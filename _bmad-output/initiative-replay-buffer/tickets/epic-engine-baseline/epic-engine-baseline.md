@@ -15,7 +15,12 @@ risk: high
 
 ## Description
 
-This is the platform baseline that every other epic builds on. The .NET 10 solution has a separate engine process and a Main App/tray shell, connected over IPC, plus the settings store later epics extend. Its first path, and the riskiest one, is capture of the Target Game's window → encoder → fragmented MP4 under the chosen Output Settings. A benchmark measures FPS cost and A/V drift. It settles PLAN.md's stack comparison (§6) and milestone 1.
+This is the platform baseline that every other epic builds on. The .NET 10 solution has a separate engine process and a Main App/tray shell, connected over IPC. It also owns the pieces epics 2 and 3 would otherwise each build in parallel:
+- the settings store, with the Global Settings → Game Profile override shape;
+- the capture-session API that other epics attach Tracks to and point at a Target Game;
+- Hotkey registration in the engine.
+
+Its first path, and the riskiest one, is capture of the Target Game's window → encoder → fragmented MP4 under the chosen Output Settings. A benchmark measures FPS cost and A/V drift. It settles PLAN.md's stack comparison (§6), the GPU color path and scheduling priority (§7.2), and the facts still to verify (§7.4).
 
 ## Outcome
 
@@ -25,14 +30,17 @@ The builder can capture a game window to a playable fragmented MP4 file at the c
 
 - A game's window is captured to an H.264 fragmented MP4 that opens in the NFR-4 players, at any offered resolution (including ultrawide) up to 120 fps, with only GPU-supported codecs offered (R20, R22).
 - A resolution or window-mode change mid-capture is scaled to the fixed output resolution with no break (R20).
-- The benchmark reports FPS loss at 1080p60 in a GPU-bound game, and A/V drift over 60 minutes with two audio devices on independent clocks. Both are recorded against the provisional 3% and one-frame targets (R36, R33).
+- The benchmark reports FPS loss at 1080p60 in a GPU-bound game, and A/V drift over 60 minutes with two audio devices on independent clocks. Both are recorded against the provisional 3% and one-frame targets. This is the baseline part of R36 and R33; epics 2, 5 and 8 deliver the rest.
 - Start with Windows (to the tray, no window) and the tray's open and quit work (R31).
-- The stack choice (PLAN.md §6 Path A, or the fallback) is recorded, and the app runs on the builder's PC, integrated and verified.
+- A Hotkey registered through the engine fires while a game has focus and with the Main App closed. It's the registration that epic 2's Mic Mute Hotkey and epic 4's rebinding (R32) build on.
+- The settings store saves and reloads Global Settings, with a Game Profile overriding one value and inheriting the rest.
+- The stack choice (PLAN.md §6 Path A, or the fallback), the color path and GPU-priority decision (§7.2), and the §7.4 fact checks are recorded. The app runs on the builder's PC, integrated and verified.
 
 ## Boundaries
 
 - Out: audio Track Layouts and device management (epic-multi-track-audio), Game Detection (epic-game-detection-profiles), the Replay Buffer and Clips (epic-replay-buffer-clips). This epic only needs one or two fixed audio devices for the drift benchmark.
-- Owns the shared engine process, IPC and settings store that later epics extend.
+- Owns the shared engine process, IPC, settings store and override shape, capture-session API and Hotkey registration that later epics extend.
+- Handoff: the benchmark harness, which epic-overlay-feedback reruns with the Overlay on (R36 Overlay part) and epic-hardening uses for the final conformance run (R33, R36).
 
 ## References
 

@@ -3,7 +3,7 @@ id: 8
 type: epic
 title: "Hardening and hands-off operation"
 parent: initiative-replay-buffer
-covers: [R34, R35]
+covers: [R34, R35, R33, R36]
 sources: []
 companions: []
 after: []
@@ -24,7 +24,8 @@ The app runs for a month of daily use with nothing to do per session, which is t
 ## Done when
 
 - An 8-hour soak keeps producing correct Clips with no memory or handle growth, and Hotkeys survive the Main App being killed (R34).
-- Killing the engine brings it back automatically: the Replay Buffer resumes and the status line reports the restart (R34).
+- Killing the engine brings it back automatically: the Replay Buffer resumes, and epic-overlay-feedback's status line reports the restart (R34).
+- The final conformance run, using epic-engine-baseline's benchmark: drift under one frame over a 60-minute Recording with every Track, and FPS loss within the NFR-1 target with everything on (R33, R36, final part).
 - After a reboot, an app restart and a BEACN restart, nothing needs re-selecting (R35).
 - The T-01 to T-25 failure cases (PLAN.md §8) pass or have a recorded decision. ShadowPlay is uninstalled, and the month of use begins.
 
@@ -34,7 +35,7 @@ The app runs for a month of daily use with nothing to do per session, which is t
 
 ## References
 
-- parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R34, R35; Done when
+- parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R33, R34, R35, R36; Done when
 - architecture input — PLAN.md, §8 Test catalog
 
 ## Notes

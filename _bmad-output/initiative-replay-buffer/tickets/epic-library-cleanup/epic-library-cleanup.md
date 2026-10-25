@@ -30,6 +30,7 @@ The builder finds, opens and shares any Clip from one window, and the Output Fol
 ## Boundaries
 
 - Out: writing files and choosing their names (epic-replay-buffer-clips, epic-game-detection-profiles).
+- Handoff: Recordings and Monitor Recordings arrive through the same "file being written" signal, raised by epic-recordings. This epic verifies the locking with Clips and a sample Recording file, and epic-hardening's soak covers live Recordings.
 - Touch point: the Windows default app for .mp4 (the Media Player), and Discord's paste, both consumed only.
 
 ## References

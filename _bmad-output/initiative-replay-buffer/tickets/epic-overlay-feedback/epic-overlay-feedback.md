@@ -3,7 +3,7 @@ id: 5
 type: epic
 title: "Overlay and Feedback Sounds"
 parent: initiative-replay-buffer
-covers: [R6, R8]
+covers: [R6, R8, R36]
 sources: []
 companions: []
 after: []
@@ -30,8 +30,9 @@ In any game, the builder knows a Clip saved or failed, by sight where the Overla
 
 - The Q-4 measurement is recorded, and the Overlay's behaviour in exclusive fullscreen is decided from it.
 - The dot appears or disappears within 1 s of a state change, the saving icon within 250 ms of the press, and messages queue. The Overlay never appears in captured video and never takes focus from a game (R6).
-- In an exclusive-fullscreen game, a saved Clip and a failed save can be told apart by sound alone. Each sound can be switched off, and the status line shows state and warnings (R8).
-- The Overlay's FPS cost is included in the NFR-1 benchmark. Verified integrated on the builder's PC.
+- In an exclusive-fullscreen game, a saved Clip and a failed save can be told apart by sound alone. Each sound can be switched off. The status line shows state and warnings, including epic-multi-track-audio's device dropouts and epic-hardening's engine restarts (R8).
+- Every window the app creates (the Overlay, toasts, the Main App) is excluded from capture (PLAN.md §7.1).
+- epic-engine-baseline's benchmark, rerun with the Overlay on, stays within the NFR-1 target. This is the Overlay part of R36. Verified integrated on the builder's PC.
 
 ## Boundaries
 
@@ -40,7 +41,8 @@ In any game, the builder knows a Clip saved or failed, by sight where the Overla
 
 ## References
 
-- parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R6, R8; Notes (Q-4)
+- parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R6, R8, R36; Notes (Q-4)
+- architecture input — PLAN.md, §7.1
 - addendum — _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md, Review-driven mechanism notes (Overlay and independent flip)
 
 ## Notes

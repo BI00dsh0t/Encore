@@ -4,35 +4,35 @@
 id = 1
 slug = "epic-engine-baseline"
 title = "Engine baseline and video capture"
-description = "The .NET 10 solution builds and runs: an engine process and a Main App/tray shell talking over IPC, a settings store shared by later epics, Start with Windows, and the Target Game's window captured, encoded and written as fragmented MP4 under the chosen Output Settings. The FPS and A/V-drift benchmark runs, and the stack comparison is decided."
-covers = ["R20", "R22", "R31", "R33", "R36"]
+description = "The .NET 10 solution builds and runs: an engine process and a Main App/tray shell talking over IPC, a settings store with the Global Settings to Game Profile override shape, the capture-session API, Hotkey registration in the engine, Start with Windows, and the Target Game's window captured, encoded and written as fragmented MP4 under the chosen Output Settings. The FPS and A/V-drift benchmark runs, and the stack comparison is decided."
+covers = ["R20", "R22", "R31", "R33", "R36"] # R33, R36: baseline benchmark part
 
 [[epic]]
 id = 2
 slug = "epic-multi-track-audio"
 title = "Multi-Track Audio"
 description = "Windows Output and Input Devices are listed live. Global Track Layouts combine any devices into named Tracks that are mixed without clipping, carry Mic Devices and mute, and survive dropouts. Live meters show each Track, and Tracks are handed to the engine's encoder and muxer in sync with video."
-covers = ["R14", "R15", "R16", "R18", "R19", "R30"]
-after = [{ epic = 1, needs = "engine process, IPC, settings store, and encoder/muxer to attach audio Tracks to" }]
+covers = ["R14", "R15", "R16", "R18", "R19", "R30", "R33"] # R18: Global part; R33: named, in-sync Tracks part
+after = [{ epic = 1, needs = "engine process, IPC, settings store, capture-session API, Hotkey registration, and encoder/muxer to attach audio Tracks to" }]
 
 [[epic]]
 id = 3
 slug = "epic-game-detection-profiles"
 title = "Game Detection and Game Profiles"
 description = "Games are detected (fullscreen or borderless, Windows-identified, or added by hand), stay detected until they exit, and one Target Game is chosen by the 10 s focus rule. Game Profiles are created automatically, inheriting Global Settings, and can be Ignored. Per-game folders and file names are resolved for later epics to write into."
-covers = ["R1", "R23", "R24", "R25", "R26"]
-after = [{ epic = 1, needs = "engine process, settings store, and window capture to point at the Target Game" }]
+covers = ["R23", "R24", "R25", "R26"]
+after = [{ epic = 1, needs = "engine process, settings store override shape, and capture-session API to point at the Target Game" }]
 
 [[epic]]
 id = 4
 slug = "epic-replay-buffer-clips"
 title = "Replay Buffer and Clips"
 description = "In a detected game, pressing the Save Hotkey writes a multi-Track Clip into the game's folder, from a Memory or Disk Replay Buffer. Clips Reset with no gap, the Save Cooldown debounces presses, failures are retryable, and each Game Profile can override its Track Layout and Output Settings. This is the first usable end-to-end version."
-covers = ["R2", "R3", "R4", "R5", "R7", "R17", "R32"]
+covers = ["R1", "R2", "R3", "R4", "R5", "R7", "R17", "R18", "R32"] # R18: per-Game-Profile Mic Devices and mute Tracks part
 after = [
   { epic = 1, needs = "encoder and fragmented MP4 writer" },
   { epic = 2, needs = "Track Layouts and mixed Track audio" },
-  { epic = 3, needs = "Target Game, Game Profiles, and per-game folders and file names" },
+  { epic = 3, needs = "Target Game appeared/exited events, Game Profiles, and per-game folders and file names" },
 ]
 
 [[epic]]
@@ -40,7 +40,7 @@ id = 5
 slug = "epic-overlay-feedback"
 title = "Overlay and Feedback Sounds"
 description = "An always-on-top Overlay shows the capture dot and a queue of messages, without appearing in captures or disturbing the game. Feedback Sounds and the Main App status line report Clip and Recording events. Q-4 (the Overlay in exclusive fullscreen) is settled by measurement."
-covers = ["R6", "R8"]
+covers = ["R6", "R8", "R36"] # R36: Overlay FPS-cost part
 after = [{ epic = 4, needs = "Clip save, saving and failure events, and capture-state events to display" }]
 
 [[epic]]
@@ -50,7 +50,7 @@ title = "Recordings and Monitor Recording"
 description = "In games with Recordings switched on, the Record Hotkey runs a single-file, crash-safe Recording alongside the Replay Buffer. It stops when the game exits, and handles a full disk and forced encoder restarts. A Monitor Recording of a chosen monitor works by its own hotkey."
 covers = ["R9", "R10", "R11", "R12", "R13", "R21"]
 after = [
-  { epic = 4, needs = "capture, Track and encoding pipeline, plus Hotkey registration" },
+  { epic = 4, needs = "capture, Track and encoding pipeline, and the file-being-written signal" },
   { epic = 5, needs = "Overlay solid dot, red X, and Feedback Sounds channel" },
 ]
 
@@ -67,7 +67,7 @@ id = 8
 slug = "epic-hardening"
 title = "Hardening and hands-off operation"
 description = "The whole app survives an 8-hour soak with no memory growth. The engine restarts itself after a crash, and settings and devices survive reboots, app restarts and mixer restarts. The PLAN.md T-01 to T-25 failure cases pass."
-covers = ["R34", "R35"]
+covers = ["R34", "R35", "R33", "R36"] # R33, R36: final conformance run
 after = [
   { epic = 6, needs = "Recordings to soak and crash-test" },
   { epic = 7, needs = "Library and Cleanup to include in the soak" },

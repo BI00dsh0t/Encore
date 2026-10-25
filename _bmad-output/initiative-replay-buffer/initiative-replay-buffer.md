@@ -99,4 +99,12 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
 - Decision: 2026-10-25, split into 8 epics, one per capability delivered together. The engine baseline goes first, as the platform baseline and the riskiest path (performance, anti-cheat, A/V sync). The Overlay and hardening are separate epics. Approved by the user.
 - Decision: 2026-10-25, the first demo is epic 1's tracer bullet: a game window → fragmented MP4 with two audio devices on independent clocks (PLAN.md milestone 1).
 - Decision: 2026-10-25, the dependency check moved R17 from epic 3 to epic 4 (it needs epic 2's Track Layouts), and made epic 6 also wait on epic 5 (red X and sounds).
+- Decision: 2026-10-25, ownership fixes from the tree check, approved by the user:
+  - R1 moves to epic 4.
+  - Shared requirements, each epic delivering its own part: R33 (epics 1, 2, 8), R36 (epics 1, 5, 8), R18 (epic 2 Global, epic 4 per-Game-Profile).
+  - Epic 1 owns Hotkey registration, the settings override shape and the capture-session API.
+  - Epic 6's Recordings raise the "file being written" signal for epic 7.
+  - Epics 2 and 8 emit warnings that epic 5's status line displays.
+  - PLAN.md §7.2 and §7.4 go to epic 1, and §7.1 to epics 5 and 6.
+- Decision: 2026-10-25, run `bmad-architecture` next, to settle the shared decisions below.
 - Open question: where the decisions several epics share will live: the engine–Main App IPC contract, the settings store schema, the interop stack and the container format. `bmad-architecture` is offered; if declined, they become hitl entries in epic 1.

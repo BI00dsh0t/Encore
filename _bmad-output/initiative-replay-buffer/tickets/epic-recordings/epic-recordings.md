@@ -29,12 +29,13 @@ A whole session in an opted-in game ends as one playable file, even after a cras
 - Killing the engine mid-Recording leaves a file that plays with every Track in sync, losing at most 1 s (R11).
 - A 4-hour Recording is one file. A forced encoder restart either continues the file or cleanly starts a new one, with notice (R12).
 - When the disk fills, the Recording stops with a playable file, the red X and the sound. A Memory buffer keeps running; a Disk buffer stops with notice (R13).
-- A Monitor Recording works with or without a game, alongside everything else, and is saved in "Monitor Recordings" (R21). Verified integrated on the builder's PC.
+- A Monitor Recording works with or without a game, alongside everything else, and is saved in "Monitor Recordings". The app's own windows never appear in it (R21, PLAN.md §7.1).
+- Recordings in progress raise epic-replay-buffer-clips' "file being written" signal, so the Library locks them. Verified integrated on the builder's PC.
 
 ## Boundaries
 
 - Out: rendering the Overlay and sounds (epic-overlay-feedback), Library display (epic-library-cleanup), and splitting a Recording by size or time (initiative Boundaries).
-- Handoff: the "Recording running" flag that epic-game-detection-profiles' Target Game rule reads (R24), replacing its stub.
+- Handoff: the "Recording running" flag that epic-game-detection-profiles' Target Game rule reads (R24), replacing its stub. The "file being written" signal for Recordings goes to epic-library-cleanup.
 
 ## References
 
@@ -44,5 +45,5 @@ A whole session in an opted-in game ends as one playable file, even after a cras
 
 ## Notes
 
-- Waits on epic-replay-buffer-clips because: it needs the capture, Track and encoding pipeline, and Hotkey registration.
+- Waits on epic-replay-buffer-clips because: it needs the capture, Track and encoding pipeline, and the "file being written" signal.
 - Waits on epic-overlay-feedback because: it needs the Overlay's solid dot, the red X, and the Feedback Sounds channel.
