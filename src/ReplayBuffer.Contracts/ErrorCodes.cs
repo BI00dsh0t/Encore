@@ -5,7 +5,7 @@ namespace ReplayBuffer.Contracts;
 /// </summary>
 public static class ErrorCodes
 {
-    /// <summary>The command line is malformed.</summary>
+    /// <summary>The command line, or a request's shape, is malformed.</summary>
     public const string InvalidArguments = "invalid-arguments";
 
     /// <summary>No top-level window matches the requested title.</summary>
@@ -32,6 +32,27 @@ public static class ErrorCodes
     /// <summary>An encoder or the muxer failed.</summary>
     public const string EncodeFailed = "encode-failed";
 
+    /// <summary>A settings update's <c>expectedRevision</c> is not the current revision.</summary>
+    public const string SettingsConflict = "settings-conflict";
+
+    /// <summary>A Game Profile override names a Global-only key.</summary>
+    public const string KeyNotOverridable = "key-not-overridable";
+
+    /// <summary>A settings update names a key that is not in the catalog.</summary>
+    public const string SettingUnknownKey = "setting-unknown-key";
+
+    /// <summary>A settings value does not fit its key's type or range.</summary>
+    public const string SettingInvalidValue = "setting-invalid-value";
+
+    /// <summary>A settings update names a Game Profile that does not exist.</summary>
+    public const string ProfileNotFound = "profile-not-found";
+
+    /// <summary>The settings file could not be written; nothing changed.</summary>
+    public const string SettingsWriteFailed = "settings-write-failed";
+
+    /// <summary>The settings file could not be read and was moved aside.</summary>
+    public const string SettingsUnreadable = "settings-unreadable";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -44,5 +65,12 @@ public static class ErrorCodes
         AudioDeviceFailed,
         CaptureFailed,
         EncodeFailed,
+        SettingsConflict,
+        KeyNotOverridable,
+        SettingUnknownKey,
+        SettingInvalidValue,
+        ProfileNotFound,
+        SettingsWriteFailed,
+        SettingsUnreadable,
     ];
 }

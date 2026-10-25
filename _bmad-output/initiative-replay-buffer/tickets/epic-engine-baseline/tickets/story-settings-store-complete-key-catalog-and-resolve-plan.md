@@ -3,14 +3,14 @@ title: 'Settings store, complete key catalog and Resolve'
 type: 'feature'
 ticket: '4'
 created: '2026-10-25'
-status: 'ready-for-dev'
+status: 'built'
 baseline_revision: 'a15cb5716f8a18ebc2d034c29ad383e592f02ba0'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md'
@@ -75,16 +75,16 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- add `settings-conflict`, `key-not-overridable`, `setting-unknown-key`, `setting-invalid-value`, `profile-not-found`, `settings-write-failed`, `settings-unreadable`.
-- [ ] `src/ReplayBuffer.Contracts/Settings/SettingValues.cs` -- value DTOs and enums from the catalog table.
-- [ ] `src/ReplayBuffer.Contracts/Settings/SettingsDocument.cs` -- immutable document and `GameProfile` (key → `JsonElement` maps), `SettingsUpdate`/`SettingsOp` (`scope: global|profile`, `op: set|remove`), `EffectiveSettings` (one typed property per key, plus `profileId`, `settingsRevision`).
-- [ ] `src/ReplayBuffer.Contracts/Settings/Keys.cs` -- `SettingKey` (name, value type, default, overridable, `AppliesAt`), `SettingKey<T>` with its `JsonTypeInfo<T>` and validator, `Keys.All`; profile attribute names kept apart from key names.
-- [ ] `src/ReplayBuffer.Contracts/Settings/SettingsJsonContext.cs` -- the source-generated context.
-- [ ] `src/ReplayBuffer.Core/Settings/SettingsResolver.cs` -- `Resolve`.
-- [ ] `src/ReplayBuffer.Engine/Settings/SettingsStore.cs` -- `Open(folder)` returning store + load code, `Current`, `Update` under one lock, `Changed`; an internal fault seam between temp write and replace.
-- [ ] `tests/ReplayBuffer.Contracts.Tests/KeysTests.cs` -- names unique and camelCase, every default present and valid and round-tripping, overridable set is exactly the three keys, attribute names disjoint.
-- [ ] `tests/ReplayBuffer.Core.Tests/*` (new project, in slnx) -- Resolve rows of the matrix.
-- [ ] `tests/ReplayBuffer.Engine.Tests/SettingsStoreTests.cs` -- every store row of the matrix, in a temp folder; reload after commit returns the same document.
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- add `settings-conflict`, `key-not-overridable`, `setting-unknown-key`, `setting-invalid-value`, `profile-not-found`, `settings-write-failed`, `settings-unreadable`.
+- [x] `src/ReplayBuffer.Contracts/Settings/SettingValues.cs` -- value DTOs and enums from the catalog table.
+- [x] `src/ReplayBuffer.Contracts/Settings/SettingsDocument.cs` -- immutable document and `GameProfile` (key → `JsonElement` maps), `SettingsUpdate`/`SettingsOp` (`scope: global|profile`, `op: set|remove`), `EffectiveSettings` (one typed property per key, plus `profileId`, `settingsRevision`).
+- [x] `src/ReplayBuffer.Contracts/Settings/Keys.cs` -- `SettingKey` (name, value type, default, overridable, `AppliesAt`), `SettingKey<T>` with its `JsonTypeInfo<T>` and validator, `Keys.All`; profile attribute names kept apart from key names.
+- [x] `src/ReplayBuffer.Contracts/Settings/SettingsJsonContext.cs` -- the source-generated context.
+- [x] `src/ReplayBuffer.Core/Settings/SettingsResolver.cs` -- `Resolve`.
+- [x] `src/ReplayBuffer.Engine/Settings/SettingsStore.cs` -- `Open(folder)` returning store + load code, `Current`, `Update` under one lock, `Changed`; an internal fault seam between temp write and replace.
+- [x] `tests/ReplayBuffer.Contracts.Tests/KeysTests.cs` -- names unique and camelCase, every default present and valid and round-tripping, overridable set is exactly the three keys, attribute names disjoint.
+- [x] `tests/ReplayBuffer.Core.Tests/*` (new project, in slnx) -- Resolve rows of the matrix.
+- [x] `tests/ReplayBuffer.Engine.Tests/SettingsStoreTests.cs` -- every store row of the matrix, in a temp folder; reload after commit returns the same document.
 
 **Acceptance Criteria:**
 - Given a profile overriding `video` only, when Resolve runs for it, then `video` is the profile's and every other key is global or default.
@@ -94,9 +94,24 @@ context:
 
 ## Implementation Notes
 
+- Values are normalized on `set` (parsed through the key's `JsonTypeInfo<T>`, re-serialized), so the file holds canonical camelCase enums; reads of enum names are case-insensitive, integers are refused.
+- Value records use `JsonUnmappedMemberHandling.Disallow`; the context sets `RespectNullableAnnotations` and `RespectRequiredConstructorParameters`, so a missing or extra field fails the key's type.
+- Ranges beyond the table: `video` width/height even, 2..8192, bitrate ≥ 1; `trackLayout` ids/keys unique and non-empty GUIDs, every `deviceKeys` entry names a layout device; hotkey `vk` 1..254, `modifiers` ⊆ `MOD_ALT|CONTROL|SHIFT|WIN|NOREPEAT`; `ringPath`/`outputFolder`/`manualGames` fully qualified; `cleanup` limits ≥ 1. Cross-key rules (`ring-path-invalid`, `hotkey-duplicate`) stay with their stories.
+- Op edge cases: a global op with a `profileId`, or an undefined scope/op, is `invalid-arguments`; a profile op without a `profileId` is `profile-not-found`; `remove` on a profile attribute is `setting-invalid-value`.
+- Maps are `ImmutableSortedDictionary` re-keyed ordinally on load, so the file is written in a stable key order. The replace is `File.Move(overwrite: true)`; `Changed` is raised under the store lock so events follow revision order.
+- Resolve echoes the requested `profileId` even when no such profile exists (it then resolves Global).
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+Lens `quick`, iteration 0. Verdicts: high 0, medium 1, low 2, false 0, maybe-false 0.
+
+| # | Finding | Verdict | Route | Evidence |
+|---|---------|---------|-------|----------|
+| 1 | A null profile value in `settings.json` crashes `Open` with a NullReferenceException instead of `settings-unreadable` | medium | patch | `RespectNullableAnnotations` doesn't check generic collection elements, so `"profiles":{"id":null}` deserializes; `WithOrdinalKeys` dereferences `p.Value`, and `TryParse` catches only `JsonException`. The engine could not start. Fixed: `TryParse` treats a null profile as unreadable; added to the unreadable-file theory. |
+| 2 | Maps are deserialized with the culture comparer before being re-keyed ordinally, so canonically equivalent ids collide | low | reject | Real: STJ builds `ImmutableSortedDictionary` with `Comparer<string>.Default`. But profile ids come from `Canonicalize` (one normalized form), and Global keys are catalog names, so two ids that compare equal under the culture are unlikely in everyday use, and the fix (a custom converter or an intermediate `Dictionary` DTO) adds more than a direct correction. |
+| 3 | An exception from a `Changed` handler leaves `Update` throwing after the commit, while the docs say an exception means "refused" | low | patch | Real, and nothing subscribes yet (story 5 will). Fixed by correcting the XML docs: a handler's exception propagates after the commit. No behaviour change. |
 
 ## Design Notes
 

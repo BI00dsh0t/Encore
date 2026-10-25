@@ -12,6 +12,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ReplayBuffer.Contracts.Tests/ReplayBuffer.Contracts.Tests.csproj" />
+    <Project Path="tests/ReplayBuffer.Core.Tests/ReplayBuffer.Core.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Media.Tests/ReplayBuffer.Media.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Platform.Capture.Tests/ReplayBuffer.Platform.Capture.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Platform.Audio.Tests/ReplayBuffer.Platform.Audio.Tests.csproj" />
