@@ -3,7 +3,7 @@ title: 'Settings store, complete key catalog and Resolve'
 type: 'feature'
 ticket: '4'
 created: '2026-10-25'
-status: 'built'
+status: done
 baseline_revision: 'a15cb5716f8a18ebc2d034c29ad383e592f02ba0'
 route: 'full'
 route_source: 'auto'
