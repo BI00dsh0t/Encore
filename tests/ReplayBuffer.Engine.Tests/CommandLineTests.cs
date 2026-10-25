@@ -20,6 +20,8 @@ public sealed class CommandLineTests
         Assert.Null(command.Output);
         Assert.Null(command.OutputDevice);
         Assert.Null(command.InputDevice);
+        Assert.Null(command.Stats);
+        Assert.Null(command.GpuPriority);
     }
 
     [Fact]
@@ -40,7 +42,28 @@ public sealed class CommandLineTests
     }
 
     [Theory]
+    [InlineData("-7", -7)]
+    [InlineData("0", 0)]
+    [InlineData("7", 7)]
+    [InlineData("+3", 3)]
+    public void StatsAndGpuPriorityAreRead(string priority, int expected)
+    {
+        var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(
+            ["debug-capture", "--window", "Cyberpunk", "--stats", @"C:\x\run.json", "--gpu-priority", priority]).Command);
+
+        Assert.Equal(@"C:\x\run.json", command.Stats);
+        Assert.Equal(expected, command.GpuPriority);
+    }
+
+    [Theory]
     [InlineData]
+    [InlineData("debug-capture", "--window", "a", "--gpu-priority", "8")]
+    [InlineData("debug-capture", "--window", "a", "--gpu-priority", "-8")]
+    [InlineData("debug-capture", "--window", "a", "--gpu-priority", "high")]
+    [InlineData("debug-capture", "--window", "a", "--gpu-priority", "1.5")]
+    [InlineData("debug-capture", "--window", "a", "--gpu-priority")]
+    [InlineData("debug-capture", "--window", "a", "--stats", "")]
+    [InlineData("debug-capture", "--window", "a", "--stats")]
     [InlineData("capture")]
     [InlineData("debug-capture")]
     [InlineData("debug-capture", "--window", "a", "--hwnd", "0x10")]

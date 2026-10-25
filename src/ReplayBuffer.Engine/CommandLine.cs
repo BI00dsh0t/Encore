@@ -15,9 +15,16 @@ public sealed record DebugCaptureCommand(
     int Seconds,
     string? Output,
     string? OutputDevice,
-    string? InputDevice) : EngineCommand
+    string? InputDevice,
+    string? Stats = null,
+    int? GpuPriority = null) : EngineCommand
 {
     public const int DefaultSeconds = 30;
+
+    /// <summary>The range <c>IDXGIDevice::SetGPUThreadPriority</c> accepts.</summary>
+    public const int MinGpuPriority = -7;
+
+    public const int MaxGpuPriority = 7;
 }
 
 /// <summary>The outcome of parsing: a command, or the reason there isn't one.</summary>
@@ -32,6 +39,7 @@ public static class CommandLine
           ReplayBuffer.Engine debug-list
           ReplayBuffer.Engine debug-capture (--window <title> | --hwnd <handle>) [--seconds 30]
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
+                              [--stats <file.json>] [--gpu-priority <-7..7>]
         """;
 
     public static ParseResult Parse(IReadOnlyList<string> args)
@@ -67,8 +75,9 @@ public static class CommandLine
 
     private static ParseResult ParseCapture(IReadOnlyList<string> args)
     {
-        string? window = null, output = null, outputDevice = null, inputDevice = null;
+        string? window = null, output = null, outputDevice = null, inputDevice = null, stats = null;
         nint? hwnd = null;
+        int? gpuPriority = null;
         var seconds = DebugCaptureCommand.DefaultSeconds;
 
         for (var i = 1; i < args.Count; i++)
@@ -109,6 +118,24 @@ public static class CommandLine
                 case "--input-device":
                     inputDevice = value;
                     break;
+                case "--stats":
+                    if (value.Length == 0)
+                    {
+                        return Fail("--stats needs a file path.");
+                    }
+
+                    stats = value;
+                    break;
+                case "--gpu-priority":
+                    if (!int.TryParse(value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var priority)
+                        || priority < DebugCaptureCommand.MinGpuPriority
+                        || priority > DebugCaptureCommand.MaxGpuPriority)
+                    {
+                        return Fail($"'{value}' is not a GPU priority from {DebugCaptureCommand.MinGpuPriority} to {DebugCaptureCommand.MaxGpuPriority}.");
+                    }
+
+                    gpuPriority = priority;
+                    break;
                 default:
                     return Fail($"Unknown option '{option}'.");
             }
@@ -124,7 +151,7 @@ public static class CommandLine
             return Fail("--window needs a non-empty title.");
         }
 
-        return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice), null);
+        return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority), null);
     }
 
     private static ParseResult Fail(string error) => new(null, error);

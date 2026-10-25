@@ -61,6 +61,24 @@ public sealed class AudioTimeline
     /// <summary>Frames written since the anchor.</summary>
     public long WrittenFrames => _writtenFrames;
 
+    /// <summary>Packets placed after a gap of more than the tolerance, which was filled with silence.</summary>
+    public long GapFills { get; private set; }
+
+    /// <summary>Silent frames written by <see cref="GapFills"/>.</summary>
+    public long GapFillFrames { get; private set; }
+
+    /// <summary>Packets that overlapped the stream, or began before the anchor, by more than the tolerance and were trimmed.</summary>
+    public long Trims { get; private set; }
+
+    /// <summary>Frames dropped by <see cref="Trims"/>.</summary>
+    public long TrimmedFrames { get; private set; }
+
+    /// <summary>Silent frames written by <see cref="FillTo"/> (idle or failed device).</summary>
+    public long IdleFillFrames { get; private set; }
+
+    /// <summary>Packets whose stamp was missing, flagged bad or not after the last one, and so extrapolated.</summary>
+    public long ResolvedStamps { get; private set; }
+
     /// <summary>
     /// Adds one packet. <paramref name="interleaved"/> holds <paramref name="frames"/> × 2
     /// samples, or is ignored when the packet is <see cref="AudioPacketFlags.Silent"/>.
@@ -90,15 +108,27 @@ public sealed class AudioTimeline
         var exact = _writtenFrames == 0 || _lastWriteWasFill || (flags & AudioPacketFlags.DataDiscontinuity) != 0;
         var tolerance = exact ? 0 : ToleranceFrames;
 
+        // Exact placement (start, idle resume) is normal; only a step past the tolerance is a correction.
+        var correction = Math.Abs(delta) > ToleranceFrames;
         long skip = 0;
         if (delta > tolerance)
         {
             _sink.WriteSilence(delta);
             _writtenFrames += delta;
+            if (correction)
+            {
+                GapFills++;
+                GapFillFrames += delta;
+            }
         }
         else if (delta < -tolerance)
         {
             skip = -delta;
+            if (correction)
+            {
+                Trims++;
+                TrimmedFrames += Math.Min(skip, frames);
+            }
         }
 
         if (skip >= frames)
@@ -130,6 +160,7 @@ public sealed class AudioTimeline
         }
 
         _sink.WriteSilence(target - _writtenFrames);
+        IdleFillFrames += target - _writtenFrames;
         _writtenFrames = target;
         _lastWriteWasFill = true;
     }
@@ -146,6 +177,8 @@ public sealed class AudioTimeline
         {
             return qpc;
         }
+
+        ResolvedStamps++;
 
         if (_hasPacket)
         {

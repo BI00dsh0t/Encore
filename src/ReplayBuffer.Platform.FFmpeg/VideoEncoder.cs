@@ -62,14 +62,24 @@ public sealed unsafe class VideoEncoder : IDisposable
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
     private readonly int _streamIndex;
+    private readonly LatencyHistogram? _latency;
     private AVCodecContext* _context;
     private AVPacket* _packet;
     private long _lastPts = long.MinValue;
     private long _lastKeyPts = long.MinValue;
     private long _dropped;
+    private long _encoded;
+    private long _flushed;
 
-    public VideoEncoder(D3D11VAFrames frames, FragmentedMp4Muxer muxer, long qpcFrequency, long anchorQpc, ILogger logger)
+    /// <param name="latency">
+    /// When given, each packet's capture→encoded latency is recorded into it: QPC as the packet
+    /// leaves <c>avcodec_receive_packet</c> minus its frame's capture QPC (anchor + PTS).
+    /// Packets drained by <see cref="Flush"/> are counted in <see cref="FlushedPackets"/> instead,
+    /// since their latency includes shutdown.
+    /// </param>
+    public VideoEncoder(D3D11VAFrames frames, FragmentedMp4Muxer muxer, long qpcFrequency, long anchorQpc, ILogger logger, LatencyHistogram? latency = null)
     {
+        _latency = latency;
         _frames = frames;
         _muxer = muxer;
         _qpcFrequency = qpcFrequency;
@@ -122,6 +132,12 @@ public sealed unsafe class VideoEncoder : IDisposable
     /// <summary>Frames dropped because their PTS was not above the previous frame's.</summary>
     public long DroppedFrames => Interlocked.Read(ref _dropped);
 
+    /// <summary>Video packets written to the muxer.</summary>
+    public long EncodedFrames => Interlocked.Read(ref _encoded);
+
+    /// <summary>Video packets drained by <see cref="Flush"/>; their latency is not recorded.</summary>
+    public long FlushedPackets => Interlocked.Read(ref _flushed);
+
     /// <summary>
     /// Takes a pool texture for a frame captured at <paramref name="qpc"/>, or returns null
     /// when that frame's PTS isn't above the last one's (it is dropped).
@@ -160,7 +176,7 @@ public sealed unsafe class VideoEncoder : IDisposable
                 }
 
                 FFmpegLibrary.Check(ffmpeg.avcodec_send_frame(_context, frame), "avcodec_send_frame(video)");
-                Drain();
+                Drain(flushing: false);
             }
         }
         finally
@@ -180,7 +196,7 @@ public sealed unsafe class VideoEncoder : IDisposable
             }
 
             FFmpegLibrary.Check(ffmpeg.avcodec_send_frame(_context, null), "avcodec_send_frame(video flush)");
-            Drain();
+            Drain(flushing: true);
             if (_dropped > 0)
             {
                 _logger.LogInformation("Dropped {Count} video frames with non-increasing PTS", _dropped);
@@ -210,7 +226,7 @@ public sealed unsafe class VideoEncoder : IDisposable
         }
     }
 
-    private void Drain()
+    private void Drain(bool flushing)
     {
         while (true)
         {
@@ -221,6 +237,16 @@ public sealed unsafe class VideoEncoder : IDisposable
             }
 
             FFmpegLibrary.Check(result, "avcodec_receive_packet(video)");
+            if (flushing)
+            {
+                Interlocked.Increment(ref _flushed);
+            }
+            else if (_latency is not null)
+            {
+                var now = System.Diagnostics.Stopwatch.GetTimestamp();
+                var captured = _anchorQpc + QpcClock.ToUnits(_packet->pts, TimeBase, _qpcFrequency);
+                _latency.Record(now - captured);
+            }
 
             // Frames are variable-rate; the nominal 1/60 s only sizes the last sample of a fragment.
             if (_packet->duration == 0)
@@ -229,6 +255,7 @@ public sealed unsafe class VideoEncoder : IDisposable
             }
 
             _muxer.Write(_packet, _streamIndex, _context->time_base);
+            Interlocked.Increment(ref _encoded);
         }
     }
 }

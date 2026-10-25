@@ -144,6 +144,56 @@ public sealed unsafe class D3D11Device : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sets the GPU thread priority of this device (<c>IDXGIDevice::SetGPUThreadPriority</c>,
+    /// −7 to 7; no elevation needed) and returns the HRESULT. <paramref name="readBack"/> is
+    /// the priority the device reports afterwards, or null when it can't be read.
+    /// </summary>
+    public int SetGpuThreadPriority(int priority, out int? readBack)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(priority, -7);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(priority, 7);
+        readBack = null;
+
+        IDXGIDevice* dxgiDevice = null;
+        try
+        {
+            var dxgiIid = IDXGIDevice.IID_Guid;
+            var hr = ((IUnknown*)_device)->QueryInterface(&dxgiIid, (void**)&dxgiDevice);
+            if (hr.Failed)
+            {
+                return hr.Value;
+            }
+
+            // CsWin32 turns a failed HRESULT into an exception carrying it.
+            try
+            {
+                dxgiDevice->SetGPUThreadPriority(priority);
+            }
+            catch (Exception e)
+            {
+                hr = new HRESULT(e.HResult);
+            }
+
+            try
+            {
+                int current;
+                dxgiDevice->GetGPUThreadPriority(&current);
+                readBack = current;
+            }
+            catch (Exception)
+            {
+                // The read-back is informational only.
+            }
+
+            return hr.Value;
+        }
+        finally
+        {
+            if (dxgiDevice is not null) dxgiDevice->Release();
+        }
+    }
+
     /// <summary>Creates a BGRA render-target texture, for synthetic sources.</summary>
     public nint CreateTexture(VideoSize size)
     {

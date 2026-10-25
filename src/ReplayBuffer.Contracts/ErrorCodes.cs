@@ -32,6 +32,12 @@ public static class ErrorCodes
     /// <summary>An encoder or the muxer failed.</summary>
     public const string EncodeFailed = "encode-failed";
 
+    /// <summary>A warning: the GPU thread priority could not be set; capture runs without it.</summary>
+    public const string GpuPriorityFailed = "gpu-priority-failed";
+
+    /// <summary>The capture statistics file could not be written; the capture itself is complete.</summary>
+    public const string StatsWriteFailed = "stats-write-failed";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -44,5 +50,7 @@ public static class ErrorCodes
         AudioDeviceFailed,
         CaptureFailed,
         EncodeFailed,
+        GpuPriorityFailed,
+        StatsWriteFailed,
     ];
 }
