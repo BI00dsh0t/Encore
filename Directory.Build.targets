@@ -1,0 +1,9 @@
+<Project>
+  <!-- Projects that load FFmpeg set CopyFFmpegNative; the DLLs (and ffprobe) land beside the output. -->
+  <ItemGroup Condition="'$(CopyFFmpegNative)' == 'true' and Exists('$(FFmpegNativeDir)')">
+    <None Include="$(FFmpegNativeDir)*.dll;$(FFmpegNativeDir)*.exe"
+          Link="%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false" />
+  </ItemGroup>
+</Project>

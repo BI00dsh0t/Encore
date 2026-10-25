@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <CopyFFmpegNative>true</CopyFFmpegNative>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReplayBuffer.Platform.FFmpeg\ReplayBuffer.Platform.FFmpeg.csproj" />
+    <ProjectReference Include="..\..\src\ReplayBuffer.Platform.Capture\ReplayBuffer.Platform.Capture.csproj" />
+  </ItemGroup>
+</Project>
