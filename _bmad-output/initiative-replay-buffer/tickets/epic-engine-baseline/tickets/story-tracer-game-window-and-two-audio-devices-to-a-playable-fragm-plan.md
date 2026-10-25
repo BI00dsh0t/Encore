@@ -3,7 +3,7 @@ title: 'Tracer: game window and two audio devices to a playable fragmented MP4'
 type: 'feature'
 ticket: '1'
 created: '2026-10-25'
-status: 'built'
+status: done
 baseline_revision: '78d4d558556c65257fdf14f48dd52748d7882ea9'
 route: 'full'
 route_source: 'auto'
