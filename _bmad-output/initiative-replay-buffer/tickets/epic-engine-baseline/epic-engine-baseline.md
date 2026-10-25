@@ -7,7 +7,7 @@ covers: [R20, R22, R31, R33, R36]
 sources: []
 companions: []
 after: []
-refined: false
+refined: true
 risk: high
 ---
 
@@ -25,6 +25,25 @@ Its first path, and the riskiest one, is capture of the Target Game's window →
 ## Outcome
 
 The builder can capture a game window to a playable fragmented MP4 file at the chosen Output Settings, and knows the FPS cost and drift from a repeatable benchmark (initiative R36, R33).
+
+## Requirements
+
+- R1 (parent R20): Capture covers only the Target Game's window. A change in its resolution or window mode is scaled to the fixed output resolution, keeping its aspect ratio, with no break.
+- R2 (parent R22): Output Settings offer common resolutions including ultrawide, frame rates up to 120 fps, bitrate, and only the codecs the GPU can encode. H.264 is the default; HEVC and AV1 are labelled as possibly not playing everywhere.
+- R3 (parent R31): A setting starts the app with Windows, in the tray, with no window. The tray icon opens the Main App and quits.
+- R4 (parent R33, baseline part): The benchmark measures A/V and audio-to-audio drift over 60 minutes, with two audio devices on independent clocks, against the one-frame target.
+- R5 (parent R36, baseline part): The benchmark measures FPS loss at 1080p60 in a GPU-bound game, against the provisional 3% target, and can be rerun by later epics.
+- R6 (architecture AD-22): The shared skeleton exists before epics 2 and 3 start: the complete settings key catalog, `SessionSpec`, the SessionOrchestrator's single-reader channel, the AudioDeviceHub port, the IPC `seq` and `state.snapshot` mechanism, and one Contracts message file per epic area.
+- R7 (architecture AD-3, AD-16): The engine and the Main App talk over the per-user named pipe, with numbered events and a snapshot on connect. Each restarts the other after a crash. Tray Quit shuts the engine down, and closing the window only hides it.
+- R8 (architecture AD-11, AD-6): Hotkeys registered through the engine fire while a game has focus and with the Main App closed, each stamped with the QPC of the press.
+- R9 (architecture AD-4, AD-5): The settings store applies revision-checked updates and writes atomically. One `Resolve` produces effective settings, where a Game Profile override wins and everything else is inherited.
+- R10 (architecture AD-14): The engine publishes with NativeAOT, with no IL2xxx/IL3xxx warnings, and encodes and muxes; otherwise the framework-dependent fallback is recorded.
+- R11 (PLAN.md §6, §7.2, §7.4): The interop stack, the color conversion path, GPU priority and the facts still to verify are each decided from measurement, and recorded.
+
+## Constraints
+
+- (parent NFR-2, NFR-3) The app never destabilizes the game, and is anti-cheat friendly. It's bound here by architecture AD-1, AD-2, AD-7 (resource budget), AD-11 and AD-12.
+- (parent PLAN.md §1) .NET 10, with the engine as a separate process from the Main App. The Stack table and Structural Seed in the architecture spine pin it.
 
 ## Done when
 
@@ -56,3 +75,16 @@ The builder can capture a game window to a playable fragmented MP4 file at the c
 - architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-1–AD-4, AD-6, AD-7, AD-9, AD-11, AD-12, AD-14, AD-16, AD-19, AD-20, AD-22; Stack; Structural Seed
 - addendum — _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md, Inputs for architecture
 - architecture input — PLAN.md, §1, §3, §6
+
+## Notes
+
+- Decision: 2026-10-25, the tracer bullet is story 1 (game window → fragmented MP4 with two audio devices on independent clocks).
+- Decision: 2026-10-25, the NativeAOT pass criterion (spine Deferred) is proved by spike 3 right after the tracer, not inside story 1, so the tracer stays the thinnest path. Story 15's sweep re-checks the publish.
+- Decision: 2026-10-25, the sequencing:
+  - The Path A measurement spike (2) runs before any Path A adapter is built on.
+  - Stories that share code form lanes: settings 4 → IPC 5 → shell 7 → supervision 8 → Hotkeys 9, and media 6 → 10 → 11 → 12.
+  - Install (13) waits on the AOT outcome (3).
+  - A Refactor sweep (15) closes the epic.
+- Decision: 2026-10-25, the least-certain item is the Path A measurement (spike 2), so it runs before the AOT spike (3). Confirmed by the user.
+- Decision: 2026-10-25, the tray menu is Open, a Start with Windows toggle and Quit, until the initiative's Q-2 settles the rest. There's no `bmad-ux` pass for this shell. Confirmed by the user.
+- Decision: 2026-10-25, the epic isn't split, despite 15 entries: it's one platform-baseline deliverable. Confirmed by the user.

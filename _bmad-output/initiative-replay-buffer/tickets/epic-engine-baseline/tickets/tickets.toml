@@ -1,0 +1,166 @@
+# Stories of epic-engine-baseline, in build order. `id` is permanent, never reused.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Tracer: game window and two audio devices to a playable fragmented MP4"
+description = "Thinnest path through every layer. The scaffold (projects per the spine's Structural Seed, global.json, tools/fetch-ffmpeg.ps1, the instance name, the Contracts.ErrorCodes registry, the test framework and an AOT-safe logging provider) plus WGC window capture, H.264 NVENC through FFmpeg.AutoGen, one Output Device by WASAPI loopback and one Input Device by capture, muxed to fragmented MP4 from an engine debug command naming a window. R1 part: window capture only. R6 part: scaffold and Contracts project. Stories 6 and 12 later replace this direct wiring. The builder fetches FFmpeg with the script and picks a game window."
+verify = "The builder runs the engine against a running game window for 30 s with a BEACN output and the BEACN Mic and gets an .mp4 that plays in VLC with the game's video and both audio streams in sync."
+covers = ["R1", "R6"]
+after = []
+hitl = true
+risk = "high"
+
+[[entry]]
+id = 2
+type = "spike"
+title = "Path A measurement: FPS cost, BGRA encoder input and QPC stamps"
+description = "Measures the tracer (PLAN.md §6 Path A) at 1080p60 in a GPU-bound game against the §6.3 criteria (FPS loss, dropped frames, latency, allocations, GC), tries BGRA straight into NVENC (color path X1), checks u64QPCPosition reliability on the BEACN endpoints (§7.4), and compares SetGPUThreadPriority settings. Answers: does Path A meet the targets, or does the epic switch to Path C before stories 6–12 build on it? The answer goes in the epic's Notes as a dated Decision. The builder runs the game during the measurement."
+verify = "A dated Decision in the epic's Notes records Path A kept or Path C adopted, the X1 result, the QPC-stamp finding and the GPU-priority choice, with the measured figures."
+covers = ["R11"]
+after = [1]
+hitl = true
+risk = "high"
+
+[[entry]]
+id = 3
+type = "spike"
+title = "NativeAOT proof for the engine"
+description = "Publishes the tracer engine with NativeAOT: WGC through the Windows SDK projection, CsWin32 COM with DisableRuntimeMarshalling and CsWin32RunAsBuildTask, and the FFmpeg.AutoGen DllImport bindings. Answers whether the engine ships NativeAOT; the outcome, or the framework-dependent fallback, goes in the epic's Notes as a dated Decision."
+verify = "A PublishAot build with no IL2xxx/IL3xxx warnings produces the same playable .mp4 as story 1, or a dated Decision records the fallback."
+covers = ["R10"]
+after = [2]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Settings store, complete key catalog and Resolve"
+description = "Contracts gains the complete AD-4 key catalog with type, default, overridable and appliesAt for every key, including video Output Settings, global.hotkeys, recordHotkeyMode, startWithWindows and the keys later epics need. Core gains the single Resolve function. The engine gains the store under the instance-named folder: revision-checked op-list updates, atomic write, settings-conflict, key-not-overridable, and defaults for missing keys. R6 part: the key catalog. Stories 9, 10 and 13 only implement behaviour on these keys."
+verify = "Unit tests show a Game Profile override winning for one key while others inherit, a stale revision refused, a non-overridable override refused, a killed write leaving the last good file readable, and every catalog key carrying a default."
+covers = ["R6", "R9"]
+after = [1]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "IPC server and client with numbered events, snapshot and shared shapes"
+description = "The instance- and user-named pipe with ACL and first-instance flag, the JSON-lines envelope, commands with one reply, events with seq, state.snapshot built under the seq lock, the bounded per-connection writer queue with coalescing, and pending commands failing on disconnect. Contracts gains one message file per epic area, the shared capture.stateChanged and warning.raised shapes, and a test mapping every event type to a snapshot field. R6 part: the IPC mechanism and message files."
+verify = "An integration test connects a client, receives the snapshot, issues a command and receives events in seq order; killing the server fails the pending command with engine-disconnected; a stalled client is dropped without blocking the engine; the event-to-snapshot test passes."
+covers = ["R6", "R7"]
+after = [4]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 6
+type = "story"
+title = "SessionOrchestrator and the capture-session API"
+description = "The single-threaded SessionOrchestrator on a single-reader channel, SessionSpec, and the capture-session API that starts, retargets within one process's windows, and ends a session from one EffectiveSettings snapshot. The tracer's direct video wiring moves behind it. R1 part: retargeting within a process. R6 part: SessionSpec and the channel."
+verify = "Starting, retargeting and ending a session through orchestrator messages produces the same playable .mp4 as the tracer; posts from several threads are processed in arrival order in a test."
+covers = ["R1", "R6"]
+after = [3, 5]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Main App shell and tray"
+description = "The WPF Main App connecting over IPC and rendering state.snapshot, with a tray icon offering Open, a Start with Windows toggle (bound by story 13) and Quit. Quit sends engine.shutdown; closing the window only hides it. The builder checks the tray by hand."
+verify = "The builder opens the Main App from the tray, closes its window and sees the app stay in the tray, then chooses Quit and sees neither process left running."
+covers = ["R3", "R7"]
+after = [5]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 8
+type = "story"
+title = "Supervision and single instance"
+description = "Mutual supervision: engine.heartbeat every 2 s, the App killing and relaunching a crashed or hung engine, the engine relaunching an App that died unexpectedly, a named mutex per instance with WAIT_ABANDONED treated as acquired, and the Replay Buffer-only resume rule recorded for later epics. R7 part: supervision."
+verify = "An automated test kills the engine, hangs it, and kills the App; each comes back within 10 s, and a second launch of either exits while one is running."
+covers = ["R7"]
+after = [7]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 9
+type = "story"
+title = "Hotkey registration in the engine"
+description = "RegisterHotKey on a dedicated message-only window thread for the HotkeyAction bindings in global.hotkeys, QPC stamped first on WM_HOTKEY, posting to the orchestrator, and hotkey.status in the snapshot. Later epics bind actions to it. The builder confirms a press inside a fullscreen game."
+verify = "An automated test using SendInput sees the Hotkey event within 1 ms of the injected press with the Main App closed, and a taken combination reports registered: false; the builder confirms a press registers inside a fullscreen game."
+covers = ["R8"]
+after = [6, 8]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 10
+type = "story"
+title = "Output Settings and encoder probing"
+description = "Implements the video Output Settings keys: common resolutions including ultrawide, frame rate up to 120, bitrate, and startup probing of NVENC, AMF, QSV and x264 so only GPU-supported codecs are offered in state.snapshot. H.264 is the default; HEVC and AV1 carry the may-not-play-everywhere label."
+verify = "An automated run on the builder's PC offers exactly the codecs the GPU can encode, refuses 144 fps, and captures a synthetic test window at each offered codec, at 3440x1440 and at 120 fps, each playing in VLC."
+covers = ["R2"]
+after = [6, 9]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 11
+type = "story"
+title = "Fixed output resolution, frame pacer and color path"
+description = "GPU scaling, keeping the aspect ratio (letterboxed), to the fixed output resolution; a frame pacer holding the configured frame rate when nothing changes; and the color path chosen in story 2's Decision. R1 part: resolution and window-mode changes with no break. R11 part: applies the recorded color-path decision."
+verify = "An automated run switches a synthetic test window between resolutions and between fullscreen and borderless mid-capture and yields one playable file at the output resolution with no break; a static window still yields the configured frame rate."
+covers = ["R1", "R11"]
+after = [10]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 12
+type = "story"
+title = "AudioDeviceHub port with QPC stamping and adaptive resampling"
+description = "The AudioDeviceHub port and its WASAPI implementation for Output (loopback) and Input (capture) devices: one client per endpoint, pu64QPCPosition stamps, silence fill, one adaptive resampler per device steered to elapsed QPC, and PCM fan-out to subscribers. The tracer's direct audio wiring moves behind it. Epic 2 builds Track Layouts on it. R4 part: per-device drift correction. R6 part: the AudioDeviceHub port."
+verify = "An automated 10-minute test plays a tone into a BEACN output while capturing it and the BEACN Mic, and shows both streams within one audio frame of each other and of elapsed QPC."
+covers = ["R4", "R6"]
+after = [11]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 13
+type = "story"
+title = "Publish, install and Start with Windows"
+description = "The publish layout (engine per story 3's Decision plus the framework-dependent App in one folder, FFmpeg DLLs beside the engine), a script installing it to %LOCALAPPDATA%\\Programs\\ReplayBuffer, the update procedure (Quit, copy, relaunch), and the tray's Start with Windows toggle writing startWithWindows and the HKCU Run key. The builder signs out and back in to check startup. R3 part: Start with Windows."
+verify = "From the installed folder, with Start with Windows on, the engine and the tray app are running after sign-in with no window shown; turning it off removes the Run key."
+covers = ["R3"]
+after = [3, 8]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 14
+type = "story"
+title = "FPS and drift benchmark, and the final stack decision"
+description = "ReplayBuffer.Bench measures FPS loss at 1080p60 in a GPU-bound game (capture on vs off) and A/V and audio-to-audio drift over 60 minutes with two independent-clock devices against the provisional 3% and one-frame targets, checks a fragmented-MP4 H.264 file in Discord, Chrome, VLC, Windows Media Player and DaVinci Resolve, and records the final PLAN.md §6 stack choice and the §7.4 facts. Epics 5 and 8 rerun it. The builder runs the chosen game during the measurement. R4 and R5 parts: the measurements; R11 part: the final decisions."
+verify = "The builder runs the benchmark with their GPU-bound game; it writes a report with FPS loss, 60-minute drift and per-player playback, and the results and decisions are recorded in the epic's Notes."
+covers = ["R4", "R5", "R11"]
+after = [12, 13]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 15
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup only, scoped at its start from plans and review findings the epic deferred."
+verify = "All tests pass, the engine publish per story 3's Decision still succeeds, a 2-minute smoke run of the benchmark completes, and every deferred cleanup item is closed or recorded."
+covers = []
+after = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+hitl = false
+risk = "low"
