@@ -359,22 +359,50 @@ function Invoke-Run($Run, [int] $Index) {
 
 # --- Run them -----------------------------------------------------------------------------
 
-# A run that fails (game gone, engine exited early) ends the session; the runs before it are kept.
+# Keep the PC awake and the display on for the whole session: an idle timeout that sleeps,
+# blanks or locks the PC stops the game presenting. ES_CONTINUOUS holds until it is reset.
+Add-Type -Namespace ReplayBuffer -Name Power -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll")]
+public static extern uint SetThreadExecutionState(uint esFlags);
+'@
+$EsContinuous = [uint32] 2147483648 # 0x80000000; a bare hex literal is a negative Int32
+$EsSystemRequired = [uint32] 1
+$EsDisplayRequired = [uint32] 2
+if ([ReplayBuffer.Power]::SetThreadExecutionState($EsContinuous -bor $EsSystemRequired -bor $EsDisplayRequired) -eq 0) {
+    Write-Warning 'Could not keep the PC awake; set sleep and screen lock to Never for this session.'
+}
+
+function Test-Locked {
+    # LogonUI runs while the lock screen is up.
+    return [bool] (Get-Process -Name LogonUI -ErrorAction SilentlyContinue)
+}
+
+# A run that fails (game gone, engine exited early, PC locked) ends the session; the runs before it are kept.
 $results = @()
 $aborted = $null
-for ($i = 0; $i -lt $plan.Count; $i++) {
-    try {
-        $results += Invoke-Run $plan[$i] ($i + 1)
-    }
-    catch {
-        $aborted = "$($_.Exception.Message) Skipped the remaining $($plan.Count - $i) run(s)."
-        Write-Warning $aborted
-        break
-    }
+try {
+    for ($i = 0; $i -lt $plan.Count; $i++) {
+        try {
+            $run = Invoke-Run $plan[$i] ($i + 1)
+            if (Test-Locked) {
+                throw "[$($run.Tag)] the PC locked during the run, so its figures are not kept."
+            }
 
-    $last = $results[-1]
-    Write-Host ("[{0}] avg {1} fps, 1% low {2} fps{3}" -f $last.Tag, $last.Fps.AvgFps, $last.Fps.OnePercentLowFps,
-        $(if ($last.Fps.Error) { " ($($last.Fps.Error))" } else { '' }))
+            $results += $run
+        }
+        catch {
+            $aborted = "$($_.Exception.Message) Skipped the remaining $($plan.Count - $i) run(s)."
+            Write-Warning $aborted
+            break
+        }
+
+        $last = $results[-1]
+        Write-Host ("[{0}] avg {1} fps, 1% low {2} fps{3}" -f $last.Tag, $last.Fps.AvgFps, $last.Fps.OnePercentLowFps,
+            $(if ($last.Fps.Error) { " ($($last.Fps.Error))" } else { '' }))
+    }
+}
+finally {
+    [void] [ReplayBuffer.Power]::SetThreadExecutionState($EsContinuous)
 }
 
 # --- Summary ------------------------------------------------------------------------------
