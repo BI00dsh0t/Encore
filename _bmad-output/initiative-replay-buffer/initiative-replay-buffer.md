@@ -7,6 +7,7 @@ sources:
   - PLAN.md
 companions:
   - _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md
+  - _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md
 after: []
 risk: high
 ---
@@ -87,6 +88,7 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
 
 - prd — _bmad-output/initiative-replay-buffer/prd-replay-buffer/prd-replay-buffer.md, §3 Glossary, §4 Features, §5 NFRs, §8 Success Metrics, §9 Open Questions
 - addendum — _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md, Precedence; Inputs for architecture; Test reference
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, Invariants & Rules AD-1–AD-22; Consistency Conventions; Stack
 - architecture input — PLAN.md, §1 Architecture, §3 Video, §6 Interop & pipeline bake-off, §8 Test catalog T-01…T-25
 
 ## Notes
@@ -107,4 +109,4 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
   - Epics 2 and 8 emit warnings that epic 5's status line displays.
   - PLAN.md §7.2 and §7.4 go to epic 1, and §7.1 to epics 5 and 6.
 - Decision: 2026-10-25, run `bmad-architecture` next, to settle the shared decisions below.
-- Open question: where the decisions several epics share will live: the engine–Main App IPC contract, the settings store schema, the interop stack and the container format. `bmad-architecture` is offered; if declined, they become hitl entries in epic 1.
+- Decision: 2026-10-25, the shared cross-epic decisions live in the architecture spine (adopted companion). AD-3 covers IPC, AD-4 settings, AD-14 the interop stack, AD-9 containers, AD-19 the capture sessions and AD-22 the Contracts. Epic 1 seeds AD-22's skeleton before epics 2 and 3 start.

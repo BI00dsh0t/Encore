@@ -37,6 +37,7 @@ Launching any game makes it the Target Game within 5 s, with its own Game Profil
 ## References
 
 - parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R23, R24, R25, R26
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-4, AD-5, AD-12, AD-18, AD-19, AD-21
 - prd — _bmad-output/initiative-replay-buffer/prd-replay-buffer/prd-replay-buffer.md, §3 Glossary (Game Detection, Target Game, Game Profile)
 
 ## Notes

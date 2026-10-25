@@ -42,6 +42,7 @@ In any game, the builder knows a Clip saved or failed, by sight where the Overla
 ## References
 
 - parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R6, R8, R36; Notes (Q-4)
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-3 (capture.stateChanged, warning.raised), AD-15
 - architecture input — PLAN.md, §7.1
 - addendum — _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md, Review-driven mechanism notes (Overlay and independent flip)
 

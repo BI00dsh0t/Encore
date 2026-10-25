@@ -36,6 +36,7 @@ The builder finds, opens and shares any Clip from one window, and the Output Fol
 ## References
 
 - parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R27, R28, R29
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-1 (shell actions), AD-9 (write protocol), AD-17, AD-21
 
 ## Notes
 

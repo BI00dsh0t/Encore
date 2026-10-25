@@ -38,6 +38,7 @@ With the builder's BEACN setup, captured files carry the configured, named Track
 ## References
 
 - parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R14, R15, R16, R18, R19, R30, R33
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-4 (Track Layout shape), AD-5 (mic mute), AD-6, AD-13, AD-20
 - addendum — _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md, Test reference (the builder's audio devices)
 - architecture input — PLAN.md, §2
 

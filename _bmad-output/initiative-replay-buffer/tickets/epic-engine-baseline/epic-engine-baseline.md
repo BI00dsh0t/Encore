@@ -34,6 +34,14 @@ The builder can capture a game window to a playable fragmented MP4 file at the c
 - Start with Windows (to the tray, no window) and the tray's open and quit work (R31).
 - A Hotkey registered through the engine fires while a game has focus and with the Main App closed. It's the registration that epic 2's Mic Mute Hotkey and epic 4's rebinding (R32) build on.
 - The settings store saves and reloads Global Settings, with a Game Profile overriding one value and inheriting the rest.
+- The shared skeleton (architecture AD-22) is in place before epics 2 and 3 start:
+  - the complete settings key catalog, with types, defaults, overridability and when each key applies (AD-4);
+  - `SessionSpec { kind, target, snapshot, audio }`;
+  - the SessionOrchestrator's single-reader `Channel` (AD-19);
+  - the AudioDeviceHub port (AD-20);
+  - the IPC `seq` and `state.snapshot` mechanism, with the bounded writer queue (AD-3);
+  - one Contracts message file per epic area (`Audio.cs`, `Game.cs`, `Capture.cs`, `Library.cs`, `Recording.cs`, `Feedback.cs`).
+- The engine publishes with NativeAOT, with no IL2xxx/IL3xxx warnings, and still does a working encode and mux; otherwise the fallback to a framework-dependent engine is recorded (AD-14).
 - The stack choice (PLAN.md §6 Path A, or the fallback), the color path and GPU-priority decision (§7.2), and the §7.4 fact checks are recorded. The app runs on the builder's PC, integrated and verified.
 
 ## Boundaries
@@ -45,5 +53,6 @@ The builder can capture a game window to a playable fragmented MP4 file at the c
 ## References
 
 - parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R20, R22, R31, R33, R36; Constraints
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-1–AD-4, AD-6, AD-7, AD-9, AD-11, AD-12, AD-14, AD-16, AD-19, AD-20, AD-22; Stack; Structural Seed
 - addendum — _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md, Inputs for architecture
 - architecture input — PLAN.md, §1, §3, §6

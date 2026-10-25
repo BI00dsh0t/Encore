@@ -47,6 +47,7 @@ In any detected game, pressing the Save Hotkey produces a playable multi-Track C
 ## References
 
 - parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R1, R2, R3, R4, R5, R7, R17, R18, R32
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-4, AD-5, AD-7, AD-8, AD-9, AD-10, AD-11, AD-19, AD-21
 - addendum — _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md, Review-driven mechanism notes (keyframe at the press)
 - architecture input — PLAN.md, §0 decisions 3–7, §3
 

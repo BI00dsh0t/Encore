@@ -40,6 +40,7 @@ A whole session in an opted-in game ends as one playable file, even after a cras
 ## References
 
 - parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R9–R13, R21
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-7, AD-8, AD-9, AD-12, AD-19, AD-21
 - addendum — _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md, Precedence (encoder restarts), Review-driven mechanism notes (fragment flushing)
 - architecture input — PLAN.md, §3, §8 (T-12, T-18)
 

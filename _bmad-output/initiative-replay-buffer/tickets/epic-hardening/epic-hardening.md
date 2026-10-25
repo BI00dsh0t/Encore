@@ -36,6 +36,7 @@ The app runs for a month of daily use with nothing to do per session, which is t
 ## References
 
 - parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R33, R34, R35, R36; Done when
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-3, AD-5, AD-16, AD-17
 - architecture input — PLAN.md, §8 Test catalog
 
 ## Notes
