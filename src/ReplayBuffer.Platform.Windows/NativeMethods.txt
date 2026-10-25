@@ -1,0 +1,11 @@
+EnumWindows
+IsWindow
+IsWindowVisible
+GetWindowTextLength
+GetWindowText
+GetWindowThreadProcessId
+DwmGetWindowAttribute
+DWMWINDOWATTRIBUTE
+OpenProcess
+QueryFullProcessImageName
+CloseHandle

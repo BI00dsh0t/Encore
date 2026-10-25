@@ -1,0 +1,118 @@
+namespace ReplayBuffer.Engine.Tests;
+
+public sealed class CommandLineTests
+{
+    [Fact]
+    public void DebugListTakesNoArguments()
+    {
+        Assert.IsType<DebugListCommand>(CommandLine.Parse(["debug-list"]).Command);
+        Assert.NotNull(CommandLine.Parse(["debug-list", "--window", "x"]).Error);
+    }
+
+    [Fact]
+    public void DebugCaptureDefaultsToThirtySecondsAndDefaultDevices()
+    {
+        var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(["debug-capture", "--window", "League"]).Command);
+
+        Assert.Equal("League", command.Window);
+        Assert.Null(command.Hwnd);
+        Assert.Equal(30, command.Seconds);
+        Assert.Null(command.Output);
+        Assert.Null(command.OutputDevice);
+        Assert.Null(command.InputDevice);
+    }
+
+    [Fact]
+    public void DebugCaptureReadsEveryOption()
+    {
+        var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(
+        [
+            "debug-capture", "--hwnd", "0x1A2B", "--seconds", "5", "--output", @"C:\x\a.mp4",
+            "--output-device", "Game", "--input-device", "BEACN Mic",
+        ]).Command);
+
+        Assert.Equal((nint)0x1A2B, command.Hwnd);
+        Assert.Null(command.Window);
+        Assert.Equal(5, command.Seconds);
+        Assert.Equal(@"C:\x\a.mp4", command.Output);
+        Assert.Equal("Game", command.OutputDevice);
+        Assert.Equal("BEACN Mic", command.InputDevice);
+    }
+
+    [Theory]
+    [InlineData]
+    [InlineData("capture")]
+    [InlineData("debug-capture")]
+    [InlineData("debug-capture", "--window", "a", "--hwnd", "0x10")]
+    [InlineData("debug-capture", "--window", "")]
+    [InlineData("debug-capture", "--window")]
+    [InlineData("debug-capture", "--window", "a", "--seconds", "0")]
+    [InlineData("debug-capture", "--window", "a", "--seconds", "-3")]
+    [InlineData("debug-capture", "--window", "a", "--seconds", "ten")]
+    [InlineData("debug-capture", "--hwnd", "0")]
+    [InlineData("debug-capture", "--hwnd", "0xZZ")]
+    [InlineData("debug-capture", "--window", "a", "--fps", "60")]
+    public void MalformedCommandLinesAreRefused(params string[] args)
+    {
+        var result = CommandLine.Parse(args);
+
+        Assert.Null(result.Command);
+        Assert.False(string.IsNullOrEmpty(result.Error));
+    }
+
+    [Theory]
+    [InlineData("0x1a2b", 0x1A2B)]
+    [InlineData("0X00010C7E", 0x10C7E)]
+    [InlineData("68734", 68734)]
+    public void HandlesParseAsHexOrDecimal(string text, long expected)
+    {
+        Assert.True(CommandLine.TryParseHandle(text, out var handle));
+        Assert.Equal((nint)expected, handle);
+    }
+}
+
+public sealed class OutputNamingTests
+{
+    [Theory]
+    [InlineData("League of Legends", "League of Legends")]
+    [InlineData("Discord | #general: chat", "Discord _ #general_ chat")]
+    [InlineData("a/b\\c*d?e\"f<g>h", "a_b_c_d_e_f_g_h")]
+    [InlineData("  trailing dots... ", "trailing dots")]
+    [InlineData("tab\there", "tab_here")]
+    [InlineData("???", "capture")]
+    [InlineData("", "capture")]
+    [InlineData("CON", "_CON")]
+    [InlineData("nul", "_nul")]
+    public void TitlesAreMadeSafeAsFileNames(string title, string expected)
+    {
+        Assert.Equal(expected, OutputNaming.Sanitize(title));
+    }
+
+    [Fact]
+    public void LongTitlesAreCut()
+    {
+        Assert.Equal(100, OutputNaming.Sanitize(new string('x', 300)).Length);
+    }
+
+    [Fact]
+    public void ThePathIsTitleAndLocalStartTime()
+    {
+        var path = OutputNaming.Allocate(@"C:\out", "Game: One", new DateTime(2026, 10, 25, 9, 5, 7), _ => false);
+
+        Assert.Equal(@"C:\out\Game_ One_2026-10-25_09-05-07.mp4", path);
+    }
+
+    [Fact]
+    public void CollisionsGetNumberSuffixes()
+    {
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            @"C:\out\Game_2026-10-25_09-05-07.mp4",
+            @"C:\out\Game_2026-10-25_09-05-07_2.mp4",
+        };
+
+        var path = OutputNaming.Allocate(@"C:\out", "Game", new DateTime(2026, 10, 25, 9, 5, 7), taken.Contains);
+
+        Assert.Equal(@"C:\out\Game_2026-10-25_09-05-07_3.mp4", path);
+    }
+}
