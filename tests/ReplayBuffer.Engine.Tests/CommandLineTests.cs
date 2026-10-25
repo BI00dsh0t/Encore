@@ -22,6 +22,7 @@ public sealed class CommandLineTests
         Assert.Null(command.InputDevice);
         Assert.Null(command.Stats);
         Assert.Null(command.GpuPriority);
+        Assert.Equal(CaptureStages.Full, command.Stages);
     }
 
     [Fact]
@@ -56,7 +57,19 @@ public sealed class CommandLineTests
     }
 
     [Theory]
+    [InlineData("full", CaptureStages.Full)]
+    [InlineData("copy", CaptureStages.Copy)]
+    [InlineData("wgc", CaptureStages.Wgc)]
+    public void StagesAreRead(string value, CaptureStages expected)
+    {
+        var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(["debug-capture", "--window", "a", "--stages", value]).Command);
+
+        Assert.Equal(expected, command.Stages);
+    }
+
+    [Theory]
     [InlineData]
+    [InlineData("debug-capture", "--window", "a", "--stages", "encode")]
     [InlineData("debug-capture", "--window", "a", "--gpu-priority", "8")]
     [InlineData("debug-capture", "--window", "a", "--gpu-priority", "-8")]
     [InlineData("debug-capture", "--window", "a", "--gpu-priority", "high")]

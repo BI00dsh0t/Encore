@@ -114,6 +114,9 @@ public sealed unsafe class D3D11Device : IDisposable
         _context->CopySubresourceRegion((ID3D11Resource*)target, targetSubresource, 0, 0, 0, (ID3D11Resource*)src, 0, &box);
     }
 
+    /// <summary>Submits the queued GPU work, as an encode of the copied frame would.</summary>
+    public void Flush() => _context->Flush();
+
     /// <summary>Fills slice <paramref name="subresource"/> of a render-target texture with one colour.</summary>
     public void Clear(nint target, uint subresource, float red, float green, float blue)
     {

@@ -15,6 +15,8 @@
       capture        capture, GPU thread priority left alone
       capture-p<N>   capture with --gpu-priority N   (e.g. capture-p7)
       capture-m<N>   capture with --gpu-priority -N  (e.g. capture-m7)
+      capture-copy   WGC plus the copy into the encoder pool, nothing encoded (--stages copy)
+      capture-wgc    WGC frames taken and released, no copy, no encode (--stages wgc)
 
     Writes into -OutDir: per run a PresentMon CSV, and for capture runs the engine's stats
     JSON, MP4, console log and GPU counter samples; then summary.csv, summary.json and
@@ -92,13 +94,16 @@ function Fail([string] $Message) {
 function Resolve-Condition([string] $Name) {
     if ($Name -eq 'baseline') { return [pscustomobject]@{ Name = $Name; Capture = $false; Priority = $null } }
     if ($Name -eq 'capture') { return [pscustomobject]@{ Name = $Name; Capture = $true; Priority = $null } }
+    if ($Name -in 'capture-wgc', 'capture-copy') {
+        return [pscustomobject]@{ Name = $Name; Capture = $true; Priority = $null; Stages = $Name.Substring(8) }
+    }
     if ($Name -match '^capture-([pm])([0-7])$') {
         $value = [int] $Matches[2]
         if ($Matches[1] -eq 'm') { $value = -$value }
         return [pscustomobject]@{ Name = $Name; Capture = $true; Priority = $value }
     }
 
-    Fail "Unknown condition '$Name'. Use baseline, capture, capture-p<0-7> or capture-m<0-7>."
+    Fail "Unknown condition '$Name'. Use baseline, capture, capture-p<0-7>, capture-m<0-7>, capture-copy or capture-wgc."
 }
 
 # Start-Process joins -ArgumentList with spaces; quote the arguments that contain any.
@@ -298,6 +303,7 @@ function Invoke-Run($Run, [int] $Index) {
                 '--seconds', [string] ($WarmUpSeconds + $Run.Seconds + $EngineTailSeconds),
                 '--output', (Join-Path $OutDir "$tag.mp4"), '--stats', $statsPath)
             if ($null -ne $condition.Priority) { $engineArgs += @('--gpu-priority', [string] $condition.Priority) }
+            if ($condition.PSObject.Properties['Stages']) { $engineArgs += @('--stages', $condition.Stages) }
             if ($OutputDevice) { $engineArgs += @('--output-device', $OutputDevice) }
             if ($InputDevice) { $engineArgs += @('--input-device', $InputDevice) }
 

@@ -102,6 +102,14 @@ context:
 - BEACN `Voice Chat Mic` stamps on this machine: 0 errors/zero/backwards, jitter p99 about 0.1 ms, age about 10.1 ms, drift about -1.5 ppm over 25 s. The idle `System` loopback sent no packets and was idle-filled. A game-audio run is needed for loopback stamps.
 - `SetGPUThreadPriority(7)` and `(-7)` both return S_OK unelevated, and read back the value that was set.
 
+**Game runs (2026-10-25, builder):**
+- Session 1 (`measurements/path-a-20261025-154104`, 8 × 5 min, GPU sampler on): baseline 74.98 fps / 1 % low 55.5; capture p0 60.7 / 22.5 (−19.0 %), p7 63.3 / 23.7 (−15.6 %), m7 61.2 / 23.4 (−18.4 %). Priority differences are inside the run-to-run spread (p0 57.9–63.5).
+- Session 2 (`path-a-20261025-163320`, baseline vs capture-p0, GPU sampler off): 75.8 → 58.9 fps (−22.3 %), 1 % low 57.8 → 22.7. The sampler is ruled out.
+- PresentMon shows the loss as single-frame hitches (≈ 720 frames > 30 ms per 5 min vs 1–2), at irregular intervals (not 1 s), with frame times quantised in ~15 ms steps. The game's GPU busy barely moves (10.8 → 11.6 ms) but its GPU latency p99 goes 9 → 38 ms and CPU busy 12.9 → 16.7 ms. Present mode is `Composed: Flip` with and without capture.
+- Engine: 0 duplicates; missed slots 0.2–1.4 % (where the game drops below 60); latency p99 ≈ 115–125 ms; CPU ≈ 10 % of one core, 0.41 % of the machine; ≈ 207 KB/s allocated; GC 20/20/20 (all Gen2) per 5 min run; GPU 3D ≈ 1 %, VideoEncode ≈ 31 %, Copy 0.
+- Audio stamps: 0 TIMESTAMP_ERROR/zero/backwards on both BEACN endpoints over 6 runs; jitter p99 0.11–0.15 ms; drift Game (BEACN Mix Create) −0.5 to −0.8 ppm, Microphone (BEACN Mic) +52.9 to +56.4 ppm (its own clock); one discontinuity per stream (the first packet).
+- The game was not fully GPU-bound (CPU busy ≈ frame time, GPU busy ≈ 80 %).
+
 **Decision draft (fill the figures from summary.md; Sofia writes it into the epic Notes):**
 
 > **Decision (YYYY-MM-DD): Path A kept | Path C adopted.** Load: Cyberpunk 2077, borderless 2560×1440 (the builder's monitor, not R5's 1080p), RT Overdrive, Frame Generation off, standing still; PresentMon 5 min per condition, interleaved twice, then 30 min of `<condition>`.
@@ -119,6 +127,8 @@ context:
 
 - 2026-10-25: added the error codes `gpu-priority-failed` (warning) and `stats-write-failed`; the report also records process start→first frame (for the §6.3 NativeAOT startup row). The script gained `-PresentMon` with the native/presentmon default (coordinator request), a balanced run order, comma-list `-Conditions` (so `pwsh -File` works), and a gitignored `measurements/` output folder. Added an FFmpeg-level test: synthetic NVENC with a latency recorder, count = encoded frames.
 - 2026-10-25 (review): packets drained at flush are left out of the latency figures and reported as `latency.flushed` (count + flushed = encoded frames). Timeline gap/trim counters only count steps past the 5 ms tolerance, not exact placement at start or idle resume. `--stats` is checked for writability before capture and written via `<path>.tmp` then a move. `video.nonIncreasingStamps` is reported and excluded from `captureFps` and the missed-slot denominator. A failed run in the script (game gone, engine exited early) now stops what's running and ends the session, but the summary still covers the finished runs. summary.md shows the engine binary size.
+
+- 2026-10-25: FPS loss of 15–22 % needs blame before the Path C rule can be applied. Added `debug-capture --stages full|copy|wgc` and script conditions `capture-copy` / `capture-wgc` (WGC alone, WGC + copy, no encode) to split the cost by stage, plus `-NoGpuSampler` (sampler ruled out) and a keep-awake / lock check after an idle lock spoilt the first session. No NVENC tuning.
 
 ## Review Triage Log
 

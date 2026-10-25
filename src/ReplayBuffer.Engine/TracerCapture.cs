@@ -174,6 +174,12 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             }
 
             _stats?.Cadence.Record(qpc);
+            if (command.Stages == CaptureStages.Wgc)
+            {
+                _lastFrameQpc = qpc;
+                return;
+            }
+
             using var surface = _video!.TryAcquire(qpc);
             if (surface is null)
             {
@@ -181,6 +187,14 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             }
 
             _device!.CopyFrame(texture, contentSize, surface.Texture, surface.Subresource, _outputSize);
+            if (command.Stages == CaptureStages.Copy)
+            {
+                // The copy alone: submit it, then hand the surface back unencoded.
+                _device.Flush();
+                _lastFrameQpc = qpc;
+                return;
+            }
+
             _video.Submit(surface);
             _lastFrameQpc = qpc;
         }

@@ -8,6 +8,19 @@ public abstract record EngineCommand;
 /// <summary><c>debug-list</c>: windows and audio endpoints.</summary>
 public sealed record DebugListCommand : EngineCommand;
 
+/// <summary>How much of the video path a <c>debug-capture</c> runs (story 1.2 cost split).</summary>
+public enum CaptureStages
+{
+    /// <summary>WGC → copy → NVENC → file: the tracer.</summary>
+    Full,
+
+    /// <summary>WGC → copy into the encoder's pool; nothing is encoded.</summary>
+    Copy,
+
+    /// <summary>WGC frames are taken and released; no copy, no encode.</summary>
+    Wgc,
+}
+
 /// <summary><c>debug-capture</c>: the tracer capture of one window.</summary>
 public sealed record DebugCaptureCommand(
     string? Window,
@@ -17,7 +30,8 @@ public sealed record DebugCaptureCommand(
     string? OutputDevice,
     string? InputDevice,
     string? Stats = null,
-    int? GpuPriority = null) : EngineCommand
+    int? GpuPriority = null,
+    CaptureStages Stages = CaptureStages.Full) : EngineCommand
 {
     public const int DefaultSeconds = 30;
 
@@ -39,7 +53,7 @@ public static class CommandLine
           ReplayBuffer.Engine debug-list
           ReplayBuffer.Engine debug-capture (--window <title> | --hwnd <handle>) [--seconds 30]
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
-                              [--stats <file.json>] [--gpu-priority <-7..7>]
+                              [--stats <file.json>] [--gpu-priority <-7..7>] [--stages full|copy|wgc]
         """;
 
     public static ParseResult Parse(IReadOnlyList<string> args)
@@ -78,6 +92,7 @@ public static class CommandLine
         string? window = null, output = null, outputDevice = null, inputDevice = null, stats = null;
         nint? hwnd = null;
         int? gpuPriority = null;
+        var stages = CaptureStages.Full;
         var seconds = DebugCaptureCommand.DefaultSeconds;
 
         for (var i = 1; i < args.Count; i++)
@@ -136,6 +151,23 @@ public static class CommandLine
 
                     gpuPriority = priority;
                     break;
+                case "--stages":
+                    switch (value)
+                    {
+                        case "full":
+                            stages = CaptureStages.Full;
+                            break;
+                        case "copy":
+                            stages = CaptureStages.Copy;
+                            break;
+                        case "wgc":
+                            stages = CaptureStages.Wgc;
+                            break;
+                        default:
+                            return Fail($"'{value}' is not one of full, copy or wgc.");
+                    }
+
+                    break;
                 default:
                     return Fail($"Unknown option '{option}'.");
             }
@@ -151,7 +183,7 @@ public static class CommandLine
             return Fail("--window needs a non-empty title.");
         }
 
-        return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority), null);
+        return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages), null);
     }
 
     private static ParseResult Fail(string error) => new(null, error);
