@@ -68,7 +68,10 @@ param(
     [string] $Engine = '',
 
     # Where the run files and the summary go. Default: measurements/path-a-<timestamp> under the repo root.
-    [string] $OutDir = ''
+    [string] $OutDir = '',
+
+    # Skip the 1 s GPU Engine counter sampling: querying those counters can itself make a game stutter.
+    [switch] $NoGpuSampler
 )
 
 $ErrorActionPreference = 'Stop'
@@ -311,7 +314,9 @@ function Invoke-Run($Run, [int] $Index) {
                 throw "[$tag] the engine exited early with code $($engineProcess.ExitCode): $("$err".Trim())"
             }
 
-            $sampler = Start-GpuSampler -EnginePid $engineProcess.Id -Samples $Run.Seconds
+            if (-not $NoGpuSampler) {
+                $sampler = Start-GpuSampler -EnginePid $engineProcess.Id -Samples $Run.Seconds
+            }
         }
 
         Write-Host "[$tag] PresentMon $($Run.Seconds) s on $($process.ProcessName).exe ..."
@@ -325,7 +330,7 @@ function Invoke-Run($Run, [int] $Index) {
             Write-Warning "[$tag] PresentMon did not stop on its own and was killed."
         }
 
-        $gpu = [pscustomobject]@{ ByType = @{}; Error = 'baseline: no engine' }
+        $gpu = [pscustomobject]@{ ByType = @{}; Error = $(if ($NoGpuSampler) { 'GPU sampler off' } else { 'baseline: no engine' }) }
         if ($sampler) {
             $samples = Receive-Job -Job $sampler -Wait -AutoRemoveJob
             $samples | Export-Csv -NoTypeInformation -Path (Join-Path $OutDir "$tag-gpu.csv")
