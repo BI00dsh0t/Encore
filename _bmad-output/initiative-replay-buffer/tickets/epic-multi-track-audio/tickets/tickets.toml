@@ -1,0 +1,122 @@
+# Stories of epic-multi-track-audio, in build order. `id` is permanent, never reused.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Tracer: Global Track Layout to named Track streams in a capture"
+description = "Thinnest path through every layer: the engine reads the Global trackLayout from the settings store, resolves each layout device key to a live endpoint through AudioDeviceHub (story 1.12), mixes each Track's devices by QPC, and writes one named AAC stream per Track, in layout order, through the existing capture session (story 1.6). The engine's debug-list command is extended to print each present endpoint's id, friendly name, parent name and flow. The builder's step: copy the BEACN Game output, the Chat output and the BEACN Mic from that list into the ReplayBuffer-Dev instance's settings.json as three Tracks while the engine is stopped. The App and IPC side is first exercised in story 3. R2 part: named Tracks in layout order. R7 part: the streams exist and are titled."
+verify = "The builder runs a 30 s capture with a three-Track layout and ffprobe shows three AAC streams with the configured titles in order; each plays only its devices' audio in VLC, in sync with the video."
+covers = ["R2", "R7"]
+after = ["epic-engine-baseline"]
+hitl = true
+risk = "high"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Track mixer: summing, alignment and limiter"
+description = "Each Track sums any number of sources (Output and Input Devices together, a device in several Tracks) aligned by QPC, through a limiter that acts only above full scale, with no gain control. A Track with no devices records silence. R2 part: any combination and shared devices. R3: level and no clipping. Stories 5, 4 and 6 extend this mixer in that order."
+verify = "Automated tests feed synthetic PCM: a single-device Track is bit-identical to its source; two full-scale sources never exceed full scale; one device in two Tracks appears in both, sample-aligned; a Track with no devices is silent."
+covers = ["R2", "R3"]
+after = [1]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Live device list over IPC"
+description = "AudioDeviceHub gains IMMNotificationClient add, remove and state-change handling, which story 5 reuses for rebinding. devices.list and devices.changed go in Contracts/Audio.cs and in state.snapshot: every present Output and Input Device with endpoint id, friendly name, parent name and flow, plus layout devices that are not present, marked unavailable; not-present devices are otherwise hidden. Updates arrive without a restart. R1 part: the engine-side list."
+verify = "An automated test enables and disables a Windows endpoint (or a test double of the enumerator) and sees devices.changed within 2 s; two devices named Speakers are told apart by parent name; a configured but absent device shows as unavailable."
+covers = ["R1"]
+after = [1]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Device dropout and rebind"
+description = "When a layout device disappears, its Tracks continue with silence from that device only. When it returns, under the same endpoint id or, if the id changed, the same friendly and parent name, audio resumes within 2 s with no capture restart, and the rebinding is not written to settings. Uses story 3's notification handling. Each dropout raises warning.raised { code: device-dropout, overlay: false } and is logged. The builder restarts the BEACN app once to confirm."
+verify = "An automated test removes a device for 10 s mid-capture and every Track keeps its length, with 10 s of silence from that device only; the builder restarts the BEACN app during a capture and its devices resume within 2 s, with one device-dropout warning and one log entry each."
+covers = ["R5"]
+after = [2, 3]
+hitl = true
+risk = "high"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Mic Devices and mic mute"
+description = "The Mic Mute Hotkey (HotkeyAction micMute from story 1.9) toggles engine runtime mute: it silences only isMic devices, before the mix, in muteAffected Tracks, from the press QPC. The state is saved atomically to runtime.json, restored before any session starts, and counts as muted if the file is missing or corrupt. It's exposed as micMuted in capture.stateChanged (a SessionOrchestrator change, also edited by epic-game-detection-profiles story 3). R4 Global part; epic-replay-buffer-clips adds per-profile overrides."
+verify = "An automated test toggles mute mid-capture: muteAffected Tracks are silent from the press sample onward and other Tracks keep the mic; deleting runtime.json and restarting the engine starts muted; capture.stateChanged reports micMuted."
+covers = ["R4"]
+after = [5]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Track meters in the engine"
+description = "meters.watch { layout } and meters.unwatch: a meter-only mixer per watched layout (a saved one or an unsaved draft) on AudioDeviceHub's fan-out, sending coalesced meters.levels at most 20 times a second from peaks gathered without allocation, with no Sink and no capture started. Meters show what is recorded, so a muted mic reads silent in muteAffected Tracks. Devices stay open only while watched. R6 part: engine meters."
+verify = "An automated test watches a draft layout with no capture running and receives meters.levels for each Track at no more than 20 Hz, moving when a tone plays on a device in that Track and silent for a muted mic in a muteAffected Track; unwatching closes the device."
+covers = ["R6"]
+after = [3, 4]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Track Layout editor in the Main App"
+description = "A Global Track Layout page in the Settings host from story 1.7, sent through its settings.update sender: pick devices from the live list (same-name devices shown with their parent, absent ones as unavailable), add, rename, reorder and delete Tracks, and assign devices to Tracks. A new layout starts with Everything first, and every device added to the layout joins Everything unless the user removes it. There is no separate UX design; the builder checks the page by hand. R1 part: the picker. R2 part: Track editing and Everything."
+verify = "The builder builds a three-Track layout in the page, sees a device unplugged while the page is open turn unavailable, saves the layout, and the next capture uses it with Everything holding all three devices."
+covers = ["R1", "R2"]
+after = [3]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 11
+type = "story"
+title = "Mic Devices and double-count warning in the editor"
+description = "The Track Layout page gains marking Mic Devices and the Tracks mute affects, and a non-blocking warning when a Track mixes Output Devices from different parent devices (a possible double count). R2 part: the warning. R4 part: marking."
+verify = "The builder marks the BEACN Mic as a Mic Device affecting only the Chat Track, presses the Mic Mute Hotkey during a capture and finds the mic silent only in Chat; adding a physical output to a Track that has a BEACN output shows the warning, and saving still works."
+covers = ["R2", "R4"]
+after = [4, 7]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 8
+type = "story"
+title = "Live meters in the Track Layout editor"
+description = "The editor shows one live meter per Track for the layout on screen, saved or an edited unsaved draft, through meters.watch, and stops watching when the page closes. R6 part: the UI."
+verify = "With no game running, the builder plays audio on the BEACN Chat output and sees only the Tracks that contain it move, including after editing the layout without saving; closing the page stops the meters."
+covers = ["R6"]
+after = [6, 7]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 9
+type = "story"
+title = "Named Tracks in players and editors, end to end"
+description = "An automated ffprobe and decoded-audio check of a multi-Track capture: titles, order, Track 1 default, sync between Tracks, a single-device Track at its source's level, and two full-scale sources never above 0 dBFS; plus a one-off check that the Track names show in VLC and DaVinci Resolve. R7 part: player and editor check. The 60-minute drift figure stays with epic-hardening."
+verify = "The automated check passes on a 5-minute capture, and the builder opens the same file in VLC and DaVinci Resolve and sees the configured Track names in order."
+covers = ["R3", "R7"]
+after = [2]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 10
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup only, scoped at its start from plans and review findings the epic deferred."
+verify = "All tests pass and a three-Track capture still plays with its named Tracks after the sweep; every deferred cleanup item is closed or recorded."
+covers = []
+after = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11]
+hitl = false
+risk = "low"

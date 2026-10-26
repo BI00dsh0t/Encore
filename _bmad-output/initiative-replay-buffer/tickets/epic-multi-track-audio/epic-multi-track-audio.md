@@ -7,7 +7,7 @@ covers: [R14, R15, R16, R18, R19, R30, R33]
 sources: []
 companions: []
 after: []
-refined: false
+refined: true
 risk: high
 ---
 
@@ -20,6 +20,22 @@ This is the app's reason to exist: audio Tracks built from any combination of Wi
 ## Outcome
 
 With the builder's BEACN setup, captured files carry the configured, named Tracks in sync, with no clipping and no lost audio when a device drops out (R14, R15, R16, R18, R19, R30).
+
+## Requirements
+
+- R1 (parent R14): The app lists Windows Output and Input Devices live, with no restart. Devices with the same name are told apart by their parent device. Devices that aren't present are hidden, unless one is already in a Track Layout; then it's shown as unavailable.
+- R2 (parent R15): A Global Track Layout holds any number of user-named Tracks, each built from any combination of Audio Devices. A device can be in several Tracks, and all Tracks stay in sync. A new layout starts with an "Everything" Track first. Settings warn, without blocking, when a Track may count the same audio twice.
+- R3 (parent R16): Audio is captured as recorded, with no gain control. A single-device Track matches its device's level, and a mix of several devices never clips; the limiter acts only above full scale (architecture AD-13).
+- R4 (parent R18, Global part): In the Global Track Layout the user marks Mic Devices and the Tracks that mute affects. The Mic Mute Hotkey silences only Mic Devices, only in those Tracks, and only in what the app records. The mute state persists across engine restarts, counts as muted if its file is missing (architecture AD-5), and is exposed as `micMuted` in `capture.stateChanged`.
+- R5 (parent R19): A device dropout leaves silence from that device only. Its audio resumes within 2 s of the device returning, with no capture restart. The Overlay stays silent, but the dropout is raised as `warning.raised { code: device-dropout, overlay: false }` and logged.
+- R6 (parent R30): The Main App shows a live level meter per Track for the layout being viewed, including an unsaved draft. The meters work with nothing being captured, and update at most 20 times a second.
+- R7 (parent R33, named-Tracks part): A file captured with a multi-Track layout shows the named Tracks, in order, in VLC and DaVinci Resolve, all in sync.
+
+## Constraints
+
+- (parent NFR-2, NFR-3; architecture AD-13, AD-20) All audio goes through epic 1's AudioDeviceHub, with one client per endpoint and capture threads that never block.
+- (architecture AD-4, AD-5) The Track Layout shape is story 1.4's `TrackLayout`. Rebinding a device is never written back to settings, and mic mute is runtime state, never a setting.
+- (architecture AD-3) Device lists, meters and warnings travel only as Contracts messages in the `Audio.cs` area. Meters coalesce.
 
 ## Done when
 
@@ -44,4 +60,15 @@ With the builder's BEACN setup, captured files carry the configured, named Track
 
 ## Notes
 
+- Decision: 2026-10-25, the tracer bullet is story 1: the Global trackLayout → named AAC Track streams through the capture session, using a hand-edited settings.json.
+- Decision: 2026-10-25, the sequencing:
+  - The mixer lane runs 2 → 5 → 4 → 6, because stories 5, 4 and 6 all change story 2's mixer.
+  - Story 3 owns AudioDeviceHub's device notifications, which story 5 reuses.
+  - The UI lane runs 7 → 11 → 8, on epic 1's Settings host (story 1.7).
+  - A Refactor sweep (10) closes the epic.
+- Decision: 2026-10-25, the least-certain item is story 5 (dropout and rebind with the BEACN virtual devices), so it comes right after the mixer. Confirmed by the user.
+- Decision: 2026-10-25, every device added to the layout joins the "Everything" Track unless the user removes it, and a Track with no devices records silence. Confirmed by the user.
+- Decision: 2026-10-25, the double-count warning fires when a Track mixes Output Devices from different parent devices. It's a heuristic that can miss a mixer output that already includes a mic captured on its own. Confirmed by the user.
+- Decision: 2026-10-25, meters show what is recorded, so a muted mic reads silent in the Tracks mute affects. Confirmed by the user.
+- Decision: 2026-10-25, there's no `bmad-ux` pass for the Track Layout editor; the builder lays it out, and you check it by hand. Confirmed by the user.
 - Waits on epic-engine-baseline because: Tracks attach to its capture-session API, settings store, and encoder/muxer, and the Mic Mute Hotkey uses its Hotkey registration.

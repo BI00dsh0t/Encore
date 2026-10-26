@@ -1,0 +1,89 @@
+# Stories of epic-game-detection-profiles, in build order. `id` is permanent, never reused.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Tracer: detect a borderless game and make it the Target Game"
+description = "Thinnest path through every layer: GameMonitor in Platform.Windows notices a borderless or fullscreen window, canonicalizes its executable with the one Canonicalize (GetFinalPathNameByHandle), opens the process only with PROCESS_QUERY_LIMITED_INFORMATION, skips the engine's own process and the supervised App's, and proposes it; the SessionOrchestrator (story 1.6) commits target.changed { reason: detected } and points the capture session at its window; the Target Game reaches the Main App through state.snapshot. The builder launches a borderless game to confirm. R1 part: borderless detection. R2 part: the propose and commit path."
+verify = "The builder launches a borderless game with the engine and Main App running and, within 5 s, sees the game shown as the Target Game in the Main App and a debug capture following its window; a borderless Main App window is never detected."
+covers = ["R1", "R2"]
+after = ["epic-engine-baseline"]
+hitl = true
+risk = "high"
+
+[[entry]]
+id = 8
+type = "spike"
+title = "Which Windows game list to read"
+description = "Answers whether to read GameConfigStore (MatchedExeFullPath), Windows.Gaming.Preview.GamesEnumeration.GameList, or neither, for 'apps Windows identifies as games': readable unelevated, read-only, populated for the builder's games, and no anti-cheat concern. Story 2 waits on it; the answer goes in the epic's Notes as a dated Decision. The builder confirms which of their games each source lists."
+verify = "A dated Decision in the epic's Notes names the source (or drops it), with the list each candidate returned on the builder's PC."
+covers = ["R1"]
+after = [1]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Detection sources and exclusions"
+description = "Adds the other detection sources: the Windows game list chosen by spike 8, and the manualGames list (written by story 6's command), matched by canonical path even when windowed. Detection stays sticky until the process exits (minimize, alt-tab and windowed mode don't end it), processes under the install folder are never detected, and game.exited fires on exit. R1 part: the other sources, stickiness and exclusions."
+verify = "Automated tests with test processes: a windowed hand-added executable is detected; a minimized or windowed detected game stays detected until it exits; a process under the install folder is never detected; the builder confirms one Windows-listed game is detected while windowed."
+covers = ["R1"]
+after = [8]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Target Game rule"
+description = "The GameMonitor proposal and SessionOrchestrator commit rules (the orchestrator is also edited by epic-multi-track-audio story 4): 10 consecutive seconds of focus switches the Target Game; a stub Recording-running flag blocks the switch and the switch is re-evaluated the moment it clears; when the Target exits, the most recently focused other detected game takes over at once, else target.changed { to: null } starts the 30 s drain; on a cold start the foreground (else most recently started) detected game is chosen at once. R2 part: the switch rules."
+verify = "Automated tests with two test game processes and simulated focus: 9 s of focus doesn't switch and 10 s does; the stub Recording flag blocks the switch until cleared; exiting the Target hands over at once; a cold start with two games picks the foreground one immediately."
+covers = ["R2"]
+after = [2]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Game Profile auto-creation and Ignored"
+description = "On first detection the engine creates a Game Profile keyed by the canonical path, named from the executable's product name read from the file on disk (falling back to the file name), with no overrides so it inherits Global Settings; written through the settings op queue so concurrent App edits never lose it. Ignored and recordingsEnabled default false; an Ignored profile is never detected, and setting Ignored on the current Target ends it with no drain. R3 part: creation, naming, inheritance and Ignored."
+verify = "Automated tests: detecting a new test game adds one profile named from its version resource; the same game reached through a junction path reuses the same profile; marking the Target Ignored ends it at once with no drain and clearing it restores detection; an App settings.update racing creation gets settings-conflict, not a lost profile."
+covers = ["R3"]
+after = [3]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "OutputPathAllocator"
+description = "The one producer of output paths in Core: <Output Folder>\\<profile folder>\\<Game>_<yyyy-MM-dd_HH-mm-ss>.mp4 from the live profile name and the press or start QPC in local time; characters Windows doesn't allow are replaced; each profile's folder name is assigned once, unique among profiles (appending (2)), and persisted as an additive GameProfile attribute so later names never move it; Monitor Recordings is reserved; the path is reserved atomically with CREATE_NEW, adding _2, _3 on a collision. epic-replay-buffer-clips and epic-recordings call it. R4."
+verify = "Automated tests over fabricated profiles: two allocations in the same second get distinct paths; a profile named with a colon gets a valid folder; two profiles both named Launcher get different folders that don't change when a third Launcher is added; a profile named Monitor Recordings doesn't share the reserved folder; after a rename, new file names use the new name in the same folder."
+covers = ["R4"]
+after = ["epic-engine-baseline"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Game Profiles page in the Main App"
+description = "A Game Profiles page in the Settings host from story 1.7, listing every profile from state.snapshot, with rename, an Ignored toggle and a Recordings switch sent through its settings.update sender. Add game by hand: this story adds the Game.cs command and its engine handler, which takes the App's raw executable path, canonicalizes it, and adds it to manualGames. There is no separate UX design; the builder checks the page by hand. R3 part: the UI. R5."
+verify = "The builder renames a detected game, toggles Ignored and sees detection stop, switches Recordings on, and adds a windowed game by hand that is then detected."
+covers = ["R3", "R5"]
+after = [4]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup only, scoped at its start from plans and review findings the epic deferred."
+verify = "All tests pass and detecting, targeting and profile creation still work end to end after the sweep; every deferred cleanup item is closed or recorded."
+covers = []
+after = [1, 2, 3, 4, 5, 6, 8]
+hitl = false
+risk = "low"
