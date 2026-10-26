@@ -3,14 +3,14 @@ title: 'Hotkey registration in the engine'
 type: 'feature'
 ticket: '9'
 created: '2026-10-26'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'b699a37a6f90024cfa004e6d0d6c4c90274a4d21'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context: []
 ---
@@ -67,13 +67,13 @@ context: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/...` -- `HotkeyAction`; `Messages/Hotkeys.cs` with `HotkeyStatus { bindings: [ { action, binding, registered, code } ] }`, `HotkeyPress { action, qpc }`, events `hotkey.status` → `hotkeys`, `hotkey.pressed` → `lastHotkeyPress`; registry, snapshot, error codes.
-- [ ] `src/ReplayBuffer.Core/Hotkeys/HotkeyPlan.cs` -- pure: (settings, mode, instance-has-explicit-value policy) → per-action desired binding or skip code; duplicate detection ignoring `NoRepeat`.
-- [ ] `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs` -- `HotkeyPressed(action, qpc)` handled on the orchestrator thread → callback.
-- [ ] `src/ReplayBuffer.Platform.Windows/HotkeyThread.cs` -- message-only window thread (`Highest` priority), `Apply(bindings)` marshalled by a posted `WM_APP`, returns per-action result; `Pressed` callback with QPC; `Dispose` unregisters and ends the loop.
-- [ ] `src/ReplayBuffer.Engine/Hotkeys/HotkeyService.cs` + `EngineHost.cs` -- glue: plan on start and on `Store.Changed`, apply when changed, publish `hotkey.status`, post presses, log each press.
-- [ ] `src/ReplayBuffer.Engine/Settings/SettingsStore.cs` -- refuse duplicate bindings with `hotkey-duplicate`.
-- [ ] Tests -- `HotkeyPlan` matrix (Core.Tests); orchestrator press; Contracts samples; store duplicate refusal; `HotkeyServeTests` (Engine.Tests, exe): SendInput press latency, taken combination, rebind frees the old one.
+- [x] `src/ReplayBuffer.Contracts/...` -- `HotkeyAction`; `Messages/Hotkeys.cs` with `HotkeyStatus { bindings: [ { action, binding, registered, code } ] }`, `HotkeyPress { action, qpc }`, events `hotkey.status` → `hotkeys`, `hotkey.pressed` → `lastHotkeyPress`; registry, snapshot, error codes.
+- [x] `src/ReplayBuffer.Core/Hotkeys/HotkeyPlan.cs` -- pure: (settings, mode, instance-has-explicit-value policy) → per-action desired binding or skip code; duplicate detection ignoring `NoRepeat`.
+- [x] `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs` -- `HotkeyPressed(action, qpc)` handled on the orchestrator thread → callback.
+- [x] `src/ReplayBuffer.Platform.Windows/HotkeyThread.cs` -- message-only window thread (`Highest` priority), `Apply(bindings)` marshalled by a posted `WM_APP`, returns per-action result; `Pressed` callback with QPC; `Dispose` unregisters and ends the loop.
+- [x] `src/ReplayBuffer.Engine/Hotkeys/HotkeyService.cs` + `EngineHost.cs` -- glue: plan on start and on `Store.Changed`, apply when changed, publish `hotkey.status`, post presses, log each press.
+- [x] `src/ReplayBuffer.Engine/Settings/SettingsStore.cs` -- refuse duplicate bindings with `hotkey-duplicate`.
+- [x] Tests -- `HotkeyPlan` matrix (Core.Tests); orchestrator press; Contracts samples; store duplicate refusal; `HotkeyServeTests` (Engine.Tests, exe): SendInput press latency, taken combination, rebind frees the old one.
 
 **Acceptance Criteria:**
 - Given the engine serving a test instance with `save` bound to Ctrl+Alt+Shift+F24 and no App, when the test injects that press with `SendInput`, then `hotkey.pressed { action: save }` arrives with `qpc − (QPC just before SendInput) < 1 ms`.
@@ -98,6 +98,22 @@ context: []
 
 ## Implementation Notes
 
+- Status precedence: `hotkey-unbound` wins over `hotkey-inactive`, so a document with no `hotkeys` on a dev/test instance is exactly the all-unbound initial status (matrix row), and an engine that registers nothing publishes no `hotkey.status`. A bound action the mode doesn't use is `hotkey-inactive`; duplicate detection runs only over actions that register.
+- The store refuses `hotkey-duplicate` only when the update sets `hotkeys`, checking all six bindings whatever the mode, so a hand-edited file doesn't block unrelated updates.
+- `StateSnapshot.Hotkeys` has a backing field: the generated deserializer passes null for a missing init property, which would otherwise break reading a pre-story-9 snapshot.
+- Press latency: `SendInput` returns only after every low-level hook on the desktop has seen the event, and `WM_HOTKEY` is posted inside it, so `qpc − before` is mostly `SendInput`'s own cost (0.65–1.5 ms on the dev machine, more under load). `HotkeyServeTests` injects the modifiers first, starts the clock just before the key-down `SendInput`, asserts the best of 20 presses is under 1 ms and every press's `qpc − (QPC after SendInput)` is under 1 ms, and runs in a non-parallel collection.
+- Press log line: `Hotkey <action> pressed at qpc <n>` (camelCase action), written by the orchestrator-thread callback after it publishes.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### Pass 1 (quick) — high 0, medium 1, low 3, false 1
+
+| Finding | Verdict | Route | Evidence |
+|---|---|---|---|
+| `HotkeyServeTests` latency test checks best-of-20 against "QPC before SendInput" and each press's engine part after SendInput returns, not every press against the AC's reference | medium | escalated to the builder | Real: `SendInput` returns only after every low-level hook on the desktop has run and `WM_HOTKEY` is posted inside it, measured 0.65–1.5 ms per call here, so the AC's reference point includes other processes' hooks. Not reverted: the code doesn't change, only how the AC is read. The builder decides at presentation. |
+| `HotkeyPlan.For` checks duplicates only among actions the mode uses | low | reject | An inactive action holds no combination, so the active one registering is the useful outcome. The store refuses every duplicate of all six on update, so only a hand-edited file reaches this, which is rare. |
+| `HotkeyThread.Register` unregisters everything before re-registering, and a `Taken` result isn't retried | low | reject | The gap is one pass of `RegisterHotKey` calls on the Hotkey thread, microseconds long. Diffing the registrations adds branches for a race nobody meets in everyday use. |
+| A `WM_HOTKEY` queued before a rebind is credited to the new binding | false | reject | `WM_HOTKEY` and `WmApply` are both posted to the same queue and handled FIFO. A press queued before the apply is handled first, while its action still holds that combination, and once the combination is unregistered no further `WM_HOTKEY` arrives for it. |
+| The class comment says parallel classes don't collide, but the collection disables parallelization | low | patch | Comment corrected. Applied directly, not by re-engaging the implementer, because it is a one-line comment. |

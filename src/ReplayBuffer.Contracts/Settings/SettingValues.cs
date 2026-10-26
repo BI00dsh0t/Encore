@@ -85,7 +85,32 @@ public sealed record HotkeySettings(
     HotkeyBinding? RecordToggle,
     HotkeyBinding? RecordStart,
     HotkeyBinding? RecordStop,
-    HotkeyBinding? MonitorRecordToggle);
+    HotkeyBinding? MonitorRecordToggle)
+{
+    /// <summary>The binding of <paramref name="action"/>, or null when it is unbound.</summary>
+    public HotkeyBinding? For(HotkeyAction action) => action switch
+    {
+        HotkeyAction.Save => Save,
+        HotkeyAction.MicMute => MicMute,
+        HotkeyAction.RecordToggle => RecordToggle,
+        HotkeyAction.RecordStart => RecordStart,
+        HotkeyAction.RecordStop => RecordStop,
+        HotkeyAction.MonitorRecordToggle => MonitorRecordToggle,
+        _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
+    };
+}
+
+/// <summary>An action a Hotkey triggers, one per <see cref="HotkeySettings"/> field, in registration order (AD-11).</summary>
+[JsonConverter(typeof(CamelCaseEnumConverter<HotkeyAction>))]
+public enum HotkeyAction
+{
+    Save,
+    MicMute,
+    RecordToggle,
+    RecordStart,
+    RecordStop,
+    MonitorRecordToggle,
+}
 
 /// <summary>Whether Record is one toggle Hotkey or separate start and stop Hotkeys.</summary>
 [JsonConverter(typeof(CamelCaseEnumConverter<RecordHotkeyMode>))]

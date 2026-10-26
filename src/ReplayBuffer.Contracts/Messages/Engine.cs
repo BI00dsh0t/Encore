@@ -12,6 +12,8 @@ namespace ReplayBuffer.Contracts.Messages;
 /// </summary>
 public sealed record StateSnapshot
 {
+    private readonly HotkeyStatus _hotkeys = HotkeyStatus.Unbound;
+
     /// <summary>Identifies one engine run; a new value means a restarted engine.</summary>
     public required string EngineInstanceId { get; init; }
 
@@ -33,6 +35,19 @@ public sealed record StateSnapshot
     /// <summary>The process id of the App that last sent <c>app.attach</c>, or <c>null</c> before one has.</summary>
     public int? AppPid { get; init; }
 
+    /// <summary>Each Hotkey action's binding and whether it is registered (AD-11); all unbound before the first status.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 9) reads as all unbound.</remarks>
+    public HotkeyStatus Hotkeys
+    {
+        get => _hotkeys;
+
+        // The generated deserializer passes null for a missing field.
+        init => _hotkeys = value ?? HotkeyStatus.Unbound;
+    }
+
+    /// <summary>The last Hotkey press, or <c>null</c> before one.</summary>
+    public HotkeyPress? LastHotkeyPress { get; init; }
+
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
 
@@ -45,6 +60,7 @@ public sealed record StateSnapshot
         Settings = settings,
         Capture = CaptureState.Initial,
         Warnings = [],
+        Hotkeys = HotkeyStatus.Unbound,
     };
 }
 

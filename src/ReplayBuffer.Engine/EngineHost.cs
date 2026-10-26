@@ -5,6 +5,7 @@ using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Engine.Hotkeys;
 using ReplayBuffer.Engine.Ipc;
 using ReplayBuffer.Engine.Sessions;
 using ReplayBuffer.Engine.Settings;
@@ -29,6 +30,8 @@ internal sealed record EngineHostOptions
 /// store, and serves its commands and events until <c>engine.shutdown</c>. It publishes the
 /// heartbeat and supervises the App that attaches (AD-16). It composes the SessionOrchestrator
 /// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; nothing starts a session yet.
+/// It registers the Hotkeys (AD-11) before the pipe accepts connections; the orchestrator publishes
+/// each press as <c>hotkey.pressed</c>, and no action is bound to one yet.
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
@@ -54,7 +57,14 @@ internal sealed class EngineHost : IAsyncDisposable
     private int _disposed;
 
     private EngineHost(
-        IpcServer server, SettingsStore settings, EventHub hub, CommandRouter router, Warnings warnings, AppSupervisor apps, SessionOrchestrator sessions)
+        IpcServer server,
+        SettingsStore settings,
+        EventHub hub,
+        CommandRouter router,
+        Warnings warnings,
+        AppSupervisor apps,
+        SessionOrchestrator sessions,
+        HotkeyService hotkeys)
     {
         Server = server;
         Settings = settings;
@@ -63,6 +73,7 @@ internal sealed class EngineHost : IAsyncDisposable
         Warnings = warnings;
         Apps = apps;
         Sessions = sessions;
+        Hotkeys = hotkeys;
     }
 
     public IpcServer Server { get; }
@@ -79,6 +90,8 @@ internal sealed class EngineHost : IAsyncDisposable
 
     public SessionOrchestrator Sessions { get; }
 
+    public HotkeyService Hotkeys { get; }
+
     public string PipeName => Server.PipeName;
 
     /// <summary>Completes once <c>engine.shutdown</c> has been answered.</summary>
@@ -89,10 +102,12 @@ internal sealed class EngineHost : IAsyncDisposable
     {
         hostOptions ??= new EngineHostOptions();
         var log = loggers.CreateLogger("Ipc");
+        var hotkeyLog = loggers.CreateLogger("Hotkeys");
 
         // The pipe first: a second engine must fail before it touches the settings file.
         var server = new IpcServer(Contracts.Ipc.PipeName.ForCurrentUser(instance.Name), options ?? new IpcServerOptions(), log);
         SessionOrchestrator? sessions = null;
+        HotkeyService? hotkeys = null;
         try
         {
             var load = SettingsStore.Open(instance.RoamingDataFolder);
@@ -112,8 +127,16 @@ internal sealed class EngineHost : IAsyncDisposable
                     new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions") },
                     loggers),
                 () => load.Store.Current,
-                state => hub.Publish(CaptureMessages.StateChanged, state));
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions);
+                state => hub.Publish(CaptureMessages.StateChanged, state),
+                press =>
+                {
+                    hub.Publish(HotkeyMessages.Pressed, press);
+                    HotkeyService.LogPress(hotkeyLog, press);
+                });
+
+            // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
+            hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys);
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
             router.Register(FeedbackMessages.Dismiss, (dismiss, _) => ValueTask.FromResult(warnings.Dismiss(dismiss)));
@@ -174,6 +197,7 @@ internal sealed class EngineHost : IAsyncDisposable
         }
         catch
         {
+            hotkeys?.Dispose();
             sessions?.Dispose();
             server.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
@@ -190,6 +214,9 @@ internal sealed class EngineHost : IAsyncDisposable
         await _stopHeartbeat.CancelAsync().ConfigureAwait(false);
         await _heartbeat.ConfigureAwait(false);
         Apps.Dispose();
+
+        // No more presses are posted to the orchestrator once this returns.
+        Hotkeys.Dispose();
 
         // Ends a running session, finishing its file, and joins the orchestrator thread.
         Sessions.Dispose();

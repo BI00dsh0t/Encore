@@ -22,6 +22,12 @@ public sealed record RetargetSession(CaptureTarget Target, TaskCompletionSource<
 public sealed record EndSession(string Reason, TaskCompletionSource<SessionOutcome> Reply) : SessionMessage;
 
 /// <summary>
+/// A registered Hotkey was pressed (AD-11); <paramref name="Qpc"/> was read when <c>WM_HOTKEY</c>
+/// arrived (AD-6). The orchestrator hands it to its press callback; no action is bound to it yet.
+/// </summary>
+public sealed record HotkeyPressed(HotkeyAction Action, long Qpc) : SessionMessage;
+
+/// <summary>
 /// A started session: its spec as of Start, and a task that completes with its outcome however it
 /// ends (an <c>End</c>, its window closing, a failure, or the orchestrator stopping).
 /// </summary>
@@ -40,6 +46,7 @@ public sealed class SessionOrchestrator : IDisposable
     private readonly ICaptureSessionFactory _factory;
     private readonly Func<SettingsDocument> _currentDocument;
     private readonly Action<CaptureState> _publish;
+    private readonly Action<HotkeyPress>? _hotkeyPressed;
     private readonly Thread _thread;
 
     // Orchestrator thread only.
@@ -52,7 +59,12 @@ public sealed class SessionOrchestrator : IDisposable
     /// <param name="factory">Starts the capture sessions.</param>
     /// <param name="currentDocument">The current settings document, read once per Start for the snapshot (AD-5).</param>
     /// <param name="publish">Receives each changed <see cref="CaptureState"/>, on the orchestrator thread, once per change.</param>
-    public SessionOrchestrator(ICaptureSessionFactory factory, Func<SettingsDocument> currentDocument, Action<CaptureState> publish)
+    /// <param name="hotkeyPressed">Receives each <see cref="HotkeyPressed"/>, on the orchestrator thread, in arrival order.</param>
+    public SessionOrchestrator(
+        ICaptureSessionFactory factory,
+        Func<SettingsDocument> currentDocument,
+        Action<CaptureState> publish,
+        Action<HotkeyPress>? hotkeyPressed = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(currentDocument);
@@ -60,6 +72,7 @@ public sealed class SessionOrchestrator : IDisposable
         _factory = factory;
         _currentDocument = currentDocument;
         _publish = publish;
+        _hotkeyPressed = hotkeyPressed;
         _thread = new Thread(Run) { Name = "SessionOrchestrator", IsBackground = true };
         _thread.Start();
     }
@@ -160,6 +173,10 @@ public sealed class SessionOrchestrator : IDisposable
 
             case EndSession end:
                 Reply(end.Reply, () => End(end.Reason));
+                break;
+
+            case HotkeyPressed pressed:
+                _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
                 break;
 
             case SessionClosed closed when _active?.Id == closed.SessionId:

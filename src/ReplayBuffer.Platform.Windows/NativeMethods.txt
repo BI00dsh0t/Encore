@@ -9,3 +9,14 @@ DWMWINDOWATTRIBUTE
 OpenProcess
 QueryFullProcessImageName
 CloseHandle
+RegisterHotKey
+UnregisterHotKey
+CreateWindowEx
+DestroyWindow
+GetMessage
+DispatchMessage
+PostMessage
+QueryPerformanceCounter
+WM_HOTKEY
+WM_APP
+WIN32_ERROR
