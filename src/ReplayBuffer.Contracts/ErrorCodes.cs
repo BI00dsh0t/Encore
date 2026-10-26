@@ -97,6 +97,18 @@ public static class ErrorCodes
     /// </summary>
     public const string RecordingInterrupted = "recording-interrupted";
 
+    /// <summary>A session start was refused: a session is already running (AD-19).</summary>
+    public const string SessionRunning = "session-running";
+
+    /// <summary>A retarget or end was refused: no session is running.</summary>
+    public const string SessionNotRunning = "session-not-running";
+
+    /// <summary>
+    /// A retarget names a window of another process; changing the process is end-session plus
+    /// new-session (AD-19).
+    /// </summary>
+    public const string RetargetOtherProcess = "retarget-other-process";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -129,5 +141,8 @@ public static class ErrorCodes
         AppRestarted,
         InstanceRunning,
         RecordingInterrupted,
+        SessionRunning,
+        SessionNotRunning,
+        RetargetOtherProcess,
     ];
 }
