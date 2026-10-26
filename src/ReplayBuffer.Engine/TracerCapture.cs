@@ -37,10 +37,17 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     private WasapiCapture? _inputCapture;
     private string _path = "";
     private D3D11VAFrames? _frames;
+    private Nv12Converter? _converter;
+    private EncoderThread? _encoderThread;
     private FragmentedMp4Muxer? _muxer;
     private VideoEncoder? _video;
     private AacEncoder? _outputAudio;
     private AacEncoder? _inputAudio;
+    private AudioTimeline? _outputTimeline;
+    private AudioTimeline? _inputTimeline;
+    private CaptureStatsCollector? _stats;
+    private WindowInfo? _window;
+    private string? _statsPath;
     private VideoSize _outputSize;
     private long _anchorQpc;
     private long _lastFrameQpc;
@@ -53,6 +60,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         FFmpegLibrary.Initialize(loggers.CreateLogger("FFmpeg"));
 
         var window = ResolveWindow();
+        _window = window;
         var output = ResolveEndpoint(AudioFlow.Output, command.OutputDevice);
         var input = ResolveEndpoint(AudioFlow.Input, command.InputDevice);
         _log.LogInformation("Window '{Title}' (0x{Handle:X}, {Process}); output '{Output}'; input '{Input}'",
@@ -62,10 +70,30 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             ? Path.GetFullPath(explicitPath)
             : OutputNaming.Allocate(Path.Combine(instance.LocalDataFolder, "debug"), window.Title, DateTime.Now, File.Exists);
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        if (command.Stats is not null)
+        {
+            // Fail now, not after a long run, when the stats file can't be written.
+            _statsPath = Path.GetFullPath(command.Stats);
+            try
+            {
+                CaptureStatsCollector.EnsureWritable(_statsPath);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+            {
+                throw new EngineFailure(ErrorCodes.StatsWriteFailed, $"Can't write the stats file '{_statsPath}': {e.Message}");
+            }
+
+            _stats = new CaptureStatsCollector(_qpcFrequency);
+        }
 
         try
         {
             _device = D3D11Device.Create(window.Handle, loggers.CreateLogger<D3D11Device>());
+            if (command.GpuPriority is { } priority)
+            {
+                SetGpuPriority(priority);
+            }
+
             _outputCapture = OpenDevice(output);
             _inputCapture = OpenDevice(input);
 
@@ -95,21 +123,31 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
                 }
 
                 // --seconds counts from the anchor, not from when the encoders finished opening.
-                var elapsed = (double)(Stopwatch.GetTimestamp() - _anchorQpc) / _qpcFrequency;
-                var remaining = TimeSpan.FromSeconds(Math.Max(0, command.Seconds - elapsed));
-                if (!_stop.Wait(remaining))
+                if (_stats is not null && command.Seconds > CaptureStatsCollector.WarmUp.TotalSeconds
+                    && !_stop.Wait(Remaining(CaptureStatsCollector.WarmUp.TotalSeconds)))
+                {
+                    _stats.SnapshotWarmUpEnd();
+                }
+
+                if (!_stop.Wait(Remaining(command.Seconds)))
                 {
                     RequestStop($"{command.Seconds} s elapsed");
                 }
 
+                _stats?.SnapshotStop();
+
                 _log.LogInformation("Stopping: {Reason}", _stopReason);
             }
+
+            // No frame can arrive now; let the encoder thread finish what is queued before the flush.
+            _encoderThread?.Complete();
 
             // Capture is stopped and no frame is in flight; stop audio, then drain everything.
             _outputCapture.Stop();
             _inputCapture.Stop();
             ReportAudioFaults();
             Finish();
+            WriteStats();
         }
         finally
         {
@@ -140,16 +178,66 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
                 StartSession(qpc, contentSize);
             }
 
+            _stats?.Cadence.Record(qpc);
+            if (command.Stages == CaptureStages.Wgc)
+            {
+                _lastFrameQpc = qpc;
+                return;
+            }
+
+            if (_encoderThread is not null)
+            {
+                // Only draw here; the encoder thread submits and drains. A full hand-off drops the frame.
+                if (_encoderThread.TryReserve() && _video!.TryAcquire(qpc, out var frame))
+                {
+                    try
+                    {
+                        Draw(texture, contentSize, frame.Texture, frame.Subresource);
+                    }
+                    catch
+                    {
+                        VideoEncoder.Release(frame);
+                        throw;
+                    }
+
+                    _encoderThread.Post(frame);
+                }
+
+                _lastFrameQpc = qpc;
+                return;
+            }
+
             using var surface = _video!.TryAcquire(qpc);
             if (surface is null)
             {
                 return;
             }
 
-            _device!.CopyFrame(texture, contentSize, surface.Texture, surface.Subresource, _outputSize);
+            Draw(texture, contentSize, surface.Texture, surface.Subresource);
+            if (command.Stages == CaptureStages.Copy)
+            {
+                // The copy alone: submit it, then hand the surface back unencoded.
+                _device!.Flush();
+                _lastFrameQpc = qpc;
+                return;
+            }
+
             _video.Submit(surface);
             _lastFrameQpc = qpc;
         }
+    }
+
+    /// <summary>Copies a captured frame into a pool slice: directly (X1), or through the VideoProcessor (X2).</summary>
+    private void Draw(nint texture, VideoSize contentSize, nint target, uint slice)
+    {
+        if (_converter is null)
+        {
+            _device!.CopyFrame(texture, contentSize, target, slice, _outputSize);
+            return;
+        }
+
+        _device!.CopyFrame(texture, contentSize, _converter.InputTexture, 0, _outputSize);
+        _converter.Convert(target, slice);
     }
 
     /// <summary>The first frame is the session anchor: every stream's PTS 0 is its QPC.</summary>
@@ -159,15 +247,31 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         _outputSize = VideoSize.EvenFloor(contentSize.Width, contentSize.Height);
         _log.LogInformation("Anchor QPC {Anchor}; output {Size} from content {Content}", anchorQpc, _outputSize, contentSize);
 
+        _stats?.SnapshotAnchor();
         _muxer = new FragmentedMp4Muxer(_path, loggers.CreateLogger<FragmentedMp4Muxer>());
-        _frames = new D3D11VAFrames(_device!.NativeDevice, _outputSize.Width, _outputSize.Height, VideoEncoder.PoolSize);
-        _video = new VideoEncoder(_frames, _muxer, _qpcFrequency, anchorQpc, loggers.CreateLogger<VideoEncoder>());
+        var nv12 = command.Color == ColorPath.X2;
+        _frames = new D3D11VAFrames(_device!.NativeDevice, _outputSize.Width, _outputSize.Height, VideoEncoder.PoolSize, nv12);
+        if (nv12)
+        {
+            _converter = new Nv12Converter(_device, _outputSize, 2 * VideoEncoder.PoolSize);
+        }
+
+        _video = new VideoEncoder(_frames, _muxer, _qpcFrequency, anchorQpc, loggers.CreateLogger<VideoEncoder>(), _stats?.Latency,
+            new VideoEncoderOptions(command.NvencPreset, command.NvencTune));
+        if (command.EncodeThread && command.Stages == CaptureStages.Full)
+        {
+            _encoderThread = new EncoderThread(_video, loggers.CreateLogger<EncoderThread>());
+            _encoderThread.Failed += e => Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "Video encode failed: " + e.Message, e));
+        }
+
         _outputAudio = new AacEncoder(_muxer, _outputCapture!.Endpoint.FriendlyName, isDefault: true, loggers.CreateLogger<AacEncoder>());
         _inputAudio = new AacEncoder(_muxer, _inputCapture!.Endpoint.FriendlyName, isDefault: false, loggers.CreateLogger<AacEncoder>());
         _muxer.Start();
 
-        _outputCapture.Start(new AudioTimeline(_qpcFrequency, anchorQpc, _outputAudio));
-        _inputCapture.Start(new AudioTimeline(_qpcFrequency, anchorQpc, _inputAudio));
+        _outputTimeline = new AudioTimeline(_qpcFrequency, anchorQpc, _outputAudio);
+        _inputTimeline = new AudioTimeline(_qpcFrequency, anchorQpc, _inputAudio);
+        _outputCapture.Start(_outputTimeline, _stats?.OutputStamps);
+        _inputCapture.Start(_inputTimeline, _stats?.InputStamps);
         _firstFrame.Set();
     }
 
@@ -184,6 +288,111 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         _muxer.Finish();
         _log.LogInformation("Audio written: output {Output} frames, input {Input} frames; video frames dropped: {Dropped}",
             _outputAudio.SamplesWritten, _inputAudio.SamplesWritten, _video.DroppedFrames);
+    }
+
+    private TimeSpan Remaining(double secondsFromAnchor)
+    {
+        var elapsed = (double)(Stopwatch.GetTimestamp() - _anchorQpc) / _qpcFrequency;
+        return TimeSpan.FromSeconds(Math.Max(0, secondsFromAnchor - elapsed));
+    }
+
+    /// <summary>Sets the device's GPU thread priority once (AD-7); a failure is logged and the run goes on.</summary>
+    private void SetGpuPriority(int priority)
+    {
+        int hr;
+        int? readBack;
+        try
+        {
+            hr = _device!.SetGpuThreadPriority(priority, out readBack);
+        }
+        catch (Exception e)
+        {
+            hr = e.HResult;
+            readBack = null;
+        }
+
+        var hex = $"0x{hr:X8}";
+        var succeeded = hr >= 0;
+        if (succeeded)
+        {
+            _log.LogInformation("GPU thread priority set to {Priority} ({Hresult}); device reports {ReadBack}", priority, hex, readBack);
+        }
+        else
+        {
+            _log.LogWarning("{Code}: SetGPUThreadPriority({Priority}) failed with {Hresult}; capturing without it",
+                ErrorCodes.GpuPriorityFailed, priority, hex);
+        }
+
+        _stats?.GpuPriority = new GpuPriorityReport(priority, hex, succeeded, readBack);
+    }
+
+    /// <summary>Writes the stats file once the trailer is written.</summary>
+    private void WriteStats()
+    {
+        if (_stats is null || _video is null || _outputAudio is null || _inputAudio is null
+            || _outputTimeline is null || _inputTimeline is null || _outputCapture is null || _inputCapture is null)
+        {
+            return;
+        }
+
+        var cadence = _stats.Cadence;
+        var arrived = cadence.Frames;
+        var stepped = arrived - cadence.NonIncreasing; // frames that advanced the capture clock
+        var span = cadence.SpanSeconds;
+        var slots = stepped + cadence.MissedSlots;
+        var video = new VideoReport(
+            _outputSize.Width,
+            _outputSize.Height,
+            arrived,
+            _video.EncodedFrames,
+            _video.DroppedFrames,
+            _encoderThread?.QueueDrops ?? 0,
+            cadence.NonIncreasing,
+            cadence.MissedSlots,
+            cadence.Gaps,
+            cadence.MaxStepMilliseconds,
+            span > 0 ? (stepped - 1) / span : 0,
+            arrived > 0 ? _video.DroppedFrames * 100.0 / arrived : 0,
+            slots > 0 ? cadence.MissedSlots * 100.0 / slots : 0);
+
+        var report = new CaptureStatsReport(
+            CaptureStatsReport.CurrentSchema,
+            DateTimeOffset.Now,
+            _path,
+            _window?.Title ?? "",
+            _window?.ProcessName,
+            _device?.AdapterName ?? "",
+            command.Seconds,
+            _stopReason,
+            (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency,
+            _stats.GpuPriority,
+            new EncoderReport(
+                command.Stages.ToString().ToLowerInvariant(),
+                command.NvencPreset,
+                command.NvencTune,
+                command.Color == ColorPath.X2 ? "x2" : "x1",
+                _encoderThread is not null),
+            video,
+            CaptureStatsCollector.Report(_stats.Latency, _video.FlushedPackets),
+            _stats.Resources(),
+            [
+                CaptureStatsCollector.Report("output", _outputCapture.Endpoint.FriendlyName, _stats.OutputStamps, _outputTimeline, _outputAudio.SamplesWritten),
+                CaptureStatsCollector.Report("input", _inputCapture.Endpoint.FriendlyName, _stats.InputStamps, _inputTimeline, _inputAudio.SamplesWritten),
+            ]);
+
+        var path = _statsPath!;
+        try
+        {
+            CaptureStatsCollector.Write(path, report);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            Fail(new EngineFailure(ErrorCodes.StatsWriteFailed, $"Could not write the stats file '{path}': {e.Message}"));
+            return;
+        }
+
+        _log.LogInformation("Stats written to {Path}: {Encoded} frames encoded, latency p99 {P99:0.0} ms, {Missed} missed slots",
+            path, video.FramesEncoded, report.Latency.P99Ms, video.MissedSlots);
     }
 
     private void ReportAudioFaults()
@@ -302,7 +511,9 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         _outputCapture?.Dispose();
         _inputAudio?.Dispose();
         _outputAudio?.Dispose();
+        _encoderThread?.Dispose(); // joined before the encoder it submits to is freed
         _video?.Dispose();
+        _converter?.Dispose();
         _frames?.Dispose();
         _muxer?.Dispose();
         _device?.Dispose();

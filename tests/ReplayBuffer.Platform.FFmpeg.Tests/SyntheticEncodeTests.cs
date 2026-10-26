@@ -53,11 +53,13 @@ public sealed class SyntheticEncodeTests : IDisposable
         var path = Path.Combine(_directory, "synthetic.mp4");
         var qpf = Stopwatch.Frequency;
         var anchor = Stopwatch.GetTimestamp();
+        var latency = new LatencyHistogram(qpf);
+        long encoded, flushed;
 
         using (var device = D3D11Device.Create(0, log))
         using (var muxer = new FragmentedMp4Muxer(path, log))
         using (var frames = new D3D11VAFrames(device.NativeDevice, 1280, 720, VideoEncoder.PoolSize))
-        using (var video = new VideoEncoder(frames, muxer, qpf, anchor, log))
+        using (var video = new VideoEncoder(frames, muxer, qpf, anchor, log, latency))
         using (var output = new AacEncoder(muxer, "Synthetic Output", isDefault: true, log))
         using (var input = new AacEncoder(muxer, "Synthetic Input", isDefault: false, log))
         {
@@ -95,7 +97,14 @@ public sealed class SyntheticEncodeTests : IDisposable
             output.Flush();
             input.Flush();
             muxer.Finish();
+            encoded = video.EncodedFrames;
+            flushed = video.FlushedPackets;
         }
+
+        // Every encoded packet has one latency sample, except those drained at flush.
+        Assert.Equal(Fps * Seconds, encoded);
+        Assert.True(flushed > 0, "NVENC holds frames until flush");
+        Assert.Equal(encoded, latency.Count + flushed);
 
         using var probe = JsonDocument.Parse(Ffprobe("-v error -show_streams -show_format -of json synthetic.mp4"));
         var streams = probe.RootElement.GetProperty("streams").EnumerateArray().ToList();

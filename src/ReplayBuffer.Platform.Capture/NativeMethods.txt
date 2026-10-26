@@ -20,3 +20,10 @@ IGraphicsCaptureItemInterop
 IDirect3DDxgiInterfaceAccess
 IUnknown
 IsWindow
+ID3D11VideoDevice
+ID3D11VideoContext1
+ID3D11VideoProcessorEnumerator
+ID3D11VideoProcessor
+ID3D11VideoProcessorInputView
+ID3D11VideoProcessorOutputView
+D3D11_VIDEO_PROCESSOR_STREAM
