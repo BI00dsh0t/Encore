@@ -8,6 +8,29 @@ public abstract record EngineCommand;
 /// <summary><c>debug-list</c>: windows and audio endpoints.</summary>
 public sealed record DebugListCommand : EngineCommand;
 
+/// <summary>How much of the video path a <c>debug-capture</c> runs (story 1.2 cost split).</summary>
+public enum CaptureStages
+{
+    /// <summary>WGC → copy → NVENC → file: the tracer.</summary>
+    Full,
+
+    /// <summary>WGC → copy into the encoder's pool; nothing is encoded.</summary>
+    Copy,
+
+    /// <summary>WGC frames are taken and released; no copy, no encode.</summary>
+    Wgc,
+}
+
+/// <summary>How captured BGRA reaches NVENC (PLAN.md §6.2).</summary>
+public enum ColorPath
+{
+    /// <summary>BGRA straight into NVENC, which converts in hardware.</summary>
+    X1,
+
+    /// <summary>BGRA → NV12 on the D3D11 VideoProcessor, NV12 into NVENC.</summary>
+    X2,
+}
+
 /// <summary><c>debug-capture</c>: the tracer capture of one window.</summary>
 public sealed record DebugCaptureCommand(
     string? Window,
@@ -15,9 +38,23 @@ public sealed record DebugCaptureCommand(
     int Seconds,
     string? Output,
     string? OutputDevice,
-    string? InputDevice) : EngineCommand
+    string? InputDevice,
+    string? Stats = null,
+    int? GpuPriority = null,
+    CaptureStages Stages = CaptureStages.Full,
+    string NvencPreset = DebugCaptureCommand.DefaultNvencPreset,
+    string? NvencTune = null,
+    ColorPath Color = ColorPath.X1,
+    bool EncodeThread = false) : EngineCommand
 {
     public const int DefaultSeconds = 30;
+
+    public const string DefaultNvencPreset = "p5";
+
+    /// <summary>The range <c>IDXGIDevice::SetGPUThreadPriority</c> accepts.</summary>
+    public const int MinGpuPriority = -7;
+
+    public const int MaxGpuPriority = 7;
 }
 
 /// <summary>
@@ -43,6 +80,8 @@ public static class CommandLine
           ReplayBuffer.Engine debug-list
           ReplayBuffer.Engine debug-capture (--window <title> | --hwnd <handle>) [--seconds 30]
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
+                              [--stats <file.json>] [--gpu-priority <-7..7>] [--stages full|copy|wgc]
+                              [--nvenc-preset p1..p7] [--nvenc-tune hq|ll|ull] [--color x1|x2] [--encode-thread]
         """;
 
     public static ParseResult Parse(IReadOnlyList<string> args)
@@ -79,13 +118,25 @@ public static class CommandLine
 
     private static ParseResult ParseCapture(IReadOnlyList<string> args)
     {
-        string? window = null, output = null, outputDevice = null, inputDevice = null;
+        string? window = null, output = null, outputDevice = null, inputDevice = null, stats = null;
         nint? hwnd = null;
+        int? gpuPriority = null;
+        var stages = CaptureStages.Full;
+        var preset = DebugCaptureCommand.DefaultNvencPreset;
+        string? tune = null;
+        var color = ColorPath.X1;
+        var encodeThread = false;
         var seconds = DebugCaptureCommand.DefaultSeconds;
 
         for (var i = 1; i < args.Count; i++)
         {
             var option = args[i];
+            if (option == "--encode-thread")
+            {
+                encodeThread = true;
+                continue;
+            }
+
             if (i + 1 >= args.Count)
             {
                 return Fail($"Option '{option}' needs a value.");
@@ -121,6 +172,71 @@ public static class CommandLine
                 case "--input-device":
                     inputDevice = value;
                     break;
+                case "--stats":
+                    if (value.Length == 0)
+                    {
+                        return Fail("--stats needs a file path.");
+                    }
+
+                    stats = value;
+                    break;
+                case "--gpu-priority":
+                    if (!int.TryParse(value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var priority)
+                        || priority < DebugCaptureCommand.MinGpuPriority
+                        || priority > DebugCaptureCommand.MaxGpuPriority)
+                    {
+                        return Fail($"'{value}' is not a GPU priority from {DebugCaptureCommand.MinGpuPriority} to {DebugCaptureCommand.MaxGpuPriority}.");
+                    }
+
+                    gpuPriority = priority;
+                    break;
+                case "--stages":
+                    switch (value)
+                    {
+                        case "full":
+                            stages = CaptureStages.Full;
+                            break;
+                        case "copy":
+                            stages = CaptureStages.Copy;
+                            break;
+                        case "wgc":
+                            stages = CaptureStages.Wgc;
+                            break;
+                        default:
+                            return Fail($"'{value}' is not one of full, copy or wgc.");
+                    }
+
+                    break;
+                case "--nvenc-preset":
+                    if (value is not ("p1" or "p2" or "p3" or "p4" or "p5" or "p6" or "p7"))
+                    {
+                        return Fail($"'{value}' is not an NVENC preset from p1 to p7.");
+                    }
+
+                    preset = value;
+                    break;
+                case "--nvenc-tune":
+                    if (value is not ("hq" or "ll" or "ull"))
+                    {
+                        return Fail($"'{value}' is not one of hq, ll or ull.");
+                    }
+
+                    tune = value;
+                    break;
+                case "--color":
+                    switch (value)
+                    {
+                        case "x1":
+                            color = ColorPath.X1;
+                            break;
+                        case "x2":
+                            color = ColorPath.X2;
+                            break;
+                        default:
+                            return Fail($"'{value}' is not one of x1 or x2.");
+                    }
+
+                    break;
                 default:
                     return Fail($"Unknown option '{option}'.");
             }
@@ -136,7 +252,7 @@ public static class CommandLine
             return Fail("--window needs a non-empty title.");
         }
 
-        return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice), null);
+        return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages, preset, tune, color, encodeThread), null);
     }
 
     private static ParseResult ParseServe(IReadOnlyList<string> args)

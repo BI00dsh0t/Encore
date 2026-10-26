@@ -27,6 +27,7 @@ public sealed unsafe class WasapiCapture : IDisposable
     private HANDLE _event;
     private Thread? _thread;
     private AudioTimeline? _timeline;
+    private AudioStampStats? _stampStats;
     private volatile bool _stopping;
 
     /// <summary>Opens and initializes the client; capture starts with <see cref="Start"/>.</summary>
@@ -99,10 +100,15 @@ public sealed unsafe class WasapiCapture : IDisposable
 
     private bool IsLoopback => Endpoint.Flow == AudioFlow.Output;
 
-    /// <summary>Starts capture into <paramref name="timeline"/>. Call once the session anchor is set.</summary>
-    public void Start(AudioTimeline timeline)
+    /// <summary>
+    /// Starts capture into <paramref name="timeline"/>. Call once the session anchor is set.
+    /// When <paramref name="stampStats"/> is given, every packet's stamp is recorded into it
+    /// before the timeline sees the packet.
+    /// </summary>
+    public void Start(AudioTimeline timeline, AudioStampStats? stampStats = null)
     {
         _timeline = timeline;
+        _stampStats = stampStats;
         _thread = new Thread(Run) { Name = $"WASAPI {Endpoint.Flow}", IsBackground = true };
         _thread.Start();
     }
@@ -148,6 +154,7 @@ public sealed unsafe class WasapiCapture : IDisposable
         }
 
         var timeline = _timeline!;
+        var stampStats = _stampStats;
         var failed = false;
         try
         {
@@ -175,7 +182,7 @@ public sealed unsafe class WasapiCapture : IDisposable
                 {
                     if (!failed && wait == WAIT_EVENT.WAIT_OBJECT_0)
                     {
-                        Drain(timeline);
+                        Drain(timeline, stampStats);
                     }
                     else if (IsLoopback || failed)
                     {
@@ -212,7 +219,7 @@ public sealed unsafe class WasapiCapture : IDisposable
         }
     }
 
-    private void Drain(AudioTimeline timeline)
+    private void Drain(AudioTimeline timeline, AudioStampStats? stampStats)
     {
         while (true)
         {
@@ -228,13 +235,16 @@ public sealed unsafe class WasapiCapture : IDisposable
             uint flags;
             ulong qpcPosition;
             _capture->GetBuffer(&data, &frames, &flags, null, &qpcPosition);
+            var readQpc = Stopwatch.GetTimestamp();
             try
             {
                 var packetFlags = (AudioPacketFlags)(flags & 0x7);
+                var stamp = QpcClock.From100ns((long)qpcPosition, _qpcFrequency);
+                stampStats?.Record(stamp, (int)frames, packetFlags, readQpc);
                 var samples = (packetFlags & AudioPacketFlags.Silent) != 0
                     ? ReadOnlySpan<float>.Empty
                     : new ReadOnlySpan<float>(data, (int)frames * AudioTimeline.Channels);
-                timeline.Push(QpcClock.From100ns((long)qpcPosition, _qpcFrequency), (int)frames, samples, packetFlags);
+                timeline.Push(stamp, (int)frames, samples, packetFlags);
             }
             finally
             {

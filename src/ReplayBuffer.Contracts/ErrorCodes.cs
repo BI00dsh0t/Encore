@@ -32,6 +32,12 @@ public static class ErrorCodes
     /// <summary>An encoder or the muxer failed.</summary>
     public const string EncodeFailed = "encode-failed";
 
+    /// <summary>A warning: the GPU thread priority could not be set; capture runs without it.</summary>
+    public const string GpuPriorityFailed = "gpu-priority-failed";
+
+    /// <summary>The capture statistics file could not be written; the capture itself is complete.</summary>
+    public const string StatsWriteFailed = "stats-write-failed";
+
     /// <summary>A settings update's <c>expectedRevision</c> is not the current revision.</summary>
     public const string SettingsConflict = "settings-conflict";
 
@@ -103,6 +109,8 @@ public static class ErrorCodes
         AudioDeviceFailed,
         CaptureFailed,
         EncodeFailed,
+        GpuPriorityFailed,
+        StatsWriteFailed,
         SettingsConflict,
         KeyNotOverridable,
         SettingUnknownKey,

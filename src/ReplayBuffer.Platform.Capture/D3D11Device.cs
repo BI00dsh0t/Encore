@@ -35,6 +35,10 @@ public sealed unsafe class D3D11Device : IDisposable
     /// <summary>The raw <c>ID3D11Device*</c>, owned by this object.</summary>
     public nint NativeDevice => (nint)_device;
 
+    internal ID3D11Device* Device => _device;
+
+    internal ID3D11DeviceContext* Context => _context;
+
     /// <summary>The WinRT wrapper WGC frame pools are created on.</summary>
     public IDirect3DDevice WinRTDevice { get; }
 
@@ -114,6 +118,9 @@ public sealed unsafe class D3D11Device : IDisposable
         _context->CopySubresourceRegion((ID3D11Resource*)target, targetSubresource, 0, 0, 0, (ID3D11Resource*)src, 0, &box);
     }
 
+    /// <summary>Submits the queued GPU work, as an encode of the copied frame would.</summary>
+    public void Flush() => _context->Flush();
+
     /// <summary>Fills slice <paramref name="subresource"/> of a render-target texture with one colour.</summary>
     public void Clear(nint target, uint subresource, float red, float green, float blue)
     {
@@ -141,6 +148,56 @@ public sealed unsafe class D3D11Device : IDisposable
         finally
         {
             rtv->Release();
+        }
+    }
+
+    /// <summary>
+    /// Sets the GPU thread priority of this device (<c>IDXGIDevice::SetGPUThreadPriority</c>,
+    /// −7 to 7; no elevation needed) and returns the HRESULT. <paramref name="readBack"/> is
+    /// the priority the device reports afterwards, or null when it can't be read.
+    /// </summary>
+    public int SetGpuThreadPriority(int priority, out int? readBack)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(priority, -7);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(priority, 7);
+        readBack = null;
+
+        IDXGIDevice* dxgiDevice = null;
+        try
+        {
+            var dxgiIid = IDXGIDevice.IID_Guid;
+            var hr = ((IUnknown*)_device)->QueryInterface(&dxgiIid, (void**)&dxgiDevice);
+            if (hr.Failed)
+            {
+                return hr.Value;
+            }
+
+            // CsWin32 turns a failed HRESULT into an exception carrying it.
+            try
+            {
+                dxgiDevice->SetGPUThreadPriority(priority);
+            }
+            catch (Exception e)
+            {
+                hr = new HRESULT(e.HResult);
+            }
+
+            try
+            {
+                int current;
+                dxgiDevice->GetGPUThreadPriority(&current);
+                readBack = current;
+            }
+            catch (Exception)
+            {
+                // The read-back is informational only.
+            }
+
+            return hr.Value;
+        }
+        finally
+        {
+            if (dxgiDevice is not null) dxgiDevice->Release();
         }
     }
 
