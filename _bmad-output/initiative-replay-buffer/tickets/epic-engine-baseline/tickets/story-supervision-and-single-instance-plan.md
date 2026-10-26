@@ -3,7 +3,7 @@ title: 'Supervision and single instance'
 type: 'feature'
 ticket: '8'
 created: '2026-10-25'
-status: 'built'
+status: done
 baseline_revision: '0ad6c84f978fb44bfaaaf394bc641afcc0af7276'
 route: 'full'
 route_source: 'auto'
