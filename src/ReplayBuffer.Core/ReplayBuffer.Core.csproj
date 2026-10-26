@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <InternalsVisibleTo Include="ReplayBuffer.Core.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj" />
   </ItemGroup>
 </Project>
