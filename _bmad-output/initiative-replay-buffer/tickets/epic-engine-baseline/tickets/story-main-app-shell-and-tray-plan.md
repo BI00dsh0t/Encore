@@ -3,14 +3,14 @@ title: 'Main App shell and tray'
 type: 'feature'
 ticket: '7'
 created: '2026-10-25'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '3751a79198b024f70888e6a8f9aff148ff25337d'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md'
@@ -92,9 +92,29 @@ context:
 
 ## Implementation Notes
 
+- Implemented directly, with no implementation subagent, as 1.5 was.
+- **`IEngineSession`** (`Status`, `Problem`, `State`, `Changed`, `SendAsync`) is what the view models and the sender see; `EngineConnection` implements it, and the tests use a synchronous `FakeEngineSession`. Story 8's supervisor builds on `EngineConnection`.
+- **The tray menu and the General page share one property,** `GeneralSettingsPage.StartWithWindows`: the menu item binds to it two-way, so both send through the sender and both follow the document.
+- **The engine is copied beside the App** by `CopyEngineBesideApp` (an `MSBuild GetTargetPath` call plus a copy of the engine's output folder), after a build-order-only `ProjectReference`. `ReplayBuffer.App.Tests` references the engine project normally to get its exe, as `Engine.Tests` does.
+- **The tray icon is a `GeneratedIconSource`** (a white "R" on red), so there's no icon asset. `ForceCreate(enablesEfficiencyMode: false)`.
+- **The tray menu's popup is excluded from capture** through `PresentationSource.AddSourceChangedHandler`, as soon as it has a window. `TrayTests` opens the menu off screen and checks the affinity.
+- The spine's AD-2, layer table and Structural Seed record `Platform.Desktop`.
+- **Verified:**
+  - `dotnet build ReplayBuffer.slnx` has 0 warnings.
+  - `dotnet test --solution ReplayBuffer.slnx`, after the review patches: 234 passed, 0 failed and 8 skipped (the FFmpeg tests, because `native/ffmpeg` isn't fetched in this worktree), with no engine left running. App.Tests (17) passed 3 runs in a row before the patches.
+  - A UI Automation smoke run of the real App: it launched the engine hidden and showed "Connected to the engine."; closing the window left both processes running; toggling Start with Windows twice took the settings revision to 2. The tray itself wasn't driven; that's the builder's hand check.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+Lens `quick`, iteration 0, run inline against the full diff. Verdicts: high 0, medium 1, low 2, false 0, maybe-false 0.
+
+| # | Finding | Verdict | Route | Evidence |
+|---|---------|---------|-------|----------|
+| 1 | `EngineConnection.ConnectAsync` left an engine it had launched running when the engine never answered within `LaunchTimeout`. With no client, Quit's `ShutdownAsync` returned at once, so the engine was orphaned. | medium | patch | It's reachable on a slow first start: the status is `NotRunning`, and `ShutdownAsync` sees no client. Fixed: on the timeout it kills the process it launched (it never served) and says why in `Problem`. |
+| 2 | `EngineConnectionTests.DisposeAsync` killed recorded PIDs blindly. If a PID were reused, it would kill an unrelated process. | low | patch | Unlikely, but the fix is a single name check: it now kills only a `ReplayBuffer.Engine` process. |
+| 3 | `GeneralSettingsPage`'s fire-and-forget send could leave an unobserved exception if the client were disposed mid-send (`ObjectDisposedException` from the client's write lock). | low | reject | It's only reachable during Quit, after the App has disposed the connection. An unobserved task exception doesn't crash .NET, and guarding it would add a branch for a path the user never sees. |
 
 ## Design Notes
 
