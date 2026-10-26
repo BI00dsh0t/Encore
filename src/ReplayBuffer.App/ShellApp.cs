@@ -27,6 +27,7 @@ internal sealed class ShellApp(Instance instance) : Application
     private static readonly TimeSpan QuitTimeout = TimeSpan.FromSeconds(5);
 
     private EngineConnection? _engine;
+    private StartupRegistration? _startup;
     private MainWindow? _window;
     private TaskbarIcon? _tray;
     private bool _quitting;
@@ -43,6 +44,13 @@ internal sealed class ShellApp(Instance instance) : Application
             EngineArguments = instance.IsTest ? ["serve", InstanceArgument, instance.Name] : ["serve"],
         });
         _engine.EngineEnded += () => Dispatcher.BeginInvoke(async () => await QuitAsync());
+
+        // The Run value follows the engine's committed settings: the snapshot, then each settings.changed.
+        _startup = new StartupRegistration(
+            instance,
+            RunKey.Startup,
+            Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ReplayBuffer.App.exe"));
+        _engine.Changed += () => Dispatcher.BeginInvoke(SyncStartup);
         var model = new MainViewModel(_engine, action => Dispatcher.BeginInvoke(action));
         _window = new MainWindow { DataContext = model };
         if (instance.Name != Instance.InstalledName)
@@ -113,6 +121,14 @@ internal sealed class ShellApp(Instance instance) : Application
             }
         });
         return menu;
+    }
+
+    private void SyncStartup()
+    {
+        if (_engine?.State?.Settings is { } settings)
+        {
+            _startup!.Sync(settings);
+        }
     }
 
     private TaskbarIcon CreateTray(MainViewModel model, string title)

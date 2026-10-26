@@ -11,7 +11,8 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
     public override string Title => "General";
 
     /// <summary>
-    /// <c>startWithWindows</c>. Setting it sends the change; the Run key itself is story 13's (AD-16).
+    /// <c>startWithWindows</c>. Setting it sends the change; <see cref="StartupRegistration"/> writes the
+    /// Run value once the engine commits it, in the installed instance only (AD-16).
     /// </summary>
     public bool StartWithWindows
     {
