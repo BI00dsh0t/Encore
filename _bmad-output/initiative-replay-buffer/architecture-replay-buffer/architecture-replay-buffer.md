@@ -32,6 +32,7 @@ Media flows as **pipes and filters**: Sources → Processors → Encoders → en
 | Domain | `ReplayBuffer.Core` | SessionOrchestrator, settings `Resolve`, Replay ring, OutputPathAllocator, LibraryActor, ports |
 | Media pipeline | `ReplayBuffer.Media` | Filters: pacer, scaler, adaptive resampler, Track mixer and limiter; encoder and muxer ports |
 | Adapters | `ReplayBuffer.Platform.*` | WGC/DXGI capture, AudioDeviceHub (WASAPI), FFmpeg, Hotkeys, process monitoring, file system, sounds |
+| App adapters | `ReplayBuffer.Platform.Desktop` | The App's Win32 calls: capture exclusion, and story 8's server and process checks |
 | Engine host | `ReplayBuffer.Engine` | Composition root, IPC server, NativeAOT executable |
 | Client | `ReplayBuffer.App` | WPF: Main App, Library, Settings, Overlay, tray, supervisor |
 
@@ -40,6 +41,7 @@ Media flows as **pipes and filters**: Sources → Processors → Encoders → en
 ```mermaid
 graph LR
   App[ReplayBuffer.App] --> Contracts[ReplayBuffer.Contracts]
+  App --> Desktop[ReplayBuffer.Platform.Desktop]
   Engine[ReplayBuffer.Engine] --> Contracts
   Engine --> Core[ReplayBuffer.Core]
   Engine --> Media[ReplayBuffer.Media]
@@ -64,6 +66,7 @@ graph LR
 - **Prevents:** UI code reaching into the pipeline; native interop leaking into domain logic
 - **Rule:**
   - The diagram above is the only allowed reference graph; `App` and `Engine` never reference each other.
+  - `Platform.Desktop` holds the App's own Win32 calls and references nothing; only the App references it. (Story 1.7, 2026-10-25.)
   - Only `ReplayBuffer.Platform.*` contains `unsafe` code, P/Invoke, COM or FFmpeg calls.
 
 ### AD-3 — IPC protocol [ADOPTED]
@@ -396,6 +399,7 @@ ReplayBuffer/
     ReplayBuffer.Platform.Audio/    # AudioDeviceHub (WASAPI, MMDevice)
     ReplayBuffer.Platform.FFmpeg/   # encode/mux via FFmpeg.AutoGen bindings
     ReplayBuffer.Platform.Windows/  # Hotkeys, GameMonitor, Canonicalize, file system, sounds
+    ReplayBuffer.Platform.Desktop/  # the App's Win32 calls: capture exclusion, server checks
     ReplayBuffer.Engine/            # composition root, IPC server (NativeAOT exe)
     ReplayBuffer.App/               # WPF Main App, Overlay, tray, supervisor
   tests/                            # *.Tests per project
