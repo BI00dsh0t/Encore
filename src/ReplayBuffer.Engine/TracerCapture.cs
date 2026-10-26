@@ -37,6 +37,8 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     private WasapiCapture? _inputCapture;
     private string _path = "";
     private D3D11VAFrames? _frames;
+    private Nv12Converter? _converter;
+    private EncoderThread? _encoderThread;
     private FragmentedMp4Muxer? _muxer;
     private VideoEncoder? _video;
     private AacEncoder? _outputAudio;
@@ -137,6 +139,9 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
                 _log.LogInformation("Stopping: {Reason}", _stopReason);
             }
 
+            // No frame can arrive now; let the encoder thread finish what is queued before the flush.
+            _encoderThread?.Complete();
+
             // Capture is stopped and no frame is in flight; stop audio, then drain everything.
             _outputCapture.Stop();
             _inputCapture.Stop();
@@ -180,17 +185,39 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
                 return;
             }
 
+            if (_encoderThread is not null)
+            {
+                // Only draw here; the encoder thread submits and drains. A full hand-off drops the frame.
+                if (_encoderThread.TryReserve() && _video!.TryAcquire(qpc, out var frame))
+                {
+                    try
+                    {
+                        Draw(texture, contentSize, frame.Texture, frame.Subresource);
+                    }
+                    catch
+                    {
+                        VideoEncoder.Release(frame);
+                        throw;
+                    }
+
+                    _encoderThread.Post(frame);
+                }
+
+                _lastFrameQpc = qpc;
+                return;
+            }
+
             using var surface = _video!.TryAcquire(qpc);
             if (surface is null)
             {
                 return;
             }
 
-            _device!.CopyFrame(texture, contentSize, surface.Texture, surface.Subresource, _outputSize);
+            Draw(texture, contentSize, surface.Texture, surface.Subresource);
             if (command.Stages == CaptureStages.Copy)
             {
                 // The copy alone: submit it, then hand the surface back unencoded.
-                _device.Flush();
+                _device!.Flush();
                 _lastFrameQpc = qpc;
                 return;
             }
@@ -198,6 +225,19 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             _video.Submit(surface);
             _lastFrameQpc = qpc;
         }
+    }
+
+    /// <summary>Copies a captured frame into a pool slice: directly (X1), or through the VideoProcessor (X2).</summary>
+    private void Draw(nint texture, VideoSize contentSize, nint target, uint slice)
+    {
+        if (_converter is null)
+        {
+            _device!.CopyFrame(texture, contentSize, target, slice, _outputSize);
+            return;
+        }
+
+        _device!.CopyFrame(texture, contentSize, _converter.InputTexture, 0, _outputSize);
+        _converter.Convert(target, slice);
     }
 
     /// <summary>The first frame is the session anchor: every stream's PTS 0 is its QPC.</summary>
@@ -209,8 +249,21 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
 
         _stats?.SnapshotAnchor();
         _muxer = new FragmentedMp4Muxer(_path, loggers.CreateLogger<FragmentedMp4Muxer>());
-        _frames = new D3D11VAFrames(_device!.NativeDevice, _outputSize.Width, _outputSize.Height, VideoEncoder.PoolSize);
-        _video = new VideoEncoder(_frames, _muxer, _qpcFrequency, anchorQpc, loggers.CreateLogger<VideoEncoder>(), _stats?.Latency);
+        var nv12 = command.Color == ColorPath.X2;
+        _frames = new D3D11VAFrames(_device!.NativeDevice, _outputSize.Width, _outputSize.Height, VideoEncoder.PoolSize, nv12);
+        if (nv12)
+        {
+            _converter = new Nv12Converter(_device, _outputSize, 2 * VideoEncoder.PoolSize);
+        }
+
+        _video = new VideoEncoder(_frames, _muxer, _qpcFrequency, anchorQpc, loggers.CreateLogger<VideoEncoder>(), _stats?.Latency,
+            new VideoEncoderOptions(command.NvencPreset, command.NvencTune));
+        if (command.EncodeThread && command.Stages == CaptureStages.Full)
+        {
+            _encoderThread = new EncoderThread(_video, loggers.CreateLogger<EncoderThread>());
+            _encoderThread.Failed += e => Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "Video encode failed: " + e.Message, e));
+        }
+
         _outputAudio = new AacEncoder(_muxer, _outputCapture!.Endpoint.FriendlyName, isDefault: true, loggers.CreateLogger<AacEncoder>());
         _inputAudio = new AacEncoder(_muxer, _inputCapture!.Endpoint.FriendlyName, isDefault: false, loggers.CreateLogger<AacEncoder>());
         _muxer.Start();
@@ -293,6 +346,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             arrived,
             _video.EncodedFrames,
             _video.DroppedFrames,
+            _encoderThread?.QueueDrops ?? 0,
             cadence.NonIncreasing,
             cadence.MissedSlots,
             cadence.Gaps,
@@ -312,6 +366,12 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             _stopReason,
             (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency,
             _stats.GpuPriority,
+            new EncoderReport(
+                command.Stages.ToString().ToLowerInvariant(),
+                command.NvencPreset,
+                command.NvencTune,
+                command.Color == ColorPath.X2 ? "x2" : "x1",
+                _encoderThread is not null),
             video,
             CaptureStatsCollector.Report(_stats.Latency, _video.FlushedPackets),
             _stats.Resources(),
@@ -451,7 +511,9 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         _outputCapture?.Dispose();
         _inputAudio?.Dispose();
         _outputAudio?.Dispose();
+        _encoderThread?.Dispose(); // joined before the encoder it submits to is freed
         _video?.Dispose();
+        _converter?.Dispose();
         _frames?.Dispose();
         _muxer?.Dispose();
         _device?.Dispose();

@@ -21,6 +21,16 @@ public enum CaptureStages
     Wgc,
 }
 
+/// <summary>How captured BGRA reaches NVENC (PLAN.md §6.2).</summary>
+public enum ColorPath
+{
+    /// <summary>BGRA straight into NVENC, which converts in hardware.</summary>
+    X1,
+
+    /// <summary>BGRA → NV12 on the D3D11 VideoProcessor, NV12 into NVENC.</summary>
+    X2,
+}
+
 /// <summary><c>debug-capture</c>: the tracer capture of one window.</summary>
 public sealed record DebugCaptureCommand(
     string? Window,
@@ -31,9 +41,15 @@ public sealed record DebugCaptureCommand(
     string? InputDevice,
     string? Stats = null,
     int? GpuPriority = null,
-    CaptureStages Stages = CaptureStages.Full) : EngineCommand
+    CaptureStages Stages = CaptureStages.Full,
+    string NvencPreset = DebugCaptureCommand.DefaultNvencPreset,
+    string? NvencTune = null,
+    ColorPath Color = ColorPath.X1,
+    bool EncodeThread = false) : EngineCommand
 {
     public const int DefaultSeconds = 30;
+
+    public const string DefaultNvencPreset = "p5";
 
     /// <summary>The range <c>IDXGIDevice::SetGPUThreadPriority</c> accepts.</summary>
     public const int MinGpuPriority = -7;
@@ -54,6 +70,7 @@ public static class CommandLine
           ReplayBuffer.Engine debug-capture (--window <title> | --hwnd <handle>) [--seconds 30]
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
                               [--stats <file.json>] [--gpu-priority <-7..7>] [--stages full|copy|wgc]
+                              [--nvenc-preset p1..p7] [--nvenc-tune hq|ll|ull] [--color x1|x2] [--encode-thread]
         """;
 
     public static ParseResult Parse(IReadOnlyList<string> args)
@@ -93,11 +110,21 @@ public static class CommandLine
         nint? hwnd = null;
         int? gpuPriority = null;
         var stages = CaptureStages.Full;
+        var preset = DebugCaptureCommand.DefaultNvencPreset;
+        string? tune = null;
+        var color = ColorPath.X1;
+        var encodeThread = false;
         var seconds = DebugCaptureCommand.DefaultSeconds;
 
         for (var i = 1; i < args.Count; i++)
         {
             var option = args[i];
+            if (option == "--encode-thread")
+            {
+                encodeThread = true;
+                continue;
+            }
+
             if (i + 1 >= args.Count)
             {
                 return Fail($"Option '{option}' needs a value.");
@@ -168,6 +195,36 @@ public static class CommandLine
                     }
 
                     break;
+                case "--nvenc-preset":
+                    if (value is not ("p1" or "p2" or "p3" or "p4" or "p5" or "p6" or "p7"))
+                    {
+                        return Fail($"'{value}' is not an NVENC preset from p1 to p7.");
+                    }
+
+                    preset = value;
+                    break;
+                case "--nvenc-tune":
+                    if (value is not ("hq" or "ll" or "ull"))
+                    {
+                        return Fail($"'{value}' is not one of hq, ll or ull.");
+                    }
+
+                    tune = value;
+                    break;
+                case "--color":
+                    switch (value)
+                    {
+                        case "x1":
+                            color = ColorPath.X1;
+                            break;
+                        case "x2":
+                            color = ColorPath.X2;
+                            break;
+                        default:
+                            return Fail($"'{value}' is not one of x1 or x2.");
+                    }
+
+                    break;
                 default:
                     return Fail($"Unknown option '{option}'.");
             }
@@ -183,7 +240,7 @@ public static class CommandLine
             return Fail("--window needs a non-empty title.");
         }
 
-        return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages), null);
+        return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages, preset, tune, color, encodeThread), null);
     }
 
     private static ParseResult Fail(string error) => new(null, error);

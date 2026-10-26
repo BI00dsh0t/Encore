@@ -175,6 +175,7 @@ public sealed record CaptureStatsReport(
     string StopReason,
     double DurationSeconds,
     GpuPriorityReport? GpuPriority,
+    EncoderReport Encoder,
     VideoReport Video,
     LatencyReport Latency,
     ResourceReport Resources,
@@ -187,9 +188,17 @@ public sealed record CaptureStatsReport(
 /// <param name="ReadBack">What <c>GetGPUThreadPriority</c> reports afterwards.</param>
 public sealed record GpuPriorityReport(int Requested, string Hresult, bool Succeeded, int? ReadBack);
 
+/// <param name="Stages">full, copy or wgc.</param>
+/// <param name="Preset">The h264_nvenc preset.</param>
+/// <param name="Tune">The h264_nvenc tune, or null for FFmpeg's default.</param>
+/// <param name="Color">x1 (BGRA into NVENC) or x2 (VideoProcessor NV12).</param>
+/// <param name="EncodeThread">Submit and drain on a dedicated encoder thread.</param>
+public sealed record EncoderReport(string Stages, string Preset, string? Tune, string Color, bool EncodeThread);
+
 /// <param name="FramesArrived">Frames WGC delivered after the anchor, warm-up included.</param>
 /// <param name="FramesEncoded">Video packets written to the file.</param>
 /// <param name="Duplicates">Frames dropped because their PTS was not above the last one.</param>
+/// <param name="QueueDrops">Frames dropped because the encoder thread's hand-off was full (0 without one).</param>
 /// <param name="NonIncreasingStamps">Arrived frames whose capture stamp was not after the previous one.</param>
 /// <param name="MissedSlots">Sum of <c>round(Δ × 60) − 1</c> over steps longer than 1.5/60 s.</param>
 public sealed record VideoReport(
@@ -198,6 +207,7 @@ public sealed record VideoReport(
     long FramesArrived,
     long FramesEncoded,
     long Duplicates,
+    long QueueDrops,
     long NonIncreasingStamps,
     long MissedSlots,
     long Gaps,

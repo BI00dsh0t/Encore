@@ -35,6 +35,10 @@ public sealed unsafe class D3D11Device : IDisposable
     /// <summary>The raw <c>ID3D11Device*</c>, owned by this object.</summary>
     public nint NativeDevice => (nint)_device;
 
+    internal ID3D11Device* Device => _device;
+
+    internal ID3D11DeviceContext* Context => _context;
+
     /// <summary>The WinRT wrapper WGC frame pools are created on.</summary>
     public IDirect3DDevice WinRTDevice { get; }
 

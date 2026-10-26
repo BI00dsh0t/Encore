@@ -67,8 +67,38 @@ public sealed class CommandLineTests
         Assert.Equal(expected, command.Stages);
     }
 
+    [Fact]
+    public void TheEncodeExperimentOptionsDefaultToTheTracer()
+    {
+        var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(["debug-capture", "--window", "a"]).Command);
+
+        Assert.Equal("p5", command.NvencPreset);
+        Assert.Null(command.NvencTune);
+        Assert.Equal(ColorPath.X1, command.Color);
+        Assert.False(command.EncodeThread);
+    }
+
+    [Fact]
+    public void TheEncodeExperimentOptionsAreRead()
+    {
+        var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(
+        [
+            "debug-capture", "--encode-thread", "--window", "a", "--nvenc-preset", "p1", "--nvenc-tune", "ull", "--color", "x2",
+        ]).Command);
+
+        Assert.Equal("p1", command.NvencPreset);
+        Assert.Equal("ull", command.NvencTune);
+        Assert.Equal(ColorPath.X2, command.Color);
+        Assert.True(command.EncodeThread);
+    }
+
     [Theory]
     [InlineData]
+    [InlineData("debug-capture", "--window", "a", "--nvenc-preset", "p8")]
+    [InlineData("debug-capture", "--window", "a", "--nvenc-preset", "slow")]
+    [InlineData("debug-capture", "--window", "a", "--nvenc-tune", "lossless")]
+    [InlineData("debug-capture", "--window", "a", "--color", "x3")]
+    [InlineData("debug-capture", "--window", "a", "--color")]
     [InlineData("debug-capture", "--window", "a", "--stages", "encode")]
     [InlineData("debug-capture", "--window", "a", "--gpu-priority", "8")]
     [InlineData("debug-capture", "--window", "a", "--gpu-priority", "-8")]

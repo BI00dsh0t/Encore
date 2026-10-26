@@ -10,13 +10,17 @@
     Get-Counter. Conditions run in a balanced order (A B C D, then D C B A, ...) so thermal
     drift and order effects fall evenly on every condition.
 
-    Condition names:
+    Condition names: baseline, or capture followed by any of these suffixes, in any order
+    (e.g. capture-x2-fast-thread):
       baseline       no capture; the game alone
-      capture        capture, GPU thread priority left alone
-      capture-p<N>   capture with --gpu-priority N   (e.g. capture-p7)
-      capture-m<N>   capture with --gpu-priority -N  (e.g. capture-m7)
-      capture-copy   WGC plus the copy into the encoder pool, nothing encoded (--stages copy)
-      capture-wgc    WGC frames taken and released, no copy, no encode (--stages wgc)
+      capture        capture with the tracer's defaults
+      -p<N>          --gpu-priority N   (e.g. capture-p7)
+      -m<N>          --gpu-priority -N  (e.g. capture-m7)
+      -copy          WGC plus the copy into the encoder pool, nothing encoded (--stages copy)
+      -wgc           WGC frames taken and released, no copy, no encode (--stages wgc)
+      -x2            BGRA -> NV12 on the D3D11 VideoProcessor (--color x2)
+      -fast          --nvenc-preset p1 --nvenc-tune ll
+      -thread        submit and drain on a dedicated encoder thread (--encode-thread)
 
     Writes into -OutDir: per run a PresentMon CSV, and for capture runs the engine's stats
     JSON, MP4, console log and GPU counter samples; then summary.csv, summary.json and
@@ -92,18 +96,35 @@ function Fail([string] $Message) {
 }
 
 function Resolve-Condition([string] $Name) {
-    if ($Name -eq 'baseline') { return [pscustomobject]@{ Name = $Name; Capture = $false; Priority = $null } }
-    if ($Name -eq 'capture') { return [pscustomobject]@{ Name = $Name; Capture = $true; Priority = $null } }
-    if ($Name -in 'capture-wgc', 'capture-copy') {
-        return [pscustomobject]@{ Name = $Name; Capture = $true; Priority = $null; Stages = $Name.Substring(8) }
-    }
-    if ($Name -match '^capture-([pm])([0-7])$') {
-        $value = [int] $Matches[2]
-        if ($Matches[1] -eq 'm') { $value = -$value }
-        return [pscustomobject]@{ Name = $Name; Capture = $true; Priority = $value }
+    $condition = [pscustomobject]@{ Name = $Name; Capture = $false; Priority = $null; Stages = $null; EngineOptions = @() }
+    if ($Name -eq 'baseline') { return $condition }
+
+    $parts = $Name -split '-'
+    if ($parts[0] -ne 'capture') {
+        Fail "Unknown condition '$Name'. Use baseline, or capture with suffixes -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast, -thread."
     }
 
-    Fail "Unknown condition '$Name'. Use baseline, capture, capture-p<0-7>, capture-m<0-7>, capture-copy or capture-wgc."
+    $condition.Capture = $true
+    $seen = @{}
+    foreach ($suffix in $parts | Select-Object -Skip 1) {
+        $kind = if ($suffix -match '^[pm][0-7]$') { 'priority' } elseif ($suffix -in 'copy', 'wgc') { 'stages' } else { $suffix }
+        if ($seen.ContainsKey($kind)) { Fail "Condition '$Name' gives '$($seen[$kind])' and '$suffix'; use one." }
+        $seen[$kind] = $suffix
+
+        switch -Regex ($suffix) {
+            '^[pm][0-7]$' {
+                $value = [int] $suffix.Substring(1)
+                $condition.Priority = if ($suffix[0] -eq 'm') { -$value } else { $value }
+            }
+            '^(copy|wgc)$' { $condition.Stages = $suffix }
+            '^x2$' { $condition.EngineOptions += @('--color', 'x2') }
+            '^fast$' { $condition.EngineOptions += @('--nvenc-preset', 'p1', '--nvenc-tune', 'll') }
+            '^thread$' { $condition.EngineOptions += @('--encode-thread') }
+            default { Fail "Unknown suffix '$suffix' in condition '$Name'. Use -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast or -thread." }
+        }
+    }
+
+    return $condition
 }
 
 # Start-Process joins -ArgumentList with spaces; quote the arguments that contain any.
@@ -303,7 +324,8 @@ function Invoke-Run($Run, [int] $Index) {
                 '--seconds', [string] ($WarmUpSeconds + $Run.Seconds + $EngineTailSeconds),
                 '--output', (Join-Path $OutDir "$tag.mp4"), '--stats', $statsPath)
             if ($null -ne $condition.Priority) { $engineArgs += @('--gpu-priority', [string] $condition.Priority) }
-            if ($condition.PSObject.Properties['Stages']) { $engineArgs += @('--stages', $condition.Stages) }
+            if ($condition.Stages) { $engineArgs += @('--stages', $condition.Stages) }
+            $engineArgs += $condition.EngineOptions
             if ($OutputDevice) { $engineArgs += @('--output-device', $OutputDevice) }
             if ($InputDevice) { $engineArgs += @('--input-device', $InputDevice) }
 
@@ -430,6 +452,7 @@ function Get-Audio($Stats, [string] $Role) {
 $rows = foreach ($r in $results) {
     $s = $r.Stats
     $steady = if ($s) { $s.resources.steady } else { $null }
+    $e = if ($s -and $s.PSObject.Properties['encoder']) { $s.encoder } else { $null }
     $row = [ordered]@{
         run = $r.Tag
         condition = $r.Condition
@@ -441,6 +464,12 @@ $rows = foreach ($r in $results) {
         presents = $r.Fps.Frames
         engineExit = $r.EngineExit
         gpuPriority = if ($s -and $s.gpuPriority) { "$($s.gpuPriority.requested) $($s.gpuPriority.hresult) readback=$($s.gpuPriority.readBack)" } else { $null }
+        encoderStages = if ($e) { $e.stages } else { $null }
+        encoderPreset = if ($e) { $e.preset } else { $null }
+        encoderTune = if ($e) { $e.tune } else { $null }
+        encoderColor = if ($e) { $e.color } else { $null }
+        encodeThread = if ($e) { $e.encodeThread } else { $null }
+        queueDrops = if ($s -and $s.video.PSObject.Properties['queueDrops']) { $s.video.queueDrops } else { $null }
         framesArrived = if ($s) { $s.video.framesArrived } else { $null }
         framesEncoded = if ($s) { $s.video.framesEncoded } else { $null }
         duplicatePercent = if ($s) { [math]::Round($s.video.duplicatePercent, 4) } else { $null }

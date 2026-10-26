@@ -4,9 +4,9 @@ using Windows.Win32.System.Com;
 namespace ReplayBuffer.Platform.FFmpeg;
 
 /// <summary>
-/// An FFmpeg D3D11VA device over the engine's own <c>ID3D11Device</c>, and a pool of BGRA
-/// render-target textures that captured frames are copied into and NVENC reads from.
-/// No CPU readback (X1 colour path).
+/// An FFmpeg D3D11VA device over the engine's own <c>ID3D11Device</c>, and a pool of
+/// render-target textures that captured frames are drawn into and NVENC reads from: BGRA
+/// (X1 colour path) or NV12 (X2, written by the VideoProcessor). No CPU readback.
 /// </summary>
 public sealed unsafe class D3D11VAFrames : IDisposable
 {
@@ -17,10 +17,12 @@ public sealed unsafe class D3D11VAFrames : IDisposable
 
     /// <param name="d3d11Device">The engine's <c>ID3D11Device*</c>; FFmpeg takes its own reference.</param>
     /// <param name="poolSize">Textures in the pool; at least NVENC's surfaces + 4.</param>
-    public D3D11VAFrames(nint d3d11Device, int width, int height, int poolSize)
+    /// <param name="nv12">NV12 textures (X2) instead of BGRA (X1).</param>
+    public D3D11VAFrames(nint d3d11Device, int width, int height, int poolSize, bool nv12 = false)
     {
         Width = width;
         Height = height;
+        IsNv12 = nv12;
 
         _device = ffmpeg.av_hwdevice_ctx_alloc(AVHWDeviceType.AV_HWDEVICE_TYPE_D3D11VA);
         if (_device is null)
@@ -45,10 +47,12 @@ public sealed unsafe class D3D11VAFrames : IDisposable
 
         var framesContext = (AVHWFramesContext*)_frames->data;
         framesContext->format = AVPixelFormat.AV_PIX_FMT_D3D11;
-        framesContext->sw_format = AVPixelFormat.AV_PIX_FMT_BGRA;
+        framesContext->sw_format = nv12 ? AVPixelFormat.AV_PIX_FMT_NV12 : AVPixelFormat.AV_PIX_FMT_BGRA;
         framesContext->width = width;
         framesContext->height = height;
-        framesContext->initial_pool_size = poolSize;
+        // D3D11 can't make an NV12 texture array a render target (E_INVALIDARG), so the NV12
+        // pool is one texture per frame, created on demand and reused by FFmpeg's buffer pool.
+        framesContext->initial_pool_size = nv12 ? 0 : poolSize;
         ((AVD3D11VAFramesContext*)framesContext->hwctx)->BindFlags = BindRenderTarget;
         FFmpegLibrary.Check(ffmpeg.av_hwframe_ctx_init(_frames), "av_hwframe_ctx_init");
     }
@@ -56,6 +60,8 @@ public sealed unsafe class D3D11VAFrames : IDisposable
     public int Width { get; }
 
     public int Height { get; }
+
+    public bool IsNv12 { get; }
 
     internal AVBufferRef* FramesRef => _frames;
 

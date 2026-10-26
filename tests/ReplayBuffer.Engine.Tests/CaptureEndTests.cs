@@ -155,8 +155,17 @@ public sealed class CaptureEndTests : IDisposable
         var latency = root.GetProperty("latency");
         Assert.Equal(encoded, latency.GetProperty("count").GetInt64() + latency.GetProperty("flushed").GetInt64());
         Assert.Equal(video.GetProperty("framesArrived").GetInt64(), encoded + video.GetProperty("duplicates").GetInt64());
+        Assert.Equal(0, video.GetProperty("queueDrops").GetInt64());
         Assert.Equal(0, video.GetProperty("nonIncreasingStamps").GetInt64());
         Assert.InRange(root.GetProperty("latency").GetProperty("p99Ms").GetDouble(), 0, 250);
+
+        // The defaults: today's tracer.
+        var encoder = root.GetProperty("encoder");
+        Assert.Equal("full", encoder.GetProperty("stages").GetString());
+        Assert.Equal("p5", encoder.GetProperty("preset").GetString());
+        Assert.Equal(JsonValueKind.Null, encoder.GetProperty("tune").ValueKind);
+        Assert.Equal("x1", encoder.GetProperty("color").GetString());
+        Assert.False(encoder.GetProperty("encodeThread").GetBoolean());
 
         var priority = root.GetProperty("gpuPriority");
         Assert.Equal(0, priority.GetProperty("requested").GetInt32());
@@ -180,6 +189,40 @@ public sealed class CaptureEndTests : IDisposable
             Assert.Equal((samples + 1023) / 1024, streams[i + 1].Packets);
             Assert.InRange(streams[i + 1].DurationTs, samples - 1024, samples + 1024);
         }
+    }
+
+    [Fact]
+    public void TheEncodeExperimentsRecordTheirOptionsAndWriteAPlayableFile()
+    {
+        RequireFFmpeg();
+        var title = OpenWindow(closeAfterMs: 0);
+        var output = Path.Combine(_directory, "experiment.mp4");
+        var statsPath = Path.Combine(_directory, "experiment.json");
+
+        var engine = StartEngine(title, output, "4", "--stats", statsPath,
+            "--color", "x2", "--nvenc-preset", "p1", "--nvenc-tune", "ll", "--encode-thread");
+        Assert.True(engine.WaitForExit(TimeSpan.FromSeconds(30)), "the engine did not stop");
+        Assert.Equal(0, engine.ExitCode);
+
+        using var stats = JsonDocument.Parse(File.ReadAllText(statsPath));
+        var root = stats.RootElement;
+        var encoder = root.GetProperty("encoder");
+        Assert.Equal("p1", encoder.GetProperty("preset").GetString());
+        Assert.Equal("ll", encoder.GetProperty("tune").GetString());
+        Assert.Equal("x2", encoder.GetProperty("color").GetString());
+        Assert.True(encoder.GetProperty("encodeThread").GetBoolean());
+
+        var video = root.GetProperty("video");
+        var encoded = video.GetProperty("framesEncoded").GetInt64();
+        Assert.True(encoded > 30, $"only {encoded} frames encoded");
+        Assert.Equal(video.GetProperty("framesArrived").GetInt64(),
+            encoded + video.GetProperty("duplicates").GetInt64() + video.GetProperty("queueDrops").GetInt64());
+        var latency = root.GetProperty("latency");
+        Assert.Equal(encoded, latency.GetProperty("count").GetInt64() + latency.GetProperty("flushed").GetInt64());
+
+        var streams = ProbeStreams(output);
+        Assert.Equal(["h264", "aac", "aac"], streams.Select(s => s.Codec));
+        Assert.Equal(encoded, streams[0].Packets);
     }
 
     [Fact]
