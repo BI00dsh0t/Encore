@@ -53,6 +53,27 @@ public static class ErrorCodes
     /// <summary>The settings file could not be read and was moved aside.</summary>
     public const string SettingsUnreadable = "settings-unreadable";
 
+    /// <summary>The connection to the engine dropped, or there is none; a pending command fails locally with this.</summary>
+    public const string EngineDisconnected = "engine-disconnected";
+
+    /// <summary>The process serving the engine pipe failed the client's server check.</summary>
+    public const string EngineUntrusted = "engine-untrusted";
+
+    /// <summary>A command's <c>type</c> is not one the engine handles.</summary>
+    public const string CommandUnknown = "command-unknown";
+
+    /// <summary>A command failed inside the engine for a reason with no code of its own.</summary>
+    public const string CommandFailed = "command-failed";
+
+    /// <summary>The engine pipe for this instance already exists: another engine is serving it.</summary>
+    public const string IpcPipeInUse = "ipc-pipe-in-use";
+
+    /// <summary><c>warning.dismiss</c> names a warning that is not active.</summary>
+    public const string WarningNotFound = "warning-not-found";
+
+    /// <summary><c>warning.dismiss</c> names a warning that can't be dismissed.</summary>
+    public const string WarningNotDismissable = "warning-not-dismissable";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -72,5 +93,12 @@ public static class ErrorCodes
         ProfileNotFound,
         SettingsWriteFailed,
         SettingsUnreadable,
+        EngineDisconnected,
+        EngineUntrusted,
+        CommandUnknown,
+        CommandFailed,
+        IpcPipeInUse,
+        WarningNotFound,
+        WarningNotDismissable,
     ];
 }
