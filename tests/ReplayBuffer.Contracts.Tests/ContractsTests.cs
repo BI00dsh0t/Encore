@@ -81,6 +81,31 @@ public sealed class InstanceTests
         Assert.Equal(@"C:\Users\u\AppData\Local\ReplayBuffer-Dev", instance.LocalDataFolder);
     }
 
+    [Theory]
+    [InlineData("ReplayBuffer-Test-abc123", true)]
+    [InlineData("ReplayBuffer-Test-a-b-C", true)]
+    [InlineData("ReplayBuffer-Test-", false)]
+    [InlineData("ReplayBuffer-Test-a_b", false)]
+    [InlineData("ReplayBuffer-Test-a.b", false)]
+    [InlineData("ReplayBuffer-Dev", false)]
+    [InlineData("ReplayBuffer", false)]
+    [InlineData("replaybuffer-test-abc", false)]
+    public void OnlyTestPrefixedNamesAreTestInstances(string name, bool isTest)
+    {
+        Assert.Equal(isTest, Instance.IsTestName(name));
+        if (isTest)
+        {
+            var instance = Instance.ForTest(name);
+            Assert.True(instance.IsTest);
+            Assert.Equal(name, Path.GetFileName(instance.RoamingDataFolder));
+            Assert.Equal(name, Path.GetFileName(instance.LocalDataFolder));
+        }
+        else
+        {
+            Assert.Throws<ArgumentException>(() => Instance.ForTest(name));
+        }
+    }
+
     [Fact]
     public void TestRunsAreTheDevInstance()
     {

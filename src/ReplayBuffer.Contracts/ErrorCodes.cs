@@ -74,6 +74,23 @@ public static class ErrorCodes
     /// <summary><c>warning.dismiss</c> names a warning that can't be dismissed.</summary>
     public const string WarningNotDismissable = "warning-not-dismissable";
 
+    /// <summary>The App restarted an engine that crashed or hung; raised by the new engine (AD-16).</summary>
+    public const string EngineRestarted = "engine-restarted";
+
+    /// <summary>The engine relaunched an App that exited with no <c>engine.shutdown</c> (AD-16).</summary>
+    public const string AppRestarted = "app-restarted";
+
+    /// <summary>Another copy of this process already runs for this instance (AD-16).</summary>
+    public const string InstanceRunning = "instance-running";
+
+    /// <summary>
+    /// A Recording was running when the engine restarted, and was not resumed (AD-16).
+    /// The resume rule, for epic-recordings: after an engine restart only the Replay Buffer
+    /// resumes, never a Recording or Monitor Recording, and this warning is raised for each one
+    /// that was running. Nothing raises it yet.
+    /// </summary>
+    public const string RecordingInterrupted = "recording-interrupted";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -100,5 +117,9 @@ public static class ErrorCodes
         IpcPipeInUse,
         WarningNotFound,
         WarningNotDismissable,
+        EngineRestarted,
+        AppRestarted,
+        InstanceRunning,
+        RecordingInterrupted,
     ];
 }

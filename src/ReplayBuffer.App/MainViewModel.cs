@@ -78,8 +78,9 @@ internal sealed class MainViewModel : Observable
         {
             EngineStatus.Connecting => "Connecting to the engine…",
             EngineStatus.Connected => "Connected to the engine.",
+            EngineStatus.Restarting => "Restarting the engine…" + (_engine.Problem is { } why ? " " + why : ""),
             EngineStatus.NotRunning => "The engine isn't running." + (_engine.Problem is { } problem ? " " + problem : ""),
-            _ => "The engine disconnected. Quit and start ReplayBuffer again to reconnect.",
+            _ => "The engine disconnected. Reconnecting…",
         };
 
         if (_engine.State is not { } state)

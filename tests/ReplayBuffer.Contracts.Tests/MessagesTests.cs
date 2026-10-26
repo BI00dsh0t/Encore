@@ -21,6 +21,8 @@ public sealed partial class MessagesTests
         ["capture.stateChanged"] = """{"replay":"buffering","recording":"running","monitorRecording":"off","micMuted":false,"cooldownUntil":null}""",
         ["warning.raised"] = """{"id":"w2","code":"settings-unreadable","severity":"warning","source":"settings","message":"m","at":"2026-10-25T12:00:00+00:00","overlay":true,"sound":null,"dismissable":true}""",
         ["warning.dismissed"] = """{"id":"w1"}""",
+        ["engine.heartbeat"] = """{"at":"2026-10-25T12:00:02+00:00"}""",
+        ["app.attached"] = """{"pid":7}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);
@@ -108,6 +110,32 @@ public sealed partial class MessagesTests
         Assert.Equal(new CaptureState(ReplayState.Off, RecordingState.Off, RecordingState.Off, true, null), initial.Capture);
         Assert.Empty(initial.Warnings);
         Assert.Equal(0, initial.Seq);
+    }
+
+    [Fact]
+    public void TheHeartbeatCoalescesAndTheSupervisionFieldsAreOptional()
+    {
+        Assert.True(EngineMessages.Heartbeat.Coalesces);
+        Assert.False(EngineMessages.Attached.Coalesces);
+
+        // An engine from before story 8 sends neither field.
+        var old = JsonSerializer.Deserialize(
+            """{"engineInstanceId":"e","pid":1,"seq":0,"settings":{"schemaVersion":1,"revision":0,"global":{},"profiles":{}},"capture":{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null},"warnings":[]}""",
+            EngineJsonContext.Default.StateSnapshot)!;
+        Assert.Null(old.HeartbeatAt);
+        Assert.Null(old.AppPid);
+    }
+
+    [Theory]
+    [InlineData("""{"pid":5}""", null)]
+    [InlineData("""{"pid":5,"engineRestart":null}""", null)]
+    [InlineData("""{"pid":5,"engineRestart":"crashed"}""", EngineRestartReason.Crashed)]
+    [InlineData("""{"pid":5,"engineRestart":"hung"}""", EngineRestartReason.Hung)]
+    public void AppAttachCarriesAnOptionalRestartReason(string json, EngineRestartReason? reason)
+    {
+        var attach = JsonSerializer.Deserialize(json, EngineJsonContext.Default.AppAttach)!;
+
+        Assert.Equal(new AppAttach(5, reason), attach);
     }
 
     [GeneratedRegex("^[a-z]+\\.[a-z][a-zA-Z]*$")]

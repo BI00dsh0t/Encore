@@ -147,28 +147,62 @@ public sealed class EngineConnectionTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task AnEngineThatDiesLeavesTheAppDisconnectedAndQuitStillEnds()
+    public async Task ASupervisedEngineThatDiesIsRelaunchedAndTheNewEngineRaisesEngineRestarted()
     {
-        var connection = await ConnectAsync();
-        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        connection.Changed += () =>
-        {
-            if (connection.Status == EngineStatus.Disconnected)
-            {
-                disconnected.TrySetResult();
-            }
-        };
+        var connection = Create(EngineExe);
+        connection.StartSupervising();
+        await Eventually(() => connection.Status == EngineStatus.Connected && connection.State?.AppPid == Environment.ProcessId);
+        var first = connection.State!.Pid;
+        _enginePids.Add(first);
 
-        using (var engine = Process.GetProcessById(connection.State!.Pid))
+        using (var engine = Process.GetProcessById(first))
         {
             engine.Kill();
         }
 
-        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(5), Token);
+        await Eventually(() => connection.Status == EngineStatus.Connected && connection.State?.Pid != first
+            && connection.State!.Warnings.Any(w => w.Code == ErrorCodes.EngineRestarted));
+        _enginePids.Add(connection.State!.Pid);
         var sender = new SettingsSender(connection);
-        var failed = await sender.UpdateAsync(connection.State.Settings, [SettingsValues.SetGlobal(Keys.StartWithWindows, true)], Token);
-        Assert.Equal(ErrorCodes.EngineDisconnected, Assert.IsType<SettingsSendResult.Failed>(failed).Code);
+        var committed = await sender.UpdateAsync(connection.State.Settings, [SettingsValues.SetGlobal(Keys.StartWithWindows, true)], Token);
+        Assert.IsType<SettingsSendResult.Committed>(committed);
+
+        using var second = Process.GetProcessById(connection.State.Pid);
         Assert.True(await connection.ShutdownAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(second.HasExited);
+    }
+
+    [Fact]
+    public async Task AServerThatIsNotTheTrustedEngineIsRefusedAndNeverLaunchedOver()
+    {
+        // The real engine serves the pipe, but the App trusts only an image elsewhere.
+        var trusted = await ConnectAsync();
+        var connection = new EngineConnection(new EngineConnectionOptions
+        {
+            InstanceName = _instance,
+            // A launch would replace the problem with "couldn't be started".
+            EnginePath = Path.Combine(AppContext.BaseDirectory, "missing", "ReplayBuffer.Engine.exe"),
+            EngineArguments = ["serve", "--instance", _instance],
+            TrustedEnginePath = Path.Combine(AppContext.BaseDirectory, "elsewhere", "ReplayBuffer.Engine.exe"),
+        });
+        _connections.Add(connection);
+
+        await connection.ConnectAsync(Token);
+
+        Assert.Equal(EngineStatus.NotRunning, connection.Status);
+        Assert.Contains(ErrorCodes.EngineUntrusted, connection.Problem);
+        Assert.Null(connection.State);
+        Assert.Equal(EngineStatus.Connected, trusted.Status);
+    }
+
+    private static async Task Eventually(Func<bool> condition)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(deadline.Elapsed < TimeSpan.FromSeconds(15), "the condition never held");
+            await Task.Delay(20, Token);
+        }
     }
 
     private EngineConnection Create(string enginePath)

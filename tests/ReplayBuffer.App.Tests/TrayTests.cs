@@ -18,6 +18,33 @@ public sealed class TrayTests
         Assert.Equal(inTray, ShellApp.StartsInTray(args));
 
     [Fact]
+    public void WithNoInstanceArgumentTheAppRunsOnItsOwnInstance()
+    {
+        Assert.True(ShellApp.TryParseInstance(["--tray"], out var instance));
+        Assert.Equal(Contracts.Instance.Current, instance);
+    }
+
+    [Fact]
+    public void TheInstanceArgumentTakesATestInstance()
+    {
+        Assert.True(ShellApp.TryParseInstance(["--tray", "--instance", "ReplayBuffer-Test-x1"], out var instance));
+        Assert.Equal("ReplayBuffer-Test-x1", instance.Name);
+        Assert.True(instance.IsTest);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("ReplayBuffer")]
+    [InlineData("ReplayBuffer-Dev")]
+    [InlineData("ReplayBuffer-Test-")]
+    public void AnyOtherInstanceArgumentIsRefused(string? name)
+    {
+        string[] args = name is null ? ["--tray", "--instance"] : ["--instance", name];
+
+        Assert.False(ShellApp.TryParseInstance(args, out _));
+    }
+
+    [Fact]
     public void TheMenuOffersOpenStartWithWindowsAndQuitAndItsPopupIsExcludedFromCapture() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession { Reply = (_, _) => new Contracts.Messages.SettingsUpdateResult(1) };

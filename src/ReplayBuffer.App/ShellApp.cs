@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,12 +13,15 @@ using ReplayBuffer.Platform.Desktop;
 namespace ReplayBuffer.App;
 
 /// <summary>
-/// The App: a tray icon, the Main App window and the engine connection. It starts in the tray and
-/// runs until Quit (AD-16). <c>--tray</c> starts it with no window, as Start with Windows will.
+/// The App: a tray icon, the Main App window and the engine connection, which supervises the
+/// engine. It starts in the tray and runs until Quit, or until the engine ends cleanly on its own
+/// (AD-16). <c>--tray</c> starts it with no window, as Start with Windows and the engine's relaunch
+/// do; <c>--instance ReplayBuffer-Test-*</c> runs it on a test instance.
 /// </summary>
-internal sealed class ShellApp : Application
+internal sealed class ShellApp(Instance instance) : Application
 {
     public const string TrayArgument = "--tray";
+    public const string InstanceArgument = "--instance";
 
     /// <summary>How long Quit waits for the engine to exit, so a pending save can finish (AD-16).</summary>
     private static readonly TimeSpan QuitTimeout = TimeSpan.FromSeconds(5);
@@ -32,12 +36,13 @@ internal sealed class ShellApp : Application
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        var instance = Instance.Current;
         _engine = new EngineConnection(new EngineConnectionOptions
         {
             InstanceName = instance.Name,
-            EnginePath = Path.Combine(AppContext.BaseDirectory, "ReplayBuffer.Engine.exe"),
+            EnginePath = Path.Combine(AppContext.BaseDirectory, EngineConnectionOptions.EngineFileName),
+            EngineArguments = instance.IsTest ? ["serve", InstanceArgument, instance.Name] : ["serve"],
         });
+        _engine.EngineEnded += () => Dispatcher.BeginInvoke(async () => await QuitAsync());
         var model = new MainViewModel(_engine, action => Dispatcher.BeginInvoke(action));
         _window = new MainWindow { DataContext = model };
         if (instance.Name != Instance.InstalledName)
@@ -51,11 +56,37 @@ internal sealed class ShellApp : Application
             _window.Open();
         }
 
-        _ = _engine.ConnectAsync();
+        _engine.StartSupervising();
     }
 
     /// <summary>Whether the command line asks for no window at start.</summary>
     internal static bool StartsInTray(IEnumerable<string> args) => args.Contains(TrayArgument, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The instance the command line names with <c>--instance</c>, which must be a test instance (the
+    /// engine's rule), or the process's own. False when <c>--instance</c> is malformed.
+    /// </summary>
+    internal static bool TryParseInstance(IReadOnlyList<string> args, [NotNullWhen(true)] out Instance? instance)
+    {
+        instance = Instance.Current;
+        for (var i = 0; i < args.Count; i++)
+        {
+            if (!string.Equals(args[i], InstanceArgument, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (i + 1 >= args.Count || !Instance.IsTestName(args[i + 1]))
+            {
+                instance = null;
+                return false;
+            }
+
+            instance = Instance.ForTest(args[++i]);
+        }
+
+        return true;
+    }
 
     /// <summary>The tray's menu: Open, Start with Windows and Quit (epic Decision, 2026-10-25).</summary>
     internal static ContextMenu CreateTrayMenu(MainViewModel model, Action open, Action quit)
