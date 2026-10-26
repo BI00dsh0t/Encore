@@ -18,6 +18,9 @@ internal sealed class StartupRegistration(Instance instance, RunKey runKey, stri
 {
     private bool? _synced;
 
+    /// <summary>The revision whose registry write failed; heartbeats re-raise it, so it isn't retried.</summary>
+    private long? _failedRevision;
+
     /// <summary>The Run value's data: the App's path, quoted, and <c>--tray</c>.</summary>
     public string Command { get; } = $"\"{appPath}\" {ShellApp.TrayArgument}";
 
@@ -27,7 +30,8 @@ internal sealed class StartupRegistration(Instance instance, RunKey runKey, stri
     /// <summary>
     /// Applies the committed <c>startWithWindows</c> when it differs from the last one synced. The
     /// first call always reconciles, so a key that is missing, stale or points elsewhere is fixed at
-    /// start. A failed registry write leaves the key as it is and is retried on the next call.
+    /// start. A failed registry write leaves the key as it is and is retried on the next committed
+    /// revision, not on every state change that carries the same document.
     /// </summary>
     public void Sync(SettingsDocument settings)
     {
@@ -38,7 +42,7 @@ internal sealed class StartupRegistration(Instance instance, RunKey runKey, stri
         }
 
         var on = SettingsValues.Global(settings, Keys.StartWithWindows);
-        if (_synced == on)
+        if (_synced == on || _failedRevision == settings.Revision)
         {
             return;
         }
@@ -58,10 +62,12 @@ internal sealed class StartupRegistration(Instance instance, RunKey runKey, stri
             }
 
             _synced = on;
+            _failedRevision = null;
         }
         catch (Exception e) when (e is UnauthorizedAccessException or IOException or SecurityException)
         {
             _synced = null;
+            _failedRevision = settings.Revision;
             Trace.TraceWarning($"Start with Windows: couldn't update the Run value: {e.Message}");
         }
     }

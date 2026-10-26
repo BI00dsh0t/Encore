@@ -1,3 +1,5 @@
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Win32;
 using ReplayBuffer.Contracts;
@@ -139,6 +141,54 @@ public sealed class StartupRegistrationTests : IDisposable
         startup.Sync(Document(2, false));
 
         Assert.Equal("written elsewhere", _key.Read());
+    }
+
+    [Fact]
+    public void ARefusedUpdateLeavesTheValueAlone()
+    {
+        var startup = new StartupRegistration(Installed, _key, AppPath);
+        var committed = Document(3, false);
+        startup.Sync(committed);
+
+        // The toggle flipped on, the engine refused it, and the committed document is unchanged.
+        startup.Sync(committed);
+
+        Assert.Null(_key.Read());
+    }
+
+    [Fact]
+    public void AFailedWriteIsSwallowedAndRetriedOnTheNextCommit()
+    {
+        _key.Write("old");
+        var user = WindowsIdentity.GetCurrent().User!;
+        var deny = new RegistryAccessRule(user, RegistryRights.SetValue, AccessControlType.Deny);
+        using (var run = Registry.CurrentUser.OpenSubKey(_key.SubKey, RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ChangePermissions | RegistryRights.ReadKey)!)
+        {
+            var security = run.GetAccessControl();
+            security.AddAccessRule(deny);
+            run.SetAccessControl(security);
+        }
+
+        var startup = new StartupRegistration(Installed, _key, AppPath);
+        try
+        {
+            startup.Sync(Document(1, true));
+            Assert.Equal("old", _key.Read());
+        }
+        finally
+        {
+            using var run = Registry.CurrentUser.OpenSubKey(_key.SubKey, RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ChangePermissions | RegistryRights.ReadKey)!;
+            var security = run.GetAccessControl();
+            security.RemoveAccessRule(deny);
+            run.SetAccessControl(security);
+        }
+
+        // A heartbeat re-raises the same failed revision: no new attempt, though the write would now work.
+        startup.Sync(Document(1, true));
+        Assert.Equal("old", _key.Read());
+
+        startup.Sync(Document(2, true));
+        Assert.Equal(Command, _key.Read());
     }
 
     [Fact]

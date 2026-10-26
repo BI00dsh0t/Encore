@@ -36,10 +36,28 @@ $Source = [IO.Path]::GetFullPath($Source)
 $Destination = [IO.Path]::GetFullPath($Destination)
 $App = 'ReplayBuffer.App.exe'
 
-foreach ($name in @($App, 'ReplayBuffer.Engine.exe', 'avcodec-63.dll')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $Source $name))) {
-        throw "$Source has no $name; run 'pwsh tools/publish.ps1' first."
-    }
+# The layout tools/publish.ps1 checks: both exes and the FFmpeg DLLs the engine loads.
+$Required = @(
+    $App,
+    'ReplayBuffer.Engine.exe',
+    'avcodec-63.dll',
+    'avdevice-63.dll',
+    'avfilter-12.dll',
+    'avformat-63.dll',
+    'avutil-61.dll',
+    'swresample-7.dll',
+    'swscale-10.dll'
+)
+$missing = @($Required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Source $_)) })
+if ($missing.Count -gt 0) {
+    throw "$Source is missing $($missing -join ', '); run 'pwsh tools/publish.ps1' first."
+}
+
+# robocopy /MIR deletes whatever the destination holds that the source doesn't; only mirror over an install.
+if ((Test-Path -LiteralPath $Destination) -and
+    @(Get-ChildItem -LiteralPath $Destination -Force).Count -gt 0 -and
+    -not (Test-Path -LiteralPath (Join-Path $Destination $App))) {
+    throw "$Destination is not empty and has no $App, so it is not a ReplayBuffer install; nothing was copied."
 }
 
 $prefix = $Destination.TrimEnd('\') + '\'

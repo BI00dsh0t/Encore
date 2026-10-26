@@ -3,14 +3,14 @@ title: 'Publish, install and Start with Windows'
 type: 'feature'
 ticket: '13'
 created: '2026-10-26'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '8c4cffaa131b38e0e46e1b84db790c596c2eac48'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context: []
 ---
@@ -94,6 +94,15 @@ context: []
 ## Plan Change Log
 
 ## Review Triage Log
+
+**Pass 1 (quick):** high 0, medium 1, low 3, false 0, maybe-false 0. All four patched.
+
+| Finding | Verdict | Route | Evidence / action |
+|---|---|---|---|
+| `StartupRegistration.Sync` retries a failed write on every `Changed` (heartbeat every 2 s), not per commit | low | patch | `EngineConnection` raises `Changed` per event; `_synced = null` after a failure. Skip while the failed revision is unchanged. |
+| `AFailedWrite…` test removes the deny ACE only on success; `Dispose` can then fail and leak the test key | low | patch | `DeleteSubKeyTree` needs write access the ACE denies. Remove it in `finally`. |
+| `install.ps1` checks 3 source files; a partial publish passes and `/MIR` strips DLLs from the install | low | patch | Check both exes and all 7 FFmpeg DLLs. |
+| `install.ps1` `/MIR` purges any `-Destination` | medium | patch | Refuse a non-empty destination without `ReplayBuffer.App.exe`. |
 
 ## Design Notes
 
