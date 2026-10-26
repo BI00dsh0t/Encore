@@ -110,18 +110,18 @@ context:
 - Audio stamps: 0 TIMESTAMP_ERROR/zero/backwards on both BEACN endpoints over 6 runs; jitter p99 0.11–0.15 ms; drift Game (BEACN Mix Create) −0.5 to −0.8 ppm, Microphone (BEACN Mic) +52.9 to +56.4 ppm (its own clock); one discontinuity per stream (the first packet).
 - The game was not fully GPU-bound (CPU busy ≈ frame time, GPU busy ≈ 80 %).
 
-**Decision draft (fill the figures from summary.md; Sofia writes it into the epic Notes):**
+- Session 3 (`path-a-20261025-175049`, 2 min each, forward order) and session 4 (`path-a-20261025-201203`, reverse order), GPU sampler off: no hitches in any run (≤ 1 frame > 30 ms). Loss vs each session's baseline (80.7 / 86.7 fps): WGC only 2.1 / 0.3 % (mean 1.2 %), WGC + copy 4.1 / 1.3 % (2.7 %), full 5.0 / 10.7 % (7.8 %). The NVIDIA performance overlay's FrameView PresentMon ran during sessions 1–2 and not 3–4; the hitches of sessions 1–2 are attributed to that combination, unconfirmed. Capture delivers ≈ 51 fps against the game's 77–87 (11 % empty 60 fps slots), already at the WGC stage: `MinUpdateInterval` 1/60 skips a game frame whenever the next one lands under 16.7 ms.
+- Still to run: the 30 min `capture-p0` run (builder, overnight).
 
-> **Decision (YYYY-MM-DD): Path A kept | Path C adopted.** Load: Cyberpunk 2077, borderless 2560×1440 (the builder's monitor, not R5's 1080p), RT Overdrive, Frame Generation off, standing still; PresentMon 5 min per condition, interleaved twice, then 30 min of `<condition>`.
-> - FPS loss vs baseline: p0 _% / p7 _% / m7 _% (avg FPS _ vs _; 1 % low _ vs _). Target < 3 %.
-> - Dropped/duplicated: _ % duplicates; missed slots _ % against the game's _ fps present rate. Target < 0.1 %.
-> - Capture→encoded p99: _ ms (max _). Target < 1 frame. Cause: tracer drain-on-submit plus NVENC frames in flight → story 6/11 | Path A itself.
-> - Engine CPU: _ % of one core (_ % of machine). Allocations: _ B/s; GC over 30 min Gen0/1/2 = _/_/_ (the WGC projection allocates per frame, story 1.1 finding 6).
-> - X1 (BGRA into NVENC): engine GPU use 3D _ %, Copy _ %, VideoEncode _ %, with no hidden CPU round-trip (engine CPU flat, 3D limited to the one CopySubresourceRegion).
-> - QPC stamps (§7.4): output `<device>` err/zero/back/disc = _, jitter p99 _ ms, drift _ ppm; input `<device>` likewise. Verdict: u64QPCPosition reliable | not on BEACN.
-> - GPU priority: chosen `<N>` because _ (FPS _ vs _, latency _ vs _). No elevation, no D3DKMTSetProcessSchedulingPriorityClass.
-> - NativeAOT: binary _ MB, first frame _ ms after start. Interop: _ lines in Platform.*.
-> - Path C rule: FPS loss ≥ 3 % or drops ≥ 0.1 % with no tracer shortcut to blame → _. Shortcut-caused misses go to story 6/11: _.
+**Decision draft (Sofia writes it into the epic Notes; the 30 min figures go in when that run is done):**
+
+> **Decision (2026-10-25): Path A kept.** Measured by spike 2 with Cyberpunk 2077, borderless 2560×1440 (the builder's monitor, not R5's 1080p), RT Overdrive, Frame Generation off, PresentMon, four sessions of 2–5 min runs.
+> - **FPS loss vs no capture:** WGC alone ≈ 1 %, WGC + copy ≈ 3 %, full capture (NVENC, X1) ≈ 5–11 % (mean 7.8 %, 1 % low 58–59 vs 60–69). It misses the provisional 3 % target. The miss comes with the NVENC encode of BGRA input, which Path C would share, not from the .NET interop stack (WGC + copy under 3 %), so by the Path C rule Path C isn't adopted. With the NVIDIA performance overlay's frame counter also running, capture caused 15–22 % loss as single-frame hitches (GPU latency p99 9 → 38 ms).
+> - **X1 (BGRA into NVENC):** works, with no hidden CPU round-trip (engine CPU 0.3–0.45 % of the machine, ≈ 8–11 % of one core; engine 3D ≈ 1 %, VideoEncode ≈ 31 %, Copy 0). Its encode stage is the largest cost to the game, so story 11 measures X2 (D3D11 VideoProcessor BGRA→NV12) against it before choosing.
+> - **QPC stamps (§7.4):** `u64QPCPosition` is reliable on Game (BEACN Mix Create) and Microphone (BEACN Mic): 0 timestamp-error, zero or backward stamps over 6 × 5 min, jitter p99 0.11–0.15 ms, one discontinuity per stream (the first packet). Drift against QPC: game −0.5 to −0.8 ppm, mic +53 to +56 ppm (an independent clock, as the drift benchmark needs).
+> - **GPU priority:** `SetGPUThreadPriority` 0, +7 and −7 all apply unelevated; FPS 60.7 / 63.3 / 61.2, inside the run-to-run spread (57.9–63.5 at one setting). Chosen: leave it at 0. No elevation, no D3DKMTSetProcessSchedulingPriorityClass.
+> - **Tracer shortcuts filed for stories 6/11/12:** capture→encoded p99 ≈ 115–130 ms (NVENC frames in flight + drain-on-submit), target < 1 frame; capture ≈ 51 fps against a 77–87 fps game (no pacer); ≈ 200 KB/s allocated with ≈ 4 Gen2 GCs a minute (all GCs Gen2), target Gen2 = 0; 0 duplicate frames.
+> - **NativeAOT and interop:** this was a framework-dependent build (spike 3 does AOT); first frame 0.7–1.5 s after process start; 1715 lines of interop in Platform.*.
 
 ## Plan Change Log
 
