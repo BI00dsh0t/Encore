@@ -19,6 +19,9 @@ internal sealed record EngineHostOptions
     /// <summary>The <c>engine.heartbeat</c> interval (AD-16), or <c>null</c> for none.</summary>
     public TimeSpan? Heartbeat { get; init; } = Contracts.Supervision.HeartbeatInterval;
 
+    /// <summary>Whether the encoders are probed at startup and <c>capture.videoOptions</c> published; tests that count events turn it off.</summary>
+    public bool ProbeEncoders { get; init; } = true;
+
     /// <summary>Opens and starts the App; <c>null</c> for <c>ReplayBuffer.App.exe</c> beside the engine.</summary>
     public IAppLauncher? AppLauncher { get; init; }
 
@@ -31,7 +34,8 @@ internal sealed record EngineHostOptions
 /// heartbeat and supervises the App that attaches (AD-16). It composes the SessionOrchestrator
 /// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; nothing starts a session yet.
 /// It registers the Hotkeys (AD-11) before the pipe accepts connections; the orchestrator publishes
-/// each press as <c>hotkey.pressed</c>, and no action is bound to one yet.
+/// each press as <c>hotkey.pressed</c>, and no action is bound to one yet. Once the pipe serves, it
+/// probes the video encoders off that path and publishes the result as <c>capture.videoOptions</c>.
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
@@ -53,7 +57,9 @@ internal sealed class EngineHost : IAsyncDisposable
 
     private readonly TaskCompletionSource _shutdown = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _stopHeartbeat = new();
+    private readonly CancellationTokenSource _stopProbe = new();
     private Task _heartbeat = Task.CompletedTask;
+    private Task _probe = Task.CompletedTask;
     private int _disposed;
 
     private EngineHost(
@@ -122,10 +128,12 @@ internal sealed class EngineHost : IAsyncDisposable
                 hostOptions.AppLauncher ?? AppLauncher.Beside(instance),
                 hostOptions.Time,
                 loggers.CreateLogger("Supervision"));
+            var encoders = new VideoEncoderCatalog(loggers);
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
                     new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions") },
-                    loggers),
+                    loggers,
+                    encoders),
                 () => load.Store.Current,
                 state => hub.Publish(CaptureMessages.StateChanged, state),
                 press =>
@@ -188,6 +196,10 @@ internal sealed class EngineHost : IAsyncDisposable
             }
 
             server.Start(hub, router);
+            if (hostOptions.ProbeEncoders)
+            {
+                host._probe = host.ProbeAsync(encoders);
+            }
             if (hostOptions.Heartbeat is { } interval)
             {
                 host._heartbeat = host.HeartbeatAsync(interval, hostOptions.Time);
@@ -213,6 +225,10 @@ internal sealed class EngineHost : IAsyncDisposable
 
         await _stopHeartbeat.CancelAsync().ConfigureAwait(false);
         await _heartbeat.ConfigureAwait(false);
+
+        // A probe stops between codecs; the one under way finishes first.
+        await _stopProbe.CancelAsync().ConfigureAwait(false);
+        await _probe.ConfigureAwait(false);
         Apps.Dispose();
 
         // No more presses are posted to the orchestrator once this returns.
@@ -222,6 +238,24 @@ internal sealed class EngineHost : IAsyncDisposable
         Sessions.Dispose();
         await Server.DisposeAsync().ConfigureAwait(false);
         _stopHeartbeat.Dispose();
+        _stopProbe.Dispose();
+    }
+
+    /// <summary>
+    /// Probes the encoders on a pool thread and publishes <c>capture.videoOptions</c> once (R2).
+    /// A failed probe publishes probed options with no codecs; a cancelled one publishes nothing.
+    /// </summary>
+    private async Task ProbeAsync(VideoEncoderCatalog encoders)
+    {
+        var token = _stopProbe.Token;
+        try
+        {
+            var options = await Task.Run(() => encoders.ProbeAll(token), token).ConfigureAwait(false);
+            Hub.Publish(CaptureMessages.VideoOptionsChanged, options);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
     }
 
     /// <summary>Publishes <c>engine.heartbeat</c> every <paramref name="interval"/> until stopped (AD-16).</summary>

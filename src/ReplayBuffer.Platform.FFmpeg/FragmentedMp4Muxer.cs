@@ -10,6 +10,9 @@ namespace ReplayBuffer.Platform.FFmpeg;
 /// </summary>
 public sealed unsafe class FragmentedMp4Muxer : IDisposable
 {
+    // MKTAG('h', 'v', 'c', '1').
+    private const uint HevcTag = 'h' | ('v' << 8) | ('c' << 16) | ((uint)'1' << 24);
+
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
     private AVFormatContext* _context;
@@ -45,6 +48,12 @@ public sealed unsafe class FragmentedMp4Muxer : IDisposable
         }
 
         FFmpegLibrary.Check(ffmpeg.avcodec_parameters_from_context(stream->codecpar, encoder), "avcodec_parameters_from_context");
+        if (encoder->codec_id == AVCodecID.AV_CODEC_ID_HEVC)
+        {
+            // hvc1 (parameter sets in the sample entry) rather than mp4's default hev1: Apple players need it.
+            stream->codecpar->codec_tag = HevcTag;
+        }
+
         stream->time_base = encoder->time_base;
         stream->disposition = isDefault ? ffmpeg.AV_DISPOSITION_DEFAULT : 0;
         if (title is not null)

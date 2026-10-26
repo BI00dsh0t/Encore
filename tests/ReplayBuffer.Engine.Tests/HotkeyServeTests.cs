@@ -84,6 +84,15 @@ public sealed class HotkeyServeTests : IDisposable
         });
         Assert.Equal(new HotkeyBindingStatus(HotkeyAction.Save, save, true, null), client.State.Hotkeys.Bindings[0]);
 
+        // Let the startup encoder probe finish first: it loads the GPU and CPU for a moment, and
+        // this measures the Hotkey path in a settled engine.
+        var settled = Stopwatch.StartNew();
+        while (!client.State.VideoOptions.Probed)
+        {
+            Assert.True(settled.Elapsed < Wait, "the encoder probe never published capture.videoOptions");
+            await Task.Delay(50, Token);
+        }
+
         // SendInput returns only once every low-level hook on the desktop has seen the event, and
         // WM_HOTKEY is posted inside it, so (qpc - before) includes other processes' hooks. The best
         // of several presses is the measure; the engine's own part, after SendInput returns, is

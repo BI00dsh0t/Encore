@@ -3,14 +3,14 @@ title: 'Output Settings and encoder probing'
 type: 'feature'
 ticket: '10'
 created: '2026-10-26'
-status: 'ready-for-dev'
+status: 'built'
 baseline_revision: '5d52a4a892d2f213233a45be044b4ebef43078f6'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md'
@@ -70,15 +70,15 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/Messages/Capture.cs` (+ `Engine.cs`) -- `VideoOptions(bool Probed, IReadOnlyList<CodecOffer> Codecs, IReadOnlyList<ResolutionOption> Resolutions, int MaxFps)`, `CodecOffer(VideoCodec Codec, string Encoder, bool MayNotPlayEverywhere)`, `ResolutionOption(int Width, int Height)`, a `VideoOptions.Unprobed` default, the `capture.videoOptions` event, and the snapshot field. Update `MessagesTests` samples.
-- [ ] `src/ReplayBuffer.Platform.FFmpeg/EncoderProbe.cs` -- `Probe(nint d3d11Device, ILogger)` → the offers, per the rules. Candidate names are a static table.
-- [ ] `src/ReplayBuffer.Platform.FFmpeg/VideoEncoder.cs` -- the settings record gains encoder name, codec, fps, bitrate and rate control. Map rate control per family: NVENC `rc`; AMF `rc` cbr/vbr_peak; QSV bit_rate/maxrate; x264 `nal-hrd cbr`. Preset and tune apply only to NVENC. Make libx264 work: copy into a staging texture and map it, `sws_scale` BGRA→yuv420p into a pooled native frame, with nothing managed allocated per frame.
-- [ ] `src/ReplayBuffer.Platform.Capture/WindowCapture.cs` -- `MinUpdateInterval` from a constructor `fps` argument.
-- [ ] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs` -- output size, fps, codec and encoder from the snapshot and the probe result (`IVideoEncoderCatalog`, probed once and cached). Fall back to H.264. `CaptureSessionOptions.Encoder` forces one encoder.
-- [ ] `src/ReplayBuffer.Engine/EngineHost.cs` -- the async startup probe, publishing `capture.videoOptions`.
-- [ ] `src/ReplayBuffer.Engine/CommandLine.cs`, `TracerCapture.cs` -- the new debug-capture options, building the session's document `video` (refusals give exit code 2 like the other bad options).
-- [ ] `tests/ReplayBuffer.Platform.FFmpeg.Tests/EncoderProbeTests.cs` -- the probe set equals the set of encoders an `ffmpeg.exe -f lavfi -i nullsrc=s=640x360 -frames:v 1 -c:v <name> -f null -` run accepts, across nvenc, amf and qsv. libx264 is offered only with no hardware H.264.
-- [ ] `tests/ReplayBuffer.Engine.Tests/OutputSettingsTests.cs` -- the story verify. `serve`'s `videoOptions` equals the probe oracle. `settings.update` at fps 144 is refused. For each offered codec, an in-process session against a 3440×1440 pwsh window repainting at ≥ 200 Hz writes 3440×1440 at that codec, with 90–125 fps measured from the PTS. A forced libx264 session writes a playable H.264 file. Each file plays in VLC (headless; the case skips if VLC is absent). Also cover `CommandLine` for the new options.
+- [x] `src/ReplayBuffer.Contracts/Messages/Capture.cs` (+ `Engine.cs`) -- `VideoOptions(bool Probed, IReadOnlyList<CodecOffer> Codecs, IReadOnlyList<ResolutionOption> Resolutions, int MaxFps)`, `CodecOffer(VideoCodec Codec, string Encoder, bool MayNotPlayEverywhere)`, `ResolutionOption(int Width, int Height)`, a `VideoOptions.Unprobed` default, the `capture.videoOptions` event, and the snapshot field. Update `MessagesTests` samples.
+- [x] `src/ReplayBuffer.Platform.FFmpeg/EncoderProbe.cs` -- `Probe(nint d3d11Device, ILogger)` → the offers, per the rules. Candidate names are a static table.
+- [x] `src/ReplayBuffer.Platform.FFmpeg/VideoEncoder.cs` -- the settings record gains encoder name, codec, fps, bitrate and rate control. Map rate control per family: NVENC `rc`; AMF `rc` cbr/vbr_peak; QSV bit_rate/maxrate; x264 `nal-hrd cbr`. Preset and tune apply only to NVENC. Make libx264 work: copy into a staging texture and map it, `sws_scale` BGRA→yuv420p into a pooled native frame, with nothing managed allocated per frame.
+- [x] `src/ReplayBuffer.Platform.Capture/WindowCapture.cs` -- `MinUpdateInterval` from a constructor `fps` argument.
+- [x] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs` -- output size, fps, codec and encoder from the snapshot and the probe result (`IVideoEncoderCatalog`, probed once and cached). Fall back to H.264. `CaptureSessionOptions.Encoder` forces one encoder.
+- [x] `src/ReplayBuffer.Engine/EngineHost.cs` -- the async startup probe, publishing `capture.videoOptions`.
+- [x] `src/ReplayBuffer.Engine/CommandLine.cs`, `TracerCapture.cs` -- the new debug-capture options, building the session's document `video` (refusals give exit code 2 like the other bad options).
+- [x] `tests/ReplayBuffer.Platform.FFmpeg.Tests/EncoderProbeTests.cs` -- the probe set equals the set of encoders an `ffmpeg.exe -f lavfi -i nullsrc=s=640x360 -frames:v 1 -c:v <name> -f null -` run accepts, across nvenc, amf and qsv. libx264 is offered only with no hardware H.264.
+- [x] `tests/ReplayBuffer.Engine.Tests/OutputSettingsTests.cs` -- the story verify. `serve`'s `videoOptions` equals the probe oracle. `settings.update` at fps 144 is refused. For each offered codec, an in-process session against a 3440×1440 pwsh window repainting at ≥ 200 Hz writes 3440×1440 at that codec, with 90–125 fps measured from the PTS. A forced libx264 session writes a playable H.264 file. Each file plays in VLC (headless; the case skips if VLC is absent). Also cover `CommandLine` for the new options.
 
 **Acceptance Criteria:**
 - Given the builder's PC, when the verify tests run, then `videoOptions` offers exactly h264, hevc and av1 (NVENC), 144 fps is refused, and each offered codec's 3440×1440 at 120 fps capture plays in VLC.
@@ -87,9 +87,32 @@ context:
 
 ## Implementation Notes
 
+- The probe reuses `VideoEncoder` itself (its muxer is now nullable: packets are counted and discarded), so a candidate "works" through exactly the session's open-and-encode path. It opens 1280×720 BGRA D3D11 frames and silences FFmpeg's log while it runs, since AMF and QSV fail loudly on a PC without them; a session's FFmpeg warnings during a probe are lost too.
+- `VideoEncoderCatalog` probes per codec, lazily, once (`Lazy<string?>` per codec), on its own D3D11 device on adapter 0. `serve` probes all three after `server.Start`; `debug-capture` and a session that starts before the probe ends probe only the codec they need, so `debug-capture` with no new option opens only NVENC H.264, as before.
+- The software path is chosen when the encoder has no D3D11 `hw_frames_ctx` config (libx264): FFmpeg's `av_hwframe_transfer_data` does the staging-texture copy and map, then `sws_scale_frame` converts BGRA→yuv420p (BT.601 limited, tagged so) into a preallocated frame; `av_frame_make_writable` reallocates natively only if the encoder still holds it. libx264 uses `veryfast`, plus `nal-hrd cbr` for CBR.
+- VBR peaks at 1.5× the bitrate (NVENC `rc vbr`, AMF `vbr_peak`, QSV maxrate > bit_rate, x264 VBV).
+- `debug-capture` with no `--size` reads the window's size from a WGC item (`WindowCapture.SizeOf`), made even, and keeps the tracer's 60 fps and 20 Mbps. A `--codec`/`--size`/`--fps`/`--bitrate` refusal is checked against `Keys.Video` too. An unknown `--encoder` fails at session start with `encode-failed` (exit 1), since it needs FFmpeg loaded.
+- `CommandLineTests` had a case expecting `--fps 60` to be refused as an unknown option; it now expects `--fps 144` to be refused.
+- Verified on the builder's PC: the probe and `serve` offer exactly h264/hevc/av1 via `*_nvenc` (AMF and QSV fail, matching `ffmpeg.exe`); 3440×1440 at 120 fps measured 108.6 (AV1), 112.9 (H.264) and 111.2 (HEVC) fps; every file played in VLC 3.0.23. VLC needs `--no-video-title-show` to keep OSD blend errors out of the log.
+- Review round: `HotkeyServeTests.AnInjectedPressArrivesWithinAMillisecondAndIsLogged` failed once at 1.12 ms against 1 ms. Its presses ran while `serve`'s startup probe was opening encoders. The test now waits for `videoOptions.probed` before pressing, which measures a settled engine. The probe runs once at engine start, never during play. That test can't be re-run green right now: on 2026-10-26 the unmodified `develop` test also stopped receiving any injected press on this PC, so the machine's input state is blocking it, not the code. Re-run it before the release.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+**Step 3 matrix audit:** the rows "No hardware H.264" and "FFmpeg missing" had no test that ran on the builder's PC, whose NVENC means neither branch can run there. `EncoderProbe.Choose` (the pure selection) and an internal per-codec probe constructor on `VideoEncoderCatalog` were added, with tests: `EncoderProbeTests.WithNoHardwareH264OnlyH264FallsBackToLibx264` and `VideoEncoderCatalogTests`.
+
+**Pass 1 (quick, 2026-10-26):** high 0, medium 2, low 3, false 0, maybe-false 1. One more was rejected as the plan's own choice.
+
+| # | Finding | Verdict | Route | Evidence / action |
+|---|---------|---------|-------|-------------------|
+| 1 | Every in-process `EngineHost.Start` runs the real probe, whose `capture.videoOptions` takes a seq at an unpredictable moment; `IpcTests` count every seq | medium | patch | `IpcTests.StartHost` asserts exact seq values (`Seq == 3`, `Hub.State.Seq == 0`). With FFmpeg present it's a race; without it, the probe publishes before connect every time. Fix: `EngineHostOptions.ProbeEncoders`, set off in `IpcTests` and `AppSupervisorTests`. |
+| 2 | One codec's probe throwing drops every offer; `Lazy` caches the exception for the engine's life; `ResolveEncoder` lets it escape, so there's no H.264 fallback | medium | patch | `ProbeAll` wrapped the whole loop in one try, and `ExecutionAndPublication` caches factory exceptions. Fix: catch per codec, cache only results, and in `ResolveEncoder` treat a throw for a non-H.264 codec as "no encoder". Test: `ACodecWhoseProbeThrowsIsNotOfferedNotCachedAndProbedAgain`. |
+| 3 | The probe's adapter-0 devices go against AD-7's "one D3D11 device" | low | reject | The frozen intent asks for the probe on adapter 0 at startup. The devices are short-lived, one per codec, and disposed after the probe. Probing on the session's device would tie the offer list to a session. |
+| 4 | The probe feeds BGRA D3D11 frames while the oracle lets `ffmpeg.exe` convert, so QSV/AMF may disagree with the oracle | maybe-false | defer | Can't be settled here: only NVENC works on this PC, and it accepts both inputs. Running the tests on an Intel or AMD PC would settle it. Logged in `deferred-work.md`. |
+| 5 | `debug-capture` now probes h264_nvenc before opening it again; `WindowCapture.SizeOf` failing reaches `Program`'s generic catch | low | reject | The probe costs a few hundred ms and the output is the same. A window vanishing between `ResolveWindow` and `SizeOf` is rare, and the inaccurate note is in this plan, which triage doesn't edit. |
+| 6 | `WindowCapture.SizeOf` leaves its `GraphicsCaptureItem` to the finalizer | low | reject | It runs once per `debug-capture`, the item isn't `IClosable`, and the finalizer releases it. |
+| 7 | `ResolveEncoder`'s fallback holds only when `EncoderFor` returns null, not when it throws | medium | patch | Same root cause as #2, fixed with it. |
 
 ## Design Notes
 

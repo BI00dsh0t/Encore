@@ -37,6 +37,69 @@ public sealed record CaptureState(
     public static CaptureState Initial { get; } = new(ReplayState.Off, RecordingState.Off, RecordingState.Off, MicMuted: true, CooldownUntil: null);
 }
 
+/// <summary>A codec this PC can encode, and the FFmpeg encoder the engine's probe chose for it (R2, AD-14).</summary>
+/// <param name="Encoder">The FFmpeg encoder name, e.g. <c>h264_nvenc</c>, or <c>libx264</c> when no hardware H.264 encoder works.</param>
+/// <param name="MayNotPlayEverywhere">True for HEVC and AV1, which some players and sites can't decode.</param>
+public sealed record CodecOffer(VideoCodec Codec, string Encoder, bool MayNotPlayEverywhere);
+
+/// <summary>An output resolution the Output Settings offer.</summary>
+public sealed record ResolutionOption(int Width, int Height);
+
+/// <summary>
+/// <c>capture.videoOptions</c>: what the <c>video</c> key can be set to on this PC. The engine probes
+/// the hardware encoders once at startup; until then <see cref="Probed"/> is false and no codec is
+/// offered. The resolutions and <see cref="MaxFps"/> are what's offered: the key itself accepts any
+/// even size up to <see cref="VideoSettings.MaxDimension"/>.
+/// </summary>
+public sealed record VideoOptions(bool Probed, IReadOnlyList<CodecOffer> Codecs, IReadOnlyList<ResolutionOption> Resolutions, int MaxFps)
+{
+    /// <summary>The resolutions every PC is offered, smallest first.</summary>
+    public static IReadOnlyList<ResolutionOption> OfferedResolutions { get; } =
+    [
+        new(1280, 720),
+        new(1920, 1080),
+        new(2560, 1080),
+        new(2560, 1440),
+        new(3440, 1440),
+        new(3840, 1600),
+        new(3840, 2160),
+    ];
+
+    /// <summary>Before the probe: no codecs yet.</summary>
+    public static VideoOptions Unprobed { get; } = new(false, [], OfferedResolutions, VideoSettings.MaxFps);
+
+    /// <summary>The probe's result: <paramref name="codecs"/>, with the offered resolutions and the fps ceiling.</summary>
+    public static VideoOptions FromProbe(IReadOnlyList<CodecOffer> codecs) => new(true, codecs, OfferedResolutions, VideoSettings.MaxFps);
+
+    /// <summary>Whether an offer of <paramref name="codec"/> is marked as one that may not play everywhere.</summary>
+    public static bool MayNotPlayEverywhereFor(VideoCodec codec) => codec != VideoCodec.H264;
+
+    /// <summary>Equal when every field is, the lists in order.</summary>
+    public bool Equals(VideoOptions? other) =>
+        other is not null
+        && (ReferenceEquals(this, other)
+            || (Probed == other.Probed && MaxFps == other.MaxFps
+                && Codecs.SequenceEqual(other.Codecs) && Resolutions.SequenceEqual(other.Resolutions)));
+
+    public override int GetHashCode()
+    {
+        var hash = default(HashCode);
+        hash.Add(Probed);
+        hash.Add(MaxFps);
+        foreach (var codec in Codecs)
+        {
+            hash.Add(codec);
+        }
+
+        foreach (var resolution in Resolutions)
+        {
+            hash.Add(resolution);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
 /// <summary>Capture messages: the Replay Buffer, the capture session and the shared capture state.</summary>
 public static class CaptureMessages
 {
@@ -46,9 +109,16 @@ public static class CaptureMessages
         "capture",
         (snapshot, state) => snapshot with { Capture = state });
 
+    /// <summary>The encoder probe's result (R2, AD-14), published once after startup.</summary>
+    public static EventType<VideoOptions> VideoOptionsChanged { get; } = new(
+        "capture.videoOptions",
+        CaptureJsonContext.Default.VideoOptions,
+        "videoOptions",
+        (snapshot, options) => snapshot with { VideoOptions = options });
+
     public static IReadOnlyList<CommandType> Commands { get; } = [];
 
-    public static IReadOnlyList<EventType> Events { get; } = [StateChanged];
+    public static IReadOnlyList<EventType> Events { get; } = [StateChanged, VideoOptionsChanged];
 }
 
 [JsonSourceGenerationOptions(
@@ -57,4 +127,5 @@ public static class CaptureMessages
     RespectNullableAnnotations = true,
     RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(CaptureState))]
+[JsonSerializable(typeof(VideoOptions))]
 public sealed partial class CaptureJsonContext : JsonSerializerContext;

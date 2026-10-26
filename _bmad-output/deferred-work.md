@@ -4,3 +4,6 @@
 - source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-engine-baseline/tickets/story-sessionorchestrator-and-the-capture-session-api-plan.md`
   summary: A session's output path in serve comes from `OutputNaming.Allocate` with a `File.Exists` probe, not AD-21's Core `OutputPathAllocator` with `CREATE_NEW`.
   evidence: The behaviour is inherited from the tracer (`CaptureSession.Open`). It's latent, because nothing starts a session in serve until epic 3; the first story that writes files from serve should switch to the allocator.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-engine-baseline/tickets/story-output-settings-and-encoder-probing-plan.md`
+  summary: The encoder probe feeds each candidate BGRA D3D11 frames, while its test oracle (`ffmpeg.exe` on a system-memory nullsrc) lets FFmpeg convert to the encoder's format, so an encoder that takes NV12 but not BGRA D3D11 input (h264_qsv is the likely one) may be offered by the oracle and refused by the probe.
+  evidence: Unverified (maybe-false, medium if true): the builder's PC has only NVENC, which accepts both. Settle it by running `EncoderProbeTests` on an Intel-iGPU or AMD PC; if they disagree, probe QSV/AMF with NV12 frames (the X2 colour path) or convert before the encoder.

@@ -9,6 +9,7 @@ using ReplayBuffer.Platform.FFmpeg;
 using ReplayBuffer.Platform.Windows;
 using PlatformFlow = ReplayBuffer.Platform.Audio.AudioFlow;
 using SessionFlow = ReplayBuffer.Contracts.Settings.AudioFlow;
+using VideoCodec = ReplayBuffer.Contracts.Settings.VideoCodec;
 
 namespace ReplayBuffer.Engine.Sessions;
 
@@ -46,6 +47,12 @@ internal sealed record CaptureSessionOptions
 
     public bool EncodeThread { get; init; }
 
+    /// <summary>
+    /// An FFmpeg encoder name that every session uses whatever the snapshot's codec, bypassing the
+    /// probe (<c>debug-capture --encoder</c>, for tests); null for the probe's encoder for the snapshot's codec.
+    /// </summary>
+    public string? Encoder { get; init; }
+
     /// <summary>Called once, on the capture thread, with the anchor QPC once the first frame has opened the output.</summary>
     public Action<long>? Anchored { get; init; }
 
@@ -53,13 +60,19 @@ internal sealed record CaptureSessionOptions
     public TimeSpan FirstFrameTimeout { get; init; } = DefaultFirstFrameTimeout;
 }
 
-/// <summary>Starts <see cref="CaptureSession"/>s with one set of options.</summary>
-internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILoggerFactory loggers) : ICaptureSessionFactory
+/// <summary>
+/// Starts <see cref="CaptureSession"/>s with one set of options and one encoder catalog; with no
+/// catalog given, the factory probes on its own, once per codec.
+/// </summary>
+internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILoggerFactory loggers, IVideoEncoderCatalog? encoders = null)
+    : ICaptureSessionFactory
 {
+    private readonly IVideoEncoderCatalog _encoders = encoders ?? new VideoEncoderCatalog(loggers);
+
     public ICaptureSession Start(SessionSpec spec, ISessionEvents events)
     {
         FFmpegLibrary.Initialize(loggers.CreateLogger("FFmpeg"));
-        var session = new CaptureSession(spec, events, options, loggers);
+        var session = new CaptureSession(spec, events, options, _encoders, loggers);
         try
         {
             session.Open();
@@ -75,10 +88,13 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 }
 
 /// <summary>
-/// One capture session (the tracer's media wiring, story 1.1): WGC window → NVENC, and each audio
-/// device → AAC, all into one fragmented MP4. The first frame is the anchor, every stream's PTS 0.
-/// A retarget swaps only the WGC capture, so the file keeps one unbroken set of streams. Encoding
-/// still runs on the capture threads; stories 11 and 12 move it.
+/// One capture session (the tracer's media wiring, story 1.1): WGC window → video encoder, and each
+/// audio device → AAC, all into one fragmented MP4. The first frame is the anchor, every stream's
+/// PTS 0. The snapshot's <c>video</c> sets the encoder (the probe's for its codec, else H.264), the
+/// output size, the fps, the bitrate and the rate control; a frame is copied at the top left of the
+/// output, cropped or padded black, until story 11 scales. A retarget swaps only the WGC capture, so
+/// the file keeps one unbroken set of streams. Encoding still runs on the capture threads; stories
+/// 11 and 12 move it.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -104,7 +120,10 @@ internal sealed class CaptureSession : ICaptureSession
     private EncoderThread? _encoderThread;
     private FragmentedMp4Muxer? _muxer;
     private VideoEncoder? _video;
-    private VideoSize _outputSize;
+    private readonly IVideoEncoderCatalog _encoders;
+    private readonly VideoSize _outputSize;
+    private string _encoderName = "";
+    private VideoCodec _codec;
     private long _anchorQpc;
     private long _lastFrameQpc;
     private bool _anchored;
@@ -112,11 +131,13 @@ internal sealed class CaptureSession : ICaptureSession
     private string _stopReason = "";
     private Exception? _failure;
 
-    public CaptureSession(SessionSpec spec, ISessionEvents events, CaptureSessionOptions options, ILoggerFactory loggers)
+    public CaptureSession(SessionSpec spec, ISessionEvents events, CaptureSessionOptions options, IVideoEncoderCatalog encoders, ILoggerFactory loggers)
     {
         _spec = spec;
         _events = events;
         _options = options;
+        _encoders = encoders;
+        _outputSize = new VideoSize(spec.Snapshot.Video.Width, spec.Snapshot.Video.Height);
         _loggers = loggers;
         _log = loggers.CreateLogger<CaptureSession>();
         _stats = options.Stats;
@@ -126,6 +147,8 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>Opens the device and audio clients and starts capture; the output opens on the first frame.</summary>
     public void Open()
     {
+        // Before anything is opened: the first codec use may run the probe.
+        (_encoderName, _codec) = ResolveEncoder();
         var target = _spec.Target;
         _window = WindowFinder.FromHandle(target.Window);
         _path = _options.OutputPath is { } explicitPath
@@ -277,7 +300,7 @@ internal sealed class CaptureSession : ICaptureSession
 
     private WindowCapture NewCapture(nint window)
     {
-        var capture = new WindowCapture(_device!, window, OnFrame, _loggers.CreateLogger<WindowCapture>());
+        var capture = new WindowCapture(_device!, window, _spec.Snapshot.Video.Fps, OnFrame, _loggers.CreateLogger<WindowCapture>());
         capture.Closed += () => OnClosed(capture);
         capture.Failed += Fail;
         return capture;
@@ -359,12 +382,49 @@ internal sealed class CaptureSession : ICaptureSession
         _converter.Convert(target, slice);
     }
 
+    /// <summary>
+    /// The encoder and codec: the forced encoder, else the probe's for the snapshot's codec, else
+    /// (a codec this PC can't encode, from a hand-edited or copied document) H.264's.
+    /// </summary>
+    private (string Encoder, VideoCodec Codec) ResolveEncoder()
+    {
+        if (_options.Encoder is { } forced)
+        {
+            var forcedCodec = EncoderProbe.CodecOf(forced)
+                ?? throw new EngineFailure(ErrorCodes.EncodeFailed, $"'{forced}' is not an H.264, HEVC or AV1 encoder in this FFmpeg build.");
+            _log.LogInformation("Encoder forced to {Encoder} ({Codec})", forced, forcedCodec);
+            return (forced, forcedCodec);
+        }
+
+        var codec = _spec.Snapshot.Video.Codec;
+        string? encoder;
+        try
+        {
+            encoder = _encoders.EncoderFor(codec);
+        }
+        catch (Exception e) when (codec != VideoCodec.H264)
+        {
+            // Only H.264's own probe failing fails the session; any other codec's falls back.
+            _log.LogWarning("The {Codec} encoder probe failed: {Message}", codec, e.Message);
+            encoder = null;
+        }
+
+        if (encoder is not null)
+        {
+            return (encoder, codec);
+        }
+
+        _log.LogWarning("No {Codec} encoder works on this PC; the session falls back to H.264", codec);
+        return _encoders.EncoderFor(VideoCodec.H264) is { } fallback
+            ? (fallback, VideoCodec.H264)
+            : throw new EngineFailure(ErrorCodes.EncodeFailed, "No H.264 encoder works on this PC.");
+    }
+
     /// <summary>The first frame is the session anchor: every stream's PTS 0 is its QPC.</summary>
     private void StartOutput(long anchorQpc, VideoSize contentSize)
     {
         _anchorQpc = anchorQpc;
-        _outputSize = VideoSize.EvenFloor(contentSize.Width, contentSize.Height);
-        _log.LogInformation("Anchor QPC {Anchor}; output {Size} from content {Content}", anchorQpc, _outputSize, contentSize);
+        _log.LogInformation("Anchor QPC {Anchor}; output {Size}, content {Content}", anchorQpc, _outputSize, contentSize);
 
         _stats?.SnapshotAnchor();
         _muxer = new FragmentedMp4Muxer(_path, _loggers.CreateLogger<FragmentedMp4Muxer>());
@@ -375,8 +435,9 @@ internal sealed class CaptureSession : ICaptureSession
             _converter = new Nv12Converter(_device, _outputSize, 2 * VideoEncoder.PoolSize);
         }
 
+        var video = _spec.Snapshot.Video;
         _video = new VideoEncoder(_frames, _muxer, _qpcFrequency, anchorQpc, _loggers.CreateLogger<VideoEncoder>(), _stats?.Latency,
-            new VideoEncoderOptions(_options.NvencPreset, _options.NvencTune));
+            new VideoEncoderOptions(_options.NvencPreset, _options.NvencTune, _encoderName, _codec, video.Fps, video.BitrateKbps, video.RateControl));
         if (_options.EncodeThread && _options.Stages == CaptureStages.Full)
         {
             _encoderThread = new EncoderThread(_video, _loggers.CreateLogger<EncoderThread>());
