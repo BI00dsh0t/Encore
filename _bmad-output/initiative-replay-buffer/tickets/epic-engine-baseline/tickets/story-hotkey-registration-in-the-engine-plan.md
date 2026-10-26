@@ -104,6 +104,8 @@ context: []
 - Press latency: `SendInput` returns only after every low-level hook on the desktop has seen the event, and `WM_HOTKEY` is posted inside it, so `qpc − before` is mostly `SendInput`'s own cost (0.65–1.5 ms on the dev machine, more under load). `HotkeyServeTests` injects the modifiers first, starts the clock just before the key-down `SendInput`, asserts the best of 20 presses is under 1 ms and every press's `qpc − (QPC after SendInput)` is under 1 ms, and runs in a non-parallel collection.
 - Press log line: `Hotkey <action> pressed at qpc <n>` (camelCase action), written by the orchestrator-thread callback after it publishes.
 
+- 2026-10-26, builder: confirmed Alt+F8 (micMute) shows `Hotkey micMute pressed` in the engine log inside a fullscreen game; Alt+F10 and Alt+F9 reported `hotkey-taken` on this PC (held by another app). The builder accepted the best-of-20 reading of the 1 ms latency criterion (each press's engine part after `SendInput` returns < 1 ms). The injected-press test needs a local window in front: a Remote Desktop client (`msrdc.exe`) with focus swallows the injected keys.
+
 ## Plan Change Log
 
 ## Review Triage Log
