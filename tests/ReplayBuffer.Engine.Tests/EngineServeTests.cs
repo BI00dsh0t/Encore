@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Threading.Channels;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
@@ -47,15 +48,28 @@ public sealed class EngineServeTests : IDisposable
         var settingsChanged = new TaskCompletionSource<IpcEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var client = await EngineClient.ConnectAsync(
             PipeName.ForCurrentUser(_instance),
-            new EngineClientOptions { OnEvent = e => settingsChanged.TrySetResult(e) },
+            new EngineClientOptions
+            {
+                // Heartbeats come and go between these; only settings.changed matters here.
+                OnEvent = e =>
+                {
+                    if (e.Type == SettingsMessages.Changed.Name)
+                    {
+                        settingsChanged.TrySetResult(e);
+                    }
+                },
+            },
             Token);
 
         Assert.Equal(engine.Id, client.State.Pid);
-        Assert.Equal(0, client.State.Seq);
+        Assert.Equal(0, client.State.Settings.Revision);
+        var seqBefore = client.State.Seq;
 
         var update = new SettingsUpdate(0, [SettingsOp.SetGlobal("saveCooldown", JsonSerializer.SerializeToElement(9, SettingsJsonContext.Default.Int32))]);
         Assert.Equal(1, (await client.SendAsync(SettingsMessages.Update, update, Token)).Revision);
-        Assert.Equal(("settings.changed", 1L), ((await settingsChanged.Task).Type, (await settingsChanged.Task).Seq));
+        var changed = await settingsChanged.Task;
+        Assert.True(changed.Seq > seqBefore);
+        Assert.Equal(1, client.State.Settings.Revision);
         Assert.True(File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), _instance, "settings.json")));
 
         var pending = client.SendAsync(EngineHost.DebugHold, Empty.Value, Token);
@@ -69,16 +83,55 @@ public sealed class EngineServeTests : IDisposable
     }
 
     [Fact]
-    public async Task ASecondEngineForTheSameInstanceFailsWithIpcPipeInUse()
+    public async Task ASecondEngineForTheSameInstanceFailsWithInstanceRunning()
     {
-        await StartServeAsync();
+        var first = await StartServeAsync();
 
         using var second = Start();
         var stderr = await second.StandardError.ReadToEndAsync(Token);
         await second.WaitForExitAsync(Token);
 
         Assert.Equal(1, second.ExitCode);
-        Assert.Contains("error ipc-pipe-in-use", stderr);
+        Assert.Contains("error instance-running", stderr);
+        Assert.False(first.HasExited);
+        await using var client = await EngineClient.ConnectAsync(PipeName.ForCurrentUser(_instance), cancellationToken: Token);
+        Assert.Equal(first.Id, client.State.Pid);
+    }
+
+    [Fact]
+    public async Task TheHeartbeatArrivesEveryTwoSecondsAndStopsOnDebugHang()
+    {
+        await StartServeAsync();
+        var heartbeats = Channel.CreateUnbounded<DateTimeOffset>();
+        await using var client = await EngineClient.ConnectAsync(
+            PipeName.ForCurrentUser(_instance),
+            new EngineClientOptions
+            {
+                OnEvent = e =>
+                {
+                    if (e.Type == EngineMessages.Heartbeat.Name)
+                    {
+                        heartbeats.Writer.TryWrite(DateTimeOffset.UtcNow);
+                    }
+                },
+            },
+            Token);
+
+        var first = await heartbeats.Reader.ReadAsync(Token).AsTask().WaitAsync(TimeSpan.FromSeconds(5), Token);
+        var second = await heartbeats.Reader.ReadAsync(Token).AsTask().WaitAsync(TimeSpan.FromSeconds(5), Token);
+        var gap = second - first;
+        Assert.InRange(gap, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(2.5));
+        Assert.NotNull(client.State.HeartbeatAt);
+
+        var hang = client.SendAsync(EngineHost.DebugHang, Empty.Value, Token);
+        await Task.Delay(200, Token);
+        while (heartbeats.Reader.TryRead(out _))
+        {
+        }
+
+        await Task.Delay(Contracts.Supervision.SilenceLimit / 2, Token);
+        Assert.False(heartbeats.Reader.TryRead(out _), "a heartbeat arrived after debug.hang");
+        Assert.False(hang.IsCompleted);
     }
 
     [Fact]

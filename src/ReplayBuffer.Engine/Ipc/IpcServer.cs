@@ -38,6 +38,7 @@ internal sealed class IpcServer : IAsyncDisposable
     private readonly PipeSecurity _security;
     private readonly ConcurrentDictionary<int, Connection> _connections = new();
     private readonly CancellationTokenSource _stop = new();
+    private readonly CancellationTokenSource _stopAccepting = new();
     private NamedPipeServerStream? _listener;
     private Task _accept = Task.CompletedTask;
     private Task _lagCheck = Task.CompletedTask;
@@ -65,6 +66,29 @@ internal sealed class IpcServer : IAsyncDisposable
 
     public int ConnectionCount => _connections.Count;
 
+    /// <summary>Ends every connection at once; their clients may connect again.</summary>
+    public void DropAll(string reason)
+    {
+        foreach (var connection in _connections.Values)
+        {
+            connection.Drop(reason);
+        }
+    }
+
+    /// <summary>
+    /// Stops accepting connections and closes the listening instance, so the pipe name disappears
+    /// while the engine lives on. Test instances use it to look unreachable (<c>debug.drop</c>).
+    /// </summary>
+    public async Task StopAcceptingAsync()
+    {
+        await _stopAccepting.CancelAsync().ConfigureAwait(false);
+        await _accept.ConfigureAwait(false);
+        if (Interlocked.Exchange(ref _listener, null) is { } listener)
+        {
+            await listener.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Starts accepting clients.</summary>
     public void Start(EventHub hub, CommandRouter router)
     {
@@ -83,23 +107,25 @@ internal sealed class IpcServer : IAsyncDisposable
         await _stop.CancelAsync().ConfigureAwait(false);
         await _accept.ConfigureAwait(false);
         await _lagCheck.ConfigureAwait(false);
-        if (_listener is not null)
+        if (Interlocked.Exchange(ref _listener, null) is { } listener)
         {
-            await _listener.DisposeAsync().ConfigureAwait(false);
+            await listener.DisposeAsync().ConfigureAwait(false);
         }
 
         await Task.WhenAll(_connections.Values.Select(c => c.CloseAsync(_options.Drain))).ConfigureAwait(false);
         _stop.Dispose();
+        _stopAccepting.Dispose();
     }
 
     private async Task AcceptLoopAsync(EventHub hub, CommandRouter router)
     {
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token, _stopAccepting.Token);
         try
         {
             while (true)
             {
                 var connected = _listener!;
-                await connected.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
+                await connected.WaitForConnectionAsync(stop.Token).ConfigureAwait(false);
 
                 // The next listener exists before this one is handed off, so the name is never free.
                 _listener = Create(first: false);
@@ -115,7 +141,7 @@ internal sealed class IpcServer : IAsyncDisposable
                     TaskScheduler.Default);
             }
         }
-        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
         }
         catch (Exception e)

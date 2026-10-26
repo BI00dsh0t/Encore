@@ -6,12 +6,15 @@ using ReplayBuffer.Platform.Audio;
 using ReplayBuffer.Platform.Windows;
 
 var parsed = CommandLine.Parse(args);
-var instance = parsed.Command is ServeCommand { Instance: { } testInstance }
-    ? new Instance(
-        testInstance,
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), testInstance),
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), testInstance))
-    : Instance.Current;
+var instance = parsed.Command is ServeCommand { Instance: { } testInstance } ? Instance.ForTest(testInstance) : Instance.Current;
+
+// AD-16: one engine per instance. Taken before anything else, and held until the process ends.
+using var single = parsed.Command is ServeCommand ? SingleInstance.TryAcquire(SingleInstance.Engine, instance.Name) : null;
+if (parsed.Command is ServeCommand && single is null)
+{
+    Console.Error.WriteLine($"error {ErrorCodes.InstanceRunning}: Another engine is already running for instance {instance.Name}.");
+    return 1;
+}
 var logFolder = Path.Combine(instance.LocalDataFolder, "logs");
 Directory.CreateDirectory(logFolder);
 

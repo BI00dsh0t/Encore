@@ -52,6 +52,17 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void TheStatusSaysTheEngineIsRestartingAndWhy()
+    {
+        _engine.Status = EngineStatus.Restarting;
+        _engine.Problem = "The engine exited with code 1.";
+
+        var model = Create();
+
+        Assert.Equal("Restarting the engine… The engine exited with code 1.", model.Status);
+    }
+
+    [Fact]
     public void ChangingStartWithWindowsSendsAGlobalSetAgainstTheRenderedRevision()
     {
         _engine.State = _engine.State! with { Settings = Document(revision: 5, startWithWindows: false) };

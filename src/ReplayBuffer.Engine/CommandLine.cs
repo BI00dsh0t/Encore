@@ -64,7 +64,7 @@ public sealed record DebugCaptureCommand(
 public sealed record ServeCommand(string? Instance) : EngineCommand
 {
     /// <summary>The only instance names <c>--instance</c> accepts, so tests never touch a real instance.</summary>
-    public const string TestInstancePrefix = "ReplayBuffer-Test-";
+    public const string TestInstancePrefix = Contracts.Instance.TestPrefix;
 }
 
 /// <summary>The outcome of parsing: a command, or the reason there isn't one.</summary>
@@ -268,8 +268,7 @@ public static class CommandLine
         }
 
         var name = args[2];
-        var suffix = name.StartsWith(ServeCommand.TestInstancePrefix, StringComparison.Ordinal) ? name[ServeCommand.TestInstancePrefix.Length..] : "";
-        if (suffix.Length == 0 || !suffix.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
+        if (!Contracts.Instance.IsTestName(name))
         {
             return Fail($"--instance must be {ServeCommand.TestInstancePrefix}<letters, digits or dashes>.");
         }
