@@ -5,7 +5,7 @@ namespace ReplayBuffer.Engine.Tests;
 /// <summary>Runs the built engine executable and checks its exit codes and messages.</summary>
 public sealed class EngineProcessTests
 {
-    private static string EngineFolder => Path.GetDirectoryName(typeof(CommandLine).Assembly.Location)!;
+    private static string EngineFolder => EngineBinaries.Folder;
 
     private static (int ExitCode, string Stdout, string Stderr) RunEngine(string folder, params string[] args)
     {

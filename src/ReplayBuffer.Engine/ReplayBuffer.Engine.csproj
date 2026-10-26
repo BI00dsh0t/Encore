@@ -2,6 +2,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <CopyFFmpegNative>true</CopyFFmpegNative>
+    <!-- AD-14: the engine ships NativeAOT (spike 1.3); tools/publish-engine.ps1 publishes it. -->
+    <PublishAot>true</PublishAot>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging" />

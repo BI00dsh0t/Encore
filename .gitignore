@@ -17,3 +17,6 @@ native/presentmon/
 
 # Run output of tools/measure-path-a.ps1 (MP4s, CSVs, stats)
 measurements/
+
+# NativeAOT engine output of tools/publish-engine.ps1
+publish/
