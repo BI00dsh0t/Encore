@@ -5,7 +5,13 @@ using ReplayBuffer.Engine.Logging;
 using ReplayBuffer.Platform.Audio;
 using ReplayBuffer.Platform.Windows;
 
-var instance = Instance.Current;
+var parsed = CommandLine.Parse(args);
+var instance = parsed.Command is ServeCommand { Instance: { } testInstance }
+    ? new Instance(
+        testInstance,
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), testInstance),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), testInstance))
+    : Instance.Current;
 var logFolder = Path.Combine(instance.LocalDataFolder, "logs");
 Directory.CreateDirectory(logFolder);
 
@@ -25,7 +31,6 @@ catch (IOException)
 {
 }
 
-var parsed = CommandLine.Parse(args);
 if (parsed.Command is null)
 {
     Console.Error.WriteLine($"error {ErrorCodes.InvalidArguments}: {parsed.Error}");
@@ -37,6 +42,9 @@ try
 {
     switch (parsed.Command)
     {
+        case ServeCommand:
+            return await Serve(instance, loggers, log);
+
         case DebugListCommand:
             DebugList();
             return 0;
@@ -88,6 +96,24 @@ catch (Exception e)
     }
 
     return 1;
+}
+
+static async Task<int> Serve(Instance instance, ILoggerFactory loggers, ILogger log)
+{
+    using var cancel = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) =>
+    {
+        e.Cancel = true;
+        cancel.Cancel();
+    };
+
+    await using var host = EngineHost.Start(instance, loggers);
+
+    // Tests wait for this line before connecting.
+    Console.WriteLine("listening " + host.PipeName);
+    await Task.WhenAny(host.ShutdownRequested, Task.Delay(Timeout.Infinite, cancel.Token));
+    log.LogInformation("Shutting down: {Reason}", host.ShutdownRequested.IsCompleted ? "engine.shutdown" : "Ctrl+C");
+    return 0;
 }
 
 static void DebugList()

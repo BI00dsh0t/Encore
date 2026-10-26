@@ -3,14 +3,14 @@ title: 'IPC server and client with numbered events, snapshot and shared shapes'
 type: 'feature'
 ticket: '5'
 created: '2026-10-25'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'f22cd177374125b3ad4d77d6fd6b0b8b67779726'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md'
@@ -99,9 +99,28 @@ context:
 
 ## Implementation Notes
 
+- Implemented directly, with no implementation subagent; the quick review was also done inline against the full diff.
+- **One code beyond the plan's list:** `engine-untrusted`, which the verify-server callback needed.
+- **The protocol lives in `ReplayBuffer.Contracts.Ipc`; the message files are in `ReplayBuffer.Contracts.Messages`.** Each area's file (`Engine.cs`, `SettingsMessages.cs`, `Capture.cs`, `Feedback.cs`, and the empty `Audio.cs`, `Game.cs`, `Library.cs`, `Recording.cs`) owns its `Commands` and `Events` lists and its JSON context. `MessageRegistry` only concatenates them.
+- **`EventType<T>.Apply` is the one reducer.** The engine's `EventHub` and `EngineClient`'s copy of the state both use it. `MessagesTests` applies a sample payload for every registered event and checks that exactly its declared snapshot field changed. It also fails when an event has no sample, or when a snapshot field has no event that changes it.
+- **The client takes its callbacks in `EngineClientOptions`** (`OnEvent`, `OnDisconnected`, `VerifyServer`), not as .NET events. That way no event can arrive between the snapshot and a subscription.
+- **`engine.shutdown` acts after its reply:** `CommandRouter.Register` takes an `afterReply`. When the server shuts down, each connection's queue gets up to 1 s to drain, so the reply reaches the App before the process exits.
+- **`serve` prints `listening <pipe>` to stdout once its pipe is serving.** Console log lines come before it, so the tests skip to that line. `debug.hold`, a command that never replies, is registered only for `ReplayBuffer-Test-*` instances, so a kill test can hold a command pending.
+- **The pipe is claimed before the settings store is opened,** so a second engine fails with `ipc-pipe-in-use` before it touches the settings file.
+- **Neither side cancels a pipe write part-way:** half a frame would corrupt the stream. The engine cancels writes only when it drops the connection anyway.
+- **Verified:** `dotnet build ReplayBuffer.slnx` has 0 warnings. `dotnet test --solution ReplayBuffer.slnx` passes 215 of 223. The 8 skips are the FFmpeg tests, because `native/ffmpeg` isn't fetched in this worktree. The IPC and `serve` tests (24 of them) passed 5 times in a row, and no `ReplayBuffer-Test-*` folders were left behind.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+Lens `quick`, iteration 0, run inline. Verdicts: high 0, medium 1, low 2, false 0, maybe-false 0.
+
+| # | Finding | Verdict | Route | Evidence |
+|---|---------|---------|-------|----------|
+| 1 | `EngineClient.SendAsync` passed the caller's token to the pipe write, so a cancel could leave half a frame on the pipe | medium | patch | Cancelling an overlapped pipe write mid-frame would make every later frame unparsable, and the engine would drop the connection. Fixed: the token now guards only the wait for the write lock and the reply, and the write itself always completes. |
+| 2 | `Connection.CloseAsync` could cancel `_stop` after `RunAsync`'s `finally` had disposed it | low | patch | Real but narrow: a client closing at the same moment as an engine shutdown would throw `ObjectDisposedException` out of `IpcServer.DisposeAsync`. Fixed: `CloseAsync` calls the idempotent `Drop`, and `_stop` is no longer disposed (it has no timer to free). |
+| 3 | `ConnectAsync`'s cleanup completed the frame reader before disposing the pipe, while a timed-out snapshot read could still be in flight | low | patch | Completing a `PipeReader` during a pending read can throw and hide the original `engine-disconnected`. Fixed by disposing the pipe first. |
 
 ## Design Notes
 
