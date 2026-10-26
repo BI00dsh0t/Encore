@@ -7,17 +7,21 @@
     <Project Path="src/ReplayBuffer.Platform.Audio/ReplayBuffer.Platform.Audio.csproj" />
     <Project Path="src/ReplayBuffer.Platform.FFmpeg/ReplayBuffer.Platform.FFmpeg.csproj" />
     <Project Path="src/ReplayBuffer.Platform.Windows/ReplayBuffer.Platform.Windows.csproj" />
+    <Project Path="src/ReplayBuffer.Platform.Desktop/ReplayBuffer.Platform.Desktop.csproj" />
     <Project Path="src/ReplayBuffer.Engine/ReplayBuffer.Engine.csproj" />
     <Project Path="src/ReplayBuffer.App/ReplayBuffer.App.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ReplayBuffer.Contracts.Tests/ReplayBuffer.Contracts.Tests.csproj" />
+    <Project Path="tests/ReplayBuffer.Core.Tests/ReplayBuffer.Core.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Media.Tests/ReplayBuffer.Media.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Platform.Capture.Tests/ReplayBuffer.Platform.Capture.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Platform.Audio.Tests/ReplayBuffer.Platform.Audio.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Platform.FFmpeg.Tests/ReplayBuffer.Platform.FFmpeg.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Platform.Windows.Tests/ReplayBuffer.Platform.Windows.Tests.csproj" />
+    <Project Path="tests/ReplayBuffer.Platform.Desktop.Tests/ReplayBuffer.Platform.Desktop.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Engine.Tests/ReplayBuffer.Engine.Tests.csproj" />
+    <Project Path="tests/ReplayBuffer.App.Tests/ReplayBuffer.App.Tests.csproj" />
   </Folder>
   <Folder Name="/bench/">
     <Project Path="bench/ReplayBuffer.Bench/ReplayBuffer.Bench.csproj" />

@@ -7,6 +7,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="ReplayBuffer.Engine.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj" />
     <ProjectReference Include="..\ReplayBuffer.Core\ReplayBuffer.Core.csproj" />
     <ProjectReference Include="..\ReplayBuffer.Media\ReplayBuffer.Media.csproj" />

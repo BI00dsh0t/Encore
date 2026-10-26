@@ -57,6 +57,16 @@ public sealed record DebugCaptureCommand(
     public const int MaxGpuPriority = 7;
 }
 
+/// <summary>
+/// <c>serve</c>: the engine proper, serving its pipe until <c>engine.shutdown</c> or Ctrl+C.
+/// <see cref="Instance"/> overrides the process's own instance, for tests only.
+/// </summary>
+public sealed record ServeCommand(string? Instance) : EngineCommand
+{
+    /// <summary>The only instance names <c>--instance</c> accepts, so tests never touch a real instance.</summary>
+    public const string TestInstancePrefix = "ReplayBuffer-Test-";
+}
+
 /// <summary>The outcome of parsing: a command, or the reason there isn't one.</summary>
 public sealed record ParseResult(EngineCommand? Command, string? Error);
 
@@ -66,6 +76,7 @@ public static class CommandLine
     public const string Usage =
         """
         Usage:
+          ReplayBuffer.Engine serve [--instance ReplayBuffer-Test-<suffix>]
           ReplayBuffer.Engine debug-list
           ReplayBuffer.Engine debug-capture (--window <title> | --hwnd <handle>) [--seconds 30]
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
@@ -84,6 +95,7 @@ public static class CommandLine
         {
             "debug-list" => args.Count == 1 ? new ParseResult(new DebugListCommand(), null) : Fail($"Unexpected argument '{args[1]}'."),
             "debug-capture" => ParseCapture(args),
+            "serve" => ParseServe(args),
             _ => Fail($"Unknown command '{args[0]}'."),
         };
     }
@@ -241,6 +253,28 @@ public static class CommandLine
         }
 
         return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages, preset, tune, color, encodeThread), null);
+    }
+
+    private static ParseResult ParseServe(IReadOnlyList<string> args)
+    {
+        if (args.Count == 1)
+        {
+            return new ParseResult(new ServeCommand(null), null);
+        }
+
+        if (args.Count != 3 || args[1] != "--instance")
+        {
+            return Fail("serve takes only --instance <name>.");
+        }
+
+        var name = args[2];
+        var suffix = name.StartsWith(ServeCommand.TestInstancePrefix, StringComparison.Ordinal) ? name[ServeCommand.TestInstancePrefix.Length..] : "";
+        if (suffix.Length == 0 || !suffix.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
+        {
+            return Fail($"--instance must be {ServeCommand.TestInstancePrefix}<letters, digits or dashes>.");
+        }
+
+        return new ParseResult(new ServeCommand(name), null);
     }
 
     private static ParseResult Fail(string error) => new(null, error);

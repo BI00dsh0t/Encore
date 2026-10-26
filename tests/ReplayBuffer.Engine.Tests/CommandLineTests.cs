@@ -10,6 +10,26 @@ public sealed class CommandLineTests
     }
 
     [Fact]
+    public void ServeTakesOnlyATestInstance()
+    {
+        Assert.Null(Assert.IsType<ServeCommand>(CommandLine.Parse(["serve"]).Command).Instance);
+        Assert.Equal("ReplayBuffer-Test-ab1-2", Assert.IsType<ServeCommand>(CommandLine.Parse(["serve", "--instance", "ReplayBuffer-Test-ab1-2"]).Command).Instance);
+    }
+
+    [Theory]
+    [InlineData("serve", "--instance", "ReplayBuffer")]
+    [InlineData("serve", "--instance", "ReplayBuffer-Dev")]
+    [InlineData("serve", "--instance", "ReplayBuffer-Test-")]
+    [InlineData("serve", "--instance", "ReplayBuffer-Test-a.b")]
+    [InlineData("serve", "--instance", "ReplayBuffer-Test-..\\x")]
+    [InlineData("serve", "--window", "x")]
+    [InlineData("serve", "--instance")]
+    public void ServeRefusesAnythingElse(params string[] args)
+    {
+        Assert.NotNull(CommandLine.Parse(args).Error);
+    }
+
+    [Fact]
     public void DebugCaptureDefaultsToThirtySecondsAndDefaultDevices()
     {
         var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(["debug-capture", "--window", "League"]).Command);

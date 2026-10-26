@@ -5,6 +5,9 @@
     <PackageVersion Include="FFmpeg.AutoGen.Abstractions" Version="9.0.1.1" />
     <PackageVersion Include="FFmpeg.AutoGen.Bindings.DynamicallyLinked" Version="9.0.1.1" />
 
+    <!-- App -->
+    <PackageVersion Include="H.NotifyIcon.Wpf" Version="2.4.1" />
+
     <!-- Logging -->
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
