@@ -68,7 +68,7 @@ public sealed class CaptureEndTests : IDisposable
     private readonly string _directory = Directory.CreateTempSubdirectory("rb-end-").FullName;
     private readonly List<Process> _processes = [];
 
-    private static string BinFolder => Path.GetDirectoryName(typeof(CommandLine).Assembly.Location)!;
+    private static string BinFolder => EngineBinaries.Folder;
 
     public void Dispose()
     {

@@ -15,7 +15,7 @@ public sealed class EngineServeTests : IDisposable
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    private static string EngineExe => Path.Combine(Path.GetDirectoryName(typeof(CommandLine).Assembly.Location)!, "ReplayBuffer.Engine.exe");
+    private static string EngineExe => Path.Combine(EngineBinaries.Folder, "ReplayBuffer.Engine.exe");
 
     public void Dispose()
     {
