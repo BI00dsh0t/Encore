@@ -109,6 +109,24 @@ public static class ErrorCodes
     /// </summary>
     public const string RetargetOtherProcess = "retarget-other-process";
 
+    /// <summary>A Hotkey's combination is registered by another process; the other Hotkeys still register.</summary>
+    public const string HotkeyTaken = "hotkey-taken";
+
+    /// <summary>
+    /// Two Hotkeys share one combination: a <c>settings.update</c> making them so is refused, and in a
+    /// hand-edited file only the first in <c>HotkeyAction</c> order registers.
+    /// </summary>
+    public const string HotkeyDuplicate = "hotkey-duplicate";
+
+    /// <summary>Registering a Hotkey failed for a reason other than another process holding it.</summary>
+    public const string HotkeyFailed = "hotkey-failed";
+
+    /// <summary>A Hotkey action has no binding, so nothing is registered for it.</summary>
+    public const string HotkeyUnbound = "hotkey-unbound";
+
+    /// <summary>A Hotkey action is not used in the current <c>recordHotkeyMode</c>, so it isn't registered.</summary>
+    public const string HotkeyInactive = "hotkey-inactive";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -144,5 +162,10 @@ public static class ErrorCodes
         SessionRunning,
         SessionNotRunning,
         RetargetOtherProcess,
+        HotkeyTaken,
+        HotkeyDuplicate,
+        HotkeyFailed,
+        HotkeyUnbound,
+        HotkeyInactive,
     ];
 }

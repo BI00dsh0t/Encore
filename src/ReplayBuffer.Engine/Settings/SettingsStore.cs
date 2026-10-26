@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Hotkeys;
 
 namespace ReplayBuffer.Engine.Settings;
 
@@ -131,7 +132,27 @@ public sealed class SettingsStore
             }
         }
 
+        RefuseDuplicateHotkeys(global, ops);
         return document with { Global = global.ToImmutable(), Profiles = profiles.ToImmutable() };
+    }
+
+    /// <summary>An update that sets <c>hotkeys</c> with two actions on one combination is refused (AD-11).</summary>
+    private static void RefuseDuplicateHotkeys(ImmutableSortedDictionary<string, JsonElement>.Builder global, IReadOnlyList<SettingsOp> ops)
+    {
+        var index = -1;
+        for (var i = 0; i < ops.Count; i++)
+        {
+            if (ops[i] is { Scope: SettingsScope.Global, Op: SettingsOpKind.Set } op && op.Key == Keys.Hotkeys.Name)
+            {
+                index = i;
+            }
+        }
+
+        if (index >= 0 && global.TryGetValue(Keys.Hotkeys.Name, out var raw) && Keys.Hotkeys.TryRead(raw, out var hotkeys)
+            && HotkeyPlan.FindDuplicate(hotkeys) is { } duplicate)
+        {
+            throw Refuse(ErrorCodes.HotkeyDuplicate, index, $"'{duplicate.First}' and '{duplicate.Second}' have the same Hotkey");
+        }
     }
 
     private static void ApplyGlobal(ImmutableSortedDictionary<string, JsonElement>.Builder global, SettingsOp op, int index)

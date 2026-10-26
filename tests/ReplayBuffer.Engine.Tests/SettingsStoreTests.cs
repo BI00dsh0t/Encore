@@ -100,6 +100,19 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void HotkeysWithTwoActionsOnOneCombinationAreRefused()
+    {
+        var store = Open();
+        var save = new HotkeyBinding(0x79, HotkeyModifiers.Alt);
+        var duplicate = Keys.Hotkeys.Default with { Save = save, RecordStart = save with { Modifiers = save.Modifiers | HotkeyModifiers.NoRepeat } };
+
+        AssertRefused(store, ErrorCodes.HotkeyDuplicate, Update(store, SettingsOp.SetGlobal(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(duplicate))));
+
+        var distinct = Keys.Hotkeys.Default with { Save = new HotkeyBinding(0x87, HotkeyModifiers.Alt) };
+        Assert.Equal(1, store.Update(Update(store, SettingsOp.SetGlobal(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(distinct)))).Revision);
+    }
+
+    [Fact]
     public void AnOverrideOfAGlobalOnlyKeyIsRefused()
     {
         var store = WithProfile();

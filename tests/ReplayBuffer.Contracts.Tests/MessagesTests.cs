@@ -23,6 +23,8 @@ public sealed partial class MessagesTests
         ["warning.dismissed"] = """{"id":"w1"}""",
         ["engine.heartbeat"] = """{"at":"2026-10-25T12:00:02+00:00"}""",
         ["app.attached"] = """{"pid":7}""",
+        ["hotkey.status"] = """{"bindings":[{"action":"save","binding":{"vk":135,"modifiers":7},"registered":true,"code":null},{"action":"micMute","binding":null,"registered":false,"code":"hotkey-unbound"}]}""",
+        ["hotkey.pressed"] = """{"action":"monitorRecordToggle","qpc":123456789}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);
@@ -124,6 +126,41 @@ public sealed partial class MessagesTests
             EngineJsonContext.Default.StateSnapshot)!;
         Assert.Null(old.HeartbeatAt);
         Assert.Null(old.AppPid);
+    }
+
+    [Fact]
+    public void TheInitialHotkeyStatusListsEveryActionUnbound()
+    {
+        var initial = StateSnapshot.Initial("e", 2, SettingsDocument.Empty);
+
+        Assert.Equal(Enum.GetValues<HotkeyAction>(), initial.Hotkeys.Bindings.Select(b => b.Action));
+        Assert.All(initial.Hotkeys.Bindings, b => Assert.Equal((null, false, ErrorCodes.HotkeyUnbound), (b.Binding, b.Registered, b.Code)));
+        Assert.Null(initial.LastHotkeyPress);
+        Assert.Equal(new HotkeyStatus([.. initial.Hotkeys.Bindings]), initial.Hotkeys);
+    }
+
+    [Fact]
+    public void HotkeyMessagesHaveTheSharedShape()
+    {
+        var status = new HotkeyStatus([new HotkeyBindingStatus(HotkeyAction.RecordToggle, new HotkeyBinding(0x78, HotkeyModifiers.Alt), false, ErrorCodes.HotkeyTaken)]);
+
+        Assert.Equal(
+            """{"bindings":[{"action":"recordToggle","binding":{"vk":120,"modifiers":1},"registered":false,"code":"hotkey-taken"}]}""",
+            JsonSerializer.Serialize(status, HotkeysJsonContext.Default.HotkeyStatus));
+        Assert.Equal(
+            """{"action":"save","qpc":42}""",
+            JsonSerializer.Serialize(new HotkeyPress(HotkeyAction.Save, 42), HotkeysJsonContext.Default.HotkeyPress));
+    }
+
+    [Fact]
+    public void ASnapshotFromBeforeHotkeysHasThemUnbound()
+    {
+        var old = JsonSerializer.Deserialize(
+            """{"engineInstanceId":"e","pid":1,"seq":0,"settings":{"schemaVersion":1,"revision":0,"global":{},"profiles":{}},"capture":{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null},"warnings":[]}""",
+            EngineJsonContext.Default.StateSnapshot)!;
+
+        Assert.Equal(HotkeyStatus.Unbound, old.Hotkeys);
+        Assert.Null(old.LastHotkeyPress);
     }
 
     [Theory]

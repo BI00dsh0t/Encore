@@ -81,6 +81,7 @@ public static class MessageRegistry
         .. GameMessages.Commands,
         .. LibraryMessages.Commands,
         .. RecordingMessages.Commands,
+        .. HotkeyMessages.Commands,
     ];
 
     public static IReadOnlyList<EventType> Events { get; } =
@@ -93,6 +94,7 @@ public static class MessageRegistry
         .. GameMessages.Events,
         .. LibraryMessages.Events,
         .. RecordingMessages.Events,
+        .. HotkeyMessages.Events,
     ];
 
     private static readonly Dictionary<string, EventType> EventsByName = Events.ToDictionary(e => e.Name, StringComparer.Ordinal);

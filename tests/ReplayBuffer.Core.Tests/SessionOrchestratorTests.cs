@@ -16,12 +16,16 @@ public sealed class SessionOrchestratorTests : IDisposable
 
     private readonly FakeFactory _factory = new();
     private readonly ConcurrentQueue<(CaptureState State, int ThreadId)> _published = new();
+    private readonly System.Threading.Channels.Channel<(HotkeyPress Press, int ThreadId)> _presses =
+        System.Threading.Channels.Channel.CreateUnbounded<(HotkeyPress, int)>();
+
     private readonly SessionOrchestrator _orchestrator;
     private SettingsDocument _document = Revision(3);
 
     public SessionOrchestratorTests()
     {
-        _orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), state => _published.Enqueue((state, Environment.CurrentManagedThreadId)));
+        _orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), state => _published.Enqueue((state, Environment.CurrentManagedThreadId)),
+            press => _presses.Writer.TryWrite((press, Environment.CurrentManagedThreadId)));
     }
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
@@ -321,6 +325,23 @@ public sealed class SessionOrchestratorTests : IDisposable
         Assert.Null(outcome.Path);
         Assert.Same(outcome, await running.Ended.WaitAsync(Timeout, Token));
         Assert.Equal(CaptureState.Initial, _published.Last().State);
+    }
+
+    [Fact]
+    public async Task AHotkeyPressReachesTheCallbackOnTheOrchestratorThreadInOrder()
+    {
+        Assert.True(_orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, 100)));
+        Assert.True(_orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 200)));
+
+        var first = await _presses.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+        var second = await _presses.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+
+        Assert.Equal(new HotkeyPress(HotkeyAction.Save, 100), first.Press);
+        Assert.Equal(new HotkeyPress(HotkeyAction.MicMute, 200), second.Press);
+        Assert.Equal(_orchestrator.ThreadId, first.ThreadId);
+        Assert.Equal(_orchestrator.ThreadId, second.ThreadId);
+        Assert.Empty(_published);
+        Assert.Empty(_factory.Sessions);
     }
 
     private static CaptureTarget Target(nint window) => new(Pid, window, ProfileId);
