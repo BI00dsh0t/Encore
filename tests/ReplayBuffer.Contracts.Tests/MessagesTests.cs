@@ -19,6 +19,7 @@ public sealed partial class MessagesTests
     {
         ["settings.changed"] = """{"revision":1,"document":{"schemaVersion":1,"revision":1,"global":{"saveCooldown":7},"profiles":{}}}""",
         ["capture.stateChanged"] = """{"replay":"buffering","recording":"running","monitorRecording":"off","micMuted":false,"cooldownUntil":null}""",
+        ["capture.videoOptions"] = """{"probed":true,"codecs":[{"codec":"h264","encoder":"h264_nvenc","mayNotPlayEverywhere":false},{"codec":"av1","encoder":"av1_nvenc","mayNotPlayEverywhere":true}],"resolutions":[{"width":1920,"height":1080}],"maxFps":120}""",
         ["warning.raised"] = """{"id":"w2","code":"settings-unreadable","severity":"warning","source":"settings","message":"m","at":"2026-10-25T12:00:00+00:00","overlay":true,"sound":null,"dismissable":true}""",
         ["warning.dismissed"] = """{"id":"w1"}""",
         ["engine.heartbeat"] = """{"at":"2026-10-25T12:00:02+00:00"}""",
@@ -161,6 +162,37 @@ public sealed partial class MessagesTests
 
         Assert.Equal(HotkeyStatus.Unbound, old.Hotkeys);
         Assert.Null(old.LastHotkeyPress);
+    }
+
+    [Fact]
+    public void TheInitialVideoOptionsAreUnprobedWithTheFixedResolutions()
+    {
+        var initial = StateSnapshot.Initial("e", 2, SettingsDocument.Empty).VideoOptions;
+
+        Assert.False(initial.Probed);
+        Assert.Empty(initial.Codecs);
+        Assert.Equal(120, initial.MaxFps);
+        Assert.Equal(
+            [(1280, 720), (1920, 1080), (2560, 1080), (2560, 1440), (3440, 1440), (3840, 1600), (3840, 2160)],
+            initial.Resolutions.Select(r => (r.Width, r.Height)));
+        Assert.Equal(VideoOptions.Unprobed, new VideoOptions(false, [], [.. VideoOptions.OfferedResolutions], 120));
+    }
+
+    [Fact]
+    public void VideoOptionsHaveTheirShapeAndAnOldSnapshotReadsAsUnprobed()
+    {
+        var options = VideoOptions.FromProbe([new CodecOffer(VideoCodec.Hevc, "hevc_nvenc", VideoOptions.MayNotPlayEverywhereFor(VideoCodec.Hevc))]);
+        var json = JsonSerializer.Serialize(options, CaptureJsonContext.Default.VideoOptions);
+
+        Assert.StartsWith("""{"probed":true,"codecs":[{"codec":"hevc","encoder":"hevc_nvenc","mayNotPlayEverywhere":true}],"resolutions":[{"width":1280,"height":720},""", json);
+        Assert.EndsWith("{\"width\":3840,\"height\":2160}],\"maxFps\":120}", json);
+        Assert.False(VideoOptions.MayNotPlayEverywhereFor(VideoCodec.H264));
+        Assert.True(VideoOptions.MayNotPlayEverywhereFor(VideoCodec.Av1));
+
+        var old = JsonSerializer.Deserialize(
+            """{"engineInstanceId":"e","pid":1,"seq":0,"settings":{"schemaVersion":1,"revision":0,"global":{},"profiles":{}},"capture":{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null},"warnings":[]}""",
+            EngineJsonContext.Default.StateSnapshot)!;
+        Assert.Equal(VideoOptions.Unprobed, old.VideoOptions);
     }
 
     [Theory]

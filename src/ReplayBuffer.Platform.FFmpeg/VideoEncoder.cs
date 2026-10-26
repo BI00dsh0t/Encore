@@ -1,5 +1,7 @@
+using System.Globalization;
 using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
+using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Media;
 
 namespace ReplayBuffer.Platform.FFmpeg;
@@ -66,21 +68,41 @@ public readonly unsafe struct EncoderFrame
     internal long Pts { get; }
 }
 
-/// <summary>The h264_nvenc options a story 1.2 experiment may change; the defaults are the tracer's.</summary>
-/// <param name="Preset">NVENC preset, <c>p1</c> (fastest) to <c>p7</c>.</param>
-/// <param name="Tune">NVENC tune (<c>hq</c>, <c>ll</c>, <c>ull</c>), or null to leave FFmpeg's default.</param>
-public sealed record VideoEncoderOptions(string Preset = VideoEncoderOptions.DefaultPreset, string? Tune = null)
+/// <summary>
+/// What a <see cref="VideoEncoder"/> encodes with. The defaults are the tracer's: h264_nvenc, p5,
+/// 60 fps, CBR 20 Mbps.
+/// </summary>
+/// <param name="Preset">NVENC preset, <c>p1</c> (fastest) to <c>p7</c>; other encoders ignore it.</param>
+/// <param name="Tune">NVENC tune (<c>hq</c>, <c>ll</c>, <c>ull</c>), or null to leave FFmpeg's default; other encoders ignore it.</param>
+/// <param name="Encoder">The FFmpeg encoder name, e.g. <c>hevc_nvenc</c> or <c>libx264</c>.</param>
+/// <param name="Codec">The codec <paramref name="Encoder"/> must encode.</param>
+/// <param name="Fps">The nominal frame rate: the GOP is this many frames (1 s).</param>
+/// <param name="BitrateKbps">The target bitrate.</param>
+/// <param name="RateControl">CBR, or VBR peaking at 1.5× the target.</param>
+public sealed record VideoEncoderOptions(
+    string Preset = VideoEncoderOptions.DefaultPreset,
+    string? Tune = null,
+    string Encoder = VideoEncoderOptions.DefaultEncoder,
+    VideoCodec Codec = VideoCodec.H264,
+    int Fps = VideoEncoderOptions.DefaultFps,
+    int BitrateKbps = VideoEncoderOptions.DefaultBitrateKbps,
+    RateControl RateControl = RateControl.Cbr)
 {
     public const string DefaultPreset = "p5";
+    public const string DefaultEncoder = "h264_nvenc";
+    public const int DefaultFps = 60;
+    public const int DefaultBitrateKbps = 20_000;
 
     public static VideoEncoderOptions Default { get; } = new();
 }
 
 /// <summary>
-/// h264_nvenc over D3D11 frames: p5 by default, CBR 20 Mbps, 1 s GOP, no B-frames. PTS are capture
-/// QPC relative to the session anchor, in 1/90000. Capture is variable-rate, so besides
-/// NVENC's 60-frame GOP an IDR is forced once a second of PTS has passed since the last one.
-/// BGRA frames go in as-is (X1); NV12 frames (X2) are tagged BT.709 limited range.
+/// One video encoder over D3D11 frames: NVENC, AMF or QSV read the pool textures directly; libx264
+/// gets each frame copied back through a staging texture (FFmpeg's D3D11 transfer) and converted
+/// from BGRA to yuv420p by swscale into preallocated native frames. No B-frames; the GOP is the fps
+/// (1 s). PTS are capture QPC relative to the session anchor, in 1/90000. Capture is variable-rate,
+/// so an IDR is also forced once a second of PTS has passed since the last one. BGRA frames go in
+/// as-is (X1); NV12 frames (X2) are tagged BT.709 limited range.
 /// </summary>
 public sealed unsafe class VideoEncoder : IDisposable
 {
@@ -90,8 +112,13 @@ public sealed unsafe class VideoEncoder : IDisposable
     /// <summary>The frame pool NVENC needs: its surfaces plus headroom for the frame being drawn.</summary>
     public const int PoolSize = NvencSurfaces + 4;
 
+    private const string SoftwarePreset = "veryfast";
+
+    // AV_CODEC_HW_CONFIG_METHOD_HW_FRAMES_CTX: the encoder takes frames from a hw_frames_ctx.
+    private const int HwFramesContextMethod = 0x02;
+
     private readonly D3D11VAFrames _frames;
-    private readonly FragmentedMp4Muxer _muxer;
+    private readonly FragmentedMp4Muxer? _muxer;
     private readonly long _qpcFrequency;
     private readonly long _anchorQpc;
     private readonly ILogger _logger;
@@ -99,16 +126,23 @@ public sealed unsafe class VideoEncoder : IDisposable
 
     // Guards only the PTS order, so acquiring on the capture thread never waits on an encode.
     private readonly Lock _ptsLock = new();
-    private readonly int _streamIndex;
+    private readonly int _streamIndex = -1;
+    private readonly long _fallbackDuration;
     private readonly LatencyHistogram? _latency;
     private AVCodecContext* _context;
     private AVPacket* _packet;
+
+    // The software path: the downloaded frame, and (BGRA only) its yuv420p conversion.
+    private AVFrame* _download;
+    private AVFrame* _converted;
+    private SwsContext* _sws;
     private long _lastPts = long.MinValue;
     private long _lastKeyPts = long.MinValue;
     private long _dropped;
     private long _encoded;
     private long _flushed;
 
+    /// <param name="muxer">Where packets go; null counts and discards them (the encoder probe).</param>
     /// <param name="latency">
     /// When given, each packet's capture→encoded latency is recorded into it: QPC as the packet
     /// leaves <c>avcodec_receive_packet</c> minus its frame's capture QPC (anchor + PTS).
@@ -117,7 +151,7 @@ public sealed unsafe class VideoEncoder : IDisposable
     /// </param>
     public VideoEncoder(
         D3D11VAFrames frames,
-        FragmentedMp4Muxer muxer,
+        FragmentedMp4Muxer? muxer,
         long qpcFrequency,
         long anchorQpc,
         ILogger logger,
@@ -125,69 +159,108 @@ public sealed unsafe class VideoEncoder : IDisposable
         VideoEncoderOptions? settings = null)
     {
         settings ??= VideoEncoderOptions.Default;
+        ArgumentOutOfRangeException.ThrowIfLessThan(settings.Fps, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(settings.BitrateKbps, 1);
         _latency = latency;
         _frames = frames;
         _muxer = muxer;
         _qpcFrequency = qpcFrequency;
         _anchorQpc = anchorQpc;
         _logger = logger;
+        _fallbackDuration = Math.Max(1, TimeBase / settings.Fps);
 
-        var codec = ffmpeg.avcodec_find_encoder_by_name("h264_nvenc");
+        var codec = ffmpeg.avcodec_find_encoder_by_name(settings.Encoder);
         if (codec is null)
         {
-            throw new InvalidOperationException("This FFmpeg build has no h264_nvenc encoder.");
+            throw new InvalidOperationException($"This FFmpeg build has no {settings.Encoder} encoder.");
         }
 
-        _context = ffmpeg.avcodec_alloc_context3(codec);
-        _context->width = frames.Width;
-        _context->height = frames.Height;
-        _context->time_base = new AVRational { num = 1, den = TimeBase };
-        _context->framerate = new AVRational { num = 60, den = 1 };
-        _context->pix_fmt = AVPixelFormat.AV_PIX_FMT_D3D11;
-        _context->sw_pix_fmt = frames.IsNv12 ? AVPixelFormat.AV_PIX_FMT_NV12 : AVPixelFormat.AV_PIX_FMT_BGRA;
-        if (frames.IsNv12)
+        if (EncoderProbe.CodecOf(codec->id) != settings.Codec)
         {
-            // What Nv12Converter writes, so the file decodes with the right colours.
-            _context->colorspace = AVColorSpace.AVCOL_SPC_BT709;
-            _context->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
-            _context->color_trc = AVColorTransferCharacteristic.AVCOL_TRC_BT709;
-            _context->color_range = AVColorRange.AVCOL_RANGE_MPEG;
+            throw new ArgumentException($"{settings.Encoder} does not encode {settings.Codec}.", nameof(settings));
         }
 
-        _context->hw_frames_ctx = ffmpeg.av_buffer_ref(frames.FramesRef);
-        _context->gop_size = 60;
-        _context->max_b_frames = 0;
-        _context->bit_rate = 20_000_000;
-        _context->rc_max_rate = 20_000_000;
-        _context->rc_buffer_size = 20_000_000;
-        if (muxer.NeedsGlobalHeader)
-        {
-            _context->flags |= ffmpeg.AV_CODEC_FLAG_GLOBAL_HEADER;
-        }
-
-        AVDictionary* options = null;
-        ffmpeg.av_dict_set(&options, "preset", settings.Preset, 0);
-        if (settings.Tune is not null)
-        {
-            ffmpeg.av_dict_set(&options, "tune", settings.Tune, 0);
-        }
-
-        ffmpeg.av_dict_set(&options, "rc", "cbr", 0);
-        ffmpeg.av_dict_set(&options, "surfaces", NvencSurfaces.ToString(System.Globalization.CultureInfo.InvariantCulture), 0);
-        ffmpeg.av_dict_set(&options, "forced-idr", "1", 0); // a forced I frame is an IDR, so a keyframe
+        var family = EncoderProbe.FamilyOf(settings.Encoder);
+        var software = !TakesD3D11Frames(codec);
         try
         {
-            FFmpegLibrary.Check(ffmpeg.avcodec_open2(_context, codec, &options), "avcodec_open2(h264_nvenc)");
+            _context = ffmpeg.avcodec_alloc_context3(codec);
+            _context->width = frames.Width;
+            _context->height = frames.Height;
+            _context->time_base = new AVRational { num = 1, den = TimeBase };
+            _context->framerate = new AVRational { num = settings.Fps, den = 1 };
+            if (software)
+            {
+                // NV12 goes in as it is; BGRA is converted with swscale's default (BT.601, limited).
+                _context->pix_fmt = frames.IsNv12 ? AVPixelFormat.AV_PIX_FMT_NV12 : AVPixelFormat.AV_PIX_FMT_YUV420P;
+                if (!frames.IsNv12)
+                {
+                    _context->colorspace = AVColorSpace.AVCOL_SPC_SMPTE170M;
+                    _context->color_range = AVColorRange.AVCOL_RANGE_MPEG;
+                }
+            }
+            else
+            {
+                _context->pix_fmt = AVPixelFormat.AV_PIX_FMT_D3D11;
+                _context->sw_pix_fmt = frames.IsNv12 ? AVPixelFormat.AV_PIX_FMT_NV12 : AVPixelFormat.AV_PIX_FMT_BGRA;
+                _context->hw_frames_ctx = ffmpeg.av_buffer_ref(frames.FramesRef);
+            }
+
+            if (frames.IsNv12)
+            {
+                // What Nv12Converter writes, so the file decodes with the right colours.
+                _context->colorspace = AVColorSpace.AVCOL_SPC_BT709;
+                _context->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
+                _context->color_trc = AVColorTransferCharacteristic.AVCOL_TRC_BT709;
+                _context->color_range = AVColorRange.AVCOL_RANGE_MPEG;
+            }
+
+            _context->gop_size = settings.Fps;
+            _context->max_b_frames = 0;
+            var bitrate = settings.BitrateKbps * 1000L;
+            var maxRate = settings.RateControl == RateControl.Cbr ? bitrate : bitrate * 3 / 2;
+            _context->bit_rate = bitrate;
+            _context->rc_max_rate = maxRate;
+            _context->rc_buffer_size = (int)Math.Min(maxRate, int.MaxValue);
+            if (muxer?.NeedsGlobalHeader ?? true)
+            {
+                _context->flags |= ffmpeg.AV_CODEC_FLAG_GLOBAL_HEADER;
+            }
+
+            AVDictionary* options = null;
+            try
+            {
+                SetOptions(&options, family, settings);
+                FFmpegLibrary.Check(ffmpeg.avcodec_open2(_context, codec, &options), $"avcodec_open2({settings.Encoder})");
+            }
+            finally
+            {
+                ffmpeg.av_dict_free(&options);
+            }
+
+            _packet = ffmpeg.av_packet_alloc();
+            if (software)
+            {
+                OpenSoftwarePath();
+            }
+
+            if (muxer is not null)
+            {
+                _streamIndex = muxer.AddStream(_context, null, isDefault: true);
+            }
         }
-        finally
+        catch
         {
-            ffmpeg.av_dict_free(&options);
+            Dispose();
+            throw;
         }
 
-        _packet = ffmpeg.av_packet_alloc();
-        _streamIndex = muxer.AddStream(_context, null, isDefault: true);
-        logger.LogInformation("h264_nvenc {Width}x{Height} {Format}, preset {Preset}, tune {Tune}, CBR 20 Mbps, GOP 60",
-            frames.Width, frames.Height, frames.IsNv12 ? "NV12" : "BGRA", settings.Preset, settings.Tune ?? "default");
+        logger.LogInformation(
+            "{Encoder} {Width}x{Height} {Format}{Path}, {Fps} fps, {RateControl} {Kbps} kbps, GOP {Gop}, preset {Preset}, tune {Tune}",
+            settings.Encoder, frames.Width, frames.Height, frames.IsNv12 ? "NV12" : "BGRA", software ? " via system memory" : "",
+            settings.Fps, settings.RateControl.ToString().ToUpperInvariant(), settings.BitrateKbps, settings.Fps,
+            family == EncoderFamily.Nvenc ? settings.Preset : software ? SoftwarePreset : "default",
+            family == EncoderFamily.Nvenc ? settings.Tune ?? "default" : "default");
     }
 
     /// <summary>Frames dropped because their PTS was not above the previous frame's.</summary>
@@ -249,17 +322,22 @@ public sealed unsafe class VideoEncoder : IDisposable
     {
         try
         {
-            frame->pts = pts;
             lock (_lock)
             {
+                var input = _download is null ? frame : Download(frame);
+                input->pts = pts;
+
+                // The software path reuses its frames: clear what the last keyframe set.
+                input->pict_type = AVPictureType.AV_PICTURE_TYPE_NONE;
+                input->flags &= ~ffmpeg.AV_FRAME_FLAG_KEY;
                 if (_lastKeyPts == long.MinValue || pts - _lastKeyPts >= TimeBase)
                 {
-                    frame->pict_type = AVPictureType.AV_PICTURE_TYPE_I;
-                    frame->flags |= ffmpeg.AV_FRAME_FLAG_KEY;
+                    input->pict_type = AVPictureType.AV_PICTURE_TYPE_I;
+                    input->flags |= ffmpeg.AV_FRAME_FLAG_KEY;
                     _lastKeyPts = pts;
                 }
 
-                FFmpegLibrary.Check(ffmpeg.avcodec_send_frame(_context, frame), "avcodec_send_frame(video)");
+                FFmpegLibrary.Check(ffmpeg.avcodec_send_frame(_context, input), "avcodec_send_frame(video)");
                 Drain(flushing: false);
             }
         }
@@ -292,6 +370,28 @@ public sealed unsafe class VideoEncoder : IDisposable
     {
         lock (_lock)
         {
+            if (_sws is not null)
+            {
+                ffmpeg.sws_freeContext(_sws);
+                _sws = null;
+            }
+
+            if (_converted is not null)
+            {
+                fixed (AVFrame** converted = &_converted)
+                {
+                    ffmpeg.av_frame_free(converted);
+                }
+            }
+
+            if (_download is not null)
+            {
+                fixed (AVFrame** download = &_download)
+                {
+                    ffmpeg.av_frame_free(download);
+                }
+            }
+
             if (_packet is not null)
             {
                 fixed (AVPacket** packet = &_packet)
@@ -308,6 +408,120 @@ public sealed unsafe class VideoEncoder : IDisposable
                 }
             }
         }
+    }
+
+    /// <summary>Whether the encoder reads D3D11 frames itself; one that doesn't gets system-memory frames.</summary>
+    private static bool TakesD3D11Frames(AVCodec* codec)
+    {
+        for (var i = 0; ; i++)
+        {
+            var config = ffmpeg.avcodec_get_hw_config(codec, i);
+            if (config is null)
+            {
+                return false;
+            }
+
+            if (config->pix_fmt == AVPixelFormat.AV_PIX_FMT_D3D11
+                && (config->methods & HwFramesContextMethod) != 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    /// <summary>Rate control and the family's own options; preset and tune apply only to NVENC.</summary>
+    private static void SetOptions(AVDictionary** options, EncoderFamily family, VideoEncoderOptions settings)
+    {
+        var cbr = settings.RateControl == RateControl.Cbr;
+        switch (family)
+        {
+            case EncoderFamily.Nvenc:
+                ffmpeg.av_dict_set(options, "preset", settings.Preset, 0);
+                if (settings.Tune is not null)
+                {
+                    ffmpeg.av_dict_set(options, "tune", settings.Tune, 0);
+                }
+
+                ffmpeg.av_dict_set(options, "rc", cbr ? "cbr" : "vbr", 0);
+                ffmpeg.av_dict_set(options, "surfaces", NvencSurfaces.ToString(CultureInfo.InvariantCulture), 0);
+                ffmpeg.av_dict_set(options, "forced-idr", "1", 0); // a forced I frame is an IDR, so a keyframe
+                break;
+            case EncoderFamily.Amf:
+                ffmpeg.av_dict_set(options, "rc", cbr ? "cbr" : "vbr_peak", 0);
+                ffmpeg.av_dict_set(options, "forced_idr", "1", 0);
+                break;
+            case EncoderFamily.Qsv:
+                // QSV picks CBR when bit_rate equals maxrate, and VBR when maxrate is above it.
+                ffmpeg.av_dict_set(options, "forced_idr", "1", 0);
+                break;
+            case EncoderFamily.X264:
+                ffmpeg.av_dict_set(options, "preset", SoftwarePreset, 0);
+                ffmpeg.av_dict_set(options, "forced-idr", "1", 0);
+                if (cbr)
+                {
+                    ffmpeg.av_dict_set(options, "nal-hrd", "cbr", 0);
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>Allocates the native frames and the swscale context the software path reuses for every frame.</summary>
+    private void OpenSoftwarePath()
+    {
+        _download = AllocateFrame(_frames.IsNv12 ? AVPixelFormat.AV_PIX_FMT_NV12 : AVPixelFormat.AV_PIX_FMT_BGRA);
+        if (_frames.IsNv12)
+        {
+            return;
+        }
+
+        _download->color_range = AVColorRange.AVCOL_RANGE_JPEG;
+        _converted = AllocateFrame(AVPixelFormat.AV_PIX_FMT_YUV420P);
+        _converted->colorspace = AVColorSpace.AVCOL_SPC_SMPTE170M;
+        _converted->color_range = AVColorRange.AVCOL_RANGE_MPEG;
+        _sws = ffmpeg.sws_getContext(
+            _frames.Width, _frames.Height, AVPixelFormat.AV_PIX_FMT_BGRA,
+            _frames.Width, _frames.Height, AVPixelFormat.AV_PIX_FMT_YUV420P,
+            (int)SwsFlags.SWS_BILINEAR, null, null, null);
+        if (_sws is null)
+        {
+            throw new InvalidOperationException("sws_getContext(BGRA → yuv420p) failed.");
+        }
+    }
+
+    private AVFrame* AllocateFrame(AVPixelFormat format)
+    {
+        var frame = ffmpeg.av_frame_alloc();
+        frame->format = (int)format;
+        frame->width = _frames.Width;
+        frame->height = _frames.Height;
+        var result = ffmpeg.av_frame_get_buffer(frame, 0);
+        if (result < 0)
+        {
+            ffmpeg.av_frame_free(&frame);
+            FFmpegLibrary.Check(result, "av_frame_get_buffer");
+        }
+
+        return frame;
+    }
+
+    /// <summary>
+    /// Copies a pool texture to system memory through FFmpeg's staging texture and, for BGRA,
+    /// converts it to yuv420p. Both frames are reused; one the encoder still holds is reallocated
+    /// natively by <c>av_frame_make_writable</c>.
+    /// </summary>
+    private AVFrame* Download(AVFrame* hardware)
+    {
+        FFmpegLibrary.Check(ffmpeg.av_frame_make_writable(_download), "av_frame_make_writable");
+        FFmpegLibrary.Check(ffmpeg.av_hwframe_transfer_data(_download, hardware, 0), "av_hwframe_transfer_data");
+        if (_converted is null)
+        {
+            return _download;
+        }
+
+        FFmpegLibrary.Check(ffmpeg.av_frame_make_writable(_converted), "av_frame_make_writable");
+        FFmpegLibrary.Check(ffmpeg.sws_scale_frame(_sws, _converted, _download), "sws_scale_frame");
+        return _converted;
     }
 
     private void Drain(bool flushing)
@@ -332,13 +546,21 @@ public sealed unsafe class VideoEncoder : IDisposable
                 _latency.Record(now - captured);
             }
 
-            // Frames are variable-rate; the nominal 1/60 s only sizes the last sample of a fragment.
+            // Frames are variable-rate; the nominal 1/fps only sizes the last sample of a fragment.
             if (_packet->duration == 0)
             {
-                _packet->duration = TimeBase / 60;
+                _packet->duration = _fallbackDuration;
             }
 
-            _muxer.Write(_packet, _streamIndex, _context->time_base);
+            if (_muxer is null)
+            {
+                ffmpeg.av_packet_unref(_packet);
+            }
+            else
+            {
+                _muxer.Write(_packet, _streamIndex, _context->time_base);
+            }
+
             Interlocked.Increment(ref _encoded);
         }
     }

@@ -1,3 +1,5 @@
+using ReplayBuffer.Contracts.Settings;
+
 namespace ReplayBuffer.Engine.Tests;
 
 public sealed class CommandLineTests
@@ -112,6 +114,46 @@ public sealed class CommandLineTests
         Assert.True(command.EncodeThread);
     }
 
+    [Fact]
+    public void TheVideoOptionsDefaultToTheTracerAtTheWindowsSize()
+    {
+        var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(["debug-capture", "--window", "a"]).Command);
+
+        Assert.Equal(VideoCodec.H264, command.Codec);
+        Assert.Null(command.Size);
+        Assert.Equal(60, command.Fps);
+        Assert.Equal(20_000, command.BitrateKbps);
+        Assert.Null(command.Encoder);
+    }
+
+    [Theory]
+    [InlineData("h264", VideoCodec.H264)]
+    [InlineData("hevc", VideoCodec.Hevc)]
+    [InlineData("av1", VideoCodec.Av1)]
+    public void TheVideoOptionsAreRead(string codec, VideoCodec expected)
+    {
+        var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(
+        [
+            "debug-capture", "--window", "a", "--codec", codec, "--size", "3440x1440", "--fps", "120", "--bitrate", "60000",
+            "--encoder", "libx264",
+        ]).Command);
+
+        Assert.Equal(expected, command.Codec);
+        Assert.Equal(new DebugCaptureSize(3440, 1440), command.Size);
+        Assert.Equal(120, command.Fps);
+        Assert.Equal(60_000, command.BitrateKbps);
+        Assert.Equal("libx264", command.Encoder);
+    }
+
+    [Theory]
+    [InlineData("2x2")]
+    [InlineData("8192x8192")]
+    [InlineData("1280x720")]
+    public void AnyEvenSizeUpToTheMaximumIsAccepted(string size)
+    {
+        Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(["debug-capture", "--window", "a", "--size", size]).Command);
+    }
+
     [Theory]
     [InlineData]
     [InlineData("debug-capture", "--window", "a", "--nvenc-preset", "p8")]
@@ -137,7 +179,24 @@ public sealed class CommandLineTests
     [InlineData("debug-capture", "--window", "a", "--seconds", "ten")]
     [InlineData("debug-capture", "--hwnd", "0")]
     [InlineData("debug-capture", "--hwnd", "0xZZ")]
-    [InlineData("debug-capture", "--window", "a", "--fps", "60")]
+    [InlineData("debug-capture", "--window", "a", "--fps", "144")]
+    [InlineData("debug-capture", "--window", "a", "--fps", "0")]
+    [InlineData("debug-capture", "--window", "a", "--fps", "sixty")]
+    [InlineData("debug-capture", "--window", "a", "--fps")]
+    [InlineData("debug-capture", "--window", "a", "--codec", "vp9")]
+    [InlineData("debug-capture", "--window", "a", "--codec", "H264")]
+    [InlineData("debug-capture", "--window", "a", "--size", "1920")]
+    [InlineData("debug-capture", "--window", "a", "--size", "1921x1080")]
+    [InlineData("debug-capture", "--window", "a", "--size", "1920x1081")]
+    [InlineData("debug-capture", "--window", "a", "--size", "0x0")]
+    [InlineData("debug-capture", "--window", "a", "--size", "8194x1080")]
+    [InlineData("debug-capture", "--window", "a", "--size", "1920x1080x2")]
+    [InlineData("debug-capture", "--window", "a", "--size", "-1920x1080")]
+    [InlineData("debug-capture", "--window", "a", "--bitrate", "0")]
+    [InlineData("debug-capture", "--window", "a", "--bitrate", "20M")]
+    [InlineData("debug-capture", "--window", "a", "--encoder", "")]
+    [InlineData("debug-capture", "--window", "a", "--encoder")]
+    [InlineData("debug-capture", "--window", "a", "--rate-control", "vbr")]
     public void MalformedCommandLinesAreRefused(params string[] args)
     {
         var result = CommandLine.Parse(args);

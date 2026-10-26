@@ -37,8 +37,6 @@ public sealed unsafe class WindowCapture : IDisposable
     private static readonly Guid GraphicsCaptureItemInteropIid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
     private static readonly Guid DxgiInterfaceAccessIid = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
 
-    private static readonly TimeSpan MinUpdateInterval = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 60);
-
     // The item's Closed event needs a message loop on the creating thread, which the headless
     // engine doesn't have; a watchdog on IsWindow raises Closed when the window is destroyed.
     private static readonly TimeSpan WatchdogInterval = TimeSpan.FromMilliseconds(250);
@@ -57,8 +55,10 @@ public sealed unsafe class WindowCapture : IDisposable
     private SizeInt32 _poolSize;
     private bool _disposed;
 
-    public WindowCapture(D3D11Device device, nint hwnd, CapturedFrameHandler onFrame, ILogger logger)
+    /// <param name="fps">The most frames a second WGC delivers: its <c>MinUpdateInterval</c> is 1/<paramref name="fps"/>.</param>
+    public WindowCapture(D3D11Device device, nint hwnd, int fps, CapturedFrameHandler onFrame, ILogger logger)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(fps, 1);
         _device = device;
         _onFrame = onFrame;
         _logger = logger;
@@ -73,10 +73,17 @@ public sealed unsafe class WindowCapture : IDisposable
         _pool.FrameArrived += OnFrameArrived;
 
         _session = _pool.CreateCaptureSession(_item);
-        _session.MinUpdateInterval = MinUpdateInterval;
+        _session.MinUpdateInterval = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / fps);
         TryDisableBorder();
         _watchdog = new Timer(_ => CheckWindow(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        logger.LogInformation("Capturing window '{Title}' at {Width}x{Height}", _item.DisplayName, _poolSize.Width, _poolSize.Height);
+        logger.LogInformation("Capturing window '{Title}' at {Width}x{Height}, at most {Fps} fps", _item.DisplayName, _poolSize.Width, _poolSize.Height, fps);
+    }
+
+    /// <summary>The size WGC captures <paramref name="hwnd"/> at now.</summary>
+    public static VideoSize SizeOf(nint hwnd)
+    {
+        var size = CreateItem(hwnd).Size;
+        return new VideoSize(size.Width, size.Height);
     }
 
     /// <summary>The window was closed; no more frames will arrive.</summary>

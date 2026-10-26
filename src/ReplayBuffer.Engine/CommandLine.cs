@@ -1,4 +1,5 @@
 using System.Globalization;
+using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.Engine;
 
@@ -31,7 +32,11 @@ public enum ColorPath
     X2,
 }
 
-/// <summary><c>debug-capture</c>: the tracer capture of one window.</summary>
+/// <summary>
+/// <c>debug-capture</c>: the tracer capture of one window. <see cref="Codec"/>, <see cref="Size"/>,
+/// <see cref="Fps"/> and <see cref="BitrateKbps"/> make the session's <c>video</c> value (CBR); a null
+/// <see cref="Size"/> is the window's size, made even. <see cref="Encoder"/> forces an FFmpeg encoder.
+/// </summary>
 public sealed record DebugCaptureCommand(
     string? Window,
     nint? Hwnd,
@@ -45,9 +50,19 @@ public sealed record DebugCaptureCommand(
     string NvencPreset = DebugCaptureCommand.DefaultNvencPreset,
     string? NvencTune = null,
     ColorPath Color = ColorPath.X1,
-    bool EncodeThread = false) : EngineCommand
+    bool EncodeThread = false,
+    VideoCodec Codec = VideoCodec.H264,
+    DebugCaptureSize? Size = null,
+    int Fps = DebugCaptureCommand.DefaultFps,
+    int BitrateKbps = DebugCaptureCommand.DefaultBitrateKbps,
+    string? Encoder = null) : EngineCommand
 {
     public const int DefaultSeconds = 30;
+
+    /// <summary>The tracer's frame rate and bitrate, kept as <c>debug-capture</c>'s defaults.</summary>
+    public const int DefaultFps = 60;
+
+    public const int DefaultBitrateKbps = 20_000;
 
     public const string DefaultNvencPreset = "p5";
 
@@ -56,6 +71,9 @@ public sealed record DebugCaptureCommand(
 
     public const int MaxGpuPriority = 7;
 }
+
+/// <summary><c>debug-capture --size</c>: the output size, <c>WxH</c>.</summary>
+public sealed record DebugCaptureSize(int Width, int Height);
 
 /// <summary>
 /// <c>serve</c>: the engine proper, serving its pipe until <c>engine.shutdown</c> or Ctrl+C.
@@ -82,6 +100,8 @@ public static class CommandLine
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
                               [--stats <file.json>] [--gpu-priority <-7..7>] [--stages full|copy|wgc]
                               [--nvenc-preset p1..p7] [--nvenc-tune hq|ll|ull] [--color x1|x2] [--encode-thread]
+                              [--codec h264|hevc|av1] [--size <W>x<H>] [--fps 1..120] [--bitrate <kbps>]
+                              [--encoder <ffmpeg encoder name>]
         """;
 
     public static ParseResult Parse(IReadOnlyList<string> args)
@@ -127,6 +147,11 @@ public static class CommandLine
         var color = ColorPath.X1;
         var encodeThread = false;
         var seconds = DebugCaptureCommand.DefaultSeconds;
+        var codec = VideoCodec.H264;
+        DebugCaptureSize? size = null;
+        var fps = DebugCaptureCommand.DefaultFps;
+        var bitrate = DebugCaptureCommand.DefaultBitrateKbps;
+        string? encoder = null;
 
         for (var i = 1; i < args.Count; i++)
         {
@@ -237,6 +262,57 @@ public static class CommandLine
                     }
 
                     break;
+                case "--codec":
+                    switch (value)
+                    {
+                        case "h264":
+                            codec = VideoCodec.H264;
+                            break;
+                        case "hevc":
+                            codec = VideoCodec.Hevc;
+                            break;
+                        case "av1":
+                            codec = VideoCodec.Av1;
+                            break;
+                        default:
+                            return Fail($"'{value}' is not one of h264, hevc or av1.");
+                    }
+
+                    break;
+                case "--size":
+                    var parts = value.Split('x');
+                    if (parts.Length != 2
+                        || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var width)
+                        || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var height)
+                        || !IsVideoDimension(width) || !IsVideoDimension(height))
+                    {
+                        return Fail($"'{value}' is not a size WxH with even sides from 2 to {VideoSettings.MaxDimension}.");
+                    }
+
+                    size = new DebugCaptureSize(width, height);
+                    break;
+                case "--fps":
+                    if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out fps) || fps is < 1 or > VideoSettings.MaxFps)
+                    {
+                        return Fail($"'{value}' is not a frame rate from 1 to {VideoSettings.MaxFps}.");
+                    }
+
+                    break;
+                case "--bitrate":
+                    if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out bitrate) || bitrate < 1)
+                    {
+                        return Fail($"'{value}' is not a positive bitrate in kbps.");
+                    }
+
+                    break;
+                case "--encoder":
+                    if (value.Length == 0)
+                    {
+                        return Fail("--encoder needs an FFmpeg encoder name.");
+                    }
+
+                    encoder = value;
+                    break;
                 default:
                     return Fail($"Unknown option '{option}'.");
             }
@@ -252,8 +328,21 @@ public static class CommandLine
             return Fail("--window needs a non-empty title.");
         }
 
-        return new ParseResult(new DebugCaptureCommand(window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages, preset, tune, color, encodeThread), null);
+        // The video key's own check, so debug-capture refuses exactly what settings.update would.
+        var video = new VideoSettings(codec, size?.Width ?? 2, size?.Height ?? 2, fps, bitrate, RateControl.Cbr);
+        if (!Keys.Video.IsValid(Keys.Video.ToJson(video)))
+        {
+            return Fail("The --codec, --size, --fps and --bitrate values don't make a valid video setting.");
+        }
+
+        return new ParseResult(
+            new DebugCaptureCommand(
+                window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages, preset, tune, color, encodeThread,
+                codec, size, fps, bitrate, encoder),
+            null);
     }
+
+    private static bool IsVideoDimension(int value) => value is >= 2 and <= VideoSettings.MaxDimension && value % 2 == 0;
 
     private static ParseResult ParseServe(IReadOnlyList<string> args)
     {

@@ -5,6 +5,7 @@ using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Engine.Sessions;
 using ReplayBuffer.Platform.Audio;
+using ReplayBuffer.Platform.Capture;
 using ReplayBuffer.Platform.FFmpeg;
 using ReplayBuffer.Platform.Windows;
 using AudioFlow = ReplayBuffer.Platform.Audio.AudioFlow;
@@ -79,11 +80,14 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             NvencTune = command.NvencTune,
             Color = command.Color,
             EncodeThread = command.EncodeThread,
+            Encoder = command.Encoder,
             Anchored = qpc => anchored.TrySetResult(qpc),
         };
 
-        // debug-capture doesn't open the settings store: the snapshot resolves against the defaults.
-        using var orchestrator = new SessionOrchestrator(new CaptureSessionFactory(options, loggers), () => SettingsDocument.Empty, _ => { });
+        // debug-capture doesn't open the settings store: the snapshot resolves against a document
+        // holding only the command line's video value.
+        var document = VideoDocument(window);
+        using var orchestrator = new SessionOrchestrator(new CaptureSessionFactory(options, loggers), () => document, _ => { });
         var target = new CaptureTarget((int)window.ProcessId, window.Handle, ProfileId: null);
         var audio = new SessionAudio(
         [
@@ -99,6 +103,30 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         }
 
         return outcome.Path!;
+    }
+
+    /// <summary>
+    /// The settings document the session resolves: global <c>video</c> from the command line, sized
+    /// to the window (made even) when no <c>--size</c> is given.
+    /// </summary>
+    private SettingsDocument VideoDocument(WindowInfo window)
+    {
+        int width, height;
+        if (command.Size is { } size)
+        {
+            (width, height) = (size.Width, size.Height);
+        }
+        else
+        {
+            var item = WindowCapture.SizeOf(window.Handle);
+            var even = VideoSize.EvenFloor(Math.Min(item.Width, VideoSettings.MaxDimension), Math.Min(item.Height, VideoSettings.MaxDimension));
+            (width, height) = (even.Width, even.Height);
+        }
+
+        var video = new VideoSettings(command.Codec, width, height, command.Fps, command.BitrateKbps, RateControl.Cbr);
+        _log.LogInformation("Video: {Codec} {Width}x{Height} at {Fps} fps, CBR {Kbps} kbps{Forced}",
+            video.Codec, width, height, video.Fps, video.BitrateKbps, command.Encoder is { } forced ? $", encoder forced to {forced}" : "");
+        return SettingsDocument.Empty with { Global = SettingsDocument.Empty.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(video)) };
     }
 
     /// <summary>Waits for the session to run its course, then ends it, unless it ended itself first.</summary>

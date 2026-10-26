@@ -22,7 +22,7 @@ public sealed class AppSupervisorTests : IAsyncLifetime
     {
         Directory.CreateDirectory(_folder);
         var instance = new Instance(Instance.TestPrefix + Path.GetFileName(_folder), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
-        _host = EngineHost.Start(instance, NullLoggerFactory.Instance, hostOptions: new EngineHostOptions { Heartbeat = null, AppLauncher = _launcher });
+        _host = EngineHost.Start(instance, NullLoggerFactory.Instance, hostOptions: new EngineHostOptions { Heartbeat = null, ProbeEncoders = false, AppLauncher = _launcher });
         _client = await EngineClient.ConnectAsync(_host.PipeName, cancellationToken: Token);
     }
 
