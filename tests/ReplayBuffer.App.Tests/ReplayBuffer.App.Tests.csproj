@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReplayBuffer.App\ReplayBuffer.App.csproj" />
+    <!-- For its executable: the tests launch the built engine, as the App does. -->
+    <ProjectReference Include="..\..\src\ReplayBuffer.Engine\ReplayBuffer.Engine.csproj" />
+  </ItemGroup>
+</Project>
