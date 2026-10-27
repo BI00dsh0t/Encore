@@ -66,7 +66,19 @@ internal static class PlaybackCheck
         Console.WriteLine("The marker flashes white on each burst. Answer y or n; an empty answer or 'skip' leaves it not checked.");
         Console.WriteLine();
 
-        var border = Ask("Did a capture border show around the marker window while it recorded? (y/n/skip)") switch
+        var (border, checks) = Questionnaire(players, Console.In, Console.Out);
+        var report = new PlaybackReport(DateTimeOffset.Now, clip, seconds, settings, audioTracks, border, checks, warnings);
+        BenchJson.Write(Path.Combine(context.RunFolder, FileName), report);
+        return 0;
+    }
+
+    /// <summary>
+    /// The checklist: the capture border, then per player whether it plays, A/V sync, its audio tracks and notes.
+    /// A skipped (or empty, or ended) answer records the border or the player as <c>not-checked</c>.
+    /// </summary>
+    internal static (string Border, List<PlayerCheck> Players) Questionnaire(IReadOnlyList<string> players, TextReader input, TextWriter output)
+    {
+        var border = Ask("Did a capture border show around the marker window while it recorded? (y/n/skip)", input, output) switch
         {
             true => "yes",
             false => "no",
@@ -76,24 +88,22 @@ internal static class PlaybackCheck
         var checks = new List<PlayerCheck>();
         foreach (var player in players)
         {
-            Console.WriteLine();
-            Console.WriteLine($"--- {player}: open the clip in {player}.");
-            var plays = Ask($"{player}: does it play? (y/n/skip)");
+            output.WriteLine();
+            output.WriteLine($"--- {player}: open the clip in {player}.");
+            var plays = Ask($"{player}: does it play? (y/n/skip)", input, output);
             if (plays is null)
             {
                 checks.Add(new PlayerCheck(player, "not-checked", null, null, null, null));
                 continue;
             }
 
-            var sync = plays.Value ? Ask($"{player}: are the flashes and bursts in sync? (y/n/skip)") : null;
-            var tracks = plays.Value ? Line($"{player}: which audio tracks can it play or list? (e.g. 'both', 'first only')") : null;
-            var notes = Line($"{player}: notes (optional)");
+            var sync = plays.Value ? Ask($"{player}: are the flashes and bursts in sync? (y/n/skip)", input, output) : null;
+            var tracks = plays.Value ? Line($"{player}: which audio tracks can it play or list? (e.g. 'both', 'first only')", input, output) : null;
+            var notes = Line($"{player}: notes (optional)", input, output);
             checks.Add(new PlayerCheck(player, "checked", plays, sync, tracks, notes));
         }
 
-        var report = new PlaybackReport(DateTimeOffset.Now, clip, seconds, settings, audioTracks, border, checks, warnings);
-        BenchJson.Write(Path.Combine(context.RunFolder, FileName), report);
-        return 0;
+        return (border, checks);
     }
 
     /// <summary>y → true, n → false, empty, skip or end of input → null.</summary>
@@ -104,26 +114,26 @@ internal static class PlaybackCheck
         _ => null,
     };
 
-    private static bool? Ask(string question)
+    private static bool? Ask(string question, TextReader input, TextWriter output)
     {
         while (true)
         {
-            Console.Write(question + " ");
-            var line = Console.ReadLine();
+            output.Write(question + " ");
+            var line = input.ReadLine();
             var answer = ParseAnswer(line);
             if (answer is not null || line is null || line.Trim().Length == 0 || line.Trim().Equals("skip", StringComparison.OrdinalIgnoreCase))
             {
                 return answer;
             }
 
-            Console.WriteLine("Answer y, n or skip.");
+            output.WriteLine("Answer y, n or skip.");
         }
     }
 
-    private static string? Line(string question)
+    private static string? Line(string question, TextReader input, TextWriter output)
     {
-        Console.Write(question + " ");
-        var line = Console.ReadLine()?.Trim();
+        output.Write(question + " ");
+        var line = input.ReadLine()?.Trim();
         return string.IsNullOrEmpty(line) ? null : line;
     }
 }

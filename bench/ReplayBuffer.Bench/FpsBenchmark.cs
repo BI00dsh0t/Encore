@@ -61,7 +61,7 @@ internal static class FpsBenchmark
     public const string FileName = "fps.json";
     public const double TargetLossPercent = 3;
 
-    public static int Run(BenchContext context)
+    public static int Run(BenchContext context, TextWriter? errors = null)
     {
         var options = context.Options;
         var game = options.Text("game", "Cyberpunk2077");
@@ -106,7 +106,11 @@ internal static class FpsBenchmark
         }
 
         Console.WriteLine($"FPS: {pwsh} {string.Join(' ', args)}");
-        var start = new ProcessStartInfo(pwsh) { UseShellExecute = false };
+
+        // The script's stdout streams to the console; its stderr (where its refusals go) is relayed line by
+        // line to errors, so the message reaches whoever runs Bench.
+        errors ??= Console.Error;
+        var start = new ProcessStartInfo(pwsh) { UseShellExecute = false, RedirectStandardError = true };
         foreach (var arg in args)
         {
             start.ArgumentList.Add(arg);
@@ -114,10 +118,16 @@ internal static class FpsBenchmark
 
         using (var process = Process.Start(start) ?? throw new BenchFailure($"Could not start {pwsh}."))
         {
+            string? line;
+            while ((line = process.StandardError.ReadLine()) is not null)
+            {
+                errors.WriteLine(line);
+            }
+
             process.WaitForExit();
             if (process.ExitCode != 0)
             {
-                Console.Error.WriteLine($"measure-path-a.ps1 exited with {process.ExitCode}.");
+                errors.WriteLine($"measure-path-a.ps1 exited with {process.ExitCode}.");
                 return 1;
             }
         }

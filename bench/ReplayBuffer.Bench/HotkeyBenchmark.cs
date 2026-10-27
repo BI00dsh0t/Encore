@@ -94,10 +94,19 @@ internal static class HotkeyBenchmark
                 var report = Result(combo, presses, timings, unpaired, null);
                 BenchJson.Write(path, report);
                 Console.WriteLine($"Hotkey: {timings.Count} press(es); p50 {Format(report.P50Ms)} ms, p99 {Format(report.P99Ms)} ms, max {Format(report.MaxMs)} ms ({report.Verdict}).");
-                client.SendAsync(EngineMessages.Shutdown, Empty.Value, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
             }
             finally
             {
+                // Shut the test engine down on every path, so it lets go of the combination at once.
+                try
+                {
+                    client.SendAsync(EngineMessages.Shutdown, Empty.Value, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+                }
+                catch (Exception e) when (e is IOException or TimeoutException or ErrorCodeException or ObjectDisposedException)
+                {
+                    // Already gone; the outer finally kills it if it isn't.
+                }
+
                 client.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
 
