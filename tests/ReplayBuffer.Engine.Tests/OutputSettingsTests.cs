@@ -244,92 +244,16 @@ public sealed class OutputSettingsTests : IDisposable
         return offers;
     }
 
-    private static void RequireFFmpeg() => Assert.SkipUnless(
-        File.Exists(Path.Combine(EngineBinaries.Folder, "ffprobe.exe")) && File.Exists(Path.Combine(EngineBinaries.Folder, "ffmpeg.exe")),
-        "native/ffmpeg is not fetched");
+    private WindowInfo OpenWindow(int width, int height) =>
+        SessionTestKit.OpenWindow(_directory, _processes, WindowScript, "-Width", Text(width), "-Height", Text(height));
 
-    /// <summary>Runs one in-process session on <paramref name="window"/> for 4 s from the anchor, through the orchestrator.</summary>
-    private static async Task<SessionOutcome> CaptureAsync(
-        WindowInfo window, VideoSettings video, string output, CaptureSessionOptions options, IVideoEncoderCatalog encoders, ILoggerFactory loggers)
-    {
-        var anchored = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
-        options = options with { Anchored = qpc => anchored.TrySetResult(qpc) };
-        var document = SettingsDocument.Empty with { Global = SettingsDocument.Empty.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(video)) };
-        using var orchestrator = new SessionOrchestrator(new CaptureSessionFactory(options, loggers, encoders), () => document, _ => { });
+    private void AssertPlaysInVlc(string file) => SessionTestKit.AssertPlaysInVlc(file, _directory, _processes);
 
-        var running = await orchestrator.StartAsync(SessionKind.Game, new CaptureTarget((int)window.ProcessId, window.Handle, null), DefaultAudio())
-            .WaitAsync(Timeout, Token);
-        Assert.Equal(video, running.Spec.Snapshot.Video);
-        await anchored.Task.WaitAsync(Timeout, Token);
-        await Task.Delay(TimeSpan.FromSeconds(4), Token);
-        var outcome = await orchestrator.EndAsync("test over").WaitAsync(Timeout, Token);
-        Assert.Equal(output, outcome.Path);
-        return outcome;
-    }
+    private static void RequireFFmpeg() => SessionTestKit.RequireFFmpeg();
 
-    private static SessionAudio DefaultAudio()
-    {
-        var output = AudioEndpoints.Default(PlatformFlow.Output);
-        var input = AudioEndpoints.Default(PlatformFlow.Input);
-        return new SessionAudio(
-        [
-            new SessionAudioDevice(output.Id, SettingsFlow.Output, output.FriendlyName),
-            new SessionAudioDevice(input.Id, SettingsFlow.Input, input.FriendlyName),
-        ]);
-    }
-
-    /// <summary>Plays the file headless; it passes when VLC picked a video decoder and logged no decoder error.</summary>
-    private void AssertPlaysInVlc(string file)
-    {
-        Assert.SkipUnless(File.Exists(VlcPath), "VLC is not installed");
-        var log = Path.Combine(_directory, Path.GetFileNameWithoutExtension(file) + ".vlc.log");
-        var start = new ProcessStartInfo(VlcPath) { UseShellExecute = false, CreateNoWindow = true };
-        foreach (var arg in new[]
-        {
-            "-I", "dummy", "--vout=dummy", "--aout=dummy", "--no-video-title-show", "--play-and-exit", "--stop-time=2",
-            "-vv", "--file-logging", "--logfile=" + log, file,
-        })
-        {
-            start.ArgumentList.Add(arg);
-        }
-
-        using (var vlc = Process.Start(start)!)
-        {
-            _processes.Add(vlc);
-            Assert.True(vlc.WaitForExit(TimeSpan.FromSeconds(60)), "VLC did not exit");
-        }
-
-        var lines = File.ReadAllLines(log);
-        Assert.Contains(lines, l => l.Contains("using video decoder module", StringComparison.Ordinal));
-        Assert.DoesNotContain(lines, l => l.Contains("decoder error", StringComparison.OrdinalIgnoreCase)
-            || l.Contains("no suitable decoder", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private WindowInfo OpenWindow(int width, int height)
-    {
-        var title = "RB-Output-" + Guid.NewGuid().ToString("N");
-        var path = Path.Combine(_directory, title + ".ps1");
-        File.WriteAllText(path, WindowScript);
-        var start = new ProcessStartInfo("pwsh") { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden };
-        foreach (var arg in new[] { "-NoProfile", "-File", path, "-Title", title, "-Width", Text(width), "-Height", Text(height) })
-        {
-            start.ArgumentList.Add(arg);
-        }
-
-        _processes.Add(Process.Start(start)!);
-        var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < TimeSpan.FromSeconds(15))
-        {
-            if (WindowFinder.List().FirstOrDefault(w => w.Title == title) is { } window)
-            {
-                return window;
-            }
-
-            Thread.Sleep(100);
-        }
-
-        throw new InvalidOperationException("The test window never appeared.");
-    }
+    private static Task<SessionOutcome> CaptureAsync(
+        WindowInfo window, VideoSettings video, string output, CaptureSessionOptions options, IVideoEncoderCatalog encoders, ILoggerFactory loggers) =>
+        SessionTestKit.CaptureAsync(window, video, output, options, encoders, loggers, TimeSpan.FromSeconds(4));
 
     private async Task StartServeAsync()
     {
@@ -358,44 +282,9 @@ public sealed class OutputSettingsTests : IDisposable
         _ = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
     }
 
-    private static (string Codec, int Width, int Height, string Tag) VideoStream(string file)
-    {
-        var stream = Probe(file, "-select_streams", "v:0", "-show_streams").GetProperty("streams")[0];
-        return (
-            stream.GetProperty("codec_name").GetString()!,
-            stream.GetProperty("width").GetInt32(),
-            stream.GetProperty("height").GetInt32(),
-            stream.GetProperty("codec_tag_string").GetString()!);
-    }
+    private static (string Codec, int Width, int Height, string Tag) VideoStream(string file) => SessionTestKit.VideoStream(file);
 
-    private static List<double> VideoPts(string file) =>
-        [.. Probe(file, "-select_streams", "v:0", "-show_entries", "packet=pts_time", "-show_packets")
-            .GetProperty("packets").EnumerateArray()
-            .Select(p => double.Parse(p.GetProperty("pts_time").GetString()!, CultureInfo.InvariantCulture))
-            .Order()];
-
-    private static JsonElement Probe(string file, params string[] args)
-    {
-        var start = new ProcessStartInfo(Path.Combine(EngineBinaries.Folder, "ffprobe.exe"))
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        foreach (var arg in new[] { "-v", "error", "-of", "json" }.Concat(args).Append(file))
-        {
-            start.ArgumentList.Add(arg);
-        }
-
-        using var process = Process.Start(start)!;
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        Assert.True(process.ExitCode == 0, stderr);
-
-        using var json = JsonDocument.Parse(stdout.Result);
-        return json.RootElement.Clone();
-    }
+    private static List<double> VideoPts(string file) => SessionTestKit.VideoPts(file);
 
     private static string Text(int value) => value.ToString(CultureInfo.InvariantCulture);
 

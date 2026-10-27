@@ -152,20 +152,19 @@ public sealed class CaptureEndTests : IDisposable
         var video = root.GetProperty("video");
         var encoded = video.GetProperty("framesEncoded").GetInt64();
         Assert.True(encoded > 60, $"only {encoded} frames encoded");
-        var latency = root.GetProperty("latency");
-        Assert.Equal(encoded, latency.GetProperty("count").GetInt64() + latency.GetProperty("flushed").GetInt64());
-        Assert.Equal(video.GetProperty("framesArrived").GetInt64(), encoded + video.GetProperty("duplicates").GetInt64());
+        AssertPacedCounts(root);
         Assert.Equal(0, video.GetProperty("queueDrops").GetInt64());
+        Assert.Equal(0, video.GetProperty("skippedSlots").GetInt64());
         Assert.Equal(0, video.GetProperty("nonIncreasingStamps").GetInt64());
         Assert.InRange(root.GetProperty("latency").GetProperty("p99Ms").GetDouble(), 0, 250);
 
-        // The defaults: today's tracer.
+        // The defaults: the tracer's, with the encoder thread always on since story 1.11.
         var encoder = root.GetProperty("encoder");
         Assert.Equal("full", encoder.GetProperty("stages").GetString());
         Assert.Equal("p5", encoder.GetProperty("preset").GetString());
         Assert.Equal(JsonValueKind.Null, encoder.GetProperty("tune").ValueKind);
         Assert.Equal("x1", encoder.GetProperty("color").GetString());
-        Assert.False(encoder.GetProperty("encodeThread").GetBoolean());
+        Assert.True(encoder.GetProperty("encodeThread").GetBoolean());
 
         var priority = root.GetProperty("gpuPriority");
         Assert.Equal(0, priority.GetProperty("requested").GetInt32());
@@ -215,10 +214,7 @@ public sealed class CaptureEndTests : IDisposable
         var video = root.GetProperty("video");
         var encoded = video.GetProperty("framesEncoded").GetInt64();
         Assert.True(encoded > 30, $"only {encoded} frames encoded");
-        Assert.Equal(video.GetProperty("framesArrived").GetInt64(),
-            encoded + video.GetProperty("duplicates").GetInt64() + video.GetProperty("queueDrops").GetInt64());
-        var latency = root.GetProperty("latency");
-        Assert.Equal(encoded, latency.GetProperty("count").GetInt64() + latency.GetProperty("flushed").GetInt64());
+        AssertPacedCounts(root);
 
         var streams = ProbeStreams(output);
         Assert.Equal(["h264", "aac", "aac"], streams.Select(s => s.Codec));
@@ -240,6 +236,24 @@ public sealed class CaptureEndTests : IDisposable
 
         Assert.Equal(1, engine.ExitCode);
         Assert.False(File.Exists(output));
+    }
+
+    /// <summary>
+    /// The paced counts agree: one packet per slot, new or repeated; every new slot is a frame that
+    /// arrived; and latency is recorded for new frames only (with NVENC's delay 0, none waits for the flush).
+    /// </summary>
+    private static void AssertPacedCounts(JsonElement root)
+    {
+        var video = root.GetProperty("video");
+        var encoded = video.GetProperty("framesEncoded").GetInt64();
+        var fresh = video.GetProperty("freshSlots").GetInt64();
+        var repeated = video.GetProperty("duplicates").GetInt64();
+        Assert.Equal(encoded, fresh + repeated);
+        Assert.True(fresh + video.GetProperty("heldReplaced").GetInt64() + video.GetProperty("queueDrops").GetInt64()
+            <= video.GetProperty("framesArrived").GetInt64());
+
+        var latency = root.GetProperty("latency");
+        Assert.Equal(fresh, latency.GetProperty("count").GetInt64() + latency.GetProperty("flushed").GetInt64());
     }
 
     private static void RequireFFmpeg() =>

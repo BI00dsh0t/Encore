@@ -8,9 +8,9 @@ using ReplayBuffer.Platform.Capture;
 namespace ReplayBuffer.Platform.FFmpeg.Tests;
 
 /// <summary>
-/// The story 1.2 encode-stage experiments through the real stack: the X2 colour path
-/// (VideoProcessor BGRA → NV12), NVENC preset/tune, and the encoder thread. Needs an NVIDIA
-/// GPU and the fetched FFmpeg.
+/// The encode-stage options through the real stack: the X2 colour path (the scaler's VideoProcessor
+/// blit writing NV12), NVENC preset/tune, and the paced encoder thread. Needs an NVIDIA GPU and the
+/// fetched FFmpeg.
 /// </summary>
 public sealed class EncodeExperimentTests : IDisposable
 {
@@ -47,20 +47,28 @@ public sealed class EncodeExperimentTests : IDisposable
         using (var device = D3D11Device.Create(0, log))
         using (var muxer = new FragmentedMp4Muxer(path, log))
         using (var frames = new D3D11VAFrames(device.NativeDevice, Width, Height, VideoEncoder.PoolSize, nv12: true))
-        using (var converter = new Nv12Converter(device, size, 2 * VideoEncoder.PoolSize))
+        using (var scaler = new FrameScaler(device, size, nv12: true, 2 * VideoEncoder.PoolSize, log))
         using (var video = new VideoEncoder(frames, muxer, qpf, anchor, log))
         using (var output = new AacEncoder(muxer, "Synthetic Output", isDefault: true, log))
         using (var input = new AacEncoder(muxer, "Synthetic Input", isDefault: false, log))
         {
             muxer.Start();
-            for (var i = 0; i < Fps * 2; i++)
+            var source = device.CreateTexture(size);
+            try
             {
-                using var surface = video.TryAcquire(anchor + (i * qpf / Fps));
-                Assert.NotNull(surface);
-                var level = i == Fps ? 1f : 0f;
-                device.Clear(converter.InputTexture, 0, level, level, level);
-                converter.Convert(surface.Texture, surface.Subresource);
-                video.Submit(surface);
+                for (var i = 0; i < Fps * 2; i++)
+                {
+                    using var surface = video.TryAcquire(anchor + (i * qpf / Fps));
+                    Assert.NotNull(surface);
+                    var level = i == Fps ? 1f : 0f;
+                    device.Clear(source, 0, level, level, level);
+                    scaler.Draw(source, size, surface.Texture, surface.Subresource);
+                    video.Submit(surface);
+                }
+            }
+            finally
+            {
+                D3D11Device.ReleaseTexture(source);
             }
 
             output.WriteSilence(2 * AudioTimeline.SampleRate);
@@ -84,7 +92,7 @@ public sealed class EncodeExperimentTests : IDisposable
     }
 
     [Fact]
-    public void TheEncoderThreadEncodesEveryPostedFrameWithAFastPreset()
+    public void ThePacedEncoderEncodesEverySlotWithAFastPreset()
     {
         RequireFFmpeg();
         var log = NullLogger.Instance;
@@ -92,8 +100,7 @@ public sealed class EncodeExperimentTests : IDisposable
         var qpf = Stopwatch.Frequency;
         var anchor = Stopwatch.GetTimestamp();
         var latency = new LatencyHistogram(qpf);
-        long encoded, flushed;
-        var posted = 0;
+        long encoded, flushed, fresh, repeated, emitted;
 
         using (var device = D3D11Device.Create(0, log))
         using (var muxer = new FragmentedMp4Muxer(path, log))
@@ -103,24 +110,36 @@ public sealed class EncodeExperimentTests : IDisposable
         using (var input = new AacEncoder(muxer, "Synthetic Input", isDefault: false, log))
         {
             muxer.Start();
-            using (var thread = new EncoderThread(video, log))
+            // The pacer's anchor is the first frame's capture QPC, after the setup above.
+            var start = Stopwatch.GetTimestamp();
+            using (var paced = new PacedVideoEncoder(video, new FramePacer(qpf, Fps, start), log))
             {
-                for (var i = 0; i < Fps; i++)
+                // A new frame every slot for ½ s, posted at its capture time; then nothing for ½ s.
+                for (var i = 0; i < Fps / 2; i++)
                 {
-                    // Paced like capture, so the hand-off rarely fills.
-                    while (!thread.TryReserve())
+                    var due = start + (i * qpf / Fps);
+                    // Spun, not slept: a 15.6 ms sleep would count as latency.
+                    while (Stopwatch.GetTimestamp() < due)
                     {
-                        Thread.Sleep(1);
+                        Thread.Yield();
                     }
 
-                    Assert.True(video.TryAcquire(anchor + (i * qpf / Fps), out var frame));
+                    Assert.True(paced.TryReserve());
+                    Assert.True(video.TryAcquireFrame(out var frame));
                     device.Clear(frame.Texture, frame.Subresource, 0.5f, 0.5f, 0.5f);
-                    thread.Post(frame);
-                    posted++;
+                    paced.Post(frame, due);
                 }
 
-                thread.Complete();
-                Assert.Null(thread.Fault);
+                while (Stopwatch.GetTimestamp() < start + qpf)
+                {
+                    Thread.Sleep(5);
+                }
+
+                paced.Complete();
+                Assert.Null(paced.Fault);
+                fresh = paced.Pacer.FreshSlots;
+                repeated = paced.Pacer.RepeatedSlots;
+                emitted = paced.Pacer.EmittedSlots;
             }
 
             output.WriteSilence(AudioTimeline.SampleRate);
@@ -133,12 +152,28 @@ public sealed class EncodeExperimentTests : IDisposable
             flushed = video.FlushedPackets;
         }
 
-        Assert.Equal(Fps, posted);
-        Assert.Equal(posted, encoded);
-        Assert.Equal(encoded, latency.Count + flushed);
+        // One second of slots, each encoded once: the static half by repeats, in real time.
+        Assert.InRange(emitted, Fps - 2, Fps + 2);
+        Assert.Equal(emitted, encoded);
+        Assert.InRange(fresh, (Fps / 2) - 2, Fps / 2);
+        Assert.InRange(repeated, (Fps / 2) - 2, (Fps / 2) + 2);
 
-        var count = Ffprobe("-v error -count_packets -select_streams v:0 -show_entries stream=nb_read_packets -of csv=p=0 thread.mp4");
-        Assert.Equal(Fps, int.Parse(count.Trim(), CultureInfo.InvariantCulture));
+        // Latency is recorded for new frames only; with delay 0 none waits for the flush.
+        Assert.Equal(fresh, latency.Count + flushed);
+        Assert.Equal(0, flushed);
+        // The median, not p99: other GPU tests run beside this one (the p99 bound is the stats verify's, run alone).
+        Assert.True(latency.Percentile(50) < 1000.0 / Fps, $"latency p50 {latency.Percentile(50)} ms");
+
+        var pts = Ffprobe("-v error -select_streams v:0 -show_entries packet=pts -of csv=p=0 thread.mp4")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(p => long.Parse(p, CultureInfo.InvariantCulture))
+            .Order()
+            .ToList();
+        Assert.Equal(encoded, pts.Count);
+        for (var i = 1; i < pts.Count; i++)
+        {
+            Assert.Equal(pts[0] + (i * (pts[1] - pts[0])), pts[i]);
+        }
     }
 
     private static void RequireFFmpeg()

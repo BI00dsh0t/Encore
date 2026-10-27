@@ -192,15 +192,19 @@ public sealed record GpuPriorityReport(int Requested, string Hresult, bool Succe
 /// <param name="Preset">The h264_nvenc preset.</param>
 /// <param name="Tune">The h264_nvenc tune, or null for FFmpeg's default.</param>
 /// <param name="Color">x1 (BGRA into NVENC) or x2 (VideoProcessor NV12).</param>
-/// <param name="EncodeThread">Submit and drain on a dedicated encoder thread.</param>
+/// <param name="EncodeThread">Submit and drain on the encoder thread: always, since story 1.11, when anything is encoded.</param>
 public sealed record EncoderReport(string Stages, string Preset, string? Tune, string Color, bool EncodeThread);
 
 /// <param name="FramesArrived">Frames WGC delivered after the anchor, warm-up included.</param>
-/// <param name="FramesEncoded">Video packets written to the file.</param>
-/// <param name="Duplicates">Frames dropped because their PTS was not above the last one.</param>
-/// <param name="QueueDrops">Frames dropped because the encoder thread's hand-off was full (0 without one).</param>
+/// <param name="FramesEncoded">Video packets written to the file: one per slot, new or repeated.</param>
+/// <param name="Duplicates">Slots the pacer filled by repeating the last frame (story 1.11).</param>
+/// <param name="QueueDrops">Frames not drawn because the encoder thread's hand-off, or the frame pool, was full.</param>
 /// <param name="NonIncreasingStamps">Arrived frames whose capture stamp was not after the previous one.</param>
-/// <param name="MissedSlots">Sum of <c>round(Δ × 60) − 1</c> over steps longer than 1.5/60 s.</param>
+/// <param name="MissedSlots">WGC's cadence: sum of <c>round(Δ × 60) − 1</c> over steps longer than 1.5/60 s.</param>
+/// <param name="DuplicatePercent">Repeated slots as a share of all slots encoded.</param>
+/// <param name="FreshSlots">Slots encoded with a new frame.</param>
+/// <param name="SkippedSlots">Slots the pacer jumped over because the encoder fell more than 4 slots behind.</param>
+/// <param name="HeldReplaced">Frames held for the next slot that a newer frame replaced before it.</param>
 public sealed record VideoReport(
     int Width,
     int Height,
@@ -214,7 +218,10 @@ public sealed record VideoReport(
     double MaxStepMs,
     double CaptureFps,
     double DuplicatePercent,
-    double MissedSlotPercent);
+    double MissedSlotPercent,
+    long FreshSlots = 0,
+    long SkippedSlots = 0,
+    long HeldReplaced = 0);
 
 /// <param name="Flushed">Capture→encoded only: packets drained at flush, left out of the latency figures.</param>
 public sealed record LatencyReport(

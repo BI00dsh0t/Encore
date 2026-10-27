@@ -199,7 +199,7 @@ public sealed unsafe class AacEncoder : IAudioSampleSink, IDisposable
         while (true)
         {
             var result = ffmpeg.avcodec_receive_packet(_context, _packet);
-            if (result == ffmpeg.AVERROR(ffmpeg.EAGAIN) || result == ffmpeg.AVERROR_EOF)
+            if (result == FFmpegLibrary.ErrorAgain || result == FFmpegLibrary.ErrorEof)
             {
                 return;
             }

@@ -34,6 +34,22 @@ public sealed class BoundedHandoffTests
     }
 
     [Fact]
+    public void TakingNowNeverWaitsAndTellsADrainedQueueFromAnEmptyOne()
+    {
+        var queue = new BoundedHandoff<int>(2);
+        Assert.False(queue.TryTakeNow(out _, out var drained));
+        Assert.False(drained);
+
+        queue.TryAdd(5);
+        queue.Complete();
+        Assert.True(queue.TryTakeNow(out var item, out drained));
+        Assert.Equal(5, item);
+        Assert.False(drained);
+        Assert.False(queue.TryTakeNow(out _, out drained));
+        Assert.True(drained);
+    }
+
+    [Fact]
     public void AWaitingConsumerWakesForAnItemAndForCompletion()
     {
         var queue = new BoundedHandoff<int>(3);

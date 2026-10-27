@@ -20,7 +20,7 @@
       -wgc           WGC frames taken and released, no copy, no encode (--stages wgc)
       -x2            BGRA -> NV12 on the D3D11 VideoProcessor (--color x2)
       -fast          --nvenc-preset p1 --nvenc-tune ll
-      -thread        submit and drain on a dedicated encoder thread (--encode-thread)
+      -thread        --encode-thread (no effect since story 1.11: the encoder thread is always on)
 
     Writes into -OutDir: per run a PresentMon CSV, and for capture runs the engine's stats
     JSON, MP4, console log and GPU counter samples; then summary.csv, summary.json and
