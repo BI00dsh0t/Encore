@@ -19,8 +19,8 @@ public readonly record struct ResourceSnapshot(long Qpc, TimeSpan Cpu, long Allo
 
 /// <summary>
 /// The recorders of one <c>debug-capture --stats</c> run (story 1.2). Each recorder has one
-/// writer thread (frames, video packets, one per audio device), and is read once those
-/// threads have stopped. Nothing here allocates per frame or per packet.
+/// writer thread (frames, video packets), and is read once those threads have stopped. Audio
+/// stamps are recorded by the hub, per device (story 1.12). Nothing here allocates per frame or per packet.
 /// </summary>
 public sealed class CaptureStatsCollector
 {
@@ -34,8 +34,6 @@ public sealed class CaptureStatsCollector
         QpcFrequency = qpcFrequency;
         Cadence = new FrameCadence(qpcFrequency);
         Latency = new LatencyHistogram(qpcFrequency);
-        OutputStamps = new AudioStampStats(qpcFrequency);
-        InputStamps = new AudioStampStats(qpcFrequency);
     }
 
     public long QpcFrequency { get; }
@@ -43,10 +41,6 @@ public sealed class CaptureStatsCollector
     public FrameCadence Cadence { get; }
 
     public LatencyHistogram Latency { get; }
-
-    public AudioStampStats OutputStamps { get; }
-
-    public AudioStampStats InputStamps { get; }
 
     public ResourceSnapshot? AtAnchor { get; private set; }
 
@@ -104,7 +98,11 @@ public sealed class CaptureStatsCollector
     public static LatencyReport Report(LatencyHistogram h, long? flushed = null) => new(
         h.Count, h.Percentile(50), h.Percentile(99), h.MaxMilliseconds, h.MeanMilliseconds, h.BucketMilliseconds, h.Overflow, h.Negative, flushed);
 
-    public static AudioReport Report(string role, string device, AudioStampStats stamps, AudioTimeline timeline, long samplesEncoded) => new(
+    /// <summary>
+    /// One device: its stamps and stream counters from the hub, which run from when the device opened;
+    /// <c>writtenFrames</c> is the session timeline's, from the anchor.
+    /// </summary>
+    public static AudioReport Report(string role, string device, AudioStampStats stamps, DeviceStream stream, AudioTimeline timeline, long samplesEncoded) => new(
         role,
         device,
         stamps.Packets,
@@ -120,13 +118,21 @@ public sealed class CaptureStatsCollector
             new DriftReport(stamps.DriftPpm, stamps.DriftSegmentSeconds, stamps.Segments)),
         new TimelineReport(
             timeline.WrittenFrames,
-            timeline.GapFills,
-            timeline.GapFillFrames,
-            timeline.Trims,
-            timeline.TrimmedFrames,
-            timeline.IdleFillFrames,
-            timeline.ResolvedStamps),
-        samplesEncoded);
+            stream.GapFills,
+            stream.GapFillFrames,
+            stream.Trims,
+            stream.TrimmedFrames,
+            stream.IdleFillFrames,
+            stream.ResolvedStamps),
+        samplesEncoded,
+        new ResamplerReport(
+            stream.RatioPpm,
+            stream.MeanRatioPpm,
+            stream.StepCorrections,
+            stream.SteeringError.Count,
+            stream.SteeringError.Percentile(99) * AudioTimeline.SampleRate / 1000,
+            stream.MaxSettledErrorSamples,
+            stream.OutputFrames));
 
     /// <summary>
     /// Checks, before a run, that <paramref name="path"/> can be written: creates its folder
@@ -255,6 +261,7 @@ public sealed record GcReport(int Gen0, int Gen1, int Gen2);
 
 /// <param name="Role">"output" (loopback) or "input".</param>
 /// <param name="SamplesEncoded">Frames the AAC encoder received, silence fill included.</param>
+/// <param name="Resampler">The hub's steering of this device to QPC (story 1.12).</param>
 public sealed record AudioReport(
     string Role,
     string Device,
@@ -263,7 +270,23 @@ public sealed record AudioReport(
     long SilentPackets,
     StampReport Stamps,
     TimelineReport Timeline,
-    long SamplesEncoded);
+    long SamplesEncoded,
+    ResamplerReport? Resampler = null);
+
+/// <param name="RatioPpm">The resampler's ratio at stop, (step − 1) × 10⁶; about −drift.</param>
+/// <param name="MeanRatioPpm">The mean ratio after the 5 s settle.</param>
+/// <param name="StepCorrections">Errors past 5 ms without a discontinuity flag, corrected by silence or a trim.</param>
+/// <param name="SettledPackets">Steered packets after the settle, which the error figures cover.</param>
+/// <param name="ErrorP99Samples">|content position − stamp| at the 99th percentile, in samples (bucket upper edge).</param>
+/// <param name="OutputFrames">Frames the device's stream produced since it opened.</param>
+public sealed record ResamplerReport(
+    double RatioPpm,
+    double MeanRatioPpm,
+    long StepCorrections,
+    long SettledPackets,
+    double ErrorP99Samples,
+    double ErrorMaxSamples,
+    long OutputFrames);
 
 /// <param name="Jitter">|stamp − (previous stamp + previous frames)|, consecutive good packets.</param>
 /// <param name="Age">QPC at <c>GetBuffer</c> minus the stamp.</param>
@@ -279,6 +302,7 @@ public sealed record StampReport(
 /// <param name="Ppm">Stamp time against frame time over the longest unbroken segment.</param>
 public sealed record DriftReport(double Ppm, double SegmentSeconds, long Segments);
 
+/// <param name="WrittenFrames">The session timeline's frames from the anchor; the other counts are the hub stream's.</param>
 public sealed record TimelineReport(
     long WrittenFrames,
     long GapFills,

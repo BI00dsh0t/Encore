@@ -1,3 +1,5 @@
+using ReplayBuffer.Core.Audio;
+
 namespace ReplayBuffer.Media;
 
 /// <summary>Per-packet flags, mirroring WASAPI's <c>AUDCLNT_BUFFERFLAGS_*</c>.</summary>
@@ -28,14 +30,15 @@ public interface IAudioSampleSink
 
 /// <summary>
 /// Turns one device's QPC-stamped packets into a contiguous 48 kHz stereo stream whose
-/// frame 0 is the session anchor (AD-6). Gaps are filled with silence and overlaps trimmed
+/// frame 0 is the session anchor (AD-6). A session feeds it the hub's blocks, which are already
+/// contiguous and QPC-locked, so in practice it only cuts the stream at the anchor. Gaps are filled with silence and overlaps trimmed
 /// once they pass <see cref="ToleranceFrames"/>; data before the anchor is dropped.
 /// Not thread-safe: one device thread drives it.
 /// </summary>
 public sealed class AudioTimeline
 {
-    public const int SampleRate = 48_000;
-    public const int Channels = 2;
+    public const int SampleRate = AudioFormat.SampleRate;
+    public const int Channels = AudioFormat.Channels;
 
     /// <summary>5 ms: drift inside this window is written as-is.</summary>
     public const int ToleranceFrames = SampleRate * 5 / 1000;
