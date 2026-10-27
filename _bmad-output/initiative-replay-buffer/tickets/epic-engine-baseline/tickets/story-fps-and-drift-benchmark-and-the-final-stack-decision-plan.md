@@ -3,14 +3,14 @@ title: 'FPS and drift benchmark, and the final stack decision'
 type: 'feature'
 ticket: '14'
 created: '2026-10-27'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '891d34796966c5550a61590f179f28ce9f497961'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context:
   - '{project-root}/PLAN.md'
@@ -101,6 +101,26 @@ context:
 - Given a 2-minute agent smoke run of `bench drift --minutes 2`, which needs no game, when it finishes, then `drift.json` matches at least 90 % of flashes and loopback bursts, and `report.md` shows the A/V figure against 16.7 ms.
 - Given the builder runs `fps`, `drift --minutes 60`, `playback` and `hotkey` into one folder, then `report.md` shows the FPS loss, the 60-minute drift, per-player playback and the Hotkey latency, each against its target.
 - Given those results, then the epic's Notes hold a dated Decision on the final §6 stack, with the §7.4 facts and the figures.
+
+## Review Triage Log
+
+**Lens `quick`, iteration 0:** 0 high, 6 medium, 4 low, 3 false (rejected). Findings 1–10 were sent to the implementer as patches, with no test runs until the builder resumes. Findings 11–13 were rejected.
+
+| # | Finding | Verdict | Route | Evidence |
+|---|---------|---------|-------|----------|
+| 1 | `HotkeyBenchmark.StartServe` leaks the started `serve` when it throws, and Bench crashes on timeout or cancel exceptions | medium | patch | `process` is assigned only after `StartServe` returns, and `Program` catches only `BenchUsageException`, `BenchFailure` and `ErrorCodeException`. |
+| 2 | Audio-to-audio passes with 0 settled packets or NaN | medium | patch | `Number()` maps non-numbers to 0; `MaxSettledErrorSamples` starts at 0. |
+| 3 | Gen2 total 0 / pass with no GC data | low | patch | `Enumerable.Sum` over `long?` returns 0 when every value is null (`FpsBenchmark.cs:215`). Direct fix. |
+| 4 | `--reanalyze` takes minutes and settings from the current command line | medium | patch | `MarkerLog` holds no capture settings; `Run` reads `options.Double("minutes", 60…)`. |
+| 5 | A skipped sync answer is marked pass | medium | patch | `Report.cs:258`: `AvInSync != false` lets null through. |
+| 6 | A wrong-shape JSON file crashes the report | medium | patch | `Load` catches only deserialization exceptions; null non-nullable members make `Markdown()` throw. This breaks the matrix's "malformed → named and skipped" row. |
+| 7 | The track check uses timestamp spans, not sample counts | medium | patch | The matrix asks for sample counts; `BurstTrackSamples` is computed and never used. |
+| 8 | `report.md` cells format in the current culture | low | patch | `Row($"…")` interpolations; the fix is one line (an invariant culture for the process). |
+| 9 | §6.3's dropped-frames figures (`QueueDrops`, `SkippedSlots`) are missing from `report.md` | low | patch | Both are collected in `fps.json` and never rendered. Direct addition. |
+| 10 | A test asserts `whoami`'s English stderr | low | patch | `CommandFailureTests` checks for "Invalid argument". |
+| 11 | The epic-Notes AC is unmet | false | reject | By design it waits on the builder's runs (Verify, task 12). It isn't a code defect. |
+| 12 | The body of commit `8bb0d33` isn't wrapped at 72 characters | low | reject | Fixing it means rewriting committed history for a cosmetic rule. Later commits follow the rule. |
+| 13 | The plan's edits are uncommitted | false | reject | That's this review's own in-progress frontmatter edit; it's committed with the patches. |
 
 ## Design Notes
 
