@@ -105,8 +105,9 @@ public sealed class SessionCaptureTests : IDisposable
             OutputPath = output,
             Anchored = qpc => anchored.TrySetResult(qpc),
         };
+        using var hub = new AudioDeviceHub(NullLoggerFactory.Instance);
         using var orchestrator = new SessionOrchestrator(
-            new CaptureSessionFactory(options, NullLoggerFactory.Instance), () => SettingsDocument.Empty, _ => { });
+            new CaptureSessionFactory(options, NullLoggerFactory.Instance, hub), () => SettingsDocument.Empty, _ => { });
 
         var running = await orchestrator.StartAsync(SessionKind.Game, Target(windows[0]), DefaultAudio()).WaitAsync(Timeout, Token);
         var anchorQpc = await anchored.Task.WaitAsync(Timeout, Token);

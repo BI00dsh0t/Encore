@@ -1,13 +1,13 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
+using ReplayBuffer.Core.Audio;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Media;
 using ReplayBuffer.Platform.Audio;
 using ReplayBuffer.Platform.Capture;
 using ReplayBuffer.Platform.FFmpeg;
 using ReplayBuffer.Platform.Windows;
-using PlatformFlow = ReplayBuffer.Platform.Audio.AudioFlow;
 using SessionFlow = ReplayBuffer.Contracts.Settings.AudioFlow;
 using VideoCodec = ReplayBuffer.Contracts.Settings.VideoCodec;
 
@@ -59,10 +59,10 @@ internal sealed record CaptureSessionOptions
 }
 
 /// <summary>
-/// Starts <see cref="CaptureSession"/>s with one set of options and one encoder catalog; with no
-/// catalog given, the factory probes on its own, once per codec.
+/// Starts <see cref="CaptureSession"/>s with one set of options, the engine's audio hub and one
+/// encoder catalog; with no catalog given, the factory probes on its own, once per codec.
 /// </summary>
-internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILoggerFactory loggers, IVideoEncoderCatalog? encoders = null)
+internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILoggerFactory loggers, IAudioDeviceHub audio, IVideoEncoderCatalog? encoders = null)
     : ICaptureSessionFactory
 {
     private readonly IVideoEncoderCatalog _encoders = encoders ?? new VideoEncoderCatalog(loggers);
@@ -70,7 +70,7 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
     public ICaptureSession Start(SessionSpec spec, ISessionEvents events)
     {
         FFmpegLibrary.Initialize(loggers.CreateLogger("FFmpeg"));
-        var session = new CaptureSession(spec, events, options, _encoders, loggers);
+        var session = new CaptureSession(spec, events, options, audio, _encoders, loggers);
         try
         {
             session.Open();
@@ -86,8 +86,8 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 }
 
 /// <summary>
-/// One capture session: WGC window → scaler → paced video encoder, and each audio device → AAC, all
-/// into one fragmented MP4. The first frame is the anchor, every stream's PTS 0. The snapshot's
+/// One capture session: WGC window → scaler → paced video encoder, and each audio device's hub
+/// stream (AD-20) → AAC, all into one fragmented MP4. The first frame is the anchor, every stream's PTS 0. The snapshot's
 /// <c>video</c> sets the encoder (the probe's for its codec, else H.264), the output size, the fps,
 /// the bitrate and the rate control. The capture thread only scales each frame into the fixed output,
 /// letterboxed (<see cref="FrameScaler"/>), and posts it; the encoder thread emits exactly one frame
@@ -104,7 +104,8 @@ internal sealed class CaptureSession : ICaptureSession
     private readonly ILogger _log;
     private readonly long _qpcFrequency = Stopwatch.Frequency;
     private readonly Lock _gate = new();
-    private readonly List<WasapiCapture> _audioCaptures = [];
+    private readonly IAudioDeviceHub _audio;
+    private readonly List<SessionAudioTrack> _audioTracks = [];
     private readonly List<AacEncoder> _audioEncoders = [];
     private readonly List<AudioTimeline> _audioTimelines = [];
     private readonly CaptureStatsCollector? _stats;
@@ -130,9 +131,10 @@ internal sealed class CaptureSession : ICaptureSession
     private string _stopReason = "";
     private Exception? _failure;
 
-    public CaptureSession(SessionSpec spec, ISessionEvents events, CaptureSessionOptions options, IVideoEncoderCatalog encoders, ILoggerFactory loggers)
+    public CaptureSession(SessionSpec spec, ISessionEvents events, CaptureSessionOptions options, IAudioDeviceHub audio, IVideoEncoderCatalog encoders, ILoggerFactory loggers)
     {
         _spec = spec;
+        _audio = audio;
         _events = events;
         _options = options;
         _encoders = encoders;
@@ -143,7 +145,7 @@ internal sealed class CaptureSession : ICaptureSession
         _firstFrameTimer = new Timer(_ => OnFirstFrameTimeout(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
-    /// <summary>Opens the device and audio clients and starts capture; the output opens on the first frame.</summary>
+    /// <summary>Opens the device, subscribes to the audio devices and starts capture; the output opens on the first frame.</summary>
     public void Open()
     {
         // Before anything is opened: the first codec use may run the probe.
@@ -163,7 +165,7 @@ internal sealed class CaptureSession : ICaptureSession
 
         foreach (var device in _spec.Audio.Devices)
         {
-            _audioCaptures.Add(OpenDevice(device));
+            Subscribe(device);
         }
 
         var capture = NewCapture(target.Window);
@@ -252,9 +254,10 @@ internal sealed class CaptureSession : ICaptureSession
             _paced?.Complete();
 
             // Capture is stopped and no frame is in flight; stop audio, then drain everything.
-            foreach (var audio in _audioCaptures)
+            // Once a subscription is disposed, its track gets no further block.
+            foreach (var track in _audioTracks)
             {
-                audio.Stop();
+                track.Subscription?.Dispose();
             }
 
             ReportAudioFaults();
@@ -425,47 +428,28 @@ internal sealed class CaptureSession : ICaptureSession
             _paced.Failed += e => Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "Video encode failed: " + e.Message, e));
         }
 
-        for (var i = 0; i < _audioCaptures.Count; i++)
+        for (var i = 0; i < _audioTracks.Count; i++)
         {
-            _audioEncoders.Add(new AacEncoder(_muxer, _audioCaptures[i].Endpoint.FriendlyName, isDefault: i == 0, _loggers.CreateLogger<AacEncoder>()));
+            _audioEncoders.Add(new AacEncoder(_muxer, _audioTracks[i].Device.FriendlyName, isDefault: i == 0, _loggers.CreateLogger<AacEncoder>()));
         }
 
         _muxer.Start();
 
-        for (var i = 0; i < _audioCaptures.Count; i++)
+        // The hub's streams have run since Open; each track takes blocks from here, cut at the anchor.
+        for (var i = 0; i < _audioTracks.Count; i++)
         {
             var timeline = new AudioTimeline(_qpcFrequency, anchorQpc, _audioEncoders[i]);
             _audioTimelines.Add(timeline);
-            _audioCaptures[i].Start(timeline, StampsFor(i));
+            _audioTracks[i].Publish(timeline);
         }
 
         _anchored = true;
         _options.Anchored?.Invoke(anchorQpc);
     }
 
-    /// <summary>The stats collector holds one stamp record per flow: the first device of each flow gets it.</summary>
-    private AudioStampStats? StampsFor(int index)
-    {
-        if (_stats is null)
-        {
-            return null;
-        }
-
-        var flow = _audioCaptures[index].Endpoint.Flow;
-        for (var i = 0; i < index; i++)
-        {
-            if (_audioCaptures[i].Endpoint.Flow == flow)
-            {
-                return null;
-            }
-        }
-
-        return flow == PlatformFlow.Output ? _stats.OutputStamps : _stats.InputStamps;
-    }
-
     private void Finish()
     {
-        if (_muxer is null || _video is null || _audioEncoders.Count != _audioCaptures.Count)
+        if (_muxer is null || _video is null || _audioEncoders.Count != _audioTracks.Count)
         {
             return;
         }
@@ -520,7 +504,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>Writes the stats file once the trailer is written.</summary>
     private void WriteStats()
     {
-        if (_stats is null || _options.StatsPath is not { } path || _video is null || _audioTimelines.Count != _audioCaptures.Count)
+        if (_stats is null || _options.StatsPath is not { } path || _video is null || _audioTimelines.Count != _audioTracks.Count)
         {
             return;
         }
@@ -551,14 +535,15 @@ internal sealed class CaptureSession : ICaptureSession
             pacer?.SkippedSlots ?? 0,
             pacer?.HeldReplaced ?? 0);
 
+        // Every device, with the hub's stamp and stream readouts.
         var audio = new List<AudioReport>();
-        for (var i = 0; i < _audioCaptures.Count; i++)
+        for (var i = 0; i < _audioTracks.Count; i++)
         {
-            if (StampsFor(i) is { } stamps)
+            var track = _audioTracks[i];
+            if (track.Subscription is AudioDeviceSubscription { Diagnostics: var diagnostics })
             {
-                var capture = _audioCaptures[i];
-                var role = capture.Endpoint.Flow == PlatformFlow.Output ? "output" : "input";
-                audio.Add(CaptureStatsCollector.Report(role, capture.Endpoint.FriendlyName, stamps, _audioTimelines[i], _audioEncoders[i].SamplesWritten));
+                var role = track.Device.Flow == SessionFlow.Output ? "output" : "input";
+                audio.Add(CaptureStatsCollector.Report(role, track.Device.FriendlyName, diagnostics.Stamps, diagnostics.Stream, _audioTimelines[i], _audioEncoders[i].SamplesWritten));
             }
         }
 
@@ -600,17 +585,24 @@ internal sealed class CaptureSession : ICaptureSession
 
     private void ReportAudioFaults()
     {
-        foreach (var capture in _audioCaptures)
+        foreach (var track in _audioTracks)
         {
-            if (capture.Fault is ErrorCodeException { Code: ErrorCodes.EncodeFailed } encodeFault)
+            var name = track.Device.FriendlyName;
+            if (track.Subscription?.SubscriberFault is ErrorCodeException { Code: ErrorCodes.EncodeFailed } encodeFault)
             {
                 // The encoder or muxer broke, not the device: the file is damaged.
                 Fail(encodeFault);
             }
-            else if (capture.Fault is { } fault)
+            else if (track.Subscription?.SubscriberFault is { } trackFault)
+            {
+                _log.LogWarning("{Code}: the track for '{Name}' stopped taking audio: {Message}",
+                    ErrorCodes.AudioDeviceFailed, name, trackFault.Message);
+            }
+
+            if (track.Subscription?.DeviceFault is { } fault)
             {
                 _log.LogWarning("{Code}: '{Name}' failed during capture and was held silent: {Message}",
-                    ErrorCodes.AudioDeviceFailed, capture.Endpoint.FriendlyName, fault.Message);
+                    ErrorCodes.AudioDeviceFailed, name, fault.Message);
             }
         }
     }
@@ -669,25 +661,28 @@ internal sealed class CaptureSession : ICaptureSession
         _stopped = true;
     }
 
-    private WasapiCapture OpenDevice(SessionAudioDevice device)
+    /// <summary>Subscribes a track to its device; it drops blocks until the anchor publishes its timeline.</summary>
+    private void Subscribe(SessionAudioDevice device)
     {
-        var flow = device.Flow == SessionFlow.Output ? PlatformFlow.Output : PlatformFlow.Input;
+        var track = new SessionAudioTrack(device);
         try
         {
-            return new WasapiCapture(new AudioEndpoint(device.EndpointId, device.FriendlyName, flow), _loggers.CreateLogger<WasapiCapture>());
+            track.Subscription = _audio.Subscribe(device.EndpointId, device.Flow, track);
         }
         catch (ErrorCodeException e)
         {
             throw new EngineFailure(e.Code, e.Message);
         }
+
+        _audioTracks.Add(track);
     }
 
     private void DisposeAll()
     {
-        // The WASAPI threads write into the encoders: join them before anything they touch is freed.
-        for (var i = _audioCaptures.Count - 1; i >= 0; i--)
+        // The device threads write into the encoders: unsubscribe before anything they touch is freed.
+        for (var i = _audioTracks.Count - 1; i >= 0; i--)
         {
-            _audioCaptures[i].Dispose();
+            _audioTracks[i].Subscription?.Dispose();
         }
 
         for (var i = _audioEncoders.Count - 1; i >= 0; i--)

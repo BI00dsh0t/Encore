@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
+using ReplayBuffer.Core.Audio;
 using ReplayBuffer.Media;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -10,11 +11,13 @@ using Windows.Win32.System.Com;
 namespace ReplayBuffer.Platform.Audio;
 
 /// <summary>
-/// One WASAPI shared-mode, event-driven client (AD-13): loopback for an Output Device,
-/// capture for an Input Device, converted by the audio engine to 48 kHz float stereo.
-/// Packets go to an <see cref="AudioTimeline"/> on a dedicated MMCSS "Pro Audio" thread.
+/// The hub's client for one endpoint (AD-13, AD-20): WASAPI shared mode, event-driven, loopback for
+/// an Output Device and capture for an Input Device, converted by the audio engine to 48 kHz float
+/// stereo. On a dedicated MMCSS "Pro Audio" thread, each packet's stamp goes to an
+/// <see cref="AudioStampStats"/> and the packet to a <see cref="DeviceStream"/>. An idle render
+/// endpoint, or a failed device, is filled with silence 50 ms behind now.
 /// </summary>
-public sealed unsafe class WasapiCapture : IDisposable
+internal sealed unsafe class WasapiCapture : IDisposable
 {
     private const long BufferDuration100ns = 1_000_000; // 100 ms
     private const uint WaitTimeoutMs = 20;
@@ -26,21 +29,22 @@ public sealed unsafe class WasapiCapture : IDisposable
     private IAudioCaptureClient* _capture;
     private HANDLE _event;
     private Thread? _thread;
-    private AudioTimeline? _timeline;
+    private DeviceStream? _stream;
     private AudioStampStats? _stampStats;
     private volatile bool _stopping;
 
     /// <summary>Opens and initializes the client; capture starts with <see cref="Start"/>.</summary>
-    public WasapiCapture(AudioEndpoint endpoint, ILogger logger)
+    /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.AudioDeviceFailed"/>: the endpoint can't be opened.</exception>
+    public WasapiCapture(string endpointId, AudioFlow flow, ILogger logger)
     {
-        Endpoint = endpoint;
         _logger = logger;
-        AudioEndpoints.EnsureCom();
-
+        Endpoint = new AudioEndpoint(endpointId, endpointId, flow);
         IMMDevice* device = null;
         try
         {
-            device = AudioEndpoints.OpenDevice(endpoint.Id);
+            AudioEndpoints.EnsureCom();
+            device = AudioEndpoints.OpenDevice(endpointId);
+            Endpoint = AudioEndpoints.Describe(device, flow);
 
             var clientIid = IAudioClient.IID_Guid;
             IAudioClient* client = null;
@@ -50,11 +54,11 @@ public sealed unsafe class WasapiCapture : IDisposable
             var format = new WAVEFORMATEX
             {
                 wFormatTag = (ushort)PInvoke.WAVE_FORMAT_IEEE_FLOAT,
-                nChannels = AudioTimeline.Channels,
-                nSamplesPerSec = AudioTimeline.SampleRate,
+                nChannels = AudioFormat.Channels,
+                nSamplesPerSec = AudioFormat.SampleRate,
                 wBitsPerSample = 32,
-                nBlockAlign = AudioTimeline.Channels * sizeof(float),
-                nAvgBytesPerSec = AudioTimeline.SampleRate * AudioTimeline.Channels * sizeof(float),
+                nBlockAlign = AudioFormat.Channels * sizeof(float),
+                nAvgBytesPerSec = AudioFormat.SampleRate * AudioFormat.Channels * sizeof(float),
                 cbSize = 0,
             };
             var flags = PInvoke.AUDCLNT_STREAMFLAGS_EVENTCALLBACK
@@ -67,7 +71,7 @@ public sealed unsafe class WasapiCapture : IDisposable
 
             _client->Initialize(AUDCLNT_SHAREMODE.AUDCLNT_SHAREMODE_SHARED, flags, BufferDuration100ns, 0, &format, null);
 
-            _event = PInvoke.CreateEvent(null, false, false, default(Windows.Win32.Foundation.PCWSTR));
+            _event = PInvoke.CreateEvent(null, false, false, default(PCWSTR));
             if (_event.IsNull)
             {
                 throw new InvalidOperationException("CreateEvent failed.");
@@ -83,14 +87,14 @@ public sealed unsafe class WasapiCapture : IDisposable
         catch (Exception e) when (e is not ErrorCodeException)
         {
             Dispose();
-            throw new ErrorCodeException(ErrorCodes.AudioDeviceFailed, $"Could not open '{endpoint.FriendlyName}': {e.Message}", e);
+            throw new ErrorCodeException(ErrorCodes.AudioDeviceFailed, $"Could not open '{Endpoint.FriendlyName}': {e.Message}", e);
         }
         finally
         {
             if (device is not null) device->Release();
         }
 
-        logger.LogInformation("Opened {Flow} device '{Name}' ({Mode})", endpoint.Flow, endpoint.FriendlyName, IsLoopback ? "loopback" : "capture");
+        logger.LogInformation("Opened {Flow} device '{Name}' ({Mode})", flow, Endpoint.FriendlyName, IsLoopback ? "loopback" : "capture");
     }
 
     public AudioEndpoint Endpoint { get; }
@@ -98,22 +102,21 @@ public sealed unsafe class WasapiCapture : IDisposable
     /// <summary>The first failure while capturing, if any; the stream was held silent after it.</summary>
     public Exception? Fault { get; private set; }
 
+    /// <summary>Whether the caller is this client's capture thread.</summary>
+    public bool OnCaptureThread => Thread.CurrentThread == _thread;
+
     private bool IsLoopback => Endpoint.Flow == AudioFlow.Output;
 
-    /// <summary>
-    /// Starts capture into <paramref name="timeline"/>. Call once the session anchor is set.
-    /// When <paramref name="stampStats"/> is given, every packet's stamp is recorded into it
-    /// before the timeline sees the packet.
-    /// </summary>
-    public void Start(AudioTimeline timeline, AudioStampStats? stampStats = null)
+    /// <summary>Starts capture: every packet's stamp goes to <paramref name="stampStats"/>, then the packet to <paramref name="stream"/>.</summary>
+    public void Start(DeviceStream stream, AudioStampStats stampStats)
     {
-        _timeline = timeline;
+        _stream = stream;
         _stampStats = stampStats;
         _thread = new Thread(Run) { Name = $"WASAPI {Endpoint.Flow}", IsBackground = true };
         _thread.Start();
     }
 
-    /// <summary>Stops the thread and the client. Every packet pushed so far is in the timeline.</summary>
+    /// <summary>Stops the thread and the client. Every packet read so far is in the stream.</summary>
     public void Stop()
     {
         _stopping = true;
@@ -153,8 +156,8 @@ public sealed unsafe class WasapiCapture : IDisposable
             _logger.LogWarning("MMCSS 'Pro Audio' was refused for '{Name}'", Endpoint.FriendlyName);
         }
 
-        var timeline = _timeline!;
-        var stampStats = _stampStats;
+        var stream = _stream!;
+        var stampStats = _stampStats!;
         var failed = false;
         try
         {
@@ -182,13 +185,13 @@ public sealed unsafe class WasapiCapture : IDisposable
                 {
                     if (!failed && wait == WAIT_EVENT.WAIT_OBJECT_0)
                     {
-                        Drain(timeline, stampStats);
+                        Drain(stream, stampStats);
                     }
                     else if (IsLoopback || failed)
                     {
                         // An idle render endpoint sends no packets: keep its stream continuous.
-                        // A failed device is held silent the same way so the file stays aligned.
-                        timeline.FillTo(Stopwatch.GetTimestamp() - (IdleFillLagMs * _qpcFrequency / 1000));
+                        // A failed device is held silent the same way so subscribers stay aligned.
+                        stream.FillTo(Stopwatch.GetTimestamp() - (IdleFillLagMs * _qpcFrequency / 1000));
                     }
                 }
                 catch (Exception e) when (!failed)
@@ -219,7 +222,7 @@ public sealed unsafe class WasapiCapture : IDisposable
         }
     }
 
-    private void Drain(AudioTimeline timeline, AudioStampStats? stampStats)
+    private void Drain(DeviceStream stream, AudioStampStats stampStats)
     {
         while (true)
         {
@@ -240,11 +243,11 @@ public sealed unsafe class WasapiCapture : IDisposable
             {
                 var packetFlags = (AudioPacketFlags)(flags & 0x7);
                 var stamp = QpcClock.From100ns((long)qpcPosition, _qpcFrequency);
-                stampStats?.Record(stamp, (int)frames, packetFlags, readQpc);
+                stampStats.Record(stamp, (int)frames, packetFlags, readQpc);
                 var samples = (packetFlags & AudioPacketFlags.Silent) != 0
                     ? ReadOnlySpan<float>.Empty
-                    : new ReadOnlySpan<float>(data, (int)frames * AudioTimeline.Channels);
-                timeline.Push(stamp, (int)frames, samples, packetFlags);
+                    : new ReadOnlySpan<float>(data, (int)frames * AudioFormat.Channels);
+                stream.Push(stamp, (int)frames, samples, packetFlags);
             }
             finally
             {

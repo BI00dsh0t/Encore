@@ -72,7 +72,8 @@ internal static class SessionTestKit
         var anchor = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
         options = options with { Anchored = qpc => anchor.TrySetResult(qpc) };
         var document = SettingsDocument.Empty with { Global = SettingsDocument.Empty.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(video)) };
-        using var orchestrator = new SessionOrchestrator(new CaptureSessionFactory(options, loggers, encoders), () => document, _ => { });
+        using var hub = new AudioDeviceHub(loggers);
+        using var orchestrator = new SessionOrchestrator(new CaptureSessionFactory(options, loggers, hub, encoders), () => document, _ => { });
 
         var running = await orchestrator.StartAsync(SessionKind.Game, new CaptureTarget((int)window.ProcessId, window.Handle, null), DefaultAudio())
             .WaitAsync(Timeout, Token);

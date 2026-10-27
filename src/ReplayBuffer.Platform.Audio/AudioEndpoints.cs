@@ -128,7 +128,7 @@ public static unsafe class AudioEndpoints
 
     private static EDataFlow ToDataFlow(AudioFlow flow) => flow == AudioFlow.Output ? EDataFlow.eRender : EDataFlow.eCapture;
 
-    private static AudioEndpoint Describe(IMMDevice* device, AudioFlow flow)
+    internal static AudioEndpoint Describe(IMMDevice* device, AudioFlow flow)
     {
         PWSTR id = default;
         device->GetId(&id);

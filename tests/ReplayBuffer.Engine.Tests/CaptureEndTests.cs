@@ -184,6 +184,14 @@ public sealed class CaptureEndTests : IDisposable
             var samples = audio[i].GetProperty("samplesEncoded").GetInt64();
             Assert.Equal(samples, audio[i].GetProperty("timeline").GetProperty("writtenFrames").GetInt64());
 
+            // The hub's steering of the device to QPC (story 1.12).
+            var resampler = audio[i].GetProperty("resampler");
+            Assert.Equal(JsonValueKind.Object, resampler.ValueKind);
+            Assert.True(resampler.GetProperty("stepCorrections").GetInt64() >= 0);
+            Assert.InRange(resampler.GetProperty("ratioPpm").GetDouble(), -1000, 1000);
+            Assert.InRange(resampler.GetProperty("meanRatioPpm").GetDouble(), -1000, 1000);
+            Assert.True(resampler.GetProperty("outputFrames").GetInt64() >= samples);
+
             // AAC packs 1024 samples a packet; the last one is partial.
             Assert.Equal((samples + 1023) / 1024, streams[i + 1].Packets);
             Assert.InRange(streams[i + 1].DurationTs, samples - 1024, samples + 1024);

@@ -86,7 +86,10 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         // debug-capture doesn't open the settings store: the snapshot resolves against a document
         // holding only the command line's video value.
         var document = VideoDocument(window);
-        using var orchestrator = new SessionOrchestrator(new CaptureSessionFactory(options, loggers), () => document, _ => { });
+
+        // One hub for the run, disposed after the orchestrator has ended the session.
+        using var hub = new AudioDeviceHub(loggers);
+        using var orchestrator = new SessionOrchestrator(new CaptureSessionFactory(options, loggers, hub), () => document, _ => { });
         var target = new CaptureTarget((int)window.ProcessId, window.Handle, ProfileId: null);
         var audio = new SessionAudio(
         [
