@@ -3,14 +3,14 @@ title: 'Fixed output resolution, frame pacer and color path'
 type: 'feature'
 ticket: '11'
 created: '2026-10-26'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '5f62f2caef6e55279838097e27b9f84269d8972f'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md'

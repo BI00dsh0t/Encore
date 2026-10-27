@@ -154,6 +154,7 @@ public sealed class FramePacerTests
     {
         var pacer = new FramePacer(Qpf, 60, Anchor);
         pacer.Offer(Anchor);
+        Assert.Equal(PacerAction.None, pacer.Poll(Anchor).Action); // caught up: running
 
         // 4 behind is caught up by repeats; 5 behind is a jump.
         Assert.Equal(new PacerDecision(PacerAction.Repeat, 1, 1500), pacer.Poll(pacer.SlotQpc(5)));
@@ -167,6 +168,29 @@ public sealed class FramePacerTests
 
         var after = pacer.Poll(pacer.SlotQpc(20) + (Qpf / 120));
         Assert.Equal(new PacerDecision(PacerAction.Repeat, 20, 20 * 1500), after);
+    }
+
+    [Fact]
+    public void ALateAnchorIsFilledWithRepeatsNotSkipped()
+    {
+        // The anchor frame reaches the encoder thread 8 slots late at 120 fps (the output opening).
+        var pacer = new FramePacer(Qpf, 120, Anchor);
+        Assert.Equal(PacerAction.Emit, pacer.Offer(Anchor).Action);
+
+        var late = pacer.SlotQpc(8);
+        var repeats = new List<long>();
+        for (var d = pacer.Poll(late); d.Action != PacerAction.None; d = pacer.Poll(late))
+        {
+            Assert.Equal(PacerAction.Repeat, d.Action);
+            repeats.Add(d.Slot);
+        }
+
+        Assert.Equal([1L, 2, 3, 4, 5, 6, 7], repeats);
+        Assert.Equal(0, pacer.SkippedSlots);
+
+        // Once caught up, the same lateness is overload.
+        pacer.Poll(pacer.SlotQpc(20));
+        Assert.Equal(12, pacer.SkippedSlots);
     }
 
     [Fact]

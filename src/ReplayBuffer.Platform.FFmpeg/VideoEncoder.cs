@@ -221,7 +221,7 @@ public sealed unsafe class VideoEncoder : IDisposable
 
             if (frames.IsNv12)
             {
-                // What Nv12Converter writes, so the file decodes with the right colours.
+                // What FrameScaler writes in NV12, so the file decodes with the right colours.
                 _context->colorspace = AVColorSpace.AVCOL_SPC_BT709;
                 _context->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
                 _context->color_trc = AVColorTransferCharacteristic.AVCOL_TRC_BT709;
@@ -282,7 +282,7 @@ public sealed unsafe class VideoEncoder : IDisposable
     /// <summary>Video packets written to the muxer.</summary>
     public long EncodedFrames => Interlocked.Read(ref _encoded);
 
-    /// <summary>Video packets drained by <see cref="Flush"/>; their latency is not recorded.</summary>
+    /// <summary>New frames' packets drained by <see cref="Flush"/>; their latency is not recorded. Repeats aren't counted.</summary>
     public long FlushedPackets => Interlocked.Read(ref _flushed);
 
     /// <summary>
@@ -622,7 +622,10 @@ public sealed unsafe class VideoEncoder : IDisposable
             FFmpegLibrary.Check(result, "avcodec_receive_packet(video)");
             if (flushing)
             {
-                Interlocked.Increment(ref _flushed);
+                if (CaptureQpcOfPacket(_packet->pts) != 0)
+                {
+                    Interlocked.Increment(ref _flushed);
+                }
             }
             else if (_latency is not null && CaptureQpcOfPacket(_packet->pts) is var captured and not 0)
             {

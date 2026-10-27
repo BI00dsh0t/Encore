@@ -32,7 +32,9 @@ public readonly record struct PacerDecision(PacerAction Action, long Slot, long 
 /// otherwise it is held for the next slot, where a newer frame replaces it. The held frame is
 /// encoded at its slot's time; a slot with no new frame by its time + ½ slot repeats the last
 /// frame. When the encoder falls more than <see cref="MaxSlotsBehind"/> slots behind, the pacer
-/// jumps to the current slot and counts the slots it skipped. Pure and allocation-free; one
+/// jumps to the current slot and counts the slots it skipped; until it has first caught up (the
+/// anchor frame reaches the encoder thread only after the output has opened), lateness is filled
+/// with repeats instead. Pure and allocation-free; one
 /// thread drives it: <see cref="Poll"/> until <see cref="PacerAction.None"/>, then
 /// <see cref="Offer"/> each new frame.
 /// </summary>
@@ -44,6 +46,7 @@ public sealed class FramePacer
     private readonly long _timeBase;
     private long _newestQpc = long.MinValue;
     private long _heldQpc;
+    private bool _running;
 
     public FramePacer(long qpcFrequency, int fps, long anchorQpc, long timeBase = 90_000)
     {
@@ -136,7 +139,7 @@ public sealed class FramePacer
     public PacerDecision Poll(long nowQpc)
     {
         var behind = CurrentSlot(nowQpc) - NextSlot;
-        if (behind > MaxSlotsBehind)
+        if (_running && behind > MaxSlotsBehind)
         {
             SkippedSlots += behind;
             NextSlot += behind;
@@ -146,6 +149,7 @@ public sealed class FramePacer
         {
             if (nowQpc < SlotQpc(NextSlot))
             {
+                _running = true;
                 return default;
             }
 
@@ -157,6 +161,7 @@ public sealed class FramePacer
 
         if (nowQpc < RepeatQpc(NextSlot))
         {
+            _running = true; // caught up: from now on, falling behind is overload
             return default;
         }
 
