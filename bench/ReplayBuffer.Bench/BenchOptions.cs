@@ -1,0 +1,388 @@
+using System.Globalization;
+using System.Security.Principal;
+
+namespace ReplayBuffer.Bench;
+
+/// <summary>A command line Bench can't run: printed with the usage, exit code 2.</summary>
+internal sealed class BenchUsageException(string message) : Exception(message);
+
+/// <summary>A run that can't go on (nothing to measure, a tool missing): printed, exit code 1.</summary>
+internal sealed class BenchFailure(string message) : Exception(message);
+
+/// <summary>
+/// Bench's command line: a subcommand, then <c>--name value</c> options and a few bare flags.
+/// Every value Bench uses has an option with a default, so a later epic can rerun the same benchmark.
+/// </summary>
+internal sealed class BenchOptions
+{
+    public const string Usage =
+        """
+        Usage:
+          ReplayBuffer.Bench fps      [--game Cyberpunk2077] [--seconds 300] [--passes 3] [--settle 20]
+                                      [--presentmon <exe>] [--pwsh <exe>] [--no-gpu-sampler] <capture options>
+          ReplayBuffer.Bench drift    [--minutes 60] [--tone-dbfs -30] [--bucket-seconds 60] [--burst-track 0]
+                                      [--reanalyze] <capture options>
+          ReplayBuffer.Bench playback [--seconds 30] [--players "Discord,Chrome,VLC,Windows Media Player,DaVinci Resolve"]
+                                      [--tone-dbfs -30] <capture options>
+          ReplayBuffer.Bench hotkey   [--presses 20] [--key ctrl+alt+f9] [--timeout 60]
+          ReplayBuffer.Bench report
+
+        Capture options: [--size 1920x1080] [--fps 60] [--bitrate 20000] [--output-device <name or id>]
+                         [--input-device <name or id>]
+        Every command:   [--out <run folder>] [--repo <repo root>] [--engine <ReplayBuffer.Engine.exe>]
+                         [--ffmpeg <folder with ffmpeg.exe and ffprobe.exe>]
+
+        Each measurement writes its JSON into the run folder (default measurements/bench-<time>/, or --out;
+        report defaults to the newest bench-* folder) and regenerates report.md and report.json there.
+        """;
+
+    private static readonly string[] Common = ["out", "repo", "engine", "ffmpeg"];
+    private static readonly string[] Capture = ["size", "fps", "bitrate", "output-device", "input-device"];
+
+    private static readonly Dictionary<string, string[]> Allowed = new(StringComparer.Ordinal)
+    {
+        ["fps"] = [.. Common, .. Capture, "game", "seconds", "passes", "settle", "presentmon", "pwsh", "no-gpu-sampler"],
+        ["drift"] = [.. Common, .. Capture, "minutes", "tone-dbfs", "bucket-seconds", "burst-track", "reanalyze"],
+        ["playback"] = [.. Common, .. Capture, "seconds", "players", "tone-dbfs"],
+        ["hotkey"] = [.. Common, "presses", "key", "timeout"],
+        ["report"] = [.. Common],
+    };
+
+    private static readonly HashSet<string> FlagNames = new(StringComparer.Ordinal) { "no-gpu-sampler", "reanalyze" };
+
+    private readonly Dictionary<string, string> _values;
+    private readonly HashSet<string> _flags;
+
+    private BenchOptions(string command, Dictionary<string, string> values, HashSet<string> flags)
+    {
+        Command = command;
+        _values = values;
+        _flags = flags;
+    }
+
+    public string Command { get; }
+
+    public static IReadOnlyCollection<string> Commands => Allowed.Keys;
+
+    /// <exception cref="BenchUsageException">An unknown command or option, a repeated option, or a missing value.</exception>
+    public static BenchOptions Parse(IReadOnlyList<string> args)
+    {
+        if (args.Count == 0)
+        {
+            throw new BenchUsageException("No command given.");
+        }
+
+        var command = args[0];
+        if (!Allowed.TryGetValue(command, out var allowed))
+        {
+            throw new BenchUsageException($"Unknown command '{command}'. Use one of {string.Join(", ", Allowed.Keys)}.");
+        }
+
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        var flags = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 1; i < args.Count; i++)
+        {
+            var arg = args[i];
+            if (!arg.StartsWith("--", StringComparison.Ordinal) || arg.Length == 2)
+            {
+                throw new BenchUsageException($"Unexpected argument '{arg}'.");
+            }
+
+            var name = arg[2..];
+            if (!allowed.Contains(name))
+            {
+                throw new BenchUsageException($"'{command}' has no option --{name}.");
+            }
+
+            if (values.ContainsKey(name) || flags.Contains(name))
+            {
+                throw new BenchUsageException($"--{name} is given twice.");
+            }
+
+            if (FlagNames.Contains(name))
+            {
+                flags.Add(name);
+                continue;
+            }
+
+            if (i + 1 >= args.Count)
+            {
+                throw new BenchUsageException($"--{name} needs a value.");
+            }
+
+            values[name] = args[++i];
+        }
+
+        return new BenchOptions(command, values, flags);
+    }
+
+    public bool Has(string name) => _values.ContainsKey(name);
+
+    public bool Flag(string name) => _flags.Contains(name);
+
+    public string? Text(string name) => _values.TryGetValue(name, out var value) && value.Length > 0 ? value : null;
+
+    public string Text(string name, string fallback) => Text(name) ?? fallback;
+
+    public int Int(string name, int fallback, int min, int max)
+    {
+        if (!_values.TryGetValue(name, out var text))
+        {
+            return fallback;
+        }
+
+        if (!int.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var value) || value < min || value > max)
+        {
+            throw new BenchUsageException($"--{name} '{text}' is not a whole number from {min} to {max}.");
+        }
+
+        return value;
+    }
+
+    public double Double(string name, double fallback, double min, double max)
+    {
+        if (!_values.TryGetValue(name, out var text))
+        {
+            return fallback;
+        }
+
+        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || value < min || value > max)
+        {
+            throw new BenchUsageException($"--{name} '{text}' is not a number from {min} to {max}.");
+        }
+
+        return value;
+    }
+
+    /// <summary>A comma-separated list, trimmed, without empty items.</summary>
+    public IReadOnlyList<string> List(string name, IReadOnlyList<string> fallback)
+    {
+        if (Text(name) is not { } text)
+        {
+            return fallback;
+        }
+
+        var items = text.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return items.Length == 0 ? throw new BenchUsageException($"--{name} lists nothing.") : items;
+    }
+
+    /// <summary>The capture options every <c>debug-capture</c> Bench starts gets.</summary>
+    public CaptureSettings CaptureSettings()
+    {
+        var size = Text("size", "1920x1080");
+        var parts = size.Split('x');
+        if (parts.Length != 2
+            || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var width)
+            || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var height)
+            || width is < 2 or > 8192 || height is < 2 or > 8192 || width % 2 != 0 || height % 2 != 0)
+        {
+            throw new BenchUsageException($"--size '{size}' is not WxH with even sides.");
+        }
+
+        return new CaptureSettings(
+            width,
+            height,
+            Int("fps", 60, 1, 120),
+            Int("bitrate", 20_000, 1, 1_000_000),
+            Text("output-device"),
+            Text("input-device"));
+    }
+}
+
+/// <summary>The engine's output for a Bench capture: H.264, CBR (the engine's defaults are the codec and rate control).</summary>
+internal sealed record CaptureSettings(int Width, int Height, int Fps, int BitrateKbps, string? OutputDevice, string? InputDevice)
+{
+    public string Size => $"{Width}x{Height}";
+
+    /// <summary>One video frame at the output rate, in ms: the drift target.</summary>
+    public double FrameMs => 1000.0 / Fps;
+}
+
+/// <summary>Where Bench finds the repo, its tools and its run folder.</summary>
+internal sealed class BenchContext
+{
+    public const string SolutionFile = "ReplayBuffer.slnx";
+
+    private BenchContext(string repoRoot, string runFolder, BenchOptions options)
+    {
+        RepoRoot = repoRoot;
+        RunFolder = runFolder;
+        Options = options;
+    }
+
+    public string RepoRoot { get; }
+
+    public string RunFolder { get; }
+
+    public BenchOptions Options { get; }
+
+    public static BenchContext Create(BenchOptions options)
+    {
+        var repo = FindRepoRoot(options.Text("repo"));
+        var run = ResolveRunFolder(repo, options.Text("out"), options.Command == "report", DateTime.Now);
+        Directory.CreateDirectory(run);
+        return new BenchContext(repo, run, options);
+    }
+
+    /// <summary>
+    /// <paramref name="given"/>, or the first folder holding <see cref="SolutionFile"/> above
+    /// Bench's own folder, then above the current folder.
+    /// </summary>
+    public static string FindRepoRoot(string? given)
+    {
+        if (given is not null)
+        {
+            var full = Path.GetFullPath(given);
+            return File.Exists(Path.Combine(full, SolutionFile))
+                ? full
+                : throw new BenchFailure($"--repo '{full}' has no {SolutionFile}.");
+        }
+
+        foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
+        {
+            for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
+            {
+                if (File.Exists(Path.Combine(dir.FullName, SolutionFile)))
+                {
+                    return dir.FullName;
+                }
+            }
+        }
+
+        throw new BenchFailure($"No {SolutionFile} above {AppContext.BaseDirectory} or {Environment.CurrentDirectory}; pass --repo.");
+    }
+
+    /// <summary>
+    /// <paramref name="given"/>, or a new <c>measurements/bench-&lt;time&gt;</c>; for <c>report</c>,
+    /// the newest existing <c>bench-*</c> folder.
+    /// </summary>
+    public static string ResolveRunFolder(string repo, string? given, bool forReport, DateTime now)
+    {
+        if (given is not null)
+        {
+            return Path.GetFullPath(given);
+        }
+
+        var measurements = Path.Combine(repo, "measurements");
+        if (forReport)
+        {
+            var newest = Directory.Exists(measurements)
+                ? new DirectoryInfo(measurements).GetDirectories("bench-*").OrderBy(d => d.Name, StringComparer.Ordinal).LastOrDefault()
+                : null;
+            return newest?.FullName ?? throw new BenchFailure($"No bench-* run folder in {measurements}; pass --out.");
+        }
+
+        return Path.Combine(measurements, "bench-" + now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+    }
+
+    /// <summary><c>--engine</c>, or the newest Release build of the engine (Debug skews its CPU and allocation figures).</summary>
+    public string ResolveEngine()
+    {
+        if (Options.Text("engine") is { } given)
+        {
+            var full = Path.GetFullPath(given);
+            return File.Exists(full) ? full : throw new BenchFailure($"The engine is not at '{full}'.");
+        }
+
+        var release = Path.Combine(RepoRoot, "src", "ReplayBuffer.Engine", "bin", "Release");
+        var built = Directory.Exists(release)
+            ? new DirectoryInfo(release).GetFiles("ReplayBuffer.Engine.exe", SearchOption.AllDirectories).OrderBy(f => f.LastWriteTimeUtc).LastOrDefault()
+            : null;
+        return built?.FullName ?? throw new BenchFailure("No Release engine build. Run dotnet build ReplayBuffer.slnx -c Release, or pass --engine <path>.");
+    }
+
+    /// <summary><c>--ffmpeg</c>, or Bench's own folder (the build copies the natives there), or <c>native/ffmpeg</c>.</summary>
+    public FfmpegTools ResolveFfmpeg() => FfmpegTools.Resolve(Options.Text("ffmpeg"), RepoRoot);
+
+    /// <summary><c>--pwsh</c>, or <c>pwsh.exe</c> on the PATH.</summary>
+    public string ResolvePwsh() =>
+        Options.Text("pwsh") is { } given
+            ? File.Exists(given) ? Path.GetFullPath(given) : throw new BenchFailure($"pwsh is not at '{given}'.")
+            : FindOnPath("pwsh.exe") ?? throw new BenchFailure("pwsh.exe (PowerShell 7) is not on the PATH; install it or pass --pwsh <path>.");
+
+    /// <summary><c>--presentmon</c>, or the newest <c>native/presentmon/PresentMon-*.exe</c>, as the FPS script picks it.</summary>
+    public string ResolvePresentMon()
+    {
+        if (Options.Text("presentmon") is { } given)
+        {
+            return File.Exists(given) ? Path.GetFullPath(given) : throw new BenchFailure($"PresentMon not found at '{given}'.");
+        }
+
+        var folder = Path.Combine(RepoRoot, "native", "presentmon");
+        var found = Directory.Exists(folder)
+            ? new DirectoryInfo(folder).GetFiles("PresentMon-*.exe")
+                .OrderBy(f => VersionOf(f.Name))
+                .ThenBy(f => f.LastWriteTimeUtc)
+                .LastOrDefault()
+            : null;
+        return found?.FullName ?? throw new BenchFailure(
+            $"PresentMon not found: no native/presentmon/PresentMon-*.exe under {RepoRoot}. Download the PresentMon CLI there, or pass --presentmon <path to PresentMon.exe>.");
+    }
+
+    public static bool IsElevated()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+    }
+
+    private static Version VersionOf(string fileName)
+    {
+        var text = Path.GetFileNameWithoutExtension(fileName)["PresentMon-".Length..];
+        var end = 0;
+        while (end < text.Length && (char.IsAsciiDigit(text[end]) || text[end] == '.'))
+        {
+            end++;
+        }
+
+        return Version.TryParse(text[..end].Trim('.'), out var version) ? version : new Version(0, 0);
+    }
+
+    private static string? FindOnPath(string exe)
+    {
+        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            try
+            {
+                var candidate = Path.Combine(dir.Trim('"'), exe);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+            catch (ArgumentException)
+            {
+                // A malformed PATH entry.
+            }
+        }
+
+        return null;
+    }
+}
+
+/// <summary>ffmpeg.exe and ffprobe.exe, side by side.</summary>
+internal sealed record FfmpegTools(string Ffmpeg, string Ffprobe)
+{
+    public static FfmpegTools? Find(string? given, string? repoRoot)
+    {
+        var folders = given is not null
+            ? [Path.GetFullPath(given)]
+            : new[] { AppContext.BaseDirectory, repoRoot is null ? null : Path.Combine(repoRoot, "native", "ffmpeg") };
+        foreach (var folder in folders.OfType<string>())
+        {
+            var ffmpeg = Path.Combine(folder, "ffmpeg.exe");
+            var ffprobe = Path.Combine(folder, "ffprobe.exe");
+            if (File.Exists(ffmpeg) && File.Exists(ffprobe))
+            {
+                return new FfmpegTools(ffmpeg, ffprobe);
+            }
+        }
+
+        return null;
+    }
+
+    public static FfmpegTools Resolve(string? given, string repoRoot) =>
+        Find(given, repoRoot) ?? throw new BenchFailure(
+            given is not null
+                ? $"--ffmpeg '{given}' has no ffmpeg.exe and ffprobe.exe."
+                : "ffmpeg.exe and ffprobe.exe are not beside Bench or in native/ffmpeg; run pwsh tools/fetch-ffmpeg.ps1, or pass --ffmpeg <folder>.");
+}

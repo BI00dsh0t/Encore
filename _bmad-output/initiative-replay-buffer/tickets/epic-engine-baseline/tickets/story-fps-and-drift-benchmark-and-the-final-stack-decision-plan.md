@@ -83,17 +83,17 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `bench/ReplayBuffer.Bench/ReplayBuffer.Bench.csproj` -- `UseWindowsForms` for the marker window. References Platform.Audio, Media and Contracts. Copies the FFmpeg natives the way the Engine does.
-- [ ] `bench/ReplayBuffer.Bench/Program.cs`, `BenchOptions.cs` -- the subcommands, options and usage, the elevation refusal, and resolving the run folder, engine (newest Release build or `--engine`), ffmpeg, PresentMon and pwsh.
-- [ ] `bench/ReplayBuffer.Bench/FpsBenchmark.cs` -- runs `pwsh -File tools/measure-path-a.ps1` with `-Conditions baseline,capture -Size … -Fps …`, the passes, the seconds, the devices, and `-OutDir <run>/fps`. Then it maps `summary.json` into `fps.json`, including fresh slots, latency p99, CPU, alloc/s and GC.
-- [ ] `bench/ReplayBuffer.Bench/MarkerWindow.cs` -- a black 640×360 window, titled "ReplayBuffer Bench Marker", that flashes white for 3 frames at each whole second from its start and logs each flash's QPC after `DwmFlush`.
-- [ ] `bench/ReplayBuffer.Bench/DriftBenchmark.cs` -- marker + `TonePlayer` + `debug-capture --hwnd <marker> --seconds 60·N --stats`, then `MediaAnalysis` → `drift.json`.
-- [ ] `bench/ReplayBuffer.Bench/MediaAnalysis.cs`, `OnsetDetector.cs`, `FlashDetector.cs`, `DriftMath.cs` -- the ffmpeg/ffprobe decode, onsets and flash PTS, nearest matching within ±0.5 s, per-minute medians, drift and slope. These are pure, apart from the decode.
-- [ ] `bench/ReplayBuffer.Bench/PlaybackCheck.cs` -- the 30 s clip and the interactive checklist → `playback.json`. It also asks whether a capture border showed (§7.4 `IsBorderRequired`).
-- [ ] `bench/ReplayBuffer.Bench/HotkeyBenchmark.cs`, `KeyboardHook.cs` -- the matrix's Hotkey row → `hotkey.json`.
-- [ ] `bench/ReplayBuffer.Bench/Report.cs` -- merges the JSON files into `report.json` and `report.md`, each figure with its target and a pass/miss mark.
-- [ ] `tools/measure-path-a.ps1` -- the `-Size`, `-Fps` and `-Bitrate` pass-through.
-- [ ] `tests/ReplayBuffer.Bench.Tests/` (new, in the slnx) -- tests for `DriftMath`, the onset and flash detectors on synthetic buffers, and option parsing. Also an end-to-end analysis test: ffmpeg lavfi makes a 2-minute fMP4 with a flash each second and bursts that drift 5 ms against the flashes over the 2 minutes. The analysis must report 5 ± 1.5 ms A/V drift. A no-drift twin must report under 1 ms. The test is skipped without ffmpeg.
+- [x] `bench/ReplayBuffer.Bench/ReplayBuffer.Bench.csproj` -- `UseWindowsForms` for the marker window. References Platform.Audio, Media and Contracts. Copies the FFmpeg natives the way the Engine does.
+- [x] `bench/ReplayBuffer.Bench/Program.cs`, `BenchOptions.cs` -- the subcommands, options and usage, the elevation refusal, and resolving the run folder, engine (newest Release build or `--engine`), ffmpeg, PresentMon and pwsh.
+- [x] `bench/ReplayBuffer.Bench/FpsBenchmark.cs` -- runs `pwsh -File tools/measure-path-a.ps1` with `-Conditions baseline,capture -Size … -Fps …`, the passes, the seconds, the devices, and `-OutDir <run>/fps`. Then it maps `summary.json` into `fps.json`, including fresh slots, latency p99, CPU, alloc/s and GC.
+- [x] `bench/ReplayBuffer.Bench/MarkerWindow.cs` -- a black 640×360 window, titled "ReplayBuffer Bench Marker", that flashes white for 3 frames at each whole second from its start and logs each flash's QPC after `DwmFlush`.
+- [x] `bench/ReplayBuffer.Bench/DriftBenchmark.cs` -- marker + `TonePlayer` + `debug-capture --hwnd <marker> --seconds 60·N --stats`, then `MediaAnalysis` → `drift.json`.
+- [x] `bench/ReplayBuffer.Bench/MediaAnalysis.cs`, `OnsetDetector.cs`, `FlashDetector.cs`, `DriftMath.cs` -- the ffmpeg/ffprobe decode, onsets and flash PTS, nearest matching within ±0.5 s, per-minute medians, drift and slope. These are pure, apart from the decode.
+- [x] `bench/ReplayBuffer.Bench/PlaybackCheck.cs` -- the 30 s clip and the interactive checklist → `playback.json`. It also asks whether a capture border showed (§7.4 `IsBorderRequired`).
+- [x] `bench/ReplayBuffer.Bench/HotkeyBenchmark.cs`, `KeyboardHook.cs` -- the matrix's Hotkey row → `hotkey.json`.
+- [x] `bench/ReplayBuffer.Bench/Report.cs` -- merges the JSON files into `report.json` and `report.md`, each figure with its target and a pass/miss mark.
+- [x] `tools/measure-path-a.ps1` -- the `-Size`, `-Fps` and `-Bitrate` pass-through.
+- [x] `tests/ReplayBuffer.Bench.Tests/` (new, in the slnx) -- tests for `DriftMath`, the onset and flash detectors on synthetic buffers, and option parsing. Also an end-to-end analysis test: ffmpeg lavfi makes a 2-minute fMP4 with a flash each second and bursts that drift 5 ms against the flashes over the 2 minutes. The analysis must report 5 ± 1.5 ms A/V drift. A no-drift twin must report under 1 ms. The test is skipped without ffmpeg.
 - [ ] `_bmad-output/.../epic-engine-baseline.md` Notes -- after the builder's runs, Sofia records the results and decisions: the §6 final stack, §7.2 kept, and the §7.4 facts.
 
 **Acceptance Criteria:**

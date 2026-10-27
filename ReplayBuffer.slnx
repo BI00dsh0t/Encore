@@ -22,6 +22,7 @@
     <Project Path="tests/ReplayBuffer.Platform.Desktop.Tests/ReplayBuffer.Platform.Desktop.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.Engine.Tests/ReplayBuffer.Engine.Tests.csproj" />
     <Project Path="tests/ReplayBuffer.App.Tests/ReplayBuffer.App.Tests.csproj" />
+    <Project Path="tests/ReplayBuffer.Bench.Tests/ReplayBuffer.Bench.Tests.csproj" />
   </Folder>
   <Folder Name="/bench/">
     <Project Path="bench/ReplayBuffer.Bench/ReplayBuffer.Bench.csproj" />

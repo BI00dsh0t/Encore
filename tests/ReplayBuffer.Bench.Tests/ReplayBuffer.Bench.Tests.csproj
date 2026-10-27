@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\bench\ReplayBuffer.Bench\ReplayBuffer.Bench.csproj" />
+  </ItemGroup>
+</Project>
