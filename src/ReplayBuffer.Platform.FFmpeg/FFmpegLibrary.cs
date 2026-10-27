@@ -20,6 +20,14 @@ public static unsafe class FFmpegLibrary
         "swscale-10.dll",
     ];
 
+    /// <summary>
+    /// <c>AVERROR(EAGAIN)</c> and <c>AVERROR_EOF</c>, read once: FFmpeg.AutoGen computes them on
+    /// every read, which allocates under NativeAOT, and the encoders test them for every packet (AD-7).
+    /// </summary>
+    internal static readonly int ErrorAgain = ffmpeg.AVERROR(ffmpeg.EAGAIN);
+
+    internal static readonly int ErrorEof = ffmpeg.AVERROR_EOF;
+
     private static readonly Lock Gate = new();
     private static bool _initialized;
 

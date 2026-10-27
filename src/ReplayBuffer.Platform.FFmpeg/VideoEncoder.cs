@@ -45,9 +45,10 @@ public sealed unsafe class VideoSurface : IDisposable
 }
 
 /// <summary>
-/// A pool texture held by value, for paths that must not allocate per frame (the encoder
-/// thread). From <see cref="VideoEncoder.TryAcquire(long, out EncoderFrame)"/>; it must reach
-/// <see cref="VideoEncoder.Submit(EncoderFrame)"/> or <see cref="VideoEncoder.Release"/> exactly once.
+/// A pool texture held by value, for paths that must not allocate per frame. From
+/// <see cref="VideoEncoder.TryAcquire(long, out EncoderFrame)"/> (its PTS set from the capture QPC)
+/// or <see cref="VideoEncoder.TryAcquireFrame"/> (PTS left to the pacer); it must reach a submit or
+/// <see cref="VideoEncoder.Release"/> exactly once.
 /// </summary>
 public readonly unsafe struct EncoderFrame
 {
@@ -100,17 +101,25 @@ public sealed record VideoEncoderOptions(
 /// One video encoder over D3D11 frames: NVENC, AMF or QSV read the pool textures directly; libx264
 /// gets each frame copied back through a staging texture (FFmpeg's D3D11 transfer) and converted
 /// from BGRA to yuv420p by swscale into preallocated native frames. No B-frames; the GOP is the fps
-/// (1 s). PTS are capture QPC relative to the session anchor, in 1/90000. Capture is variable-rate,
-/// so an IDR is also forced once a second of PTS has passed since the last one. BGRA frames go in
-/// as-is (X1); NV12 frames (X2) are tagged BT.709 limited range.
+/// (1 s). PTS are in 1/90000: a session's pacer gives each frame its slot's PTS
+/// (<see cref="PacedVideoEncoder"/>); the variable-rate API (<see cref="TryAcquire(long)"/>, for the
+/// probe and tests) takes capture QPC relative to the anchor. An IDR is also forced once a second
+/// of PTS has passed since the last one. NVENC and QSV return each packet as soon as its frame is
+/// encoded. BGRA frames go in as-is (X1); NV12 frames (X2) are tagged BT.709 limited range.
 /// </summary>
 public sealed unsafe class VideoEncoder : IDisposable
 {
     public const int TimeBase = 90_000;
     public const int NvencSurfaces = 8;
 
-    /// <summary>The frame pool NVENC needs: its surfaces plus headroom for the frame being drawn.</summary>
-    public const int PoolSize = NvencSurfaces + 4;
+    /// <summary>
+    /// The frame pool: NVENC's surfaces, plus the frame being drawn, the pacer's hand-off, its held
+    /// frame and the last frame it keeps for repeats.
+    /// </summary>
+    public const int PoolSize = NvencSurfaces + 6;
+
+    // Frames whose capture QPC is remembered for the latency of their packet.
+    private const int LatencyRing = 32;
 
     private const string SoftwarePreset = "veryfast";
 
@@ -136,18 +145,22 @@ public sealed unsafe class VideoEncoder : IDisposable
     private AVFrame* _download;
     private AVFrame* _converted;
     private SwsContext* _sws;
+    private readonly long[] _ringPts = new long[LatencyRing];
+    private readonly long[] _ringQpc = new long[LatencyRing];
+    private int _ringNext;
     private long _lastPts = long.MinValue;
     private long _lastKeyPts = long.MinValue;
     private long _dropped;
     private long _encoded;
     private long _flushed;
+    private long _poolMisses;
 
     /// <param name="muxer">Where packets go; null counts and discards them (the encoder probe).</param>
     /// <param name="latency">
-    /// When given, each packet's capture→encoded latency is recorded into it: QPC as the packet
-    /// leaves <c>avcodec_receive_packet</c> minus its frame's capture QPC (anchor + PTS).
-    /// Packets drained by <see cref="Flush"/> are counted in <see cref="FlushedPackets"/> instead,
-    /// since their latency includes shutdown.
+    /// When given, each new frame's capture→encoded latency is recorded into it: QPC as its packet
+    /// leaves <c>avcodec_receive_packet</c> minus the frame's capture QPC. Repeated frames have no
+    /// capture QPC and record nothing. Packets drained by <see cref="Flush"/> are counted in
+    /// <see cref="FlushedPackets"/> instead, since their latency includes shutdown.
     /// </param>
     public VideoEncoder(
         D3D11VAFrames frames,
@@ -302,11 +315,60 @@ public sealed unsafe class VideoEncoder : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Takes a pool texture to draw a frame into, its PTS left to the pacer: false, counted in
+    /// <see cref="PoolMisses"/>, when the pool is exhausted.
+    /// </summary>
+    public bool TryAcquireFrame(out EncoderFrame frame)
+    {
+        var pointer = _context is null ? null : _frames.TryAcquire();
+        if (pointer is null)
+        {
+            Interlocked.Increment(ref _poolMisses);
+            frame = default;
+            return false;
+        }
+
+        frame = new EncoderFrame(pointer, 0);
+        return true;
+    }
+
+    /// <summary>Frames <see cref="TryAcquireFrame"/> could not take because the pool was exhausted.</summary>
+    public long PoolMisses => Interlocked.Read(ref _poolMisses);
+
+    /// <summary>
+    /// Encodes <paramref name="frame"/> (consumed) at slot PTS <paramref name="pts"/>.
+    /// <paramref name="captureQpc"/> is the new frame's capture QPC, or 0 for a repeat, which
+    /// records no latency.
+    /// </summary>
+    internal void SubmitSlot(AVFrame* frame, long pts, long captureQpc) => Encode(frame, pts, captureQpc);
+
+    /// <summary>A new reference to <paramref name="frame"/>'s texture, for a repeat; native, never managed.</summary>
+    internal static AVFrame* Reference(AVFrame* frame)
+    {
+        var clone = ffmpeg.av_frame_clone(frame);
+        if (clone is null)
+        {
+            throw new InvalidOperationException("av_frame_clone failed.");
+        }
+
+        return clone;
+    }
+
+    /// <summary>Frees a frame from <see cref="Reference"/> or the pool unencoded.</summary>
+    internal static void Free(AVFrame* frame)
+    {
+        if (frame is not null)
+        {
+            ffmpeg.av_frame_free(&frame);
+        }
+    }
+
     /// <summary>Encodes a surface from <see cref="TryAcquire(long)"/> and writes its packets.</summary>
-    public void Submit(VideoSurface surface) => Encode(surface.Detach(), surface.Pts);
+    public void Submit(VideoSurface surface) => Encode(surface.Detach(), surface.Pts, CaptureQpcOf(surface.Pts));
 
     /// <summary>Encodes a frame from <see cref="TryAcquire(long, out EncoderFrame)"/> and writes its packets.</summary>
-    public void Submit(EncoderFrame frame) => Encode(frame.Frame, frame.Pts);
+    public void Submit(EncoderFrame frame) => Encode(frame.Frame, frame.Pts, CaptureQpcOf(frame.Pts));
 
     /// <summary>Hands a frame from <see cref="TryAcquire(long, out EncoderFrame)"/> back to the pool unencoded.</summary>
     public static void Release(EncoderFrame frame)
@@ -318,12 +380,19 @@ public sealed unsafe class VideoEncoder : IDisposable
         }
     }
 
-    private void Encode(AVFrame* frame, long pts)
+    /// <summary>The variable-rate API's capture QPC: the anchor plus the PTS.</summary>
+    private long CaptureQpcOf(long pts) => _anchorQpc + QpcClock.ToUnits(pts, TimeBase, _qpcFrequency);
+
+    private void Encode(AVFrame* frame, long pts, long captureQpc)
     {
         try
         {
             lock (_lock)
             {
+                _ringPts[_ringNext] = pts;
+                _ringQpc[_ringNext] = captureQpc;
+                _ringNext = (_ringNext + 1) % LatencyRing;
+
                 var input = _download is null ? frame : Download(frame);
                 input->pts = pts;
 
@@ -445,6 +514,7 @@ public sealed unsafe class VideoEncoder : IDisposable
                 ffmpeg.av_dict_set(options, "rc", cbr ? "cbr" : "vbr", 0);
                 ffmpeg.av_dict_set(options, "surfaces", NvencSurfaces.ToString(CultureInfo.InvariantCulture), 0);
                 ffmpeg.av_dict_set(options, "forced-idr", "1", 0); // a forced I frame is an IDR, so a keyframe
+                ffmpeg.av_dict_set(options, "delay", "0", 0); // each packet out as soon as its frame is encoded
                 break;
             case EncoderFamily.Amf:
                 ffmpeg.av_dict_set(options, "rc", cbr ? "cbr" : "vbr_peak", 0);
@@ -453,6 +523,7 @@ public sealed unsafe class VideoEncoder : IDisposable
             case EncoderFamily.Qsv:
                 // QSV picks CBR when bit_rate equals maxrate, and VBR when maxrate is above it.
                 ffmpeg.av_dict_set(options, "forced_idr", "1", 0);
+                ffmpeg.av_dict_set(options, "async_depth", "1", 0); // likewise
                 break;
             case EncoderFamily.X264:
                 ffmpeg.av_dict_set(options, "preset", SoftwarePreset, 0);
@@ -524,12 +595,26 @@ public sealed unsafe class VideoEncoder : IDisposable
         return _converted;
     }
 
+    /// <summary>The capture QPC remembered for a packet's PTS; 0 for a repeat, or a PTS no longer remembered.</summary>
+    private long CaptureQpcOfPacket(long pts)
+    {
+        for (var i = 0; i < LatencyRing; i++)
+        {
+            if (_ringPts[i] == pts && _ringQpc[i] != 0)
+            {
+                return _ringQpc[i];
+            }
+        }
+
+        return 0;
+    }
+
     private void Drain(bool flushing)
     {
         while (true)
         {
             var result = ffmpeg.avcodec_receive_packet(_context, _packet);
-            if (result == ffmpeg.AVERROR(ffmpeg.EAGAIN) || result == ffmpeg.AVERROR_EOF)
+            if (result == FFmpegLibrary.ErrorAgain || result == FFmpegLibrary.ErrorEof)
             {
                 return;
             }
@@ -539,14 +624,12 @@ public sealed unsafe class VideoEncoder : IDisposable
             {
                 Interlocked.Increment(ref _flushed);
             }
-            else if (_latency is not null)
+            else if (_latency is not null && CaptureQpcOfPacket(_packet->pts) is var captured and not 0)
             {
-                var now = System.Diagnostics.Stopwatch.GetTimestamp();
-                var captured = _anchorQpc + QpcClock.ToUnits(_packet->pts, TimeBase, _qpcFrequency);
-                _latency.Record(now - captured);
+                _latency.Record(System.Diagnostics.Stopwatch.GetTimestamp() - captured);
             }
 
-            // Frames are variable-rate; the nominal 1/fps only sizes the last sample of a fragment.
+            // Packets come without a duration; the nominal 1/fps sizes the last sample of a fragment.
             if (_packet->duration == 0)
             {
                 _packet->duration = _fallbackDuration;

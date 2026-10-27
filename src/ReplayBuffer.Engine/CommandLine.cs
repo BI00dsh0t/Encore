@@ -36,6 +36,8 @@ public enum ColorPath
 /// <c>debug-capture</c>: the tracer capture of one window. <see cref="Codec"/>, <see cref="Size"/>,
 /// <see cref="Fps"/> and <see cref="BitrateKbps"/> make the session's <c>video</c> value (CBR); a null
 /// <see cref="Size"/> is the window's size, made even. <see cref="Encoder"/> forces an FFmpeg encoder.
+/// <see cref="EncodeThread"/> (<c>--encode-thread</c>) is still accepted and has no effect: since
+/// story 1.11 the encoder thread is always on.
 /// </summary>
 public sealed record DebugCaptureCommand(
     string? Window,

@@ -77,6 +77,30 @@ public sealed class BoundedHandoff<T>
         }
     }
 
+    /// <summary>
+    /// Takes the oldest item without waiting: false when the queue is empty, and then
+    /// <paramref name="drained"/> tells whether it is also completed (nothing will ever arrive).
+    /// </summary>
+    public bool TryTakeNow(out T item, out bool drained)
+    {
+        lock (_sync)
+        {
+            if (_count == 0)
+            {
+                item = default;
+                drained = _completed;
+                return false;
+            }
+
+            item = _items[_head];
+            _items[_head] = default;
+            _head = (_head + 1) % _items.Length;
+            _count--;
+            drained = false;
+            return true;
+        }
+    }
+
     /// <summary>No more adds; the consumer takes what is left, then <see cref="TryTake"/> returns false.</summary>
     public void Complete()
     {

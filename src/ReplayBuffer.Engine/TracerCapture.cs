@@ -79,7 +79,6 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             NvencPreset = command.NvencPreset,
             NvencTune = command.NvencTune,
             Color = command.Color,
-            EncodeThread = command.EncodeThread,
             Encoder = command.Encoder,
             Anchored = qpc => anchored.TrySetResult(qpc),
         };

@@ -45,8 +45,6 @@ internal sealed record CaptureSessionOptions
 
     public ColorPath Color { get; init; } = ColorPath.X1;
 
-    public bool EncodeThread { get; init; }
-
     /// <summary>
     /// An FFmpeg encoder name that every session uses whatever the snapshot's codec, bypassing the
     /// probe (<c>debug-capture --encoder</c>, for tests); null for the probe's encoder for the snapshot's codec.
@@ -88,13 +86,14 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 }
 
 /// <summary>
-/// One capture session (the tracer's media wiring, story 1.1): WGC window → video encoder, and each
-/// audio device → AAC, all into one fragmented MP4. The first frame is the anchor, every stream's
-/// PTS 0. The snapshot's <c>video</c> sets the encoder (the probe's for its codec, else H.264), the
-/// output size, the fps, the bitrate and the rate control; a frame is copied at the top left of the
-/// output, cropped or padded black, until story 11 scales. A retarget swaps only the WGC capture, so
-/// the file keeps one unbroken set of streams. Encoding still runs on the capture threads; stories
-/// 11 and 12 move it.
+/// One capture session: WGC window → scaler → paced video encoder, and each audio device → AAC, all
+/// into one fragmented MP4. The first frame is the anchor, every stream's PTS 0. The snapshot's
+/// <c>video</c> sets the encoder (the probe's for its codec, else H.264), the output size, the fps,
+/// the bitrate and the rate control. The capture thread only scales each frame into the fixed output,
+/// letterboxed (<see cref="FrameScaler"/>), and posts it; the encoder thread emits exactly one frame
+/// per slot of the fps, repeating the last one when nothing new arrived (story 1.11,
+/// <see cref="PacedVideoEncoder"/>). A retarget swaps only the WGC capture, so the file keeps one
+/// unbroken set of streams.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -116,8 +115,8 @@ internal sealed class CaptureSession : ICaptureSession
     private D3D11Device? _device;
     private WindowCapture? _capture;
     private D3D11VAFrames? _frames;
-    private Nv12Converter? _converter;
-    private EncoderThread? _encoderThread;
+    private FrameScaler? _scaler;
+    private PacedVideoEncoder? _paced;
     private FragmentedMp4Muxer? _muxer;
     private VideoEncoder? _video;
     private readonly IVideoEncoderCatalog _encoders;
@@ -249,8 +248,8 @@ internal sealed class CaptureSession : ICaptureSession
                 return new SessionOutcome(null, _stopReason, new EngineFailure(_failure is null ? ErrorCodes.CaptureFailed : CodeOf(_failure), message));
             }
 
-            // No frame can arrive now; let the encoder thread finish what is queued before the flush.
-            _encoderThread?.Complete();
+            // No frame can arrive now; let the encoder thread offer what is queued before the flush.
+            _paced?.Complete();
 
             // Capture is stopped and no frame is in flight; stop audio, then drain everything.
             foreach (var audio in _audioCaptures)
@@ -321,65 +320,49 @@ internal sealed class CaptureSession : ICaptureSession
             }
 
             _stats?.Cadence.Record(qpc);
+            _lastFrameQpc = qpc;
             if (_options.Stages == CaptureStages.Wgc)
             {
-                _lastFrameQpc = qpc;
                 return;
             }
 
-            if (_encoderThread is not null)
+            if (_paced is null)
             {
-                // Only draw here; the encoder thread submits and drains. A full hand-off drops the frame.
-                if (_encoderThread.TryReserve() && _video!.TryAcquire(qpc, out var frame))
+                // --stages copy: the scale alone; submit it, then hand the texture back unencoded.
+                if (_video!.TryAcquireFrame(out var drawn))
                 {
                     try
                     {
-                        Draw(texture, contentSize, frame.Texture, frame.Subresource);
+                        _scaler!.Draw(texture, contentSize, drawn.Texture, drawn.Subresource);
+                        _device!.Flush();
                     }
-                    catch
+                    finally
                     {
-                        VideoEncoder.Release(frame);
-                        throw;
+                        VideoEncoder.Release(drawn);
                     }
-
-                    _encoderThread.Post(frame);
                 }
 
-                _lastFrameQpc = qpc;
                 return;
             }
 
-            using var surface = _video!.TryAcquire(qpc);
-            if (surface is null)
+            // Only draw here; the encoder thread paces, submits and drains. A full hand-off drops the frame.
+            if (!_paced.TryReserve() || !_video!.TryAcquireFrame(out var frame))
             {
                 return;
             }
 
-            Draw(texture, contentSize, surface.Texture, surface.Subresource);
-            if (_options.Stages == CaptureStages.Copy)
+            try
             {
-                // The copy alone: submit it, then hand the surface back unencoded.
-                _device!.Flush();
-                _lastFrameQpc = qpc;
-                return;
+                _scaler!.Draw(texture, contentSize, frame.Texture, frame.Subresource);
+            }
+            catch
+            {
+                VideoEncoder.Release(frame);
+                throw;
             }
 
-            _video.Submit(surface);
-            _lastFrameQpc = qpc;
+            _paced.Post(frame, qpc);
         }
-    }
-
-    /// <summary>Copies a captured frame into a pool slice: directly (X1), or through the VideoProcessor (X2).</summary>
-    private void Draw(nint texture, VideoSize contentSize, nint target, uint slice)
-    {
-        if (_converter is null)
-        {
-            _device!.CopyFrame(texture, contentSize, target, slice, _outputSize);
-            return;
-        }
-
-        _device!.CopyFrame(texture, contentSize, _converter.InputTexture, 0, _outputSize);
-        _converter.Convert(target, slice);
     }
 
     /// <summary>
@@ -430,18 +413,16 @@ internal sealed class CaptureSession : ICaptureSession
         _muxer = new FragmentedMp4Muxer(_path, _loggers.CreateLogger<FragmentedMp4Muxer>());
         var nv12 = _options.Color == ColorPath.X2;
         _frames = new D3D11VAFrames(_device!.NativeDevice, _outputSize.Width, _outputSize.Height, VideoEncoder.PoolSize, nv12);
-        if (nv12)
-        {
-            _converter = new Nv12Converter(_device, _outputSize, 2 * VideoEncoder.PoolSize);
-        }
+        _scaler = new FrameScaler(_device, _outputSize, nv12, 2 * VideoEncoder.PoolSize, _loggers.CreateLogger<FrameScaler>());
 
         var video = _spec.Snapshot.Video;
         _video = new VideoEncoder(_frames, _muxer, _qpcFrequency, anchorQpc, _loggers.CreateLogger<VideoEncoder>(), _stats?.Latency,
             new VideoEncoderOptions(_options.NvencPreset, _options.NvencTune, _encoderName, _codec, video.Fps, video.BitrateKbps, video.RateControl));
-        if (_options.EncodeThread && _options.Stages == CaptureStages.Full)
+        if (_options.Stages == CaptureStages.Full)
         {
-            _encoderThread = new EncoderThread(_video, _loggers.CreateLogger<EncoderThread>());
-            _encoderThread.Failed += e => Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "Video encode failed: " + e.Message, e));
+            var pacer = new FramePacer(_qpcFrequency, video.Fps, anchorQpc, VideoEncoder.TimeBase);
+            _paced = new PacedVideoEncoder(_video, pacer, _loggers.CreateLogger<PacedVideoEncoder>());
+            _paced.Failed += e => Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "Video encode failed: " + e.Message, e));
         }
 
         for (var i = 0; i < _audioCaptures.Count; i++)
@@ -496,8 +477,14 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         _muxer.Finish();
-        _log.LogInformation("Audio written: {Frames} frames per stream; video frames dropped: {Dropped}",
-            string.Join(", ", _audioEncoders.Select(a => a.SamplesWritten)), _video.DroppedFrames);
+        if (_paced?.Pacer is { } pacer)
+        {
+            _log.LogInformation(
+                "Video slots: {Fresh} new, {Repeated} repeated, {Skipped} skipped; {Replaced} held frames replaced, {Stale} stale, {QueueDrops} not drawn",
+                pacer.FreshSlots, pacer.RepeatedSlots, pacer.SkippedSlots, pacer.HeldReplaced, pacer.StaleFrames, _paced.QueueDrops + _video.PoolMisses);
+        }
+
+        _log.LogInformation("Audio written: {Frames} frames per stream", string.Join(", ", _audioEncoders.Select(a => a.SamplesWritten)));
     }
 
     /// <summary>Sets the device's GPU thread priority once (AD-7); a failure is logged and the run goes on.</summary>
@@ -543,20 +530,26 @@ internal sealed class CaptureSession : ICaptureSession
         var stepped = arrived - cadence.NonIncreasing; // frames that advanced the capture clock
         var span = cadence.SpanSeconds;
         var slots = stepped + cadence.MissedSlots;
+        var pacer = _paced?.Pacer;
+        var emitted = pacer?.EmittedSlots ?? 0;
+        var repeated = pacer?.RepeatedSlots ?? 0;
         var video = new VideoReport(
             _outputSize.Width,
             _outputSize.Height,
             arrived,
             _video.EncodedFrames,
-            _video.DroppedFrames,
-            _encoderThread?.QueueDrops ?? 0,
+            repeated,
+            (_paced?.QueueDrops ?? 0) + _video.PoolMisses,
             cadence.NonIncreasing,
             cadence.MissedSlots,
             cadence.Gaps,
             cadence.MaxStepMilliseconds,
             span > 0 ? (stepped - 1) / span : 0,
-            arrived > 0 ? _video.DroppedFrames * 100.0 / arrived : 0,
-            slots > 0 ? cadence.MissedSlots * 100.0 / slots : 0);
+            emitted > 0 ? repeated * 100.0 / emitted : 0,
+            slots > 0 ? cadence.MissedSlots * 100.0 / slots : 0,
+            pacer?.FreshSlots ?? 0,
+            pacer?.SkippedSlots ?? 0,
+            pacer?.HeldReplaced ?? 0);
 
         var audio = new List<AudioReport>();
         for (var i = 0; i < _audioCaptures.Count; i++)
@@ -585,7 +578,7 @@ internal sealed class CaptureSession : ICaptureSession
                 _options.NvencPreset,
                 _options.NvencTune,
                 _options.Color == ColorPath.X2 ? "x2" : "x1",
-                _encoderThread is not null),
+                _paced is not null),
             video,
             CaptureStatsCollector.Report(_stats.Latency, _video.FlushedPackets),
             _stats.Resources(),
@@ -601,8 +594,8 @@ internal sealed class CaptureSession : ICaptureSession
             return;
         }
 
-        _log.LogInformation("Stats written to {Path}: {Encoded} frames encoded, latency p99 {P99:0.0} ms, {Missed} missed slots",
-            path, video.FramesEncoded, report.Latency.P99Ms, video.MissedSlots);
+        _log.LogInformation("Stats written to {Path}: {Encoded} frames encoded ({Fresh} new), latency p99 {P99:0.0} ms",
+            path, video.FramesEncoded, video.FreshSlots, report.Latency.P99Ms);
     }
 
     private void ReportAudioFaults()
@@ -702,9 +695,9 @@ internal sealed class CaptureSession : ICaptureSession
             _audioEncoders[i].Dispose();
         }
 
-        _encoderThread?.Dispose(); // joined before the encoder it submits to is freed
+        _paced?.Dispose(); // joined before the encoder it submits to is freed
         _video?.Dispose();
-        _converter?.Dispose();
+        _scaler?.Dispose();
         _frames?.Dispose();
         _muxer?.Dispose();
         _device?.Dispose();

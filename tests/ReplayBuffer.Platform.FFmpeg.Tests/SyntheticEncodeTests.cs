@@ -101,9 +101,10 @@ public sealed class SyntheticEncodeTests : IDisposable
             flushed = video.FlushedPackets;
         }
 
-        // Every encoded packet has one latency sample, except those drained at flush.
+        // Every encoded packet has one latency sample, except those drained at flush: none, since
+        // NVENC's delay 0 returns each packet as soon as its frame is encoded (story 1.11).
         Assert.Equal(Fps * Seconds, encoded);
-        Assert.True(flushed > 0, "NVENC holds frames until flush");
+        Assert.Equal(0, flushed);
         Assert.Equal(encoded, latency.Count + flushed);
 
         using var probe = JsonDocument.Parse(Ffprobe("-v error -show_streams -show_format -of json synthetic.mp4"));

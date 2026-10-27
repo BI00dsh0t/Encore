@@ -79,6 +79,19 @@ public sealed unsafe class D3D11VAFrames : IDisposable
         return frame;
     }
 
+    /// <summary>Like <see cref="Acquire"/>, but null when the pool is exhausted.</summary>
+    internal AVFrame* TryAcquire()
+    {
+        var frame = ffmpeg.av_frame_alloc();
+        if (ffmpeg.av_hwframe_get_buffer(_frames, frame, 0) < 0)
+        {
+            ffmpeg.av_frame_free(&frame);
+            return null;
+        }
+
+        return frame;
+    }
+
     public void Dispose()
     {
         if (_frames is not null)
