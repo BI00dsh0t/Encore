@@ -3,7 +3,7 @@ title: 'Fixed output resolution, frame pacer and color path'
 type: 'feature'
 ticket: '11'
 created: '2026-10-26'
-status: 'in-review'
+status: 'built'
 baseline_revision: '5f62f2caef6e55279838097e27b9f84269d8972f'
 route: 'full'
 route_source: 'auto'
@@ -103,10 +103,24 @@ context:
   - Static window: 152 frames at 30 fps and 302 at 60 fps, over 5 s.
   - All 516 JIT tests pass; all 180 Engine tests pass against the NativeAOT publish (9.5 MB, 0 IL2xxx/IL3xxx).
 - WGC's `SystemRelativeTime` can be later than QPC at packet out: for a window repainting at ≈ 40 fps on a WinForms timer, 149 of 158 samples came out negative and were recorded as 0. It looks like the composition target time, not the paint. For a fast window none did.
+- Re-verification after the review fixes (`15319dd`): build 0 warnings, publish 0 IL2xxx/IL3xxx. One full run failed `EngineConnectionTests.ASecondAppConnectsToTheRunningEngineWithoutLaunchingOne` ("engine didn't answer within 30 s") while the GPU-heavy Engine tests ran beside it; the App tests passed 53/53 twice alone, and the next full run passed 517/517. It reads as a load-timing flake, not this change; noted for story 15.
 
 ## Plan Change Log
 
 ## Review Triage Log
+
+**Step 3 matrix audit:** every matrix row has a passing test: `LetterboxTests` and `FrameScalerTests` (window = output, narrower, wider, copy-in), `OutputResolutionTests` (resize/mode, static 30 and 60 fps, fast window ≥ 95 % fresh), `FramePacerTests` (overload skip). 516/516 ran, 0 skipped.
+
+**Pass 1 (quick, 2026-10-26):** high 0, medium 1, low 5, false 0, maybe-false 0.
+
+| # | Finding | Verdict | Route | Evidence / action |
+|---|---------|---------|-------|-------------------|
+| 1 | The anchor frame reaches the encoder thread only after `StartOutput`, so at 120 fps the first catch-up is > 4 slots late and is treated as overload: PTS gap after slot 0, counted as `skippedSlots` | medium | patch | `StartOutput` took ≈ 3 slots at 60 fps (Implementation Notes), so ≈ 6 at 120. Fix: the overload skip applies only once the pacer has caught up once; start-up lateness is filled with repeats. Test `ALateAnchorIsFilledWithRepeatsNotSkipped`. Commit `15319dd`. |
+| 2 | X2 with empty content clears an NV12 pool texture through a single-format RTV, which D3D11 refuses | low | reject | Real, but only under the `--color x2` debug option, and only when WGC reports zero-size content. Fixing it needs a new NV12 clear path. |
+| 3 | `av_frame_clone` throwing in `PacedVideoEncoder.Emit` leaks the frame and ends the thread, leaking frames posted after it | low | reject | Only on native out-of-memory, when the session fails anyway. Fixing it means restructuring the loop's fault handling. |
+| 4 | `Drain` counts every packet drained at flush as `flushed`, repeats included, breaking `freshSlots == latency.count + flushed` for encoders that hold frames (AMF, libx264) | low | patch | Stats-only. Fix: count a flushed packet only when its PTS maps to a new frame's capture QPC. Commit `15319dd`. |
+| 5 | `duplicatePercent` changes meaning, not just additively; `measure-path-a.ps1` compares it | low | reject | The intent gives `duplicates` its new meaning (repeated slots), and the percentage follows it. Within one script run every condition uses the new meaning; the old-path meaning can't happen on the paced path. |
+| 6 | `VideoEncoder.cs:224` comment names the deleted `Nv12Converter` | low | patch | Direct correction to name FrameScaler. Commit `15319dd`. |
 
 ## Design Notes
 
