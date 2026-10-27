@@ -96,4 +96,46 @@ public sealed class ReportTests : IDisposable
         var md = Report.Markdown(Report.Generate(_folder));
         Assert.Contains("| FPS loss, capture against baseline | 2 % | < 3 % | pass |", md, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData(DriftBenchmark.FileName, "{}")]
+    [InlineData(PlaybackCheck.FileName, """{ "clip": "c.mp4", "capture": { "width": 2, "height": 2, "fps": 60, "bitrateKbps": 1 }, "players": [ { "status": "checked" } ], "warnings": [] }""")]
+    public void ValidJsonOfTheWrongShapeIsNamedAndSkipped(string file, string json)
+    {
+        File.WriteAllText(Path.Combine(_folder, file), json);
+
+        var report = Report.Generate(_folder);
+
+        Assert.Contains(report.Errors, e => e.Contains(file, StringComparison.Ordinal));
+        Assert.Null(report.Drift);
+        Assert.Null(report.Playback);
+        Assert.Contains("## Skipped files", Report.Markdown(report), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ASkippedSyncAnswerIsNotAPass()
+    {
+        var players = new List<PlayerCheck>
+        {
+            new("Chrome", "checked", true, null, "both", null),
+            new("VLC", "checked", true, false, "both", null),
+        };
+        BenchJson.Write(Path.Combine(_folder, PlaybackCheck.FileName), new PlaybackReport(
+            DateTimeOffset.Now, "clip.mp4", 30, new CaptureSettings(1920, 1080, 60, 20_000, null, null), 2, "no", players, []));
+
+        var md = Report.Markdown(Report.Generate(_folder));
+
+        Assert.Contains("| Chrome | yes |  | both |  | not-checked |", md, StringComparison.Ordinal);
+        Assert.Contains("| VLC | yes | no | both |  | miss |", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NoGcFiguresAreNotZeroGen2()
+    {
+        var summary = """{ "runs": [ { "run": "01-capture-1", "condition": "capture", "pass": 1, "avgFps": 98.0, "fpsLossPercent": 2.0 } ] }""";
+
+        var report = FpsBenchmark.Map(summary, "summary.json", _folder, "Game", new CaptureSettings(1920, 1080, 60, 20_000, null, null), 300, 1);
+
+        Assert.Null(report.CaptureMeans!.Gen2Collections);
+    }
 }

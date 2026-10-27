@@ -172,10 +172,30 @@ public sealed class DriftMathTests
         using var stats = JsonDocument.Parse(
             """
             { "audio": [
-              { "role": "output", "device": "Game", "resampler": { "errorMaxSamples": 500 } },
-              { "role": "input", "device": "Mic", "resampler": { "errorMaxSamples": 400 } } ] }
+              { "role": "output", "device": "Game", "resampler": { "errorMaxSamples": 500, "settledPackets": 10 } },
+              { "role": "input", "device": "Mic", "resampler": { "errorMaxSamples": 400, "settledPackets": 10 } } ] }
             """);
 
         Assert.Equal(DriftMath.Miss, DriftMath.AudioToAudio(stats.RootElement, 60).Verdict);
+    }
+
+    [Theory]
+    [InlineData("\"errorMaxSamples\": 3, \"settledPackets\": 0", "no settled packets")]
+    [InlineData("\"errorMaxSamples\": \"NaN\", \"settledPackets\": 10", "no numeric errorMaxSamples")]
+    [InlineData("\"settledPackets\": 10", "no numeric errorMaxSamples")]
+    public void AnUnmeasuredDeviceIsInconclusiveNotAZeroError(string inputResampler, string why)
+    {
+        using var stats = JsonDocument.Parse(
+            $$"""
+            { "audio": [
+              { "role": "output", "device": "Game", "resampler": { "errorMaxSamples": 5, "settledPackets": 10 } },
+              { "role": "input", "device": "Mic", "resampler": { {{inputResampler}} } } ] }
+            """);
+
+        var result = DriftMath.AudioToAudio(stats.RootElement, 60);
+
+        Assert.Equal(DriftMath.Inconclusive, result.Verdict);
+        Assert.Null(result.BoundSamples);
+        Assert.Equal($"the input device has {why}", result.Why);
     }
 }

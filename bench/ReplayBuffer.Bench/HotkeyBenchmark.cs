@@ -112,6 +112,13 @@ internal static class HotkeyBenchmark
 
             return 0;
         }
+        catch (Exception e) when (e is TimeoutException or OperationCanceledException or IOException)
+        {
+            // serve never said it was listening, the pipe didn't connect, or Ctrl+C: a clean exit 1, not a crash.
+            throw new BenchFailure(e is OperationCanceledException
+                ? "Stopped before the Hotkey run started."
+                : $"Could not start or reach the test engine: {e.Message}");
+        }
         finally
         {
             Console.CancelKeyPress -= onCancel;
@@ -239,25 +246,45 @@ internal static class HotkeyBenchmark
         start.ArgumentList.Add("serve");
         start.ArgumentList.Add("--instance");
         start.ArgumentList.Add(instance);
-        var process = Process.Start(start) ?? throw new BenchFailure($"Could not start {engine}.");
         var stdout = new StreamWriter(logPrefix + "-engine.out.log") { AutoFlush = true };
-        var expected = "listening " + PipeName.ForCurrentUser(instance);
-        string? line;
-        do
+        Process process;
+        try
         {
-            line = process.StandardOutput.ReadLineAsync(cancellation).AsTask().WaitAsync(TimeSpan.FromSeconds(30), cancellation).GetAwaiter().GetResult();
-            if (line is not null)
+            process = Process.Start(start) ?? throw new BenchFailure($"Could not start {engine}.");
+        }
+        catch
+        {
+            stdout.Dispose();
+            throw;
+        }
+
+        try
+        {
+            var expected = "listening " + PipeName.ForCurrentUser(instance);
+            string? line;
+            do
             {
-                stdout.WriteLine(line);
+                line = process.StandardOutput.ReadLineAsync(cancellation).AsTask().WaitAsync(TimeSpan.FromSeconds(30), cancellation).GetAwaiter().GetResult();
+                if (line is not null)
+                {
+                    stdout.WriteLine(line);
+                }
+            }
+            while (line is not null && !line.StartsWith("listening ", StringComparison.Ordinal));
+
+            if (line != expected)
+            {
+                Stop(process);
+                throw new BenchFailure($"serve did not start listening on {expected}: {process.StandardError.ReadToEnd().Trim()}");
             }
         }
-        while (line is not null && !line.StartsWith("listening ", StringComparison.Ordinal));
-
-        if (line != expected)
+        catch
         {
-            var error = process.StandardError.ReadToEnd();
+            // Whatever went wrong after the start (a timeout, Ctrl+C, a wrong pipe), the engine must not keep the Hotkey.
+            Stop(process);
             stdout.Dispose();
-            throw new BenchFailure($"serve did not start listening on {expected}: {error.Trim()}");
+            process.Dispose();
+            throw;
         }
 
         // Keep reading, so the engine never blocks on a full pipe.
@@ -273,5 +300,21 @@ internal static class HotkeyBenchmark
         });
         _ = Task.Run(async () => await File.WriteAllTextAsync(logPrefix + "-engine.err.log", await process.StandardError.ReadToEndAsync(CancellationToken.None)));
         return process;
+    }
+
+    private static void Stop(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill();
+                process.WaitForExit(5000);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // It exited in between.
+        }
     }
 }

@@ -212,7 +212,7 @@ internal static class FpsBenchmark
                 Mean(capture.Select(r => r.LatencyP99Ms)),
                 Mean(capture.Select(r => r.CpuPercentOneCore)),
                 Mean(capture.Select(r => r.AllocBytesPerSecond)),
-                capture.Select(r => Gen2(r.GcSteady)).Sum());
+                Gen2Sum(capture));
         }
 
         var loss = means?.FpsLossPercent;
@@ -220,6 +220,13 @@ internal static class FpsBenchmark
         var aborted = root.TryGetProperty("aborted", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString() : null;
         return new FpsReport(
             DateTimeOffset.Now, game, settings, seconds, passes, summaryPath, aborted, baselineFps, baselineLow, means, runs, TargetLossPercent, verdict);
+    }
+
+    /// <summary>The Gen2 collections over the runs that report them; null when none does.</summary>
+    private static long? Gen2Sum(IEnumerable<FpsRun> runs)
+    {
+        var counts = runs.Select(r => Gen2(r.GcSteady)).OfType<long>().ToList();
+        return counts.Count == 0 ? null : counts.Sum();
     }
 
     private static long? Gen2(string? gc)

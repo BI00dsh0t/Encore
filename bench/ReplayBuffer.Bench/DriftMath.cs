@@ -194,6 +194,7 @@ internal static class DriftMath
         var targetSamples = (double)OnsetDetector.SampleRate / fps;
         var targetMs = 1000.0 / fps;
         var devices = new List<DeviceSync>();
+        var unusable = new Dictionary<string, string>(StringComparer.Ordinal);
         if (stats.ValueKind == JsonValueKind.Object && stats.TryGetProperty("audio", out var audio) && audio.ValueKind == JsonValueKind.Array)
         {
             foreach (var entry in audio.EnumerateArray())
@@ -201,6 +202,14 @@ internal static class DriftMath
                 if (!entry.TryGetProperty("resampler", out var resampler) || resampler.ValueKind != JsonValueKind.Object)
                 {
                     continue;
+                }
+
+                // Only a measured error counts: a number (not "NaN") over packets steered after the settle.
+                var role = Text(entry, "role");
+                var hasError = resampler.TryGetProperty("errorMaxSamples", out var error) && error.ValueKind == JsonValueKind.Number && double.IsFinite(error.GetDouble());
+                if (!hasError || Whole(resampler, "settledPackets") <= 0)
+                {
+                    unusable.TryAdd(role, hasError ? "no settled packets" : "no numeric errorMaxSamples");
                 }
 
                 var drift = entry.TryGetProperty("stamps", out var stamps) && stamps.TryGetProperty("drift", out var d) ? Number(d, "ppm") : 0;
@@ -225,6 +234,12 @@ internal static class DriftMath
         {
             var missing = string.Join(" and ", new[] { output is null ? "output" : null, input is null ? "input" : null }.OfType<string>());
             return new AudioToAudioResult(devices, null, null, targetSamples, Math.Round(targetMs, 3), Inconclusive, $"no {missing} device with resampler stats in the stats file");
+        }
+
+        var bad = new[] { "output", "input" }.Where(unusable.ContainsKey).Select(r => $"the {r} device has {unusable[r]}").ToList();
+        if (bad.Count > 0)
+        {
+            return new AudioToAudioResult(devices, null, null, targetSamples, Math.Round(targetMs, 3), Inconclusive, string.Join("; ", bad));
         }
 
         var bound = Math.Abs(output.ErrorMaxSamples) + Math.Abs(input.ErrorMaxSamples);

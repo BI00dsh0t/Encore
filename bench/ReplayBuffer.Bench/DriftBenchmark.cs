@@ -6,6 +6,8 @@ using ReplayBuffer.Platform.Audio;
 namespace ReplayBuffer.Bench;
 
 /// <summary>The source log of one marked capture: kept beside the file, so it can be analysed again.</summary>
+/// <param name="Minutes">The capture's length; null in a log written before it was recorded.</param>
+/// <param name="Capture">The capture's output settings; null in a log written before they were recorded.</param>
 internal sealed record MarkerLog(
     long QpcFrequency,
     long EngineStartQpc,
@@ -15,10 +17,14 @@ internal sealed record MarkerLog(
     string InputDevice,
     string InputDeviceId,
     IReadOnlyList<long> FlashQpcs,
-    IReadOnlyList<long> BurstQpcs);
+    IReadOnlyList<long> BurstQpcs,
+    double? Minutes = null,
+    CaptureSettings? Capture = null);
 
-/// <summary>One audio track's length in the file against the video's.</summary>
-internal sealed record TrackCheck(int Track, string? Title, double DurationSeconds, double MinusVideoMs, double TargetMs, string Mark);
+/// <summary>One audio track's sample count in the file against the video's duration (frames / fps).</summary>
+/// <param name="Samples">Decoded samples for the burst track; AAC packets × 1024 for the others.</param>
+/// <param name="DurationSeconds">Samples / 48 kHz.</param>
+internal sealed record TrackCheck(int Track, string? Title, long Samples, double DurationSeconds, double MinusVideoMs, double TargetMs, string Mark);
 
 /// <summary><c>drift.json</c>.</summary>
 internal sealed record DriftReport(
@@ -123,7 +129,7 @@ internal static class MarkedCapture
             warnings.Add($"The tone player failed: {fault.Message}");
         }
 
-        var log = new MarkerLog(frequency, startQpc, hwnd, output.FriendlyName, output.Id, input.FriendlyName, input.Id, flashes, bursts);
+        var log = new MarkerLog(frequency, startQpc, hwnd, output.FriendlyName, output.Id, input.FriendlyName, input.Id, flashes, bursts, seconds / 60.0, settings);
         return (exit, stderr, log);
     }
 
@@ -225,6 +231,10 @@ internal static class DriftBenchmark
             log = JsonSerializer.Deserialize<MarkerLog>(File.ReadAllText(logPath), BenchJson.Options)
                 ?? throw new BenchFailure($"{logPath} is empty.");
 
+            // The run's own length and output settings, when its log has them (the frame target follows its fps).
+            minutes = log.Minutes ?? minutes;
+            settings = log.Capture ?? settings;
+
             // Keep what the capture run recorded about the engine.
             engine = "(reanalysed)";
             try
@@ -322,13 +332,17 @@ internal static class DriftBenchmark
             settings.FrameMs,
             bucketSeconds));
 
-        // Each track's length against the video's: its ends are whole AAC frames, so the tolerance is one AAC
-        // frame (1024 samples) plus one video frame.
-        var trackToleranceMs = (1024.0 * 1000 / OnsetDetector.SampleRate) + settings.FrameMs;
+        // Each track's sample count against the video's duration (its frame count over the fps): a track's ends
+        // are whole AAC frames, so the tolerance is one AAC frame (1024 samples) plus one video frame.
+        const int AacFrameSamples = 1024;
+        var trackToleranceMs = (AacFrameSamples * 1000.0 / OnsetDetector.SampleRate) + settings.FrameMs;
+        var videoSeconds = scan.Fps > 0 ? scan.VideoFrames / scan.Fps : scan.Video.DurationSeconds;
         var tracks = scan.AudioStreams.Select((stream, i) =>
         {
-            var minus = (stream.DurationSeconds - scan.Video.DurationSeconds) * 1000;
-            return new TrackCheck(i, stream.Title, Math.Round(stream.DurationSeconds, 4), Math.Round(minus, 2), Math.Round(trackToleranceMs, 3),
+            var samples = i == scan.BurstTrack ? scan.BurstTrackSamples : stream.Packets * AacFrameSamples;
+            var seconds = (double)samples / OnsetDetector.SampleRate;
+            var minus = (seconds - videoSeconds) * 1000;
+            return new TrackCheck(i, stream.Title, samples, Math.Round(seconds, 4), Math.Round(minus, 2), Math.Round(trackToleranceMs, 3),
                 Math.Abs(minus) < trackToleranceMs ? DriftMath.Pass : DriftMath.Miss);
         }).ToList();
 

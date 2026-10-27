@@ -1,7 +1,15 @@
+using System.Globalization;
 using ReplayBuffer.Bench;
 
 // Story 1.14: the FPS, drift, playback and Hotkey benchmarks of R4, R5, NFR-4 and R11, each into one
 // run folder, merged into report.md and report.json after every measurement.
+
+// One number format on every locale, for report.md and every message, on every thread.
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
+
 if (args.Length == 0 || args[0] is "-h" or "--help" or "help")
 {
     Console.WriteLine(BenchOptions.Usage);
@@ -57,5 +65,11 @@ catch (BenchFailure e)
 catch (ReplayBuffer.Contracts.ErrorCodeException e)
 {
     Console.Error.WriteLine($"error {e.Code}: {e.Message}");
+    return 1;
+}
+catch (Exception e) when (e is TimeoutException or OperationCanceledException or IOException)
+{
+    // A process or pipe that didn't answer in time, Ctrl+C, or a file that couldn't be written: exit 1, not a crash.
+    Console.Error.WriteLine("error: " + e.Message);
     return 1;
 }

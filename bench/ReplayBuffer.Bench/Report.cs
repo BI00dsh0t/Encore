@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -107,6 +108,11 @@ internal static class Report
         }
 
         var c = fps.CaptureMeans;
+
+        // §6.3's dropped frames: the capture runs' queue drops and pacer-skipped slots, summed (interleaved runs only).
+        var captureRuns = fps.Runs.Where(r => r.Condition == "capture" && r.Pass != "final").ToList();
+        var queueDrops = captureRuns.Select(r => r.QueueDrops).OfType<long>().ToList();
+        var skippedSlots = captureRuns.Select(r => r.SkippedSlots).OfType<long>().ToList();
         Table(md, [
             Row("FPS loss, capture against baseline", Pct(c?.FpsLossPercent), $"< {fps.TargetLossPercent} %", fps.Verdict),
             Row("Baseline average FPS", Num(fps.BaselineAvgFps), "", ""),
@@ -115,18 +121,19 @@ internal static class Report
             Row("1 % low loss", Pct(c?.OnePercentLowLossPercent), "", ""),
             Row("Fresh slots (new frames encoded)", Pct(c?.FreshSlotPercent), "", ""),
             Row("Duplicated slots", Pct(c?.DuplicatePercent), "", ""),
+            Row("Queue drops / pacer-skipped slots (capture runs)", $"{(queueDrops.Count > 0 ? queueDrops.Sum().ToString(CultureInfo.InvariantCulture) : "n/a")} / {(skippedSlots.Count > 0 ? skippedSlots.Sum().ToString(CultureInfo.InvariantCulture) : "n/a")}", "", ""),
             Row("Capture-to-encoded latency, p99", Ms(c?.LatencyP99Ms), $"< {Num(1000.0 / fps.Capture.Fps)} ms", Mark(c?.LatencyP99Ms, 1000.0 / fps.Capture.Fps)),
             Row("Engine CPU, % of one core", Pct(c?.CpuPercentOneCore), "reported (§6.3: < 3 % of one CPU)", ""),
             Row("Managed allocations, steady state", c?.AllocBytesPerSecond is { } alloc ? $"{alloc:0} B/s" : "n/a", "~0", ""),
             Row("Gen2 GCs, steady state (all capture runs)", c?.Gen2Collections?.ToString(CultureInfo.InvariantCulture) ?? "n/a", "0", c?.Gen2Collections is { } g ? (g == 0 ? DriftMath.Pass : DriftMath.Miss) : ""),
         ]);
 
-        md.AppendLine("| Run | Condition | Pass | Avg FPS | 1 % low | Loss | Fresh slots | Latency p99 | CPU (1 core) | Alloc/s | GC 0/1/2 |");
-        md.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|");
+        md.AppendLine("| Run | Condition | Pass | Avg FPS | 1 % low | Loss | Fresh slots | Duplicates | Queue drops | Skipped slots | Latency p99 | CPU (1 core) | Alloc/s | GC 0/1/2 |");
+        md.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
         foreach (var r in fps.Runs)
         {
             md.AppendLine(CultureInfo.InvariantCulture,
-                $"| {r.Run} | {r.Condition} | {r.Pass} | {Num(r.AvgFps)} | {Num(r.OnePercentLowFps)} | {Pct(r.FpsLossPercent)} | {(r.FreshSlots is { } f ? $"{f} ({Pct(r.FreshSlotPercent)})" : "")} | {Ms(r.LatencyP99Ms)} | {Pct(r.CpuPercentOneCore)} | {Num(r.AllocBytesPerSecond)} | {r.GcSteady} |");
+                $"| {r.Run} | {r.Condition} | {r.Pass} | {Num(r.AvgFps)} | {Num(r.OnePercentLowFps)} | {Pct(r.FpsLossPercent)} | {(r.FreshSlots is { } f ? $"{f} ({Pct(r.FreshSlotPercent)})" : "")} | {Pct(r.DuplicatePercent)} | {r.QueueDrops} | {r.SkippedSlots} | {Ms(r.LatencyP99Ms)} | {Pct(r.CpuPercentOneCore)} | {Num(r.AllocBytesPerSecond)} | {r.GcSteady} |");
         }
 
         md.AppendLine();
@@ -203,11 +210,11 @@ internal static class Report
 
         if (drift.Tracks.Count > 0)
         {
-            md.AppendLine("| Audio track | Length | Minus the video | Target (an AAC frame + a video frame) | Mark |");
-            md.AppendLine("|---|---|---|---|---|");
+            md.AppendLine("| Audio track | Samples | Length | Minus the video (frames / fps) | Target (an AAC frame + a video frame) | Mark |");
+            md.AppendLine("|---|---|---|---|---|---|");
             foreach (var t in drift.Tracks)
             {
-                md.AppendLine(CultureInfo.InvariantCulture, $"| {t.Track}: {t.Title} | {t.DurationSeconds:0.###} s | {t.MinusVideoMs:0.##} ms | < {t.TargetMs:0.#} ms | {t.Mark} |");
+                md.AppendLine(CultureInfo.InvariantCulture, $"| {t.Track}: {t.Title} | {t.Samples} | {t.DurationSeconds:0.###} s | {t.MinusVideoMs:0.##} ms | < {t.TargetMs:0.#} ms | {t.Mark} |");
             }
 
             md.AppendLine();
@@ -255,7 +262,11 @@ internal static class Report
         md.AppendLine("|---|---|---|---|---|---|");
         foreach (var p in playback.Players)
         {
-            var mark = p.Status != "checked" ? "not-checked" : p.Plays == true && p.AvInSync != false ? DriftMath.Pass : DriftMath.Miss;
+            // A pass needs both answers yes; a "no" to either is a miss; a skipped sync answer is not checked.
+            var mark = p.Status != "checked" ? "not-checked"
+                : p.Plays == false || p.AvInSync == false ? DriftMath.Miss
+                : p.Plays == true && p.AvInSync == true ? DriftMath.Pass
+                : "not-checked";
             md.AppendLine(CultureInfo.InvariantCulture, $"| {p.Player} | {YesNo(p.Plays)} | {YesNo(p.AvInSync)} | {Cell(p.AudioTracks)} | {Cell(p.Notes)} | {mark} |");
         }
 
@@ -304,16 +315,82 @@ internal static class Report
 
         try
         {
-            return JsonSerializer.Deserialize<T>(File.ReadAllText(path), BenchJson.Options)
+            var value = JsonSerializer.Deserialize<T>(File.ReadAllText(path), BenchJson.Options)
                 ?? throw new JsonException("the file holds null");
+
+            // Valid JSON of the wrong shape (e.g. {}) leaves required members null.
+            return MissingMember(value) is { } missing ? throw new JsonException($"it has no {missing}") : value;
         }
-        catch (Exception e) when (e is JsonException or NotSupportedException or ArgumentException)
+        catch (Exception e) when (e is JsonException or NotSupportedException or ArgumentException or IOException or UnauthorizedAccessException)
         {
-            errors.Add($"`{file}` is malformed and was skipped: {e.Message}");
+            errors.Add($"`{file}` is malformed or unreadable and was skipped: {e.Message}");
             notRun.Add(name);
             return null;
         }
     }
+
+    /// <summary>
+    /// The first member declared non-nullable that is null, in <paramref name="value"/> or in the Bench records and
+    /// lists it holds, as a JSON path (e.g. <c>av.buckets</c>); null when every required member is there.
+    /// </summary>
+    internal static string? MissingMember(object value, string path = "")
+    {
+        var nullability = new NullabilityInfoContext();
+        foreach (var property in value.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (property.GetIndexParameters().Length > 0 || property.PropertyType.IsValueType)
+            {
+                continue;
+            }
+
+            var name = path + JsonNamingPolicy.CamelCase.ConvertName(property.Name);
+            var item = property.GetValue(value);
+            if (item is null)
+            {
+                if (nullability.Create(property).ReadState == NullabilityState.NotNull)
+                {
+                    return name;
+                }
+
+                continue;
+            }
+
+            if (item is string)
+            {
+                continue;
+            }
+
+            if (item is System.Collections.IEnumerable list)
+            {
+                var i = 0;
+                foreach (var element in list)
+                {
+                    if (element is null)
+                    {
+                        return $"{name}[{i}]";
+                    }
+
+                    if (IsBenchRecord(element.GetType()) && MissingMember(element, $"{name}[{i}].") is { } inner)
+                    {
+                        return inner;
+                    }
+
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (IsBenchRecord(item.GetType()) && MissingMember(item, name + ".") is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsBenchRecord(Type type) => !type.IsValueType && type.Namespace == typeof(Report).Namespace;
 
     private static void Table(StringBuilder md, IReadOnlyList<string> rows)
     {

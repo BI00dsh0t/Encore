@@ -26,8 +26,10 @@ public sealed class CommandFailureTests : IDisposable
         var drift = JsonSerializer.Deserialize<DriftReport>(File.ReadAllText(_run.PathOf(DriftBenchmark.FileName)), BenchJson.Options)!;
         Assert.Equal("failed", drift.Verdict);
         Assert.Equal(1, drift.EngineExit);
-        Assert.Contains("Invalid argument", drift.EngineError, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("debug-capture", drift.EngineError, StringComparison.Ordinal);
+
+        // The stand-in's own stderr, whatever the Windows display language words it as.
+        Assert.False(string.IsNullOrWhiteSpace(drift.EngineError));
+        Assert.Equal(File.ReadAllText(_run.PathOf("drift-engine.err.log")).Trim(), drift.EngineError);
         Assert.Null(drift.Av);
 
         var md = Report.Markdown(Report.Generate(_run.Folder));
