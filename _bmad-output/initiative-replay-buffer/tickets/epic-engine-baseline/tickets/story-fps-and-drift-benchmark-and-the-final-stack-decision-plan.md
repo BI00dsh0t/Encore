@@ -44,6 +44,15 @@ context:
 - Test HEVC/AV1 playback (they're labelled as possibly not playing everywhere).
 - Replace `measure-path-a.ps1`. It stays the FPS driver, and only gains pass-through options.
 
+**Decisions (builder, 2026-10-27):**
+- Audio-to-audio has no acoustic coupling. The mic doesn't hear the bursts, so audio-to-audio comes from the engine's stats over the 60-minute drift run, per device:
+  - `resampler.errorMaxSamples` and `errorP99Samples` (content position against its own QPC stamps);
+  - raw `stamps.drift.ppm` and `resampler.meanRatioPpm`;
+  - gap fills, trims and step corrections.
+- The bound is |game error| + |mic error|, against one video frame (800 samples at 60 fps). The Decision states that this trusts the device stamps, which spike 1.2 and story 1.12 checked.
+- The FPS run keeps Cyberpunk 2077 borderless at 2560×1440 (RT Overdrive, Frame Generation off, the NVIDIA overlay off), with the capture scaled to 1920×1080 at 60 fps by the 1.11 scaler.
+- The full plan is kept despite its size: it's one benchmark deliverable.
+
 ## I/O & Edge-Case Matrix
 
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
@@ -51,7 +60,7 @@ context:
 | FPS | `bench fps --game Cyberpunk2077` with the game running | the script runs baseline vs capture at `--size 1920x1080 --fps 60`, with 3 balanced passes of 5 min by default. `fps.json` holds the mean loss, the 1 % lows and the engine's stats per condition | game missing, elevated, or no PresentMon → the script's message, exit 1 |
 | Drift | `bench drift --minutes 60` | Bench shows a marker window that flashes white each second, plays `TonePlayer` bursts into the output device, and runs `debug-capture` on the marker window with both devices. It then analyses the MP4 | engine exits early → its stderr in `drift.json`, exit 1 |
 | A/V analysis | MP4 + the flash and burst QPC logs | per burst k: `error_k = (audio onset − flash frame PTS) in file − (burst QPC − flash QPC) at source`. Reports the per-minute median, drift = the largest change of the per-minute median from minute 1, and the regression slope | < 90 % of flashes or bursts matched → `matched` low, verdict `inconclusive` |
-| Audio-to-audio | the mic track hears the bursts (see Design Notes) | per burst: mic onset − loopback onset in the file, with the same per-minute drift | mic onsets < 90 % → acoustic result `not-coupled`. The fallback figure is the engine stats' `resampler.errorMaxSamples` (game + mic) |
+| Audio-to-audio | the drift run's stats JSON (`audio[]` with roles `output` and `input`) | per device: error max and p99, drift ppm, mean ratio and corrections. Bound = output errorMax + input errorMax, in samples and ms, against 800 samples. Each track's sample count is also checked against the video duration in the file | a device missing from the stats → verdict `inconclusive` |
 | Playback | `bench playback` | writes a 30 s clip (`debug-capture` of the marker window, both tracks) and its path, then asks for each player (Discord, Chrome, VLC, Windows Media Player, DaVinci Resolve): plays? A/V in sync? which audio tracks? notes | "skip" recorded as `not-checked` |
 | Hotkey | `bench hotkey --presses 20 --key ctrl+alt+f9` | starts `serve --instance ReplayBuffer-Test-bench-<guid>` with Save bound, plus a `WH_KEYBOARD_LL` hook in Bench that stamps QPC on key-down. Each `hotkey.pressed` gives `press.Qpc − hook QPC`. Reports p50/p99/max | the key is held by another process → `hotkey-taken` from the snapshot, exit 1; no press within 60 s → stop with what was gathered |
 | Report | any subset of the JSON files | `report.md` has a section per measurement present, and "not run" for the rest | malformed JSON → named in the report and skipped |
@@ -84,7 +93,7 @@ context:
 - [ ] `bench/ReplayBuffer.Bench/HotkeyBenchmark.cs`, `KeyboardHook.cs` -- the matrix's Hotkey row → `hotkey.json`.
 - [ ] `bench/ReplayBuffer.Bench/Report.cs` -- merges the JSON files into `report.json` and `report.md`, each figure with its target and a pass/miss mark.
 - [ ] `tools/measure-path-a.ps1` -- the `-Size`, `-Fps` and `-Bitrate` pass-through.
-- [ ] `tests/ReplayBuffer.Bench.Tests/` (new, in the slnx) -- tests for `DriftMath`, the onset and flash detectors on synthetic buffers, and option parsing. Also an end-to-end analysis test: ffmpeg lavfi makes a 2-minute fMP4 with a flash each second, loopback bursts, and mic bursts with 5 ms of injected drift. The analysis must report 5 ± 1 ms audio-to-audio and ≈ 0 A/V. The test is skipped without ffmpeg.
+- [ ] `tests/ReplayBuffer.Bench.Tests/` (new, in the slnx) -- tests for `DriftMath`, the onset and flash detectors on synthetic buffers, and option parsing. Also an end-to-end analysis test: ffmpeg lavfi makes a 2-minute fMP4 with a flash each second and bursts that drift 5 ms against the flashes over the 2 minutes. The analysis must report 5 ± 1.5 ms A/V drift. A no-drift twin must report under 1 ms. The test is skipped without ffmpeg.
 - [ ] `_bmad-output/.../epic-engine-baseline.md` Notes -- after the builder's runs, Sofia records the results and decisions: the §6 final stack, §7.2 kept, and the §7.4 facts.
 
 **Acceptance Criteria:**
@@ -97,16 +106,6 @@ context:
 
 - **What drift means here:** the 60-minute change in offset. Constant pipeline offsets (DWM composition, AAC priming, capture latency) cancel out, and are reported separately as the "absolute offset, minute 1". Video onsets are quantised to 1/60 s, so a single burst's error can be off by ±8 ms. Per-minute medians of about 60 bursts average that out, so a raw max−min spread isn't used as the verdict.
 - **The source term** `(burst QPC − flash QPC)` takes the render device's drift against QPC out, so only the capture path is measured.
-
-## Open Questions
-
-1. **Audio-to-audio over the BEACN Mic.** The mic is on its own clock, and can only be compared in the file if it hears the bursts.
-   - (a) **Acoustic coupling (recommended):** the bursts play from speakers, or a headphone cup sits on the mic, at a louder `--burst-dbfs -12`. That gives a true file-level measure.
-   - (b) **No coupling:** audio-to-audio comes only from the engine's per-device stamp error (`resampler.errorMaxSamples`). That's weaker: it trusts the stamps.
-   - Bench supports both either way. The answer decides what the Decision may claim.
-2. **The game's resolution for R5's 1080p60.**
-   - (a) **Game borderless at 2560×1440, capture scaled to 1920×1080 at 60 (recommended):** the real configuration, and it uses the 1.11 scaler.
-   - (b) **Game set to 1920×1080:** R5's wording taken literally. No scaling, and a lighter GPU load.
 
 ## Verification
 
