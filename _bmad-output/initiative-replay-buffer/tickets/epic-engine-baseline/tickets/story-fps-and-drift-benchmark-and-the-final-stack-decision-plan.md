@@ -189,6 +189,26 @@ context:
 
 ## Checkpoint Log
 
+**2026-11-01, runs paused by the builder.** The amendment is built and reviewed on `feature/1.14-benchmark` (tip `2144fd6`). Release build 0 warnings and NativeAOT publish 0 warnings (10.0 MB). The full suite passes 653/654. The one failure is `EncodeExperimentTests.ThePacedEncoderEncodesEverySlotWithAFastPreset` under whole-suite parallelism; the pre-amendment `7229d26` fails it the same way (p50 18.6 ms), and it passes alone. Runs so far, in `measurements/bench-1.14` (NativeAOT engine, Game (BEACN Mix Create) and BEACN Mic):
+
+- **Timing tests rerun alone:** 3/3 pass.
+- **`fps`** (synthetic load, 2560×1440 on the RTX 5090, calibrated 80.52 fps at 6120 iterations, 3 balanced passes of 5 min, capture 1920×1080 at 60 fps): FPS loss **5.88 %, a miss** against 3 %.
+  - Average fps: baseline 80.40, capture 75.67.
+  - 1 % low: 77.77 → 70.63 (9.2 % loss).
+  - Capture→encoded p99 **39.0 ms, a miss** against 16.7 ms.
+  - Fresh slots 89.6 %, duplicates 10.4 %, 3 queue drops, 0 skipped.
+  - Engine CPU 5.5 % of one core; 15 B/s allocated; 0 Gen2 GCs.
+- **`hotkey --inject`** (20 presses): p50 1.135 ms, p99 1.631 ms, max 1.631 ms. That passes the 1 s target but not the old 1 ms bar.
+- **`drift --minutes 60`:** stopped at the builder's request about 11 minutes in. Its `drift.mp4` is partial and has no `drift.json`; rerun it from the start.
+
+When resuming, in order:
+
+1. `drift --minutes 60`.
+2. `playback --auto`.
+3. A short diagnostic of where the FPS loss comes from: the script's `baseline,capture-wgc,capture-copy,capture` against the same load.
+4. Sofia's Decision lines in the epic Notes.
+5. The final verification and commit, then "READY FOR QA". The coordinator gates the merge.
+
 **2026-11-01, measurements deferred by the builder.** Code and review are done (`7b810ab`); the story stays `in-review` on `feature/1.14-benchmark` and isn't merged into `develop`. The builder chose to come back to the runs later. At this checkpoint the review fixes still hold: the Release build has 0 warnings and the Bench tests pass (71 of 71). When resuming, in order:
 
 1. Rerun the three real-time timing tests with no game running: `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile`, `OutputResolutionTests.AStatsRunOnAFastWindowMeetsTheLatencyGcAndAllocationBounds` and `EncodeExperimentTests.ThePacedEncoderEncodesEverySlotWithAFastPreset`. They failed only while Cyberpunk held the GPU, and none is in code this story changed.
