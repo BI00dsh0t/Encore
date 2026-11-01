@@ -7,7 +7,7 @@ title = "Tracer: Global Track Layout to named Track streams in a capture"
 description = "Thinnest path through every layer: the engine reads the Global trackLayout from the settings store, resolves each layout device key to a live endpoint through AudioDeviceHub (story 1.12), mixes each Track's devices by QPC, and writes one named AAC stream per Track, in layout order, through the existing capture session (story 1.6). The engine's debug-list command is extended to print each present endpoint's id, friendly name, parent name and flow. The builder's step: copy the BEACN Game output, the Chat output and the BEACN Mic from that list into the ReplayBuffer-Dev instance's settings.json as three Tracks while the engine is stopped. The App and IPC side is first exercised in story 3. R2 part: named Tracks in layout order. R7 part: the streams exist and are titled."
 verify = "The builder runs a 30 s capture with a three-Track layout and ffprobe shows three AAC streams with the configured titles in order; each plays only its devices' audio in VLC, in sync with the video."
 covers = ["R2", "R7"]
-after = ["epic-engine-baseline"]
+after = ["1.4", "1.5", "1.6", "1.9", "1.10", "1.12"]
 hitl = true
 risk = "high"
 
