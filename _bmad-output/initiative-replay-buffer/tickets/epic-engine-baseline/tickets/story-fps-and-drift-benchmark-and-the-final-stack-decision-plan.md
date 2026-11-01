@@ -122,6 +122,19 @@ context:
 | 12 | The body of commit `8bb0d33` isn't wrapped at 72 characters | low | reject | Fixing it means rewriting committed history for a cosmetic rule. Later commits follow the rule. |
 | 13 | The plan's edits are uncommitted | false | reject | That's this review's own in-progress frontmatter edit; it's committed with the patches. |
 
+## Checkpoint Log
+
+**2026-11-01, measurements deferred by the builder.** Code and review are done (`7b810ab`); the story stays `in-review` on `feature/1.14-benchmark` and isn't merged into `develop`. The builder chose to come back to the runs later. At this checkpoint the review fixes still hold: the Release build has 0 warnings and the Bench tests pass (71 of 71). When resuming, in order:
+
+1. Rerun the three real-time timing tests with no game running: `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile`, `OutputResolutionTests.AStatsRunOnAFastWindowMeetsTheLatencyGcAndAllocationBounds` and `EncodeExperimentTests.ThePacedEncoderEncodesEverySlotWithAFastPreset`. They failed only while Cyberpunk held the GPU, and none is in code this story changed.
+2. `bench fps` into `measurements/bench-1.14`: baseline vs capture, 3 balanced passes of 5 minutes (about 35 minutes), 1920×1080 at 60 fps, NativeAOT engine, Game (BEACN Mix Create) and BEACN Mic. The last attempt never started: the auto-start watcher needs two samples in a row under 200 fps, and Cyberpunk read 400–515 fps for 30 minutes (a menu, or Frame Generation on). Before starting, the builder loads into gameplay at a busy spot with RT Overdrive on, Frame Generation off, the NVIDIA overlay off, and the game focused (spike 1.2 saw about 78 fps at 2560×1440). Print one PresentMon sample first to confirm it's GPU-bound.
+3. `hotkey`: about 20 presses with the game focused, re-checking the real-press latency story 1.10 loosened in the automated test (1 ms → 1 s).
+4. `drift --minutes 60`, without the game.
+5. `playback` in Discord, Chrome, VLC, Windows Media Player and DaVinci Resolve; a skipped player is `not-checked`.
+6. Sofia records the results against the 3 % FPS and one-frame drift targets, the final PLAN.md §6 stack and the §7.4 facts as dated Decision lines in the epic's Notes.
+
+Then: full build with 0 warnings, the tests and the NativeAOT publish; commit with `Refs: 1.14`; on the builder's go-ahead, merge into `develop` from the main folder with `--no-ff` and `feat(bench): merge 1.14-benchmark`; `tickets.py mark epic-engine-baseline 1.14 done` committed on `develop`.
+
 ## Design Notes
 
 - **What drift means here:** the 60-minute change in offset. Constant pipeline offsets (DWM composition, AAC priming, capture latency) cancel out, and are reported separately as the "absolute offset, minute 1". Video onsets are quantised to 1/60 s, so a single burst's error can be off by ±8 ms. Per-minute medians of about 60 bursts average that out, so a raw max−min spread isn't used as the verdict.
