@@ -86,6 +86,12 @@ internal static class FpsBenchmark
 
         var loadTimeout = TimeSpan.FromSeconds(options.Int("load-timeout", 60, 5, 600));
         var loadWarmup = options.Has("load-warmup") ? options.Double("load-warmup", 10, 1, 600) : (double?)null;
+
+        // The load calibrates for its warm-up, then measures for a few seconds: wait at least that long.
+        if (loadWarmup is { } warmupSeconds && loadTimeout < TimeSpan.FromSeconds(warmupSeconds + 30))
+        {
+            loadTimeout = TimeSpan.FromSeconds(warmupSeconds + 30);
+        }
         var game = realGame ?? GpuLoadProcess.ProcessName;
         var seconds = options.Int("seconds", 300, 10, 7200);
         var passes = options.Int("passes", 3, 1, 20);
@@ -131,10 +137,18 @@ internal static class FpsBenchmark
         errors ??= Console.Error;
         GpuLoadInfo loadInfo;
         GpuLoadProcess? load = null;
+        var loadDied = false;
         try
         {
             if (loadExe is not null)
             {
+                // The script takes the first process of the name and PresentMon traces them all: only Bench's own may run.
+                if (GpuLoadProcess.Running() is { Count: > 0 } running)
+                {
+                    throw new BenchFailure(
+                        $"{GpuLoadProcess.ProcessName} is already running (pid {string.Join(", ", running)}); close it before measuring.");
+                }
+
                 try
                 {
                     load = GpuLoadProcess.Start(loadExe, targetFps, loadSize, loadWarmup, loadTimeout);
@@ -172,7 +186,8 @@ internal static class FpsBenchmark
             process.WaitForExit();
             if (load is { HasExited: true })
             {
-                errors.WriteLine("The GPU load exited during the run.");
+                loadDied = true;
+                errors.WriteLine($"The GPU load exited during the run ({load.ExitDescription()}).");
             }
 
             if (process.ExitCode != 0)
@@ -196,7 +211,7 @@ internal static class FpsBenchmark
         var report = Map(File.ReadAllText(summary), summary, folder, game, settings, seconds, passes, loadInfo);
         BenchJson.Write(Path.Combine(context.RunFolder, FileName), report);
         Console.WriteLine($"FPS loss {Format(report.CaptureMeans?.FpsLossPercent)} % against {TargetLossPercent} % ({report.Verdict}).");
-        return 0;
+        return loadDied ? 1 : 0;
     }
 
     /// <summary>Maps the script's <c>summary.json</c> (and the capture runs' stats files beside it) into the report.</summary>

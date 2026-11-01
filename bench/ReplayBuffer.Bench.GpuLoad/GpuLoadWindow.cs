@@ -272,9 +272,10 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
                 throw new InvalidOperationException($"RegisterClassEx failed with error {Marshal.GetLastPInvokeError()}.");
             }
 
-            // Unowned and visible, so Get-Process finds it as the MainWindowHandle, like a borderless game.
+            // Unowned and visible, so Get-Process finds it as the MainWindowHandle, like a borderless game; topmost,
+            // because SetForegroundWindow is refused to a process started from a background shell.
             _hwnd = PInvoke.CreateWindowEx(
-                WINDOW_EX_STYLE.WS_EX_APPWINDOW,
+                WINDOW_EX_STYLE.WS_EX_APPWINDOW | WINDOW_EX_STYLE.WS_EX_TOPMOST,
                 className,
                 title,
                 WINDOW_STYLE.WS_POPUP | WINDOW_STYLE.WS_VISIBLE,
@@ -309,10 +310,13 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
             PInvoke.CreateDXGIFactory2(0, &factoryIid, (void**)&factory).ThrowOnFailure();
 
             // Adapter 0 drives the primary monitor (C1: one GPU).
-            if (factory->EnumAdapters1(0, &adapter) == HRESULT.DXGI_ERROR_NOT_FOUND)
+            var enumerated = factory->EnumAdapters1(0, &adapter);
+            if (enumerated == HRESULT.DXGI_ERROR_NOT_FOUND)
             {
                 throw new NoHardwareGpuException("No DXGI adapter is present.");
             }
+
+            enumerated.ThrowOnFailure();
 
             var desc = adapter->GetDesc1();
             _adapter = desc.Description.AsReadOnlySpan().SliceAtNull().ToString();

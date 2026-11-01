@@ -198,6 +198,9 @@ public sealed class UnattendedTests : IDisposable
         Assert.False(refused.Plays);
         Assert.Equal("media error 4: unsupported", refused.Error);
 
+        var stuck = PlayerScripts.Parse("Windows Media Player", """{"error":"it did not start playing within 20 s (playState 9)","errorKind":"timeout"}""");
+        Assert.Null(stuck.Plays);
+
         var missing = PlayerScripts.Parse("Windows Media Player", """{"error":"WMPlayer.OCX is not available","errorKind":"setup"}""");
         Assert.Null(missing.Plays);
 

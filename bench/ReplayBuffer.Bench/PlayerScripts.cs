@@ -186,7 +186,8 @@ internal static class PlayerScripts
             foreach (var arg in new[]
             {
                 "--headless=new", $"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check", "--disable-extensions",
-                "--disable-sync", "--autoplay-policy=no-user-gesture-required", "--mute-audio", "--enable-blink-features=AudioVideoTracks",
+                "--disable-sync", "--disable-background-networking", "--disable-component-update", "--no-pings",
+                "--autoplay-policy=no-user-gesture-required", "--mute-audio", "--enable-blink-features=AudioVideoTracks",
                 prefix,
             })
             {
@@ -542,9 +543,15 @@ internal static class PlayerScripts
             # playState 3 is Playing.
             Wait-Pumped 20 { $wmp.playState -eq 3 }
             if ($wmp.playState -ne 3) {
-                $why = if ($wmp.error.errorCount -gt 0) { $wmp.error.item(0).errorDescription } else { "playState $($wmp.playState) after 20 s" }
-                $r.error = "it never started playing: $why"
-                $r.errorKind = 'media'
+                # Only an error the OCX reports means it refused the file; a plain timeout leaves it not checked.
+                if ($wmp.error.errorCount -gt 0) {
+                    $r.error = "it never started playing: $($wmp.error.item(0).errorDescription)"
+                    $r.errorKind = 'media'
+                }
+                else {
+                    $r.error = "it did not start playing within 20 s (playState $($wmp.playState))"
+                    $r.errorKind = 'timeout'
+                }
             }
             else {
                 $p0 = $wmp.controls.currentPosition

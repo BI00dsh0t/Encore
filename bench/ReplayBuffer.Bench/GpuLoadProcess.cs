@@ -46,9 +46,12 @@ internal sealed class GpuLoadProcess : IDisposable
     private bool _stopped;
     private bool _exited;
 
-    private GpuLoadProcess(Process process, GpuLoadInfo info, nint hwnd)
+    private readonly StringBuilder _stderr;
+
+    private GpuLoadProcess(Process process, GpuLoadInfo info, nint hwnd, StringBuilder stderr)
     {
         _process = process;
+        _stderr = stderr;
         Info = info;
         Hwnd = hwnd;
     }
@@ -61,6 +64,46 @@ internal sealed class GpuLoadProcess : IDisposable
 
     /// <summary>True once the load has exited, by itself or stopped by <see cref="Dispose"/>.</summary>
     public bool HasExited => _stopped ? _exited : _process.HasExited;
+
+    /// <summary>What the load wrote on stderr so far.</summary>
+    public string Stderr
+    {
+        get
+        {
+            lock (_stderr)
+            {
+                return _stderr.ToString().Trim();
+            }
+        }
+    }
+
+    /// <summary>
+    /// For a load that exited by itself before <see cref="Dispose"/>: its exit code and stderr, once its output has
+    /// drained.
+    /// </summary>
+    public string ExitDescription()
+    {
+        _process.WaitForExit();
+        var stderr = Stderr;
+        return $"exit {_process.ExitCode.ToString(CultureInfo.InvariantCulture)}{(stderr.Length > 0 ? ": " + stderr : ", nothing on stderr")}";
+    }
+
+    /// <summary>The ids of the <see cref="ProcessName"/> processes running now.</summary>
+    public static List<int> Running()
+    {
+        var running = Process.GetProcessesByName(ProcessName);
+        try
+        {
+            return [.. running.Select(p => p.Id)];
+        }
+        finally
+        {
+            foreach (var process in running)
+            {
+                process.Dispose();
+            }
+        }
+    }
 
     /// <summary>
     /// Starts the load and waits up to <paramref name="timeout"/> for its <c>ready</c> line.
@@ -172,7 +215,7 @@ internal sealed class GpuLoadProcess : IDisposable
         _ = process.StandardOutput.ReadToEndAsync();
         var info = new GpuLoadInfo(GpuLoadInfo.Synthetic, ProcessName, ready!.Width, ready.Height, ready.TargetFps, ready.CalibratedFps, ready.Iterations, ready.Adapter, ready.Tearing);
         Console.WriteLine($"GPU load ready: {info.Width}x{info.Height} on {info.Adapter}, {info.CalibratedFps:0.##} fps (target {info.TargetFps:0.##}) at {info.Iterations} iterations; window {ready.HwndText}.");
-        return new GpuLoadProcess(process, info, ready.Hwnd);
+        return new GpuLoadProcess(process, info, ready.Hwnd, stderr);
     }
 
     /// <summary>Parses the load's <c>ready {json}</c> line.</summary>

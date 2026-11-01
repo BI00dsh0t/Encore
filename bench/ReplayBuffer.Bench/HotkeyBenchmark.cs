@@ -95,6 +95,13 @@ internal static class HotkeyBenchmark
                 }
 
                 var timings = Measure(combo, presses, timeout, events.Reader, inject, out var unpaired, out var injectFault, cancel.Token);
+
+                // UIPI can drop injected input without SendInput saying so: no press at all is a named failure.
+                if (inject && injectFault is null && timings.Count == 0 && !cancel.IsCancellationRequested)
+                {
+                    injectFault = $"no injected press reached the engine within {timeout.TotalSeconds:0} s: SendInput may be blocked by UIPI or a secure desktop";
+                }
+
                 var report = Result(combo, presses, timings, unpaired, injectFault, inject);
                 BenchJson.Write(path, report);
                 if (injectFault is not null)
