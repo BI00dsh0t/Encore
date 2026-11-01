@@ -3,7 +3,7 @@ title: 'FPS and drift benchmark, and the final stack decision'
 type: 'feature'
 ticket: '14'
 created: '2026-10-27'
-status: 'in-review'
+status: 'ready-for-dev'
 baseline_revision: '891d34796966c5550a61590f179f28ce9f497961'
 route: 'full'
 route_source: 'auto'
@@ -22,7 +22,7 @@ context:
 
 **Problem:** R4, R5 and R11 need a repeatable benchmark: FPS loss at 1080p60 in a GPU-bound game, A/V and audio-to-audio drift over 60 minutes on two independent clocks, fMP4 playback in the NFR-4 players, and real-key Hotkey latency. Today `bench/ReplayBuffer.Bench` is a placeholder, and only spike 1.2's script exists.
 
-**Approach:** Turn `ReplayBuffer.Bench` into a CLI with four measurements: `fps`, `drift`, `playback` and `hotkey`. Each writes its JSON into one run folder, and `report` merges them into `report.md` and `report.json`. Every subcommand regenerates the report. `fps` reuses `tools/measure-path-a.ps1`. `drift` measures the finished MP4 itself, from flashes and bursts. The builder runs it, and the results and the final §6/§7.4 decisions go into the epic's Notes.
+**Approach:** Turn `ReplayBuffer.Bench` into a CLI with four measurements: `fps`, `drift`, `playback` and `hotkey`. Each writes its JSON into one run folder, and `report` merges them into `report.md` and `report.json`. Every subcommand regenerates the report. `fps` reuses `tools/measure-path-a.ps1`. `drift` measures the finished MP4 itself, from flashes and bursts. Since 2026-11-01 the runs need nobody: `fps` measures Bench's own synthetic GPU load (`bench/ReplayBuffer.Bench.GpuLoad`) unless `--game` names a real one, `hotkey --inject` presses the key with `SendInput`, and `playback` scripts the players it can. The results and the final §6/§7.4 decisions go into the epic's Notes; what only a person can check goes to the Human Check Queue.
 
 ## Boundaries & Constraints
 
@@ -34,7 +34,9 @@ context:
   - Hotkey press-to-stamp under 1 s, with p50 and p99 shown against the old 1 ms bar.
 - The run is repeatable: everything Bench uses is a command-line option with a sensible default, so epics 5 and 8 can rerun it. That covers the game, the devices, the seconds, the passes and the output folder.
 - Output goes to `measurements/bench-<time>/` (gitignored), or to the folder `--out` names. A later subcommand adds to that folder.
-- Like the script, Bench refuses to run elevated. It never starts the game and never downloads anything.
+- Like the script, Bench refuses to run elevated. It never starts the game and never downloads anything. Starting its own synthetic GPU load, and the players already installed, is not starting the game.
+- The synthetic load is a process of its own, `ReplayBuffer.Bench.GpuLoad.exe`, so the script finds it with `-Game ReplayBuffer.Bench.GpuLoad` and PresentMon traces it by name, unchanged. Bench always stops it, on every path, and it exits by itself when Bench does.
+- Whatever a run couldn't check without a person is recorded as `not-checked`, never guessed.
 - The NativeAOT publish of the engine stays at 0 warnings. Bench itself is JIT, as its exclusion in `Directory.Build.props` already sets.
 
 **Never:**
@@ -53,16 +55,25 @@ context:
 - The FPS run keeps Cyberpunk 2077 borderless at 2560×1440 (RT Overdrive, Frame Generation off, the NVIDIA overlay off), with the capture scaled to 1920×1080 at 60 fps by the 1.11 scaler.
 - The full plan is kept despite its size: it's one benchmark deliverable.
 
+**Decisions (builder, 2026-11-01, renegotiated so the runs need nobody):**
+- `bench fps` with no `--game` starts Bench's own synthetic GPU load and measures that; `--game <process>` keeps the real game as an option. R4's/R5's "GPU-bound game" counts as met by the synthetic load. The real-game run goes to the Human Check Queue as a confirmation, not a gate.
+- The load is a borderless popup covering the primary monitor (`--size` overrides), like a borderless game: a D3D11 flip-model swap chain (FLIP_DISCARD, ALLOW_TEARING when supported, Present with sync interval 0) drawing a fullscreen triangle whose pixel shader runs a loop of N trig iterations animated by time, so every frame is new to WGC. During warm-up it calibrates N until its present rate settles near `--target-fps` (default 80, spike 1.2's ≈ 78 fps in Cyberpunk at 2560×1440), then freezes N for the run.
+- `bench hotkey --inject` presses the key with `SendInput`, about once a second, for unattended runs. Real presses stay the default and go in the Human Check Queue.
+- `bench playback --auto` scripts the players it can check without a person and records the rest (at least Discord and DaVinci Resolve) as `not-checked`, queued for the builder. A scripted check records what it actually saw (plays, tracks listed); A/V sync in a player stays a person's check unless the script measured it.
+
 ## I/O & Edge-Case Matrix
 
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
 |----------|--------------|---------------------------|----------------|
-| FPS | `bench fps --game Cyberpunk2077` with the game running | the script runs baseline vs capture at `--size 1920x1080 --fps 60`, with 3 balanced passes of 5 min by default. `fps.json` holds the mean loss, the 1 % lows and the engine's stats per condition | game missing, elevated, or no PresentMon → the script's message, exit 1 |
+| FPS, synthetic | `bench fps` with no `--game` | Bench starts `ReplayBuffer.Bench.GpuLoad --target-fps 80 --parent <pid>`, waits for its one `ready` line (hwnd, calibrated fps, iterations, adapter), then runs the script with `-Game ReplayBuffer.Bench.GpuLoad` as below. `fps.json` and `report.md` record the load: kind, resolution, target and calibrated fps, iterations, adapter. The load is stopped afterwards | no `ready` within the timeout, or the load exits early → its stderr, exit 1, load stopped |
+| FPS, real game | `bench fps --game Cyberpunk2077` with the game running | the script runs baseline vs capture at `--size 1920x1080 --fps 60`, with 3 balanced passes of 5 min by default. `fps.json` holds the mean loss, the 1 % lows and the engine's stats per condition | game missing, elevated, or no PresentMon → the script's message, exit 1 |
 | Drift | `bench drift --minutes 60` | Bench shows a marker window that flashes white each second, plays `TonePlayer` bursts into the output device, and runs `debug-capture` on the marker window with both devices. It then analyses the MP4 | engine exits early → its stderr in `drift.json`, exit 1 |
 | A/V analysis | MP4 + the flash and burst QPC logs | per burst k: `error_k = (audio onset − flash frame PTS) in file − (burst QPC − flash QPC) at source`. Reports the per-minute median, drift = the largest change of the per-minute median from minute 1, and the regression slope | < 90 % of flashes or bursts matched → `matched` low, verdict `inconclusive` |
 | Audio-to-audio | the drift run's stats JSON (`audio[]` with roles `output` and `input`) | per device: error max and p99, drift ppm, mean ratio and corrections. Bound = output errorMax + input errorMax, in samples and ms, against 800 samples. Each track's sample count is also checked against the video duration in the file | a device missing from the stats → verdict `inconclusive` |
 | Playback | `bench playback` | writes a 30 s clip (`debug-capture` of the marker window, both tracks) and its path, then asks for each player (Discord, Chrome, VLC, Windows Media Player, DaVinci Resolve): plays? A/V in sync? which audio tracks? notes | "skip" recorded as `not-checked` |
+| Playback, scripted | `bench playback --auto` | the same clip; Chrome (headless, own profile) and Windows Media Player (its `WMPlayer.OCX` engine) each play it and report whether playback advanced, the size, and the audio tracks they list; a screen grab around the marker during the capture answers the capture-border question. Every other player is `not-checked` with "needs a person" | a player not installed, or a script that times out → `not-checked` with the reason |
 | Hotkey | `bench hotkey --presses 20 --key ctrl+alt+f9` | starts `serve --instance ReplayBuffer-Test-bench-<guid>` with Save bound, plus a `WH_KEYBOARD_LL` hook in Bench that stamps QPC on key-down. Each `hotkey.pressed` gives `press.Qpc − hook QPC`. Reports p50/p99/max | the key is held by another process → `hotkey-taken` from the snapshot, exit 1; no press within 60 s → stop with what was gathered |
+| Hotkey, injected | `bench hotkey --inject` | as above, with Bench pressing the combination by `SendInput` once a second; each timing is marked injected, and the report says the presses were injected | `SendInput` inserts nothing (UIPI) → named, exit 1 |
 | Report | any subset of the JSON files | `report.md` has a section per measurement present, and "not run" for the rest | malformed JSON → named in the report and skipped |
 
 </frozen-after-approval>
@@ -79,6 +90,8 @@ context:
 - `src/ReplayBuffer.Contracts/Ipc/EngineClient.cs`, `HotkeyMessages`, `Keys.Hotkeys`, `SettingsJsonContext` -- the hotkey run copies `tests/ReplayBuffer.Engine.Tests/HotkeyServeTests.cs`: `WriteHotkeys`, `StartServeAsync`, waiting for `listening <pipe>`, then `ConnectAsync`, and cleaning up the instance folders.
 - `native/ffmpeg/ffmpeg.exe` and `ffprobe.exe` -- the analysis decodes with them. Video goes to `scale=64:36,format=gray` rawvideo (CFR, frame i → i/fps), and each audio track to mono f32le at 48 kHz, streamed. `ffprobe` gives each stream's `start_time`.
 - `.gitignore` -- `measurements/` is already ignored.
+- `src/ReplayBuffer.Platform.Capture/NativeMethods.txt`, `NativeMethods.json`, `D3D11Device.cs` -- the CsWin32 pattern the GpuLoad copies: `allowMarshaling: false`, raw COM pointers, released in `finally`.
+- `tools/measure-path-a.ps1` lines 209–214 and 365 -- finds the target by `Get-Process -Name $Game` with a `MainWindowHandle`, and traces `--process_name <name>.exe`: a WinExe named `ReplayBuffer.Bench.GpuLoad` with a visible unowned popup satisfies both.
 
 ## Tasks & Acceptance
 
@@ -94,13 +107,25 @@ context:
 - [x] `bench/ReplayBuffer.Bench/Report.cs` -- merges the JSON files into `report.json` and `report.md`, each figure with its target and a pass/miss mark.
 - [x] `tools/measure-path-a.ps1` -- the `-Size`, `-Fps` and `-Bitrate` pass-through.
 - [x] `tests/ReplayBuffer.Bench.Tests/` (new, in the slnx) -- tests for `DriftMath`, the onset and flash detectors on synthetic buffers, and option parsing. Also an end-to-end analysis test: ffmpeg lavfi makes a 2-minute fMP4 with a flash each second and bursts that drift 5 ms against the flashes over the 2 minutes. The analysis must report 5 ± 1.5 ms A/V drift. A no-drift twin must report under 1 ms. The test is skipped without ffmpeg.
-- [ ] `_bmad-output/.../epic-engine-baseline.md` Notes -- after the builder's runs, Sofia records the results and decisions: the §6 final stack, §7.2 kept, and the §7.4 facts.
+- [ ] `bench/ReplayBuffer.Bench.GpuLoad/` (new WinExe, in the slnx; AOT-compatible, CsWin32 like Platform.Capture) -- the synthetic load: borderless popup, D3D11 flip-model swap chain, `D3DCompile`d fullscreen-triangle shader with a time-animated `[loop]` of N trig iterations, warm-up calibration of N to `--target-fps`, one `ready` line on stdout, `--parent <pid>` exit, `--size`, `--warmup`, and Escape or `WM_CLOSE` to exit.
+- [ ] `bench/ReplayBuffer.Bench/GpuLoadProcess.cs`, `FpsBenchmark.cs`, `BenchOptions.cs` -- `fps` without `--game` starts the load, waits for `ready` (`--load-timeout`), passes `-Game ReplayBuffer.Bench.GpuLoad`, and always stops it; `fps.json` and `report.md` carry the load's details. Options `--target-fps`, `--load-size`. Confirm `measure-path-a.ps1` needs no change.
+- [ ] `bench/ReplayBuffer.Bench/HotkeyBenchmark.cs`, `KeyInjector.cs` -- `--inject`: `SendInput` presses once a second; the report marks injected presses.
+- [ ] `bench/ReplayBuffer.Bench/PlaybackCheck.cs`, `PlayerScripts.cs` -- `--auto`: Chrome headless and WMP's OCX scripted checks, the capture-border screen grab, and `not-checked` for the rest.
+- [ ] `tests/ReplayBuffer.Bench.Tests/` -- option parsing for the new options, the ready-line parse, `fps.json` mapping with the load, the scripted players' result parse, and a GpuLoad start/ready/exit smoke test skipped without a hardware GPU.
+- [ ] Runs into `measurements/bench-1.14` -- the three timing tests rerun, then `fps` (synthetic), `hotkey --inject`, `drift --minutes 60` and `playback --auto`.
+- [ ] `_bmad-output/.../epic-engine-baseline.md` Notes -- after the runs, Sofia records the results and decisions: the §6 final stack, §7.2 kept, and the §7.4 facts.
 
 **Acceptance Criteria:**
 - Given FFmpeg is fetched, when `dotnet build` and `dotnet test --solution` run, then there are 0 warnings and all tests pass. `pwsh tools/publish-engine.ps1` also gives 0 warnings.
 - Given a 2-minute agent smoke run of `bench drift --minutes 2`, which needs no game, when it finishes, then `drift.json` matches at least 90 % of flashes and loopback bursts, and `report.md` shows the A/V figure against 16.7 ms.
 - Given the builder runs `fps`, `drift --minutes 60`, `playback` and `hotkey` into one folder, then `report.md` shows the FPS loss, the 60-minute drift, per-player playback and the Hotkey latency, each against its target.
 - Given those results, then the epic's Notes hold a dated Decision on the final §6 stack, with the §7.4 facts and the figures.
+- Given no game is running, when `bench fps --seconds 30 --passes 1 --settle 5` runs, then it writes `fps.json` with a loss figure and the synthetic load's details (kind, resolution, target and calibrated fps, iterations, adapter), and no load process is left running.
+- Given `bench hotkey --inject` and `bench playback --auto` run with nobody at the PC, then `hotkey.json` holds injected timings and `playback.json` holds the scripted players' results, with every other player `not-checked`.
+
+## Plan Change Log
+
+- **2026-11-01, builder renegotiation (unattended runs).** The builder is away and asked for the initiative to finish unattended. A synthetic GPU load (`ReplayBuffer.Bench.GpuLoad`) replaces the game in `bench fps`, `hotkey` gains `--inject`, and `playback` gains `--auto`. The real-game FPS run, real presses and the players that need a person go to the Human Check Queue in `automation-state.md`. Frozen intent edited by the builder's decision: Approach, Boundaries, Decisions (2026-11-01) and the Matrix rows. Status back to `ready-for-dev` for the new tasks.
 
 ## Review Triage Log
 
