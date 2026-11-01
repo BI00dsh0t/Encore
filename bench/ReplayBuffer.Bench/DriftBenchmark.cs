@@ -348,25 +348,33 @@ internal static class DriftBenchmark
             settings.FrameMs,
             bucketSeconds));
 
-        // Each track's sample count against the video's duration (its frame count over the fps): a track's ends
-        // are whole AAC frames, so the tolerance is one AAC frame (1024 samples) plus one video frame.
-        const int AacFrameSamples = 1024;
-        var trackToleranceMs = (AacFrameSamples * 1000.0 / OnsetDetector.SampleRate) + settings.FrameMs;
-        var videoSeconds = scan.Fps > 0 ? scan.VideoFrames / scan.Fps : scan.Video.DurationSeconds;
-        var tracks = scan.AudioStreams.Select((stream, i) =>
-        {
-            var samples = i == scan.BurstTrack ? scan.BurstTrackSamples : stream.Packets * AacFrameSamples;
-            var seconds = (double)samples / OnsetDetector.SampleRate;
-            var minus = (seconds - videoSeconds) * 1000;
-            return new TrackCheck(i, stream.Title, samples, Math.Round(seconds, 4), Math.Round(minus, 2), Math.Round(trackToleranceMs, 3),
-                Math.Abs(minus) < trackToleranceMs ? DriftMath.Pass : DriftMath.Miss);
-        }).ToList();
+        var tracks = CheckTracks(scan, settings.FrameMs);
 
         var verdicts = new[] { av.Verdict, audioToAudio?.Verdict ?? DriftMath.Inconclusive };
         var verdict = verdicts.Contains(DriftMath.Miss) ? DriftMath.Miss : verdicts.Contains(DriftMath.Inconclusive) ? DriftMath.Inconclusive : DriftMath.Pass;
         return new DriftReport(
             DateTimeOffset.Now, minutes, engine, settings, log.OutputDevice, log.InputDevice, mp4, statsPath, exit, null, startup, scan.VideoFrames,
             av, audioToAudio, tracks, verdict, warnings);
+    }
+
+    /// <summary>
+    /// Each track's sample count against the video's span from its packet timestamps, not its frame count over
+    /// the fps: a slot the pacer skips leaves a gap in the timestamps and no frame. A track's ends are whole AAC
+    /// frames, so the tolerance is one AAC frame (1024 samples) plus one video frame.
+    /// </summary>
+    internal static List<TrackCheck> CheckTracks(MediaScan scan, double frameMs)
+    {
+        const int AacFrameSamples = 1024;
+        var toleranceMs = (AacFrameSamples * 1000.0 / OnsetDetector.SampleRate) + frameMs;
+        var videoSeconds = scan.Video.DurationSeconds;
+        return scan.AudioStreams.Select((stream, i) =>
+        {
+            var samples = i == scan.BurstTrack ? scan.BurstTrackSamples : stream.Packets * AacFrameSamples;
+            var seconds = (double)samples / OnsetDetector.SampleRate;
+            var minus = (seconds - videoSeconds) * 1000;
+            return new TrackCheck(i, stream.Title, samples, Math.Round(seconds, 4), Math.Round(minus, 2), Math.Round(toleranceMs, 3),
+                Math.Abs(minus) < toleranceMs ? DriftMath.Pass : DriftMath.Miss);
+        }).ToList();
     }
 
     private static void Print(DriftReport report)

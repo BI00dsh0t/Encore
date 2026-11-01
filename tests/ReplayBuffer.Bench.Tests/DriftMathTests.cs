@@ -198,4 +198,47 @@ public sealed class DriftMathTests
         Assert.Null(result.BoundSamples);
         Assert.Equal($"the input device has {why}", result.Why);
     }
+
+    [Fact]
+    public void TracksAreCheckedAgainstTheVideoSpanNotItsFrameCount()
+    {
+        // The 60 min drift run: the pacer skipped 33 slots, so 215967 frames span the full 3600 s.
+        var scan = new MediaScan(
+            60,
+            [
+                new StreamSpan(0, "video", null, 0, 3600.0, 215967),
+                new StreamSpan(1, "audio", "Game", 0, 3600.021, 168751),
+                new StreamSpan(2, "audio", "Mic", 0, 3600.021, 168751),
+            ],
+            215967,
+            [],
+            0,
+            172801024,
+            []);
+
+        var tracks = DriftBenchmark.CheckTracks(scan, 1000.0 / 60);
+
+        Assert.Equal(2, tracks.Count);
+        Assert.All(tracks, t => Assert.Equal(DriftMath.Pass, t.Mark));
+        Assert.InRange(tracks[0].MinusVideoMs, 21, 22);
+        Assert.InRange(tracks[1].MinusVideoMs, 21, 22);
+    }
+
+    [Fact]
+    public void ATrackLongerThanTheVideoByMoreThanAFrameIsAMiss()
+    {
+        var scan = new MediaScan(
+            60,
+            [new StreamSpan(0, "video", null, 0, 10.0, 600), new StreamSpan(1, "audio", "Game", 0, 10.1, 474)],
+            600,
+            [],
+            0,
+            484_800,
+            []);
+
+        var track = Assert.Single(DriftBenchmark.CheckTracks(scan, 1000.0 / 60));
+
+        Assert.Equal(DriftMath.Miss, track.Mark);
+        Assert.InRange(track.MinusVideoMs, 99, 101);
+    }
 }
