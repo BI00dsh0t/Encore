@@ -12,7 +12,7 @@ public sealed class SessionOrchestratorTests : IDisposable
     private const string ProfileId = @"c:\games\game.exe";
 
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
-    private static readonly SessionAudio NoAudio = new([]);
+    private static readonly SessionAudio NoAudio = SessionAudio.None;
 
     private readonly FakeFactory _factory = new();
     private readonly ConcurrentQueue<(CaptureState State, int ThreadId)> _published = new();

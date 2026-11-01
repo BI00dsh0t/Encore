@@ -96,5 +96,35 @@ public sealed class EngineProcessTests
         Assert.Contains("Windows:", stdout);
         Assert.Contains("Output Devices (loopback):", stdout);
         Assert.Contains("Input Devices:", stdout);
+
+        // Every endpoint line: marker, flow, friendly name, parent name, then the endpoint id.
+        var endpoints = stdout.Split('\n')
+            .Select(l => l.TrimEnd('\r'))
+            .SkipWhile(l => l != "Output Devices (loopback):")
+            .Where(l => l.StartsWith("  output", StringComparison.Ordinal) || l.StartsWith("* output", StringComparison.Ordinal)
+                || l.StartsWith("  input", StringComparison.Ordinal) || l.StartsWith("* input", StringComparison.Ordinal))
+            .ToList();
+        var present = Platform.Audio.AudioEndpoints.List(Platform.Audio.AudioFlow.Output).Count
+            + Platform.Audio.AudioEndpoints.List(Platform.Audio.AudioFlow.Input).Count;
+        Assert.Equal(present, endpoints.Count);
+        Assert.All(endpoints, l => Assert.Matches(@"^[* ] (output|input) +\S.*  parent: .+  \[\{.+\}\.\{.+\}\]$", l));
+    }
+
+    [Fact]
+    public void DebugCaptureRefusesANonTestInstance()
+    {
+        var (exitCode, _, stderr) = RunEngine(EngineFolder, "debug-capture", "--window", "a", "--instance", "Foo");
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("error invalid-arguments", stderr);
+    }
+
+    [Fact]
+    public void DebugCaptureRefusesTheTrackLayoutWithADeviceFlag()
+    {
+        var (exitCode, _, stderr) = RunEngine(EngineFolder, "debug-capture", "--window", "a", "--track-layout", "--output-device", "x");
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("error invalid-arguments", stderr);
     }
 }

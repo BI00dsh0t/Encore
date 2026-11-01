@@ -32,6 +32,34 @@ public sealed class CommandLineTests
     }
 
     [Fact]
+    public void DebugCaptureTakesTheTrackLayoutFlagAndATestInstance()
+    {
+        var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(
+            ["debug-capture", "--window", "League", "--track-layout", "--instance", "ReplayBuffer-Test-2-1", "--seconds", "3"]).Command);
+
+        Assert.True(command.TrackLayout);
+        Assert.Equal("ReplayBuffer-Test-2-1", command.Instance);
+        Assert.Equal(3, command.Seconds);
+
+        var plain = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(["debug-capture", "--window", "League"]).Command);
+        Assert.False(plain.TrackLayout);
+        Assert.Null(plain.Instance);
+    }
+
+    [Theory]
+    [InlineData("--track-layout", "--output-device", "Speakers")]
+    [InlineData("--input-device", "Mic", "--track-layout")]
+    [InlineData("--instance", "ReplayBuffer")]
+    [InlineData("--instance", "Foo")]
+    [InlineData("--instance", "ReplayBuffer-Test-")]
+    [InlineData("--instance", "ReplayBuffer-Test-..\\x")]
+    [InlineData("--instance")]
+    public void DebugCaptureRefusesMixedDeviceFlagsAndNonTestInstances(params string[] extra)
+    {
+        Assert.NotNull(CommandLine.Parse(["debug-capture", "--window", "League", .. extra]).Error);
+    }
+
+    [Fact]
     public void DebugCaptureDefaultsToThirtySecondsAndDefaultDevices()
     {
         var command = Assert.IsType<DebugCaptureCommand>(CommandLine.Parse(["debug-capture", "--window", "League"]).Command);

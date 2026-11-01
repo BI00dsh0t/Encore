@@ -37,7 +37,9 @@ public enum ColorPath
 /// <see cref="Fps"/> and <see cref="BitrateKbps"/> make the session's <c>video</c> value (CBR); a null
 /// <see cref="Size"/> is the window's size, made even. <see cref="Encoder"/> forces an FFmpeg encoder.
 /// <see cref="EncodeThread"/> (<c>--encode-thread</c>) is still accepted and has no effect: since
-/// story 1.11 the encoder thread is always on.
+/// story 1.11 the encoder thread is always on. <see cref="TrackLayout"/> (<c>--track-layout</c>)
+/// captures the Tracks of the instance's Global <c>trackLayout</c> instead of the output and input
+/// device; <see cref="Instance"/> (<c>--instance</c>, test names only) overrides the process's own instance.
 /// </summary>
 public sealed record DebugCaptureCommand(
     string? Window,
@@ -57,7 +59,9 @@ public sealed record DebugCaptureCommand(
     DebugCaptureSize? Size = null,
     int Fps = DebugCaptureCommand.DefaultFps,
     int BitrateKbps = DebugCaptureCommand.DefaultBitrateKbps,
-    string? Encoder = null) : EngineCommand
+    string? Encoder = null,
+    bool TrackLayout = false,
+    string? Instance = null) : EngineCommand
 {
     public const int DefaultSeconds = 30;
 
@@ -103,7 +107,8 @@ public static class CommandLine
                               [--stats <file.json>] [--gpu-priority <-7..7>] [--stages full|copy|wgc]
                               [--nvenc-preset p1..p7] [--nvenc-tune hq|ll|ull] [--color x1|x2] [--encode-thread]
                               [--codec h264|hevc|av1] [--size <W>x<H>] [--fps 1..120] [--bitrate <kbps>]
-                              [--encoder <ffmpeg encoder name>]
+                              [--encoder <ffmpeg encoder name>] [--track-layout]
+                              [--instance ReplayBuffer-Test-<suffix>]
         """;
 
     public static ParseResult Parse(IReadOnlyList<string> args)
@@ -154,6 +159,8 @@ public static class CommandLine
         var fps = DebugCaptureCommand.DefaultFps;
         var bitrate = DebugCaptureCommand.DefaultBitrateKbps;
         string? encoder = null;
+        var trackLayout = false;
+        string? instance = null;
 
         for (var i = 1; i < args.Count; i++)
         {
@@ -161,6 +168,12 @@ public static class CommandLine
             if (option == "--encode-thread")
             {
                 encodeThread = true;
+                continue;
+            }
+
+            if (option == "--track-layout")
+            {
+                trackLayout = true;
                 continue;
             }
 
@@ -315,6 +328,14 @@ public static class CommandLine
 
                     encoder = value;
                     break;
+                case "--instance":
+                    if (!Contracts.Instance.IsTestName(value))
+                    {
+                        return Fail($"--instance must be {ServeCommand.TestInstancePrefix}<letters, digits or dashes>.");
+                    }
+
+                    instance = value;
+                    break;
                 default:
                     return Fail($"Unknown option '{option}'.");
             }
@@ -330,6 +351,11 @@ public static class CommandLine
             return Fail("--window needs a non-empty title.");
         }
 
+        if (trackLayout && (outputDevice is not null || inputDevice is not null))
+        {
+            return Fail("--track-layout takes its devices from the Track Layout; drop --output-device and --input-device.");
+        }
+
         // The video key's own check, so debug-capture refuses exactly what settings.update would.
         var video = new VideoSettings(codec, size?.Width ?? 2, size?.Height ?? 2, fps, bitrate, RateControl.Cbr);
         if (!Keys.Video.IsValid(Keys.Video.ToJson(video)))
@@ -340,7 +366,7 @@ public static class CommandLine
         return new ParseResult(
             new DebugCaptureCommand(
                 window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages, preset, tune, color, encodeThread,
-                codec, size, fps, bitrate, encoder),
+                codec, size, fps, bitrate, encoder, trackLayout, instance),
             null);
     }
 

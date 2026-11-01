@@ -3,7 +3,7 @@ title: 'Tracer: Global Track Layout to named Track streams in a capture'
 type: 'feature'
 ticket: '1'
 created: '2026-11-01'
-status: 'ready-for-dev'
+status: 'in-progress'
 baseline_revision: 'bc4d4a12bb672a1efd392281b3c7c254d959c9f7'
 route: 'full'
 route_source: 'auto'
@@ -86,6 +86,8 @@ deferred: []
 
 ## Implementation Notes
 
+- 2026-11-01, paused: the builder took the PC (the `.bench-running` pause). The implementing subagent was stopped during its own verification; its report never came back. All the plan's source and test files are written and committed as WIP. To resume: read the WIP diff against `baseline_revision`, then run the Verification commands. The build and tests have not been confirmed, and the matrix audit, the review (step 4) and the real BEACN capture are still to do.
+
 ## Plan Change Log
 
 ## Review Triage Log
@@ -103,6 +105,8 @@ EmitSum(_emitted, ready); _emitted = ready; // drop consumed pending
 ```
 
 ## Verification
+
+**GPU lock:** story 1.14 runs benchmarks in parallel. Before every build, test run or capture, check for `%USERPROFILE%\Documents\repos\ReplayBuffer\.bench-running`. While it exists, wait for it to go, checking every few minutes with a background wait; never build, test or capture while it is there.
 
 **Commands:**
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors

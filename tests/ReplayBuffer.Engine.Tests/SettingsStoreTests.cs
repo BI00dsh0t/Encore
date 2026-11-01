@@ -296,6 +296,46 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal("\"long\"", reloaded.Global["bufferWindow"].GetRawText());
     }
 
+    [Fact]
+    public void ReadDocumentOfAMissingFileIsTheEmptyDocumentAndWritesNothing()
+    {
+        var document = SettingsStore.ReadDocument(Path.Combine(_folder, "no-such-folder"));
+
+        Assert.Same(SettingsDocument.Empty, document);
+        Assert.Empty(Directory.GetFileSystemEntries(_folder));
+    }
+
+    [Fact]
+    public void ReadDocumentReturnsTheCommittedDocumentAndTouchesNothing()
+    {
+        var store = Open();
+        var committed = store.Update(Update(store, SettingsOp.SetGlobal(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(90))));
+        File.WriteAllText(SettingsPath + ".tmp", "a stale temp file");
+        var before = Snapshot();
+
+        var document = SettingsStore.ReadDocument(_folder);
+
+        Assert.Equal(Serialize(committed), Serialize(document));
+        Assert.Equal(before, Snapshot());
+    }
+
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("""{"schemaVersion":2,"revision":3,"global":{},"profiles":{}}""")]
+    public void ReadDocumentOfAnUnreadableFileIsSettingsUnreadableAndLeavesItInPlace(string contents)
+    {
+        File.WriteAllText(SettingsPath, contents);
+        var before = Snapshot();
+
+        var error = Assert.Throws<ErrorCodeException>(() => SettingsStore.ReadDocument(_folder));
+
+        Assert.Equal(ErrorCodes.SettingsUnreadable, error.Code);
+        Assert.Equal(before, Snapshot());
+    }
+
+    /// <summary>Every file in the folder with its contents.</summary>
+    private string Snapshot() => string.Join("\n", Directory.GetFiles(_folder).Order().Select(f => f + "=" + File.ReadAllText(f)));
+
     private SettingsStore Open()
     {
         var (store, code) = SettingsStore.Open(_folder);

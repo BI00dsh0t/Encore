@@ -150,7 +150,7 @@ public sealed class SessionCaptureTests : IDisposable
     {
         var output = AudioEndpoints.Default(PlatformFlow.Output);
         var input = AudioEndpoints.Default(PlatformFlow.Input);
-        return new SessionAudio(
+        return SessionAudio.OnePerDevice(
         [
             new SessionAudioDevice(output.Id, SettingsFlow.Output, output.FriendlyName),
             new SessionAudioDevice(input.Id, SettingsFlow.Input, input.FriendlyName),
