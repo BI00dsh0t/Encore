@@ -3,7 +3,7 @@ title: 'FPS and drift benchmark, and the final stack decision'
 type: 'feature'
 ticket: '14'
 created: '2026-10-27'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '891d34796966c5550a61590f179f28ce9f497961'
 route: 'full'
 route_source: 'auto'
@@ -12,6 +12,7 @@ review: 'quick'
 review_source: 'pinned'
 lenses_ran: ['quick']
 review_loop_iteration: 0
+followup_review_recommended: true
 context:
   - '{project-root}/PLAN.md'
 ---
@@ -146,6 +147,45 @@ context:
 | 11 | The epic-Notes AC is unmet | false | reject | By design it waits on the builder's runs (Verify, task 12). It isn't a code defect. |
 | 12 | The body of commit `8bb0d33` isn't wrapped at 72 characters | low | reject | Fixing it means rewriting committed history for a cosmetic rule. Later commits follow the rule. |
 | 13 | The plan's edits are uncommitted | false | reject | That's this review's own in-progress frontmatter edit; it's committed with the patches. |
+
+### 2026-11-01 — Review pass
+- verdicts: 9 findings (8 from lens `quick`, 1 from the orchestrator's own read of the diff) — high 0, medium 5, low 4, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` A load that exits after `ready` only warns; Bench exits 0 and the load's stderr is lost — confirmed: `measure-path-a.ps1` records `$aborted` and exits 0, and the stderr builder is local to `Start`. Fix: `GpuLoadProcess` keeps its stderr; a load gone during the run is reported with its exit code and stderr, exit 1.
+  - `[medium]` `[patch]` `hotkey --inject` with every injected press dropped (UIPI drops silently) ends with 0 timings, no error, exit 0 — confirmed: `Result` names a shortfall only when `ms.Count > 0`. Fix: inject mode with 0 timings names the reason and exits 1.
+  - `[medium]` `[patch]` The WMP script records a 20 s stall with no OCX error as `media` (player refused the file → miss) — confirmed in the script. Fix: `media` only when the OCX reported an error; a timeout is `not-checked` with the reason.
+  - `[low]` `[reject]` The "during" border grab isn't tied to the capture having started — real only for very short clips on a slow start: the default 30 s clip grabs 8 s in, and engine start to first frame is ≈ 0.3 s (AOT) to ≈ 1 s (JIT); tying it to the engine's capture start needs a new signal from the engine, more than a direct correction.
+  - `[medium]` `[patch]` A second `ReplayBuffer.Bench.GpuLoad` already running is measured too (the script takes the first by name; PresentMon traces every process of that name) — reachable after a manual run without `--parent`. Fix: refuse to start, naming the running pid(s).
+  - `[low]` `[patch]` `--load-warmup` ≥ ≈ 57 s can never meet the default 60 s `--load-timeout` — direct correction: the ready timeout is at least warm-up + 30 s.
+  - `[medium]` `[patch]` Scripted headless Chrome on a fresh profile does background downloads, against "never downloads anything" — fix: `--disable-background-networking --disable-component-update --no-pings`.
+  - `[low]` `[patch]` `EnumAdapters1` failures other than `DXGI_ERROR_NOT_FOUND` dereference a null adapter (access violation, no stderr) — direct correction: throw on any other failed HRESULT.
+  - `[low]` `[patch]` (orchestrator) The load's popup isn't topmost, and `SetForegroundWindow` is refused for a process started from a background shell, so in an unattended run other windows can cover the "game" for the whole FPS run — fix: `WS_EX_TOPMOST`, keeping `WS_EX_APPWINDOW`.
+
+## Auto Run Result
+
+**2026-11-01, bmad-build-auto on the amendment (full route, quick review).**
+
+- **Summary:** `bench fps` now runs without a game. It starts Bench's own synthetic GPU load, calibrated to `--target-fps` (default 80), measures it through the unchanged `measure-path-a.ps1`, records the load in `fps.json` and `report.md`, and always stops it. `bench hotkey --inject` presses the key with `SendInput`. `bench playback --auto` scripts headless Chrome and Windows Media Player (`WMPlayer.OCX`), answers the capture-border question from screen grabs, and records every other player as `not-checked`.
+- **Files:**
+  - `bench/ReplayBuffer.Bench.GpuLoad/` (new): the load. Borderless topmost popup, D3D11 FLIP_DISCARD swap chain, `D3DCompile`d shader, calibration, ready line, `--parent`.
+  - `GpuLoadProcess.cs` (new): starts the load, waits for ready, keeps its stderr, and stops it.
+  - `FpsBenchmark.cs`: the synthetic path. It refuses a second load and fails on a load that dies mid-run.
+  - `KeyInjector.cs` (new), `HotkeyBenchmark.cs`: `--inject`, and a named failure when no press arrives.
+  - `PlayerScripts.cs` (new), `BorderProbe.cs` (new), `PlaybackCheck.cs`, `DriftBenchmark.cs`: `--auto`.
+  - `BenchOptions.cs`, `Report.cs`: the new options and report lines.
+  - `ReplayBuffer.slnx`, the csproj files: the new project.
+  - `tests/ReplayBuffer.Bench.Tests/UnattendedTests.cs` and `UnattendedProcessTests.cs` (new), `PlaybackChecklistTests.cs`: the tests.
+- **Review:**
+  - 9 findings: 8 patched (`1693162`), 0 deferred.
+  - 1 rejected as low: the border grab isn't tied to capture start. The default clip grabs 8 s in; tying it needs a new engine signal.
+  - Patched by verdict: 5 medium, 3 low.
+- **Follow-up review recommended: true** (two or more medium patched). The specific unverified risk: three fixes have no tests. They are the load dying mid-run (exit 1 with its stderr), `--inject` with every press dropped by UIPI, and the refusal of a second load instance. The QA session on this branch serves as that follow-up.
+- **Verification:**
+  - Implementer: Release build 0 warnings; Bench tests 115/115; NativeAOT publish 0 warnings; smoke runs of `fps --seconds 30 --passes 1 --settle 5` (loss figure plus load details, no load left) and `playback --auto --seconds 15`.
+  - Orchestrator: the three timing tests rerun alone in Release and passed (3/3). Full build, tests and publish after the patches are in `measurements/bench-1.14/verify-after-review.log`.
+- **Residual risks:**
+  - The capture-border answer comes from a GDI screen grab: if WGC's border isn't in the grab, "no" could be a false negative. The PNGs are kept for a person to check.
+  - The synthetic load is a proxy for a game, not a game. The real-game run is queued for the builder.
 
 ## Checkpoint Log
 
