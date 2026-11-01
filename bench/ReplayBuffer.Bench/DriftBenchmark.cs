@@ -52,8 +52,10 @@ internal sealed record DriftReport(
 /// </summary>
 internal static class MarkedCapture
 {
+    /// <param name="probe">Screen grabs around the marker: one before the engine starts, one <see cref="BorderProbe.Delay"/> into its capture.</param>
     public static (int ExitCode, string Stderr, MarkerLog Log) Run(
-        string engine, CaptureSettings settings, int seconds, string mp4, string? statsPath, string logPrefix, double toneDbfs, List<string> warnings)
+        string engine, CaptureSettings settings, int seconds, string mp4, string? statsPath, string logPrefix, double toneDbfs, List<string> warnings,
+        BorderProbe? probe = null)
     {
         var output = ResolveDevice(AudioFlow.Output, settings.OutputDevice);
         var input = ResolveDevice(AudioFlow.Input, settings.InputDevice);
@@ -106,13 +108,27 @@ internal static class MarkedCapture
         int exit;
         string stderr;
         long startQpc;
+        Task? grab = null;
         try
         {
+            if (probe is not null)
+            {
+                probe.Before(marker.Handle);
+                grab = Task.Run(() =>
+                {
+                    Thread.Sleep(probe.Delay);
+                    probe.During(marker.Handle);
+                });
+            }
+
             (exit, stderr, startQpc) = EngineProcess.Run(engine, args, logPrefix, TimeSpan.FromSeconds(seconds + 180));
         }
         finally
         {
             Console.CancelKeyPress -= keep;
+
+            // The marker must outlive the grab.
+            grab?.Wait();
         }
 
         // The engine's tail is past its --seconds; give the last flash and burst a moment, then stop both.

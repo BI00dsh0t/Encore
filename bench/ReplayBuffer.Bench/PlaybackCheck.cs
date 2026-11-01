@@ -3,10 +3,13 @@ using System.Text.Json;
 namespace ReplayBuffer.Bench;
 
 /// <summary>One player's answers; <see cref="Status"/> is <c>checked</c> or <c>not-checked</c> (skipped).</summary>
-internal sealed record PlayerCheck(string Player, string Status, bool? Plays, bool? AvInSync, string? AudioTracks, string? Notes);
+/// <param name="Method">Who checked it: <c>scripted</c> (<c>--auto</c>), <c>person</c>; null for a person's answers in a file written before it was recorded.</param>
+internal sealed record PlayerCheck(string Player, string Status, bool? Plays, bool? AvInSync, string? AudioTracks, string? Notes, string? Method = null);
 
 /// <summary><c>playback.json</c>.</summary>
 /// <param name="CaptureBorder">Whether WGC's capture border showed around the marker window (§7.4 <c>IsBorderRequired</c>): yes, no or not-checked.</param>
+/// <param name="Auto">True for an unattended <c>--auto</c> run; null in a file written before it was recorded.</param>
+/// <param name="BorderProbe">The screen grabs behind <see cref="CaptureBorder"/> in an <c>--auto</c> run.</param>
 internal sealed record PlaybackReport(
     DateTimeOffset Created,
     string Clip,
@@ -15,12 +18,16 @@ internal sealed record PlaybackReport(
     int AudioTracks,
     string? CaptureBorder,
     IReadOnlyList<PlayerCheck> Players,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    bool? Auto = null,
+    BorderProbeResult? BorderProbe = null);
 
 /// <summary>
 /// <c>bench playback</c>: a short marked capture (both tracks, the default H.264 output), then a checklist
 /// the builder answers per NFR-4 player. HEVC and AV1 are not checked: they are labelled as possibly not
-/// playing everywhere.
+/// playing everywhere. With <c>--auto</c> nobody answers: Chrome and Windows Media Player are scripted
+/// (<see cref="PlayerScripts"/>), screen grabs answer the capture-border question (<see cref="BorderProbe"/>),
+/// and every other player is <c>not-checked</c>, needing a person.
 /// </summary>
 internal static class PlaybackCheck
 {
@@ -35,14 +42,28 @@ internal static class PlaybackCheck
         var players = options.List("players", DefaultPlayers);
         var settings = options.CaptureSettings();
         var toneDbfs = options.Double("tone-dbfs", OnsetDetector.DefaultBurstDbfs, -60, -3);
+        var auto = options.Flag("auto");
+        if (!auto && new[] { "chrome", "play-seconds", "player-timeout" }.FirstOrDefault(options.Has) is { } autoOption)
+        {
+            throw new BenchUsageException($"--{autoOption} applies to --auto only.");
+        }
+
+        var playSeconds = options.Int("play-seconds", 5, 1, 120);
+        var playerTimeout = TimeSpan.FromSeconds(options.Int("player-timeout", 60, 10, 600));
+        var chromeOption = options.Text("chrome");
         var engine = context.ResolveEngine();
         var tools = context.ResolveFfmpeg();
         var clip = Path.Combine(context.RunFolder, "playback.mp4");
         var warnings = new List<string>();
 
         Console.WriteLine($"Playback: a {seconds} s clip of the marker window with both tracks, into {clip}");
-        Console.WriteLine("Watch the marker window while it records: does a yellow capture border show around it?");
-        var (exit, stderr, log) = MarkedCapture.Run(engine, settings, seconds, clip, null, Path.Combine(context.RunFolder, "playback"), toneDbfs, warnings);
+        var probe = auto ? new BorderProbe(context.RunFolder, TimeSpan.FromSeconds(Math.Min(8, seconds / 2.0))) : null;
+        if (!auto)
+        {
+            Console.WriteLine("Watch the marker window while it records: does a yellow capture border show around it?");
+        }
+
+        var (exit, stderr, log) = MarkedCapture.Run(engine, settings, seconds, clip, null, Path.Combine(context.RunFolder, "playback"), toneDbfs, warnings, probe);
         File.WriteAllText(Path.Combine(context.RunFolder, "playback-markers.json"), JsonSerializer.Serialize(log, BenchJson.Options));
         if (exit != 0 || !File.Exists(clip))
         {
@@ -63,13 +84,53 @@ internal static class PlaybackCheck
         Console.WriteLine();
         Console.WriteLine($"Clip: {clip}");
         Console.WriteLine($"It has {audioTracks} audio track(s): the Output Device ({log.OutputDevice}) with a 3 kHz burst each second, and the Input Device ({log.InputDevice}).");
-        Console.WriteLine("The marker flashes white on each burst. Answer y or n; an empty answer or 'skip' leaves it not checked.");
-        Console.WriteLine();
+        PlaybackReport report;
+        if (auto)
+        {
+            var borderProbe = probe!.Result();
+            Console.WriteLine($"Capture border: {borderProbe.Verdict} ({borderProbe.YellowBefore} yellow pixels before the capture, {borderProbe.YellowDuring} during, of {borderProbe.RingPixels} round the edge{(borderProbe.Error is null ? "" : "; " + borderProbe.Error)}).");
+            var checks = Scripted(players, clip, context.RunFolder, chromeOption, playSeconds, playerTimeout);
+            report = new PlaybackReport(DateTimeOffset.Now, clip, seconds, settings, audioTracks, borderProbe.Verdict, checks, warnings, true, borderProbe);
+        }
+        else
+        {
+            Console.WriteLine("The marker flashes white on each burst. Answer y or n; an empty answer or 'skip' leaves it not checked.");
+            Console.WriteLine();
+            var (border, checks) = Questionnaire(players, Console.In, Console.Out);
+            report = new PlaybackReport(DateTimeOffset.Now, clip, seconds, settings, audioTracks, border, checks, warnings, false);
+        }
 
-        var (border, checks) = Questionnaire(players, Console.In, Console.Out);
-        var report = new PlaybackReport(DateTimeOffset.Now, clip, seconds, settings, audioTracks, border, checks, warnings);
         BenchJson.Write(Path.Combine(context.RunFolder, FileName), report);
         return 0;
+    }
+
+    /// <summary>The <c>--auto</c> checklist: Chrome and Windows Media Player scripted, every other player needing a person.</summary>
+    internal static List<PlayerCheck> Scripted(IReadOnlyList<string> players, string clip, string work, string? chromeOption, int playSeconds, TimeSpan timeout)
+    {
+        var checks = new List<PlayerCheck>();
+        foreach (var player in players)
+        {
+            ScriptedPlayback? result = null;
+            if (player.Equals(PlayerScripts.Chrome, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"{player}: playing the clip headless for {playSeconds} s ...");
+                result = PlayerScripts.FindChrome(chromeOption) is { } chrome
+                    ? PlayerScripts.RunChrome(chrome, clip, work, playSeconds, timeout)
+                    : new ScriptedPlayback(PlayerScripts.Chrome, null, null, null, null, null, null, null, null, null, null,
+                        chromeOption is null ? "Chrome is not installed (pass --chrome <exe>)" : $"Chrome is not at '{chromeOption}'");
+            }
+            else if (player.Equals(PlayerScripts.WindowsMediaPlayer, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"{player}: playing the clip through WMPlayer.OCX for {playSeconds} s ...");
+                result = PlayerScripts.RunWindowsMediaPlayer(clip, work, playSeconds, timeout);
+            }
+
+            var check = result is null ? PlayerScripts.NeedsPerson(player) : PlayerScripts.ToCheck(result with { Player = player });
+            Console.WriteLine($"  {player}: {check.Status}{(check.Plays is { } plays ? plays ? ", plays" : ", does not play" : "")}; {check.Notes}");
+            checks.Add(check);
+        }
+
+        return checks;
     }
 
     /// <summary>
@@ -93,14 +154,14 @@ internal static class PlaybackCheck
             var plays = Ask($"{player}: does it play? (y/n/skip)", input, output);
             if (plays is null)
             {
-                checks.Add(new PlayerCheck(player, "not-checked", null, null, null, null));
+                checks.Add(new PlayerCheck(player, "not-checked", null, null, null, null, PlayerScripts.Person));
                 continue;
             }
 
             var sync = plays.Value ? Ask($"{player}: are the flashes and bursts in sync? (y/n/skip)", input, output) : null;
             var tracks = plays.Value ? Line($"{player}: which audio tracks can it play or list? (e.g. 'both', 'first only')", input, output) : null;
             var notes = Line($"{player}: notes (optional)", input, output);
-            checks.Add(new PlayerCheck(player, "checked", plays, sync, tracks, notes));
+            checks.Add(new PlayerCheck(player, "checked", plays, sync, tracks, notes, PlayerScripts.Person));
         }
 
         return (border, checks);

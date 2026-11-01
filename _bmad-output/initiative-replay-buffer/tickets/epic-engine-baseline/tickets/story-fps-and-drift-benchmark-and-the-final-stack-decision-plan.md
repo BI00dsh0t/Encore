@@ -3,7 +3,7 @@ title: 'FPS and drift benchmark, and the final stack decision'
 type: 'feature'
 ticket: '14'
 created: '2026-10-27'
-status: 'ready-for-dev'
+status: 'in-progress'
 baseline_revision: '891d34796966c5550a61590f179f28ce9f497961'
 route: 'full'
 route_source: 'auto'
@@ -107,13 +107,13 @@ context:
 - [x] `bench/ReplayBuffer.Bench/Report.cs` -- merges the JSON files into `report.json` and `report.md`, each figure with its target and a pass/miss mark.
 - [x] `tools/measure-path-a.ps1` -- the `-Size`, `-Fps` and `-Bitrate` pass-through.
 - [x] `tests/ReplayBuffer.Bench.Tests/` (new, in the slnx) -- tests for `DriftMath`, the onset and flash detectors on synthetic buffers, and option parsing. Also an end-to-end analysis test: ffmpeg lavfi makes a 2-minute fMP4 with a flash each second and bursts that drift 5 ms against the flashes over the 2 minutes. The analysis must report 5 ± 1.5 ms A/V drift. A no-drift twin must report under 1 ms. The test is skipped without ffmpeg.
-- [ ] `bench/ReplayBuffer.Bench.GpuLoad/` (new WinExe, in the slnx; AOT-compatible, CsWin32 like Platform.Capture) -- the synthetic load: borderless popup, D3D11 flip-model swap chain, `D3DCompile`d fullscreen-triangle shader with a time-animated `[loop]` of N trig iterations, warm-up calibration of N to `--target-fps`, one `ready` line on stdout, `--parent <pid>` exit, `--size`, `--warmup`, and Escape or `WM_CLOSE` to exit.
-- [ ] `bench/ReplayBuffer.Bench/GpuLoadProcess.cs`, `FpsBenchmark.cs`, `BenchOptions.cs` -- `fps` without `--game` starts the load, waits for `ready` (`--load-timeout`), passes `-Game ReplayBuffer.Bench.GpuLoad`, and always stops it; `fps.json` and `report.md` carry the load's details. Options `--target-fps`, `--load-size`. Confirm `measure-path-a.ps1` needs no change.
-- [ ] `bench/ReplayBuffer.Bench/HotkeyBenchmark.cs`, `KeyInjector.cs` -- `--inject`: `SendInput` presses once a second; the report marks injected presses.
-- [ ] `bench/ReplayBuffer.Bench/PlaybackCheck.cs`, `PlayerScripts.cs` -- `--auto`: Chrome headless and WMP's OCX scripted checks, the capture-border screen grab, and `not-checked` for the rest.
-- [ ] `tests/ReplayBuffer.Bench.Tests/` -- option parsing for the new options, the ready-line parse, `fps.json` mapping with the load, the scripted players' result parse, and a GpuLoad start/ready/exit smoke test skipped without a hardware GPU.
-- [ ] Runs into `measurements/bench-1.14` -- the three timing tests rerun, then `fps` (synthetic), `hotkey --inject`, `drift --minutes 60` and `playback --auto`.
-- [ ] `_bmad-output/.../epic-engine-baseline.md` Notes -- after the runs, Sofia records the results and decisions: the §6 final stack, §7.2 kept, and the §7.4 facts.
+- [x] `bench/ReplayBuffer.Bench.GpuLoad/` (new WinExe, in the slnx; AOT-compatible, CsWin32 like Platform.Capture) -- the synthetic load: borderless popup, D3D11 flip-model swap chain, `D3DCompile`d fullscreen-triangle shader with a time-animated `[loop]` of N trig iterations, warm-up calibration of N to `--target-fps`, one `ready` line on stdout, `--parent <pid>` exit, `--size`, `--warmup`, and Escape or `WM_CLOSE` to exit.
+- [x] `bench/ReplayBuffer.Bench/GpuLoadProcess.cs`, `FpsBenchmark.cs`, `BenchOptions.cs` -- `fps` without `--game` starts the load, waits for `ready` (`--load-timeout`), passes `-Game ReplayBuffer.Bench.GpuLoad`, and always stops it; `fps.json` and `report.md` carry the load's details. Options `--target-fps`, `--load-size`. Confirm `measure-path-a.ps1` needs no change.
+- [x] `bench/ReplayBuffer.Bench/HotkeyBenchmark.cs`, `KeyInjector.cs` -- `--inject`: `SendInput` presses once a second; the report marks injected presses.
+- [x] `bench/ReplayBuffer.Bench/PlaybackCheck.cs`, `PlayerScripts.cs` -- `--auto`: Chrome headless and WMP's OCX scripted checks, the capture-border screen grab, and `not-checked` for the rest.
+- [x] `tests/ReplayBuffer.Bench.Tests/` -- option parsing for the new options, the ready-line parse, `fps.json` mapping with the load, the scripted players' result parse, and a GpuLoad start/ready/exit smoke test skipped without a hardware GPU.
+- [ ] Runs into `measurements/bench-1.14` (after review, by the orchestrating session, not the implementer: about two hours of exclusive GPU and audio use) -- the three timing tests rerun, then `fps` (synthetic), `hotkey --inject`, `drift --minutes 60` and `playback --auto`.
+- [ ] `_bmad-output/.../epic-engine-baseline.md` Notes (after the runs, by the orchestrating session) -- Sofia records the results and decisions: the §6 final stack, §7.2 kept, and the §7.4 facts.
 
 **Acceptance Criteria:**
 - Given FFmpeg is fetched, when `dotnet build` and `dotnet test --solution` run, then there are 0 warnings and all tests pass. `pwsh tools/publish-engine.ps1` also gives 0 warnings.

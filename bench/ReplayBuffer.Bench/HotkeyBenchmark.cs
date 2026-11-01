@@ -13,6 +13,7 @@ namespace ReplayBuffer.Bench;
 internal sealed record HotkeyPressTiming(int Press, double Ms, bool Injected);
 
 /// <summary><c>hotkey.json</c>.</summary>
+/// <param name="Injected">True when Bench pressed the key with <c>SendInput</c> (<c>--inject</c>); null in a file written before it was recorded.</param>
 internal sealed record HotkeyReport(
     DateTimeOffset Created,
     string Key,
@@ -27,12 +28,14 @@ internal sealed record HotkeyReport(
     double TargetMs,
     double OldBarMs,
     string Verdict,
-    string? Error);
+    string? Error,
+    bool? Injected = null);
 
 /// <summary>
 /// <c>bench hotkey</c>: real presses of a Save Hotkey bound on a throwaway <c>serve</c> instance. A
 /// <c>WH_KEYBOARD_LL</c> hook in Bench stamps each key-down; the engine stamps its <c>WM_HOTKEY</c> and
-/// publishes <c>hotkey.pressed</c>. Press-to-stamp is the difference of the two QPCs.
+/// publishes <c>hotkey.pressed</c>. Press-to-stamp is the difference of the two QPCs. With <c>--inject</c>,
+/// Bench presses the combination itself with <c>SendInput</c> about once a second, for unattended runs.
 /// </summary>
 internal static class HotkeyBenchmark
 {
@@ -46,6 +49,7 @@ internal static class HotkeyBenchmark
         var presses = options.Int("presses", 20, 1, 1000);
         var combo = KeyCombo.Parse(options.Text("key", "ctrl+alt+f9"));
         var timeout = TimeSpan.FromSeconds(options.Int("timeout", 60, 5, 3600));
+        var inject = options.Flag("inject");
         var engine = context.ResolveEngine();
         var instance = Instance.TestPrefix + "bench-" + Guid.NewGuid().ToString("N");
         var path = Path.Combine(context.RunFolder, FileName);
@@ -85,15 +89,21 @@ internal static class HotkeyBenchmark
                     var why = save.Code == ErrorCodes.HotkeyTaken
                         ? $"{ErrorCodes.HotkeyTaken}: another process holds {combo.Text}; pick another --key"
                         : $"{save.Code}: the engine did not register {combo.Text}";
-                    BenchJson.Write(path, Result(combo, presses, [], 0, why));
+                    BenchJson.Write(path, Result(combo, presses, [], 0, why, inject));
                     Console.Error.WriteLine(why);
                     return 1;
                 }
 
-                var timings = Measure(combo, presses, timeout, events.Reader, out var unpaired, cancel.Token);
-                var report = Result(combo, presses, timings, unpaired, null);
+                var timings = Measure(combo, presses, timeout, events.Reader, inject, out var unpaired, out var injectFault, cancel.Token);
+                var report = Result(combo, presses, timings, unpaired, injectFault, inject);
                 BenchJson.Write(path, report);
-                Console.WriteLine($"Hotkey: {timings.Count} press(es); p50 {Format(report.P50Ms)} ms, p99 {Format(report.P99Ms)} ms, max {Format(report.MaxMs)} ms ({report.Verdict}).");
+                if (injectFault is not null)
+                {
+                    Console.Error.WriteLine(injectFault);
+                    return 1;
+                }
+
+                Console.WriteLine($"Hotkey: {timings.Count} press(es){(inject ? " injected" : "")}; p50 {Format(report.P50Ms)} ms, p99 {Format(report.P99Ms)} ms, max {Format(report.MaxMs)} ms ({report.Verdict}).");
             }
             finally
             {
@@ -152,7 +162,7 @@ internal static class HotkeyBenchmark
     }
 
     /// <summary>The report of <paramref name="timings"/>, each press held to <see cref="TargetMs"/>.</summary>
-    internal static HotkeyReport Result(KeyCombo combo, int requested, List<HotkeyPressTiming> timings, int unpaired, string? error)
+    internal static HotkeyReport Result(KeyCombo combo, int requested, List<HotkeyPressTiming> timings, int unpaired, string? error, bool injected = false)
     {
         var ms = timings.Select(t => t.Ms).ToList();
         string verdict = error is not null || ms.Count == 0
@@ -173,28 +183,50 @@ internal static class HotkeyBenchmark
             TargetMs,
             OldBarMs,
             verdict,
-            error ?? (ms.Count < requested && ms.Count > 0 ? $"only {ms.Count} of {requested} presses arrived" : null));
+            error ?? (ms.Count < requested && ms.Count > 0 ? $"only {ms.Count} of {requested} presses arrived" : null),
+            injected);
     }
 
-    private static List<HotkeyPressTiming> Measure(KeyCombo combo, int presses, TimeSpan timeout, ChannelReader<HotkeyPress> events, out int unpaired, CancellationToken cancellation)
+    private static List<HotkeyPressTiming> Measure(
+        KeyCombo combo, int presses, TimeSpan timeout, ChannelReader<HotkeyPress> events, bool inject, out int unpaired, out string? injectFault, CancellationToken cancellation)
     {
         using var hook = new KeyboardHook(combo.Vk);
         var timings = new List<HotkeyPressTiming>();
         var downs = new List<(long Qpc, bool Injected)>();
         unpaired = 0;
-        Console.WriteLine($"Press {combo.Text} {presses} times, about a second apart, with the game focused. Each press saves nothing on this test instance.");
+        injectFault = null;
+        if (inject)
+        {
+            Console.WriteLine($"Injecting {combo.Text} with SendInput about once a second, {presses} times. Each press saves nothing on this test instance.");
+        }
+        else
+        {
+            Console.WriteLine($"Press {combo.Text} {presses} times, about a second apart, with the game focused. Each press saves nothing on this test instance.");
+        }
+
         Console.WriteLine($"Stops after {presses} presses, or {timeout.TotalSeconds:0} s without one, or Ctrl+C.");
+
+        // The hook is in place before the first injected press; a press the engine misses is pressed again,
+        // up to twice the count asked for.
+        using var injector = inject ? KeyInjector.Start(combo, TimeSpan.FromSeconds(1), presses * 2) : null;
         while (timings.Count < presses && !cancellation.IsCancellationRequested)
         {
             HotkeyPress press;
             try
             {
-                using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+                using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellation, injector?.Faulted ?? CancellationToken.None);
                 wait.CancelAfter(timeout);
                 press = events.ReadAsync(wait.Token).AsTask().GetAwaiter().GetResult();
             }
             catch (OperationCanceledException)
             {
+                if (injector?.Fault is { } fault)
+                {
+                    injectFault = fault;
+                    Console.WriteLine("The key injector stopped: " + fault);
+                    break;
+                }
+
                 Console.WriteLine(cancellation.IsCancellationRequested ? "Stopped." : $"No press for {timeout.TotalSeconds:0} s; stopping with what was gathered.");
                 break;
             }

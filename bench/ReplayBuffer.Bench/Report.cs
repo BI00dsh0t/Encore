@@ -101,6 +101,18 @@ internal static class Report
 
         md.AppendLine(CultureInfo.InvariantCulture, $"Game `{fps.Game}`, capture {fps.Capture.Size} at {fps.Capture.Fps} fps, CBR {fps.Capture.BitrateKbps} kbps; {fps.Passes} balanced passes of {fps.Seconds} s. Script summary: `{fps.Summary}`.");
         md.AppendLine();
+        if (fps.Load is { Kind: GpuLoadInfo.Synthetic } load)
+        {
+            md.AppendLine(CultureInfo.InvariantCulture,
+                $"**Load: Bench's synthetic GPU load** (`{load.Process}`), a borderless {load.Width}x{load.Height} popup on {load.Adapter}: target {Num(load.TargetFps)} fps, calibrated {Num(load.CalibratedFps)} fps at {load.Iterations} shader iterations, tearing {(load.Tearing == true ? "on" : "off")}. A real game's run is a person's confirmation, not-checked here.");
+            md.AppendLine();
+        }
+        else if (fps.Load is { Kind: GpuLoadInfo.Game })
+        {
+            md.AppendLine("Load: the real game.");
+            md.AppendLine();
+        }
+
         if (fps.Aborted is not null)
         {
             md.AppendLine(CultureInfo.InvariantCulture, $"**Session ended early:** {fps.Aborted}");
@@ -258,14 +270,29 @@ internal static class Report
         md.AppendLine();
         md.AppendLine(CultureInfo.InvariantCulture, $"Capture border shown around the marker window (§7.4 `IsBorderRequired`): **{playback.CaptureBorder ?? "not-checked"}**.");
         md.AppendLine();
+        if (playback.BorderProbe is { } probe)
+        {
+            md.AppendLine(CultureInfo.InvariantCulture,
+                $"From screen grabs of the band {BorderProbe.Margin} px each side of the window's edge: {probe.YellowBefore} yellow pixels before the capture, {probe.YellowDuring} during it, of {probe.RingPixels}{(probe.Error is null ? "" : $"; {probe.Error}")}. Images: `{probe.BeforeImage}`, `{probe.DuringImage}`.");
+            md.AppendLine();
+        }
+
+        if (playback.Auto == true)
+        {
+            md.AppendLine("An unattended `--auto` run: Chrome (headless) and Windows Media Player (its `WMPlayer.OCX` engine) were scripted; A/V sync in a player and every other player need a person.");
+            md.AppendLine();
+        }
+
         md.AppendLine("| Player | Plays | A/V in sync | Audio tracks | Notes | Mark |");
         md.AppendLine("|---|---|---|---|---|---|");
         foreach (var p in playback.Players)
         {
             // A pass needs both answers yes; a "no" to either is a miss; a skipped sync answer is not checked.
+            // A scripted check sees playback only: it passes that, and leaves A/V sync to a person.
             var mark = p.Status != "checked" ? "not-checked"
                 : p.Plays == false || p.AvInSync == false ? DriftMath.Miss
                 : p.Plays == true && p.AvInSync == true ? DriftMath.Pass
+                : p.Method == PlayerScripts.Scripted && p.Plays == true ? "plays: pass; A/V sync: not-checked"
                 : "not-checked";
             md.AppendLine(CultureInfo.InvariantCulture, $"| {p.Player} | {YesNo(p.Plays)} | {YesNo(p.AvInSync)} | {Cell(p.AudioTracks)} | {Cell(p.Notes)} | {mark} |");
         }
@@ -286,6 +313,20 @@ internal static class Report
 
         md.AppendLine(CultureInfo.InvariantCulture, $"`{hotkey.Key}`, {hotkey.Presses} of {hotkey.PressesRequested} presses, from the low-level hook's key-down to the engine's `WM_HOTKEY` stamp.");
         md.AppendLine();
+        if (hotkey.Injected == true)
+        {
+            md.AppendLine("**Presses injected** by Bench with `SendInput` (an unattended run); real key presses are not-checked.");
+            md.AppendLine();
+        }
+        else if (hotkey.Injected == false || hotkey.Timings.Count > 0)
+        {
+            var injected = hotkey.Timings.Count(t => t.Injected);
+            md.AppendLine(injected == 0
+                ? "Real key presses."
+                : string.Create(CultureInfo.InvariantCulture, $"Real key presses; {injected} of {hotkey.Timings.Count} came in flagged injected."));
+            md.AppendLine();
+        }
+
         if (hotkey.Error is not null)
         {
             md.AppendLine(CultureInfo.InvariantCulture, $"**Note:** {hotkey.Error}");

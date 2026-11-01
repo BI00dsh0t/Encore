@@ -18,10 +18,10 @@ public sealed class PlaybackChecklistTests : IDisposable
         var (border, players) = PlaybackCheck.Questionnaire(["Discord", "VLC", "Chrome", "DaVinci Resolve"], input, TextWriter.Null);
 
         Assert.Equal("not-checked", border);
-        Assert.Equal(new PlayerCheck("Discord", "not-checked", null, null, null, null), players[0]);
-        Assert.Equal(new PlayerCheck("VLC", "checked", true, true, "both", "fine"), players[1]);
-        Assert.Equal(new PlayerCheck("Chrome", "not-checked", null, null, null, null), players[2]);
-        Assert.Equal(new PlayerCheck("DaVinci Resolve", "not-checked", null, null, null, null), players[3]);
+        Assert.Equal(new PlayerCheck("Discord", "not-checked", null, null, null, null, PlayerScripts.Person), players[0]);
+        Assert.Equal(new PlayerCheck("VLC", "checked", true, true, "both", "fine", PlayerScripts.Person), players[1]);
+        Assert.Equal(new PlayerCheck("Chrome", "not-checked", null, null, null, null, PlayerScripts.Person), players[2]);
+        Assert.Equal(new PlayerCheck("DaVinci Resolve", "not-checked", null, null, null, null, PlayerScripts.Person), players[3]);
 
         var report = new PlaybackReport(DateTimeOffset.Now, "clip.mp4", 30, new CaptureSettings(1920, 1080, 60, 20_000, null, null), 2, border, players, []);
         BenchJson.Write(_run.PathOf(PlaybackCheck.FileName), report);
@@ -44,7 +44,7 @@ public sealed class PlaybackChecklistTests : IDisposable
         var (border, players) = PlaybackCheck.Questionnaire(["VLC"], input, output);
 
         Assert.Equal("no", border);
-        Assert.Equal(new PlayerCheck("VLC", "checked", false, null, null, null), players[0]);
+        Assert.Equal(new PlayerCheck("VLC", "checked", false, null, null, null, PlayerScripts.Person), players[0]);
         Assert.Contains("Answer y, n or skip.", output.ToString(), StringComparison.Ordinal);
     }
 }

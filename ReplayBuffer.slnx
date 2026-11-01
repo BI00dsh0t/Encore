@@ -26,5 +26,6 @@
   </Folder>
   <Folder Name="/bench/">
     <Project Path="bench/ReplayBuffer.Bench/ReplayBuffer.Bench.csproj" />
+    <Project Path="bench/ReplayBuffer.Bench.GpuLoad/ReplayBuffer.Bench.GpuLoad.csproj" />
   </Folder>
 </Solution>

@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\..\bench\ReplayBuffer.Bench\ReplayBuffer.Bench.csproj" />
+    <!-- Its calibration and ready line are tested here; the smoke test runs its exe from its own output folder. -->
+    <ProjectReference Include="..\..\bench\ReplayBuffer.Bench.GpuLoad\ReplayBuffer.Bench.GpuLoad.csproj" />
     <!-- Built first, not referenced: the Hotkey tests run its exe from its own output folder. -->
     <ProjectReference Include="..\..\src\ReplayBuffer.Engine\ReplayBuffer.Engine.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>

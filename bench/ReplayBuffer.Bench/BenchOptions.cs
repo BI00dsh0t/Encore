@@ -18,13 +18,16 @@ internal sealed class BenchOptions
     public const string Usage =
         """
         Usage:
-          ReplayBuffer.Bench fps      [--game Cyberpunk2077] [--seconds 300] [--passes 3] [--settle 20]
+          ReplayBuffer.Bench fps      [--game <process>] [--seconds 300] [--passes 3] [--settle 20]
+                                      [--target-fps 80] [--load-size WxH] [--load-timeout 60] [--load-warmup 10]
+                                      [--load-exe <ReplayBuffer.Bench.GpuLoad.exe>]
                                       [--presentmon <exe>] [--pwsh <exe>] [--no-gpu-sampler] <capture options>
           ReplayBuffer.Bench drift    [--minutes 60] [--tone-dbfs -30] [--bucket-seconds 60] [--burst-track 0]
                                       [--reanalyze] <capture options>
           ReplayBuffer.Bench playback [--seconds 30] [--players "Discord,Chrome,VLC,Windows Media Player,DaVinci Resolve"]
-                                      [--tone-dbfs -30] <capture options>
-          ReplayBuffer.Bench hotkey   [--presses 20] [--key ctrl+alt+f9] [--timeout 60]
+                                      [--tone-dbfs -30] [--auto [--chrome <exe>] [--play-seconds 5] [--player-timeout 60]]
+                                      <capture options>
+          ReplayBuffer.Bench hotkey   [--presses 20] [--key ctrl+alt+f9] [--timeout 60] [--inject]
           ReplayBuffer.Bench report
 
         Capture options: [--size 1920x1080] [--fps 60] [--bitrate 20000] [--output-device <name or id>]
@@ -34,6 +37,11 @@ internal sealed class BenchOptions
 
         Each measurement writes its JSON into the run folder (default measurements/bench-<time>/, or --out;
         report defaults to the newest bench-* folder) and regenerates report.md and report.json there.
+
+        Without --game, fps measures Bench's own synthetic GPU load (ReplayBuffer.Bench.GpuLoad), calibrated to
+        --target-fps over the primary monitor (or --load-size). hotkey --inject presses the key with SendInput
+        about once a second; playback --auto scripts Chrome (headless) and Windows Media Player and records
+        every other player as not-checked. All three need nobody at the PC.
         """;
 
     private static readonly string[] Common = ["out", "repo", "engine", "ffmpeg"];
@@ -41,14 +49,15 @@ internal sealed class BenchOptions
 
     private static readonly Dictionary<string, string[]> Allowed = new(StringComparer.Ordinal)
     {
-        ["fps"] = [.. Common, .. Capture, "game", "seconds", "passes", "settle", "presentmon", "pwsh", "no-gpu-sampler"],
+        ["fps"] = [.. Common, .. Capture, "game", "seconds", "passes", "settle", "presentmon", "pwsh", "no-gpu-sampler",
+            "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe"],
         ["drift"] = [.. Common, .. Capture, "minutes", "tone-dbfs", "bucket-seconds", "burst-track", "reanalyze"],
-        ["playback"] = [.. Common, .. Capture, "seconds", "players", "tone-dbfs"],
-        ["hotkey"] = [.. Common, "presses", "key", "timeout"],
+        ["playback"] = [.. Common, .. Capture, "seconds", "players", "tone-dbfs", "auto", "chrome", "play-seconds", "player-timeout"],
+        ["hotkey"] = [.. Common, "presses", "key", "timeout", "inject"],
         ["report"] = [.. Common],
     };
 
-    private static readonly HashSet<string> FlagNames = new(StringComparer.Ordinal) { "no-gpu-sampler", "reanalyze" };
+    private static readonly HashSet<string> FlagNames = new(StringComparer.Ordinal) { "no-gpu-sampler", "reanalyze", "inject", "auto" };
 
     private readonly Dictionary<string, string> _values;
     private readonly HashSet<string> _flags;
@@ -166,19 +175,26 @@ internal sealed class BenchOptions
         return items.Length == 0 ? throw new BenchUsageException($"--{name} lists nothing.") : items;
     }
 
-    /// <summary>The capture options every <c>debug-capture</c> Bench starts gets.</summary>
-    public CaptureSettings CaptureSettings()
+    /// <summary>Parses <c>WxH</c>, each side even and from 2 to 8192.</summary>
+    /// <exception cref="BenchUsageException">Not such a size.</exception>
+    public static (int Width, int Height) ParseSize(string size, string option)
     {
-        var size = Text("size", "1920x1080");
         var parts = size.Split('x');
         if (parts.Length != 2
             || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var width)
             || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var height)
             || width is < 2 or > 8192 || height is < 2 or > 8192 || width % 2 != 0 || height % 2 != 0)
         {
-            throw new BenchUsageException($"--size '{size}' is not WxH with even sides.");
+            throw new BenchUsageException($"--{option} '{size}' is not WxH with even sides.");
         }
 
+        return (width, height);
+    }
+
+    /// <summary>The capture options every <c>debug-capture</c> Bench starts gets.</summary>
+    public CaptureSettings CaptureSettings()
+    {
+        var (width, height) = ParseSize(Text("size", "1920x1080"), "size");
         return new CaptureSettings(
             width,
             height,

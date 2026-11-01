@@ -16,5 +16,7 @@
     <ProjectReference Include="..\..\src\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj" />
     <ProjectReference Include="..\..\src\ReplayBuffer.Media\ReplayBuffer.Media.csproj" />
     <ProjectReference Include="..\..\src\ReplayBuffer.Platform.Audio\ReplayBuffer.Platform.Audio.csproj" />
+    <!-- Built first, not referenced: bench fps starts its exe from its own output folder. -->
+    <ProjectReference Include="..\ReplayBuffer.Bench.GpuLoad\ReplayBuffer.Bench.GpuLoad.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>
