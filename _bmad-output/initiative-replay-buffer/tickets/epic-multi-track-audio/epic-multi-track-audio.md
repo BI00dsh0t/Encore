@@ -71,4 +71,5 @@ With the builder's BEACN setup, captured files carry the configured, named Track
 - Decision: 2026-10-25, the double-count warning fires when a Track mixes Output Devices from different parent devices. It's a heuristic that can miss a mixer output that already includes a mic captured on its own. Confirmed by the user.
 - Decision: 2026-10-25, meters show what is recorded, so a muted mic reads silent in the Tracks mute affects. Confirmed by the user.
 - Decision: 2026-10-25, there's no `bmad-ux` pass for the Track Layout editor; the builder lays it out, and you check it by hand. Confirmed by the user.
+- Decision: 2026-11-01, story 1 waits only on the epic 1 stories it builds on (1.4 settings store, 1.5 IPC, 1.6 capture session, 1.9 Hotkeys, 1.10 encoder, 1.12 AudioDeviceHub), not the whole epic, so epic 2 starts while 1.14's benchmarks finish. The builder said so. 1.15's sweep then runs over code epic 2 may already have changed.
 - Waits on epic-engine-baseline because: Tracks attach to its capture-session API, settings store, and encoder/muxer, and the Mic Mute Hotkey uses its Hotkey registration.
