@@ -88,7 +88,7 @@ The coordinator logs each QA round in the Log below.
 | 28 | Slice epic 7 (Library and Cleanup), then its stories and release | | pending |
 | 29 | Slice epic 8 (Hardening), then its stories and release | | pending |
 
-The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
+Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
 
 ## Human Check Queue
 
@@ -120,3 +120,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 
 - 2026-11-01: Automation set up. 1.14 checkpointed at `7229d26` on `feature/1.14-benchmark` (Release build 0 warnings, Bench tests 71/71). Coordinator starts the 1.14 amendment session.
 - 2026-11-01: Epic 4 sliced into stories 4.1–4.14 (merged `4a42b04`); the board validates with no problems. Queue row 25 expanded; eight defaults added to Decisions Awaiting Review.
+- 2026-11-01: The builder said epic 2 can begin while 1.14's benchmarks finish. Story 2.1 now waits only on 1.4, 1.5, 1.6, 1.9, 1.10 and 1.12, and `tickets.py next` lists it as ready.
