@@ -9,7 +9,8 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 - Build everything to the end of the initiative, unattended. The builder is away from the desktop.
 - **One fresh session per task** (story, spike, epic slicing, release), started by the coordinator one at a time, so context stays small. Sessions run sequentially: they share `develop` in the main folder.
 - Each story runs `bmad-build-auto` on its ticket (unattended plans, implementation and review). No plan-approval halts: the builder pre-approved plans that keep to the ticket and epic.
-- **Merging is approved:** when a story is green (0-warning build, all tests, NativeAOT publish), its session merges it into `develop` from the main folder with `--no-ff` and `<type>(<scope>): merge <ref>-<slug>`, then commits `tickets.py mark <epic> <ref> done` on `develop`. **Never push.**
+- **QA gate (builder, 2026-11-01):** after each change, the coordinator starts a separate QA session on the story's branch before anything merges. QA sends its findings straight to the story's session, which fixes them; QA re-checks until it passes.
+- **Merging is approved:** when a story is green (0-warning build, all tests, NativeAOT publish) and QA has passed, its session merges it into `develop` from the main folder with `--no-ff` and `<type>(<scope>): merge <ref>-<slug>`, then commits `tickets.py mark <epic> <ref> done` on `develop`. **Never push.**
 - **Releases:** at each epic's end (after its refactor sweep), a release session runs `git flow release start 0.<epic>.0` / `finish` in the main folder, tagging `v0.<epic>.0`, and leaves `develop` checked out there.
 - **HITL checks:** a session automates what it can (synthetic input, injected keys, scripted players, logs, screenshots of its own windows) and records the rest in the Human Check Queue below instead of waiting. The story can still be marked done; the queue is the builder's to work through on return.
 - **Unsliced epics (4–8):** a slicing session runs Sofia (`bmad-agent-po`) to break the epic into stories, choosing defaults where the PRD and architecture leave a gap, and lists each such choice in the Decisions Awaiting Review below.
@@ -22,8 +23,21 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 2. `git flow feature start <ref>-<slug>` in the session's own worktree (cut from `develop`). For 1.14 only: switch to the existing `feature/1.14-benchmark`.
 3. Run `bmad-build-auto` with the ticket ref.
 4. Verify: `dotnet build ReplayBuffer.slnx -c Release` (0 warnings), `dotnet test --solution ReplayBuffer.slnx`, `pwsh tools/publish-engine.ps1` (0 IL warnings). Real-time timing tests that fail only under GPU load get one rerun.
-5. Merge into `develop` from the main folder (`git -C %USERPROFILE%/Documents/repos/ReplayBuffer merge --no-ff ...`), mark the ticket done, commit, and update this file's Queue, Log and queues. Don't push.
-6. End with a one-paragraph report: commits, verification results, anything queued for the builder.
+5. Commit, then end the turn with a report that begins `READY FOR QA`: the branch, its tip commit, the verification results, and anything queued for the builder. Don't merge yet.
+6. Fix each QA finding that arrives as a cross-session message, commit, and report `READY FOR QA` again.
+7. When the coordinator says QA passed: merge into `develop` from the main folder (`git -C %USERPROFILE%/Documents/repos/ReplayBuffer merge --no-ff ...`), mark the ticket done, commit, and update this file's Queue, Log and queues. Don't push.
+
+## QA procedure
+
+The coordinator starts a fresh QA session in its own worktree, cut from the story's branch, once that session reports `READY FOR QA`. QA:
+
+1. Reads this file, `CLAUDE.md`, the ticket (`tickets.py find <ref>`), the epic file, and the story's plan, its ACs above all.
+2. Reviews the diff against `develop` for unmet ACs, broken `CLAUDE.md` rules, bugs and gaps in the tests.
+3. Runs the full verification itself (0-warning Release build, `dotnet test --solution ReplayBuffer.slnx`, NativeAOT publish), plus each AC that can run without a person. For a HITL story it also runs the automated proxy the story describes.
+4. Changes no code. It sends its findings as one cross-session message (`SendMessage`, `to` = the story session's id) listing each problem's location, what goes wrong, and the evidence, then ends with a report that begins `QA PASS` or `QA FAIL` and gives the count.
+5. On a re-check, verifies the fixes and anything they touched.
+
+The coordinator logs each QA round in the Log below.
 
 ## Queue
 
