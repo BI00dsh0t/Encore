@@ -12,6 +12,12 @@ namespace ReplayBuffer.Bench.Tests;
 [Collection(nameof(BenchProcessCollection))]
 public sealed class UnattendedProcessTests : IDisposable
 {
+    /// <summary>
+    /// The smoke tests calibrate to the load's highest rate, so its shader stays tiny: a load calibrated to a
+    /// game's 80 fps would hold the GPU busy beside the other assemblies' real-time encode tests.
+    /// </summary>
+    private const int LightTargetFps = 1000;
+
     private readonly BenchRun _run = new();
 
     public void Dispose() => _run.Dispose();
@@ -28,7 +34,7 @@ public sealed class UnattendedProcessTests : IDisposable
         Assert.Equal(GpuLoadInfo.Synthetic, info.Kind);
         Assert.Equal(GpuLoadProcess.ProcessName, info.Process);
         Assert.Equal((320, 180), (info.Width, info.Height));
-        Assert.Equal(80, info.TargetFps);
+        Assert.Equal(LightTargetFps, info.TargetFps);
         Assert.True(info.CalibratedFps > 0);
         Assert.True(info.Iterations >= 1);
         Assert.False(string.IsNullOrEmpty(info.Adapter));
@@ -55,7 +61,11 @@ public sealed class UnattendedProcessTests : IDisposable
         })!;
         _ = parent.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
         var start = new ProcessStartInfo(exe) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var arg in new[] { "--size", "320x180", "--warmup", "1", "--parent", parent.Id.ToString(CultureInfo.InvariantCulture) })
+        foreach (var arg in new[]
+        {
+            "--size", "320x180", "--warmup", "1", "--target-fps", LightTargetFps.ToString(CultureInfo.InvariantCulture),
+            "--parent", parent.Id.ToString(CultureInfo.InvariantCulture),
+        })
         {
             start.ArgumentList.Add(arg);
         }
@@ -144,7 +154,7 @@ public sealed class UnattendedProcessTests : IDisposable
     {
         try
         {
-            return GpuLoadProcess.Start(exe, 80, "320x180", 2, TimeSpan.FromSeconds(60));
+            return GpuLoadProcess.Start(exe, LightTargetFps, "320x180", 2, TimeSpan.FromSeconds(60));
         }
         catch (BenchFailure e) when (e.Message.Contains("no hardware GPU", StringComparison.Ordinal))
         {
