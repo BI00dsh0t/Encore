@@ -67,7 +67,22 @@ The coordinator logs each QA round in the Log below.
 | 22 | 3.6 Game Profiles page in the Main App | | pending |
 | 23 | 3.7 Refactor sweep | | pending |
 | 24 | Release epic 3 (`v0.3.0`) | | pending |
-| 25 | Slice epic 4 (Replay Buffer and Clips), then its stories and release | | pending |
+| 25 | Slice epic 4 (Replay Buffer and Clips) | | done |
+| 25.1 | 4.1 Tracer: Save Hotkey to a multi-Track Clip from a Memory ring | | pending |
+| 25.2 | 4.2 Exact save cut and gapless Reset | | pending |
+| 25.3 | 4.3 Replay Buffer lifecycle: Target switch, exit drain and Ignored | | pending |
+| 25.4 | 4.4 Save Cooldown, save events and two concurrent writers | | pending |
+| 25.5 | 4.5 Failed saves, retry and the file-being-written signal | | pending |
+| 25.6 | 4.6 Ring generations and Buffer Window resizing | | pending |
+| 25.7 | 4.7 Disk-mode ring | | pending |
+| 25.8 | 4.8 Memory-mode RAM margin | | pending |
+| 25.9 | 4.9 Per-Game-Profile settings at the next Reset | | pending |
+| 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | | pending |
+| 25.11 | 4.11 Game Profile overrides in the Main App | | pending |
+| 25.12 | 4.12 Hotkeys page in the Main App | | pending |
+| 25.13 | 4.13 Refactor sweep | | pending |
+| 25.14 | 4.14 Clips end to end on the builder's PC | | pending |
+| 25.15 | Release epic 4 (`v0.4.0`) | | pending |
 | 26 | Slice epic 5 (Overlay and Feedback Sounds), then its stories and release | | pending |
 | 27 | Slice epic 6 (Recordings), then its stories and release | | pending |
 | 28 | Slice epic 7 (Library and Cleanup), then its stories and release | | pending |
@@ -92,7 +107,16 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | Date | Ticket | Decision | Why |
 |------|--------|----------|-----|
 | 2026-11-01 | 1.14 | A synthetic Direct3D GPU load stands in for the game in `bench fps`; R4's "GPU-bound game" counts as met by it | The builder chose it, so FPS runs unattended |
+| 2026-11-01 | 4 | 14 stories kept in one epic, past the usual 8 to 12 | R1 to R7 are the first usable version and deliver together; a split would change the initiative's epic set |
+| 2026-11-01 | 4.8 | Memory mode's safe margin: the ring stops growing below the larger of 4 GB and 15% of installed RAM available; a constant, not a setting | The PRD says only "a safe margin of the free RAM" |
+| 2026-11-01 | 4.2 | A press with under 1 s buffered is reported as a save failure `clip-too-short`, with no Reset | FR-4 says no Clip is made but not whether the user is told; this way the Overlay and sound say why |
+| 2026-11-01 | 4.4 | A press after the cooldown while two Clips are still writing fails as a retryable `save-busy`, with no Reset | FR-7 caps writers at two but doesn't say what a third press does |
+| 2026-11-01 | 4.10 | The VBR worst-case estimate uses 1.5× the target bitrate (story 1.10's peak rate) plus each Track's AAC bitrate | FR-3 asks for a worst case without defining it |
+| 2026-11-01 | 4.10 | The Global Output Settings page lands in epic 4, beside the Buffer Window and its estimate | Epic 1 delivered the keys and probing (R22) but no page, and no other epic owns one |
+| 2026-11-01 | 4.10, 4.11, 4.12 | No `bmad-ux` pass for the Replay Buffer, Game Profile override and Hotkeys pages; the builder checks them by hand | Same as epics 2 and 3 |
+| 2026-11-01 | 4.14 | A closing end-to-end story on the builder's PC (hitl) after the sweep | The epic's Done when ends "Verified integrated on the builder's PC" |
 
 ## Log
 
 - 2026-11-01: Automation set up. 1.14 checkpointed at `7229d26` on `feature/1.14-benchmark` (Release build 0 warnings, Bench tests 71/71). Coordinator starts the 1.14 amendment session.
+- 2026-11-01: Epic 4 sliced into stories 4.1–4.14 (merged `4a42b04`); the board validates with no problems. Queue row 25 expanded; eight defaults added to Decisions Awaiting Review.
