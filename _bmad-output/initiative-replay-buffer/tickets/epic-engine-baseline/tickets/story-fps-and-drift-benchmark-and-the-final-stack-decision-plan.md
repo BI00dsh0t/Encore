@@ -113,8 +113,8 @@ context:
 - [x] `bench/ReplayBuffer.Bench/HotkeyBenchmark.cs`, `KeyInjector.cs` -- `--inject`: `SendInput` presses once a second; the report marks injected presses.
 - [x] `bench/ReplayBuffer.Bench/PlaybackCheck.cs`, `PlayerScripts.cs` -- `--auto`: Chrome headless and WMP's OCX scripted checks, the capture-border screen grab, and `not-checked` for the rest.
 - [x] `tests/ReplayBuffer.Bench.Tests/` -- option parsing for the new options, the ready-line parse, `fps.json` mapping with the load, the scripted players' result parse, and a GpuLoad start/ready/exit smoke test skipped without a hardware GPU.
-- [ ] Runs into `measurements/bench-1.14` (after review, by the orchestrating session, not the implementer: about two hours of exclusive GPU and audio use) -- the three timing tests rerun, then `fps` (synthetic), `hotkey --inject`, `drift --minutes 60` and `playback --auto`.
-- [ ] `_bmad-output/.../epic-engine-baseline.md` Notes (after the runs, by the orchestrating session) -- Sofia records the results and decisions: the §6 final stack, §7.2 kept, and the §7.4 facts.
+- [x] Runs into `measurements/bench-1.14` (after review, by the orchestrating session, not the implementer: about two hours of exclusive GPU and audio use) -- the three timing tests rerun, then `fps` (synthetic), `hotkey --inject`, `drift --minutes 60` and `playback --auto`.
+- [x] `_bmad-output/.../epic-engine-baseline.md` Notes (after the runs, by the orchestrating session) -- Sofia records the results and decisions: the §6 final stack, §7.2 kept, and the §7.4 facts.
 
 **Acceptance Criteria:**
 - Given FFmpeg is fetched, when `dotnet build` and `dotnet test --solution` run, then there are 0 warnings and all tests pass. `pwsh tools/publish-engine.ps1` also gives 0 warnings.
@@ -188,6 +188,22 @@ context:
   - The synthetic load is a proxy for a game, not a game. The real-game run is queued for the builder.
 
 ## Checkpoint Log
+
+**2026-11-01, runs resumed and finished.** The builder said to resume.
+
+- **`drift --minutes 60`:** passes.
+  - A/V drift 0.54 ms against 16.7 ms; flashes 3600/3600, bursts 3598/3600.
+  - Audio-to-audio bound 160.1 samples against 800.
+  - The track-length check first read 571 ms, a miss, because it counted frames and the pacer had skipped 33 slots. The file's video ends at 3600.000 s and its audio at 3600.021 s. Fixed in `c0beb06`, which checks against the video's timestamp span with tests; `--reanalyze` now gives 21.3 ms, a pass.
+- **`playback --auto`:** Chrome and Windows Media Player play the clip at 1920×1080 and list 2 tracks. No capture border showed (726 yellow pixels before and during). Discord, VLC and DaVinci Resolve are not-checked.
+- **The stage diagnostic** (`fps-stages`) isn't valid: the display was asleep (`Availability` 8). Every capture run went to Composed: Flip at 10–12 fps while the engine still saw ≈ 78 fps. `fps-stages/INVALID.md` explains, and the stage split is queued for the builder.
+- **Sofia's Decision lines** are in the epic Notes.
+- **Final verification**, with the display still asleep:
+  - The Release build has 0 warnings. The NativeAOT publish has 0 warnings (9.6 MiB, 10.0 MB).
+  - `dotnet test --solution` passes 653 of 656. Bench.Tests passes all of its tests.
+  - `ThePacedEncoderEncodesEverySlotWithAFastPreset` (the known parallelism flake) and `SupervisionTests.AHungEngineIsKilledAndRelaunched` both pass when run alone.
+  - `OutputResolutionTests.AWindowResizedAndChangingModeGivesOneFixedSizeFileWithNoPtsBreak` also fails alone: a PTS step of 10 slots after the window changes mode. The branch changes nothing under `src/` or those tests' projects, and the test passed in both of today's earlier full runs, with the display on. It needs a rerun with the display on, and that's queued for the builder.
+  - Logs are `final-*.log` in the run folder.
 
 **2026-11-01, runs paused by the builder.** The amendment is built and reviewed on `feature/1.14-benchmark` (tip `2144fd6`). Release build 0 warnings and NativeAOT publish 0 warnings (10.0 MB). The full suite passes 653/654. The one failure is `EncodeExperimentTests.ThePacedEncoderEncodesEverySlotWithAFastPreset` under whole-suite parallelism; the pre-amendment `7229d26` fails it the same way (p50 18.6 ms), and it passes alone. Runs so far, in `measurements/bench-1.14` (NativeAOT engine, Game (BEACN Mix Create) and BEACN Mic):
 
