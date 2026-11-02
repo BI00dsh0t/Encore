@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Settings;
@@ -106,16 +107,26 @@ public sealed class TrackLayoutCaptureTests : IDisposable
     }
 
     [Fact]
-    public void TheDefaultLayoutHasATrackWithNoDevicesAndIsRefused()
+    public void TheDefaultLayoutCapturesOneSilentTrack()
     {
         RequireFFmpeg();
+        var title = OpenWindow();
+        var file = Path.Combine(_directory, "default.mp4");
 
         // No settings.json: the catalog default, one "Everything" Track with no devices.
-        var (exitCode, _, stderr) = RunEngine(TimeSpan.FromSeconds(30), "--window", "anything", "--output", Path.Combine(_directory, "never.mp4"));
+        var (exitCode, _, stderr) = RunEngine(TimeSpan.FromSeconds(40), "--window", title, "--seconds", "3", "--output", file);
 
-        Assert.Equal(1, exitCode);
-        Assert.Contains("error invalid-arguments: Track 'Everything' has no devices", stderr);
-        Assert.False(File.Exists(Path.Combine(_directory, "never.mp4")));
+        Assert.True(exitCode == 0, stderr);
+        Assert.False(File.Exists(Path.Combine(_instance.RoamingDataFolder, SettingsStore.FileName)));
+        var streams = Probe(file);
+        Assert.Equal(["h264", "aac"], streams.Select(s => s.Codec));
+        Assert.Equal("Everything", streams[1].Title);
+        Assert.True(streams[1].Default);
+
+        var video = streams[0].Duration;
+        Assert.InRange(video, 2.5, 4);
+        Assert.InRange(streams[1].Duration, video - 0.1, video + 0.1);
+        Assert.InRange(DecodedPeak(file, 0), 0, Math.Pow(10, -90 / 20.0));
     }
 
     [Fact]
@@ -244,6 +255,38 @@ public sealed class TrackLayoutCaptureTests : IDisposable
         }
 
         throw new InvalidOperationException("The test window never appeared.");
+    }
+
+    /// <summary>The largest absolute sample of audio stream <paramref name="index"/>, decoded to float.</summary>
+    private double DecodedPeak(string file, int index)
+    {
+        var raw = Path.Combine(_directory, $"a{index}.f32");
+        var start = new ProcessStartInfo(Path.Combine(BinFolder, "ffmpeg.exe"))
+        {
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in new[] { "-v", "error", "-y", "-i", file, "-map", $"0:a:{index}", "-f", "f32le", raw })
+        {
+            start.ArgumentList.Add(arg);
+        }
+
+        using (var ffmpeg = Process.Start(start)!)
+        {
+            var stderr = ffmpeg.StandardError.ReadToEnd();
+            ffmpeg.WaitForExit();
+            Assert.True(ffmpeg.ExitCode == 0, stderr);
+        }
+
+        var samples = MemoryMarshal.Cast<byte, float>(File.ReadAllBytes(raw));
+        Assert.True(samples.Length > 0, $"audio stream {index} decodes to nothing");
+        var peak = 0.0;
+        foreach (var s in samples)
+        {
+            peak = Math.Max(peak, Math.Abs(s));
+        }
+
+        return peak;
     }
 
     /// <summary>

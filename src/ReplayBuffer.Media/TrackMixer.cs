@@ -6,9 +6,11 @@ namespace ReplayBuffer.Media;
 /// position sums by QPC. Frame k of the output is the sum of every input's frame k; it is written
 /// once every input has reached it, or once the leading input is more than
 /// <see cref="MaxLagFrames"/> ahead, in which case the laggard counts as silence there and its late
-/// frames are dropped when they arrive. With one input it passes straight through, bit-identically.
-/// No gain, limiter or clipping handling (story 2.2). Thread-safe: each input is written from its
-/// device's thread, under one short lock; nothing is allocated once constructed.
+/// frames are dropped when they arrive. With one input there is nothing to sum and its frames pass
+/// straight on; with none the Track is silent, and only <see cref="PadTo"/> advances it. Every
+/// emission goes through a <see cref="PeakLimiter"/>, the Track's last stage, which leaves audio
+/// within full scale bit-identical and keeps the rest within it (story 2.2). Thread-safe: each input
+/// is written from its device's thread, under one short lock; nothing is allocated once constructed.
 /// </summary>
 public sealed class TrackMixer
 {
@@ -24,7 +26,7 @@ public sealed class TrackMixer
     private const int Channels = AudioTimeline.Channels;
 
     private readonly Lock _lock = new();
-    private readonly IAudioSampleSink _output;
+    private readonly PeakLimiter _limiter;
     private readonly IAudioSampleSink[] _inputs;
     private readonly float[][] _rings;
     private readonly long[] _written;
@@ -32,19 +34,23 @@ public sealed class TrackMixer
     private long _emitted;
     private long _dropped;
 
-    /// <param name="inputs">The number of devices the Track mixes; at least one.</param>
+    /// <param name="inputs">The number of devices the Track mixes; zero for a silent Track.</param>
     /// <param name="output">Receives the mix, typically the Track's encoder.</param>
     public TrackMixer(int inputs, IAudioSampleSink output)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(inputs);
+        ArgumentOutOfRangeException.ThrowIfNegative(inputs);
         ArgumentNullException.ThrowIfNull(output);
-        _output = output;
+        _limiter = new PeakLimiter(output);
         _inputs = new IAudioSampleSink[inputs];
         _written = new long[inputs];
-        if (inputs == 1)
+        if (inputs <= 1)
         {
-            // Passthrough: the input is the output itself; nothing to align.
-            _inputs[0] = output;
+            // Nothing to align: a single input's frames go straight to the limiter, without a ring.
+            if (inputs == 1)
+            {
+                _inputs[0] = new PassthroughInput(this);
+            }
+
             _rings = [];
             _mix = [];
             return;
@@ -63,7 +69,7 @@ public sealed class TrackMixer
     /// <summary>The number of inputs.</summary>
     public int Inputs => _inputs.Length;
 
-    /// <summary>Frames written to the output so far (not counted for a passthrough mixer).</summary>
+    /// <summary>Frames written to the output so far.</summary>
     public long EmittedFrames
     {
         get
@@ -87,23 +93,99 @@ public sealed class TrackMixer
         }
     }
 
+    /// <summary>Frames the limiter wrote with a gain below 1.</summary>
+    public long LimitedFrames
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _limiter.LimitedFrames;
+            }
+        }
+    }
+
+    /// <summary>The frames the longest input has written, late ones included; 0 with no inputs.</summary>
+    public long LongestInputFrames
+    {
+        get
+        {
+            lock (_lock)
+            {
+                var longest = 0L;
+                foreach (var written in _written)
+                {
+                    longest = Math.Max(longest, written);
+                }
+
+                return longest;
+            }
+        }
+    }
+
     /// <summary>The sink for input <paramref name="index"/>; frame 0 is the session anchor.</summary>
     public IAudioSampleSink Input(int index) => _inputs[index];
+
+    /// <summary>
+    /// Writes the mix up to <paramref name="frame"/>, any input that hasn't reached it counted as
+    /// silence there; that input's frames below it are dropped when they arrive. Does nothing when
+    /// the mix is already there.
+    /// </summary>
+    public void PadTo(long frame)
+    {
+        lock (_lock)
+        {
+            if (frame <= _emitted)
+            {
+                return;
+            }
+
+            if (_rings.Length == 0)
+            {
+                // No ring: no input, or one whose frames are all written by now; the rest is silence.
+                var silence = frame - _emitted;
+                _emitted = frame;
+                _limiter.WriteSilence(silence);
+                return;
+            }
+
+            Emit(frame);
+        }
+    }
 
     /// <summary>
     /// Writes the mix up to the longest input, the shorter ones padded with silence. Call once the
     /// inputs have stopped; later input past that point is mixed as usual.
     /// </summary>
-    public void Flush()
-    {
-        if (_inputs.Length == 1)
-        {
-            return;
-        }
+    public void Flush() => PadTo(LongestInputFrames);
 
+    /// <summary>A single input: drops what the mix has passed, then writes the rest straight to the limiter.</summary>
+    private void Pass(ReadOnlySpan<float> interleaved, long silentFrames)
+    {
+        var silent = interleaved.IsEmpty;
+        var frames = silent ? silentFrames : interleaved.Length / Channels;
         lock (_lock)
         {
-            Emit(_written.Max());
+            var late = Math.Min(frames, Math.Max(0, _emitted - _written[0]));
+            _dropped += late;
+            _written[0] += late;
+            var rest = frames - late;
+            if (rest <= 0)
+            {
+                return;
+            }
+
+            // Counted before the write: a failing encoder never sees the same range twice.
+            _written[0] += rest;
+            _emitted = _written[0];
+            if (silent)
+            {
+                _limiter.WriteSilence(rest);
+            }
+            else
+            {
+                _limiter.Write(interleaved[(int)(late * Channels)..]);
+            }
         }
     }
 
@@ -200,7 +282,26 @@ public sealed class TrackMixer
 
             // Counted before the write: a failing encoder never sees the same range twice.
             _emitted += count;
-            _output.Write(mix);
+            _limiter.Write(mix);
+        }
+    }
+
+    private sealed class PassthroughInput(TrackMixer mixer) : IAudioSampleSink
+    {
+        public void Write(ReadOnlySpan<float> interleaved)
+        {
+            if (interleaved.Length >= Channels)
+            {
+                mixer.Pass(interleaved[..(interleaved.Length / Channels * Channels)], 0);
+            }
+        }
+
+        public void WriteSilence(long frames)
+        {
+            if (frames > 0)
+            {
+                mixer.Pass([], frames);
+            }
         }
     }
 

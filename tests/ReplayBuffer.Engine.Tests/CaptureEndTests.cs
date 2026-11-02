@@ -181,8 +181,11 @@ public sealed class CaptureEndTests : IDisposable
         Assert.Equal(["output", "input"], audio.Select(a => a.GetProperty("role").GetString()));
         for (var i = 0; i < 2; i++)
         {
+            // Every Track is padded with silence to one common end (story 2.2), so a device's Track
+            // holds all it wrote, plus at most the gap to the longest device or the last video frame.
             var samples = audio[i].GetProperty("samplesEncoded").GetInt64();
-            Assert.Equal(samples, audio[i].GetProperty("timeline").GetProperty("writtenFrames").GetInt64());
+            Assert.Equal(audio[0].GetProperty("samplesEncoded").GetInt64(), samples);
+            Assert.InRange(samples - audio[i].GetProperty("timeline").GetProperty("writtenFrames").GetInt64(), 0, 48_000 / 10);
 
             // The hub's steering of the device to QPC (story 1.12).
             var resampler = audio[i].GetProperty("resampler");
