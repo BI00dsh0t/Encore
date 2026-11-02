@@ -3,7 +3,7 @@ title: 'Track mixer: summing, alignment and limiter'
 type: 'feature'
 ticket: '2'
 created: '2026-11-02'
-status: 'built'
+status: done
 baseline_revision: '6a5ff147352517ac195d34935bfdb5ba7959867b'
 route: 'full'
 route_source: 'auto'

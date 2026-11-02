@@ -70,7 +70,7 @@ The coordinator logs each QA round in the Log below.
 | 2 | 1.15 Refactor sweep | story-1-15 | in progress |
 | 3 | Release epic 1 (`v0.1.0`) | | pending |
 | 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | done |
-| 5 | 2.2 Track mixer | story-2-2 | in progress |
+| 5 | 2.2 Track mixer | story-2-2 | done |
 | 6 | 2.3 Live device list over IPC | story-2-3 | in progress |
 | 7 | 2.5 Device dropout and rebind | | pending |
 | 8 | 2.4 Mic Devices and mic mute | | pending |
@@ -263,3 +263,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: 2.2 (`0f399f9`) and 2.3 (`ba483ef`) reported READY FOR QA. The run stalled because the app starts new sessions only from a turn the builder began, and every READY FOR QA had arrived in an automated turn. On the builder's next message, the coordinator started qa-1-15, qa-2-2 and qa-2-3. **Known limit:** whenever a session must start (QA, the next story, a release) and the builder hasn't written since, the coordinator can only propose a card.
 - 2026-11-02: **Worker pool set up** at the builder's request (see Worker pool), so the run keeps going while the builder is away. Six idle sessions have Remote Control off, and a test clear of slice-epic-4 worked.
 - 2026-11-02: QA round 1 on 2.2 (`0f399f9`): **QA PASS**, 0 findings. QA round 1 on 2.3 (`ba483ef`): **QA PASS**, 0 blocking findings. Some timing tests failed while the three QA sessions ran at once, and each passed on its one rerun. 2.2 merges first, and 2.3 waits for 2.2's merge before its own. 1.15's QA is still running (drift smoke run).
+- 2026-11-02: 2.2 merged into `develop` (`e580e82`, `feat(media): merge 2.2-track-mixer`) and marked done. Develop had only docs commits since the branch was cut, so no rebuild was needed. QA's out-of-scope note: on a static window the "Wrote N s" log line still uses `_lastFrameQpc` (1.2 s for a 3.0 s file).
