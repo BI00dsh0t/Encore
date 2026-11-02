@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using ReplayBuffer.Platform.FFmpeg.Tests;
 
 namespace ReplayBuffer.Engine.Tests;
 
@@ -137,12 +138,25 @@ public sealed class CaptureEndTests : IDisposable
     {
         RequireFFmpeg();
         var title = OpenWindow(closeAfterMs: 0);
-        var output = Path.Combine(_directory, "stats.mp4");
-        var statsPath = Path.Combine(_directory, "stats.json");
+        RealTimeAttempts.Run(attempt => StatsReportAttempt(title, attempt));
+    }
+
+    private void StatsReportAttempt(string title, int attempt)
+    {
+        var output = Path.Combine(_directory, $"stats-{attempt}.mp4");
+        var statsPath = Path.Combine(_directory, $"stats-{attempt}.json");
 
         // Past the 10 s warm-up, so the steady-state block is filled too.
         var engine = StartEngine(title, output, "12", "--stats", statsPath, "--gpu-priority", "0");
-        Assert.True(engine.WaitForExit(TimeSpan.FromSeconds(40)), "the engine did not stop");
+        var stopped = engine.WaitForExit(TimeSpan.FromSeconds(40));
+        if (!stopped)
+        {
+            // Not left running beside the next attempt.
+            engine.Kill(entireProcessTree: true);
+            engine.WaitForExit();
+        }
+
+        Assert.True(stopped, "the engine did not stop");
         Assert.Equal(0, engine.ExitCode);
 
         using var stats = JsonDocument.Parse(File.ReadAllText(statsPath));

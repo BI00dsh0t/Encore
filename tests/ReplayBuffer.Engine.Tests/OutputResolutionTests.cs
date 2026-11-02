@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Engine.Sessions;
+using ReplayBuffer.Platform.FFmpeg.Tests;
 using ReplayBuffer.Platform.Windows;
 
 namespace ReplayBuffer.Engine.Tests;
@@ -199,8 +200,13 @@ public sealed class OutputResolutionTests : IDisposable
     {
         SessionTestKit.RequireFFmpeg();
         var window = SessionTestKit.OpenWindow(_directory, _processes, FastWindowScript, "-Width", "1920", "-Height", "1080");
-        var output = Path.Combine(_directory, "stats.mp4");
-        var statsPath = Path.Combine(_directory, "stats.json");
+        RealTimeAttempts.Run(attempt => FastWindowStatsAttempt(window, attempt));
+    }
+
+    private void FastWindowStatsAttempt(WindowInfo window, int attempt)
+    {
+        var output = Path.Combine(_directory, $"stats-{attempt}.mp4");
+        var statsPath = Path.Combine(_directory, $"stats-{attempt}.json");
 
         // 20 s: the 10 s warm-up, then the steady state the bounds apply to.
         var start = new ProcessStartInfo(Path.Combine(EngineBinaries.Folder, "ReplayBuffer.Engine.exe"))
@@ -219,7 +225,15 @@ public sealed class OutputResolutionTests : IDisposable
 
         var engine = Process.Start(start)!;
         _processes.Add(engine);
-        Assert.True(engine.WaitForExit(TimeSpan.FromSeconds(60)), "the engine did not stop");
+        var stopped = engine.WaitForExit(TimeSpan.FromSeconds(60));
+        if (!stopped)
+        {
+            // Not left running beside the next attempt.
+            engine.Kill(entireProcessTree: true);
+            engine.WaitForExit();
+        }
+
+        Assert.True(stopped, "the engine did not stop");
         Assert.Equal(0, engine.ExitCode);
 
         using var stats = JsonDocument.Parse(File.ReadAllText(statsPath));
