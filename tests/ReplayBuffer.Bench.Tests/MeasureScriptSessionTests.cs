@@ -33,6 +33,30 @@ public sealed class MeasureScriptSessionTests : IDisposable
     [Fact]
     public void TheScriptStopsADeadRunsSessionAndLeavesALiveOneAlone()
     {
+        // The script's sweep covers the whole machine, and other worktrees run this test beside this one:
+        // one run at a time, from the first session started to the last assert.
+        using var oneRun = new Mutex(false, @"Global\ReplayBuffer-MeasureScriptSessionTests");
+        try
+        {
+            Assert.True(oneRun.WaitOne(TimeSpan.FromMinutes(5)), "another run of this test held the machine for 5 minutes");
+        }
+        catch (AbandonedMutexException)
+        {
+            // A run that died holding it; its sessions are dead runs' too.
+        }
+
+        try
+        {
+            ScriptStopsADeadRunsSessionAndLeavesALiveOneAlone();
+        }
+        finally
+        {
+            oneRun.ReleaseMutex();
+        }
+    }
+
+    private void ScriptStopsADeadRunsSessionAndLeavesALiveOneAlone()
+    {
         var dead = "ReplayBuffer-PathA-" + DeadPid().ToString(CultureInfo.InvariantCulture);
         var live = "ReplayBuffer-PathA-" + Environment.ProcessId.ToString(CultureInfo.InvariantCulture);
         StartSession(dead);
@@ -54,12 +78,13 @@ public sealed class MeasureScriptSessionTests : IDisposable
     }
 
     /// <summary>
-    /// A pid no process answers to. <c>OpenProcess</c> ignores a pid's low two bits, so an odd pid can
-    /// still name a running process; the lookup here is the script's, so the two agree.
+    /// A pid no process answers to, from a random start so two runs don't share a session name.
+    /// <c>OpenProcess</c> ignores a pid's low two bits, so the candidates are multiples of 4; the lookup
+    /// here is the script's, so the two agree.
     /// </summary>
     private static int DeadPid()
     {
-        for (var pid = 999_999; ; pid -= 2)
+        for (var pid = Random.Shared.Next(100_000, 250_000) * 4; ; pid -= 4)
         {
             try
             {
