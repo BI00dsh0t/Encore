@@ -3,7 +3,7 @@ title: 'FPS and drift benchmark, and the final stack decision'
 type: 'feature'
 ticket: '14'
 created: '2026-10-27'
-status: 'built'
+status: done
 baseline_revision: '891d34796966c5550a61590f179f28ce9f497961'
 route: 'full'
 route_source: 'auto'
