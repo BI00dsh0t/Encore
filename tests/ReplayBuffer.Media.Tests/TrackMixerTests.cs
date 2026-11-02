@@ -39,8 +39,12 @@ public sealed class TrackMixerTests
 {
     private readonly SampleSink _output = new();
 
-    /// <summary>A device's stream: frame k is (seed + k / 1000, -(seed + k / 1000)), so each frame is distinct.</summary>
-    private static float Value(float seed, long frame) => seed + (frame / 1000f);
+    /// <summary>
+    /// A device's stream: frame k is (v, -v) with v = seed / 20 + (k mod 4096) / 16384, so frames
+    /// within 4096 of each other are distinct, and any two devices' sum (seeds up to 7) stays within
+    /// full scale, which the limiter leaves bit-identical.
+    /// </summary>
+    private static float Value(float seed, long frame) => (seed / 20) + ((frame % 4096) / 16384f);
 
     private static float[] Chunk(float seed, long start, int frames)
     {
@@ -78,7 +82,6 @@ public sealed class TrackMixerTests
         input.WriteSilence(7);
         mixer.Flush();
 
-        Assert.Same(_output, input);
         Assert.Equal(1, _output.Writes);
         Assert.Equal(1, _output.SilenceWrites);
         Assert.Equal(487, _output.Frames);
@@ -231,5 +234,174 @@ public sealed class TrackMixerTests
         Assert.Equal(400, _output.Frames);
         Assert.Equal(Value(1, 10) + Value(4, 10), _output.Left(10));
         Assert.Equal(Value(4, 350), _output.Left(350));
+    }
+
+    /// <summary>Frames of a full-scale square wave: +1 or -1 on both channels, flipping every <paramref name="half"/> frames.</summary>
+    private static float[] Square(long start, int frames, int half)
+    {
+        var samples = new float[frames * 2];
+        for (var i = 0; i < frames; i++)
+        {
+            var v = ((start + i) / half) % 2 == 0 ? 1f : -1f;
+            samples[2 * i] = v;
+            samples[(2 * i) + 1] = v;
+        }
+
+        return samples;
+    }
+
+    private static float[] Sine(long start, int frames, double hz)
+    {
+        var samples = new float[frames * 2];
+        for (var i = 0; i < frames; i++)
+        {
+            var v = (float)Math.Sin(2 * Math.PI * hz * (start + i) / AudioTimeline.SampleRate);
+            samples[2 * i] = v;
+            samples[(2 * i) + 1] = -v;
+        }
+
+        return samples;
+    }
+
+    [Fact]
+    public void ASingleDeviceIsBitIdenticalThroughTheLimiterIncludingFullScale()
+    {
+        var mixer = new TrackMixer(1, _output);
+        var chunk = Sine(0, 4800, 997);
+        chunk[0] = 1f;
+        chunk[1] = -1f;
+        chunk[2] = -0f;
+
+        mixer.Input(0).Write(chunk);
+
+        Assert.Equal(chunk.Select(BitConverter.SingleToInt32Bits), _output.Samples.Select(BitConverter.SingleToInt32Bits));
+        Assert.Equal(0, mixer.LimitedFrames);
+        Assert.Equal(4800, mixer.EmittedFrames);
+    }
+
+    [Fact]
+    public void TwoFullScaleSourcesNeverExceedFullScale()
+    {
+        var mixer = new TrackMixer(2, _output);
+        const int total = 48_000;
+        for (var start = 0; start < total; start += 480)
+        {
+            mixer.Input(0).Write(Square(start, 480, 50));
+            mixer.Input(1).Write(Sine(start, 480, 440));
+        }
+
+        mixer.Flush();
+
+        Assert.Equal(total, _output.Frames);
+        Assert.All(_output.Samples, x => Assert.InRange(x, -1f, 1f));
+        Assert.Contains(1f, _output.Samples);
+        Assert.True(mixer.LimitedFrames > 0);
+    }
+
+    [Fact]
+    public void ADeviceFannedOutToTwoMixersIsInBothSampleAligned()
+    {
+        var alone = new SampleSink();
+        var mixed = new SampleSink();
+        var a = new TrackMixer(1, alone);
+        var b = new TrackMixer(2, mixed);
+        var device = new AudioFanOut([a.Input(0), b.Input(0)]);
+        const long total = 9_600;
+
+        // D runs in 480-frame blocks, E in 441-frame blocks, the two interleaved.
+        var d = Feed(device, 2, 480, total).ToList();
+        var e = Feed(b.Input(1), 5, 441, total).ToList();
+        for (var i = 0; i < Math.Max(d.Count, e.Count); i++)
+        {
+            if (i < d.Count)
+            {
+                d[i]();
+            }
+
+            if (i < e.Count)
+            {
+                e[i]();
+            }
+        }
+
+        a.Flush();
+        b.Flush();
+
+        Assert.Equal(total, alone.Frames);
+        Assert.Equal(total, mixed.Frames);
+        for (long k = 0; k < total; k++)
+        {
+            Assert.Equal(Value(2, k), alone.Left(k));
+            Assert.Equal(-Value(2, k), alone.Right(k));
+            Assert.Equal(Value(2, k) + Value(5, k), mixed.Left(k));
+            Assert.Equal(-Value(2, k) + -Value(5, k), mixed.Right(k));
+        }
+    }
+
+    [Fact]
+    public void AMixerWithNoInputsWritesSilenceUpToPadTo()
+    {
+        var mixer = new TrackMixer(0, _output);
+
+        mixer.PadTo(4800);
+        mixer.PadTo(4000);
+        mixer.PadTo(9600);
+        mixer.Flush();
+
+        Assert.Equal(0, mixer.Inputs);
+        Assert.Equal(0, mixer.LongestInputFrames);
+        Assert.Equal(9600, mixer.EmittedFrames);
+        Assert.Equal(9600, _output.Frames);
+        Assert.Equal(0, _output.Writes);
+        Assert.All(_output.Samples, x => Assert.Equal(0f, x));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void InputBelowAPadToIsDropped(int inputs)
+    {
+        var mixer = new TrackMixer(inputs, _output);
+        mixer.Input(0).Write(Chunk(1, 0, 100));
+
+        mixer.PadTo(1000);
+        Assert.Equal(1000, _output.Frames);
+
+        // The first input comes back with frames 100..1199: 900 of them are below the pad.
+        mixer.Input(0).Write(Chunk(1, 100, 1100));
+        for (var i = 1; i < inputs; i++)
+        {
+            mixer.Input(i).WriteSilence(1200);
+        }
+
+        mixer.Flush();
+
+        Assert.Equal(900 + (inputs == 2 ? 1000 : 0), mixer.DroppedFrames);
+        Assert.Equal(1200, mixer.LongestInputFrames);
+        Assert.Equal(1200, _output.Frames);
+        Assert.Equal(Value(1, 99), _output.Left(99));
+        Assert.Equal(0, _output.Left(100));
+        Assert.Equal(0, _output.Left(999));
+        Assert.Equal(Value(1, 1000), _output.Left(1000));
+        Assert.Equal(Value(1, 1199), _output.Left(1199));
+    }
+
+    [Fact]
+    public void FlushStillPadsToTheLongestInputWithThreeInputs()
+    {
+        var mixer = new TrackMixer(3, _output);
+
+        mixer.Input(0).Write(Chunk(1, 0, 300));
+        mixer.Input(1).Write(Chunk(2, 0, 700));
+        mixer.Input(2).WriteSilence(500);
+        Assert.Equal(300, _output.Frames);
+        Assert.Equal(700, mixer.LongestInputFrames);
+
+        mixer.Flush();
+
+        Assert.Equal(700, _output.Frames);
+        Assert.Equal(Value(1, 299) + Value(2, 299), _output.Left(299));
+        Assert.Equal(Value(2, 300), _output.Left(300));
+        Assert.Equal(Value(2, 699), _output.Left(699));
     }
 }

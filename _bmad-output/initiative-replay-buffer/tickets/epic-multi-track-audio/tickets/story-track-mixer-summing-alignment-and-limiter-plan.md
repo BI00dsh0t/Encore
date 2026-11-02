@@ -90,8 +90,8 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Media/PeakLimiter.cs` -- the limiter -- R3, AD-13 "limiter that acts only above full scale"
-- [ ] `tests/ReplayBuffer.Media.Tests/PeakLimiterTests.cs`:
+- [x] `src/ReplayBuffer.Media/PeakLimiter.cs` -- the limiter -- R3, AD-13 "limiter that acts only above full scale"
+- [x] `tests/ReplayBuffer.Media.Tests/PeakLimiterTests.cs`:
   - in-range audio bit-identical (incl. ±1);
   - overs never exceed 1;
   - linked gain;
@@ -99,21 +99,21 @@ deferred: []
   - non-finite samples written as 0;
   - silence advances the release;
   - no allocation per block once warmed (`GC.GetAllocatedBytesForCurrentThread`).
-- [ ] `src/ReplayBuffer.Media/TrackMixer.cs` -- zero inputs, `PadTo`, `LongestInputFrames`, limiter stage, single input under the lock
-- [ ] `tests/ReplayBuffer.Media.Tests/TrackMixerTests.cs`, the ticket's verify list:
+- [x] `src/ReplayBuffer.Media/TrackMixer.cs` -- zero inputs, `PadTo`, `LongestInputFrames`, limiter stage, single input under the lock
+- [x] `tests/ReplayBuffer.Media.Tests/TrackMixerTests.cs`, the ticket's verify list:
   - single-device bit-identical through the limiter;
   - two full-scale sources never exceed full scale;
   - a device fanned out to two mixers is in both, sample-aligned;
   - a zero-input mixer `PadTo(n)` writes n silent frames;
   - `PadTo` then late input is dropped;
   - `Flush` still pads to the longest input.
-- [ ] `src/ReplayBuffer.Core/Sessions/SessionSpec.cs` + `tests/ReplayBuffer.Core.Tests/SessionAudioTests.cs` -- empty Track allowed; mixed empty and non-empty Tracks keep their indexes
-- [ ] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs` -- silence clock, common end padding, limiter log
-- [ ] `tests/ReplayBuffer.Engine.Tests/TrackMixCaptureTests.cs`:
+- [x] `src/ReplayBuffer.Core/Sessions/SessionSpec.cs` + `tests/ReplayBuffer.Core.Tests/SessionAudioTests.cs` -- empty Track allowed; mixed empty and non-empty Tracks keep their indexes
+- [x] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs` -- silence clock, common end padding, limiter log
+- [x] `tests/ReplayBuffer.Engine.Tests/TrackMixCaptureTests.cs`:
   - Add a Track `Silent` with no devices to the in-process session. It decodes to silence (below −90 dB) and lasts as long as the video to within 0.1 s, like every other Track.
   - Add a case with two full-scale tones in one Track: the decoded peak stays ≤ 1.0 + AAC tolerance (0.05), and the raw mixer output is checked in the unit tests.
-- [ ] `tests/ReplayBuffer.Engine.Tests/TrackLayoutCaptureTests.cs` -- the default layout with no settings.json captures: exit 0, h264 plus one AAC stream titled `Everything`, silent, as long as the video to within 0.1 s
-- [ ] `src/ReplayBuffer.Engine/TracerCapture.cs` -- doc only
+- [x] `tests/ReplayBuffer.Engine.Tests/TrackLayoutCaptureTests.cs` -- the default layout with no settings.json captures: exit 0, h264 plus one AAC stream titled `Everything`, silent, as long as the video to within 0.1 s
+- [x] `src/ReplayBuffer.Engine/TracerCapture.cs` -- doc only
 
 **Acceptance Criteria:**
 - Given the instance has no settings.json (the default layout: Everything, no devices), when `debug-capture --track-layout --seconds 3` runs, then it exits 0 and ffprobe shows h264 plus one AAC stream titled Everything, silent, within 0.1 s of the video's duration.
@@ -121,6 +121,11 @@ deferred: []
 - Given two devices both at full scale in one Track, when it is captured, then no decoded sample of that Track exceeds full scale beyond AAC coding error.
 
 ## Implementation Notes
+
+- The common end frame in `CaptureSession.Finish` also takes the silent (zero-input) mixers' `EmittedFrames`: the silence clock runs until `Finish` stops it, so it may already have taken a silent Track a little past the last video frame or the longest device, and written audio can't be taken back. Including it keeps "one common end frame" true; the plan's formula is otherwise unchanged.
+- A silence-clock tick that throws (encoder or muxer failure) stops the clock and fails the session with `encode-failed`, instead of crashing the timer thread.
+- The single-input path takes the lock once per block rather than per 4096-frame chunk: it has one writer, and `PadTo` on it runs only in `Finish`, after the devices are unsubscribed.
+- The existing `TrackMixerTests` stream values were rescaled into [-1, 1] (they reached ~49 before), so the limiter leaves them bit-identical and the sums stay exact.
 
 ## Plan Change Log
 
