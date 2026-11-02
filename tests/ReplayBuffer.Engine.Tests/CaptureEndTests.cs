@@ -167,10 +167,7 @@ public sealed class CaptureEndTests : IDisposable
         var encoded = video.GetProperty("framesEncoded").GetInt64();
         Assert.True(encoded > 60, $"only {encoded} frames encoded");
         AssertPacedCounts(root);
-        Assert.Equal(0, video.GetProperty("queueDrops").GetInt64());
-        Assert.Equal(0, video.GetProperty("skippedSlots").GetInt64());
         Assert.Equal(0, video.GetProperty("nonIncreasingStamps").GetInt64());
-        Assert.InRange(root.GetProperty("latency").GetProperty("p99Ms").GetDouble(), 0, 250);
 
         // The defaults: the tracer's, with the encoder thread always on since story 1.11.
         var encoder = root.GetProperty("encoder");
@@ -210,6 +207,11 @@ public sealed class CaptureEndTests : IDisposable
             Assert.Equal((samples + 1023) / 1024, streams[i + 1].Packets);
             Assert.InRange(streams[i + 1].DurationTs, samples - 1024, samples + 1024);
         }
+
+        // Then the timing bounds, which a neighbouring GPU test can make this attempt miss.
+        RealTimeAttempts.InRange(video.GetProperty("queueDrops").GetInt64(), 0, 0, "queue drops");
+        RealTimeAttempts.InRange(video.GetProperty("skippedSlots").GetInt64(), 0, 0, "skipped slots");
+        RealTimeAttempts.InRange(root.GetProperty("latency").GetProperty("p99Ms").GetDouble(), 0, 250, "latency p99 ms");
     }
 
     [Fact]

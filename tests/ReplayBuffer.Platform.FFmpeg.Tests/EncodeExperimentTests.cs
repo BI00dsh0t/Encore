@@ -130,8 +130,9 @@ public sealed class EncodeExperimentTests : IDisposable
                         Thread.Yield();
                     }
 
-                    Assert.True(paced.TryReserve());
-                    Assert.True(video.TryAcquireFrame(out var frame));
+                    // A full queue or an empty pool means the encoder fell behind: a timing bound.
+                    RealTimeAttempts.Bound(paced.TryReserve(), $"the pacer's queue was full at frame {i}");
+                    RealTimeAttempts.Bound(video.TryAcquireFrame(out var frame), $"no free frame at frame {i}");
                     device.Clear(frame.Texture, frame.Subresource, 0.5f, 0.5f, 0.5f);
                     paced.Post(frame, due);
                 }
@@ -158,19 +159,10 @@ public sealed class EncodeExperimentTests : IDisposable
             flushed = video.FlushedPackets;
         }
 
-        // One second of slots, each encoded once: the static half by repeats, in real time.
-        Assert.InRange(emitted, Fps - 2, Fps + 2);
+        // Correctness first, failing on any attempt: every slot is encoded once, latency is recorded for
+        // new frames only, and every PTS step is one slot.
         Assert.Equal(emitted, encoded);
-        Assert.InRange(fresh, (Fps / 2) - 2, Fps / 2);
-        Assert.InRange(repeated, (Fps / 2) - 2, (Fps / 2) + 2);
-
-        // Latency is recorded for new frames only; with delay 0 none waits for the flush.
         Assert.Equal(fresh, latency.Count + flushed);
-        Assert.Equal(0, flushed);
-        // The median, not p99: other GPU tests run beside this one (the p99 bound is the stats verify's).
-        // A median missed under that contention is retried by RealTimeAttempts; the bound is unchanged.
-        Assert.True(latency.Percentile(50) < 1000.0 / Fps, $"latency p50 {latency.Percentile(50)} ms");
-
         var pts = Ffprobe($"-v error -select_streams v:0 -show_entries packet=pts -of csv=p=0 {file}")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(p => long.Parse(p, CultureInfo.InvariantCulture))
@@ -181,6 +173,15 @@ public sealed class EncodeExperimentTests : IDisposable
         {
             Assert.Equal(pts[0] + (i * (pts[1] - pts[0])), pts[i]);
         }
+
+        // Then the timing bounds, which a neighbouring GPU test can make this attempt miss: one second of
+        // slots in real time, the static half by repeats, and with delay 0 no frame waits for the flush.
+        RealTimeAttempts.InRange(emitted, Fps - 2, Fps + 2, "emitted slots");
+        RealTimeAttempts.InRange(fresh, (Fps / 2) - 2, Fps / 2, "fresh slots");
+        RealTimeAttempts.InRange(repeated, (Fps / 2) - 2, (Fps / 2) + 2, "repeated slots");
+        RealTimeAttempts.Bound(flushed == 0, $"{flushed} frames waited for the flush");
+        // The median, not p99: other GPU tests run beside this one (the p99 bound is the stats verify's).
+        RealTimeAttempts.Bound(latency.Percentile(50) < 1000.0 / Fps, $"latency p50 {latency.Percentile(50)} ms");
     }
 
     private static void RequireFFmpeg()

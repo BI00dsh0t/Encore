@@ -251,12 +251,16 @@ public sealed class OutputResolutionTests : IDisposable
             + $"held replaced {video.GetProperty("heldReplaced").GetInt64()}, skipped {video.GetProperty("skippedSlots").GetInt64()}, "
             + $"queue drops {video.GetProperty("queueDrops").GetInt64()}");
 
-        Assert.True(latency.GetProperty("p99Ms").GetDouble() < 1000.0 / 60, $"latency p99 {latency.GetProperty("p99Ms").GetDouble()} ms");
-        Assert.Equal((0, 0, 0), (gc.GetProperty("gen0").GetInt32(), gc.GetProperty("gen1").GetInt32(), gc.GetProperty("gen2").GetInt32()));
-        Assert.True(steady.GetProperty("allocatedBytesPerSecond").GetDouble() < 2048,
-            $"{steady.GetProperty("allocatedBytesPerSecond").GetDouble():0} B/s allocated in steady state");
-        Assert.True(fresh >= 0.95 * slots, $"{fresh} of {slots} slots fresh");
         Assert.Equal(2, root.GetProperty("audio").GetArrayLength());
+
+        // The timing bounds, which a neighbouring GPU test can make this attempt miss.
+        var p99 = latency.GetProperty("p99Ms").GetDouble();
+        RealTimeAttempts.Bound(p99 < 1000.0 / 60, $"latency p99 {p99} ms");
+        var collections = (gc.GetProperty("gen0").GetInt32(), gc.GetProperty("gen1").GetInt32(), gc.GetProperty("gen2").GetInt32());
+        RealTimeAttempts.Bound(collections == (0, 0, 0), $"steady-state GC {collections}");
+        var bytesPerSecond = steady.GetProperty("allocatedBytesPerSecond").GetDouble();
+        RealTimeAttempts.Bound(bytesPerSecond < 2048, $"{bytesPerSecond:0} B/s allocated in steady state");
+        RealTimeAttempts.Bound(fresh >= 0.95 * slots, $"{fresh} of {slots} slots fresh");
     }
 
     /// <summary>

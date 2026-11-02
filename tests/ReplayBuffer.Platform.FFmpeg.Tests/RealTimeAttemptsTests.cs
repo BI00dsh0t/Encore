@@ -16,12 +16,12 @@ public sealed class RealTimeAttemptsTests
         RealTimeAttempts.Run(attempt =>
         {
             calls++;
-            Assert.True(attempt >= 2, $"latency p50 {20 - attempt} ms");
+            RealTimeAttempts.Bound(attempt >= 2, $"latency p50 {20 - attempt} ms");
         }, output);
 
         Assert.Equal(2, calls);
         var line = Assert.Single(output.Lines);
-        Assert.StartsWith("Attempt 1 of 3 failed:", line, StringComparison.Ordinal);
+        Assert.StartsWith("Attempt 1 of 3 missed a timing bound:", line, StringComparison.Ordinal);
         Assert.Contains("latency p50 19 ms", line, StringComparison.Ordinal);
     }
 
@@ -31,10 +31,10 @@ public sealed class RealTimeAttemptsTests
         var output = new RecordingOutput();
         var calls = 0;
 
-        var failure = Assert.Throws<TrueException>(() => RealTimeAttempts.Run(attempt =>
+        var failure = Assert.Throws<RealTimeBoundException>(() => RealTimeAttempts.Run(attempt =>
         {
             calls++;
-            Assert.True(attempt > RealTimeAttempts.MaxAttempts, $"latency p50 {20 - attempt} ms");
+            RealTimeAttempts.Bound(attempt > RealTimeAttempts.MaxAttempts, $"latency p50 {20 - attempt} ms");
         }, output));
 
         Assert.Equal(RealTimeAttempts.MaxAttempts, calls);
@@ -42,6 +42,34 @@ public sealed class RealTimeAttemptsTests
         Assert.Equal(RealTimeAttempts.MaxAttempts, output.Lines.Count);
         Assert.Contains("latency p50 19 ms", output.Lines[0], StringComparison.Ordinal);
         Assert.Contains("latency p50 18 ms", output.Lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMissedRangeNamesTheValueAndIsRetried()
+    {
+        var output = new RecordingOutput();
+
+        RealTimeAttempts.Run(attempt => RealTimeAttempts.InRange(attempt == 1 ? 27L : 30L, 28L, 32L, "fresh slots"), output);
+
+        var line = Assert.Single(output.Lines);
+        Assert.Contains("fresh slots 27 is outside [28, 32]", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACorrectnessAssertionIsNotRetried()
+    {
+        var output = new RecordingOutput();
+        var calls = 0;
+
+        // A crash, a pacer fault or a broken PTS is not contention: one bad run in three must fail.
+        Assert.Throws<EqualException>(() => RealTimeAttempts.Run(attempt =>
+        {
+            calls++;
+            Assert.Equal(0, attempt == 1 ? -1 : 0);
+        }, output));
+
+        Assert.Equal(1, calls);
+        Assert.Empty(output.Lines);
     }
 
     [Fact]
