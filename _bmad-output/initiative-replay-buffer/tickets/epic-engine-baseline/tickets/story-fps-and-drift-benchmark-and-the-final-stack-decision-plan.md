@@ -266,7 +266,7 @@ Then: full build with 0 warnings, the tests and the NativeAOT publish; commit wi
 
 **Commands:**
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors.
-- `dotnet test --solution ReplayBuffer.slnx` -- expected: all pass. **Accepted known flake:** the engine's real-time timing tests fail now and then only under whole-suite parallelism, and pass alone. They are `EncodeExperimentTests.ThePacedEncoderEncodesEverySlotWithAFastPreset` (p50 18.6–18.9 ms) and `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile` (a few queue drops). The pre-amendment `7229d26` fails the first the same way, and this story changes no engine code. Rerun alone before calling a failure real; a bugfix task to make them robust is requested from the coordinator.
+- `dotnet test --solution ReplayBuffer.slnx` -- expected: all pass. **Accepted known flake:** the engine's real-time timing tests fail now and then only under whole-suite parallelism, and pass alone. They are `EncodeExperimentTests.ThePacedEncoderEncodesEverySlotWithAFastPreset` (p50 18.6–18.9 ms), `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile` (a few queue drops) and `OutputResolutionTests.AStatsRunOnAFastWindowMeetsTheLatencyGcAndAllocationBounds` (p99 16.8 ms in QA round 2's suite). The pre-amendment `7229d26` fails the first the same way, and this story changes no engine code. Rerun alone before calling a failure real; a bugfix task to make them robust is requested from the coordinator.
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL2xxx/IL3xxx warnings.
 - `dotnet run --project bench/ReplayBuffer.Bench -c Release -- drift --minutes 2` -- expected: `drift.json` and `report.md`, with ≥ 90 % matched.
 
