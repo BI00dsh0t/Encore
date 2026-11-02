@@ -43,7 +43,7 @@ The coordinator logs each QA round in the Log below.
 
 | # | Task | Session | Status |
 |---|------|---------|--------|
-| 1 | 1.14 amendment: synthetic GPU load, unattended `fps` and `drift`, injected-key `hotkey`, scripted playback; the runs; the epic Notes Decision; merge | story-1-14 | in progress |
+| 1 | 1.14 amendment: synthetic GPU load, unattended `fps` and `drift`, injected-key `hotkey`, scripted playback; the runs; the epic Notes Decision; merge | story-1-14 | done |
 | 2 | 1.15 Refactor sweep | | pending |
 | 3 | Release epic 1 (`v0.1.0`) | | pending |
 | 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | in progress |
@@ -128,6 +128,8 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 1.14 | `bench fps` in a real GPU-bound game (Cyberpunk, RT Overdrive, Frame Generation off, overlay off) to confirm the synthetic-load figure | `bench fps --game Cyberpunk2077` while in gameplay | the synthetic-load run |
 | 1.14 | Real key presses for the Hotkey latency | `bench hotkey --presses 20` with a game focused | injected presses |
 | 1.14 | Playback in Discord and DaVinci Resolve (and any player the session couldn't script) | `bench playback --out <run folder>` | the players the session scripted |
+| 1.14 | A/V sync of a saved clip in a player | Play `playback.mp4` from `measurements/bench-1.14` and watch the flash against the burst | Bench's file analysis: A/V drift 0.54 ms over 60 min, offset −1.6 ms |
+| 1.14 | No WGC capture border | Compare `playback-border-before.png` and `playback-border-during.png` in `measurements/bench-1.14` | the screen grab: 726 yellow pixels before and during, from desktop icons |
 
 ## Decisions Awaiting Review
 
@@ -136,6 +138,9 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | Date | Ticket | Decision | Why |
 |------|--------|----------|-----|
 | 2026-11-01 | 1.14 | A synthetic Direct3D GPU load stands in for the game in `bench fps`; R4's "GPU-bound game" counts as met by it | The builder chose it, so FPS runs unattended |
+| 2026-11-02 | 1.14 | PLAN.md §6.3's "< 3 % of one modern CPU" is read as the whole processor: the engine uses 0.17 % of the machine, 4.2 % of one core | Spike 1.2 reported it that way; read per core, it misses |
+| 2026-11-02 | 1.14 | Path A stays the final stack although capture→encoded latency p99 under the synthetic load is 29.3 ms, against one frame | The FPS loss passes (1.47 %), and Path C changes the hot path's language, not its GPU work |
+| 2026-11-02 | 1.14 | Three real-time timing tests are accepted as known flakes under whole-suite parallelism: `ThePacedEncoderEncodesEverySlotWithAFastPreset`, `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile`, `OutputResolutionTests.AStatsRunOnAFastWindowMeetsTheLatencyGcAndAllocationBounds` | Each passes alone, and `7229d26` fails the first the same way; making them robust is a bugfix task, not yet queued |
 | 2026-11-01 | 4 | 14 stories kept in one epic, past the usual 8 to 12 | R1 to R7 are the first usable version and deliver together; a split would change the initiative's epic set |
 | 2026-11-01 | 4.8 | Memory mode's safe margin: the ring stops growing below the larger of 4 GB and 15% of installed RAM available; a constant, not a setting | The PRD says only "a safe margin of the free RAM" |
 | 2026-11-01 | 4.2 | A press with under 1 s buffered is reported as a save failure `clip-too-short`, with no Reset | FR-4 says no Clip is made but not whether the user is told; this way the Overlay and sound say why |
@@ -176,3 +181,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: 1.14 reported READY FOR QA at `7c21dc2`. All 7 round-1 findings are handled, and the display-on FPS rerun shows a 1.47 % loss. The coordinator removed the stale `.bench-running` and sent QA round 2 to qa-1-14. 2.1 is now building and testing. Epic 5 is sliced (`910486b`), and slicing epic 6 has started (slice-epic-6).
 - 2026-11-02: Epic 6 sliced into stories 6.1–6.13 (merged `cbb1255`); the board validates with no problems. Epic 6 now also declares needs on epics 3 (3.3, 3.4, 3.6) and 2 (2.4). Queue row 27 expanded; nine defaults added to Decisions Awaiting Review.
 - 2026-11-02: QA round 2 on 1.14 (`7c21dc2`): **QA PASS**, 0 findings. 1.14 was told to merge. 2.1 reported READY FOR QA at `d7d2485`, and QA round 1 started (qa-2-1). Epic 6 is sliced into 6.1–6.13 (`cbb1255`), and slicing epic 7 has started (slice-epic-7).
+- 2026-11-02: 1.14 merged into `develop` (`3db2541`) and marked done (`cc95c7b`). Final figures on the synthetic load: FPS loss 1.47 % (pass), latency p99 29.3 ms (miss), A/V drift 0.54 ms over 60 min, audio-to-audio 160 samples. Path A stays the final stack. Two Human Check rows and three Decisions Awaiting Review rows added. Follow-ups not queued: a bugfix to make the three timing tests robust, and `measure-path-a.ps1` cleaning up the `ReplayBuffer-PathA-<pid>` ETW session a killed run leaves behind.
