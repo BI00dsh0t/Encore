@@ -31,7 +31,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (cleared once to test) |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 2.9 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
@@ -78,7 +78,7 @@ The coordinator logs each QA round in the Log below.
 | 10 | 2.7 Track Layout editor in the Main App | | pending |
 | 11 | 2.11 Mic Devices and double-count warning in the editor | | pending |
 | 12 | 2.8 Live meters in the Track Layout editor | | pending |
-| 13 | 2.9 Named Tracks in players and editors | | pending |
+| 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | in progress |
 | 14 | 2.10 Refactor sweep | | pending |
 | 15 | Release epic 2 (`v0.2.0`) | | pending |
 | 16 | 3.1 Tracer: detect a borderless game | | pending |
@@ -264,3 +264,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: **Worker pool set up** at the builder's request (see Worker pool), so the run keeps going while the builder is away. Six idle sessions have Remote Control off, and a test clear of slice-epic-4 worked.
 - 2026-11-02: QA round 1 on 2.2 (`0f399f9`): **QA PASS**, 0 findings. QA round 1 on 2.3 (`ba483ef`): **QA PASS**, 0 blocking findings. Some timing tests failed while the three QA sessions ran at once, and each passed on its one rerun. 2.2 merges first, and 2.3 waits for 2.2's merge before its own. 1.15's QA is still running (drift smoke run).
 - 2026-11-02: 2.2 merged into `develop` (`e580e82`, `feat(media): merge 2.2-track-mixer`) and marked done. Develop had only docs commits since the branch was cut, so no rebuild was needed. QA's out-of-scope note: on a static window the "Wrote N s" log line still uses `_lastFrameQpc` (1.2 s for a 3.0 s file).
+- 2026-11-02: 2.2 is merged (`e580e82`). 2.9 became ready and went to the pool worker slice-epic-4 (already cleared). QA round 1 on 1.15 (`ca0a873`): **QA FAIL** with 2 findings. One is medium: the retries hide intermittent correctness failures. One is low: the ETW session test collides when suites run at once. 1.15 is fixing them. 2.3 is syncing with develop before its merge.
