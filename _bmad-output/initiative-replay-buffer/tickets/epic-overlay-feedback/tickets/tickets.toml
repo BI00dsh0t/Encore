@@ -1,0 +1,155 @@
+# Stories of epic-overlay-feedback, in build order. `id` is permanent, never reused.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Tracer: capture state to the Overlay dot"
+description = "Thinnest path through every layer: the SessionOrchestrator's capture.stateChanged (story 4.1's replay session) reaches the App over IPC, and a new Overlay window in ReplayBuffer.App renders it. The Overlay is a topmost, click-through, never-activated WPF window (WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, shown without activation), excluded from capture with CaptureExclusion (WDA_EXCLUDEFROMCAPTURE), in the top-right corner of the monitor holding the Target Game's window (the primary monitor when there is none), 24 px in at per-monitor DPI. It draws a hollow red dot while replay is buffering or draining, a solid red dot while recording or monitorRecording is running, and nothing when all are off, updating within 1 s of the state change; it renders only from the state.snapshot and its events (AD-3, AD-15). The Win32 calls live in Platform.Desktop. The builder plays a borderless game and sees the dot. R1 part: the dot and the window."
+verify = "Automated tests: a fake engine event stream drives the Overlay's view model through off, buffering, draining and running, and the dot's state follows each within 1 s; the created window has the topmost, transparent, no-activate and tool-window styles and WDA_EXCLUDEFROMCAPTURE; showing and updating it leaves a helper window in the foreground with focus; a WGC monitor capture under it has none of its pixels. The builder starts a borderless game, sees the hollow dot within 1 s of the Replay Buffer starting, keeps keyboard focus in the game, and sees the dot go when the Replay Buffer stops."
+covers = ["R1", "R6"]
+after = ["4.1"]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 2
+type = "spike"
+title = "Q-4: the Overlay over exclusive fullscreen and its borderless FPS cost"
+description = "Settle PRD Q-4 by measurement, reusing story 1.14's bench (PresentMon, the synthetic GPU load window): with the tracer's Overlay on and off, record each run's PresentMon PresentMode, FPS and SHQueryUserNotificationState result for the GPU load in borderless flip (independent flip expected) and in exclusive fullscreen, and whether the Overlay shows over each. Decide from it: (a) what the Overlay does over exclusive fullscreen (unattended default: it detects exclusive fullscreen with SHQueryUserNotificationState == QUNS_RUNNING_D3D_FULL_SCREEN and doesn't show, and Feedback Sounds cover it); (b) whether an always-shown dot keeps a borderless game in independent flip, and if not, the mitigation story 8 builds (unattended default: show the Overlay only while it has something to show, the dot for 3 s after each capture-state change, and record that deviation from FR-6 for the builder). The builder's own list of games that run in exclusive fullscreen is queued as a Human Check. The decision goes into the epic's Notes as a dated Decision: line. R7 part: Q-4."
+verify = "A report under the bench's run folder gives PresentMode and FPS for the GPU load in borderless and exclusive fullscreen with the Overlay on and off, and the epic's Notes record the decision for exclusive fullscreen and for the borderless dot."
+covers = ["R7"]
+after = [1, "1.14"]
+hitl = true
+risk = "high"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Saving icon through the Save Cooldown"
+description = "On an accepted Save press the SessionOrchestrator sets capture.stateChanged's cooldownUntil (the Hotkey QPC plus saveCooldown, as UTC) and a new additive clipsWriting count (AD-22, in Contracts/Capture.cs, default 0), emitted within 250 ms of the press, and clears clipsWriting as each writer completes. The Overlay shows a green saving icon beside the dot from that event until both the cooldown has passed and no Clip is writing, timing the cooldown's end itself from cooldownUntil. Presses inside the cooldown change nothing. R2."
+verify = "Automated tests: with a fake Hotkey and a slowed writer, capture.stateChanged with cooldownUntil and clipsWriting = 1 leaves the engine within 250 ms of the press QPC; the Overlay view model shows the icon from that event to the later of cooldownUntil and the writer's completion, then hides it; a press inside the cooldown changes no state; a snapshot taken mid-cooldown restores the icon on reconnect."
+covers = ["R2"]
+after = [1, 4, "4.4"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Feedback notices in the engine, with a dev simulator"
+description = "An engine FeedbackRouter (Core, fed by the orchestrator's channel) turns outcomes into warning.raised notices, the one shape the Overlay and status line render for messages (AD-3, AD-15): clip.saved becomes { code: clip-saved, severity: info, overlay: true, sound: clipSaved }, which the engine dismisses itself after 10 s; clip.failed { reason } becomes { code: clip-failed, severity: error, overlay: true, sound: saveFailed } with a short reason (\"disk full\", \"clip too short\", \"busy\") in its message, dismissed by the user or by the next saved Clip; Recording started and stopped and disk-full have the same mapping ready for epic-recordings (recording-started, recording-stopped, disk-full with dismissable: true). New codes go in Contracts.ErrorCodes. A dev-instance-only command, dev.simulate { event } (AD-16 instances: refused with not-dev-instance in the daily instance), injects a stub Recording state (recording running and off), a disk-full and a save failure, so the Overlay, sounds and status line can be checked before epic-recordings. R3 part: the messages. R4 part: which sound each event names."
+verify = "Automated tests: a saved Clip raises one clip-saved notice that is dismissed 10 s later; a failed save raises clip-failed with the reason and it is dismissed by the next save; each dev.simulate event raises the expected notice or capture state; dev.simulate is refused in a non-dev instance; every new code is in ErrorCodes and every new event maps to a snapshot field."
+covers = ["R3", "R4"]
+after = ["4.5"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Overlay message queue"
+description = "The Overlay shows active warnings with overlay: true as messages below the dot, oldest first, one at a time for 4 s each, so messages that arrive close together queue and none is overwritten; a message dismissed before its turn is skipped, and a reconnect's snapshot re-queues only notices not yet shown. Clip saved is green, failures and disk full red. The Overlay never shows warnings with overlay: false (device dropouts stay silent, R19). R3 part: the queue."
+verify = "Automated tests on the view model: three notices raised 100 ms apart are each shown for 4 s in order; a notice dismissed while queued never shows; an overlay: false warning never shows; after a reconnect the snapshot doesn't replay a message already shown. The dev simulator's saved and failed events show their messages over a borderless test window."
+covers = ["R3"]
+after = [3, 4]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Feedback Sounds in the engine"
+description = "The engine plays Feedback Sounds (AD-1, AD-15) through a WASAPI shared-mode render client in Platform.Audio, behind a Core port, on global.feedbackSoundDevice or, when it is null, the default communications endpoint, following that endpoint when it changes. Five built-in sounds, synthesized at build time into embedded 48 kHz WAVs peaking at -12 dBFS and under 600 ms: clipSaved a rising two-note chime, saveFailed a low descending double buzz, recordingStarted a single high note, recordingStopped a single low note, diskFull three short low pulses, so a saved Clip and a failed save are told apart by sound alone. The FeedbackRouter's sound name plays only when its feedbackSounds flag is on (applied immediately); playback never blocks the orchestrator, and a missing device logs and skips. Validation raises feedback-device-captured when a Track in the active layout loopback-captures the sound endpoint. A new feedback.preview { sound } command (Contracts/Feedback.cs) plays the named sound on the current device even when it is switched off, for story 11's Play buttons. R4."
+verify = "Automated tests with a fake render port: each event plays its sound once, a switched-off sound doesn't play, a null device resolves to the default communications endpoint, a device that disappears is skipped without an error reaching the orchestrator, and a layout capturing the sound endpoint raises feedback-device-captured; feedback.preview plays a switched-off sound. A test renders the five WAVs and checks their lengths, peaks and that clipSaved and saveFailed differ in pitch direction. The dev simulator plays each sound on the test PC's default endpoint."
+covers = ["R4"]
+after = [4]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Mic-muted icon and the disk-full red X"
+description = "The Overlay shows a mic-muted icon beside the dot while capture.stateChanged.micMuted is true (story 2.4's mute, R18's display part), and a red X while a disk-full warning is active; the red X goes when the warning is dismissed, which the engine does when the next Recording starts (epic-recordings) or the user dismisses it from the status line. Both are checked here with the dev simulator's stub Recording and disk-full. R3 part: the icons."
+verify = "Automated tests on the view model: micMuted true shows the icon and false hides it within 1 s; an active disk-full warning shows the red X and warning.dismissed removes it; the simulator's disk-full followed by a stub Recording start shows the X, then clears it once the engine dismisses the warning."
+covers = ["R3"]
+after = [5, "2.4"]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 8
+type = "story"
+title = "Overlay over exclusive fullscreen and the presentation path"
+description = "Build what spike 2 decided: over an exclusive-fullscreen Target the Overlay behaves as decided (default: it detects QUNS_RUNNING_D3D_FULL_SCREEN and stays hidden while sounds carry the feedback), and in borderless the Overlay keeps the game in its fastest presentation path, with the spike's mitigation if one was needed (default: shown only while it has something to show). The Overlay never minimizes, takes focus from or interrupts a game, in either mode. R1 part: exclusive fullscreen. R7 part: the presentation path."
+verify = "PresentMon on the synthetic GPU load in borderless with the Overlay running reports the same PresentMode as with it off; in exclusive fullscreen the load window keeps exclusive mode and focus through saved and failed simulator events, and the Overlay behaves as the spike decided; automated tests cover the fullscreen-state switch in the view model."
+covers = ["R1", "R7"]
+after = [2, 7]
+hitl = true
+risk = "high"
+
+[[entry]]
+id = 9
+type = "story"
+title = "Capture exclusion for every App window"
+description = "Every top-level window the App creates (the Overlay, the Main App and its dialogs, any in-app toast, the tray's menu and flyout) sets WDA_EXCLUDEFROMCAPTURE when its handle is created: a WPF class handler on Window.SourceInitialized for WPF windows, and an explicit CaptureExclusion call for the tray's native menu, so a new window can't be missed. The app shows no Windows toast notifications of its own. PLAN.md §7.1."
+verify = "An automated UI test opens the Main App, a dialog, the tray menu and the Overlay with a message, enumerates every top-level window of the App process, and finds WDA_EXCLUDEFROMCAPTURE on each; a WGC monitor capture taken meanwhile has none of their pixels."
+covers = ["R6"]
+after = [8]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 10
+type = "story"
+title = "Main App status line"
+description = "A status line on every page of the Main App (replacing story 1.7's Status tab text) shows the current state from capture.stateChanged (Replay Buffer off, buffering on <Target Game> or draining, Recording and Monitor Recording running, mic muted) and the active warnings newest first, each with its time and a Dismiss button that sends warning.dismiss when dismissable. It shows the warnings other epics raise: device-dropout (story 2.5), engine-restarted and app-restarted (story 1.8's AppSupervisor, later epic-hardening), memory-margin (story 4.8), reset-gap (story 4.9), clip-failed, disk-full and feedback-device-captured. There is no separate UX design; the builder checks it by hand. R5."
+verify = "Automated tests on the view model: each capture state renders its text; warnings list newest first; Dismiss sends warning.dismiss and the row goes on warning.dismissed; a non-dismissable warning has no button; a reconnect's snapshot restores the list. The builder unplugs a layout device and sees its dropout in the status line, and kills the engine and sees the restart reported."
+covers = ["R5"]
+after = [4, "1.8", "2.5", "4.8", "4.9"]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 11
+type = "story"
+title = "Feedback Sounds settings page"
+description = "A Feedback Sounds page in the Settings host (after story 4.12, which also adds a page there): an on/off switch per sound (feedbackSounds), the sound device (feedbackSoundDevice) picked from story 2.3's live Output Device list with \"Default communications device\" first, and a Play button per sound that sends story 6's feedback.preview { sound } command so the builder hears it on the chosen device even when switched off; the feedback-device-captured warning shows on the page. Changes go through the settings.update sender. There is no separate UX design; the builder checks it by hand. R4 part: switching sounds off."
+verify = "Automated tests: switching a sound off sends a settings.update for feedbackSounds and the engine stops playing it; choosing a device sets feedbackSoundDevice; the Play button sends feedback.preview for its sound. The builder switches the save-failed sound off and on, picks another device, and plays each sound."
+covers = ["R4"]
+after = [6, 10, "2.3", "4.12"]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 12
+type = "story"
+title = "Benchmark with the Overlay on"
+description = "ReplayBuffer.Bench's fps command gains an --overlay switch that launches the installed App as a separate process (Bench never references the App, AD-2) so its Overlay runs with a buffering dot and a message every 10 s, and the FPS run is repeated with capture and the Overlay on, against story 1.14's NFR-1 target (provisional 3% at 1080p60), reporting PresentMode as well as FPS. The synthetic GPU load run is automated; the run in the builder's GPU-bound game is queued as a Human Check. R7 part: the Overlay share of R36."
+verify = "The bench report for the synthetic GPU load with capture and the Overlay on is within the NFR-1 target and shows no PresentMode change from the Overlay; the result is recorded in the epic's Notes."
+covers = ["R7"]
+after = [8, 9]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 13
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup only, scoped at its start from plans and review findings the epic deferred."
+verify = "All tests pass, and the Overlay, sounds and status line still report a saved and a failed Clip after the sweep; every deferred cleanup item is closed or recorded."
+covers = []
+after = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 14
+type = "story"
+title = "Overlay and Feedback Sounds end to end on the builder's PC"
+description = "The closing end-to-end check of the epic's Done when, integrated: an automated suite drives the installed engine and App with injected Save presses and the dev simulator against the synthetic game window, and checks the dot within 1 s, the saving icon within 250 ms, queued messages, the mic-muted icon, the red X, each sound played on the endpoint, capture exclusion of every App window, and the status line's warnings; the builder then plays a borderless and an exclusive-fullscreen game, saves Clips and forces a failure (a full test drive), and tells saved from failed by sound alone in the exclusive-fullscreen one."
+verify = "The automated suite passes against the installed build, and the builder's session confirms each Done-when line, including saved versus failed by sound alone in exclusive fullscreen."
+covers = ["R1", "R2", "R3", "R4", "R5", "R6"]
+after = [13]
+hitl = true
+risk = "low"
