@@ -273,6 +273,8 @@ internal sealed class CaptureSession : ICaptureSession
                 track.Subscription?.Dispose();
             }
 
+            // Silent Tracks stop with the device taps, not after the teardown below.
+            StopSilenceClock();
             ReportAudioFaults();
             Finish();
             WriteStats();
@@ -495,10 +497,16 @@ internal sealed class CaptureSession : ICaptureSession
         _video.Flush();
 
         // The devices are unsubscribed and the silence clock stopped: pad every Track with silence to
-        // one end frame, the longest device's or the last video frame's, whichever is later (or where
-        // the clock already took a silent Track, should that be later still), then drain the encoders.
+        // one end frame, the longest device's or the video's end, whichever is later (or where the
+        // clock already took a silent Track, should that be later still), then drain the encoders.
+        // The video ends after its last emitted pacer slot, which repeats past the last captured frame.
         StopSilenceClock();
         var end = FramesAt(_lastFrameQpc);
+        if (_paced?.Pacer is { } slots)
+        {
+            end = Math.Max(end, (long)((Int128)slots.EmittedSlots * AudioTimeline.SampleRate / slots.Fps));
+        }
+
         foreach (var mixer in _mixers)
         {
             end = Math.Max(end, mixer.Inputs == 0 ? mixer.EmittedFrames : mixer.LongestInputFrames);
