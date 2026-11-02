@@ -99,7 +99,21 @@ The coordinator logs each QA round in the Log below.
 | 26.13 | 5.13 Refactor sweep | | pending |
 | 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | | pending |
 | 26.15 | Release epic 5 (`v0.5.0`) | | pending |
-| 27 | Slice epic 6 (Recordings), then its stories and release | slice-epic-6 | in progress |
+| 27 | Slice epic 6 (Recordings) | slice-epic-6 | done |
+| 27.1 | 6.1 Tracer: Record Hotkey to a fragmented MP4 Recording beside the Replay Buffer | | pending |
+| 27.2 | 6.2 Crash-safe Recordings and recording-interrupted | | pending |
+| 27.3 | 6.3 Record Hotkey modes and the Recordings switch | | pending |
+| 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | | pending |
+| 27.5 | 6.5 Clips during a Recording on one encoder chain | | pending |
+| 27.6 | 6.6 One file however long, and forced encoder restarts | | pending |
+| 27.7 | 6.7 Disk full during a Recording | | pending |
+| 27.8 | 6.8 Recording notices and sounds | | pending |
+| 27.9 | 6.9 Monitor Recording by its own Hotkey | | pending |
+| 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | | pending |
+| 27.11 | 6.11 Recordings settings in the Main App | | pending |
+| 27.12 | 6.12 Refactor sweep | | pending |
+| 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
+| 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup), then its stories and release | | pending |
 | 29 | Slice epic 8 (Hardening), then its stories and release | | pending |
 
@@ -140,6 +154,15 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-02 | 5.6, 5.11 | A `feedback.preview` command and a Play button per sound on the Feedback Sounds page | Lets the builder hear each sound on the chosen device |
 | 2026-11-02 | 5.10, 5.11 | No `bmad-ux` pass for the Overlay, status line or Feedback Sounds page; the builder checks them by hand | Same as epics 2 to 4 |
 | 2026-11-02 | 5.14 | A closing end-to-end story on the builder's PC (hitl) after the sweep | The epic's Done when ends "Verified integrated on the builder's PC" |
+| 2026-11-02 | 6 | 13 entries kept in one epic, past the usual 8 to 12 | Recordings and the Monitor Recording share the writer, crash safety and disk-full path, and deliver together |
+| 2026-11-02 | 6.1 | A Recording starts at a keyframe forced on the first frame after the press, with audio from that frame's QPC; it doesn't reach back into the ring | The PRD doesn't say where a Recording starts |
+| 2026-11-02 | 6.2 | Each 1 s fragment is followed by `FlushFileBuffers`; a real power cut is only an optional check for the builder | FR-12 covers power loss, which can't be automated |
+| 2026-11-02 | 6.5, 6.9 | While a game Recording runs, ChainKey-changing settings wait until it stops, and a Recording started with one pending shares the Replay Buffer's current chain; during a Monitor Recording a Replay Buffer chain change tears down before rebuilding (`reset-gap`), and a third chain is refused with `encoder-budget` | AD-7 caps chains at two but doesn't say how a Recording, a Reset and a Monitor Recording share them |
+| 2026-11-02 | 6.6 | A forced encoder restart always ends the Recording and starts a new one at once, raising `recording-restarted`; continuing the same file isn't attempted | FR-13 allows either; a new chain's codec headers can differ |
+| 2026-11-02 | 6.7 | On disk full the file is truncated to its last complete fragment; a Disk-mode Replay Buffer stopped by it raises `replay-stopped-disk-full` and restarts by itself once there is room for the ring, checked every 30 s | FR-14 says a Disk buffer stops but not when it comes back |
+| 2026-11-02 | 6.9 | New `monitorRecordStart` and `monitorRecordStop` Hotkey actions (unbound by default) follow `recordHotkeyMode`, added additively; AD-11's action list should gain them | FR-23 asks for separate Start and Stop keys, which AD-11's enum lacks |
+| 2026-11-02 | 6.11 | The monitor picker goes on a new Recordings page (via a new `monitors.list` command) and the Monitor Record keys on the Hotkeys page; no `bmad-ux` pass, the builder checks it by hand | Same as epics 2 to 5 |
+| 2026-11-02 | 6.13 | A closing end-to-end story on the builder's PC (hitl) after the sweep | The epic's Done when ends "Verified integrated on the builder's PC" |
 
 ## Log
 
@@ -151,3 +174,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02 02:45: **Resumed by the builder.** 1.14 restarted `bench fps` at 02:40 and holds `.bench-running` until the run ends. 2.1 continues from `420ee54` but waits for the lock before it builds or tests. The board shows nothing else ready (the rest of epic 2 waits on 2.1; epics 3 and 4 wait on epic 1), so slicing epic 5 runs in parallel (planning only, no GPU).
 - 2026-11-02: Epic 5 sliced into stories 5.1–5.14 (merged `910486b`); the board validates with no problems. Epic 5 now also declares needs on epics 1 (5.2, 5.12 use 1.14's bench) and 2 (2.3, 2.4, 2.5). Queue row 26 expanded; ten defaults added to Decisions Awaiting Review.
 - 2026-11-02: 1.14 reported READY FOR QA at `7c21dc2`. All 7 round-1 findings are handled, and the display-on FPS rerun shows a 1.47 % loss. The coordinator removed the stale `.bench-running` and sent QA round 2 to qa-1-14. 2.1 is now building and testing. Epic 5 is sliced (`910486b`), and slicing epic 6 has started (slice-epic-6).
+- 2026-11-02: Epic 6 sliced into stories 6.1–6.13 (merged `cbb1255`); the board validates with no problems. Epic 6 now also declares needs on epics 3 (3.3, 3.4, 3.6) and 2 (2.4). Queue row 27 expanded; nine defaults added to Decisions Awaiting Review.
