@@ -99,7 +99,7 @@ The coordinator logs each QA round in the Log below.
 | 26.13 | 5.13 Refactor sweep | | pending |
 | 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | | pending |
 | 26.15 | Release epic 5 (`v0.5.0`) | | pending |
-| 27 | Slice epic 6 (Recordings), then its stories and release | | pending |
+| 27 | Slice epic 6 (Recordings), then its stories and release | slice-epic-6 | in progress |
 | 28 | Slice epic 7 (Library and Cleanup), then its stories and release | | pending |
 | 29 | Slice epic 8 (Hardening), then its stories and release | | pending |
 
@@ -150,3 +150,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-01 12:18: **PAUSED by the builder**, who needs the PC. The coordinator stopped 1.14's FPS rerun (started 12:08; it must be redone from scratch) and paused 2.1. `.bench-running` in the main folder marks the pause, and sessions start no builds, tests or benchmarks while it exists. **To resume:** the builder says so, the coordinator deletes `.bench-running`, tells 1.14 to rerun `bench fps` and finish its QA fixes, and tells 2.1 to continue. Running stories at the time: 1.14 (QA fixes), 2.1 (implementation).
 - 2026-11-02 02:45: **Resumed by the builder.** 1.14 restarted `bench fps` at 02:40 and holds `.bench-running` until the run ends. 2.1 continues from `420ee54` but waits for the lock before it builds or tests. The board shows nothing else ready (the rest of epic 2 waits on 2.1; epics 3 and 4 wait on epic 1), so slicing epic 5 runs in parallel (planning only, no GPU).
 - 2026-11-02: Epic 5 sliced into stories 5.1–5.14 (merged `910486b`); the board validates with no problems. Epic 5 now also declares needs on epics 1 (5.2, 5.12 use 1.14's bench) and 2 (2.3, 2.4, 2.5). Queue row 26 expanded; ten defaults added to Decisions Awaiting Review.
+- 2026-11-02: 1.14 reported READY FOR QA at `7c21dc2`. All 7 round-1 findings are handled, and the display-on FPS rerun shows a 1.47 % loss. The coordinator removed the stale `.bench-running` and sent QA round 2 to qa-1-14. 2.1 is now building and testing. Epic 5 is sliced (`910486b`), and slicing epic 6 has started (slice-epic-6).
