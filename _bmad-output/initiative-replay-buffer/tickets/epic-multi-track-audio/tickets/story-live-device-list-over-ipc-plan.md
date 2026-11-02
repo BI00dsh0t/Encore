@@ -3,7 +3,7 @@ title: 'Live device list over IPC'
 type: 'feature'
 ticket: '3'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-progress'
 baseline_revision: '8efe555891633d78a801b620abe975b9acc49157'
 route: 'full'
 route_source: 'auto'
@@ -68,12 +68,12 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/Messages/Audio.cs`, `Engine.cs` -- payloads, messages, snapshot field -- the wire shape
-- [ ] `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` -- sample + default -- registry coverage tests demand it
-- [ ] `src/ReplayBuffer.Core/Audio/AudioDeviceHub.cs`, `AudioDeviceListBuilder.cs` + `tests/ReplayBuffer.Core.Tests/AudioDeviceListBuilderTests.cs` -- port and merge -- matrix rows Same names, Configured but absent, Absent and unconfigured, Same id in two layouts, Wrong flow, ordering
-- [ ] `src/ReplayBuffer.Platform.Audio/EndpointWatcher.cs`, `AudioDeviceHub.cs` + `tests/ReplayBuffer.Platform.Audio.Tests/EndpointWatcherTests.cs` -- notifications -- Burst and the real COM path
-- [ ] `src/ReplayBuffer.Engine/Audio/DeviceListPublisher.cs`, `Ipc/EventHub.cs`, `EngineHost.cs` -- publish and serve -- Listing fails, Nothing changed, Layout edited
-- [ ] `tests/ReplayBuffer.Engine.Tests/DeviceListServeTests.cs`, `IpcTests.cs` -- IPC end to end
+- [x] `src/ReplayBuffer.Contracts/Messages/Audio.cs`, `Engine.cs` -- payloads, messages, snapshot field -- the wire shape
+- [x] `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` -- sample + default -- registry coverage tests demand it
+- [x] `src/ReplayBuffer.Core/Audio/AudioDeviceHub.cs`, `AudioDeviceListBuilder.cs` + `tests/ReplayBuffer.Core.Tests/AudioDeviceListBuilderTests.cs` -- port and merge -- matrix rows Same names, Configured but absent, Absent and unconfigured, Same id in two layouts, Wrong flow, ordering
+- [x] `src/ReplayBuffer.Platform.Audio/EndpointWatcher.cs`, `AudioDeviceHub.cs` + `tests/ReplayBuffer.Platform.Audio.Tests/EndpointWatcherTests.cs` -- notifications -- Burst and the real COM path
+- [x] `src/ReplayBuffer.Engine/Audio/DeviceListPublisher.cs`, `Ipc/EventHub.cs`, `EngineHost.cs` -- publish and serve -- Listing fails, Nothing changed, Layout edited
+- [x] `tests/ReplayBuffer.Engine.Tests/DeviceListServeTests.cs`, `IpcTests.cs` -- IPC end to end
 
 **Acceptance Criteria:**
 - Given a connected client and an engine whose endpoint source is a test double, when the double adds, removes or changes the state of an endpoint, then the client receives `devices.changed` with the new list within 2 s, and its `State.Devices` matches `devices.list`.
@@ -82,6 +82,12 @@ deferred: []
 - Given the real Windows endpoints, when the published NativeAOT engine serves, then `devices.list` returns every present Output and Input endpoint, available, and the notification client registers and unregisters with no error or IL warning.
 
 ## Implementation Notes
+
+- `DeviceListPublisher.Seed` runs the `EventHub` construction under the publisher's lock, so a change raised between building the first list and wiring the hub can't be lost (the publish delegate reads the hub through a field assigned inside `Seed`).
+- `AudioEndpoints.CreateEnumerator` is factored out of the private `Enumerator` so the watcher owns its own enumerator.
+- `Platform.Audio` had no `InternalsVisibleTo`; added `ReplayBuffer.Platform.Audio.Tests` in its csproj, and `AllowUnsafeBlocks` in the test csproj, so tests reach `AudioDeviceHub.Watcher` / `EndpointWatcher.Client`.
+- The CCW returns `S_OK` through a local `(HRESULT)0`: CsWin32 doesn't generate `HRESULT.S_OK` here.
+- Verification: `EncodeExperimentTests.ThePacedEncoderEncodesEverySlotWithAFastPreset` (FFmpeg, GPU latency p50 18.8 ms against a 16.7 ms bound) failed on the run and on its rerun; that project doesn't reference the changed code.
 
 ## Plan Change Log
 

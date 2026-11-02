@@ -22,9 +22,13 @@ internal sealed class EventHub
     private readonly List<IFrameSink> _sinks = [];
     private StateSnapshot _state;
 
-    public EventHub(SettingsDocument settings)
+    /// <param name="devices">The device list the engine starts with; in the initial state, so no event and no <c>seq</c>.</param>
+    public EventHub(SettingsDocument settings, AudioDeviceList? devices = null)
     {
-        _state = StateSnapshot.Initial(Guid.NewGuid().ToString("N"), Environment.ProcessId, settings);
+        _state = StateSnapshot.Initial(Guid.NewGuid().ToString("N"), Environment.ProcessId, settings) with
+        {
+            Devices = devices ?? AudioDeviceList.Empty,
+        };
     }
 
     /// <summary>The current state, with the <c>seq</c> of the last event in it.</summary>
