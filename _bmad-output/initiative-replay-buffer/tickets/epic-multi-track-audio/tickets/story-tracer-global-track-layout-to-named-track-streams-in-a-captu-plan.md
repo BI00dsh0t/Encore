@@ -76,7 +76,7 @@ deferred: []
 - [x] `src/ReplayBuffer.Engine/Settings/SettingsStore.cs` -- ReadDocument + tests in `SettingsStoreTests.cs`
 - [x] `src/ReplayBuffer.Engine/CommandLine.cs`, `Program.cs`, `TracerCapture.cs` -- `--track-layout`, `--instance`, debug-list fields + `CommandLineTests`
 - [x] `tests/ReplayBuffer.Engine.Tests/TrackLayoutCaptureTests.cs` -- runs the published engine as a process: `debug-capture --instance ReplayBuffer-Test-<guid> --track-layout --seconds 3` on a throwaway pwsh window. settings.json holds a layout from the default output and input endpoints, with Tracks `Game`={out}, `Both`={out,in}, `Mic`={in}. ffprobe shows 3 AAC streams with those titles in order and the first is default. Then the empty-Track and absent-device error cases. The test instance's folders are deleted afterwards.
-- [ ] Update the existing tests for the SessionAudio shape; extend the debug-list process test.
+- [x] Update the existing tests for the SessionAudio shape; extend the debug-list process test.
 
 **Acceptance Criteria:**
 - Given the instance's settings.json holds a Global trackLayout with three Tracks of one present device each, when `debug-capture --track-layout --seconds 30` runs, then ffprobe on the file shows one video stream and three AAC streams whose `title` tags are the Track names in layout order, and each stream lasts as long as the video to within 0.1 s.
