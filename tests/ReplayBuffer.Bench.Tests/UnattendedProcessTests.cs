@@ -137,6 +137,23 @@ public sealed class UnattendedProcessTests : IDisposable
         Assert.True(result.AudioTracks == 2, $"Windows Media Player: {result}");
     }
 
+    [Fact]
+    public void AGpuLoadAlreadyRunningIsRefusedAndLeftAlone()
+    {
+        var exe = LoadExe();
+        using var load = Start(exe);
+        var stand = Path.Combine(Environment.SystemDirectory, "whoami.exe");
+
+        var failure = Assert.Throws<BenchFailure>(() => FpsBenchmark.Run(
+            _run.Context("fps", "--seconds", "10", "--passes", "1", "--settle", "0",
+                "--pwsh", stand, "--presentmon", stand, "--engine", stand, "--load-exe", exe)));
+
+        Assert.StartsWith(GpuLoadProcess.ProcessName + " is already running (pid ", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(load.Id.ToString(CultureInfo.InvariantCulture), failure.Message, StringComparison.Ordinal);
+        Assert.False(load.HasExited);
+        Assert.False(File.Exists(_run.PathOf(FpsBenchmark.FileName)));
+    }
+
     private static string LoadExe()
     {
         try

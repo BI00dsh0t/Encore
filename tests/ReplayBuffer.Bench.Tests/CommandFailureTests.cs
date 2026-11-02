@@ -54,6 +54,35 @@ public sealed class CommandFailureTests : IDisposable
     }
 
     [Fact]
+    public void ALoadThatExitsDuringTheRunIsExitOneWithItsStderr()
+    {
+        Assert.SkipWhen(GpuLoadProcess.Running().Count > 0, $"{GpuLoadProcess.ProcessName} is running");
+
+        // A load that says ready, then gives up; and a script that outlives it, then fails.
+        var load = Stub("load.cmd", """
+            @echo off
+            echo stub load gave up 1>&2
+            echo ready {"hwnd":"0x1","width":320,"height":180,"targetFps":80,"calibratedFps":80,"iterations":1,"adapter":"stub"}
+            exit /b 7
+            """);
+        var pwsh = Stub("pwsh.cmd", """
+            @echo off
+            ping -n 3 127.0.0.1 >nul
+            exit /b 1
+            """);
+        var errors = new StringWriter();
+
+        var code = FpsBenchmark.Run(
+            _run.Context("fps", "--seconds", "10", "--passes", "1", "--settle", "0",
+                "--pwsh", pwsh, "--presentmon", FailingEngine, "--engine", FailingEngine, "--load-exe", load),
+            errors);
+
+        Assert.Equal(1, code);
+        Assert.Contains("The GPU load exited during the run (exit 7: stub load gave up).", errors.ToString(), StringComparison.Ordinal);
+        Assert.False(File.Exists(_run.PathOf(FpsBenchmark.FileName)));
+    }
+
+    [Fact]
     public void AMissingPresentMonIsRefusedWithTheScriptsMessage()
     {
         var missing = Path.Combine(_run.Folder, "PresentMon-9.9.9-x64.exe");
@@ -62,6 +91,13 @@ public sealed class CommandFailureTests : IDisposable
 
         // measure-path-a.ps1's own words for a -PresentMon that isn't there.
         Assert.Equal($"PresentMon not found at '{missing}'.", failure.Message);
+    }
+
+    private string Stub(string name, string script)
+    {
+        var path = _run.PathOf(name);
+        File.WriteAllText(path, script.ReplaceLineEndings("\r\n"));
+        return path;
     }
 
     private static bool HasDefaultDevices()

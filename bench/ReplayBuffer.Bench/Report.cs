@@ -222,7 +222,7 @@ internal static class Report
 
         if (drift.Tracks.Count > 0)
         {
-            md.AppendLine("| Audio track | Samples | Length | Minus the video (frames / fps) | Target (an AAC frame + a video frame) | Mark |");
+            md.AppendLine("| Audio track | Samples | Length | Minus the video (its timestamp span) | Target (an AAC frame + a video frame) | Mark |");
             md.AppendLine("|---|---|---|---|---|---|");
             foreach (var t in drift.Tracks)
             {

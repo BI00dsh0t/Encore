@@ -291,7 +291,7 @@ internal sealed class BenchContext
         return Path.Combine(measurements, "bench-" + now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
     }
 
-    /// <summary><c>--engine</c>, or the newest Release build of the engine (Debug skews its CPU and allocation figures).</summary>
+    /// <summary><c>--engine</c>, or <see cref="FindEngine"/>.</summary>
     public string ResolveEngine()
     {
         if (Options.Text("engine") is { } given)
@@ -300,11 +300,26 @@ internal sealed class BenchContext
             return File.Exists(full) ? full : throw new BenchFailure($"The engine is not at '{full}'.");
         }
 
-        var release = Path.Combine(RepoRoot, "src", "ReplayBuffer.Engine", "bin", "Release");
-        var built = Directory.Exists(release)
-            ? new DirectoryInfo(release).GetFiles("ReplayBuffer.Engine.exe", SearchOption.AllDirectories).OrderBy(f => f.LastWriteTimeUtc).LastOrDefault()
-            : null;
-        return built?.FullName ?? throw new BenchFailure("No Release engine build. Run dotnet build ReplayBuffer.slnx -c Release, or pass --engine <path>.");
+        return FindEngine(RepoRoot)
+            ?? throw new BenchFailure("No Release engine build. Run dotnet build ReplayBuffer.slnx -c Release, or pass --engine <path>.");
+    }
+
+    /// <summary>
+    /// The newer of the published engine (<c>publish/engine</c>) and the Release build's own folder
+    /// (<c>bin/Release/&lt;tfm&gt;</c>; Debug skews its CPU and allocation figures). Never a folder under
+    /// it, such as the NativeAOT compiler's <c>&lt;rid&gt;/native</c> output, which has no FFmpeg beside it.
+    /// </summary>
+    internal static string? FindEngine(string repo)
+    {
+        const string Exe = "ReplayBuffer.Engine.exe";
+        var candidates = new List<FileInfo> { new(Path.Combine(repo, "publish", "engine", Exe)) };
+        var release = new DirectoryInfo(Path.Combine(repo, "src", "ReplayBuffer.Engine", "bin", "Release"));
+        if (release.Exists)
+        {
+            candidates.AddRange(release.GetDirectories().Select(tfm => new FileInfo(Path.Combine(tfm.FullName, Exe))));
+        }
+
+        return candidates.Where(f => f.Exists).OrderBy(f => f.LastWriteTimeUtc).LastOrDefault()?.FullName;
     }
 
     /// <summary><c>--ffmpeg</c>, or Bench's own folder (the build copies the natives there), or <c>native/ffmpeg</c>.</summary>

@@ -21,7 +21,7 @@ internal sealed record MarkerLog(
     double? Minutes = null,
     CaptureSettings? Capture = null);
 
-/// <summary>One audio track's sample count in the file against the video's duration (frames / fps).</summary>
+/// <summary>One audio track's sample count in the file against the video's duration (from its first packet's timestamp to the end of its last packet).</summary>
 /// <param name="Samples">Decoded samples for the burst track; AAC packets × 1024 for the others.</param>
 /// <param name="DurationSeconds">Samples / 48 kHz.</param>
 internal sealed record TrackCheck(int Track, string? Title, long Samples, double DurationSeconds, double MinusVideoMs, double TargetMs, string Mark);

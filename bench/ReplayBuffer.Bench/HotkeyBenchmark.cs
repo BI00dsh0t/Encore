@@ -95,13 +95,7 @@ internal static class HotkeyBenchmark
                 }
 
                 var timings = Measure(combo, presses, timeout, events.Reader, inject, out var unpaired, out var injectFault, cancel.Token);
-
-                // UIPI can drop injected input without SendInput saying so: no press at all is a named failure.
-                if (inject && injectFault is null && timings.Count == 0 && !cancel.IsCancellationRequested)
-                {
-                    injectFault = $"no injected press reached the engine within {timeout.TotalSeconds:0} s: SendInput may be blocked by UIPI or a secure desktop";
-                }
-
+                injectFault = InjectFault(inject, injectFault, timings.Count, cancel.IsCancellationRequested, timeout);
                 var report = Result(combo, presses, timings, unpaired, injectFault, inject);
                 BenchJson.Write(path, report);
                 if (injectFault is not null)
@@ -167,6 +161,15 @@ internal static class HotkeyBenchmark
             }
         }
     }
+
+    /// <summary>
+    /// <paramref name="fault"/>, or, for an injected run that was not cancelled and timed no press, a named
+    /// failure: UIPI can drop injected input without SendInput saying so.
+    /// </summary>
+    internal static string? InjectFault(bool inject, string? fault, int timed, bool cancelled, TimeSpan timeout) =>
+        inject && fault is null && timed == 0 && !cancelled
+            ? $"no injected press reached the engine within {timeout.TotalSeconds:0} s: SendInput may be blocked by UIPI or a secure desktop"
+            : fault;
 
     /// <summary>The report of <paramref name="timings"/>, each press held to <see cref="TargetMs"/>.</summary>
     internal static HotkeyReport Result(KeyCombo combo, int requested, List<HotkeyPressTiming> timings, int unpaired, string? error, bool injected = false)

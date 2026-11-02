@@ -158,6 +158,70 @@ public sealed class UnattendedTests : IDisposable
     }
 
     [Fact]
+    public void AnAbortedScriptOrNoCaptureDataIsNotAMeasurement()
+    {
+        var settings = new CaptureSettings(1920, 1080, 60, 20_000, null, null);
+        FpsReport Mapped(string summary) => FpsBenchmark.Map(summary, "summary.json", _run.Folder, "game", settings, 30, 1);
+
+        var aborted = Mapped("""{ "aborted": "The engine exited early. Skipped the remaining 2 run(s).", "runs": [ { "run": "01-baseline-1", "condition": "baseline", "pass": 1, "avgFps": 80.0 } ] }""");
+        var noCapture = Mapped("""{ "runs": [ { "run": "01-baseline-1", "condition": "baseline", "pass": 1, "avgFps": 80.0 }, { "run": "02-capture-1", "condition": "capture", "pass": 1 } ] }""");
+        var measured = Mapped("""{ "runs": [ { "run": "01-baseline-1", "condition": "baseline", "pass": 1, "avgFps": 80.0 }, { "run": "02-capture-1", "condition": "capture", "pass": 1, "avgFps": 79.0 } ] }""");
+
+        Assert.Equal("measure-path-a.ps1 aborted: The engine exited early. Skipped the remaining 2 run(s).", FpsBenchmark.Unmeasured(aborted));
+        Assert.Equal("No capture run has a frame rate; nothing was measured.", FpsBenchmark.Unmeasured(noCapture));
+        Assert.Null(FpsBenchmark.Unmeasured(measured));
+    }
+
+    [Fact]
+    public void TheEngineIsNeverTheNativeAotIntermediate()
+    {
+        var repo = _run.Folder;
+        var tfm = Path.Combine(repo, "src", "ReplayBuffer.Engine", "bin", "Release", "net10.0-windows10.0.26100.0");
+        var built = Touch(Path.Combine(tfm, "ReplayBuffer.Engine.exe"), 1);
+        var published = Touch(Path.Combine(repo, "publish", "engine", "ReplayBuffer.Engine.exe"), 2);
+
+        // publish-engine.ps1 leaves the compiler's output, newest of all, with no FFmpeg beside it.
+        Touch(Path.Combine(tfm, "win-x64", "native", "ReplayBuffer.Engine.exe"), 3);
+        Touch(Path.Combine(tfm, "win-x64", "ReplayBuffer.Engine.exe"), 3);
+
+        Assert.Equal(published, BenchContext.FindEngine(repo));
+
+        // A Release build newer than the publish wins.
+        File.SetLastWriteTimeUtc(built, DateTime.UtcNow.AddMinutes(5));
+        Assert.Equal(built, BenchContext.FindEngine(repo));
+
+        File.Delete(built);
+        File.Delete(published);
+        Assert.Null(BenchContext.FindEngine(repo));
+    }
+
+    [Fact]
+    public void AnInjectedRunThatTimedNoPressIsANamedFailure()
+    {
+        var timeout = TimeSpan.FromSeconds(60);
+
+        var fault = HotkeyBenchmark.InjectFault(inject: true, null, 0, cancelled: false, timeout);
+
+        Assert.Equal("no injected press reached the engine within 60 s: SendInput may be blocked by UIPI or a secure desktop", fault);
+        Assert.Equal(DriftMath.Inconclusive, HotkeyBenchmark.Result(KeyCombo.Parse("ctrl+alt+f9"), 20, [], 0, fault, injected: true).Verdict);
+
+        // Pressed by hand, cancelled, already failing, or timed: no new failure.
+        Assert.Null(HotkeyBenchmark.InjectFault(inject: false, null, 0, cancelled: false, timeout));
+        Assert.Null(HotkeyBenchmark.InjectFault(inject: true, null, 0, cancelled: true, timeout));
+        Assert.Equal("SendInput failed", HotkeyBenchmark.InjectFault(inject: true, "SendInput failed", 0, cancelled: false, timeout));
+        Assert.Null(HotkeyBenchmark.InjectFault(inject: true, null, 1, cancelled: false, timeout));
+    }
+
+    /// <summary>An empty file, last written <paramref name="order"/> minutes after a fixed past time: higher is newer.</summary>
+    private static string Touch(string path, int order)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, []);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(order - 10));
+        return path;
+    }
+
+    [Fact]
     public void AnInjectedPressIsTheModifiersAroundTheKey()
     {
         var batch = KeyInjector.Batch(KeyCombo.Parse("ctrl+alt+f9"));

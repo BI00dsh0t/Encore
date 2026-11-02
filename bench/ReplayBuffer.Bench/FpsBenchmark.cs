@@ -211,8 +211,22 @@ internal static class FpsBenchmark
         var report = Map(File.ReadAllText(summary), summary, folder, game, settings, seconds, passes, loadInfo);
         BenchJson.Write(Path.Combine(context.RunFolder, FileName), report);
         Console.WriteLine($"FPS loss {Format(report.CaptureMeans?.FpsLossPercent)} % against {TargetLossPercent} % ({report.Verdict}).");
+
+        // The script records an engine failure as aborted and exits 0: an unattended run must not read that as a measurement.
+        if (Unmeasured(report) is { } reason)
+        {
+            errors.WriteLine(reason);
+            return 1;
+        }
+
         return loadDied ? 1 : 0;
     }
+
+    /// <summary>Why <paramref name="report"/> is not a measurement: the script aborted, or no capture run has a frame rate.</summary>
+    internal static string? Unmeasured(FpsReport report) =>
+        report.Aborted is { } aborted ? $"measure-path-a.ps1 aborted: {aborted}"
+        : !report.Runs.Any(r => r.Condition != "baseline" && r.AvgFps is not null) ? "No capture run has a frame rate; nothing was measured."
+        : null;
 
     /// <summary>Maps the script's <c>summary.json</c> (and the capture runs' stats files beside it) into the report.</summary>
     internal static FpsReport Map(
