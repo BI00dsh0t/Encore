@@ -71,7 +71,7 @@ The coordinator logs each QA round in the Log below.
 | 3 | Release epic 1 (`v0.1.0`) | | pending |
 | 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | done |
 | 5 | 2.2 Track mixer | story-2-2 | done |
-| 6 | 2.3 Live device list over IPC | story-2-3 | in progress |
+| 6 | 2.3 Live device list over IPC | story-2-3 | done |
 | 7 | 2.5 Device dropout and rebind | | pending |
 | 8 | 2.4 Mic Devices and mic mute | | pending |
 | 9 | 2.6 Track meters in the engine | | pending |
@@ -179,6 +179,7 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 1.14 | No WGC capture border | Compare `playback-border-before.png` and `playback-border-during.png` in `measurements/bench-1.14` | the screen grab: 726 yellow pixels before and during, from desktop icons |
 | 2.1 | Each Track plays only its own devices' audio, in sync with the video, in VLC (R2, R7) | Put the BEACN Game, Chat and Mic devices from `ReplayBuffer.Engine debug-list` into the Dev instance's `settings.json` as three Tracks (the engine stopped). Then run `ReplayBuffer.Engine debug-capture --window <game> --track-layout --seconds 30` with game audio, chat and speech going, and switch audio tracks in VLC | 30 s BEACN capture: three AAC streams Game, Chat, Mic in order, each within 0.07 s of the video, silent because nothing was playing. Tone proxy: a tone on System appeared in System and Both at −54 dB, and Game stayed silent (−91 dB) |
 | 2.1 | The Track names show in VLC's and DaVinci Resolve's audio-track lists | Open the capture above in both | ffprobe reads the names as each stream's `name` tag (the mp4 udta `name` box), not `title`; the pre-2.1 per-device streams behave the same |
+| 2.3 | Plugging in, unplugging, enabling or disabling a real audio device sends `devices.changed` within 2 s, and a layout device that is unplugged shows as unavailable (R6) | With the engine serving, plug a USB or Bluetooth audio device in and out (or toggle one in Sound settings) and watch the App or an IPC client | `DeviceListServeTests` with a fake endpoint source; `EndpointWatcherTests` call the real `IMMNotificationClient` CCW through its vtable; `devices.list` on the published engine returned all 30 endpoints |
 
 ## Decisions Awaiting Review
 
@@ -265,3 +266,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: QA round 1 on 2.2 (`0f399f9`): **QA PASS**, 0 findings. QA round 1 on 2.3 (`ba483ef`): **QA PASS**, 0 blocking findings. Some timing tests failed while the three QA sessions ran at once, and each passed on its one rerun. 2.2 merges first, and 2.3 waits for 2.2's merge before its own. 1.15's QA is still running (drift smoke run).
 - 2026-11-02: 2.2 merged into `develop` (`e580e82`, `feat(media): merge 2.2-track-mixer`) and marked done. Develop had only docs commits since the branch was cut, so no rebuild was needed. QA's out-of-scope note: on a static window the "Wrote N s" log line still uses `_lastFrameQpc` (1.2 s for a 3.0 s file).
 - 2026-11-02: 2.2 is merged (`e580e82`). 2.9 became ready and went to the pool worker slice-epic-4 (already cleared). QA round 1 on 1.15 (`ca0a873`): **QA FAIL** with 2 findings. One is medium: the retries hide intermittent correctness failures. One is low: the ETW session test collides when suites run at once. 1.15 is fixing them. 2.3 is syncing with develop before its merge.
+- 2026-11-02: 2.3 merged into `develop` (`169e6a5`, `feat(audio): merge 2.3-device-list`) and marked done (`9ee9e22`). Before the merge, `develop` (with 2.2) was merged into the branch with no conflicts: Release build 0 warnings, 737 of 740 tests passed and the three that failed (the GPU encoder flake, `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile`, `EngineConnectionTests.AServerThatIsNotTheTrustedEngine...`) each passed on its one rerun, publish 0 IL warnings. One Human Check row added (a real device change). QA's two non-blocking notes not acted on: a watcher start that times out after 10 s logs an error but may still register later; a layout edit can publish `devices.changed` before `settings.changed`.
