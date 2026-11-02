@@ -30,6 +30,7 @@ public sealed class TrackMixer
     private readonly long[] _written;
     private readonly float[] _mix;
     private long _emitted;
+    private long _dropped;
 
     /// <param name="inputs">The number of devices the Track mixes; at least one.</param>
     /// <param name="output">Receives the mix, typically the Track's encoder.</param>
@@ -75,7 +76,16 @@ public sealed class TrackMixer
     }
 
     /// <summary>Frames of late input dropped because the mix had already passed them.</summary>
-    public long DroppedFrames { get; private set; }
+    public long DroppedFrames
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _dropped;
+            }
+        }
+    }
 
     /// <summary>The sink for input <paramref name="index"/>; frame 0 is the session anchor.</summary>
     public IAudioSampleSink Input(int index) => _inputs[index];
@@ -99,24 +109,30 @@ public sealed class TrackMixer
 
     private void Append(int input, ReadOnlySpan<float> interleaved, long silentFrames)
     {
-        lock (_lock)
+        var silent = interleaved.IsEmpty;
+        var frames = silent ? silentFrames : interleaved.Length / Channels;
+        var ring = _rings[input];
+        var offset = 0L;
+
+        // The lock is taken per chunk, so a long silence fill never holds the other inputs' threads
+        // through more than one chunk's encode.
+        while (offset < frames)
         {
-            var silent = interleaved.IsEmpty;
-            var frames = silent ? silentFrames : interleaved.Length / Channels;
-            var offset = 0L;
-
-            // Frames the mix has already passed (written as silence for this input) are dropped.
-            var late = Math.Min(frames, Math.Max(0, _emitted - _written[input]));
-            if (late > 0)
+            lock (_lock)
             {
-                DroppedFrames += late;
-                _written[input] += late;
-                offset = late;
-            }
+                // Frames the mix has already passed (written as silence for this input) are dropped.
+                var late = Math.Min(frames - offset, Math.Max(0, _emitted - _written[input]));
+                if (late > 0)
+                {
+                    _dropped += late;
+                    _written[input] += late;
+                    offset += late;
+                    if (offset >= frames)
+                    {
+                        return;
+                    }
+                }
 
-            var ring = _rings[input];
-            while (offset < frames)
-            {
                 var chunk = (int)Math.Min(ChunkFrames, frames - offset);
                 var start = _written[input];
                 for (var done = 0; done < chunk;)
@@ -182,8 +198,9 @@ public sealed class TrackMixer
                 }
             }
 
-            _output.Write(mix);
+            // Counted before the write: a failing encoder never sees the same range twice.
             _emitted += count;
+            _output.Write(mix);
         }
     }
 
