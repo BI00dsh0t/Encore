@@ -43,10 +43,10 @@ The coordinator logs each QA round in the Log below.
 
 | # | Task | Session | Status |
 |---|------|---------|--------|
-| 1 | 1.14 amendment: synthetic GPU load, unattended `fps` and `drift`, injected-key `hotkey`, scripted playback; the runs; the epic Notes Decision; merge | | in progress |
+| 1 | 1.14 amendment: synthetic GPU load, unattended `fps` and `drift`, injected-key `hotkey`, scripted playback; the runs; the epic Notes Decision; merge | story-1-14 | in progress |
 | 2 | 1.15 Refactor sweep | | pending |
 | 3 | Release epic 1 (`v0.1.0`) | | pending |
-| 4 | 2.1 Tracer: Global Track Layout to named Track streams | | pending |
+| 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | in progress |
 | 5 | 2.2 Track mixer | | pending |
 | 6 | 2.3 Live device list over IPC | | pending |
 | 7 | 2.5 Device dropout and rebind | | pending |
@@ -83,7 +83,7 @@ The coordinator logs each QA round in the Log below.
 | 25.13 | 4.13 Refactor sweep | | pending |
 | 25.14 | 4.14 Clips end to end on the builder's PC | | pending |
 | 25.15 | Release epic 4 (`v0.4.0`) | | pending |
-| 26 | Slice epic 5 (Overlay and Feedback Sounds), then its stories and release | | pending |
+| 26 | Slice epic 5 (Overlay and Feedback Sounds), then its stories and release | slice-epic-5 | in progress |
 | 27 | Slice epic 6 (Recordings), then its stories and release | | pending |
 | 28 | Slice epic 7 (Library and Cleanup), then its stories and release | | pending |
 | 29 | Slice epic 8 (Hardening), then its stories and release | | pending |
@@ -123,3 +123,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-01: The builder said epic 2 can begin while 1.14's benchmarks finish. Story 2.1 now waits only on 1.4, 1.5, 1.6, 1.9, 1.10 and 1.12, and `tickets.py next` lists it as ready.
 - 2026-11-01: QA round 1 on 1.14 (`d596f0f`): QA FAIL with 7 findings, sent to the 1.14 session. The stage-split diagnostic was rerun with the display awake (done 12:08).
 - 2026-11-01 12:18: **PAUSED by the builder**, who needs the PC. The coordinator stopped 1.14's FPS rerun (started 12:08; it must be redone from scratch) and paused 2.1. `.bench-running` in the main folder marks the pause, and sessions start no builds, tests or benchmarks while it exists. **To resume:** the builder says so, the coordinator deletes `.bench-running`, tells 1.14 to rerun `bench fps` and finish its QA fixes, and tells 2.1 to continue. Running stories at the time: 1.14 (QA fixes), 2.1 (implementation).
+- 2026-11-02 02:45: **Resumed by the builder.** 1.14 restarted `bench fps` at 02:40 and holds `.bench-running` until the run ends. 2.1 continues from `420ee54` but waits for the lock before it builds or tests. The board shows nothing else ready (the rest of epic 2 waits on 2.1; epics 3 and 4 wait on epic 1), so slicing epic 5 runs in parallel (planning only, no GPU).
