@@ -44,11 +44,11 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
     /// <summary>
     /// The session audio of a Track Layout: its Tracks in layout order, and the distinct devices
     /// some Track references, in first-reference order. A device is one endpoint and flow, however
-    /// many layout keys name it; a device the layout holds but no Track uses is left out.
+    /// many layout keys name it; a device the layout holds but no Track uses is left out. A Track
+    /// with no devices is a silent Track (no device indexes), written as silence.
     /// </summary>
     /// <exception cref="ErrorCodeException">
-    /// <see cref="ErrorCodes.InvalidArguments"/>: a Track has no devices (a silent Track is story 2.2's)
-    /// or names a device key the layout doesn't hold.
+    /// <see cref="ErrorCodes.InvalidArguments"/>: a Track names a device key the layout doesn't hold.
     /// </exception>
     public static SessionAudio FromLayout(TrackLayout layout)
     {
@@ -63,12 +63,6 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
         var tracks = new List<SessionTrack>();
         foreach (var track in layout.Tracks)
         {
-            if (track.DeviceKeys.Count == 0)
-            {
-                throw new ErrorCodeException(ErrorCodes.InvalidArguments,
-                    $"Track '{track.Name}' has no devices; a Track Layout for a capture needs at least one device in every Track.");
-            }
-
             var indexes = new List<int>();
             foreach (var key in track.DeviceKeys)
             {

@@ -17,6 +17,29 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 - The PC is kept awake and unlocked while sessions work (the app's keep-awake hold plus a display-required holder). Never change Windows settings.
 - Commit at every checkpoint and keep each plan's log current; the usage limit can land at any time.
 
+## Worker pool (builder, 2026-11-02)
+
+The app starts a new session only from a turn the builder began. A READY FOR QA report, a merge or any other automated event can't start one. So that the run never waits on the builder, the coordinator hands new tasks to idle sessions it already started:
+
+1. If the builder wrote in this turn, start a new session as usual. Otherwise:
+2. Pick an idle worker from the table below that holds no queued message and isn't pinned or open on screen.
+3. Clear it (`clear_session`) so it starts with fresh context. If the clear is refused, send the task without clearing and note it in the Log.
+4. Send the full brief by `SendMessage`, the same brief a new session would get. Its first step: in its own worktree, discard nothing, check `git status` is clean, then cut the task's branch from `develop` (`git flow feature start ...`) or, for QA, check out the story's tip.
+5. Note in the Queue's Session column which worker took the task.
+
+Workers have Remote Control off, which `clear_session` requires. Sessions that are working keep Remote Control on.
+
+| Worker | Session id | Remote Control |
+|--------|------------|----------------|
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (cleared once to test) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+
+slice-epic-6, slice-epic-7 and story-1-14 still have Remote Control on (the auto-mode classifier declined to switch them off), so they can't be cleared. Use them only without a clear, as a last resort. When a session finishes its task (its story merged, its QA passed), it joins the pool. If its Remote Control is on, it joins only once the builder switches that off.
+
 ## Per-session procedure (stories)
 
 1. Read this file, `CLAUDE.md`, the ticket via `tickets.py find <ref>`, and the epic file.
@@ -47,7 +70,7 @@ The coordinator logs each QA round in the Log below.
 | 2 | 1.15 Refactor sweep | story-1-15 | in progress |
 | 3 | Release epic 1 (`v0.1.0`) | | pending |
 | 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | done |
-| 5 | 2.2 Track mixer | story-2-2 | in progress |
+| 5 | 2.2 Track mixer | story-2-2 | done |
 | 6 | 2.3 Live device list over IPC | story-2-3 | in progress |
 | 7 | 2.5 Device dropout and rebind | | pending |
 | 8 | 2.4 Mic Devices and mic mute | | pending |
@@ -127,7 +150,19 @@ The coordinator logs each QA round in the Log below.
 | 28.10 | 7.10 Refactor sweep | | pending |
 | 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
-| 29 | Slice epic 8 (Hardening), then its stories and release | slice-epic-8 | in progress |
+| 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
+| 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | | pending |
+| 29.2 | 8.2 Engine crash recovery and the restart warnings | | pending |
+| 29.3 | 8.3 GPU driver reset recovery | | pending |
+| 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
+| 29.5 | 8.5 Monitor changes | | pending |
+| 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
+| 29.7 | 8.7 Final conformance run | | pending |
+| 29.8 | 8.8 8-hour soaks in Memory and Disk mode | | pending |
+| 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
+| 29.10 | 8.10 Refactor sweep | | pending |
+| 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
+| 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
 
@@ -194,6 +229,16 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-02 | 7 | Actions act on one item at a time (no multi-select in v1); no `bmad-ux` pass for the Library or its settings page, the builder checks them by hand | Same as epics 2 to 6 |
 | 2026-11-02 | 7 | Epic 7 doesn't wait on epic 6: locking is verified with Clips and a fake writer growing a sample fragmented MP4; epic 8's soak covers live Recordings | The epic's Handoff says so; keeps epic 7 buildable beside epic 6 |
 | 2026-11-02 | 7.11 | A closing end-to-end story on the builder's PC (hitl) after the sweep | The epic's Done when ends "Verified integrated on the builder's PC" |
+| 2026-11-02 | 8 | Recovery from T-01 to T-04 (driver reset, sleep, monitor changes, the secure desktop) is built in epic 8 | No earlier epic owns it, and it is robustness, not a new feature |
+| 2026-11-02 | 8.2 | A restarted engine raises `engine-restarted` (the App relaunches it with `--restarted crashed\|hung`); the engine raises `app-restarted`; after 3 restarts in 10 min the supervisor stops (`engine-crash-loop`, `app-crash-loop`) and the tray offers Restart; hang simulated by dev-only `dev.simulate engine-hang` | AD-16 and NFR-5 require the restart and its report but don't say who raises it or what a crash loop does |
+| 2026-11-02 | 8.2 | After a kill the Replay Buffer buffers again within 10 s; after a hang within 20 s | NFR-5 gives no recovery time |
+| 2026-11-02 | 8.3 | A GPU driver reset rebuilds the device and chains in the SessionOrchestrator (every 2 s for up to 60 s, then `gpu-reset-failed`), opens a new ring generation, raises `gpu-reset`; tests use a dev-only fault seam, a real `dxcap -forcetdr` is a Human Check | T-01 says what, not how; a real reset needs elevation |
+| 2026-11-02 | 8.4 | Sleep closes the ring generation (still saveable), ends a Recording (`recording-suspended`, not restarted); resume opens a new generation; the secure desktop is a static screen with no generation break; power events and frame starvation simulated, real sleep, lock and UAC are Human Checks | T-02 and T-04 don't say what happens to a Recording or the ring; sessions mustn't sleep or lock the PC |
+| 2026-11-02 | 8.5 | A display change re-places the Overlay; a Monitor Recording of a removed monitor ends with `monitor-removed`, file kept; tests use a fake display port, real monitor changes are Human Checks | T-03 asks only for a clear error and no crash |
+| 2026-11-02 | 8.1, 8.8 | Soak bounds after a 30 min warm-up: private bytes within max(5%, 20 MB) with slope < 2 MB/h; handles, GDI and USER within 50; every Clip passes ffprobe (all Tracks, length within a frame) | NFR-5 says no memory growth without a bound |
+| 2026-11-02 | 8.8 | Two unattended 8-hour soaks (Memory, then Disk) on Bench's synthetic game without GPU load, real Audio Devices, a press every 5 min, a 10-min Recording each hour, a crossed Cleanup limit, the App killed in the last hour; a real-game soak is a Human Check | T-16 asks for both modes; the synthetic window keeps it unattended |
+| 2026-11-02 | 8.9 | T-01 to T-25 recorded in `conformance-t01-t25.md` beside the epic; T-09's HDR half and T-12 (Post-roll) out of v1; T-11 met by 4.4's `save-busy`; failures needing new behaviour become bugfixes against the owning story | PLAN.md §8 predates the PRD's overrides |
+| 2026-11-02 | 8.11 | A closing end-to-end story on the builder's PC (hitl) after the sweep, ending with ShadowPlay uninstalled | The epic's Done when ends with checks only the builder can run |
 
 ## Log
 
@@ -212,3 +257,10 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: QA round 1 on 2.1 (`d7d2485`): **QA PASS**, 0 findings. 2.1 was told to merge. 1.14 is merged (`3db2541`), so 1.15 (story-1-15) has started. Epic 7 is sliced into 7.1–7.11 (`3c4f93f`), and slicing epic 8 has started (slice-epic-8). Once 2.1 merges, 2.2 and 2.3 are next; both wait only on 2.1.
 - 2026-11-02: 2.1 merged into `develop` (`8a501fc`) after QA round 1 passed with 0 findings, and marked done. Before the merge, `develop` (with 1.14) was merged into the branch: Release build 0 warnings, 694 of 696 tests passed and the two timing tests passed on their one rerun, publish 0 warnings. Two Human Check rows added (VLC listening and sync, and the Track names in VLC and Resolve). Each fresh QA worktree needs `native/ffmpeg` copied in or `tools/fetch-ffmpeg.ps1`, or the capture tests are skipped. 2.2 and 2.3 are now ready.
 - 2026-11-02: 2.1 is merged (`8a501fc`). 2.2 (story-2-2) and 2.3 (story-2-3) started in parallel; both waited only on 2.1. 1.15 and epic 8's slicing are still running.
+- 2026-11-02: Epic 8 sliced into stories 8.1–8.11 (merged `8e77c75`); the board validates with no problems. Epic 8 now also declares needs on epics 1 to 5. Queue row 29 expanded; ten defaults added to Decisions Awaiting Review. Every epic is now sliced.
+- 2026-11-02 07:41: The usage limit stopped 1.15, 2.2 and 2.3 mid-work. Their state: 1.15's plan was committed and its timing-test edits were uncommitted, 2.2's plan was committed, and 2.3 had no commits. After the limit reset, the coordinator told all three to continue. Epic 8 is sliced into 8.1–8.11 (`8e77c75`), so all eight epics are now sliced.
+- 2026-11-02: 1.15 reported READY FOR QA at `ca0a873`. The full suite passed except one allocation test the sweep didn't touch, which passed 3 of 3 alone. The app refused to start the QA session from an event-started turn, so the coordinator proposed it as a card (task_25ddfe4b) for the builder to start. 2.2 and 2.3 are still implementing.
+- 2026-11-02: 2.2 (`0f399f9`) and 2.3 (`ba483ef`) reported READY FOR QA. The run stalled because the app starts new sessions only from a turn the builder began, and every READY FOR QA had arrived in an automated turn. On the builder's next message, the coordinator started qa-1-15, qa-2-2 and qa-2-3. **Known limit:** whenever a session must start (QA, the next story, a release) and the builder hasn't written since, the coordinator can only propose a card.
+- 2026-11-02: **Worker pool set up** at the builder's request (see Worker pool), so the run keeps going while the builder is away. Six idle sessions have Remote Control off, and a test clear of slice-epic-4 worked.
+- 2026-11-02: QA round 1 on 2.2 (`0f399f9`): **QA PASS**, 0 findings. QA round 1 on 2.3 (`ba483ef`): **QA PASS**, 0 blocking findings. Some timing tests failed while the three QA sessions ran at once, and each passed on its one rerun. 2.2 merges first, and 2.3 waits for 2.2's merge before its own. 1.15's QA is still running (drift smoke run).
+- 2026-11-02: 2.2 merged into `develop` (`e580e82`, `feat(media): merge 2.2-track-mixer`) and marked done. Develop had only docs commits since the branch was cut, so no rebuild was needed. QA's out-of-scope note: on a static window the "Wrote N s" log line still uses `_lastFrameQpc` (1.2 s for a 3.0 s file).

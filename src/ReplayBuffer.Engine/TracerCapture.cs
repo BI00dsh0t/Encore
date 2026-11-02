@@ -119,7 +119,8 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
 
     /// <summary>
     /// The session audio of the stored Global <c>trackLayout</c>: refused when the stored value is
-    /// invalid, when a Track has no devices, or when a device is not present with its flow.
+    /// invalid, or when a device is not present with its flow. A Track with no devices is a silent
+    /// Track (<see cref="SessionAudio.FromLayout"/>).
     /// </summary>
     private SessionAudio LayoutAudio(SettingsDocument document)
     {
