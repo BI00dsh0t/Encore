@@ -83,7 +83,22 @@ The coordinator logs each QA round in the Log below.
 | 25.13 | 4.13 Refactor sweep | | pending |
 | 25.14 | 4.14 Clips end to end on the builder's PC | | pending |
 | 25.15 | Release epic 4 (`v0.4.0`) | | pending |
-| 26 | Slice epic 5 (Overlay and Feedback Sounds), then its stories and release | slice-epic-5 | in progress |
+| 26 | Slice epic 5 (Overlay and Feedback Sounds) | slice-epic-5 | done |
+| 26.1 | 5.1 Tracer: capture state to the Overlay dot | | pending |
+| 26.2 | 5.2 Spike Q-4: the Overlay over exclusive fullscreen and its borderless FPS cost | | pending |
+| 26.3 | 5.3 Saving icon through the Save Cooldown | | pending |
+| 26.4 | 5.4 Feedback notices in the engine, with a dev simulator | | pending |
+| 26.5 | 5.5 Overlay message queue | | pending |
+| 26.6 | 5.6 Feedback Sounds in the engine | | pending |
+| 26.7 | 5.7 Mic-muted icon and the disk-full red X | | pending |
+| 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | | pending |
+| 26.9 | 5.9 Capture exclusion for every App window | | pending |
+| 26.10 | 5.10 Main App status line | | pending |
+| 26.11 | 5.11 Feedback Sounds settings page | | pending |
+| 26.12 | 5.12 Benchmark with the Overlay on | | pending |
+| 26.13 | 5.13 Refactor sweep | | pending |
+| 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | | pending |
+| 26.15 | Release epic 5 (`v0.5.0`) | | pending |
 | 27 | Slice epic 6 (Recordings), then its stories and release | | pending |
 | 28 | Slice epic 7 (Library and Cleanup), then its stories and release | | pending |
 | 29 | Slice epic 8 (Hardening), then its stories and release | | pending |
@@ -115,6 +130,16 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-01 | 4.10 | The Global Output Settings page lands in epic 4, beside the Buffer Window and its estimate | Epic 1 delivered the keys and probing (R22) but no page, and no other epic owns one |
 | 2026-11-01 | 4.10, 4.11, 4.12 | No `bmad-ux` pass for the Replay Buffer, Game Profile override and Hotkeys pages; the builder checks them by hand | Same as epics 2 and 3 |
 | 2026-11-01 | 4.14 | A closing end-to-end story on the builder's PC (hitl) after the sweep | The epic's Done when ends "Verified integrated on the builder's PC" |
+| 2026-11-02 | 5 | 14 entries kept in one epic, past the usual 8 to 12 | The Overlay, sounds and status line report the same events and deliver together |
+| 2026-11-02 | 5.1 | The Overlay sits top-right on the Target Game's monitor (else the primary), 24 px in; a constant, not a setting | The PRD doesn't place it |
+| 2026-11-02 | 5.2, 5.8 | Over exclusive fullscreen the Overlay detects `QUNS_RUNNING_D3D_FULL_SCREEN` and stays hidden; sounds carry the feedback. If an always-shown dot breaks independent flip in borderless, the Overlay shows only while it has something to show (dot for 3 s per state change), a deviation from FR-6. The spike confirms or replaces both | Q-4 is open until measured, and the builder isn't here to choose |
+| 2026-11-02 | 5.3 | The saving icon is driven by snapshot state: `capture.stateChanged` gains an additive `clipsWriting` count beside `cooldownUntil` | AD-3 requires every rendered state to be in the snapshot; FR-6 wants the icon through the cooldown and while writing |
+| 2026-11-02 | 5.4, 5.5 | Overlay messages are `warning.raised` notices from an engine FeedbackRouter: `clip-saved` (info, auto-dismissed after 10 s), `clip-failed` (until dismissed or the next save); each shows 4 s, oldest first | AD-15 lets the Overlay render only `capture.stateChanged` and `warning.raised`; FR-6 gives no timings |
+| 2026-11-02 | 5.4 | A dev-instance-only `dev.simulate` command stubs Recording state, disk full and save failures | The epic verifies the solid dot, red X and Recording sounds before epic 6 exists |
+| 2026-11-02 | 5.6 | Five built-in synthesized sounds (<600 ms, -12 dBFS peak), no custom files or volume setting; saved a rising chime, failed a low descending buzz | FR-39 doesn't specify the sounds |
+| 2026-11-02 | 5.6, 5.11 | A `feedback.preview` command and a Play button per sound on the Feedback Sounds page | Lets the builder hear each sound on the chosen device |
+| 2026-11-02 | 5.10, 5.11 | No `bmad-ux` pass for the Overlay, status line or Feedback Sounds page; the builder checks them by hand | Same as epics 2 to 4 |
+| 2026-11-02 | 5.14 | A closing end-to-end story on the builder's PC (hitl) after the sweep | The epic's Done when ends "Verified integrated on the builder's PC" |
 
 ## Log
 
@@ -124,3 +149,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-01: QA round 1 on 1.14 (`d596f0f`): QA FAIL with 7 findings, sent to the 1.14 session. The stage-split diagnostic was rerun with the display awake (done 12:08).
 - 2026-11-01 12:18: **PAUSED by the builder**, who needs the PC. The coordinator stopped 1.14's FPS rerun (started 12:08; it must be redone from scratch) and paused 2.1. `.bench-running` in the main folder marks the pause, and sessions start no builds, tests or benchmarks while it exists. **To resume:** the builder says so, the coordinator deletes `.bench-running`, tells 1.14 to rerun `bench fps` and finish its QA fixes, and tells 2.1 to continue. Running stories at the time: 1.14 (QA fixes), 2.1 (implementation).
 - 2026-11-02 02:45: **Resumed by the builder.** 1.14 restarted `bench fps` at 02:40 and holds `.bench-running` until the run ends. 2.1 continues from `420ee54` but waits for the lock before it builds or tests. The board shows nothing else ready (the rest of epic 2 waits on 2.1; epics 3 and 4 wait on epic 1), so slicing epic 5 runs in parallel (planning only, no GPU).
+- 2026-11-02: Epic 5 sliced into stories 5.1–5.14 (merged `910486b`); the board validates with no problems. Epic 5 now also declares needs on epics 1 (5.2, 5.12 use 1.14's bench) and 2 (2.3, 2.4, 2.5). Queue row 26 expanded; ten defaults added to Decisions Awaiting Review.
