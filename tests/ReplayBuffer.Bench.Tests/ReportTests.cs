@@ -11,10 +11,58 @@ public sealed class ReportTests : IDisposable
     {
         var report = Report.Generate(_folder);
 
-        Assert.Equal(["FPS", "Drift", "Playback", "Hotkey"], report.NotRun);
+        Assert.Equal(["FPS", "Drift", "Playback", "Hotkey", "Named Tracks"], report.NotRun);
         var md = File.ReadAllText(Path.Combine(_folder, Report.MarkdownName));
-        Assert.Equal(4, md.Split("Not run.").Length - 1);
+        Assert.Equal(5, md.Split("Not run.").Length - 1);
         Assert.True(File.Exists(Path.Combine(_folder, Report.JsonName)));
+    }
+
+    [Fact]
+    public void TheNamedTracksSectionHasARowPerCheck()
+    {
+        BenchJson.Write(Path.Combine(_folder, TracksCheck.FileName), new TracksReport(
+            DateTimeOffset.Now, 5, "engine.exe", new CaptureSettings(1920, 1080, 60, 20_000, null, null), 0,
+            "Speakers A", "Speakers B", "Mic", "tracks.mp4", 0, null, 300.01, 0.5,
+            [
+                new TrackFigures(0, "Everything", true, 300.02, 598, 299, -2.4, 0.998),
+                new TrackFigures(1, "Game", false, 300.02, 300, 299, -0.04, 1.0),
+                new TrackFigures(2, "Chat", false, 300.02, 299, 299, 0.02, 1.0),
+                new TrackFigures(3, "Mic", false, 300.01, null, null, null, null),
+            ],
+            new SyncFigures(300, 299, 299, 299, 599, 1, 0.08, 0.02),
+            [
+                new NamedTrackCheck("titles", "Everything, Game, Chat, Mic", "Everything, Game, Chat, Mic", DriftMath.Pass),
+                new NamedTrackCheck("sync", "max |Δ| 0.08 ms", "≤ 1 ms", DriftMath.Pass),
+                new NamedTrackCheck("vlc", "VLC not found", "the file's titles, in order", TrackAnalysis.NotChecked),
+            ],
+            null,
+            TrackAnalysis.PassVerdict,
+            []));
+
+        var report = Report.Generate(_folder);
+        var md = Report.Markdown(report);
+
+        Assert.DoesNotContain("Named Tracks", report.NotRun);
+        Assert.NotNull(report.Tracks);
+        Assert.Contains("## Named Tracks (R3, R7)", md, StringComparison.Ordinal);
+        Assert.Contains("| titles | Everything, Game, Chat, Mic | Everything, Game, Chat, Mic | pass |", md, StringComparison.Ordinal);
+        Assert.Contains("| sync | max /Δ/ 0.08 ms | ≤ 1 ms | pass |", md, StringComparison.Ordinal);
+        Assert.Contains("| vlc | VLC not found | the file's titles, in order | not-checked |", md, StringComparison.Ordinal);
+        Assert.Contains("| 2 | Game | no | 300.02 s | 300 (expected ≥ 299) | -0.04 dBFS | 1 |", md, StringComparison.Ordinal);
+        Assert.Contains("Verdict: **pass**", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AFailedTracksRunShowsTheEngineError()
+    {
+        BenchJson.Write(Path.Combine(_folder, TracksCheck.FileName), new TracksReport(
+            DateTimeOffset.Now, 5, "engine.exe", new CaptureSettings(1920, 1080, 60, 20_000, null, null), 0,
+            "Speakers A", "Speakers B", "Mic", "tracks.mp4", 1, "error audio-device-not-found: gone", null, null,
+            [], null, [], null, TrackAnalysis.FailedVerdict, []));
+
+        var md = Report.Markdown(Report.Generate(_folder));
+
+        Assert.Contains("**The engine failed** (exit 1): error audio-device-not-found: gone", md, StringComparison.Ordinal);
     }
 
     [Fact]

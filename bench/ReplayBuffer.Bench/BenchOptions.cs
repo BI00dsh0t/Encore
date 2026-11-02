@@ -28,6 +28,9 @@ internal sealed class BenchOptions
                                       [--tone-dbfs -30] [--auto [--chrome <exe>] [--play-seconds 5] [--player-timeout 60]]
                                       <capture options>
           ReplayBuffer.Bench hotkey   [--presses 20] [--key ctrl+alt+f9] [--timeout 60] [--inject]
+          ReplayBuffer.Bench tracks   --device-a <Output Device> --device-b <Output Device> [--input-device <name or id>]
+                                      [--minutes 5] [--tone-dbfs 0] [--size 1920x1080] [--fps 60] [--bitrate 20000]
+                                      [--vlc <vlc.exe>] [--reanalyze]
           ReplayBuffer.Bench report
 
         Capture options: [--size 1920x1080] [--fps 60] [--bitrate 20000] [--output-device <name or id>]
@@ -42,6 +45,12 @@ internal sealed class BenchOptions
         --target-fps over the primary monitor (or --load-size). hotkey --inject presses the key with SendInput
         about once a second; playback --auto scripts Chrome (headless) and Windows Media Player and records
         every other player as not-checked. All three need nobody at the PC.
+
+        tracks plays a tone with a 3 kHz burst each second into each of two Output Devices (B half a second after
+        A, both at --tone-dbfs), captures a four-Track layout (Everything = A + B + Mic, Game = A, Chat = B,
+        Mic = the Input Device) in a throwaway test instance, and checks the Track names and order, Track 1 as
+        the only default, their lengths, sync, levels and full scale, and VLC's listing (when VLC is installed).
+        Exit 0 when every check passes. --reanalyze checks tracks.mp4 again without devices.
         """;
 
     private static readonly string[] Common = ["out", "repo", "engine", "ffmpeg"];
@@ -54,6 +63,9 @@ internal sealed class BenchOptions
         ["drift"] = [.. Common, .. Capture, "minutes", "tone-dbfs", "bucket-seconds", "burst-track", "reanalyze"],
         ["playback"] = [.. Common, .. Capture, "seconds", "players", "tone-dbfs", "auto", "chrome", "play-seconds", "player-timeout"],
         ["hotkey"] = [.. Common, "presses", "key", "timeout", "inject"],
+
+        // Its Output Devices are --device-a and --device-b: --output-device doesn't apply.
+        ["tracks"] = [.. Common, "size", "fps", "bitrate", "input-device", "minutes", "device-a", "device-b", "tone-dbfs", "vlc", "reanalyze"],
         ["report"] = [.. Common],
     };
 

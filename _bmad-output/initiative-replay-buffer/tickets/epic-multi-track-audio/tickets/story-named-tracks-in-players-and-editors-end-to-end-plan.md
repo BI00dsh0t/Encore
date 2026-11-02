@@ -3,8 +3,8 @@ title: 'Named Tracks in players and editors, end to end'
 type: 'feature'
 ticket: '9'
 created: '2026-11-02'
-status: 'ready-for-dev'
-baseline_revision: ''
+status: 'in-progress'
+baseline_revision: 'e283cd20c40f061692f4919f4a41b5e96fa64b12'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
@@ -103,12 +103,12 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `bench/ReplayBuffer.Bench/TrackAnalysis.cs`: records and checks.
-- [ ] `bench/ReplayBuffer.Bench/PlayerScripts.cs`: `FindVlc` and `RunVlc`.
-- [ ] `bench/ReplayBuffer.Bench/TracksCheck.cs`: the command.
-- [ ] `bench/ReplayBuffer.Bench/BenchOptions.cs` and `Program.cs`: the `tracks` command and its options.
-- [ ] `bench/ReplayBuffer.Bench/Report.cs`: the Named Tracks section.
-- [ ] `tests/ReplayBuffer.Bench.Tests/TrackAnalysisTests.cs`: each matrix row from synthetic onsets, levels and probe data:
+- [x] `bench/ReplayBuffer.Bench/TrackAnalysis.cs`: records and checks.
+- [x] `bench/ReplayBuffer.Bench/PlayerScripts.cs`: `FindVlc` and `RunVlc`.
+- [x] `bench/ReplayBuffer.Bench/TracksCheck.cs`: the command.
+- [x] `bench/ReplayBuffer.Bench/BenchOptions.cs` and `Program.cs`: the `tracks` command and its options.
+- [x] `bench/ReplayBuffer.Bench/Report.cs`: the Named Tracks section.
+- [x] `tests/ReplayBuffer.Bench.Tests/TrackAnalysisTests.cs`: each matrix row from synthetic onsets, levels and probe data:
   - pass;
   - wrong names or order;
   - wrong default;
@@ -118,14 +118,14 @@ deferred: []
   - a short Track;
   - too few onsets;
   - VLC absent, matching or mismatched.
-- [ ] `tests/ReplayBuffer.Bench.Tests/TracksEndToEndTests.cs`: ffmpeg lavfi makes a 20 s mp4 with h264 and four AAC streams titled Everything, Game, Chat, Mic (`-metadata:s:a:N title=...`, disposition default on the first). The signals mimic the layout:
+- [x] `tests/ReplayBuffer.Bench.Tests/TracksEndToEndTests.cs`: ffmpeg lavfi makes a 20 s mp4 with h264 and four AAC streams titled Everything, Game, Chat, Mic (`-metadata:s:a:N title=...`, disposition default on the first). The signals mimic the layout:
   - Game: bursts at −6 dBFS;
   - Chat: bursts offset by 0.5 s;
   - Everything: their sum, limited to ≤ 1;
   - Mic: silence.
 
   `--reanalyze` on it, with a hand-written markers log, passes. A second file with Game delayed 5 ms fails `sync`. Skipped without ffmpeg.
-- [ ] `tests/ReplayBuffer.Bench.Tests/OptionsTests.cs` and `ReportTests.cs`: parsing of `tracks` (`device-a` required, `output-device` refused); the report section from a sample `tracks.json`.
+- [x] `tests/ReplayBuffer.Bench.Tests/OptionsTests.cs` and `ReportTests.cs`: parsing of `tracks` (`device-a` required, `output-device` refused); the report section from a sample `tracks.json`.
 
 **Acceptance Criteria:**
 - Given two inaudible Output Devices on the builder's PC (e.g. the Steam Streaming ones), when `ReplayBuffer.Bench tracks --device-a <A> --device-b <B> --out measurements/bench-2.9` runs for 5 minutes, then it exits 0. `tracks.json`'s checks all pass: titles Everything, Game, Chat, Mic in order; only Track 1 default; durations within 0.1 s; sync within 1 ms; Game and Chat within 0.5 dB of the played level; Everything ≤ 1.05; VLC listing the same names in order. `report.md` shows the Named Tracks section.
@@ -133,6 +133,12 @@ deferred: []
 - Given a file whose Tracks are misnamed or out of sync, when it is analysed, then the verdict is fail and the exit code 1.
 
 ## Implementation Notes
+
+- `MarkedCapture.ResolveDevice` and `MediaAnalysis.Run`, `RunTool` and `PacketTimes` became `internal` for reuse; no behaviour change.
+- Track durations and onset start times come from packet timestamps, as `drift` does. Titles are read from the `name` tag, then `title`, then `handler_name`.
+- B's phase: B is started so its first burst lands 0.5 s into A's second grid (A's latency taken as B's), checked against B's first stamp and retried up to 3 times; outside 0.35–0.65 s it is a warning.
+- VLC found but failing to list the streams is a `miss` (not `not-checked`); only an absent vlc.exe is `not-checked`.
+- The throwaway instance's engine logs are copied to `tracks-instance-logs/` in the run folder before its folders are deleted.
 
 ## Plan Change Log
 
