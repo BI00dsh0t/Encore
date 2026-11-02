@@ -17,6 +17,29 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 - The PC is kept awake and unlocked while sessions work (the app's keep-awake hold plus a display-required holder). Never change Windows settings.
 - Commit at every checkpoint and keep each plan's log current; the usage limit can land at any time.
 
+## Worker pool (builder, 2026-11-02)
+
+The app starts a new session only from a turn the builder began. A READY FOR QA report, a merge or any other automated event can't start one. So that the run never waits on the builder, the coordinator hands new tasks to idle sessions it already started:
+
+1. If the builder wrote in this turn, start a new session as usual. Otherwise:
+2. Pick an idle worker from the table below that holds no queued message and isn't pinned or open on screen.
+3. Clear it (`clear_session`) so it starts with fresh context. If the clear is refused, send the task without clearing and note it in the Log.
+4. Send the full brief by `SendMessage`, the same brief a new session would get. Its first step: in its own worktree, discard nothing, check `git status` is clean, then cut the task's branch from `develop` (`git flow feature start ...`) or, for QA, check out the story's tip.
+5. Note in the Queue's Session column which worker took the task.
+
+Workers have Remote Control off, which `clear_session` requires. Sessions that are working keep Remote Control on.
+
+| Worker | Session id | Remote Control |
+|--------|------------|----------------|
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (cleared once to test) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+
+slice-epic-6, slice-epic-7 and story-1-14 still have Remote Control on (the auto-mode classifier declined to switch them off), so they can't be cleared. Use them only without a clear, as a last resort. When a session finishes its task (its story merged, its QA passed), it joins the pool. If its Remote Control is on, it joins only once the builder switches that off.
+
 ## Per-session procedure (stories)
 
 1. Read this file, `CLAUDE.md`, the ticket via `tickets.py find <ref>`, and the epic file.
@@ -238,3 +261,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02 07:41: The usage limit stopped 1.15, 2.2 and 2.3 mid-work. Their state: 1.15's plan was committed and its timing-test edits were uncommitted, 2.2's plan was committed, and 2.3 had no commits. After the limit reset, the coordinator told all three to continue. Epic 8 is sliced into 8.1–8.11 (`8e77c75`), so all eight epics are now sliced.
 - 2026-11-02: 1.15 reported READY FOR QA at `ca0a873`. The full suite passed except one allocation test the sweep didn't touch, which passed 3 of 3 alone. The app refused to start the QA session from an event-started turn, so the coordinator proposed it as a card (task_25ddfe4b) for the builder to start. 2.2 and 2.3 are still implementing.
 - 2026-11-02: 2.2 (`0f399f9`) and 2.3 (`ba483ef`) reported READY FOR QA. The run stalled because the app starts new sessions only from a turn the builder began, and every READY FOR QA had arrived in an automated turn. On the builder's next message, the coordinator started qa-1-15, qa-2-2 and qa-2-3. **Known limit:** whenever a session must start (QA, the next story, a release) and the builder hasn't written since, the coordinator can only propose a card.
+- 2026-11-02: **Worker pool set up** at the builder's request (see Worker pool), so the run keeps going while the builder is away. Six idle sessions have Remote Control off, and a test clear of slice-epic-4 worked.
