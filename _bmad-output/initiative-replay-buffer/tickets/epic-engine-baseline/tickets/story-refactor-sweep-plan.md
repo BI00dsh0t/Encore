@@ -3,7 +3,7 @@ title: 'Refactor sweep'
 type: 'refactor'
 ticket: '15'
 created: '2026-11-02'
-status: 'in-review'
+status: 'built'
 baseline_revision: '633130beaa27511d96b215883947dbb09c08c166'
 route: 'full'
 route_source: 'auto'
@@ -126,3 +126,26 @@ deferred: []
 
 **Manual checks (if no CLI):**
 - `logman start ReplayBuffer-PathA-999999 -p Microsoft-Windows-Kernel-Process -ets`, then `pwsh tools/measure-path-a.ps1 -Game NoSuchGame`: the output names the stopped session, and `logman query -ets` no longer lists it.
+
+## Auto Run Result
+
+**2026-11-02, bmad-build-auto (full route, quick review).**
+
+- **Summary:** The three real-time timing tests repeat their measurement up to 3 times and pass on the first attempt that meets every bound (`RealTimeAttempts`), logging each failed attempt; bounds unchanged, skips not retried. `tools/measure-path-a.ps1` stops leftover `ReplayBuffer-PathA-<pid>` ETW sessions whose process is gone before its setup checks, and its own session on every exit path. Every epic 1 item in `deferred-work.md` has an outcome. No `src/` change.
+- **Files:**
+  - `tests/ReplayBuffer.Platform.FFmpeg.Tests/RealTimeAttempts.cs` (new): the retry rule, linked into the Engine tests.
+  - `tests/ReplayBuffer.Platform.FFmpeg.Tests/RealTimeAttemptsTests.cs` (new): the helper's matrix rows without a GPU.
+  - `EncodeExperimentTests.cs`, `CaptureEndTests.cs`, `OutputResolutionTests.cs`: the three timing tests, per-attempt files.
+  - `tests/ReplayBuffer.Bench.Tests/MeasureScriptSessionTests.cs` (new): the sweep against the real script and real ETW sessions.
+  - `tools/measure-path-a.ps1`: the sweep and own-session stop.
+  - `_bmad-output/deferred-work.md`: outcomes.
+- **Review:** 4 findings, all patched (1 medium, 3 low), 0 deferred, 0 rejected. Follow-up review recommended: false (no high, one medium).
+- **Verification** (after merging `develop` with 2.1, `2475b9e`):
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+  - `dotnet test --solution ReplayBuffer.slnx`: 700 of 701. The failure is `AudioStampStatsTests.RecordingDoesNotAllocate` (1,560 B allocated on the thread against 0), an epic 1 test this branch doesn't touch; it passed 3 of 3 reruns of Media.Tests alone. None of the three timing tests failed.
+  - `pwsh tools/publish-engine.ps1`: exit 0, 0 IL2xxx/IL3xxx warnings, 9.6 MB.
+  - `bench drift --minutes 2` (NativeAOT engine, default devices): completed; A/V drift 0.759 ms (pass), flashes and bursts 120/120, audio-to-audio 54.3 samples (pass). Logs in `measurements/verify-1.15/` (gitignored).
+  - Implementer's run before the merge: suite 666/666, with the paced-encoder test passing on attempt 2 after a contended p50 of 18.6 ms; a locally broken bound failed after 3 logged attempts.
+- **Residual risks:**
+  - `RecordingDoesNotAllocate` is a newly seen one-off flake (likely tiered JIT allocating on the test thread in Debug). Not fixed here: the cause is unconfirmed. A candidate for epic 2's or 8's sweep if it recurs.
+  - The sweep parses English `logman` output and needs the right to query ETW sessions; a failed query is now a warning. The own-session stop after a killed PresentMon is not exercised by a test.
