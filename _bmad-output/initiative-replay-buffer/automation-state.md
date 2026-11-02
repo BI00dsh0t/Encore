@@ -46,7 +46,7 @@ The coordinator logs each QA round in the Log below.
 | 1 | 1.14 amendment: synthetic GPU load, unattended `fps` and `drift`, injected-key `hotkey`, scripted playback; the runs; the epic Notes Decision; merge | story-1-14 | done |
 | 2 | 1.15 Refactor sweep | story-1-15 | in progress |
 | 3 | Release epic 1 (`v0.1.0`) | | pending |
-| 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | in progress |
+| 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | done |
 | 5 | 2.2 Track mixer | | pending |
 | 6 | 2.3 Live device list over IPC | | pending |
 | 7 | 2.5 Device dropout and rebind | | pending |
@@ -142,6 +142,8 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 1.14 | Playback in Discord and DaVinci Resolve (and any player the session couldn't script) | `bench playback --out <run folder>` | the players the session scripted |
 | 1.14 | A/V sync of a saved clip in a player | Play `playback.mp4` from `measurements/bench-1.14` and watch the flash against the burst | Bench's file analysis: A/V drift 0.54 ms over 60 min, offset −1.6 ms |
 | 1.14 | No WGC capture border | Compare `playback-border-before.png` and `playback-border-during.png` in `measurements/bench-1.14` | the screen grab: 726 yellow pixels before and during, from desktop icons |
+| 2.1 | Each Track plays only its own devices' audio, in sync with the video, in VLC (R2, R7) | Put the BEACN Game, Chat and Mic devices from `ReplayBuffer.Engine debug-list` into the Dev instance's `settings.json` as three Tracks (the engine stopped). Then run `ReplayBuffer.Engine debug-capture --window <game> --track-layout --seconds 30` with game audio, chat and speech going, and switch audio tracks in VLC | 30 s BEACN capture: three AAC streams Game, Chat, Mic in order, each within 0.07 s of the video, silent because nothing was playing. Tone proxy: a tone on System appeared in System and Both at −54 dB, and Game stayed silent (−91 dB) |
+| 2.1 | The Track names show in VLC's and DaVinci Resolve's audio-track lists | Open the capture above in both | ffprobe reads the names as each stream's `name` tag (the mp4 udta `name` box), not `title`; the pre-2.1 per-device streams behave the same |
 
 ## Decisions Awaiting Review
 
@@ -208,3 +210,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: 1.14 merged into `develop` (`3db2541`) and marked done (`cc95c7b`). Final figures on the synthetic load: FPS loss 1.47 % (pass), latency p99 29.3 ms (miss), A/V drift 0.54 ms over 60 min, audio-to-audio 160 samples. Path A stays the final stack. Two Human Check rows and three Decisions Awaiting Review rows added. Follow-ups not queued: a bugfix to make the three timing tests robust, and `measure-path-a.ps1` cleaning up the `ReplayBuffer-PathA-<pid>` ETW session a killed run leaves behind.
 - 2026-11-02: Epic 7 sliced into stories 7.1–7.11 (merged `3c4f93f`); the board validates with no problems. Epic 7 now also declares a need on epic 3 (7.1 waits on 3.5) and doesn't wait on epic 6. Queue row 28 expanded; twelve defaults added to Decisions Awaiting Review.
 - 2026-11-02: QA round 1 on 2.1 (`d7d2485`): **QA PASS**, 0 findings. 2.1 was told to merge. 1.14 is merged (`3db2541`), so 1.15 (story-1-15) has started. Epic 7 is sliced into 7.1–7.11 (`3c4f93f`), and slicing epic 8 has started (slice-epic-8). Once 2.1 merges, 2.2 and 2.3 are next; both wait only on 2.1.
+- 2026-11-02: 2.1 merged into `develop` (`8a501fc`) after QA round 1 passed with 0 findings, and marked done. Before the merge, `develop` (with 1.14) was merged into the branch: Release build 0 warnings, 694 of 696 tests passed and the two timing tests passed on their one rerun, publish 0 warnings. Two Human Check rows added (VLC listening and sync, and the Track names in VLC and Resolve). Each fresh QA worktree needs `native/ffmpeg` copied in or `tools/fetch-ffmpeg.ps1`, or the capture tests are skipped. 2.2 and 2.3 are now ready.

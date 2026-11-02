@@ -3,7 +3,7 @@ title: 'Tracer: Global Track Layout to named Track streams in a capture'
 type: 'feature'
 ticket: '1'
 created: '2026-11-01'
-status: 'built'
+status: done
 baseline_revision: 'bc4d4a12bb672a1efd392281b3c7c254d959c9f7'
 route: 'full'
 route_source: 'auto'
