@@ -149,3 +149,10 @@ deferred: []
 - **Residual risks:**
   - `RecordingDoesNotAllocate` is a newly seen one-off flake (likely tiered JIT allocating on the test thread in Debug). Not fixed here: the cause is unconfirmed. A candidate for epic 2's or 8's sweep if it recurs.
   - The sweep parses English `logman` output and needs the right to query ETW sessions; a failed query is now a warning. The own-session stop after a killed PresentMon is not exercised by a test.
+
+### QA round 1 (2026-11-02)
+
+- **[medium] Retry covered correctness assertions.** Fixed (`bfdc7e1`): `RealTimeAttempts.Run` retries only `RealTimeBoundException`, thrown by `RealTimeAttempts.Bound`/`InRange`. The three tests check their correctness assertions first (exit code, pacer fault, counts, PTS, audio) with plain `Assert`, failing on any attempt, and only the timing bounds (latency p50/p99, queue drops, skipped slots, the slot ranges, flushed, fresh share, steady GC and B/s, and a full queue or empty pool while posting) through the helpers. Two new rule tests: a missed range names the value and is retried; a correctness assertion is not.
+- **[low] Concurrent ETW test runs.** Fixed (`5164e61`): the test holds `Global\ReplayBuffer-MeasureScriptSessionTests` from the first session started to the last assert, and the dead pid starts at a random multiple of 4.
+- **Note: owners of open deferred items.** Done (`d9726bc`): story 4.2's and epic 8's refactor sweep's descriptions name their epic 1 items.
+- **Verification:** Release build 0 warnings; suite 702/703 — the failure, App `ASupervisedEngineThatDiesIsRelaunchedAndTheNewEngineRaisesEngineRestarted` (untouched), passed on one rerun alone. Publish and drift not rerun: the round changes tests and tickets only.
