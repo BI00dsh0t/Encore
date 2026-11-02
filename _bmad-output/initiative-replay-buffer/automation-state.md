@@ -47,8 +47,8 @@ The coordinator logs each QA round in the Log below.
 | 2 | 1.15 Refactor sweep | story-1-15 | in progress |
 | 3 | Release epic 1 (`v0.1.0`) | | pending |
 | 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | done |
-| 5 | 2.2 Track mixer | | pending |
-| 6 | 2.3 Live device list over IPC | | pending |
+| 5 | 2.2 Track mixer | story-2-2 | in progress |
+| 6 | 2.3 Live device list over IPC | story-2-3 | in progress |
 | 7 | 2.5 Device dropout and rebind | | pending |
 | 8 | 2.4 Mic Devices and mic mute | | pending |
 | 9 | 2.6 Track meters in the engine | | pending |
@@ -211,3 +211,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: Epic 7 sliced into stories 7.1–7.11 (merged `3c4f93f`); the board validates with no problems. Epic 7 now also declares a need on epic 3 (7.1 waits on 3.5) and doesn't wait on epic 6. Queue row 28 expanded; twelve defaults added to Decisions Awaiting Review.
 - 2026-11-02: QA round 1 on 2.1 (`d7d2485`): **QA PASS**, 0 findings. 2.1 was told to merge. 1.14 is merged (`3db2541`), so 1.15 (story-1-15) has started. Epic 7 is sliced into 7.1–7.11 (`3c4f93f`), and slicing epic 8 has started (slice-epic-8). Once 2.1 merges, 2.2 and 2.3 are next; both wait only on 2.1.
 - 2026-11-02: 2.1 merged into `develop` (`8a501fc`) after QA round 1 passed with 0 findings, and marked done. Before the merge, `develop` (with 1.14) was merged into the branch: Release build 0 warnings, 694 of 696 tests passed and the two timing tests passed on their one rerun, publish 0 warnings. Two Human Check rows added (VLC listening and sync, and the Track names in VLC and Resolve). Each fresh QA worktree needs `native/ffmpeg` copied in or `tools/fetch-ffmpeg.ps1`, or the capture tests are skipped. 2.2 and 2.3 are now ready.
+- 2026-11-02: 2.1 is merged (`8a501fc`). 2.2 (story-2-2) and 2.3 (story-2-3) started in parallel; both waited only on 2.1. 1.15 and epic 8's slicing are still running.
