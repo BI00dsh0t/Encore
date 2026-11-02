@@ -3,7 +3,9 @@ using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Core.Settings;
 using ReplayBuffer.Engine.Sessions;
+using ReplayBuffer.Engine.Settings;
 using ReplayBuffer.Platform.Audio;
 using ReplayBuffer.Platform.Capture;
 using ReplayBuffer.Platform.FFmpeg;
@@ -36,11 +38,25 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     {
         FFmpegLibrary.Initialize(loggers.CreateLogger("FFmpeg"));
 
+        // With --track-layout the stored settings come first: a bad layout fails before any capture.
+        var stored = command.TrackLayout ? SettingsStore.ReadDocument(instance.RoamingDataFolder) : SettingsDocument.Empty;
+        var audio = command.TrackLayout ? LayoutAudio(stored) : null;
+
         var window = ResolveWindow();
-        var output = ResolveEndpoint(AudioFlow.Output, command.OutputDevice);
-        var input = ResolveEndpoint(AudioFlow.Input, command.InputDevice);
-        _log.LogInformation("Window '{Title}' (0x{Handle:X}, {Process}); output '{Output}'; input '{Input}'",
-            window.Title, window.Handle, window.ProcessName, output.FriendlyName, input.FriendlyName);
+        if (audio is null)
+        {
+            var output = ResolveEndpoint(AudioFlow.Output, command.OutputDevice);
+            var input = ResolveEndpoint(AudioFlow.Input, command.InputDevice);
+            audio = SessionAudio.OnePerDevice(
+            [
+                new SessionAudioDevice(output.Id, SettingsAudioFlow.Output, output.FriendlyName),
+                new SessionAudioDevice(input.Id, SettingsAudioFlow.Input, input.FriendlyName),
+            ]);
+        }
+
+        _log.LogInformation("Window '{Title}' (0x{Handle:X}, {Process}); Tracks {Tracks}",
+            window.Title, window.Handle, window.ProcessName,
+            string.Join(", ", audio.Tracks.Select(t => $"'{t.Name}' = {string.Join(" + ", t.DeviceIndexes.Select(i => $"'{audio.Devices[i].FriendlyName}'"))}")));
 
         var debugFolder = Path.Combine(instance.LocalDataFolder, "debug");
         var path = command.Output is { } explicitPath
@@ -83,20 +99,14 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             Anchored = qpc => anchored.TrySetResult(qpc),
         };
 
-        // debug-capture doesn't open the settings store: the snapshot resolves against a document
-        // holding only the command line's video value.
-        var document = VideoDocument(window);
+        // debug-capture doesn't open the settings store: the snapshot resolves against the document
+        // read with --track-layout (else the empty one) with the command line's video value set.
+        var document = stored with { Global = stored.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(VideoFor(window))) };
 
         // One hub for the run, disposed after the orchestrator has ended the session.
         using var hub = new AudioDeviceHub(loggers);
         using var orchestrator = new SessionOrchestrator(new CaptureSessionFactory(options, loggers, hub), () => document, _ => { });
         var target = new CaptureTarget((int)window.ProcessId, window.Handle, ProfileId: null);
-        var audio = new SessionAudio(
-        [
-            new SessionAudioDevice(output.Id, SettingsAudioFlow.Output, output.FriendlyName),
-            new SessionAudioDevice(input.Id, SettingsAudioFlow.Input, input.FriendlyName),
-        ]);
-
         var session = orchestrator.StartAsync(SessionKind.Game, target, audio).GetAwaiter().GetResult();
         var outcome = Wait(orchestrator, session, anchored.Task, stats, cancellation);
         if (outcome.Failure is { } failure)
@@ -108,10 +118,55 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     }
 
     /// <summary>
-    /// The settings document the session resolves: global <c>video</c> from the command line, sized
-    /// to the window (made even) when no <c>--size</c> is given.
+    /// The session audio of the stored Global <c>trackLayout</c>: refused when the stored value is
+    /// invalid, when a Track has no devices, or when a device is not present with its flow.
     /// </summary>
-    private SettingsDocument VideoDocument(WindowInfo window)
+    private SessionAudio LayoutAudio(SettingsDocument document)
+    {
+        if (document.Global.TryGetValue(Keys.TrackLayout.Name, out var raw) && !Keys.TrackLayout.IsValid(raw))
+        {
+            throw new EngineFailure(ErrorCodes.SettingInvalidValue,
+                $"The stored '{Keys.TrackLayout.Name}' is not a valid Track Layout; fix or remove it in {SettingsStore.FileName}.");
+        }
+
+        var layout = SettingsResolver.Resolve(document, null).TrackLayout;
+        var audio = SessionAudio.FromLayout(layout);
+
+        var present = new Dictionary<SettingsAudioFlow, IReadOnlyList<AudioEndpoint>>();
+        foreach (var device in audio.Devices)
+        {
+            var flow = device.Flow == SettingsAudioFlow.Output ? AudioFlow.Output : AudioFlow.Input;
+            if (!present.TryGetValue(device.Flow, out var endpoints))
+            {
+                try
+                {
+                    endpoints = AudioEndpoints.List(flow);
+                }
+                catch (Exception e)
+                {
+                    throw new EngineFailure(ErrorCodes.AudioDeviceFailed, $"Could not list {flow} devices: {e.Message}");
+                }
+
+                present[device.Flow] = endpoints;
+            }
+
+            if (!endpoints.Any(e => string.Equals(e.Id, device.EndpointId, StringComparison.OrdinalIgnoreCase)))
+            {
+                var kind = flow == AudioFlow.Output ? "output" : "input";
+                throw new EngineFailure(ErrorCodes.AudioDeviceNotFound,
+                    $"The Track Layout's {kind} device '{device.FriendlyName}' [{device.EndpointId}] is not present.",
+                    endpoints.Select(Describe).ToList());
+            }
+        }
+
+        return audio;
+    }
+
+    /// <summary>
+    /// The session's <c>video</c> value from the command line, sized to the window (made even) when
+    /// no <c>--size</c> is given.
+    /// </summary>
+    private VideoSettings VideoFor(WindowInfo window)
     {
         int width, height;
         if (command.Size is { } size)
@@ -128,7 +183,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         var video = new VideoSettings(command.Codec, width, height, command.Fps, command.BitrateKbps, RateControl.Cbr);
         _log.LogInformation("Video: {Codec} {Width}x{Height} at {Fps} fps, CBR {Kbps} kbps{Forced}",
             video.Codec, width, height, video.Fps, video.BitrateKbps, command.Encoder is { } forced ? $", encoder forced to {forced}" : "");
-        return SettingsDocument.Empty with { Global = SettingsDocument.Empty.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(video)) };
+        return video;
     }
 
     /// <summary>Waits for the session to run its course, then ends it, unless it ended itself first.</summary>
@@ -231,4 +286,8 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     internal static string Describe(WindowInfo w) => $"0x{w.Handle:X8}  {w.ProcessName ?? "?",-24} {w.Title}";
 
     internal static string Describe(AudioEndpoint e) => $"{e.FriendlyName}  [{e.Id}]";
+
+    /// <summary><c>debug-list</c>'s line: flow, friendly name, parent name and endpoint id.</summary>
+    internal static string DescribeFully(AudioEndpoint e) =>
+        $"{(e.Flow == AudioFlow.Output ? "output" : "input"),-6}  {e.FriendlyName}  parent: {(e.ParentName.Length > 0 ? e.ParentName : "-")}  [{e.Id}]";
 }

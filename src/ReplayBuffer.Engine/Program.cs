@@ -6,7 +6,13 @@ using ReplayBuffer.Platform.Audio;
 using ReplayBuffer.Platform.Windows;
 
 var parsed = CommandLine.Parse(args);
-var instance = parsed.Command is ServeCommand { Instance: { } testInstance } ? Instance.ForTest(testInstance) : Instance.Current;
+var testInstance = parsed.Command switch
+{
+    ServeCommand serve => serve.Instance,
+    DebugCaptureCommand capture => capture.Instance,
+    _ => null,
+};
+var instance = testInstance is not null ? Instance.ForTest(testInstance) : Instance.Current;
 
 // AD-16: one engine per instance. Taken before anything else, and held until the process ends.
 using var single = parsed.Command is ServeCommand ? SingleInstance.TryAcquire(SingleInstance.Engine, instance.Name) : null;
@@ -144,7 +150,7 @@ static void DebugList()
         foreach (var endpoint in AudioEndpoints.List(flow))
         {
             var marker = endpoint.Id == fallback?.Id ? "* " : "  ";
-            Console.WriteLine(marker + TracerCapture.Describe(endpoint));
+            Console.WriteLine(marker + TracerCapture.DescribeFully(endpoint));
         }
     }
 

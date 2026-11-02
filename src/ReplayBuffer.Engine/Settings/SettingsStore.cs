@@ -77,6 +77,35 @@ public sealed class SettingsStore
     }
 
     /// <summary>
+    /// Reads the document in <paramref name="folder"/> without opening a store: nothing in the folder
+    /// is written, moved or deleted. A missing file is the empty document.
+    /// </summary>
+    /// <exception cref="ErrorCodeException">
+    /// <see cref="ErrorCodes.SettingsUnreadable"/>: the file can't be read or isn't a settings document; it is left in place.
+    /// </exception>
+    public static SettingsDocument ReadDocument(string folder)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(folder);
+        var path = Path.Combine(Path.GetFullPath(folder), FileName);
+        byte[] json;
+        try
+        {
+            json = File.ReadAllBytes(path);
+        }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return SettingsDocument.Empty;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new ErrorCodeException(ErrorCodes.SettingsUnreadable, $"Settings could not be read from '{path}': {e.Message}", e);
+        }
+
+        return TryParse(json)
+            ?? throw new ErrorCodeException(ErrorCodes.SettingsUnreadable, $"'{path}' is not a readable settings document.");
+    }
+
+    /// <summary>
     /// Applies <paramref name="update"/> all-or-nothing: validates every op, writes the file, swaps
     /// <see cref="Current"/> and raises <see cref="Changed"/>. A refused update changes nothing.
     /// </summary>
