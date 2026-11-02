@@ -3,7 +3,7 @@ title: 'Live device list over IPC'
 type: 'feature'
 ticket: '3'
 created: '2026-11-02'
-status: 'built'
+status: done
 baseline_revision: '8efe555891633d78a801b620abe975b9acc49157'
 route: 'full'
 route_source: 'auto'
