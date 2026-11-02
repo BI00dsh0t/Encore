@@ -3,14 +3,14 @@ title: 'Refactor sweep'
 type: 'refactor'
 ticket: '15'
 created: '2026-11-02'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '633130beaa27511d96b215883947dbb09c08c166'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -69,15 +69,15 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `tests/ReplayBuffer.Platform.FFmpeg.Tests/RealTimeAttempts.cs` -- new public static helper: runs an attempt delegate (given the attempt number) up to 3 times; it catches only assertion failures, logs each failed attempt's message to the test output, and rethrows the last failure -- one place for the retry rule, shared like `EncoderOracle`.
-- [ ] `tests/ReplayBuffer.Engine.Tests/ReplayBuffer.Engine.Tests.csproj` -- link `RealTimeAttempts.cs` beside `EncoderOracle.cs`.
-- [ ] `tests/ReplayBuffer.Platform.FFmpeg.Tests/EncodeExperimentTests.cs` -- wrap the paced-encoder test's measurement and asserts in the helper, with a per-attempt file name; update the comment on the p50 bound.
-- [ ] `tests/ReplayBuffer.Engine.Tests/CaptureEndTests.cs` -- the stats-report test: open the window once, then the engine run and asserts per attempt with per-attempt files.
-- [ ] `tests/ReplayBuffer.Engine.Tests/OutputResolutionTests.cs` -- the fast-window stats test: same pattern.
-- [ ] `tools/measure-path-a.ps1` -- before every setup check (elevation, PresentMon, engine, game), stop leftover `ReplayBuffer-PathA-<pid>` sessions (from `logman query -ets`) whose pid has no process; after a PresentMon kill or a failed run, and in the run loop's `finally`, stop this run's own session if it is running (best effort, errors ignored). Mention the sweep in the help text.
-- [ ] `tests/ReplayBuffer.Platform.FFmpeg.Tests/RealTimeAttemptsTests.cs` -- new: the helper's matrix rows without a GPU -- passes on a later attempt and logs the earlier failure; fails with the last message after 3; a skip thrown by the attempt is a skip after 1 call.
-- [ ] `tests/ReplayBuffer.Bench.Tests/MeasureScriptSessionTests.cs` -- new: the stale and live rows against the real script. Start sessions with `logman start <name> -p {<random guid>} -ets` (skip the test when that is refused), one named for a pid with no process and one for the test host's own pid; run `pwsh -NoProfile -File tools/measure-path-a.ps1 -Game NoSuchGame -PresentMon <missing path>`; assert exit 1, the dead one is stopped and named in the output, the live one still runs. Always stop both sessions in cleanup. Join `BenchProcessCollection` if the folder's other process tests do.
-- [ ] `_bmad-output/deferred-work.md` -- record each epic 1 item's outcome (see Design Notes).
+- [x] `tests/ReplayBuffer.Platform.FFmpeg.Tests/RealTimeAttempts.cs` -- new public static helper: runs an attempt delegate (given the attempt number) up to 3 times; it catches only assertion failures, logs each failed attempt's message to the test output, and rethrows the last failure -- one place for the retry rule, shared like `EncoderOracle`.
+- [x] `tests/ReplayBuffer.Engine.Tests/ReplayBuffer.Engine.Tests.csproj` -- link `RealTimeAttempts.cs` beside `EncoderOracle.cs`.
+- [x] `tests/ReplayBuffer.Platform.FFmpeg.Tests/EncodeExperimentTests.cs` -- wrap the paced-encoder test's measurement and asserts in the helper, with a per-attempt file name; update the comment on the p50 bound.
+- [x] `tests/ReplayBuffer.Engine.Tests/CaptureEndTests.cs` -- the stats-report test: open the window once, then the engine run and asserts per attempt with per-attempt files.
+- [x] `tests/ReplayBuffer.Engine.Tests/OutputResolutionTests.cs` -- the fast-window stats test: same pattern.
+- [x] `tools/measure-path-a.ps1` -- before every setup check (elevation, PresentMon, engine, game), stop leftover `ReplayBuffer-PathA-<pid>` sessions (from `logman query -ets`) whose pid has no process; after a PresentMon kill or a failed run, and in the run loop's `finally`, stop this run's own session if it is running (best effort, errors ignored). Mention the sweep in the help text.
+- [x] `tests/ReplayBuffer.Platform.FFmpeg.Tests/RealTimeAttemptsTests.cs` -- new: the helper's matrix rows without a GPU -- passes on a later attempt and logs the earlier failure; fails with the last message after 3; a skip thrown by the attempt is a skip after 1 call.
+- [x] `tests/ReplayBuffer.Bench.Tests/MeasureScriptSessionTests.cs` -- new: the stale and live rows against the real script. Start sessions with `logman start <name> -p {<random guid>} -ets` (skip the test when that is refused), one named for a pid with no process and one for the test host's own pid; run `pwsh -NoProfile -File tools/measure-path-a.ps1 -Game NoSuchGame -PresentMon <missing path>`; assert exit 1, the dead one is stopped and named in the output, the live one still runs. Always stop both sessions in cleanup. Join `BenchProcessCollection` if the folder's other process tests do.
+- [x] `_bmad-output/deferred-work.md` -- record each epic 1 item's outcome (see Design Notes).
 
 **Acceptance Criteria:**
 - Given the full suite runs with `dotnet test --solution ReplayBuffer.slnx`, when one of the three timing tests misses a bound on an attempt under contention, then it passes on a later attempt, and the output shows the attempt that failed and why.
@@ -86,9 +86,25 @@ deferred: []
 
 ## Implementation Notes
 
+- xunit v3's `SkipException` implements `IAssertionException`, so `RealTimeAttempts` excludes it explicitly; a skip propagates after one call.
+- `Assert.Throws<SkipException>` lets a skip through to the runner (the test reports skipped), so `RealTimeAttemptsTests` catches the skip by hand.
+- An attempt whose engine does not stop in time kills it before failing, so it never runs beside the next attempt.
+- The script's sweep runs before the first setup check (elevation); a session for a running pid other than the script's own is left with a warning, the script's own pid's session is treated as stale.
+- Verified: Release and Debug builds 0 warnings; full suite 666 passed, 0 skipped (the paced-encoder test logged one contended attempt, p50 18.6 ms, and passed on attempt 2); a locally broken p50 bound failed after 3 logged attempts (reverted); `publish-engine.ps1` 0 IL2xxx/IL3xxx; `drift --minutes 2` passed with `drift.json` and `report.md`.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-02 — Review pass
+- verdicts: 4 findings — high 0, medium 1, low 3, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` Checkpoint commit `1b52395` is typed `test(engine)` but also changes `tools/measure-path-a.ps1` and `_bmad-output/deferred-work.md`, against CLAUDE.md's "`test` — tests only" — confirmed. Fix: the unpushed, un-QA'd checkpoint is split into `test(engine)` (the timing tests and their helper), `fix(tools)` (the sweep and its Bench test) and `docs(tickets)` (deferred-work outcomes and this plan).
+  - `[low]` `[patch]` `MeasureScriptSessionTests.DeadPid`'s comment claims an odd pid never runs, but `OpenProcess` ignores a pid's low two bits — confirmed; the loop still copes and agrees with the script's lookup. Fix: comment corrected.
+  - `[low]` `[patch]` `Get-PathASessions` hides a failed `logman query -ets`, so the sweep says nothing when it couldn't look — confirmed (no `$LASTEXITCODE` check). Fix: a failed query is a warning naming logman's output, and the sweep is skipped.
+  - `[low]` `[patch]` A timed-out engine is killed but not waited for, so it can still be exiting when the next attempt starts — confirmed (`Process.Kill` doesn't wait). Fix: `WaitForExit()` after the kill in both tests.
+- Patches applied in the orchestrating session (each a one- to five-line change), not by the implementation subagent.
+
 
 ## Design Notes
 
