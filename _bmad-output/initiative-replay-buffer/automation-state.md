@@ -114,7 +114,7 @@ The coordinator logs each QA round in the Log below.
 | 27.12 | 6.12 Refactor sweep | | pending |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
-| 28 | Slice epic 7 (Library and Cleanup), then its stories and release | | pending |
+| 28 | Slice epic 7 (Library and Cleanup), then its stories and release | slice-epic-7 | in progress |
 | 29 | Slice epic 8 (Hardening), then its stories and release | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -175,3 +175,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: Epic 5 sliced into stories 5.1–5.14 (merged `910486b`); the board validates with no problems. Epic 5 now also declares needs on epics 1 (5.2, 5.12 use 1.14's bench) and 2 (2.3, 2.4, 2.5). Queue row 26 expanded; ten defaults added to Decisions Awaiting Review.
 - 2026-11-02: 1.14 reported READY FOR QA at `7c21dc2`. All 7 round-1 findings are handled, and the display-on FPS rerun shows a 1.47 % loss. The coordinator removed the stale `.bench-running` and sent QA round 2 to qa-1-14. 2.1 is now building and testing. Epic 5 is sliced (`910486b`), and slicing epic 6 has started (slice-epic-6).
 - 2026-11-02: Epic 6 sliced into stories 6.1–6.13 (merged `cbb1255`); the board validates with no problems. Epic 6 now also declares needs on epics 3 (3.3, 3.4, 3.6) and 2 (2.4). Queue row 27 expanded; nine defaults added to Decisions Awaiting Review.
+- 2026-11-02: QA round 2 on 1.14 (`7c21dc2`): **QA PASS**, 0 findings. 1.14 was told to merge. 2.1 reported READY FOR QA at `d7d2485`, and QA round 1 started (qa-2-1). Epic 6 is sliced into 6.1–6.13 (`cbb1255`), and slicing epic 7 has started (slice-epic-7).
