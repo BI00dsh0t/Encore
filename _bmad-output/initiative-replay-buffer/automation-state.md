@@ -114,7 +114,19 @@ The coordinator logs each QA round in the Log below.
 | 27.12 | 6.12 Refactor sweep | | pending |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
-| 28 | Slice epic 7 (Library and Cleanup), then its stories and release | slice-epic-7 | in progress |
+| 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
+| 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | | pending |
+| 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | | pending |
+| 28.3 | 7.3 Length and thumbnails | | pending |
+| 28.4 | 7.4 Favourite | | pending |
+| 28.5 | 7.5 Group and filter by game, date and Favourite | | pending |
+| 28.6 | 7.6 Open, show in Explorer and copy for Discord | | pending |
+| 28.7 | 7.7 Rename and delete, locked while being written | | pending |
+| 28.8 | 7.8 Cleanup | | pending |
+| 28.9 | 7.9 Library and Cleanup settings page | | pending |
+| 28.10 | 7.10 Refactor sweep | | pending |
+| 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
+| 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening), then its stories and release | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -168,6 +180,18 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-02 | 6.9 | New `monitorRecordStart` and `monitorRecordStop` Hotkey actions (unbound by default) follow `recordHotkeyMode`, added additively; AD-11's action list should gain them | FR-23 asks for separate Start and Stop keys, which AD-11's enum lacks |
 | 2026-11-02 | 6.11 | The monitor picker goes on a new Recordings page (via a new `monitors.list` command) and the Monitor Record keys on the Hotkeys page; no `bmad-ux` pass, the builder checks it by hand | Same as epics 2 to 5 |
 | 2026-11-02 | 6.13 | A closing end-to-end story on the builder's PC (hitl) after the sweep | The epic's Done when ends "Verified integrated on the builder's PC" |
+| 2026-11-02 | 7 | Output Folder picker on a new Library and Cleanup settings page (7.9) | No story in epics 1 to 6 owns one; changing it rebuilds the index (AD-17) |
+| 2026-11-02 | 7.3 | The engine reads length with FFmpeg's demuxer, cached in `library.json` by size and mtime; a being-written item shows locked with no thumbnail or length until `EndWrite` | FR-30 asks for length; AD-1 keeps the App out of file contents |
+| 2026-11-02 | 7.3 | Thumbnails only from the Windows shell with an in-memory cache and a generic icon fallback; no disk cache | AD-1 names the shell API; the spine deferred caching to epic 7 |
+| 2026-11-02 | 7.2, 7.5 | An item's game is its `BeginWrite` profileId, else the profile whose folder holds it, else its top-level folder (Other at the root); Monitor Recordings are a group; its date is the `BeginWrite` time, else the file's creation time | FR-30 groups by game and date but files found outside the app have no profile |
+| 2026-11-02 | 7.5 | Group by game or by day; date filter Today, Last 7 days, Last 30 days, All; Favourites-only filter | FR-30 doesn't define the date groups |
+| 2026-11-02 | 7.7 | Rename changes only the base name; codes `file-being-written`, `invalid-file-name`, `file-name-taken`, `library-item-changed`; delete refuses with `recycle-bin-unavailable` rather than delete permanently | FR-31 doesn't cover these cases |
+| 2026-11-02 | 7.8 | Cleanup runs after each `EndWrite`, on a `cleanup` change, after reconciliation and every 10 min; all indexed items count toward the size; Favourites alone over the limit raise `cleanup-limit-unreachable` once; a locked file is skipped until the next pass | FR-32 and AD-17 don't say when it runs or what happens when it can't reach the limit |
+| 2026-11-02 | 7.8, 7.9 | Turning a limit on or lowering it shows a confirmation with a `cleanup.preview` count and size; only then is the update sent | FR-32 asks for a confirmation without saying what it shows |
+| 2026-11-02 | 7.2 | `library-corrupt` is acknowledged by dismissing its warning, from a banner on the Library page, so epic 7 doesn't wait on epic 5 | AD-17 requires an acknowledgement but names no UI |
+| 2026-11-02 | 7 | Actions act on one item at a time (no multi-select in v1); no `bmad-ux` pass for the Library or its settings page, the builder checks them by hand | Same as epics 2 to 6 |
+| 2026-11-02 | 7 | Epic 7 doesn't wait on epic 6: locking is verified with Clips and a fake writer growing a sample fragmented MP4; epic 8's soak covers live Recordings | The epic's Handoff says so; keeps epic 7 buildable beside epic 6 |
+| 2026-11-02 | 7.11 | A closing end-to-end story on the builder's PC (hitl) after the sweep | The epic's Done when ends "Verified integrated on the builder's PC" |
 
 ## Log
 
@@ -182,3 +206,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: Epic 6 sliced into stories 6.1–6.13 (merged `cbb1255`); the board validates with no problems. Epic 6 now also declares needs on epics 3 (3.3, 3.4, 3.6) and 2 (2.4). Queue row 27 expanded; nine defaults added to Decisions Awaiting Review.
 - 2026-11-02: QA round 2 on 1.14 (`7c21dc2`): **QA PASS**, 0 findings. 1.14 was told to merge. 2.1 reported READY FOR QA at `d7d2485`, and QA round 1 started (qa-2-1). Epic 6 is sliced into 6.1–6.13 (`cbb1255`), and slicing epic 7 has started (slice-epic-7).
 - 2026-11-02: 1.14 merged into `develop` (`3db2541`) and marked done (`cc95c7b`). Final figures on the synthetic load: FPS loss 1.47 % (pass), latency p99 29.3 ms (miss), A/V drift 0.54 ms over 60 min, audio-to-audio 160 samples. Path A stays the final stack. Two Human Check rows and three Decisions Awaiting Review rows added. Follow-ups not queued: a bugfix to make the three timing tests robust, and `measure-path-a.ps1` cleaning up the `ReplayBuffer-PathA-<pid>` ETW session a killed run leaves behind.
+- 2026-11-02: Epic 7 sliced into stories 7.1–7.11 (merged `3c4f93f`); the board validates with no problems. Epic 7 now also declares a need on epic 3 (7.1 waits on 3.5) and doesn't wait on epic 6. Queue row 28 expanded; twelve defaults added to Decisions Awaiting Review.
