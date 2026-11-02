@@ -80,4 +80,9 @@ covers = ["R34", "R35", "R33", "R36"] # R33, R36: final conformance run
 after = [
   { epic = 6, needs = "Recordings to soak and crash-test" },
   { epic = 7, needs = "Library and Cleanup to include in the soak" },
+  { epic = 1, needs = "ReplayBuffer.Bench (FPS, drift, playback, injected Hotkeys) for the soak harness and the final conformance run, supervision, and Start with Windows" },
+  { epic = 4, needs = "the finished Clip path to soak, and ring generations to open on a GPU driver reset" },
+  { epic = 5, needs = "the status line that reports restarts, the Overlay to re-place on monitor changes, and bench fps --overlay" },
+  { epic = 2, needs = "device rebinding for resume and mixer restarts, and the named-Track checks for the conformance run" },
+  { epic = 3, needs = "Game Profiles to check for persistence across restarts" },
 ]
