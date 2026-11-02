@@ -3,16 +3,16 @@ title: 'Track mixer: summing, alignment and limiter'
 type: 'feature'
 ticket: '2'
 created: '2026-11-02'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '6a5ff147352517ac195d34935bfdb5ba7959867b'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: ['{project-root}/CLAUDE.md']
 warnings: ['oversized']
 deferred: []
@@ -126,10 +126,18 @@ deferred: []
 - A silence-clock tick that throws (encoder or muxer failure) stops the clock and fails the session with `encode-failed`, instead of crashing the timer thread.
 - The single-input path takes the lock once per block rather than per 4096-frame chunk: it has one writer, and `PadTo` on it runs only in `Finish`, after the devices are unsubscribed.
 - The existing `TrackMixerTests` stream values were rescaled into [-1, 1] (they reached ~49 before), so the limiter leaves them bit-identical and the sums stay exact.
+- `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile` now expects every Track's `samplesEncoded` to be equal, and at most 4,800 frames above what the device wrote. The common end padding means a Track can carry more than its device delivered.
+- After review: the silence clock now stops in `End` beside the device unsubscription, and the video's end is the pacer's `NextSlot` (skips included) in 48 kHz frames. See the Review Triage Log.
 
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-02 — Review pass
+- verdicts: 2 findings — high 0, medium 2, low 0, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` The silence clock stopped only in `Finish`, after capture dispose and the video flush. Silent Tracks kept running to wall-clock "now" through teardown, and the common end took every Track past the video by the teardown time. Fixed: `End` calls `StopSilenceClock()` right after the device subscriptions are disposed, so silent and device Tracks stop together.
+  - `[medium]` `[patch]` The end frame used `FramesAt(_lastFrameQpc)`, the start of the last captured frame. With a static window WGC delivers no frames while the pacer repeats slots, so a session with only silent Tracks could end well short of the video. At low fps the shortfall is at least one frame. Fixed: the floor also takes the pacer's `NextSlot` (one past the last emitted slot, skips included) converted to 48 kHz frames.
 
 ## Design Notes
 
@@ -149,3 +157,46 @@ Why the silent-Track clock is a timer and not the capture thread: `OnFrame` runs
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors
 - `dotnet test --solution ReplayBuffer.slnx` -- expected: all pass. Known real-time flakes get one rerun.
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL/AOT warnings
+
+## Auto Run Result
+
+**Status:** built, verified 2026-11-02.
+
+**Summary:**
+- Every Track now ends in a stereo-linked `PeakLimiter`:
+  - it acts only above full scale, with instant attack, a 50 ms release and no look-ahead;
+  - audio within [-1, 1] passes bit-identically, so a single-device Track matches its device;
+  - output never exceeds ±1, and non-finite samples are written as 0.
+- `TrackMixer` accepts zero inputs (a silent Track) and gains `PadTo`. Its single-input path is lock-guarded and still ring-free.
+- A Track Layout Track with no devices now records silence instead of being refused. A 100 ms QPC timer keeps it advancing during capture, off the capture thread.
+- At the end, every Track is padded to one common end frame: the latest of the longest device, the video's end (pacer slots), and the silence the clock already wrote.
+
+**Files:**
+- `src/ReplayBuffer.Media/PeakLimiter.cs` (new): the limiter.
+- `src/ReplayBuffer.Media/TrackMixer.cs`: zero inputs, `PadTo`, `LongestInputFrames`, `LimitedFrames`, the limiter stage.
+- `src/ReplayBuffer.Core/Sessions/SessionSpec.cs`: an empty Track becomes a silent Track.
+- `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs`: the silence clock, the common end frame, and the limiter count in the log.
+- `src/ReplayBuffer.Engine/TracerCapture.cs`: doc only.
+- Tests:
+  - New: `PeakLimiterTests`.
+  - Extended: `TrackMixerTests`, `SessionAudioTests`, `TrackMixCaptureTests` (a Silent Track, and two full-scale tones), `TrackLayoutCaptureTests` (the default layout captures one silent Track).
+  - Adjusted: `CaptureEndTests`.
+
+**Review:** one quick pass, 2 findings, both medium, both patched (see the Review Triage Log). Nothing deferred or rejected.
+
+**Follow-up review recommended:** true by the rule, because two medium entries were patched. The specific unverified risk is the end-frame logic on a real stop with a static window, where repeated pacer slots carry the video past the last captured frame. The tests' windows animate continuously, so only `NextSlot`'s arithmetic, not that case, runs under test. The QA session covers this.
+
+**Verification:**
+- `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+- `dotnet test --solution ReplayBuffer.slnx`: 714 tests, 713 passed, 0 skipped. `EncodeExperimentTests.ThePacedEncoderEncodesEverySlotWithAFastPreset`, a known real-time flake, failed and passed on its one rerun.
+- `pwsh tools/publish-engine.ps1`: 0 IL/AOT warnings, 9.7 MB.
+- Matrix audit: every row has a passing test.
+  - Limiter rows: `PeakLimiterTests`, `TrackMixerTests.TwoFullScaleSourcesNeverExceedFullScale`.
+  - Shared device: `ADeviceFannedOutToTwoMixersIsInBothSampleAligned`.
+  - Silent Tracks: `AMixerWithNoInputsWritesSilenceUpToPadTo`, `TheDefaultLayoutCapturesOneSilentTrack`, `EachTrackCarriesExactlyItsDevicesTones`.
+  - End and late input: `EachTrackCarriesExactlyItsDevicesTones` (every stream within 0.1 s of the video), `InputBelowAPadToIsDropped`.
+
+**Residual risks:**
+- Instant attack with no look-ahead distorts the first sample of an over slightly.
+- Device Tracks still run through WGC teardown until they are unsubscribed (as in 2.1), so audio can outlast the video by that teardown time.
+- Listening to a limited mix is left to the builder's R3 check in story 2.x's end-to-end.

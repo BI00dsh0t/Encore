@@ -499,12 +499,13 @@ internal sealed class CaptureSession : ICaptureSession
         // The devices are unsubscribed and the silence clock stopped: pad every Track with silence to
         // one end frame, the longest device's or the video's end, whichever is later (or where the
         // clock already took a silent Track, should that be later still), then drain the encoders.
-        // The video ends after its last emitted pacer slot, which repeats past the last captured frame.
+        // The video ends where its pacer's next slot starts: one past the last emitted slot, skips
+        // included, which repeats can take past the last captured frame.
         StopSilenceClock();
         var end = FramesAt(_lastFrameQpc);
         if (_paced?.Pacer is { } slots)
         {
-            end = Math.Max(end, (long)((Int128)slots.EmittedSlots * AudioTimeline.SampleRate / slots.Fps));
+            end = Math.Max(end, (long)((Int128)slots.NextSlot * AudioTimeline.SampleRate / slots.Fps));
         }
 
         foreach (var mixer in _mixers)
