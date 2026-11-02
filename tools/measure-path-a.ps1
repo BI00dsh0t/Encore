@@ -67,6 +67,17 @@ param(
     [string] $OutputDevice = '',
     [string] $InputDevice = '',
 
+    # Passed to every capture condition's debug-capture as --size / --fps / --bitrate when given
+    # (story 1.14 runs 1920x1080 at 60 fps, CBR 20000 kbps). Empty / 0: the engine's own defaults.
+    [ValidatePattern('^(\d+x\d+)?$')]
+    [string] $Size = '',
+
+    [ValidateRange(0, 120)]
+    [int] $Fps = 0,
+
+    [ValidateRange(0, 1000000)]
+    [int] $Bitrate = 0,
+
     # The PresentMon CLI. Default: the newest native/presentmon/PresentMon-*.exe under the repo root.
     [string] $PresentMon = '',
 
@@ -328,6 +339,9 @@ function Invoke-Run($Run, [int] $Index) {
             $engineArgs += $condition.EngineOptions
             if ($OutputDevice) { $engineArgs += @('--output-device', $OutputDevice) }
             if ($InputDevice) { $engineArgs += @('--input-device', $InputDevice) }
+            if ($Size) { $engineArgs += @('--size', $Size) }
+            if ($Fps -gt 0) { $engineArgs += @('--fps', [string] $Fps) }
+            if ($Bitrate -gt 0) { $engineArgs += @('--bitrate', [string] $Bitrate) }
 
             Write-Host "[$tag] engine $($engineArgs -join ' ')"
             $engineProcess = Start-Process -FilePath $Engine -ArgumentList (Format-Arguments $engineArgs) `
