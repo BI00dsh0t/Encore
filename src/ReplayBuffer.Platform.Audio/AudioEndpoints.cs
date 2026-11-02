@@ -15,8 +15,11 @@ public enum AudioFlow
     Input,
 }
 
-/// <summary>An active MMDevice endpoint.</summary>
-public sealed record AudioEndpoint(string Id, string FriendlyName, AudioFlow Flow);
+/// <summary>
+/// An active MMDevice endpoint. <see cref="ParentName"/> is the name of the audio device that
+/// exposes it (<c>PKEY_DeviceInterface_FriendlyName</c>), or empty when it has none.
+/// </summary>
+public sealed record AudioEndpoint(string Id, string FriendlyName, AudioFlow Flow, string ParentName = "");
 
 public enum EndpointMatchOutcome
 {
@@ -146,24 +149,31 @@ public static unsafe class AudioEndpoints
         device->OpenPropertyStore(STGM.STGM_READ, &store);
         try
         {
-            var key = PInvoke.PKEY_Device_FriendlyName;
-            PROPVARIANT value = default;
-            store->GetValue(&key, &value);
-            try
-            {
-                var name = value.Anonymous.Anonymous.vt == VARENUM.VT_LPWSTR
-                    ? value.Anonymous.Anonymous.Anonymous.pwszVal.ToString()
-                    : idText;
-                return new AudioEndpoint(idText, name, flow);
-            }
-            finally
-            {
-                PInvoke.PropVariantClear(&value);
-            }
+            var name = ReadString(store, PInvoke.PKEY_Device_FriendlyName) ?? idText;
+            var parent = ReadString(store, PInvoke.PKEY_DeviceInterface_FriendlyName) ?? "";
+            return new AudioEndpoint(idText, name, flow, parent);
         }
         finally
         {
             store->Release();
+        }
+    }
+
+    /// <summary>A string property, or null when it is missing or not a string.</summary>
+    private static string? ReadString(IPropertyStore* store, PROPERTYKEY key)
+    {
+        // A property the store doesn't hold reads as VT_EMPTY.
+        PROPVARIANT value = default;
+        store->GetValue(&key, &value);
+        try
+        {
+            return value.Anonymous.Anonymous.vt == VARENUM.VT_LPWSTR
+                ? value.Anonymous.Anonymous.Anonymous.pwszVal.ToString()
+                : null;
+        }
+        finally
+        {
+            PInvoke.PropVariantClear(&value);
         }
     }
 
