@@ -66,7 +66,10 @@ slug = "epic-library-cleanup"
 title = "Library and Cleanup"
 description = "The Main App's Library lists every Clip and Recording by game, date and Favourite, with its actions (open, Favourite, rename, delete, show in Explorer, copy to clipboard). Cleanup keeps the Output Folder within its size or age limit and never deletes Favourites."
 covers = ["R27", "R28", "R29"]
-after = [{ epic = 4, needs = "Clips written into per-game folders, and a signal for files being written" }]
+after = [
+  { epic = 4, needs = "Clips written into per-game folders, and a signal for files being written" },
+  { epic = 3, needs = "each Game Profile's persisted folder name, to give files found by the scan their game" },
+]
 
 [[epic]]
 id = 8
