@@ -24,7 +24,18 @@ public sealed unsafe class EndpointWatcherTests : IDisposable
 
     public void Dispose() => _hub.Dispose();
 
-    private IMMNotificationClient* Client => _hub.Watcher!.Client;
+    private IMMNotificationClient* Client
+    {
+        get
+        {
+            var watcher = _hub.Watcher;
+            Assert.NotNull(watcher);
+            Assert.True(watcher.Registered, "the endpoint watcher didn't register");
+            var client = watcher.Client;
+            Assert.True(client is not null, "the endpoint watcher has no client");
+            return client;
+        }
+    }
 
     [Fact]
     public void TheHubStartsAndStopsWatchingCleanly()

@@ -21,6 +21,8 @@ internal sealed class DeviceListPublisher : IDisposable
     private readonly ILogger _log;
     private IReadOnlyList<AudioDevice> _present;
     private AudioDeviceList _current;
+    private long _listings;
+    private long _storedListing;
     private int _disposed;
 
     public DeviceListPublisher(IAudioEndpointSource source, Func<SettingsDocument> settings, Action<AudioDeviceList> publish, ILogger log)
@@ -29,10 +31,26 @@ internal sealed class DeviceListPublisher : IDisposable
         _settings = settings;
         _publish = publish;
         _log = log;
-        _present = TryList() ?? [];
+        _present = [];
         _current = AudioDeviceListBuilder.Build(_present, settings());
-        _log.LogInformation("Listed {Count} audio devices", _current.Devices.Count);
+
+        // Subscribe before the first listing: for the hub, subscribing starts the watcher, so a
+        // change after this listing is raised. An early change may publish before anything receives it.
         _source.EndpointsChanged += OnEndpointsChanged;
+        var listing = Interlocked.Increment(ref _listings);
+        var present = TryList();
+        lock (_lock)
+        {
+            // The first list is built without publishing; a newer listing already stored wins.
+            if (present is not null && listing > _storedListing)
+            {
+                _storedListing = listing;
+                _present = present;
+                _current = AudioDeviceListBuilder.Build(present, settings());
+            }
+
+            _log.LogInformation("Listed {Count} audio devices", _current.Devices.Count);
+        }
     }
 
     /// <summary>The list as last built, and published if it changed.</summary>
@@ -63,7 +81,8 @@ internal sealed class DeviceListPublisher : IDisposable
     /// <summary>The endpoints changed: re-lists them, then rebuilds from the current settings.</summary>
     public void OnEndpointsChanged()
     {
-        // Listing makes COM calls; outside the lock.
+        // Listing makes COM calls; outside the lock. A listing older than one already stored is dropped.
+        var listing = Interlocked.Increment(ref _listings);
         var present = TryList();
         if (present is null)
         {
@@ -72,6 +91,12 @@ internal sealed class DeviceListPublisher : IDisposable
 
         lock (_lock)
         {
+            if (listing < _storedListing)
+            {
+                return;
+            }
+
+            _storedListing = listing;
             _present = present;
             Rebuild(_settings());
         }

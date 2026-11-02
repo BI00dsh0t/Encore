@@ -3,14 +3,14 @@ title: 'Live device list over IPC'
 type: 'feature'
 ticket: '3'
 created: '2026-11-02'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '8efe555891633d78a801b620abe975b9acc49157'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -83,15 +83,27 @@ deferred: []
 
 ## Implementation Notes
 
-- `DeviceListPublisher.Seed` runs the `EventHub` construction under the publisher's lock, so a change raised between building the first list and wiring the hub can't be lost (the publish delegate reads the hub through a field assigned inside `Seed`).
+- `DeviceListPublisher` subscribes to `EndpointsChanged` (for the hub, this starts the watcher and returns once it has registered) before its first listing, so a change after that listing is raised; listings are numbered, and one older than a listing already stored is dropped. A change raised before the `EventHub` exists publishes to nothing, but `Seed` builds the hub under the publisher's lock from the current list, so the hub's initial state holds it.
 - `AudioEndpoints.CreateEnumerator` is factored out of the private `Enumerator` so the watcher owns its own enumerator.
 - `Platform.Audio` had no `InternalsVisibleTo`; added `ReplayBuffer.Platform.Audio.Tests` in its csproj, and `AllowUnsafeBlocks` in the test csproj, so tests reach `AudioDeviceHub.Watcher` / `EndpointWatcher.Client`.
 - The CCW returns `S_OK` through a local `(HRESULT)0`: CsWin32 doesn't generate `HRESULT.S_OK` here.
 - Verification: `EncodeExperimentTests.ThePacedEncoderEncodesEverySlotWithAFastPreset` (FFmpeg, GPU latency p50 18.8 ms against a 16.7 ms bound) failed on the run and on its rerun; that project doesn't reference the changed code.
+- 2026-11-02, verification by the build session: on its own full run `ThePacedEncoderEncodesEverySlotWithAFastPreset` passed with everything else (Release build 0 warnings, all tests, publish 0 IL warnings, 9.8 MB); the earlier failures were load, a known flake (Decisions Awaiting Review, 1.14). The implementer's manual check: the published engine `serve --instance ReplayBuffer-Test-2-3` answered `devices.list` with all 30 endpoints `debug-list` prints, available, parent names filled, and logged no unregister error.
 
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-02 — Review pass
+- verdicts: 7 findings — high 0, medium 1, low 4, false 2, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `DeviceListPublisher` listed before subscribing, and subscribing is what starts the real watcher, so a change between the first listing and registration was never raised — fixed: it subscribes first, then lists.
+  - `[low]` `[patch]` Overlapping `EndpointsChanged` raises could store an older listing over a newer one; the real watcher raises from one thread, but the port allows any thread — fixed with the same patch: listings are numbered and an older one is dropped.
+  - `[false]` `[reject]` AC4 has no evidence — the publish ran with 0 IL warnings and the implementer's manual `devices.list` run against the published engine returned all 30 endpoints with no unregister error; both now recorded in the Implementation Notes and Auto Run Result.
+  - `[low]` `[reject]` `TheHubStartsAndStopsWatchingCleanly` can't see a logged unregister failure — catching it would need a capturing logger in the fixture; the manual run's log covers it, and a failure there is unlikely.
+  - `[false]` `[reject]` "All tests pass" not met — the build session's full run passed every test, the GPU timing test included.
+  - `[low]` `[reject]` `ABurstRaisesOnce` and `AnUnrelatedPropertyOrADefaultDeviceChangeRaisesNothing` count raises on the real registered client, so a real device change inside their 600 ms window would fail them — rare during a test run, and isolating them needs a registration switch on the watcher.
+  - `[low]` `[patch]` `EndpointWatcherTests.Client` dereferenced a null client when registration failed, crashing the test host — fixed: the helper asserts the watcher is registered with a client first.
 
 ## Design Notes
 
@@ -119,3 +131,27 @@ IMMNotificationClient.PopulateVTable(vtbl);
 
 **Manual checks (if no CLI):**
 - Run the published engine `serve --instance ReplayBuffer-Test-2-3`, connect, and send `devices.list`: every endpoint from `debug-list` appears, with parent names. Plugging a device in is the builder's check.
+
+## Auto Run Result
+
+**Status:** built, verified 2026-11-02.
+
+**Summary:** AudioDeviceHub watches the MMDevice endpoints through an `IMMNotificationClient` (a ComWrappers CCW over CsWin32's vtable) on its own MTA thread, coalescing a burst into one `EndpointsChanged`. The engine's `DeviceListPublisher` merges the present endpoints with the devices of every Track Layout (absent ones `available: false`) into `state.snapshot.devices`, publishes `devices.changed` only when the list differs, and answers `devices.list`. The first list goes into the snapshot without an event.
+
+**Files:**
+- `src/ReplayBuffer.Contracts/Messages/Audio.cs`, `Engine.cs` — `AudioDevice`, `AudioDeviceList`, `devices.list`, `devices.changed`, `StateSnapshot.Devices` (additive).
+- `src/ReplayBuffer.Core/Audio/AudioDeviceHub.cs`, `AudioDeviceListBuilder.cs` — the `IAudioEndpointSource` port and the pure merge.
+- `src/ReplayBuffer.Platform.Audio/EndpointWatcher.cs`, `AudioDeviceHub.cs`, `AudioEndpoints.cs`, `NativeMethods.txt`, csproj — the notification client and the hub as endpoint source.
+- `src/ReplayBuffer.Engine/Audio/DeviceListPublisher.cs`, `EngineHost.cs`, `Ipc/EventHub.cs` — publishing and serving.
+- Tests: new `AudioDeviceListBuilderTests`, `EndpointWatcherTests`, `DeviceListServeTests`; `MessagesTests` sample; `IpcTests` uses a fixed fake source.
+
+**Review:** one quick pass, 7 findings. Patched: 1 medium, 2 low. Deferred: none. Rejected: 2 false (evidence existed), 2 low (rare, and the fix adds test plumbing). See the Review Triage Log.
+
+**Follow-up review recommended:** false. One medium and no high were patched, and both patches are covered by passing tests.
+
+**Verification:** Release build 0 warnings; `dotnet test --solution ReplayBuffer.slnx` all passed before the review patches; after them 721 of 722, with `ThePacedEncoderEncodesEverySlotWithAFastPreset` (the known GPU timing flake) passing on its one rerun alone; `pwsh tools/publish-engine.ps1` 0 IL/AOT warnings (9.8 MB); manual `devices.list` against the published engine returned all 30 endpoints.
+
+**Residual risks:**
+- A real plug-in or enable is untested here (no test may change Windows device state); it's the builder's check.
+- Two `EndpointWatcherTests` can fail if a real device changes during their 600 ms window.
+
