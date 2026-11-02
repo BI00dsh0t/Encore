@@ -44,7 +44,7 @@ The coordinator logs each QA round in the Log below.
 | # | Task | Session | Status |
 |---|------|---------|--------|
 | 1 | 1.14 amendment: synthetic GPU load, unattended `fps` and `drift`, injected-key `hotkey`, scripted playback; the runs; the epic Notes Decision; merge | story-1-14 | done |
-| 2 | 1.15 Refactor sweep | | pending |
+| 2 | 1.15 Refactor sweep | story-1-15 | in progress |
 | 3 | Release epic 1 (`v0.1.0`) | | pending |
 | 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | in progress |
 | 5 | 2.2 Track mixer | | pending |
@@ -127,7 +127,7 @@ The coordinator logs each QA round in the Log below.
 | 28.10 | 7.10 Refactor sweep | | pending |
 | 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
-| 29 | Slice epic 8 (Hardening), then its stories and release | | pending |
+| 29 | Slice epic 8 (Hardening), then its stories and release | slice-epic-8 | in progress |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
 
@@ -207,3 +207,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: QA round 2 on 1.14 (`7c21dc2`): **QA PASS**, 0 findings. 1.14 was told to merge. 2.1 reported READY FOR QA at `d7d2485`, and QA round 1 started (qa-2-1). Epic 6 is sliced into 6.1–6.13 (`cbb1255`), and slicing epic 7 has started (slice-epic-7).
 - 2026-11-02: 1.14 merged into `develop` (`3db2541`) and marked done (`cc95c7b`). Final figures on the synthetic load: FPS loss 1.47 % (pass), latency p99 29.3 ms (miss), A/V drift 0.54 ms over 60 min, audio-to-audio 160 samples. Path A stays the final stack. Two Human Check rows and three Decisions Awaiting Review rows added. Follow-ups not queued: a bugfix to make the three timing tests robust, and `measure-path-a.ps1` cleaning up the `ReplayBuffer-PathA-<pid>` ETW session a killed run leaves behind.
 - 2026-11-02: Epic 7 sliced into stories 7.1–7.11 (merged `3c4f93f`); the board validates with no problems. Epic 7 now also declares a need on epic 3 (7.1 waits on 3.5) and doesn't wait on epic 6. Queue row 28 expanded; twelve defaults added to Decisions Awaiting Review.
+- 2026-11-02: QA round 1 on 2.1 (`d7d2485`): **QA PASS**, 0 findings. 2.1 was told to merge. 1.14 is merged (`3db2541`), so 1.15 (story-1-15) has started. Epic 7 is sliced into 7.1–7.11 (`3c4f93f`), and slicing epic 8 has started (slice-epic-8). Once 2.1 merges, 2.2 and 2.3 are next; both wait only on 2.1.
