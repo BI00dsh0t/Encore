@@ -360,8 +360,12 @@ public sealed class IpcTests : IAsyncLifetime
 
     private void StartHost(IpcServerOptions? options = null)
     {
-        // No heartbeat: these tests count every event and seq.
-        _host = EngineHost.Start(TestInstance, NullLoggerFactory.Instance, options, new EngineHostOptions { Heartbeat = null, ProbeEncoders = false });
+        // No heartbeat and a fixed device list: these tests count every event and seq.
+        _host = EngineHost.Start(
+            TestInstance,
+            NullLoggerFactory.Instance,
+            options,
+            new EngineHostOptions { Heartbeat = null, ProbeEncoders = false, AudioEndpoints = new FakeEndpointSource() });
         _disposables.Add(_host);
     }
 
