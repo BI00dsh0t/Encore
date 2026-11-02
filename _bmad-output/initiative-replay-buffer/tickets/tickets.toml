@@ -56,6 +56,8 @@ covers = ["R9", "R10", "R11", "R12", "R13", "R21"]
 after = [
   { epic = 4, needs = "capture, Track and encoding pipeline, and the file-being-written signal" },
   { epic = 5, needs = "Overlay solid dot, red X, and Feedback Sounds channel" },
+  { epic = 3, needs = "the Target Game rule's stub Recording-running flag to replace, and Game Profiles to read recordingsEnabled from" },
+  { epic = 2, needs = "runtime.json, where mic mute is kept, to record which Recordings were left open" },
 ]
 
 [[epic]]
