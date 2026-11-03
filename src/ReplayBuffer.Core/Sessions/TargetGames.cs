@@ -105,6 +105,11 @@ public sealed record ReplayClips(
 /// Called on the orchestrator thread with why a press made no Recording, or what a started one
 /// shares that differs from the profile's settings; null ignores it.
 /// </param>
+/// <param name="Open">
+/// Keeps each Recording's path from just after the Library is told it begins until just after it is
+/// told how it ended (FR-12), so a restart can find the Recordings a dead engine left open; null
+/// keeps nothing.
+/// </param>
 public sealed record Recordings(
     OutputPathAllocator Paths,
     Func<string> DefaultOutputFolder,
@@ -112,7 +117,8 @@ public sealed record Recordings(
     Action<RecordingStopped> Stopped,
     Action<Exception> Failed,
     ILibraryWrites? Library = null,
-    Action<string>? Info = null);
+    Action<string>? Info = null,
+    IOpenRecordings? Open = null);
 
 /// <summary>One audio device of a <see cref="ChainKey"/>: its endpoint, compared ignoring case, and flow.</summary>
 public readonly record struct ChainDevice

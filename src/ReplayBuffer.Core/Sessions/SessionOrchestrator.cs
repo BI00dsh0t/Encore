@@ -869,8 +869,9 @@ public sealed class SessionOrchestrator : IDisposable
     /// gives the Output Folder, else the default one, where the path is reserved (AD-21) beside the
     /// game's Clips, and the chain the profile asks for: a mismatch with the session's still shares
     /// the session's chain, and <see cref="Recordings.Info"/> says so. Once the path is reserved,
-    /// <see cref="Recordings.Library"/> is told the write begins, and <see cref="OnRecordingWritten"/>
-    /// (or a write that never started) tells it how it ended. No game session, a drain only, no
+    /// <see cref="Recordings.Library"/> is told the write begins, then <see cref="Recordings.Open"/>
+    /// keeps the path, and <see cref="OnRecordingWritten"/> (or a write that never started) tells the
+    /// Library how it ended, then lets the path go. No game session, a drain only, no
     /// profile, the flag off, or a session that can't record yet: nothing happens but the Info.
     /// </summary>
     private void StartRecording(long qpc)
@@ -927,6 +928,7 @@ public sealed class SessionOrchestrator : IDisposable
 
         var library = recordings.Library ?? NoLibraryWrites.Instance;
         library.BeginWrite(path, profileId);
+        recordings.Open?.Opened(path);
         var recording = new RecordingRun(active.Id, path, write);
         try
         {
@@ -937,6 +939,7 @@ public sealed class SessionOrchestrator : IDisposable
             // It never started: nothing else will remove the reserved file.
             TryDelete(path);
             library.EndWrite(path, WriteOutcome.Failed);
+            recordings.Open?.Closed(path);
             recordings.Failed(e);
             return;
         }
@@ -978,6 +981,7 @@ public sealed class SessionOrchestrator : IDisposable
         // A failed writer deletes a file that holds nothing; one with data is kept, finished as far as it got.
         var kept = error is null || File.Exists(recording.Path);
         (recordings.Library ?? NoLibraryWrites.Instance).EndWrite(recording.Path, kept ? WriteOutcome.Written : WriteOutcome.Failed);
+        recordings.Open?.Closed(recording.Path);
         if (error is not null)
         {
             recordings.Failed(error);

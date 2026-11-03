@@ -228,6 +228,10 @@ internal sealed class EngineHost : IAsyncDisposable
             string OutputFolder() =>
                 SettingsResolver.Resolve(load.Store.Current, null).OutputFolder
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
+            // FR-12: the Recordings the last run left open are trimmed before the Library sees them.
+            var runtime = new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Runtime"));
+            var interrupted = InterruptedRecordings.Recover(runtime.ReadInterrupted(), recordingLog);
+
             var libraryFile = Path.Combine(instance.RoamingDataFolder, "library.json");
 
             // A top-level folder's Game Profile, for files found on disk (AD-21).
@@ -337,7 +341,7 @@ internal sealed class EngineHost : IAsyncDisposable
                     hub.Publish(HotkeyMessages.Pressed, press);
                     HotkeyService.LogPress(hotkeyLog, press);
                 },
-                new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Audio")),
+                runtime,
                 changed =>
                 {
                     hub.Publish(GameMessages.TargetChanged, changed);
@@ -389,7 +393,8 @@ internal sealed class EngineHost : IAsyncDisposable
                         },
                         e => recordingLog.LogWarning("The Recording failed: {Message}", e.Message),
                         libraryActor,
-                        message => recordingLog.LogInformation("{Message}", message))
+                        message => recordingLog.LogInformation("{Message}", message),
+                        runtime)
                     : null);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
@@ -500,6 +505,15 @@ internal sealed class EngineHost : IAsyncDisposable
                     "The settings file couldn't be read. It was moved aside and the defaults are in use.",
                     overlay: false);
             }
+
+            // AD-16: an interrupted Recording is never resumed, only reported.
+            foreach (var message in interrupted)
+            {
+                warnings.Raise(ErrorCodes.RecordingInterrupted, WarningSeverity.Warning, "recordings", message, overlay: true);
+            }
+
+            // Only once they are reported: a start that fails before here reports them next time.
+            runtime.ClearInterrupted();
 
             if (libraryLoad.Corrupt)
             {
