@@ -39,10 +39,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 7.4 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 4.10 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.4 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.12 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -108,7 +108,7 @@ The coordinator logs each QA round in the Log below.
 | 25.9 | 4.9 Per-Game-Profile settings at the next Reset | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
 | 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done |
 | 25.11 | 4.11 Game Profile overrides in the Main App | | pending |
-| 25.12 | 4.12 Hotkeys page in the Main App | | pending |
+| 25.12 | 4.12 Hotkeys page in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 25.13 | 4.13 Refactor sweep | | pending |
 | 25.14 | 4.14 Clips end to end on the builder's PC | | pending |
 | 25.15 | Release epic 4 (`v0.4.0`) | | pending |
@@ -463,3 +463,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 7.3 merged into `develop` (`c2508c3`, `feat(core): merge 7.3-length-thumbnails`) and marked done, after QA PASS at `a38a811`. Develop was synced in first (6.2, 6.3): build 0 warnings; Contracts 116, Core 102, FFmpeg 36, Desktop 11, App 78, Engine 185 pass; publish clean. A 7.3 row is in the Human Check Queue. The deferred review item (a length read opens the file without `FILE_SHARE_DELETE`, so a rename/delete during the read could fail) is for 7.6 to check.- 2026-11-03: 7.3 merged (`c2508c3`, marked done `684fb5b`). Its card is Done with its label detached, and story-2-7 is back in the pool. 7.4 went to slice-epic-5 (Opus, medium effort), with its card In progress.
 
 - 2026-11-03: 4.10 merged into `develop` (`518e4d9`, `feat(app): merge 4.10-buffer-output-settings`) and marked done, after QA PASS at `9cb23a0` with 0 blocking findings. Develop (6.3, 7.3) was merged into the branch first: the conflicts in `EngineHost` and `EventHub`'s constructor kept both sides. Release build 0 warnings; Contracts 118, Core 104, Engine 166 and App 81 passed; publish 0 warnings. Contracts change is additive (`StorageEstimate`, `estimate.changed`, `StateSnapshot.Estimate`). QA's advisories are recorded in the epic Notes. One Human Check row added.
+- 2026-11-03: 4.10 merged (`518e4d9`, marked done `cf86e75`). Its card is Done with its label detached, and qa-1-14 is back in the pool. 4.12 went to story-2-7 (Opus, medium effort), with its card In progress. 4.11 still waits on 4.9.
