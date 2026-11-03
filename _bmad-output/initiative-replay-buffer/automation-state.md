@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.3 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with .gitattributes chore |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 5.2 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.2 |
 
@@ -370,3 +370,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 4.2 merged (`02b0b95`, `feat(engine): merge 4.2-exact-save-cut`, after merging develop in cleanly: build 0 warnings, Core 65, Contracts 97, Engine 167, Platform.Windows 25, Platform.Desktop 11 and App 74 passed, publish clean), and marked done. QA's two optional notes are accepted: (1) `PacketRing.Cut` allocates its copy array (`new RingEntry[_count - first]`) inside the ring lock, a large allocation on a first save at a big Buffer Window that can briefly stall `Append`; not a defect at current window sizes, so it is for 4.6 (ring resizing) or the 4.13 sweep to pool or pre-size. (2) Overlapping presses stay the deferred 4.4 item: `TryGetForcedKey` keeps only the latest served key, so 4.4's Save Cooldown and `save-busy` must cover a press during an in-flight write. Also recorded in the plan's `deferred`. The Human Check Queue gains: press Save twice about 10 s apart in a game and play both Clips back to back in VLC.
 - 2026-11-03: 4.2 merged (`02b0b95`, done `645fccc`), and its card is in Done. That unblocked 4.3 (Replay Buffer lifecycle, medium risk), which went to pool worker slice-epic-4 (Opus, medium effort); its card is In progress. Spike 5.2 fixed QA round 1 at `1e6dbcb`, and QA round 2 is running on qa-1-14 at low effort.
 - 2026-11-03: The builder approved adding a `.gitattributes` that pins text files to LF, after CRLF churn was flagged in QA three times (2.5, 3.7, 5.2). It went to pool worker slice-epic-5 (Sonnet, low effort) on `feature/gitattributes-lf`, so the merge allow rule applies. The coordinator reviews the diff instead of running a QA session.
+- 2026-11-03: QA round 2 on spike 5.2 (`1e6dbcb`): **QA PASS**, 0 findings, and 5.2 was told to merge. The coordinator reviewed `feature/gitattributes-lf` (`1b9c47a`: `* text=auto eol=lf` plus binary types; the 31 CRLF files in the index were left as they are). In a scratch clone, a fresh checkout and a merge into an existing tree both stay clean. It merges after 5.2. 4.3 is being implemented.

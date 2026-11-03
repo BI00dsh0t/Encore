@@ -2,7 +2,7 @@ using System.Globalization;
 using ReplayBuffer.Bench;
 
 // Story 1.14: the FPS, drift, playback and Hotkey benchmarks of R4, R5, NFR-4 and R11, and story 2.9's
-// Named Tracks check of R3 and R7, each into one run folder, merged into report.md and report.json after
+// Named Tracks check of R3 and R7, and story 5.2's Overlay measurement, each into one run folder, merged into report.md and report.json after
 // every measurement.
 
 // One number format on every locale, for report.md and every message, on every thread.
@@ -46,6 +46,7 @@ try
         "playback" => PlaybackCheck.Run(context),
         "hotkey" => HotkeyBenchmark.Run(context),
         "tracks" => TracksCheck.Run(context),
+        "overlay" => OverlayBenchmark.Run(context),
         _ => 0,
     };
 
