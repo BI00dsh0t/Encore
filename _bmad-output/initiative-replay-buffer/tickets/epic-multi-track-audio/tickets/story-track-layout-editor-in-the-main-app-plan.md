@@ -3,7 +3,7 @@ title: 'Track Layout editor in the Main App'
 type: 'feature'
 ticket: '7'
 created: '2026-11-02'
-status: 'built'
+status: done
 baseline_revision: 'd8ec9613890121d660210ddf7ae43db66b1aa680'
 route: 'full'
 route_source: 'auto'
