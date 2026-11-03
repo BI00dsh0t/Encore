@@ -156,7 +156,7 @@ public sealed class SettingsStoreTests : IDisposable
             SettingsOp.SetProfile(GameId, ProfileAttributes.Ignored, Json("true")),
             SettingsOp.SetProfile(GameId, ProfileAttributes.RecordingsEnabled, Json("true")),
             SettingsOp.SetProfile(GameId, ProfileAttributes.Name, Json("\"Renamed\""))));
-        Assert.Equal(new GameProfile { Name = "Renamed", Ignored = true, RecordingsEnabled = true, Overrides = created.Overrides }, store.Current.Profiles[GameId]);
+        Assert.Equal(new GameProfile { Name = "Renamed", Ignored = true, RecordingsEnabled = true, Overrides = created.Overrides, Folder = created.Folder }, store.Current.Profiles[GameId]);
 
         AssertRefused(store, ErrorCodes.SettingInvalidValue, Update(store, SettingsOp.SetProfile(GameId, ProfileAttributes.Ignored, Json("\"yes\""))));
         AssertRefused(store, ErrorCodes.SettingInvalidValue, Update(store, SettingsOp.SetProfile(GameId, ProfileAttributes.Name, Json("\"\""))));

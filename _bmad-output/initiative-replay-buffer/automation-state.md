@@ -11,7 +11,7 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 - Each story runs `bmad-build-auto` on its ticket (unattended plans, implementation and review). No plan-approval halts: the builder pre-approved plans that keep to the ticket and epic.
 - **QA gate (builder, 2026-11-01):** after each change, the coordinator starts a separate QA session on the story's branch before anything merges. QA sends its findings straight to the story's session, which fixes them; QA re-checks until it passes.
 - **Merging is approved:** when a story is green (0-warning build, all tests, NativeAOT publish) and QA has passed, its session merges it into `develop` from the main folder with `--no-ff` and `<type>(<scope>): merge <ref>-<slug>`, then commits `tickets.py mark <epic> <ref> done` on `develop`. **Never push.**
-- **Releases:** at each epic's end (after its refactor sweep), a release session runs `git flow release start 0.<epic>.0` / `finish` in the main folder, tagging `v0.<epic>.0`, and leaves `develop` checked out there.
+- **Releases:** at each epic's end (after its refactor sweep), the epic file gets `status: done` (it gates later epics) and a release session runs `git flow release start 0.<epic>.0` / `finish` in the main folder, tagging `v0.<epic>.0`, and leaves `develop` checked out there.
 - **HITL checks:** a session automates what it can (synthetic input, injected keys, scripted players, logs, screenshots of its own windows) and records the rest in the Human Check Queue below instead of waiting. The story can still be marked done; the queue is the builder's to work through on return.
 - **Unsliced epics (4–8):** a slicing session runs Sofia (`bmad-agent-po`) to break the epic into stories, choosing defaults where the PRD and architecture leave a gap, and lists each such choice in the Decisions Awaiting Review below.
 - The PC is kept awake and unlocked while sessions work (the app's keep-awake hold plus a display-required holder). Never change Windows settings.
@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 2.4 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 3.1 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
@@ -84,12 +84,12 @@ The coordinator logs each QA round in the Log below.
 | 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | done |
 | 14 | 2.10 Refactor sweep | | pending |
 | 15 | Release epic 2 (`v0.2.0`) | | pending |
-| 16 | 3.1 Tracer: detect a borderless game | | pending |
+| 16 | 3.1 Tracer: detect a borderless game | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 17 | 3.8 Spike: which Windows game list to read | | pending |
 | 18 | 3.2 Detection sources and exclusions | | pending |
 | 19 | 3.3 Target Game rule | | pending |
 | 20 | 3.4 Game Profile auto-creation and Ignored | | pending |
-| 21 | 3.5 OutputPathAllocator | | pending |
+| 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `af89823`) |
 | 22 | 3.6 Game Profiles page in the Main App | | pending |
 | 23 | 3.7 Refactor sweep | | pending |
 | 24 | Release epic 3 (`v0.3.0`) | | pending |
@@ -291,3 +291,13 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 2.7 merged into `develop` (`295a5ec`, `feat(app): merge 2.7-track-layout-editor`) and marked done. `develop` (2.9 + 2.5) was merged into its branch first without conflicts (`f78b358`); Release build 0 warnings, `ReplayBuffer.App.Tests` 71 of 71. QA's two low notes were accepted, not fixed: edits made during an in-flight save are dropped (the page reloads with the 'changed elsewhere' note), and devices show as unavailable before the first device list arrives. Human Check row added.
 - 2026-11-03: 2.5 merged (`e6ed604`, done `98c8ab1`) and 2.7 merged (`295a5ec`). The story-2-5 session was archived. story-2-7 couldn't be archived (the app keeps it, as it's pinned or open), so the builder can archive it from the sidebar. The only ready story is 2.4. It went to pool worker slice-epic-5, which was cleared and set to Opus at high effort (risk high). 2.6, 2.11 and the rest of epic 2 wait on 2.4.
 - 2026-11-03: **Lean tests** is now a standing decision by the builder. Session test-trim (`local_8ea47ad6-d6bb-4933-b4cc-93bcff3aba81`, branch `feature/test-suite-trim`) is measuring and slimming every test project, moving slow, hardware-bound and flaky tests to an opt-in category, and documenting this in `CLAUDE.md`. It merges after 2.4, syncing develop first. The 2.4 worker was told to keep its tests lean.
+- 2026-11-03 01:04: **PAUSE ALL WORK by the builder.** `.bench-running` says PAUSED. The coordinator sent pause messages to the 2.4 worker (slice-epic-5) and test-trim, then stopped both turns. No test hosts or ReplayBuffer processes were left running. **To resume:** the builder says so, and the coordinator deletes `.bench-running`. It tells the 2.4 worker to continue (with its tests trimmed lean) through READY FOR QA, and tells test-trim to continue its measure-and-trim. test-trim merges after 2.4, syncing develop first.
+- 2026-11-03: 2.4 paused at `feature/2.4-mic-devices` tip `5972c75`, with its implementation committed, its worktree clean and nothing running. Still to do: the lean-tests trim, verification and review. On its branch, `OutputResolutionTests` (2 tests) fail even when run alone, and the baseline comparison against develop was stopped. On resume, check whether those fail on develop too (test-trim may move them to opt-in). The worker left a detached worktree of `03d62eb` in its scratchpad (`.../scratchpad/base`) for that comparison.
+- 2026-11-03: test-trim paused on `feature/test-suite-trim`, cut from `3411014`, with no edits and a clean worktree. Its Release build had 0 warnings. The baseline timing run stopped during App.Tests, so it has no timings yet.
+- 2026-11-03: **Resumed by the builder.** The coordinator deleted `.bench-running`. The 2.4 worker was told to trim its tests lean, check `OutputResolutionTests` against develop, then verify, review and report READY FOR QA. test-trim was told to continue its baseline, trim and verify, and to merge after 2.4.
+- 2026-11-03: Epic 1's own `status` was never set, which kept epic 3 waiting behind it. It's now marked `status: done` (`a27cd5c`), so mark each epic done at its release from now on. 3.1 (game-detection tracer, high risk, HITL) went to pool worker slice-epic-8 (Opus, high effort). 3.5 (OutputPathAllocator) went to pool worker 2-1-tracer (Opus, medium effort). Both were told to keep their tests lean.
+- 2026-11-03: 3.5 is READY FOR QA at `30d6c19`: Release build 0 warnings, Core and scoped Engine tests pass, publish clean. Pool worker qa-1-14 (Sonnet, medium effort) was given its QA. 2.4 is finishing its scoped tests, 3.1 is being implemented, and test-trim is on its after-run.
+- 2026-11-03: QA on 3.5 (`30d6c19`): **QA PASS**, 0 findings (Core 58/58, Contracts 109/109). 3.5 was switched to Sonnet and told to merge. qa-1-14 is back in the pool. test-trim committed its trim (`e0e828d`) and is running the opt-in heavy category before its docs commit.
+- 2026-11-03: 3.5 merged into develop (`af89823`, --no-ff) after QA PASS at `30d6c19`; ticket marked done. Deferred: pre-existing NullReferenceException in `SettingsStore.Open` for a profile with no `overrides` property (hand-edited files only). `SettingsStoreTests.cs` has a one-line change that may conflict with test-trim.
+- 2026-11-03: test-trim is READY FOR REVIEW at `68a6806`. The default suite went from about 400 s to about 83 s (829 → 584 cases, 40 moved to opt-in `Heavy` + `Explicit`, 205 removed), all pass, and the heavy run passes too. The coordinator reviewed the report instead of running QA, as the change is test-only and has no production code. The session is asked to restore the path and file-name safety rows that the mechanical 2-row cut dropped (they cost milliseconds), then sync and merge now, ahead of 2.4, so every later story gets the faster suite. 2.4 and 3.1 will sync after it.
+- 2026-11-03 05:31: 2.4, 3.1 and test-trim hit the usage limit (reset 05:30). Their work is intact: 2.4 has uncommitted lean-trim edits, 3.1 has an uncommitted implementation, and test-trim is at `68a6806`. All three were told to continue.

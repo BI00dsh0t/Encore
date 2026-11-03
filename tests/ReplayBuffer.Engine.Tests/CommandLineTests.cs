@@ -208,6 +208,8 @@ public sealed class OutputNamingTests
     [InlineData("", "capture")]
     [InlineData("CON", "_CON")]
     [InlineData("nul", "_nul")]
+    [InlineData("nul.txt", "_nul.txt")]
+    [InlineData("COM0", "_COM0")]
     public void TitlesAreMadeSafeAsFileNames(string title, string expected)
     {
         Assert.Equal(expected, OutputNaming.Sanitize(title));

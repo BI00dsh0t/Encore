@@ -38,6 +38,13 @@ public sealed record GameProfile
 
     public bool RecordingsEnabled { get; init; }
 
+    /// <summary>
+    /// The profile's folder under the Output Folder (AD-21). Assigned once by the engine when it
+    /// first commits the profile, and never changed after; clients can't set it. Null until then.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Folder { get; init; }
+
     /// <summary>Override values by key name; only overridable keys take effect.</summary>
     public ImmutableSortedDictionary<string, JsonElement> Overrides { get; init; } = SettingsMaps.EmptyValues;
 }
