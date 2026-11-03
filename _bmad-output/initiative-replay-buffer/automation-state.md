@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 7.4 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; idle |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.4 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
@@ -119,7 +119,7 @@ The coordinator logs each QA round in the Log below.
 | 26.4 | 5.4 Feedback notices in the engine, with a dev simulator | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `9c364fa`) |
 | 26.5 | 5.5 Overlay message queue | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `b0f684e`) |
 | 26.6 | 5.6 Feedback Sounds in the engine | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ac6a3a2`) |
-| 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
+| 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `53d83b7`) |
 | 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | | pending |
 | 26.9 | 5.9 Capture exclusion for every App window | | pending |
 | 26.10 | 5.10 Main App status line | | pending |
@@ -467,3 +467,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 5.7 stalled from 21:48 to 22:38, with uncommitted work waiting on a review subagent whose completion never arrived. The coordinator nudged it: review the diff itself if the lens is lost, sync with develop, then READY FOR QA. On each all-idle event, check every story's `lastActivityAt` for one stuck over 30 minutes.
 - 2026-11-03: 5.7 is READY FOR QA at `7b82d69` after the nudge. QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-03: QA 5.7 at `7b82d69`: **QA PASS**, 0 findings. 5.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
+- 2026-11-03: 5.7 merged (`53d83b7`) after QA PASS at `7b82d69` and a docs-only sync with develop (App.Tests 84 passed, 0-warning build). Ticket marked done.

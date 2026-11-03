@@ -3,7 +3,7 @@ title: 'Mic-muted icon and the disk-full red X'
 type: 'feature'
 ticket: '7'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '8f3c755800b3e6c3a68df75bc97b4f40723bd1a3'
 route: 'full'
 route_source: 'auto'
