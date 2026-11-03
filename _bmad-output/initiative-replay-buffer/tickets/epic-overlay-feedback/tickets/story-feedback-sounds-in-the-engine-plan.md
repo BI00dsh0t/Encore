@@ -70,14 +70,14 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs`, `Messages/Feedback.cs` -- the code, the enum, the preview command.
-- [ ] `src/ReplayBuffer.Core/Feedback/FeedbackSoundSynth.cs`, `FeedbackSoundPlayer.cs`, `FeedbackCapture.cs` (new) -- synth, port, player (`bool Play(string name)`, `void Preview(FeedbackSound)`, `IDisposable`, which drains and joins), capture check logic.
-- [ ] `src/ReplayBuffer.Core/Feedback/FeedbackRouter.cs` -- optional player.
-- [ ] `src/ReplayBuffer.Platform.Audio/FeedbackSoundOutput.cs` (new), `AudioEndpoints.cs`, `EndpointWatcher.cs` -- the WASAPI port and the default communications endpoint.
-- [ ] `src/ReplayBuffer.Engine/Audio/FeedbackDeviceCheck.cs` (new), `EngineHost.cs` -- composition, `feedback.preview`.
-- [ ] `tests/ReplayBuffer.Core.Tests/FeedbackSoundsTests.cs` (new) -- matrix rows 1 to 4 and 6 (player and router over a fake output), plus the synth check.
-- [ ] `tests/ReplayBuffer.Engine.Tests/FeedbackSoundServeTests.cs` (new) -- over the pipe with a fake output: a layout capturing the fake's default endpoint raises `feedback-device-captured`, and `feedback.preview` plays a switched-off sound.
-- [ ] `tests/ReplayBuffer.Platform.Audio.Tests/FeedbackSoundOutputTests.cs` (new, Explicit + Heavy) -- plays each sound on the PC's default communications endpoint.
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs`, `Messages/Feedback.cs` -- the code, the enum, the preview command.
+- [x] `src/ReplayBuffer.Core/Feedback/FeedbackSoundSynth.cs`, `FeedbackSoundPlayer.cs`, `FeedbackCapture.cs` (new) -- synth, port, player (`bool Play(string name)`, `void Preview(FeedbackSound)`, `IDisposable`, which drains and joins), capture check logic.
+- [x] `src/ReplayBuffer.Core/Feedback/FeedbackRouter.cs` -- optional player.
+- [x] `src/ReplayBuffer.Platform.Audio/FeedbackSoundOutput.cs` (new), `AudioEndpoints.cs`, `EndpointWatcher.cs` -- the WASAPI port and the default communications endpoint.
+- [x] `src/ReplayBuffer.Engine/Audio/FeedbackDeviceCheck.cs` (new), `EngineHost.cs` -- composition, `feedback.preview`.
+- [x] `tests/ReplayBuffer.Core.Tests/FeedbackSoundsTests.cs` (new) -- matrix rows 1 to 4 and 6 (player and router over a fake output), plus the synth check.
+- [x] `tests/ReplayBuffer.Engine.Tests/FeedbackSoundServeTests.cs` (new) -- over the pipe with a fake output: a layout capturing the fake's default endpoint raises `feedback-device-captured`, and `feedback.preview` plays a switched-off sound.
+- [x] `tests/ReplayBuffer.Platform.Audio.Tests/FeedbackSoundOutputTests.cs` (new, Explicit + Heavy) -- plays each sound on the PC's default communications endpoint.
 
 **Acceptance Criteria:**
 - Given every sound on and no device set, when a Clip is saved, a save fails, a Recording starts and stops, and the disk fills, then each matching sound plays once, on the default communications endpoint.
@@ -87,6 +87,12 @@ deferred: []
 - Given the five rendered sounds, then each is under 600 ms at 48 kHz, peaks at -12 dBFS (±0.1 dB), and `clipSaved` rises in pitch while `saveFailed` falls.
 
 ## Implementation Notes
+
+- `FeedbackNotice.Sound` is now `string?`, so the router can raise a switched-off notice with no sound. Existing router tests pass unchanged.
+- `IFeedbackSoundOutput` and `SilentFeedbackSoundOutput` live in `FeedbackSoundPlayer.cs`. The player also exposes `Endpoint()` (device, else default communications), which the engine check reuses.
+- `FeedbackCapture.CapturingTracks` returns each capturing Track with its matching device, so the warning can name the device.
+- `FeedbackDeviceCheck` subscribes to `SettingsStore.Changed` and `EndpointsChanged` itself and unsubscribes on dispose; the host calls `Check()` once before the pipe serves and after each `target.changed`. The condition key is the endpoint plus the capturing Track ids; a changed condition withdraws the old warning and raises a new one.
+- The real-device check measured about 480 ms for the 450 ms `clipSaved`, so playback ends on the padding drain, not the cap.
 
 ## Plan Change Log
 

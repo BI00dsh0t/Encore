@@ -78,7 +78,8 @@ public interface IAudioEndpointSource
     IReadOnlyList<AudioDevice> ListPresent();
 
     /// <summary>
-    /// An endpoint was added, removed, enabled, disabled or renamed. Raised on any thread, coalesced
+    /// An endpoint was added, removed, enabled, disabled or renamed, or the default communications
+    /// render endpoint changed. Raised on any thread, coalesced
     /// (a burst raises once); handlers must not block. Carries nothing: re-list with <see cref="ListPresent"/>.
     /// </summary>
     event Action? EndpointsChanged;
