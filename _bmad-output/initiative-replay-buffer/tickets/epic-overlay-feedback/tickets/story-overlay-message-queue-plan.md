@@ -3,7 +3,7 @@ title: 'Overlay message queue'
 type: 'feature'
 ticket: '5'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '36632897ef73704fcb2960ea4951928c35739f85'
 route: 'full'
 route_source: 'auto'
