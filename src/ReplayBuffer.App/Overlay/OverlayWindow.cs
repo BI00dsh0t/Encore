@@ -9,12 +9,14 @@ using ReplayBuffer.Platform.Desktop;
 namespace ReplayBuffer.App.Overlay;
 
 /// <summary>
-/// The Overlay: a dot in the top-right corner of the Target Game's monitor, with the green saving
-/// icon to its left while a Clip is being saved (R2), and the queued message below them (R3), green
-/// for a notice and red for an error, in a topmost, click-through window that is never activated and
-/// is excluded from capture (AD-15). The window is one fixed-width strip, so the dot stays put as the
-/// icon comes and goes; while a message shows it grows left and down, the dot still in its place. It
-/// is hidden while there is none of the three. Nothing is drawn in or hooked onto the game (NFR-3).
+/// The Overlay: a dot in the top-right corner of the Target Game's monitor; to its left, right to
+/// left, the mic-muted icon while the mic is muted, the green saving icon while a Clip is being saved
+/// (R2) and a red X while the disk is full (R3); and the queued message below them (R3), green for a
+/// notice and red for an error. It is a topmost, click-through window that is never activated and is
+/// excluded from capture (AD-15). The window is one fixed-width strip of fixed slots, so the dot stays
+/// put as the icons come and go; while a message shows it grows left and down, the dot still in its
+/// place. It is hidden while there is no dot, icon, X or message. Nothing is drawn in or hooked onto
+/// the game (NFR-3).
 /// </summary>
 internal sealed class OverlayWindow : ShellWindow
 {
@@ -24,10 +26,10 @@ internal sealed class OverlayWindow : ShellWindow
     /// <summary>How far the dot sits in from the monitor's top and right edges.</summary>
     public const double InsetDip = 24;
 
-    /// <summary>The saving icon's width and height.</summary>
+    /// <summary>Each icon's width and height: the mic, the saving icon and the X.</summary>
     public const double IconSizeDip = 16;
 
-    /// <summary>The space between the saving icon and the dot.</summary>
+    /// <summary>The space after each icon, toward the dot.</summary>
     public const double GapDip = 6;
 
     /// <summary>The message's width at most, right-aligned to the dot.</summary>
@@ -39,20 +41,43 @@ internal sealed class OverlayWindow : ShellWindow
     /// <summary>The space between the strip and the message.</summary>
     public const double MessageGapDip = 6;
 
-    private const double WidthDip = IconSizeDip + GapDip + DotSizeDip;
+    private const double WidthDip = (3 * (IconSizeDip + GapDip)) + DotSizeDip;
 
     private const double MessageAreaHeightDip = DotSizeDip + MessageGapDip + MessageHeightDip;
 
     private static readonly Brush Red = Freeze(new SolidColorBrush(Color.FromRgb(0xE5, 0x39, 0x35)));
     private static readonly Brush Green = Freeze(new SolidColorBrush(Color.FromRgb(0x43, 0xA0, 0x47)));
+    private static readonly Brush Light = Freeze(new SolidColorBrush(Color.FromRgb(0xEE, 0xEE, 0xEE)));
     private static readonly Brush Shade = Freeze(new SolidColorBrush(Color.FromArgb(0xB0, 0x00, 0x00, 0x00)));
 
     // A downward arrow over a bar, in the icon's 16 DIP square.
     private static readonly Geometry SaveGlyph = Freeze(Geometry.Parse("M6,1 H10 V7 H13 L8,12 L3,7 H6 Z M2,13 H14 V15.5 H2 Z"));
 
+    // A microphone capsule on a stand, in the icon's 16 DIP square.
+    private static readonly Geometry MicGlyph = Freeze(Geometry.Parse(
+        "F1 M8,1 A2.5,2.5 0 0 1 10.5,3.5 V6.5 A2.5,2.5 0 0 1 5.5,6.5 V3.5 A2.5,2.5 0 0 1 8,1 Z "
+        + "M3.5,7 H5 A3,3 0 0 0 11,7 H12.5 A4.5,4.5 0 0 1 8.75,11.45 V13.5 H11 V15 H5 V13.5 H7.25 V11.45 A4.5,4.5 0 0 1 3.5,7 Z"));
+
+    private static readonly Geometry SlashGlyph = Freeze(Geometry.Parse("M2,2 L14,14"));
+
+    private static readonly Geometry CrossGlyph = Freeze(Geometry.Parse("M3,3 L13,13 M13,3 L3,13"));
+
     private readonly OverlayViewModel _model;
     private readonly Ellipse _dot = new() { Width = DotSizeDip, Height = DotSizeDip, IsHitTestVisible = false };
     private readonly System.Windows.Shapes.Path _icon = new() { Data = SaveGlyph, Fill = Green, Width = IconSizeDip, Height = IconSizeDip, IsHitTestVisible = false };
+    private readonly Grid _mic = new() { Width = IconSizeDip, Height = IconSizeDip, IsHitTestVisible = false };
+    private readonly System.Windows.Shapes.Path _cross = new()
+    {
+        Data = CrossGlyph,
+        Stroke = Red,
+        StrokeThickness = 2.5,
+        StrokeStartLineCap = PenLineCap.Round,
+        StrokeEndLineCap = PenLineCap.Round,
+        Width = IconSizeDip,
+        Height = IconSizeDip,
+        IsHitTestVisible = false,
+    };
+
     private readonly TextBlock _text = new() { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
     private readonly Border _message;
     private readonly Grid _root;
@@ -76,6 +101,18 @@ internal sealed class OverlayWindow : ShellWindow
         Width = WidthDip;
         Height = DotSizeDip;
         _icon.Margin = new Thickness(0, 0, GapDip, 0);
+        _mic.Margin = new Thickness(0, 0, GapDip, 0);
+        _cross.Margin = new Thickness(0, 0, GapDip, 0);
+        _mic.Children.Add(new System.Windows.Shapes.Path { Data = MicGlyph, Fill = Light, IsHitTestVisible = false });
+        _mic.Children.Add(new System.Windows.Shapes.Path
+        {
+            Data = SlashGlyph,
+            Stroke = Red,
+            StrokeThickness = 2,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            IsHitTestVisible = false,
+        });
         var strip = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -83,7 +120,7 @@ internal sealed class OverlayWindow : ShellWindow
             Height = DotSizeDip,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
-            Children = { _icon, _dot },
+            Children = { _cross, _icon, _mic, _dot },
         };
         _message = new Border
         {
@@ -124,7 +161,9 @@ internal sealed class OverlayWindow : ShellWindow
             return;
         }
 
-        // Hidden, not collapsed: the dot keeps its place in the strip.
+        // Hidden, not collapsed: every slot, and so the dot, keeps its place in the strip.
+        _cross.Visibility = _model.DiskFull ? Visibility.Visible : Visibility.Hidden;
+        _mic.Visibility = _model.MicMuted ? Visibility.Visible : Visibility.Hidden;
         _icon.Visibility = _model.Saving ? Visibility.Visible : Visibility.Hidden;
         _dot.Visibility = _model.Dot == OverlayDot.None ? Visibility.Hidden : Visibility.Visible;
         switch (_model.Dot)
@@ -167,10 +206,10 @@ internal sealed class OverlayWindow : ShellWindow
         }
     }
 
-    private bool Showing => _model.Dot != OverlayDot.None || _model.Saving || _model.Message is not null;
+    private bool Showing => _model.Dot != OverlayDot.None || _model.Saving || _model.Message is not null || _model.DiskFull;
 
     // In physical pixels, so WPF's DIP conversion across mixed-DPI monitors doesn't matter. The dot
-    // sits where Monitors.TopRight puts it; the icon and the gap extend the window to its left, and
+    // sits where Monitors.TopRight puts it; the icons and the gaps extend the window to its left, and
     // a message extends it further left and down.
     private void Place()
     {
