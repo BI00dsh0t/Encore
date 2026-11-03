@@ -503,6 +503,134 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task AnExitDrainsTheSessionSoASaveStillCutsUntilTheDrainExpiresAndReleasesIt()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = SettingsDocument.Empty.Global.SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(folder)) };
+            var published = new ConcurrentQueue<CaptureState>();
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var writes = new ConcurrentQueue<string>();
+            var saves = 0;
+            var factory = new FakeFactory { Save = _ => { Interlocked.Increment(ref saves); return new FakeWrite(writes); } };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                published.Enqueue,
+                targetCapture: new TargetCapture(_ => NoAudio, (_, _) => { }),
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => saved.Writer.TryWrite(s), _ => { }, ExitDrain: TimeSpan.FromMilliseconds(200)));
+            // No Game Profile: the Clip is named after the Target, which is gone by the press.
+            var game = new TargetCandidate(Pid, 1, @"c:\games\unlisted.exe", "Unlisted Game");
+
+            orchestrator.Post(new ProposeTarget(game, TargetChangeReason.Detected));
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+
+            // The drained session takes the press, and the Clip keeps the game's name.
+            var clip = await NextAsync(saved);
+            Assert.StartsWith("Unlisted Game_", Path.GetFileName(clip.Path), StringComparison.Ordinal);
+            var session = Assert.Single(factory.Sessions);
+            Assert.Equal(1, session.Drains);
+            Assert.Equal(1, Volatile.Read(ref saves));
+
+            // After ExitDrain the ring is released, the state is off, and a press reaches no session.
+            await WaitUntil(() => session.Releases == 1);
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            await HandledAsync(orchestrator);
+            Assert.Equal(1, Volatile.Read(ref saves));
+            Assert.Equal([ReplayState.Buffering, ReplayState.Draining, ReplayState.Off], published.Select(p => p.Replay));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ANewTargetReleasesTheDrainWhileASwitchIgnoredOrDisposeNeverDrains()
+    {
+        var published = new ConcurrentQueue<CaptureState>();
+        var orchestrator = new SessionOrchestrator(
+            _factory,
+            () => Volatile.Read(ref _document),
+            published.Enqueue,
+            targetCapture: new TargetCapture(_ => NoAudio, (_, _) => { }),
+            clips: new ReplayClips(OutputPathAllocator.System, () => "unused", _ => { }, _ => { }, ExitDrain: TimeSpan.FromMinutes(5)));
+        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+        try
+        {
+            // A drained, then B detected: the drain is released before B's session starts.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Detected));
+
+            // A switch B -> A, and an exit to another game, end with no drain.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Focus));
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Exit));
+
+            // Ignored ends at once, no drain, and the state is off.
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Ignored));
+            await HandledAsync(orchestrator);
+
+            var sessions = _factory.Sessions;
+            Assert.Equal(4, sessions.Count);
+            Assert.Equal([1, 0, 0, 0], sessions.Select(s => s.Drains));
+            Assert.Equal(1, sessions[0].Releases);
+            Assert.All(sessions, s => Assert.NotNull(s.EndReason));
+            Assert.Equal(ReplayState.Off, published.Last().Replay);
+            Assert.Equal(
+                [ReplayState.Buffering, ReplayState.Draining, ReplayState.Off, ReplayState.Buffering, ReplayState.Off, ReplayState.Buffering, ReplayState.Off, ReplayState.Buffering, ReplayState.Off],
+                published.Select(p => p.Replay));
+
+            // A closed window drains too; marking the Target Ignored then releases the drain.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+            await WaitUntil(() => _factory.Sessions.Count == 5);
+            var closed = _factory.Sessions[^1];
+            closed.Events.Closed("window closed");
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Ignored));
+            await HandledAsync(orchestrator);
+            Assert.Equal((1, 1), (closed.Drains, closed.Releases));
+            Assert.Equal(ReplayState.Off, published.Last().Replay);
+
+            // A drain whose outcome is a failure holds nothing: released at once, and off.
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Detected));
+            await WaitUntil(() => _factory.Sessions.Count == 6);
+            var failed = _factory.Sessions[^1];
+            failed.DrainFailure = new IOException("never anchored");
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            await HandledAsync(orchestrator);
+            Assert.Equal((1, 1), (failed.Drains, failed.Releases));
+            Assert.Equal(ReplayState.Off, published.Last().Replay);
+
+            // Disposing mid-drain releases it.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            await HandledAsync(orchestrator);
+            var last = _factory.Sessions[^1];
+            Assert.Equal((1, 0), (last.Drains, last.Releases));
+        }
+        finally
+        {
+            orchestrator.Dispose();
+        }
+
+        Assert.Equal(1, _factory.Sessions[^1].Releases);
+        Assert.Equal(ReplayState.Off, published.Last().Replay);
+    }
+
+    private static async Task WaitUntil(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow + Timeout;
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < deadline, "Timed out waiting for the condition.");
+            await Task.Delay(20, Token);
+        }
+    }
+
     private static async Task<T> NextAsync<T>(System.Threading.Channels.Channel<T> channel) =>
         await channel.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
@@ -660,6 +788,8 @@ public sealed class SessionOrchestratorTests : IDisposable
         private readonly ConcurrentQueue<nint> _retargets = new();
         private int _inside;
         private int _maxConcurrency;
+        private int _drains;
+        private int _releases;
 
         public SessionSpec Spec { get; } = spec;
 
@@ -704,6 +834,22 @@ public sealed class SessionOrchestratorTests : IDisposable
             _retargets.Enqueue(target.Window);
             Interlocked.Decrement(ref _inside);
         }
+
+        public int Drains => Volatile.Read(ref _drains);
+
+        public int Releases => Volatile.Read(ref _releases);
+
+        /// <summary>When set, <see cref="Drain"/>'s outcome carries it, as a session that never anchored.</summary>
+        public Exception? DrainFailure { get; set; }
+
+        public SessionOutcome Drain(string reason)
+        {
+            Interlocked.Increment(ref _drains);
+            var outcome = End(reason);
+            return DrainFailure is { } failure ? outcome with { Failure = failure } : outcome;
+        }
+
+        public void Release() => Interlocked.Increment(ref _releases);
 
         public SessionOutcome End(string reason)
         {
