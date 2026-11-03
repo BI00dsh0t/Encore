@@ -3,7 +3,7 @@ title: 'Disk-mode ring'
 type: 'feature'
 ticket: '7'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'ab97142fa244e23889a37a93ef5518bf32f3e5f5'
 route: 'full'
 route_source: 'auto'
