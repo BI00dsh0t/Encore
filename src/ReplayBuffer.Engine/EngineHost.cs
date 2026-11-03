@@ -126,6 +126,7 @@ internal sealed class EngineHost : IAsyncDisposable
     private LibraryActor _library = null!;
     private FeedbackRouter? _feedback;
     private FeedbackDeviceCheck? _feedbackCheck;
+    private MemoryMarginReporter? _marginReporter;
     private FeedbackSoundPlayer? _sounds;
     private int _disposed;
 
@@ -211,6 +212,7 @@ internal sealed class EngineHost : IAsyncDisposable
         HotkeyService? hotkeys = null;
         DeviceListPublisher? devices = null;
         DeviceDropoutReporter? dropouts = null;
+        MemoryMarginReporter? marginReporter = null;
         TrackMeters? meters = null;
         GameMonitor? games = null;
         LibraryActor? library = null;
@@ -291,6 +293,10 @@ internal sealed class EngineHost : IAsyncDisposable
                 notices.ClipNotSaved(failed);
             };
             dropouts = new DeviceDropoutReporter(audio, warnings);
+
+            // One margin for the engine: every session and ring generation shares it, so neither re-arms the warning.
+            var margin = new MemoryMargin(new SystemMemoryStatus());
+            marginReporter = new MemoryMarginReporter(margin, warnings);
             var router = new CommandRouter(log);
             var apps = new AppSupervisor(
                 hub,
@@ -319,7 +325,7 @@ internal sealed class EngineHost : IAsyncDisposable
             var defaultOutputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
-                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay, RingFolder = ringFolder },
+                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay, RingFolder = ringFolder, Margin = margin },
                     loggers,
                     audio,
                     encoders),
@@ -418,7 +424,7 @@ internal sealed class EngineHost : IAsyncDisposable
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor, _feedback = notices, _feedbackCheck = soundCheck, _sounds = player };
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor, _feedback = notices, _feedbackCheck = soundCheck, _sounds = player, _marginReporter = marginReporter };
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
             router.Register(AudioMessages.List, (_, _) => ValueTask.FromResult(devices.Current));
@@ -545,6 +551,7 @@ internal sealed class EngineHost : IAsyncDisposable
             meters?.Dispose();
             devices?.Dispose();
             dropouts?.Dispose();
+            marginReporter?.Dispose();
             audio.Dispose();
             server.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
@@ -588,6 +595,7 @@ internal sealed class EngineHost : IAsyncDisposable
         Meters.Dispose();
         Devices.Dispose();
         Dropouts.Dispose();
+        _marginReporter?.Dispose();
         Audio.Dispose();
         _stopHeartbeat.Dispose();
         _stopProbe.Dispose();

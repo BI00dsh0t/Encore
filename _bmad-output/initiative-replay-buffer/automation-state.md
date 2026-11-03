@@ -36,13 +36,13 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.8 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.2 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 4.10 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.2 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.3 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -104,9 +104,9 @@ The coordinator logs each QA round in the Log below.
 | 25.5 | 4.5 Failed saves, retry and the file-being-written signal | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `9da03df`) |
 | 25.6 | 4.6 Ring generations and Buffer Window resizing | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e7058ea`) |
 | 25.7 | 4.7 Disk-mode ring | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c96ab9c`) |
-| 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
-| 25.9 | 4.9 Per-Game-Profile settings at the next Reset | | pending |
-| 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | | pending |
+| 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `2b218ae`) |
+| 25.9 | 4.9 Per-Game-Profile settings at the next Reset | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
 | 25.11 | 4.11 Game Profile overrides in the Main App | | pending |
 | 25.12 | 4.12 Hotkeys page in the Main App | | pending |
 | 25.13 | 4.13 Refactor sweep | | pending |
@@ -146,7 +146,7 @@ The coordinator logs each QA round in the Log below.
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
 | 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `a8f4c23`) |
-| 28.3 | 7.3 Length and thumbnails | | pending |
+| 28.3 | 7.3 Length and thumbnails | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 28.4 | 7.4 Favourite | | pending |
 | 28.5 | 7.5 Group and filter by game, date and Favourite | | pending |
 | 28.6 | 7.6 Open, show in Explorer and copy for Discord | | pending |
@@ -440,3 +440,8 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA 7.2 at `5be972a`: **QA PASS**, 0 findings (one App flake that didn't recur on two reruns). 7.2 has been told to merge (Sonnet), and qa-1-14 is back in the pool. `Mp4File.IsComplete` matches 6.2's plan, and 6.2 will take it from develop.
 - 2026-11-03: The builder turned off Remote Control on story-2-7, so it joins the pool as a seventh worker.
 - 2026-11-03: 7.2 merged into `develop` (`a8f4c23`, `feat(core): merge 7.2-library-reconciliation`) and marked done, after QA PASS at `5be972a` (0 findings). `develop` (4.7, 5.5) was merged into the branch first (`f93a821`) with conflicts in `ErrorCodes` and `EngineHost` (the `library-corrupt` code and dismiss hook sit beside the feedback-sound code); both sides were kept. The Release build (0 warnings), Contracts 113, Core 96, Engine 161, App 76 and the publish all passed again. **6.2 must take `Mp4File.IsComplete` from `develop` (`src/ReplayBuffer.Core/Library/Mp4File.cs`) instead of adding its own copy, and add its trim function to that file.** Residuals: a copy that sets the file's full size up front and doesn't lock it can be listed before its data is in; `ReplayClips` still writes to `MyVideos\<instance>`, not the `outputFolder` setting, so with a custom Output Folder the engine's own Clips land outside the Library; `cleanupBlocked` waits for 7.5's Cleanup to be used. Human checks: none beyond 7.1's.
+- 2026-11-03: 7.2 merged (`a8f4c23`, marked done `dfa2f5b`). Its card is Done with its label detached, and 2-1-tracer is back in the pool. 7.3 is now ready and was given to story-2-7 (Opus, medium effort), with its card In progress.
+- 2026-11-03: 4.8 is READY FOR QA at `40f2800` (its own review found and fixed two margin-trim bugs, a false short-ring warning and a weak assertion). QA started on qa-2-1 (Sonnet), and its card is In QA.
+- 2026-11-03: QA 4.8 at `40f2800`: **QA PASS**, 0 findings and 2 non-blocking notes. One App.Tests load-timeout flake (`AKilledAppIsRelaunchedByTheEngine`) passed on rerun; it's the second App flake today, so watch it. 4.8 has been told to merge (Sonnet), and qa-2-1 is back in the pool.
+- 2026-11-03: 4.8 merged into `develop` (`2b218ae`, `feat(engine): merge 4.8-memory-ram-margin`) and marked done, after QA PASS at `40f2800`. `develop` (7.2, 5.5) was merged into the branch first; the Release build (0 warnings), Core 99, Contracts 113, Engine 181 (19 Explicit skipped) and the publish passed again. QA's two notes are in the epic Notes: the warning is raised on the encoder thread under the ring's lock, and a fully pinned ring still allocates; also `memory-margin` warnings aren't withdrawn on leaving the margin (epic 5 may want that). Human checks: none.
+- 2026-11-03: 4.8 merged (`2b218ae`, marked done `12b9625`). Its card is Done with its label detached, and slice-epic-4 is back in the pool. 4.9 went to 2-1-tracer (Opus, high effort) and 4.10 to qa-1-14 (Opus, medium effort), both with cards In progress. Each knows the other is running and to keep any Contracts settings change additive.
