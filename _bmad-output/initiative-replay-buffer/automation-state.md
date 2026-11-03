@@ -42,6 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.2 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -437,3 +438,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 5.5 merged (`b0f684e`), and its card is Done. 5.7 is now ready and was given to slice-epic-8 (Opus, medium effort), with its card In progress.
 - 2026-11-03: 7.2 is READY FOR QA at `5be972a` (build 0 warnings; Contracts, Core, Engine and App pass; publish clean). QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-03: QA 7.2 at `5be972a`: **QA PASS**, 0 findings (one App flake that didn't recur on two reruns). 7.2 has been told to merge (Sonnet), and qa-1-14 is back in the pool. `Mp4File.IsComplete` matches 6.2's plan, and 6.2 will take it from develop.
+- 2026-11-03: The builder turned off Remote Control on story-2-7, so it joins the pool as a seventh worker.
