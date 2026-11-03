@@ -15,3 +15,8 @@
   summary: A session's audio tracks drop hub blocks after the anchor until StartOutput has built the encoders, so each track opens with ~50 ms of silence fill.
   evidence: SessionAudioTrack drops blocks until Publish, which runs after the muxer, frame pool, scaler and encoders are created; the hub has delivered post-anchor audio since Open. Buffering those blocks (preallocated) and replaying them at Publish would keep that audio. The tracer had the same loss.
   outcome: Recorded, open (story 1.15). Owned by epic 4's exact save cut (story 4.2); it changes `SessionAudioTrack`, which story 2.1 is reworking.
+
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-multi-track-audio/tickets/story-refactor-sweep-plan.md`
+  summary: Epic 2 (2.1–2.9, 2.11) deferred no items; every one of its plans has an empty `deferred:`.
+  evidence: Story 2.10 closed the duplicates epic 2 left instead: the device tap (`AudioTimelineTap`), the device-to-Track fan-out with mic-mute gating (`TrackWiring.DeviceSink`), the endpoint-and-flow match (`AudioEndpointMatch.Same`), the Mic-in-affected-Track walk (`SessionAudio.GatedMicInputs`, with `SessionAudio.FirstTrackOf`), and the unused `RuntimeStateStore.FilePath`.
+  outcome: Closed by story 2.10.
