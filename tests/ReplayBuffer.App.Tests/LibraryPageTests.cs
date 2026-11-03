@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using ReplayBuffer.App.Library;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
@@ -28,7 +29,7 @@ public sealed class LibraryPageTests
             [
                 ("new.mp4", "Beta", "", "Saving…"),
                 ("mid.mp4", "Alpha", "1.5 MB", ""),
-                ("old.mp4", "Other", "512 B", ""),
+                ("old.mp4", "Other", "0.0 MB", ""),
             ],
             page.Rows.Select(r => (r.Name, r.Game, r.Size, r.Lock)));
         Assert.True(page.Rows[0].IsLocked);
@@ -76,6 +77,38 @@ public sealed class LibraryPageTests
         page.AcknowledgeCommand.Execute(null);
 
         Assert.Equal(new WarningDismiss(CorruptWarning.Id), Assert.Single(_engine.Sent));
+    }
+
+    [Fact]
+    public void AThumbnailIsAskedByAbsolutePathOnceTheItemIsWritten()
+    {
+        var asked = new List<string>();
+        var page = new LibraryPage(_engine, new LibraryThumbnails(path => { asked.Add(path); return null; }, work => work(), work => work()));
+        const string Folder = @"C:\Videos\ReplayBuffer";
+        var writing = new LibraryItem(@"Game\clip.mp4", null, 0, DateTimeOffset.UnixEpoch, true);
+        var state = _engine.State! with { LibraryFolder = Folder, Library = [writing] };
+
+        page.Render(state);
+        Assert.Empty(asked);
+        Assert.Equal("Saving…", page.Rows[0].Lock);
+
+        var written = state with { Library = [writing with { Size = 1536 * 1024, BeingWritten = false, LengthSeconds = 30 }] };
+        page.Render(written);
+        page.Render(written);
+
+        Assert.Equal([System.IO.Path.Combine(Folder, writing.Path)], asked);
+        Assert.False(page.Rows[0].HasThumbnail);
+        Assert.Equal(("0:30", "1.5 MB"), (page.Rows[0].Length, page.Rows[0].Size));
+    }
+
+    [Fact]
+    public void AnHourLongTwoGigabyteItemReadsAsHoursAndGigabytes()
+    {
+        var page = new LibraryPage(_engine);
+
+        page.Render(_engine.State! with { Library = [new LibraryItem("long.mp4", null, 2L << 30, DateTimeOffset.UnixEpoch, false, 3723)] });
+
+        Assert.Equal(("1:02:03", "2.0 GB"), (page.Rows[0].Length, page.Rows[0].Size));
     }
 
     private void SetLibrary()

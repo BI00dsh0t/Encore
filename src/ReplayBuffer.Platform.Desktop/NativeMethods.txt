@@ -15,3 +15,9 @@ GetMonitorInfo
 GetDpiForMonitor
 GetForegroundWindow
 WINDOW_EX_STYLE
+SHCreateItemFromParsingName
+IShellItemImageFactory
+SIIGBF
+DeleteObject
+GetObject
+DIBSECTION

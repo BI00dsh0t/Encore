@@ -19,6 +19,7 @@ using ReplayBuffer.Engine.Sessions;
 using ReplayBuffer.Engine.Settings;
 using ReplayBuffer.Engine.Supervision;
 using ReplayBuffer.Platform.Audio;
+using ReplayBuffer.Platform.FFmpeg;
 using ReplayBuffer.Platform.Windows;
 
 namespace ReplayBuffer.Engine;
@@ -204,6 +205,7 @@ internal sealed class EngineHost : IAsyncDisposable
         var clipLog = loggers.CreateLogger("Clips");
         var recordingLog = loggers.CreateLogger("Recordings");
         var libraryLog = loggers.CreateLogger("Library");
+        var ffmpegLog = loggers.CreateLogger("FFmpeg");
         var replay = !hostOptions.DebugCapture && (hostOptions.ReplayBuffer ?? !instance.IsTest);
 
         // The pipe first: a second engine must fail before it touches the settings file.
@@ -250,7 +252,8 @@ internal sealed class EngineHost : IAsyncDisposable
                 () => load.Store.Current,
                 list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
                 loggers.CreateLogger("Audio"));
-            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryLoad.Items, libraryLoad.Corrupt));
+            var libraryFolder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(OutputFolder()));
+            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryLoad.Items, libraryLoad.Corrupt, libraryFolder));
             load.Store.Changed += document => hub.Publish(SettingsMessages.Changed, new SettingsChanged(document.Revision, document));
             load.Store.Changed += devices.OnSettingsChanged;
 
@@ -267,7 +270,9 @@ internal sealed class EngineHost : IAsyncDisposable
                 blocked => hub.Publish(LibraryMessages.CleanupBlockedChanged, blocked),
                 hostOptions.Time,
                 e => libraryLog.LogWarning("A Library disk operation failed: {Message}", e.Message),
-                createMissingFolder: !instance.IsTest);
+                createMissingFolder: !instance.IsTest,
+                readLength: path => MediaLength.Read(path, ffmpegLog),
+                folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed));
 
             // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.
             load.Store.Changed += _ => libraryActor.OutputFolderChanged();
