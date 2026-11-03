@@ -866,9 +866,9 @@ internal sealed class CaptureSession : ICaptureSession
         foreach (var track in _audioTracks)
         {
             var name = track.Device.FriendlyName;
-            if (track.Subscription?.SubscriberFault is ErrorCodeException { Code: ErrorCodes.EncodeFailed } encodeFault)
+            if (track.Subscription?.SubscriberFault is ErrorCodeException { Code: ErrorCodes.EncodeFailed or ErrorCodes.DiskFull or ErrorCodes.AccessDenied } encodeFault)
             {
-                // The encoder or muxer broke, not the device: the file is damaged.
+                // The encoder or muxer broke (Check maps a full disk or denied access to their own codes), not the device: the file is damaged.
                 Fail(encodeFault);
             }
             else if (track.Subscription?.SubscriberFault is { } trackFault)
@@ -1078,10 +1078,17 @@ internal sealed class CaptureSession : ICaptureSession
                 }
 
                 var windowUs = session._spec.Snapshot.BufferWindow * 1_000_000L;
-                var fromUs = Math.Max(Math.Max(pressUs - windowUs, Volatile.Read(ref session._resetUs)), previous);
+                var ownFromUs = Math.Max(pressUs - windowUs, Volatile.Read(ref session._resetUs));
+                var fromUs = Math.Max(ownFromUs, previous);
+
+                // R4: an empty cut, whatever set its start, makes no Clip.
+                if (toUs <= fromUs)
+                {
+                    throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The cut is empty: its start is at or after its end.");
+                }
 
                 // R4: an earlier write still in flight has claimed all but less than 1 s of the span.
-                if (toUs - fromUs < 1_000_000)
+                if (previous >= ownFromUs && toUs - fromUs < 1_000_000)
                 {
                     throw new ErrorCodeException(ErrorCodes.ClipTooShort, "An earlier Clip still being written leaves less than 1 s to save.");
                 }
