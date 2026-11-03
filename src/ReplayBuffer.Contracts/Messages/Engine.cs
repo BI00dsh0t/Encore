@@ -82,6 +82,10 @@ public sealed record StateSnapshot
         init => _videoOptions = value ?? VideoOptions.Unprobed;
     }
 
+    /// <summary>The Global settings' storage estimate (R2), or <c>null</c> before the engine has made one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 4.10) reads as none.</remarks>
+    public StorageEstimate? Estimate { get; init; }
+
     /// <summary>The audio devices the App can offer (R1); empty until the engine lists them.</summary>
     /// <remarks>A snapshot without the field (an engine from before story 2.3) reads as the empty list.</remarks>
     public AudioDeviceList Devices

@@ -118,6 +118,17 @@ public sealed record VideoOptions(bool Probed, IReadOnlyList<CodecOffer> Codecs,
     }
 }
 
+/// <summary>
+/// <c>estimate.changed</c>: what the Global Buffer Window costs in RAM or disk (R2), from the Global
+/// <c>video</c>, <c>bufferWindow</c>, <c>replayStorage</c>, <c>ringPath</c> and Track count.
+/// </summary>
+/// <param name="Storage">Where the ring lives, so whether <see cref="Bytes"/> is RAM or disk.</param>
+/// <param name="Bytes">The ring's bytes at worst for the Global settings.</param>
+/// <param name="WorstCase">True for VBR, whose bytes are counted at 1.5 times its bitrate.</param>
+/// <param name="FreeBytes">The free RAM for Memory, the ring folder drive's free space for Disk; null when unknown.</param>
+/// <param name="ExceedsFree">True when <see cref="Bytes"/> is over <see cref="FreeBytes"/>; false when that is unknown.</param>
+public sealed record StorageEstimate(ReplayStorage Storage, long Bytes, bool WorstCase, long? FreeBytes, bool ExceedsFree);
+
 /// <summary>Capture messages: the Replay Buffer, the capture session and the shared capture state.</summary>
 public static class CaptureMessages
 {
@@ -155,9 +166,17 @@ public static class CaptureMessages
         "lastClipFailure",
         (snapshot, failed) => snapshot with { LastClipFailure = failed });
 
+    /// <summary>The Global settings' storage estimate (R2). Coalescing: a connection's queue keeps only the latest.</summary>
+    public static EventType<StorageEstimate> EstimateChanged { get; } = new(
+        "estimate.changed",
+        CaptureJsonContext.Default.StorageEstimate,
+        "estimate",
+        (snapshot, estimate) => snapshot with { Estimate = estimate },
+        coalesces: true);
+
     public static IReadOnlyList<CommandType> Commands { get; } = [];
 
-    public static IReadOnlyList<EventType> Events { get; } = [StateChanged, VideoOptionsChanged, Saving, Saved, Failed];
+    public static IReadOnlyList<EventType> Events { get; } = [StateChanged, VideoOptionsChanged, Saving, Saved, Failed, EstimateChanged];
 }
 
 [JsonSourceGenerationOptions(
@@ -170,4 +189,5 @@ public static class CaptureMessages
 [JsonSerializable(typeof(ClipSaving))]
 [JsonSerializable(typeof(ClipSaved))]
 [JsonSerializable(typeof(ClipFailed))]
+[JsonSerializable(typeof(StorageEstimate))]
 public sealed partial class CaptureJsonContext : JsonSerializerContext;

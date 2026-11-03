@@ -127,6 +127,7 @@ internal sealed class EngineHost : IAsyncDisposable
     private FeedbackRouter? _feedback;
     private FeedbackDeviceCheck? _feedbackCheck;
     private MemoryMarginReporter? _marginReporter;
+    private EstimatePublisher? _estimates;
     private FeedbackSoundPlayer? _sounds;
     private int _disposed;
 
@@ -213,6 +214,7 @@ internal sealed class EngineHost : IAsyncDisposable
         DeviceListPublisher? devices = null;
         DeviceDropoutReporter? dropouts = null;
         MemoryMarginReporter? marginReporter = null;
+        EstimatePublisher? estimates = null;
         TrackMeters? meters = null;
         GameMonitor? games = null;
         LibraryActor? library = null;
@@ -246,9 +248,19 @@ internal sealed class EngineHost : IAsyncDisposable
                 () => load.Store.Current,
                 list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
                 loggers.CreateLogger("Audio"));
-            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryLoad.Items, libraryLoad.Corrupt));
+            // The storage estimate (R2) seeds the initial state likewise.
+            estimates = new EstimatePublisher(
+                () => load.Store.Current,
+                new SystemMemoryStatus(),
+                EstimatePublisher.FreeDiskBytes,
+                Path.Combine(instance.LocalDataFolder, "ring"),
+                e => Volatile.Read(ref publishTo)?.Publish(CaptureMessages.EstimateChanged, e),
+                hostOptions.Time);
+            var estimate = estimates.Seed();
+            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryLoad.Items, libraryLoad.Corrupt, estimate));
             load.Store.Changed += document => hub.Publish(SettingsMessages.Changed, new SettingsChanged(document.Revision, document));
             load.Store.Changed += devices.OnSettingsChanged;
+            load.Store.Changed += estimates.OnSettingsChanged;
 
             var libraryActor = library = new LibraryActor(
                 libraryLoad.Items,
@@ -419,7 +431,7 @@ internal sealed class EngineHost : IAsyncDisposable
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor, _feedback = notices, _feedbackCheck = soundCheck, _sounds = player, _marginReporter = marginReporter };
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor, _feedback = notices, _feedbackCheck = soundCheck, _sounds = player, _marginReporter = marginReporter, _estimates = estimates };
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
             router.Register(AudioMessages.List, (_, _) => ValueTask.FromResult(devices.Current));
@@ -538,6 +550,7 @@ internal sealed class EngineHost : IAsyncDisposable
             devices?.Dispose();
             dropouts?.Dispose();
             marginReporter?.Dispose();
+            estimates?.Dispose();
             audio.Dispose();
             server.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
@@ -582,6 +595,7 @@ internal sealed class EngineHost : IAsyncDisposable
         Devices.Dispose();
         Dropouts.Dispose();
         _marginReporter?.Dispose();
+        _estimates?.Dispose();
         Audio.Dispose();
         _stopHeartbeat.Dispose();
         _stopProbe.Dispose();
