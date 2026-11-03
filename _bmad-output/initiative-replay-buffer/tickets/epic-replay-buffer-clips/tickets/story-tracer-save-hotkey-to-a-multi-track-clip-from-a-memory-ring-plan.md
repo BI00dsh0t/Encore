@@ -3,19 +3,33 @@ title: 'Tracer: Save Hotkey to a multi-Track Clip from a Memory ring'
 type: 'feature'
 ticket: '1'
 created: '2026-11-03'
-status: 'ready-for-dev'
+status: 'built'
 baseline_revision: '60cb338ab39bd1a62e9f48a5b4b3d8fb2a1482e2'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      A Clip still writing when the engine shuts down is not published, and its .rbpart can be left behind if the process exits mid-write.
+    evidence: |-
+      ClipWrite runs on a background thread and posts ClipWritten to the orchestrator, which may already be disposed; nothing joins the writer at shutdown. The exit drain and writer lifecycle belong to stories 4.3 and 4.5.
+    location: >-
+      src/ReplayBuffer.Engine/Sessions/CaptureSession.cs (ClipWrite)
+    severity: low
+  - summary: >-
+      A save with nothing to cut fails with a plain InvalidOperationException, which is logged but carries no error code.
+    evidence: |-
+      The plan allowed no new Contracts beyond clip.saved; clip-too-short and clip.failed with reasons are stories 4.2 and 4.5.
+    location: >-
+      src/ReplayBuffer.Engine/Sessions/CaptureSession.cs (ClipWrite.Run)
+    severity: low
 ---
 
 <intent-contract>
@@ -96,9 +110,45 @@ deferred: []
 
 ## Implementation Notes
 
+- The implementing subagent built every task. Names that differ from the plan:
+  - The Contracts descriptor is `CaptureMessages.Saved`, because a property named `ClipSaved` would clash with the `ClipSaved` record. The wire name `clip.saved` and the `lastClip` field are as planned.
+  - The allocator method is `AllocateForGame`.
+- `ReplayRingSink` has `Lease`/`Release` reference counting. Without it, a session that ends while a save is still waiting to cut would free the ring under the writer.
+- The ffprobe title for these MP4 streams reads as `tags.name`, as in `TrackLayoutCaptureTests`. The writer sets both `title` and `handler_name`.
+- The coordinator session added `OutputPathAllocatorTests.AGameWithNoProfileYetGetsAFolderNamedAfterIt`, the test for the matrix's "No profile yet" row. It also made `Cut` pin slabs through a reference `HashSet` rather than `List.Contains`.
+- Matrix coverage:
+  - "Save in a game": `ReplayClipCaptureTests`.
+  - "Ring past the window": `PacketRingTests` test 1.
+  - "No profile yet": the allocator test above.
+  - "No Replay Buffer": `SessionOrchestratorTests`, a press with no session.
+  - "Session ends mid-write": `PacketRingTests` test 2, pins surviving trim and dispose.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 2 findings — high 0, medium 1, low 1, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `PacketRing.Cut` sorted and projected every picked entry inside the ring lock. That stalls the video encoder and the audio threads' `Append` for each save (about 60k entries at the defaults), against "the writer never blocks the ring". The coordinator applied the fix itself, because the step-03 subagent had ended: the lock now covers only finding K, copying the entries, pinning the slabs and the origins; the `OrderBy` and the `RingPacket` projection run after it. Core 62/62 and Engine 162/162 pass, and the publish is clean.
+  - `[low]` `[reject]` The descriptor is `CaptureMessages.Saved`, not the plan's `ClipSaved`. The wire name and the snapshot field match, and the plan's name would clash with the `ClipSaved` record inside `CaptureMessages`. The fix would only edit the plan; the difference is recorded in Implementation Notes.
+
+## Auto Run Result
+
+- **Summary:** a detected Target Game now starts a Replay Buffer session whose encoders write into a Memory-mode `PacketRing` (native slabs counted by reference, with a keyframe index, trimmed to `bufferWindow`). A `save` press reserves a path through the OutputPathAllocator. A background writer pins the slabs from the first keyframe in the window up to the press and writes a faststart MP4 to `<final>.rbpart`, renames it, and the orchestrator publishes `clip.saved { path }`. `serve --debug-capture` and `debug-capture` are unchanged.
+- **Files:**
+  - Core: `Replay/PacketRing.cs` (the ring and `RingCut`); `Sessions/{CaptureSessionPorts,TargetGames,SessionOrchestrator}.cs` (`Save`/`IClipWrite`, `ReplayClips`, `SaveClip`, the session's audio from the snapshot); `Output/OutputPathAllocator.cs` (`AllocateForGame`); the csproj (unsafe).
+  - Platform.FFmpeg: `PacketSink.cs`, `ReplayRingSink.cs`, `ClipWriter.cs`, `FragmentedMp4Muxer.cs`, `VideoEncoder.cs`, `AacEncoder.cs`, `NativeMethods.txt`.
+  - Engine: `Sessions/CaptureSession.cs` (Replay mode, `ClipWrite`); `EngineHost.cs` (`ReplayBuffer` option, the default Output Folder `<MyVideos>\<instance>`).
+  - Contracts: `Messages/Capture.cs`, `Messages/Engine.cs` (`clip.saved`, `lastClip`).
+  - Tests: `PacketRingTests`, `SessionOrchestratorTests`, `OutputPathAllocatorTests`, `MessagesTests`, `ReplayClipCaptureTests`.
+- **Review:** 1 patch applied (medium), 0 deferred from review, 1 low rejected (descriptor name, see the triage log). Two deferred items from implementation are in the frontmatter (shutdown mid-write, no error code on an empty save).
+- **Follow-up review recommended:** false. One medium was patched, none high.
+- **Verification:** Release build 0 warnings; Core 62/62, Contracts 95/95, Platform.FFmpeg 31/31 and Engine 162 passed with 0 failed (explicit Heavy tests skipped); `publish-engine.ps1` published `ReplayBuffer.Engine.exe` (10.4 MB) with no warnings. After the patch: build, Core, Engine and the publish ran again and are green.
+- **Residual risks:**
+  - The builder hasn't played a real game and pressed a real Save Hotkey yet (Human Check).
+  - A 300 s window at a high bitrate holds over 1 GB of RAM until story 4.8's margin.
+  - The cut ends with what is in the ring about 1 s after the press, not the exact AD-10 cut (story 4.2).
 
 ## Design Notes
 

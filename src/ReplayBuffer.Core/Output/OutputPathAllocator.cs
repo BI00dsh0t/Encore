@@ -38,6 +38,26 @@ public sealed class OutputPathAllocator(TimeProvider time)
     }
 
     /// <summary>
+    /// Reserves a path for a game whose Game Profile may not exist yet: <see cref="Allocate"/> when
+    /// <paramref name="document"/> holds profile <paramref name="profileId"/>, else a folder and file
+    /// named after <paramref name="gameName"/> (the executable's name until profiles name it).
+    /// </summary>
+    public string AllocateForGame(SettingsDocument document, string? profileId, string gameName, string outputFolder, long qpc)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(gameName);
+        ArgumentException.ThrowIfNullOrEmpty(outputFolder);
+
+        if (profileId is not null && document.Profiles.ContainsKey(profileId))
+        {
+            return Allocate(document, profileId, outputFolder, qpc);
+        }
+
+        var localTime = (time.GetLocalNow() - time.GetElapsedTime(qpc)).DateTime;
+        return Reserve(Path.Combine(outputFolder, PathNames.Sanitize(gameName, Fallback)), gameName, localTime);
+    }
+
+    /// <summary>
     /// Creates <paramref name="folder"/> and an empty <c>&lt;name&gt;_&lt;localTime&gt;.mp4</c> in it,
     /// adding <c>_2</c>, <c>_3</c>… while the path is taken, and returns the path created.
     /// </summary>

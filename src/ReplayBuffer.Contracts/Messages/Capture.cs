@@ -37,6 +37,9 @@ public sealed record CaptureState(
     public static CaptureState Initial { get; } = new(ReplayState.Off, RecordingState.Off, RecordingState.Off, MicMuted: true, CooldownUntil: null);
 }
 
+/// <summary><c>clip.saved</c>: a Clip was written to <see cref="Path"/> (R4). The SessionOrchestrator is its only producer (AD-19).</summary>
+public sealed record ClipSaved(string Path);
+
 /// <summary>A codec this PC can encode, and the FFmpeg encoder the engine's probe chose for it (R2, AD-14).</summary>
 /// <param name="Encoder">The FFmpeg encoder name, e.g. <c>h264_nvenc</c>, or <c>libx264</c> when no hardware H.264 encoder works.</param>
 /// <param name="MayNotPlayEverywhere">True for HEVC and AV1, which some players and sites can't decode.</param>
@@ -116,9 +119,16 @@ public static class CaptureMessages
         "videoOptions",
         (snapshot, options) => snapshot with { VideoOptions = options });
 
+    /// <summary>A Clip was saved (R4); the snapshot keeps the last one.</summary>
+    public static EventType<ClipSaved> Saved { get; } = new(
+        "clip.saved",
+        CaptureJsonContext.Default.ClipSaved,
+        "lastClip",
+        (snapshot, saved) => snapshot with { LastClip = saved });
+
     public static IReadOnlyList<CommandType> Commands { get; } = [];
 
-    public static IReadOnlyList<EventType> Events { get; } = [StateChanged, VideoOptionsChanged];
+    public static IReadOnlyList<EventType> Events { get; } = [StateChanged, VideoOptionsChanged, Saved];
 }
 
 [JsonSourceGenerationOptions(
@@ -128,4 +138,5 @@ public static class CaptureMessages
     RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(CaptureState))]
 [JsonSerializable(typeof(VideoOptions))]
+[JsonSerializable(typeof(ClipSaved))]
 public sealed partial class CaptureJsonContext : JsonSerializerContext;

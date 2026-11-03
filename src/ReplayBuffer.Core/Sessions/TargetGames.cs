@@ -1,4 +1,6 @@
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Output;
 
 namespace ReplayBuffer.Core.Sessions;
 
@@ -25,10 +27,19 @@ public sealed record ProposeTarget(TargetCandidate? To, TargetChangeReason Reaso
 public sealed record RecordingRunning(bool Running) : SessionMessage;
 
 /// <summary>
-/// The debug capture that follows the Target Game (<c>serve --debug-capture</c>), until the Replay
-/// Buffer starts sessions on <c>target.changed</c> (epic 4): each new Target ends the game session
-/// and starts one on the Target's window.
+/// The game session that follows the Target Game: the Replay Buffer's, or the debug capture's
+/// (<c>serve --debug-capture</c>). Each new Target ends the game session and starts one on the
+/// Target's window.
 /// </summary>
-/// <param name="Audio">The audio of each session it starts.</param>
+/// <param name="Audio">The audio of each session it starts, from the snapshot its Start resolved.</param>
 /// <param name="Failed">Called on the orchestrator thread when a session on the Target couldn't be started or retargeted.</param>
-public sealed record TargetCapture(Func<SessionAudio> Audio, Action<TargetCandidate, Exception> Failed);
+public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, Action<TargetCandidate, Exception> Failed);
+
+/// <summary>
+/// How the orchestrator turns a <c>save</c> press into a Clip (R4, AD-19, AD-21).
+/// </summary>
+/// <param name="Paths">Reserves each Clip's path.</param>
+/// <param name="DefaultOutputFolder">The Output Folder when the Global <c>outputFolder</c> is unset.</param>
+/// <param name="Saved">Called on the orchestrator thread once a Clip is written.</param>
+/// <param name="Failed">Called on the orchestrator thread when a save could not be written.</param>
+public sealed record ReplayClips(OutputPathAllocator Paths, Func<string> DefaultOutputFolder, Action<ClipSaved> Saved, Action<Exception> Failed);
