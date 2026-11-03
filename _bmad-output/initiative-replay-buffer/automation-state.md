@@ -33,10 +33,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 2.9 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 2.5 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
@@ -279,3 +279,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: QA round 1 on 2.9 (`8d87e66`): **QA FAIL**, 3 low findings. 2.9 fixed them at `e9f3d31` (Bench.Tests 166/166). QA round 2 is running, and it is also asked to explain why Bench.Tests passed only on the third run in round 1.
 - 2026-11-02: QA round 2 on 2.9 (`e9f3d31`): **QA PASS**, 0 findings. Round 1's hotkey test failures came from overlapping Bench.Tests runs, outside the diff. 2.9 was told to sync with develop and merge, and qa-2-1 is back in the pool. 2.5 is running its scoped tests (Platform.Audio, Media, Contracts, Core, Engine). 2.7 is still in verification.
 - 2026-11-02: 2.9 synced with develop (1.15, v0.1.0; no conflicts; Bench.Tests 167/167, 0 warnings), merged into `develop` (`e11f94b`, `feat(bench): merge 2.9-named-tracks-players`) and marked done. One Human Check row (Resolve) and one Decisions row (the 99.9th-percentile full-scale check) added. Its worktree's orphaned engine (PID 23088) is still the builder's to end.
+- 2026-11-02: 2.9 merged (`e11f94b`, done `d98a6ff`), and its worker is back in the pool. 2.5 is READY FOR QA at `83fe5c1`: scoped tests pass (Platform.Audio, Media, Engine, Contracts, Core), along with the 10 s dropout AC and the publish (0 warnings). Pool worker qa-1-14 was cleared and switched to Sonnet at medium effort under the new model rule, then given QA for 2.5.
