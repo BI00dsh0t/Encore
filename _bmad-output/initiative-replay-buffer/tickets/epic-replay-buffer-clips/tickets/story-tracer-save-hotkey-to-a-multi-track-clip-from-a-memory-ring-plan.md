@@ -3,7 +3,7 @@ title: 'Tracer: Save Hotkey to a multi-Track Clip from a Memory ring'
 type: 'feature'
 ticket: '1'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '60cb338ab39bd1a62e9f48a5b4b3d8fb2a1482e2'
 route: 'full'
 route_source: 'auto'
