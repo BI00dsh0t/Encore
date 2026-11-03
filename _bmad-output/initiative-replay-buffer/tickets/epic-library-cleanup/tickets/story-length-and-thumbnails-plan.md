@@ -3,7 +3,7 @@ title: 'Length and thumbnails'
 type: 'feature'
 ticket: '3'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '2e0187b0e74f970ceab36432bcb293fd06eb37c9'
 route: 'full'
 route_source: 'auto'
