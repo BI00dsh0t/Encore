@@ -3,7 +3,7 @@ title: 'Exact save cut and gapless Reset'
 type: 'feature'
 ticket: '2'
 created: '2026-11-03'
-status: 'ready-for-dev'
+status: 'in-progress'
 baseline_revision: 'cc6c2d180eb8ff3bac681ef97cf4626d70b9acf3'
 route: 'full'
 route_source: 'auto'
@@ -50,7 +50,6 @@ deferred: []
 | Press soon after a Reset | Press < 1 s after the last Reset's press | No Clip, no keyframe, no Reset; `clip.failed { reason: clip-too-short }` | Logged at Information |
 | Press soon after start | Press < 1 s after the session's anchor | Same as above | Same |
 | Failed write | The writer throws | No Reset: the next Clip still starts at the previous Reset | Logged at Warning, as 4.1 (4.5 adds `clip.failed`) |
-| Encoder stalls | The forced keyframe isn't encoded within the save wait | The Clip is cut at the press instead | — |
 | Pre-anchor audio | Hub blocks arrive between the anchor and Publish | They are replayed at Publish: each Track starts with real audio, not fill | — |
 
 </intent-contract>
@@ -81,11 +80,11 @@ deferred: []
 - [ ] `src/ReplayBuffer.Engine/Audio/AudioTimelineTap.cs`, `Sessions/SessionAudioTrack.cs` -- an optional preallocated hold (`AudioTimelineTap(int holdFrames = 0)`): before Publish, keep the newest blocks up to that many frames (oldest dropped); `Publish` replays them in order, then live blocks follow, with no block lost or reordered between the two (one per-tap lock, uncontended except during Publish). `SessionAudioTrack` holds 1 s; meters hold none -- deferred item from epic 1
 - [ ] `src/ReplayBuffer.Engine/EngineHost.cs` -- `NotSaved` publishes `clip.failed` and logs Information
 - [ ] `tests/ReplayBuffer.Core.Tests/PacketRingTests.cs` -- update test 1 to the new semantics; add the cut-boundary test: synthetic 30 fps video (1 s GOP plus a forced key just after each press) and AAC packets; two cuts 10 s apart sharing the first press's keyframe give exactly every video packet once and every audio packet once, the second runs ~10 s, and each cut's audio span is within one AAC frame of its video span
-- [ ] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- a save, then a press 0.5 s (QPC) later: one `clip.failed { clip-too-short }`, the fake session's `Save` called once, `Reset` once; then a press 1.5 s after the first saves again
+- [ ] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- a save, then a press 0.5 s (QPC) later: one `clip.failed { clip-too-short }`, the fake session's `Save` called once, `Reset` once; then a press 1.5 s after the first saves again; a write that fails calls no `Reset`
 - [ ] `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` -- the `clip.failed` sample
 - [ ] `tests/ReplayBuffer.Platform.FFmpeg.Tests/ReplayCutTests.cs` -- the synthetic capture: 640×360 at 30 fps for 21 s of virtual QPC into a `ReplayRingSink` (video plus one AAC Track), `RequestKeyframe` just before the first frame after presses at 10.02 s and 20.02 s, two cuts written with `ClipWriter`; ffprobe shows Clip 1 holds exactly the frames captured at or before press 1, Clip 2 the frames after it up to press 2 (~10 s), and each audio stream lasts within one AAC frame of its video
 - [ ] `tests/ReplayBuffer.Engine.Tests/AudioTimelineTapTests.cs` -- blocks from before and after the anchor arrive before Publish; after Publish the timeline holds the post-anchor frames with no gap fill, and a later block follows contiguously
-- [ ] `tests/ReplayBuffer.Engine.Tests/ReplayClipCaptureTests.cs` -- after the first Clip, wait ~2 s and press again: the second Clip's video lasts the time between the presses within 0.1 s
+- [ ] `tests/ReplayBuffer.Engine.Tests/ReplayClipCaptureTests.cs` -- a press right after the anchor reports `clip-too-short` through `NotSaved`; after the first Clip, wait ~2 s and press again: the second Clip's video lasts the time between the presses within 0.1 s
 
 **Acceptance Criteria:**
 - Given the synthetic capture with known frame QPCs, when saves are pressed 10 s apart, then the second Clip lasts 10 s within one frame, the two Clips overlap by at most one frame with none missing, each ends with the last frame captured at or before its press, and every Track's length matches its video within one AAC frame (R4, R5).
@@ -108,6 +107,8 @@ deferred: []
 **Reset ownership.** The orchestrator decides. It keeps `ResetQpc` per session and Resets only on a successful write, so a failed save leaves the next Clip starting at the old Reset. The session keeps the ring-time side: `Reset()` on the write sets the session's `resetUs` to that write's `toUs`. The next cut starts at `max(pressUs − window, resetUs)`, and K is the first keyframe at or after that: the previous Clip's end key.
 
 **Keyframe index.** A preallocated circular `long[]` of the absolute sequence numbers of video keyframe entries. It is trimmed with the head and doubles with `Grow`. Each entry's sequence is `_headSeq + i`. `Cut`, under the lock: K is the first indexed key with `TimeUs ≥ fromUs` (none, or `≥ toUs`: null). It steps back from K's position while entries are newer than `K − 1 s` (audio packets that overlap K were appended earlier). It `Array.Copy`s that position through the tail (two segments at most). It pins each slab whose entry-sequence range (`FirstSeq`/`LastSeq`, kept on append) meets the copied range, by walking `_held` (O(slabs)). Then it reads the origins. After the lock: filter by the rules above, stable sort by `TimeUs`, project.
+
+**Encoder stall.** If the forced key isn't encoded within `SaveWait`, the cut ends at the press (`toUs = pressUs`). The next Clip still starts at the first keyframe at or after it, the forced key once encoded.
 
 **Forced key ticket.** `RequestKeyframe` increments a request counter. `Encode`, under its lock, serves every outstanding request with this frame and records `(servedTicket, pts)`. `TryGetForcedKey(t)` answers once `servedTicket ≥ t`. Requests that land before one frame share its key. Saves are seconds apart, so the recorded pts can't be overwritten before the writer reads it (4.4's cooldown makes that a rule).
 
