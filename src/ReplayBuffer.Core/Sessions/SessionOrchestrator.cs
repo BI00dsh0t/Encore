@@ -53,10 +53,13 @@ public sealed class SessionOrchestrator : IDisposable
     private readonly Action<CaptureState> _publish;
     private readonly Action<HotkeyPress>? _hotkeyPressed;
     private readonly IMicMuteStore? _micMute;
+    private readonly Action<TargetChanged>? _targetChanged;
+    private readonly TargetCapture? _targetCapture;
     private readonly Thread _thread;
 
     // Orchestrator thread only.
     private Active? _active;
+    private TargetCandidate? _target;
     private CaptureState _state = CaptureState.Initial;
     private long _nextSessionId;
 
@@ -73,12 +76,16 @@ public sealed class SessionOrchestrator : IDisposable
     /// <param name="micMute">
     /// Where mic mute is kept between runs, read once here; null keeps it in memory only, starting muted.
     /// </param>
+    /// <param name="targetChanged">Receives each committed change of the Target Game, on the orchestrator thread.</param>
+    /// <param name="targetCapture">When given, each new Target Game ends the game session and starts one on its window.</param>
     public SessionOrchestrator(
         ICaptureSessionFactory factory,
         Func<SettingsDocument> currentDocument,
         Action<CaptureState> publish,
         Action<HotkeyPress>? hotkeyPressed = null,
-        IMicMuteStore? micMute = null)
+        IMicMuteStore? micMute = null,
+        Action<TargetChanged>? targetChanged = null,
+        TargetCapture? targetCapture = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(currentDocument);
@@ -88,6 +95,8 @@ public sealed class SessionOrchestrator : IDisposable
         _publish = publish;
         _hotkeyPressed = hotkeyPressed;
         _micMute = micMute;
+        _targetChanged = targetChanged;
+        _targetCapture = targetCapture;
 
         // Before the thread runs, so no session can start with any other mute.
         _state = CaptureState.Initial with { MicMuted = LoadMicMuted(micMute) };
@@ -206,6 +215,10 @@ public sealed class SessionOrchestrator : IDisposable
                 }
 
                 _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
+                break;
+
+            case ProposeTarget propose:
+                CommitTarget(propose);
                 break;
 
             case SessionClosed closed when _active?.Id == closed.SessionId:
@@ -374,6 +387,95 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         SetState(_state with { MicMuted = muted });
+    }
+
+    /// <summary>
+    /// Commits a proposed Target Game (AD-19). Another process, or none, becomes the Target and is
+    /// published; a new window of the Target's own process only moves the debug capture to it.
+    /// </summary>
+    private void CommitTarget(ProposeTarget propose)
+    {
+        var current = _target;
+        var to = propose.To;
+        if (to is not null && current is not null && to.ProcessId == current.ProcessId)
+        {
+            if (to.Window != current.Window)
+            {
+                _target = current with { Window = to.Window };
+                FollowTargetWindow(_target);
+            }
+
+            return;
+        }
+
+        if (to is null && current is null)
+        {
+            return;
+        }
+
+        _target = to;
+        _targetChanged?.Invoke(new TargetChanged(current?.ToTargetGame(), to?.ToTargetGame(), propose.Reason));
+        if (_targetCapture is null)
+        {
+            return;
+        }
+
+        if (_active is { Spec.Kind: SessionKind.Game })
+        {
+            EndActive("target changed", failure: null);
+        }
+
+        if (to is not null)
+        {
+            StartOnTarget(to);
+        }
+    }
+
+    /// <summary>Moves the debug capture to the Target's new window, or starts it there when none is running.</summary>
+    private void FollowTargetWindow(TargetCandidate target)
+    {
+        if (_targetCapture is null)
+        {
+            return;
+        }
+
+        if (_active is null)
+        {
+            StartOnTarget(target);
+            return;
+        }
+
+        if (_active.Spec.Kind != SessionKind.Game || _active.Spec.Target.ProcessId != target.ProcessId)
+        {
+            return;
+        }
+
+        try
+        {
+            Retarget(new CaptureTarget(target.ProcessId, target.Window, target.ProfileId));
+        }
+        catch (Exception e)
+        {
+            // A failed retarget has already ended the session where it couldn't go on.
+            _targetCapture.Failed(target, e);
+        }
+    }
+
+    private void StartOnTarget(TargetCandidate target)
+    {
+        try
+        {
+            Start(new StartSession(
+                SessionKind.Game,
+                new CaptureTarget(target.ProcessId, target.Window, target.ProfileId),
+                _targetCapture!.Audio(),
+                NewReply<RunningSession>()));
+        }
+        catch (Exception e)
+        {
+            // The Target stays committed; only its capture failed.
+            _targetCapture!.Failed(target, e);
+        }
     }
 
     private void SetState(CaptureState next)

@@ -20,3 +20,17 @@ QueryPerformanceCounter
 WM_HOTKEY
 WM_APP
 WIN32_ERROR
+GetForegroundWindow
+GetShellWindow
+GetClassName
+IsIconic
+GetWindowLong
+GetWindowRect
+MonitorFromWindow
+GetMonitorInfo
+GetExitCodeProcess
+CreateFile
+GetFinalPathNameByHandle
+WINDOW_STYLE
+WINDOW_EX_STYLE
+GetSystemMetrics
