@@ -123,7 +123,9 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// instead of a file, and <see cref="Save"/> writes a Clip from it on a thread of its own. The ring
 /// is sized from the snapshot's Buffer Window at the anchor; a new window from
 /// <see cref="SetBufferWindow"/> resizes it at the next Reset (AD-8), into a new ring generation
-/// seeded from the Reset keyframe, so Clips stay gapless.
+/// seeded from the Reset keyframe, so Clips stay gapless. The encoders write into the ring through a
+/// <see cref="RecordingTap"/>, and <see cref="Record"/> attaches a <see cref="RecordingWriter"/> to it:
+/// a Recording from the same encoder chain.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -167,6 +169,7 @@ internal sealed class CaptureSession : ICaptureSession
     private PacedVideoEncoder? _paced;
     private FragmentedMp4Muxer? _muxer;
     private ReplayRingSink? _ring;
+    private RecordingTap? _tap;
     private volatile bool _outputFinished;
 
     // R1's exit drain, orchestrator thread only: the teardown keeps the ring for saves until Release.
@@ -357,8 +360,9 @@ internal sealed class CaptureSession : ICaptureSession
         }
         finally
         {
-            // A save still waiting has every packet it will get.
+            // A save still waiting has every packet it will get, and so has a Recording.
             _outputFinished = true;
+            _tap?.Close();
             DisposeAll();
         }
 
@@ -440,6 +444,23 @@ internal sealed class CaptureSession : ICaptureSession
 
         // A drained session's encoder is already disposed: never ask it for a keyframe.
         return new ClipWrite(this, ring, _outputFinished ? null : video, qpc, _windowSeconds);
+    }
+
+    /// <summary>
+    /// In Replay mode, once the output is open and while it runs: a Recording from
+    /// <paramref name="qpc"/> on the session's own encoders, through the tap; null once drained or
+    /// released, before the anchor, or while a Recording is attached.
+    /// </summary>
+    public IRecordingWrite? Record(long qpc)
+    {
+        // The anchor's release write publishes the tap and the encoder.
+        if (!_options.Replay || _released || _outputFinished || !Volatile.Read(ref _anchored)
+            || _tap is not { HasWriter: false } tap || _video is not { } video)
+        {
+            return null;
+        }
+
+        return new RecordingWrite(this, tap, video, qpc);
     }
 
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>
@@ -585,7 +606,8 @@ internal sealed class CaptureSession : ICaptureSession
             var window = _spec.Snapshot.BufferWindow;
             _windowSeconds = window;
             _ring = new ReplayRingSink(NewRing(window));
-            packets = _ring;
+            _tap = new RecordingTap(_ring);
+            packets = _tap;
             _log.LogInformation("Replay Buffer of {Window} s in memory, {Capacity} packets preallocated", window, RingCapacity(window));
         }
         else
@@ -1038,6 +1060,9 @@ internal sealed class CaptureSession : ICaptureSession
         _frames?.Dispose();
         _muxer?.Dispose();
 
+        // A Recording still finishing owns its own copies of the streams.
+        _tap?.Dispose();
+
         // A save still writing holds its own lease and pins; the ring goes when the last is released.
         // A drained session keeps it for saves until Release.
         if (!_keepRing)
@@ -1230,5 +1255,63 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         private long Deadline() => Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * session._qpcFrequency);
+    }
+
+    /// <summary>
+    /// One Recording (R2): <see cref="Start"/> attaches a <see cref="RecordingWriter"/> with its own
+    /// copies of the streams to the tap, then asks the encoder for a keyframe after the press; the
+    /// writer's thread does the rest. <see cref="Stop"/> hands it the press as µs since the anchor.
+    /// </summary>
+    private sealed class RecordingWrite(CaptureSession session, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
+    {
+        private RecordingWriter? _writer;
+
+        public void Start(string path, Action<Exception?> done)
+        {
+            ArgumentNullException.ThrowIfNull(path);
+            ArgumentNullException.ThrowIfNull(done);
+            if (_writer is not null)
+            {
+                throw new InvalidOperationException("The Recording has already started.");
+            }
+
+            // Set before the writer thread starts, which publishes it to the lambda.
+            long ticket = 0;
+            var streams = tap.CopyStreams();
+            RecordingWriter writer;
+            try
+            {
+                writer = new RecordingWriter(
+                    path,
+                    streams,
+                    () => video.TryGetForcedKey(ticket, out var pts) ? pts : null,
+                    session.MicrosAt(qpc),
+                    session._loggers.CreateLogger<RecordingWriter>(),
+                    done);
+            }
+            catch
+            {
+                streams.Dispose();
+                throw;
+            }
+
+            try
+            {
+                // Attached before the keyframe is asked for, so the forced key can't pass the tap unseen.
+                tap.Attach(writer);
+                ticket = video.RequestKeyframe(qpc);
+                writer.Start();
+            }
+            catch
+            {
+                writer.Abandon();
+                throw;
+            }
+
+            _writer = writer;
+            session._log.LogInformation("Recording to {Path}", path);
+        }
+
+        public void Stop(long qpc) => _writer?.Stop(session.MicrosAt(qpc));
     }
 }

@@ -75,7 +75,9 @@ internal sealed record EngineHostOptions
 /// The orchestrator owns mic mute, kept in the instance's <c>runtime.json</c> (AD-5) and loaded
 /// before the pipe serves. It registers the Hotkeys (AD-11) before the pipe accepts connections; the
 /// orchestrator publishes each press as <c>hotkey.pressed</c>, and a <c>micMute</c> press also toggles
-/// mic mute, and a <c>save</c> press saves a Clip. Once the pipe serves, it
+/// mic mute, a <c>save</c> press saves a Clip, and a <c>recordToggle</c> press starts or stops a
+/// Recording beside the Replay Buffer, published as <c>recording.started</c> and
+/// <c>recording.stopped</c>. Once the pipe serves, it
 /// probes the video encoders off that path and publishes the result as <c>capture.videoOptions</c>.
 /// It lists the audio devices before the hub exists, so the first snapshot holds them, and then
 /// publishes <c>devices.changed</c> when the endpoints or the Track Layouts change them (R1).
@@ -198,6 +200,7 @@ internal sealed class EngineHost : IAsyncDisposable
         var hotkeyLog = loggers.CreateLogger("Hotkeys");
         var gameLog = loggers.CreateLogger("Games");
         var clipLog = loggers.CreateLogger("Clips");
+        var recordingLog = loggers.CreateLogger("Recordings");
         var libraryLog = loggers.CreateLogger("Library");
         var replay = !hostOptions.DebugCapture && (hostOptions.ReplayBuffer ?? !instance.IsTest);
 
@@ -281,6 +284,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 hostOptions.MeterAudio ?? audio,
                 levels => hub.Publish(AudioMessages.Levels, levels),
                 loggers.CreateLogger("Audio"));
+            var defaultOutputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
                     new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay },
@@ -317,7 +321,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 replay
                     ? new ReplayClips(
                         OutputPathAllocator.System,
-                        () => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name),
+                        () => defaultOutputFolder,
                         saved =>
                         {
                             hub.Publish(CaptureMessages.Saved, saved);
@@ -334,6 +338,24 @@ internal sealed class EngineHost : IAsyncDisposable
                         Ignored: since => clipLog.LogInformation(
                             "The save press came {Seconds:0.0} s after the last accepted one, inside the Save Cooldown; it was ignored", since.TotalSeconds),
                         Library: libraryActor)
+                    : null,
+                replay
+                    ? new Recordings(
+                        OutputPathAllocator.System,
+                        () => defaultOutputFolder,
+                        started =>
+                        {
+                            hub.Publish(RecordingMessages.Started, started);
+                            recordingLog.LogInformation("Recording to {Path}", started.Path);
+                        },
+                        stopped =>
+                        {
+                            hub.Publish(RecordingMessages.Stopped, stopped);
+                            recordingLog.LogInformation("Recording stopped ({Reason}): {Path}", stopped.Reason, stopped.Path);
+                        },
+                        e => recordingLog.LogWarning("The Recording failed: {Message}", e.Message),
+                        libraryActor,
+                        message => recordingLog.LogInformation("{Message}", message))
                     : null);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
