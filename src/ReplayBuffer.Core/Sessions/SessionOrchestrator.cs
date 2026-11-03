@@ -404,8 +404,8 @@ public sealed class SessionOrchestrator : IDisposable
     /// Commits a proposed Target Game (AD-19). Another process, or none, becomes the Target and is
     /// published; a new window of the Target's own process only moves the debug capture to it. While
     /// a Recording runs, a switch from the Target to another game is held as pending, each later one
-    /// replacing it; a proposal of the Target itself drops it. An exit handover is never held: the
-    /// Target is gone.
+    /// replacing it; a proposal of the Target itself drops it. An exit or Ignored handover is never
+    /// held: the Target is gone, or must never be captured (AD-5).
     /// </summary>
     private void CommitTarget(ProposeTarget propose)
     {
@@ -423,7 +423,7 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
-        if (_recordingRunning && current is not null && to is not null && propose.Reason != TargetChangeReason.Exit)
+        if (_recordingRunning && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
         {
             _pendingTarget = propose;
             return;

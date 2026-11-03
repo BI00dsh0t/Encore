@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -73,6 +74,35 @@ public static unsafe class GamePaths
         {
             PInvoke.CloseHandle(file);
         }
+    }
+
+    /// <summary>
+    /// A game's display name (story 3.4): the <c>ProductName</c> of the executable's version resource,
+    /// trimmed, read from the file on disk without loading it (AD-12); when that is empty, unreadable or
+    /// the file isn't a PE image, the file name of <paramref name="fallbackName"/> (else of
+    /// <paramref name="path"/>) without its extension, or with it when that leaves nothing.
+    /// </summary>
+    public static string ProductName(string path, string? fallbackName = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        try
+        {
+            var product = FileVersionInfo.GetVersionInfo(path).ProductName?.Trim();
+            if (!string.IsNullOrEmpty(product))
+            {
+                return product;
+            }
+        }
+        catch (Exception e) when (e is FileNotFoundException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // Named from the file instead.
+        }
+
+        var file = string.IsNullOrEmpty(fallbackName) ? path : fallbackName;
+        var stem = Path.GetFileNameWithoutExtension(file);
+
+        // A file named only ".exe" keeps its extension: a profile name is never empty.
+        return string.IsNullOrWhiteSpace(stem) ? Path.GetFileName(file) : stem;
     }
 
     private static string StripVerbatim(string path)
