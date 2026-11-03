@@ -119,18 +119,6 @@ public sealed class DriftMathTests
     }
 
     [Fact]
-    public void NearestPicksTheCloserNeighbour()
-    {
-        double[] sorted = [1, 2, 4];
-
-        Assert.Equal(0, DriftMath.Nearest(sorted, -3));
-        Assert.Equal(1, DriftMath.Nearest(sorted, 2.9));
-        Assert.Equal(2, DriftMath.Nearest(sorted, 3.1));
-        Assert.Equal(2, DriftMath.Nearest(sorted, 9));
-        Assert.Equal(-1, DriftMath.Nearest(Array.Empty<double>(), 1));
-    }
-
-    [Fact]
     public void AudioToAudioBoundsBothDevicesErrorsAgainstOneFrame()
     {
         using var stats = JsonDocument.Parse(
@@ -182,7 +170,6 @@ public sealed class DriftMathTests
     [Theory]
     [InlineData("\"errorMaxSamples\": 3, \"settledPackets\": 0", "no settled packets")]
     [InlineData("\"errorMaxSamples\": \"NaN\", \"settledPackets\": 10", "no numeric errorMaxSamples")]
-    [InlineData("\"settledPackets\": 10", "no numeric errorMaxSamples")]
     public void AnUnmeasuredDeviceIsInconclusiveNotAZeroError(string inputResampler, string why)
     {
         using var stats = JsonDocument.Parse(

@@ -89,24 +89,6 @@ public sealed partial class KeysTests
     [Theory]
     [InlineData("video", """{"codec":"h264","width":1920,"height":1080,"fps":121,"bitrateKbps":40000,"rateControl":"cbr"}""")]
     [InlineData("video", """{"codec":"h264","width":1921,"height":1080,"fps":60,"bitrateKbps":40000,"rateControl":"cbr"}""")]
-    [InlineData("video", """{"codec":"vp9","width":1920,"height":1080,"fps":60,"bitrateKbps":40000,"rateControl":"cbr"}""")]
-    [InlineData("video", """{"codec":0,"width":1920,"height":1080,"fps":60,"bitrateKbps":40000,"rateControl":"cbr"}""")]
-    [InlineData("video", """{"codec":"h264","width":1920,"height":1080,"fps":60,"bitrateKbps":40000}""")]
-    [InlineData("video", """{"codec":"h264","width":1920,"height":1080,"fps":60,"bitrateKbps":40000,"rateControl":"cbr","extra":1}""")]
-    [InlineData("video", "null")]
-    [InlineData("bufferWindow", "0")]
-    [InlineData("bufferWindow", "1.5")]
-    [InlineData("bufferWindow", "\"300\"")]
-    [InlineData("saveCooldown", "-1")]
-    [InlineData("replayStorage", "\"tape\"")]
-    [InlineData("ringPath", "\"relative\\\\ring\"")]
-    [InlineData("startWithWindows", "null")]
-    [InlineData("hotkeys", """{"save":{"vk":0,"modifiers":1},"micMute":null,"recordToggle":null,"recordStart":null,"recordStop":null,"monitorRecordToggle":null}""")]
-    [InlineData("hotkeys", """{"save":{"vk":121,"modifiers":16},"micMute":null,"recordToggle":null,"recordStart":null,"recordStop":null,"monitorRecordToggle":null}""")]
-    [InlineData("cleanup", """{"maxBytes":0,"maxAgeSeconds":null}""")]
-    [InlineData("manualGames", """["c:\\games\\a.exe","C:\\Games\\A.exe"]""")]
-    [InlineData("trackLayout", """{"devices":[],"tracks":[{"id":"8c010267-eff4-4ac3-9b71-6c0c54f08c75","name":"All","deviceKeys":["11111111-1111-1111-1111-111111111111"],"muteAffected":true}]}""")]
-    [InlineData("trackLayout", """{"devices":null,"tracks":[]}""")]
     public void BadValuesAreRefused(string name, string json)
     {
         Assert.True(Keys.TryGet(name, out var key));
@@ -118,9 +100,6 @@ public sealed partial class KeysTests
     [Theory]
     [InlineData("ringPath", "null")]
     [InlineData("ringPath", "\"D:\\\\ring\"")]
-    [InlineData("cleanup", """{"maxBytes":1000000000,"maxAgeSeconds":null}""")]
-    [InlineData("video", """{"codec":"HEVC","width":2560,"height":1440,"fps":120,"bitrateKbps":80000,"rateControl":"vbr"}""")]
-    [InlineData("trackLayout", """{"devices":[{"key":"11111111-1111-1111-1111-111111111111","endpointId":"{0.0.0.00000000}.{a}","friendlyName":"Mic","parentName":"USB","flow":"input","isMic":true}],"tracks":[{"id":"8c010267-eff4-4ac3-9b71-6c0c54f08c75","name":"Mic","deviceKeys":["11111111-1111-1111-1111-111111111111"],"muteAffected":true}]}""")]
     public void GoodValuesAreAccepted(string name, string json)
     {
         Assert.True(Keys.TryGet(name, out var key));

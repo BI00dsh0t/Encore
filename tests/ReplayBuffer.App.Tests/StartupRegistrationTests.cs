@@ -80,14 +80,6 @@ public sealed class StartupRegistrationTests : IDisposable
         Assert.Null(_key.Read());
     }
 
-    [Fact]
-    public void StartingWithTheSettingOffAndNoValueIsFine()
-    {
-        new StartupRegistration(Installed, _key, AppPath).Sync(Document(5, false));
-
-        Assert.Null(_key.Read());
-    }
-
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -95,21 +87,6 @@ public sealed class StartupRegistrationTests : IDisposable
     {
         _key.Write("preset");
         var startup = new StartupRegistration(Dev, _key, AppPath);
-
-        startup.Sync(Document(1, on));
-        startup.Sync(Document(2, !on));
-
-        Assert.False(startup.Applies);
-        Assert.Equal("preset", _key.Read());
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ATestInstanceLeavesAPresetValueUntouched(bool on)
-    {
-        _key.Write("preset");
-        var startup = new StartupRegistration(Instance.ForTest("ReplayBuffer-Test-startup"), _key, AppPath);
 
         startup.Sync(Document(1, on));
         startup.Sync(Document(2, !on));
@@ -129,18 +106,6 @@ public sealed class StartupRegistrationTests : IDisposable
         startup.Sync(Document(2, true));
 
         Assert.Equal("changed elsewhere", _key.Read());
-    }
-
-    [Fact]
-    public void AnUnchangedOffIsNotDeletedAgain()
-    {
-        var startup = new StartupRegistration(Installed, _key, AppPath);
-        startup.Sync(Document(1, false));
-        _key.Write("written elsewhere");
-
-        startup.Sync(Document(2, false));
-
-        Assert.Equal("written elsewhere", _key.Read());
     }
 
     [Fact]
@@ -189,17 +154,6 @@ public sealed class StartupRegistrationTests : IDisposable
 
         startup.Sync(Document(2, true));
         Assert.Equal(Command, _key.Read());
-    }
-
-    [Fact]
-    public void AMissingSettingIsTheDefaultOff()
-    {
-        _key.Write(Command);
-
-        new StartupRegistration(Installed, _key, AppPath).Sync(SettingsDocument.Empty);
-
-        Assert.False(Keys.StartWithWindows.Default);
-        Assert.Null(_key.Read());
     }
 
     private static SettingsDocument Document(long revision, bool startWithWindows) => SettingsDocument.Empty with

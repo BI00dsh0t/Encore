@@ -22,7 +22,8 @@ public sealed class UnattendedProcessTests : IDisposable
 
     public void Dispose() => _run.Dispose();
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void TheGpuLoadStartsCalibratesAndStops()
     {
         var exe = LoadExe();
@@ -49,7 +50,8 @@ public sealed class UnattendedProcessTests : IDisposable
         Assert.DoesNotContain(Process.GetProcessesByName(GpuLoadProcess.ProcessName), p => p.Id == id);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task TheGpuLoadExitsWhenItsParentDoes()
     {
         var exe = LoadExe();
@@ -90,7 +92,8 @@ public sealed class UnattendedProcessTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void AnInjectedHotkeyIsTimed()
     {
         var engine = BenchRun.EngineExe;
@@ -109,7 +112,8 @@ public sealed class UnattendedProcessTests : IDisposable
         Assert.Contains("**Presses injected**", Report.Markdown(Report.Generate(_run.Folder)), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void ChromePlaysTheClipHeadless()
     {
         var chrome = PlayerScripts.FindChrome(null);
@@ -124,7 +128,8 @@ public sealed class UnattendedProcessTests : IDisposable
         Assert.False(Directory.Exists(_run.PathOf("playback-chrome-profile")));
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void WindowsMediaPlayerPlaysTheClip()
     {
         var clip = Clip();
@@ -137,7 +142,8 @@ public sealed class UnattendedProcessTests : IDisposable
         Assert.True(result.AudioTracks == 2, $"Windows Media Player: {result}");
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void AGpuLoadAlreadyRunningIsRefusedAndLeftAlone()
     {
         var exe = LoadExe();

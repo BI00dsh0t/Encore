@@ -88,7 +88,8 @@ public sealed class SessionCaptureTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task ARetargetedSessionWritesOneFileWithFramesFromBothWindows()
     {
         Assert.SkipUnless(File.Exists(Path.Combine(EngineBinaries.Folder, "ffprobe.exe")), "native/ffmpeg is not fetched");

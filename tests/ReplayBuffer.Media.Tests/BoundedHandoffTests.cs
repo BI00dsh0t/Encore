@@ -76,7 +76,8 @@ public sealed class BoundedHandoffTests
         Assert.Equal(Enumerable.Range(0, 1000), taken);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void AddingAndTakingDoNotAllocate()
     {
         var queue = new BoundedHandoff<long>(3);

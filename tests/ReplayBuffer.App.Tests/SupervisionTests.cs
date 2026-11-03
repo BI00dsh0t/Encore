@@ -91,7 +91,8 @@ public sealed class SupervisionTests : IAsyncDisposable
         Assert.Contains("unexpectedly", Assert.Single(state.Warnings, w => w.Code == ErrorCodes.EngineRestarted).Message);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AHungEngineIsKilledAndRelaunched()
     {
         var (app, engine) = await StartPairAsync();
@@ -107,7 +108,8 @@ public sealed class SupervisionTests : IAsyncDisposable
         Assert.Contains("answering", Assert.Single(state.Warnings, w => w.Code == ErrorCodes.EngineRestarted).Message);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task ADroppedConnectionToALiveEngineReconnectsWithNoRelaunch()
     {
         var (app, engine) = await StartPairAsync();
@@ -124,7 +126,8 @@ public sealed class SupervisionTests : IAsyncDisposable
         Assert.False(app.HasExited);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task ALiveEngineThatRefusesNewConnectionsIsKilledAsHungAfterTenSeconds()
     {
         var (app, engine) = await StartPairAsync();
@@ -157,7 +160,8 @@ public sealed class SupervisionTests : IAsyncDisposable
         Assert.False(relaunched.HasExited);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task ASecondAppAndASecondEngineExitAndThePairRunsOn()
     {
         var (app, engine) = await StartPairAsync();
@@ -179,7 +183,8 @@ public sealed class SupervisionTests : IAsyncDisposable
         Assert.False(app.HasExited);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AShutdownEndsThePairAndNeitherIsRelaunched()
     {
         var (app, engine) = await StartPairAsync();

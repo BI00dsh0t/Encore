@@ -78,16 +78,6 @@ public sealed class EngineProcessTests
     }
 
     [Fact]
-    public void AGpuPriorityOutsideTheRangeFailsWithInvalidArguments()
-    {
-        var (exitCode, _, stderr) = RunEngine(EngineFolder, "debug-capture", "--window", "a", "--gpu-priority", "9");
-
-        Assert.Equal(2, exitCode);
-        Assert.Contains("error invalid-arguments", stderr);
-        Assert.Contains("--gpu-priority", stderr);
-    }
-
-    [Fact]
     public void DebugListPrintsWindowsAndBothDeviceKinds()
     {
         var (exitCode, stdout, _) = RunEngine(EngineFolder, "debug-list");

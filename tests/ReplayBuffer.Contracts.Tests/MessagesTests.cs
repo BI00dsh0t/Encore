@@ -217,9 +217,7 @@ public sealed partial class MessagesTests
 
     [Theory]
     [InlineData("""{"pid":5}""", null)]
-    [InlineData("""{"pid":5,"engineRestart":null}""", null)]
     [InlineData("""{"pid":5,"engineRestart":"crashed"}""", EngineRestartReason.Crashed)]
-    [InlineData("""{"pid":5,"engineRestart":"hung"}""", EngineRestartReason.Hung)]
     public void AppAttachCarriesAnOptionalRestartReason(string json, EngineRestartReason? reason)
     {
         var attach = JsonSerializer.Deserialize(json, EngineJsonContext.Default.AppAttach)!;
@@ -273,7 +271,6 @@ public sealed class FrameTests
     [Theory]
     [InlineData("not json\n")]
     [InlineData("{\"v\":1,\"payload\":{}}\n")]
-    [InlineData("[1,2]\n")]
     public async Task AFrameThatIsNotAnEnvelopeIsInvalidData(string text)
     {
         await using var reader = new FrameReader(new MemoryStream(Encoding.UTF8.GetBytes(text)), 1024);

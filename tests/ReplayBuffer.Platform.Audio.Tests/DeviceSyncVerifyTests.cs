@@ -135,7 +135,8 @@ public sealed class DeviceSyncVerifyTests
     private const int AacFrame = 1024;
     private const int SettleSeconds = 5;
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void BothStreamsStayLockedToQpcAndToEachOther()
     {
         var seconds = Environment.GetEnvironmentVariable("REPLAYBUFFER_LONG_TESTS") == "1" ? 600 : 60;

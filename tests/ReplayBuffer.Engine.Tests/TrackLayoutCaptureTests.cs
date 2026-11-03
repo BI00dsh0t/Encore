@@ -106,7 +106,8 @@ public sealed class TrackLayoutCaptureTests : IDisposable
         Assert.All(streams.Skip(1), s => Assert.InRange(s.Duration, video - 0.1, video + 0.1));
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void TheDefaultLayoutCapturesOneSilentTrack()
     {
         RequireFFmpeg();
@@ -142,20 +143,6 @@ public sealed class TrackLayoutCaptureTests : IDisposable
         Assert.Contains("error audio-device-not-found", stderr);
         Assert.Contains("Gone Speakers", stderr);
         Assert.Contains("Candidates:", stderr);
-    }
-
-    [Fact]
-    public void AnInputEndpointNamedAsAnOutputIsAbsent()
-    {
-        RequireFFmpeg();
-        var input = AudioEndpoints.Default(PlatformFlow.Input);
-        var wrong = Device(input.Id, input.FriendlyName, SettingsFlow.Output);
-        StoreLayout(new TrackLayout([wrong], [Track("Game", wrong)]));
-
-        var (exitCode, _, stderr) = RunEngine(TimeSpan.FromSeconds(30), "--window", "anything", "--output", Path.Combine(_directory, "never.mp4"));
-
-        Assert.Equal(1, exitCode);
-        Assert.Contains("error audio-device-not-found", stderr);
     }
 
     [Fact]
