@@ -77,7 +77,7 @@ The coordinator logs each QA round in the Log below.
 | 6 | 2.3 Live device list over IPC | story-2-3 | done |
 | 7 | 2.5 Device dropout and rebind | story-2-5 (local_ea1ff557-3cb9-4fe2-9a70-3029632aee7c) | done |
 | 8 | 2.4 Mic Devices and mic mute | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged) |
-| 9 | 2.6 Track meters in the engine | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 9 | 2.6 Track meters in the engine | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
 | 10 | 2.7 Track Layout editor in the Main App | story-2-7 (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 11 | 2.11 Mic Devices and double-count warning in the editor | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
 | 12 | 2.8 Live meters in the Track Layout editor | | pending |
@@ -319,3 +319,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 2.6 is verified on its synced tree (`0d32806`: build 0 warnings; Contracts 89, Core 56, App 58, Engine 142, 0 failures; publish clean), but **the auto-mode classifier denied its `git merge --no-ff` into develop**. That needs the builder: run the merge, tell the session to retry, or add a permission rule. The coordinator won't run it for the session (permission boundary). 2.11 waits behind it. Spike 3.8 is READY FOR QA at `11862f3` (Decision: GameConfigStore, drop GameList). QA started on qa-2-1.
 - 2026-11-03: QA on spike 3.8 (`11862f3`): **QA PASS**, 0 findings. The 2.6 merge retry (the builder said "Retry the merge") was **denied again** by the auto-mode classifier as "[Merge Without Review]". All merges into develop are on hold (2.6, then 2.11 and 3.8) until the builder runs them or allows them by permission rule.
 - 2026-11-03: The builder added a user-settings allow rule for `git [-C %USERPROFILE%/Documents/repos/ReplayBuffer] merge --no-ff feature/*` (Bash and PowerShell), after auto mode blocked the merge twice as "Merge Without Review" and blocked the coordinator's own settings edit as "Self-Modification". Merges must use exactly that form. 2.6 was told to retry its merge.
+- 2026-11-03: 2.6 merged into `develop` (`9b9d7e0`, `feat(engine): merge 2.6-track-meters`) and marked done. Verified on the synced tree `0d32806` (3.1 merged in): Release build 0 warnings; Contracts 89, Core 56, App 58, Engine 142, 0 failures; publish 0 IL/AOT warnings. QA had passed at `1410061`. Human Check: none new (the integrated meters check is 2.8's). 2.11 can sync with develop now.
