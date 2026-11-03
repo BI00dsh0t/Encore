@@ -99,7 +99,7 @@ The coordinator logs each QA round in the Log below.
 | 25.2 | 4.2 Exact save cut and gapless Reset | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `02b0b95`) |
 | 25.3 | 4.3 Replay Buffer lifecycle: Target switch, exit drain and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e0c3931`) |
 | 25.4 | 4.4 Save Cooldown, save events and two concurrent writers | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8ce2703`) |
-| 25.5 | 4.5 Failed saves, retry and the file-being-written signal | | pending |
+| 25.5 | 4.5 Failed saves, retry and the file-being-written signal | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `9da03df`) |
 | 25.6 | 4.6 Ring generations and Buffer Window resizing | | pending |
 | 25.7 | 4.7 Disk-mode ring | | pending |
 | 25.8 | 4.8 Memory-mode RAM margin | | pending |
@@ -388,3 +388,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 4.4 merged (`8ce2703`), and its card is in Done. 4.5 (failed saves, retry and the file-being-written signal) went to pool worker slice-epic-4 (Opus, medium effort), with 4.4's two QA notes in its brief; its card is In progress. 4.5 is the gateway: its merge unblocks 4.6, 5.4, 6.1 and 7.1 in parallel.
 - 2026-11-03: 4.5 is READY FOR QA at `2ae1059` (build 0 warnings; Contracts, Core, FFmpeg and Engine pass; publish clean). QA started on qa-2-1 (Sonnet), and its card is In QA.
 - 2026-11-03: QA on 4.5 (`2ae1059`): **QA PASS**, 0 blocking findings and two accepted low notes, one being that an overlapping failed write loses its span. 4.5 was told to merge.
+- 2026-11-03: 4.5 merged into `develop` (`9da03df`, `feat(engine): merge 4.5-failed-saves`) and marked done, after QA PASS at `2ae1059` and a clean merge of `develop` (state-file lines only, so no re-verification). QA's two low notes are accepted without change: (1) when write B starts while write A is in flight and A then fails, B keeps A's end as its start, so A's span is never saved and B's Reset moves past it (from 4.4's claim design, not new in 4.5; the sequential retry holds); (2) a write in flight at engine shutdown gets `BeginWrite` but no `EndWrite` (in the plan's `deferred`), and the allocator's empty `.mp4` exists before `BeginWrite`, so epic 7's LibraryActor must treat a zero-length `.mp4` without `EndWrite` as being written. The `ILibraryWrites` port (`Core/Library/LibraryWrites.cs`) and `WriteFailures.ReasonOf` are what epics 6 and 7 consume. 4.6, 5.4, 6.1 and 7.1 are unblocked.

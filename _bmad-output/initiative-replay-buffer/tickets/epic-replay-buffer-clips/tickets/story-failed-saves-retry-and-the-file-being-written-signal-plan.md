@@ -3,7 +3,7 @@ title: 'Failed saves, retry and the file-being-written signal'
 type: 'feature'
 ticket: '5'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '2bb1f18a870fd555d146b76308c4c8ec278d35ea'
 route: 'full'
 route_source: 'auto'
