@@ -3,7 +3,7 @@ title: 'Tracer: detect a borderless game and make it the Target Game'
 type: 'feature'
 ticket: '1'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '898121f15adb57704d152e8788901cfe319b7417'
 route: 'full'
 route_source: 'auto'
