@@ -36,11 +36,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.3 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with .gitattributes chore |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.2 |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -376,3 +376,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA round 2 on spike 5.2 (`1e6dbcb`): **QA PASS**, 0 findings, and 5.2 was told to merge. The coordinator reviewed `feature/gitattributes-lf` (`1b9c47a`: `* text=auto eol=lf` plus binary types; the 31 CRLF files in the index were left as they are). In a scratch clone, a fresh checkout and a merge into an existing tree both stay clean. It merges after 5.2. 4.3 is being implemented.
 - 2026-11-03: Spike 5.2 merged (`5db7981`, `docs(tickets): merge 5.2-overlay-fullscreen-spike`, after merging develop in cleanly: Bench and Bench.Tests build 0 warnings; no Bench code conflicted with 4.2). QA passed in round 2 at `1e6dbcb`. Measured at the physical console; Decisions (a) and (b) are in the epic Notes and replace the 5.2/5.8 default above, and two Human Checks are queued. The CRLF churn QA found was fixed on the branch. `.bench-running` is clear.
 - 2026-11-03: `feature/gitattributes-lf` merged (`9fe22eb`, `chore: merge gitattributes-lf`) after merging develop in cleanly. `.gitattributes` now pins text files to LF; the 31 existing CRLF files were left as they are.
+- 2026-11-03: Spike 5.2 merged (`5db7981`, state `9fe22eb`), and its card is in Done. `.gitattributes` merged (`4dd8a16`). Both workers are back in the pool. 4.3 is being implemented.
