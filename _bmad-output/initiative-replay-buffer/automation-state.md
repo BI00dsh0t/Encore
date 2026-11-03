@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 5.8 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 7.4 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; idle |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
@@ -120,7 +120,7 @@ The coordinator logs each QA round in the Log below.
 | 26.5 | 5.5 Overlay message queue | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `b0f684e`) |
 | 26.6 | 5.6 Feedback Sounds in the engine | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ac6a3a2`) |
 | 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `53d83b7`) |
-| 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | | pending |
+| 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 26.9 | 5.9 Capture exclusion for every App window | | pending |
 | 26.10 | 5.10 Main App status line | | pending |
 | 26.11 | 5.11 Feedback Sounds settings page | | pending |
@@ -468,3 +468,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 5.7 is READY FOR QA at `7b82d69` after the nudge. QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-03: QA 5.7 at `7b82d69`: **QA PASS**, 0 findings. 5.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-03: 5.7 merged (`53d83b7`) after QA PASS at `7b82d69` and a docs-only sync with develop (App.Tests 84 passed, 0-warning build). Ticket marked done.
+- 2026-11-03: 5.7 merged (`53d83b7`, marked done `a131491`), and its card is Done. slice-epic-8 is back in the pool. 5.8 went to slice-epic-4 (Opus, high effort), with its card In progress. Its brief covers the `.bench-running` lock and using Bench's synthetic GPU load as a stand-in game.
