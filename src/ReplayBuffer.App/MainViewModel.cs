@@ -1,5 +1,6 @@
 using System.Globalization;
 using ReplayBuffer.App.Engine;
+using ReplayBuffer.App.Library;
 using ReplayBuffer.App.Settings;
 using ReplayBuffer.Contracts.Messages;
 
@@ -31,6 +32,7 @@ internal sealed class MainViewModel : Observable
         TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
         GameProfiles = Pages.OfType<GameProfilesPage>().Single();
         _selectedPage = Pages[0];
+        Library = new LibraryPage();
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -45,6 +47,9 @@ internal sealed class MainViewModel : Observable
 
     /// <summary>The Game Profiles page.</summary>
     public GameProfilesPage GameProfiles { get; }
+
+    /// <summary>The Library tab.</summary>
+    public LibraryPage Library { get; }
 
     public SettingsPage SelectedPage
     {
@@ -148,6 +153,7 @@ internal sealed class MainViewModel : Observable
         SettingsRevision = state.Settings.Revision.ToString(CultureInfo.InvariantCulture);
         Warnings = [.. state.Warnings.Select(w => $"{w.Severity}: {w.Message} ({w.Code})")];
         TrackLayout.ShowDevices(state.Devices);
+        Library.Render(state);
 
         // Before rendering, so a draft the render watches is recorded against this engine run.
         TrackLayout.ShowMeters(state.Meters, state.EngineInstanceId);

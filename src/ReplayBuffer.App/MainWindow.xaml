@@ -30,6 +30,9 @@
                 </ItemsControl>
             </StackPanel>
         </TabItem>
+        <TabItem Header="Library">
+            <ContentControl Margin="12" Content="{Binding Library.View}" />
+        </TabItem>
         <TabItem Header="Settings" IsSelected="{Binding IsSettingsTabSelected, Mode=TwoWay}">
             <Grid Margin="12">
                 <Grid.ColumnDefinitions>
