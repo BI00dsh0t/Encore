@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 4.3 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -378,3 +378,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: `feature/gitattributes-lf` merged (`9fe22eb`, `chore: merge gitattributes-lf`) after merging develop in cleanly. `.gitattributes` now pins text files to LF; the 31 existing CRLF files were left as they are.
 - 2026-11-03: Spike 5.2 merged (`5db7981`, state `9fe22eb`), and its card is in Done. `.gitattributes` merged (`4dd8a16`). Both workers are back in the pool. 4.3 is being implemented.
 - 2026-11-03: 4.3 is READY FOR QA at `8446562` (build 0 warnings, Core and Engine pass, publish clean). QA started on qa-2-1 (Sonnet), and its card is In QA. No other story is ready until 4.3 merges.
+- 2026-11-03: QA on 4.3 (`8446562`): **QA PASS**, 0 blocking findings and two accepted low notes, logged in the plan at `f031d48`. 4.3 was told to merge. Once it lands, 4.4 is next.
