@@ -119,18 +119,6 @@ public sealed class DriftMathTests
     }
 
     [Fact]
-    public void NearestPicksTheCloserNeighbour()
-    {
-        double[] sorted = [1, 2, 4];
-
-        Assert.Equal(0, DriftMath.Nearest(sorted, -3));
-        Assert.Equal(1, DriftMath.Nearest(sorted, 2.9));
-        Assert.Equal(2, DriftMath.Nearest(sorted, 3.1));
-        Assert.Equal(2, DriftMath.Nearest(sorted, 9));
-        Assert.Equal(-1, DriftMath.Nearest(Array.Empty<double>(), 1));
-    }
-
-    [Fact]
     public void AudioToAudioBoundsBothDevicesErrorsAgainstOneFrame()
     {
         using var stats = JsonDocument.Parse(

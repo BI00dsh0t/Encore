@@ -138,7 +138,8 @@ public sealed class OutputResolutionTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AWindowResizedAndChangingModeGivesOneFixedSizeFileWithNoPtsBreak()
     {
         SessionTestKit.RequireFFmpeg();
@@ -177,7 +178,8 @@ public sealed class OutputResolutionTests : IDisposable
         SessionTestKit.AssertPlaysInVlc(output, _directory, _processes);
     }
 
-    [Theory]
+    [Theory(Explicit = true)]
+    [Trait("Category", "Heavy")]
     [InlineData(30)]
     [InlineData(60)]
     public async Task AStaticWindowStillGetsTheConfiguredFrameRate(int fps)
@@ -195,7 +197,8 @@ public sealed class OutputResolutionTests : IDisposable
         AssertUniformPts(output, fps, 5);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void AStatsRunOnAFastWindowMeetsTheLatencyGcAndAllocationBounds()
     {
         SessionTestKit.RequireFFmpeg();

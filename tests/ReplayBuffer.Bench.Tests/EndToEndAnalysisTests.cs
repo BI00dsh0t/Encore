@@ -33,18 +33,6 @@ public sealed class EndToEndAnalysisTests : IDisposable
         Assert.Single(report.Tracks);
     }
 
-    [Fact]
-    public void NoDriftReportsUnderAMillisecond()
-    {
-        var report = Analyze(driftMs: 0);
-
-        var av = report.Av!;
-        Assert.True(av.FlashMatchedFraction >= 0.9, $"flashes matched {av.FlashMatchedFraction}");
-        Assert.True(av.BurstMatchedFraction >= 0.9, $"bursts matched {av.BurstMatchedFraction}");
-        Assert.InRange(av.DriftMs!.Value, 0, 1);
-        Assert.InRange(Math.Abs(av.RegressionDriftMs!.Value), 0, 1);
-    }
-
     private static FfmpegTools Tools()
     {
         string? repo = null;

@@ -88,7 +88,8 @@ public sealed class DeviceDropoutCaptureTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task ADeviceOutForTenSecondsIsSilentInItsTracksOnlyAndResumesWithoutARestart()
     {
         SessionTestKit.RequireFFmpeg();

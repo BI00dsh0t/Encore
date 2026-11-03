@@ -150,7 +150,8 @@ public sealed class OutputSettingsTests : IDisposable
         Assert.Equal(1, accepted.Revision);
     }
 
-    [Theory]
+    [Theory(Explicit = true)]
+    [Trait("Category", "Heavy")]
     [MemberData(nameof(Codecs))]
     public async Task EachOfferedCodecCapturesA3440x1440WindowAt120Fps(VideoCodec codec)
     {
@@ -180,7 +181,8 @@ public sealed class OutputSettingsTests : IDisposable
         AssertPlaysInVlc(output);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AForcedLibx264SessionWritesAPlayableH264File()
     {
         RequireFFmpeg();

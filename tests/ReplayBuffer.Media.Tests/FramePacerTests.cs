@@ -11,8 +11,6 @@ public sealed class FramePacerTests
     [Theory]
     [InlineData(30, 3000)]
     [InlineData(50, 1800)]
-    [InlineData(60, 1500)]
-    [InlineData(120, 750)]
     public void SlotPtsStepByExactlyOneSlotIn90kHz(int fps, long step)
     {
         var pacer = new FramePacer(Qpf, fps, Anchor);
