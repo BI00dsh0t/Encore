@@ -71,7 +71,13 @@ public sealed class HotkeyServeTests : IDisposable
         }
     }
 
-    [Fact]
+    /// <remarks>
+    /// Opt-in: <c>SendInput</c> goes through the desktop's real keyboard, so a window that takes every
+    /// key while it has focus (a Remote Desktop client, msrdc) swallows all 20 presses and the test fails.
+    /// Run it with that window out of focus.
+    /// </remarks>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AnInjectedPressArrivesPromptlyAndIsLogged()
     {
         var save = new HotkeyBinding(VkF24, CtrlAltShift);
