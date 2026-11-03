@@ -395,3 +395,5 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - 6.1 (Recordings tracer, high risk, HITL) on slice-epic-8, high effort;
   - 7.1 (Library tracer, HITL) on 2-1-tracer, medium effort.
   qa-1-14 and qa-2-1 are free for QA. 6.1 shares the encode chain with the Replay Buffer, so it expects to sync with 4.6 before merging.
+- 2026-11-03: 5.4 is READY FOR QA at `1809c60` (build 0 warnings; Contracts, Core and Engine pass; publish clean). QA started on qa-1-14 (Sonnet), and its card is In QA. 4.6, 6.1 and 7.1 are being implemented.
+- 2026-11-03: QA on 5.4 (`1809c60`): **QA PASS**, 0 blocking findings and two accepted notes (`dev.simulate` is refused at runtime in the installed instance; repeated failure notices stack). 5.4 was told to merge.
