@@ -3,7 +3,7 @@ title: 'Saving icon through the Save Cooldown'
 type: 'feature'
 ticket: '3'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'e8e59c94bf92794535088c6e77165ecb12999350'
 route: 'full'
 route_source: 'auto'
