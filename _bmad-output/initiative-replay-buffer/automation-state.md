@@ -38,8 +38,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 3.3 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 2.8 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 2.8 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 3.3 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -335,3 +335,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 3.2 merged (`168704a`), and its Trello card is in Done. The builder ended both hung App.Tests processes. 3.3 (Target Game rule, high risk) went to pool worker slice-epic-5 (Opus, high effort), and its card is In progress. 2.8 was told its hung run was ended and to rerun with a timeout. Pool worker qa-1-14 (Opus, medium effort) is checking whether `HotkeyServeTests` still fails on develop and will open a bugfix if it does.
 - 2026-11-03: `HotkeyServeTests` cause found. A focused Remote Desktop client (msrdc; the builder connects over RDP) swallows `SendInput`, so `AnInjectedPressArrivesPromptlyAndIsLogged` failed every time. `bugfix/hotkey-serve-test` (`11730f4`) made it opt-in (Heavy, Explicit), and the default HotkeyServeTests run passed 3 of 3. The coordinator reviewed the one-file test-only diff and merged it (`2af284f`). **Note for future tests:** anything that injects input or needs window focus must be Heavy and Explicit. 2.8's full App.Tests run hung, with each class passing alone; it was given the msrdc lead.
 - 2026-11-03: 2.8 is READY FOR QA at `81023ce` (build 0 warnings, App.Tests 62 passed and 5 Heavy skipped). The full-suite hang was fixed by running the three WPF test classes one at a time. QA started on qa-2-1 (Sonnet, medium effort), and the Trello card moved to In QA. 3.3 is applying two review patches.
+- 2026-11-03: QA on 2.8 (`81023ce`): **QA PASS**, 0 findings, with the full App.Tests run done in 27 s. 2.8 was switched to Sonnet and told to merge. 3.3 is READY FOR QA at `4b3f7f5` (scoped build, tests and publish pass), and QA started on qa-1-14 (Sonnet). Its Trello card moved to In QA.
