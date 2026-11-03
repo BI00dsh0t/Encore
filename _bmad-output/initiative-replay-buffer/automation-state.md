@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.2 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 5.5 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.2 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -431,3 +431,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 5.5 is READY FOR QA at `65e61c8` (build 0 warnings; App.Tests 75 pass). QA started on qa-2-1 (Sonnet), and its card is In QA.
 - 2026-11-03: 4.7 merged into `develop` (`c96ab9c`, `feat(engine): merge 4.7-disk-mode-ring`) and marked done, after QA PASS at `f507443` and a conflict-resolved merge of `develop` (EngineHost and CaptureSession, keeping both 6.1's recording tap and 4.7's disk ring; rebuilt 0 warnings, Core 90, FFmpeg 33, Engine 159 pass, publish clean). QA's five advisories are recorded in the epic Notes: spill to RAM while a long Clip pins blocks (for 4.8/4.10), up to 2x disk use across a resize, a mid-session write failure fails the session, `RemoveStale` should match `ring-<digits>.bin`, and `DiskRingClipTests` should be Explicit (the last two for the 4.13 sweep).
 - 2026-11-03: 4.7 merged (`c96ab9c`, marked done `458013c`), and its card is Done. 4.8 is now ready and was given to slice-epic-4 (Opus, high effort), with its card In progress. The rest of epic 4 waits on 4.8.
+- 2026-11-03: QA 5.5 at `65e61c8`: **QA PASS**, 0 findings. 5.5 has been told to merge (Sonnet), and qa-2-1 is back in the pool. 7.2 is running its review lens before reporting READY FOR QA.
