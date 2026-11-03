@@ -90,6 +90,10 @@ In any detected game, pressing the Save Hotkey produces a playable multi-Track C
 - Decision: 2026-11-01, the Global Output Settings page lands in this epic (story 10), since epic 1 delivered the keys but no page. Unattended default, awaiting review.
 - Decision: 2026-11-01, `Library.BeginWrite`/`EndWrite` is a Core port with a no-op implementation until epic-library-cleanup provides the LibraryActor (story 5).
 - Decision: 2026-11-01, there's no `bmad-ux` pass for the Replay Buffer, Game Profile override and Hotkeys pages; the builder checks them by hand, as in epics 2 and 3. Unattended default, awaiting review.
+- Decision: 2026-11-03, from 4.6: `ReplayRingSink.Restart` opens a ring generation, but no engine path calls it yet. Its documented precondition is that no save is waiting for its keyframe or streams when it is called. Story 9's chain switch at the press frame breaks that precondition, so story 9 must do two things:
+  - Drain in-flight saves before `Restart`, or convert `VideoMicros`/`AllStreamsPast` per generation.
+  - Decide a cut's generation (and so its end) before `ClipWrite.Run` publishes its claim. Otherwise a fallback Clip just after a boundary, with a second write in flight, leaves `[boundary, key)` in neither Clip.
+  - Both are recorded as `deferred` in 4.6's plan.
 - Waits on epic-engine-baseline because: it needs the encoder and fragmented MP4 writer.
 - Waits on epic-multi-track-audio because: it needs the Track Layouts and the mixed Track audio.
 - Waits on epic-game-detection-profiles because: it needs the Target Game appeared and exited events, Game Profiles, and per-game folders and file names.
