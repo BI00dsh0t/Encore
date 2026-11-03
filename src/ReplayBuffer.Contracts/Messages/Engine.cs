@@ -55,6 +55,10 @@ public sealed record StateSnapshot
     /// <remarks>A snapshot without the field (an engine from before story 4.1) reads as none.</remarks>
     public ClipSaved? LastClip { get; init; }
 
+    /// <summary>The last save that made no Clip, or <c>null</c> before one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 4.2) reads as none.</remarks>
+    public ClipFailed? LastClipFailure { get; init; }
+
     /// <summary>What the <c>video</c> key can be set to on this PC (R2); unprobed until <c>capture.videoOptions</c>.</summary>
     /// <remarks>A snapshot without the field (an engine from before story 10) reads as unprobed.</remarks>
     public VideoOptions VideoOptions

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
@@ -43,7 +44,8 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// <see cref="CaptureState.MicMuted"/>, put in each session's spec at Start and handed to the running
 /// session with the press QPC. With <see cref="ReplayClips"/>, a <see cref="HotkeyAction.Save"/> press
 /// on the game session reserves a path and has the session write its Clip there; the writer posts
-/// its result back, and only then is the Clip published as saved.
+/// its result back, and only then is the Clip published as saved and the session's Replay Buffer
+/// Reset at its end (R5); a press less than 1 s after that Reset is refused as too short.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -517,12 +519,20 @@ public sealed class SessionOrchestrator : IDisposable
     /// A <c>save</c> press (R4): with a game session holding a Replay Buffer, reserves the Clip's
     /// path (AD-21) in the Global Output Folder, else the default one, and hands the session the
     /// write; the writer posts its result back as a <see cref="ClipWritten"/>. Ignored with no game
-    /// session, or one with nothing to save yet.
+    /// session, or one with nothing to save yet. A press less than 1 s after the session's last
+    /// Reset (R5) is refused here, before the session is asked for anything: no keyframe, no Clip,
+    /// no Reset, only <see cref="ReplayClips.NotSaved"/> with <see cref="ErrorCodes.ClipTooShort"/>.
     /// </summary>
     private void SaveClip(long qpc)
     {
         if (_clips is null || _active is not { Spec.Kind: SessionKind.Game } active)
         {
+            return;
+        }
+
+        if (active.ResetQpc is { } reset && qpc - reset < Stopwatch.Frequency)
+        {
+            _clips.NotSaved?.Invoke(new ClipFailed(ErrorCodes.ClipTooShort));
             return;
         }
 
@@ -543,19 +553,33 @@ public sealed class SessionOrchestrator : IDisposable
         }
         catch (Exception e)
         {
-            _clips.Failed(e);
+            ReportSaveFailure(e);
             return;
         }
 
+        var sessionId = active.Id;
         try
         {
-            write.Write(path, error => Post(new ClipWritten(path, error)));
+            write.Write(path, error => Post(new ClipWritten(sessionId, qpc, write, path, error)));
         }
         catch (Exception e)
         {
             // It never started: nothing else will remove the reserved file.
             TryDelete(path);
-            _clips.Failed(e);
+            ReportSaveFailure(e);
+        }
+    }
+
+    /// <summary>A save that made no Clip: refused (<see cref="ErrorCodes.ClipTooShort"/>) to <see cref="ReplayClips.NotSaved"/>, else to <see cref="ReplayClips.Failed"/>.</summary>
+    private void ReportSaveFailure(Exception e)
+    {
+        if (e is ErrorCodeException { Code: ErrorCodes.ClipTooShort } refused)
+        {
+            _clips?.NotSaved?.Invoke(new ClipFailed(refused.Code));
+        }
+        else
+        {
+            _clips?.Failed(e);
         }
     }
 
@@ -565,16 +589,26 @@ public sealed class SessionOrchestrator : IDisposable
             ? candidate.Name
             : target.ProfileId is { } profileId ? Path.GetFileName(profileId) : "Game";
 
+    /// <summary>
+    /// A writer's result. A Clip written for the still-running session Resets its Replay Buffer
+    /// (R5, AD-19) at the Clip's end, and its press starts the 1 s a next press must wait; a failed
+    /// write Resets nothing, so the next Clip still starts at the last Reset.
+    /// </summary>
     private void OnClipWritten(ClipWritten written)
     {
-        if (written.Error is null)
+        if (written.Error is not null)
         {
-            _clips?.Saved(new ClipSaved(written.Path));
+            ReportSaveFailure(written.Error);
+            return;
         }
-        else
+
+        if (_active is { } active && active.Id == written.SessionId)
         {
-            _clips?.Failed(written.Error);
+            written.Write.Reset();
+            active.ResetQpc = active.ResetQpc is { } reset ? Math.Max(reset, written.Qpc) : written.Qpc;
         }
+
+        _clips?.Saved(new ClipSaved(written.Path));
     }
 
     private static void TryDelete(string path)
@@ -608,13 +642,16 @@ public sealed class SessionOrchestrator : IDisposable
 
         public SessionSpec Spec { get; set; } = spec;
 
+        /// <summary>The press QPC of the session's last Reset (R5); null before its first Clip.</summary>
+        public long? ResetQpc { get; set; }
+
         public TaskCompletionSource<SessionOutcome> Ended { get; } = NewReply<SessionOutcome>();
     }
 
     private sealed record SessionClosed(long SessionId, string Reason) : SessionMessage;
 
-    /// <summary>A Clip writer's result, posted from its thread.</summary>
-    private sealed record ClipWritten(string Path, Exception? Error) : SessionMessage;
+    /// <summary>A Clip writer's result, posted from its thread, with the session, press and write it came from.</summary>
+    private sealed record ClipWritten(long SessionId, long Qpc, IClipWrite Write, string Path, Exception? Error) : SessionMessage;
 
     private sealed record SessionFailed(long SessionId, Exception Failure) : SessionMessage;
 

@@ -446,6 +446,63 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task APressUnderASecondAfterAResetIsRefusedAndAFailedWriteResetsNothing()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = SettingsDocument.Empty.Global.SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(folder)) };
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var refused = System.Threading.Channels.Channel.CreateUnbounded<ClipFailed>();
+            var failures = System.Threading.Channels.Channel.CreateUnbounded<Exception>();
+            var writes = new ConcurrentQueue<string>();
+            var made = new ConcurrentQueue<FakeWrite>();
+            var factory = new FakeFactory
+            {
+                Save = _ =>
+                {
+                    // The third write fails.
+                    var write = new FakeWrite(writes, made.Count == 2 ? new IOException("disk gone") : null);
+                    made.Enqueue(write);
+                    return write;
+                },
+            };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => saved.Writer.TryWrite(s), e => failures.Writer.TryWrite(e), f => refused.Writer.TryWrite(f)));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
+            await NextAsync(saved);
+
+            // 0.5 s after that Reset: refused before the session is asked for anything.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second / 2)));
+            Assert.Equal(new ClipFailed(ErrorCodes.ClipTooShort), await NextAsync(refused));
+            Assert.Single(made);
+            Assert.Equal(1, made.Single().Resets);
+
+            // 1.5 s after it: saved, and Reset again.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 3 / 2)));
+            await NextAsync(saved);
+            Assert.Equal([1, 1], made.Select(w => w.Resets));
+
+            // A failed write Resets nothing.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 3)));
+            Assert.IsType<IOException>(await NextAsync(failures));
+            Assert.Equal([1, 1, 0], made.Select(w => w.Resets));
+            Assert.False(refused.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     private static async Task<T> NextAsync<T>(System.Threading.Channels.Channel<T> channel) =>
         await channel.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
@@ -560,14 +617,23 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
-    /// <summary>A write that records its path and completes at once, from another thread, leaving the reserved file.</summary>
-    private sealed class FakeWrite(ConcurrentQueue<string> writes) : IClipWrite
+    /// <summary>
+    /// A write that records its path and completes at once, from another thread, leaving the reserved
+    /// file, or failing with <paramref name="failure"/>; it counts its Resets.
+    /// </summary>
+    private sealed class FakeWrite(ConcurrentQueue<string> writes, Exception? failure = null) : IClipWrite
     {
+        private int _resets;
+
+        public int Resets => Volatile.Read(ref _resets);
+
         public void Write(string path, Action<Exception?> done)
         {
             writes.Enqueue(path);
-            ThreadPool.QueueUserWorkItem(_ => done(null));
+            ThreadPool.QueueUserWorkItem(_ => done(failure));
         }
+
+        public void Reset() => Interlocked.Increment(ref _resets);
     }
 
     /// <summary>A store that starts with <paramref name="saved"/> and records each save.</summary>
