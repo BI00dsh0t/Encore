@@ -35,12 +35,12 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 3.4 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 2.10 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 3.7 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.1 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 4.2 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 5.1 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.1 |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -84,18 +84,18 @@ The coordinator logs each QA round in the Log below.
 | 12 | 2.8 Live meters in the Track Layout editor | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged) |
 | 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | done |
 | 14 | 2.10 Refactor sweep | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged) |
-| 15 | Release epic 2 (`v0.2.0`) | | pending |
+| 15 | Release epic 2 (`v0.2.0`) | coordinator | done |
 | 16 | 3.1 Tracer: detect a borderless game | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `a7de027`) |
 | 17 | 3.8 Spike: which Windows game list to read | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 18 | 3.2 Detection sources and exclusions | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `168704a`) |
 | 19 | 3.3 Target Game rule | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `22b214e`) |
-| 20 | 3.4 Game Profile auto-creation and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 20 | 3.4 Game Profile auto-creation and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `31c2830`) |
 | 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `af89823`) |
-| 22 | 3.6 Game Profiles page in the Main App | | pending |
-| 23 | 3.7 Refactor sweep | | pending |
+| 22 | 3.6 Game Profiles page in the Main App | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4e5c446`) |
+| 23 | 3.7 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
 | 24 | Release epic 3 (`v0.3.0`) | | pending |
 | 25 | Slice epic 4 (Replay Buffer and Clips) | | done |
-| 25.1 | 4.1 Tracer: Save Hotkey to a multi-Track Clip from a Memory ring | | pending |
+| 25.1 | 4.1 Tracer: Save Hotkey to a multi-Track Clip from a Memory ring | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `01f2795`) |
 | 25.2 | 4.2 Exact save cut and gapless Reset | | pending |
 | 25.3 | 4.3 Replay Buffer lifecycle: Target switch, exit drain and Ignored | | pending |
 | 25.4 | 4.4 Save Cooldown, save events and two concurrent writers | | pending |
@@ -194,6 +194,8 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 2.8 | Live meters in the Track Layout editor, by hand (R6) | With no game running, play audio on the BEACN Chat output, open Settings → Track Layout: only the Tracks holding that output move, also after an unsaved edit; switch page or tab, or close the window, and the meters stop | `TrackLayoutPageTests` through the view model with a fake meter feed (watch on open, re-watch of the unsaved draft, only the fed Track moves, unwatch on close); the window-visibility and tab wiring are not covered; QA PASS at `81023ce` |
 | 3.8 | GameConfigStore lists the games you play (GameList's confirmed list is the same set) | Skim the lists at the bottom of `_bmad-output/initiative-replay-buffer/tickets/epic-game-detection-profiles/tickets/spike-which-windows-game-list-to-read-plan.md`. Are any of your games missing, and are there non-games you'd want Ignored by default (the launchers `LeagueClientUx.exe`, `rs2client.exe`, Oculus `Client.exe`, `rpcs3.exe`)? | Unelevated, read-only probes on this PC: GameConfigStore has 259 `MatchedExeFullPath` paths (74 on disk); GameList has 289 `ConfirmedBySystem` (all GameConfigStore-backed) and 450 `Candidate` (Start-menu apps) |
 | 3.2 | A real Windows-listed game is detected while windowed and stays detected until it exits | Start the Dev engine from a terminal with `ReplayBuffer.Engine serve --debug-capture`, then the Main App, then launch a game from Windows' list (a Steam game) in windowed mode. The Status tab should read `Target Game: <game>.exe (process <pid>)` within 5 s and keep it through minimize and Alt+Tab until you exit the game. A non-game on the list (a launcher such as `LeagueClientUx.exe`) is also detected until story 3.4's Ignored | Fake-process tests in `GameMonitorTests` (windowed listed game, stickiness to exit, install folder never detected) and `GameDetectionServeTests` (hand-added game with a captioned window over a real pipe); a read-only read of the real GameConfigStore |
+| 3.6 | The Game Profiles page in Settings, by hand (R3, R5) | With the Dev engine serving (`ReplayBuffer.Engine serve --debug-capture`) and the App attached, open Settings → Game Profiles: rename a detected game; tick Ignored and see detection stop (the Status line goes to `none`), untick it and see it detected again; switch Recordings on; Browse to a windowed game's `.exe`, press Add, launch it and see it become the Target Game | `GameProfilesPageTests` through the view model (list, rename, Ignored, Recordings, blank rename, Add and its refusal, view renders without binding errors); `GameDetectionServeTests` for `game.add` (canonical path written once, repeat writes nothing, missing file `invalid-arguments`); QA PASS at `c6aad2d`. A hand-added game shows in the list only once detected |
+| 4.1 | A real game's Save Hotkey writes a Clip that plays with every Track in sync and ends at the press (R1, R4, R6) | Start the Dev engine with `ReplayBuffer.Engine serve` (no `--debug-capture`) and the Main App, set a three-Track layout, play a detected game for a minute, press the Save Hotkey, then open the Clip in `<Output Folder>\<game>` (default `Videos\<instance>`) in VLC and run `ffprobe` on it. Every named Track should play in sync, the Clip should end at the press, and moov should come before mdat | `ReplayClipCaptureTests`: a 4 s in-process capture with a tone hub and three Tracks, then a `save` press; ffprobe stream titles and durations, moov before mdat, no `.rbpart`. QA PASS at `48b5cd7`. A real Hotkey press and a real game are untested |
 
 ## Decisions Awaiting Review
 
@@ -256,6 +258,7 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-02 | 8.8 | Two unattended 8-hour soaks (Memory, then Disk) on Bench's synthetic game without GPU load, real Audio Devices, a press every 5 min, a 10-min Recording each hour, a crossed Cleanup limit, the App killed in the last hour; a real-game soak is a Human Check | T-16 asks for both modes; the synthetic window keeps it unattended |
 | 2026-11-02 | 8.9 | T-01 to T-25 recorded in `conformance-t01-t25.md` beside the epic; T-09's HDR half and T-12 (Post-roll) out of v1; T-11 met by 4.4's `save-busy`; failures needing new behaviour become bugfixes against the owning story | PLAN.md §8 predates the PRD's overrides |
 | 2026-11-02 | 8.11 | A closing end-to-end story on the builder's PC (hitl) after the sweep, ending with ShadowPlay uninstalled | The epic's Done when ends with checks only the builder can run |
+| 2026-11-03 | 4.1 | With no `outputFolder` set, Clips go to `<Videos>\<instance name>`; a game with no Game Profile yet saves to a folder named after its executable (until 3.4 profiles reach it); Disk mode buffers in memory with a log line until 4.7 | The PRD has no default Output Folder, and 4.1 is a tracer |
 
 ## Log
 
@@ -344,3 +347,16 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 2.10 is READY FOR QA at `3240a1f` (epic 2's duplicated audio wiring moved into shared helpers; build, Core, Engine and publish clean). QA started on qa-2-1 (Sonnet), checking for any behaviour change, and its card moved to In QA. 3.4 and 4.1 are being implemented.
 - 2026-11-03: QA on 2.10 (`3240a1f`): **QA PASS**, 0 findings, no behaviour change. 2.10 was switched to Sonnet and told to merge. Next, the coordinator marks epic 2 `status: done` and releases `v0.2.0`.
 - 2026-11-03: 2.10 merged into `develop` (`refactor(audio): merge 2.10-refactor-sweep`; develop, state files only, merged into the branch first, so nothing was rebuilt) and marked done. Verified before: Release build 0 warnings; Core 58, Engine 143 (18 explicit skipped), publish 0 IL warnings; Heavy mic-mute and Track-mix tests passed. Epic 2 is ready to be marked done and released as `v0.2.0` by the coordinator.
+- 2026-11-03: 2.10 merged (`0770b95`, done `e54dd81`). **Epic 2 is complete:** it was marked `status: done` (`e6216ae`) and **`v0.2.0` was released** by the coordinator (master `02bcd8e`, tag `v0.2.0`, back-merge `b44e0eb`). The 2.10 card is in Done with a release comment. 3.4 is READY FOR QA at `c456b1d`, and QA started on qa-1-14 (Sonnet); its card is In QA. 4.1 is being implemented.
+- 2026-11-03: QA on 3.4 (`c456b1d`): **QA PASS**, 0 findings. 3.4 was switched to Sonnet and told to merge. Once it lands, 3.6 (Game Profiles page) and 4.3 (once 4.2 is done) can follow.
+- 2026-11-03: 3.4 merged (`31c2830`, `feat(engine): merge 3.4-game-profiles`; develop merged into the branch first with no conflicts, then Release build 0 warnings, Platform.Windows 25, Core 59 and Engine 146 passed), ticket marked done. A profile deleted while its game is still detected isn't recreated until the next detection (QA note, out of scope). 3.6 (Game Profiles page) is unblocked.
+- 2026-11-03: 3.4 merged (`31c2830`, done `5560509`), and its card is in Done. 3.6 (Game Profiles page, low risk, HITL) went to pool worker slice-epic-5 (Opus, medium effort), and its card is In progress. 4.1 is still being implemented. After 3.6 comes 3.7 (epic 3's refactor sweep), then `v0.3.0`.
+- 2026-11-03: 3.6 is READY FOR QA at `c6aad2d` (Game Profiles page plus a `game.add` command; build 0 warnings; App, Contracts and Engine pass). QA started on qa-2-1 (Sonnet), and its card moved to In QA. 4.1 is in review.
+- 2026-11-03: QA on 3.6 (`c6aad2d`): **QA PASS**, 0 blocking findings and one accepted optional note on the Add catch. 3.6 was told to merge. 4.1 is READY FOR QA at `48b5cd7` (build 0 warnings; Core, Contracts, FFmpeg and Engine pass; publish clean; a real-game Save check is queued for the builder). QA started on qa-1-14 (Sonnet), and its card is In QA.
+- 2026-11-03: QA on 3.6 (`c6aad2d`): **QA PASS**, 0 blocking findings. QA's optional note (`GameProfilesPage.AddAsync` catches only `ErrorCodeException`, so another exception would go unobserved) is accepted as is: a disconnect already surfaces as `ErrorCodeException`. 3.6 merged (`4e5c446`, `feat(app): merge 3.6-game-profiles-page`; develop merged into the branch first, only the state file differed, so no rebuild), ticket marked done. Next: 3.7 (epic 3 refactor sweep), then `v0.3.0`.
+- 2026-11-03: 3.6 merged (`e83d511`, done `054d2f1`), and its card is in Done. QA on 4.1 (`48b5cd7`): **QA PASS**, 0 blocking findings and two accepted low notes. 4.1 was switched to Sonnet and told to merge. 3.7 (epic 3 refactor sweep) went to pool worker slice-epic-4 (Opus, medium effort), and its card is In progress. After 3.7 merges: mark epic 3 `status: done` and release `v0.3.0`. After 4.1 merges, 4.2 is next.
+- 2026-11-03: 4.1 merged into `develop` (`01f2795`, `feat(engine): merge 4.1-replay-buffer-tracer`) and marked done, after QA PASS at `48b5cd7` with 0 blocking findings. `develop` (2.10, 3.4, 3.6, v0.2.0) was merged into the branch first without conflicts: Release build 0 warnings; Core 63, Contracts 95, Platform.FFmpeg 31, Engine 166, 0 failures; publish 0 warnings. QA's two low notes are accepted: the lock scope during a save (two linear scans inside the ring lock) goes to 4.2's exact cut, and a Save pressed with no game session leaves no extra log line (the press itself is logged; the user-visible failure is 4.5's). Deferred from review, for 4.3 and 4.5: a Clip still writing at engine shutdown isn't announced and can leave a `.rbpart`, and an empty save fails without an error code. One Human Check row and one Decisions row added. 4.2 is next.
+- 2026-11-03: 4.1 merged (`01f2795`, done `5cf2bd2`), and its card is in Done. That unblocked 4.2 (exact save cut and gapless Reset, high risk), which went to pool worker slice-epic-8 (Opus, high effort), and 5.1 (Overlay dot tracer, medium risk, HITL), which went to pool worker slice-epic-5 (Opus, medium effort). Both cards are In progress. 3.7 is being implemented. Epic 4 and 5 stories have no Queue rows; their status is tracked in the Log and on the Trello board.
+- 2026-11-03: 3.7 is READY FOR QA at `23d77f4` (build 0 warnings, four scoped suites pass, publish clean). QA started on qa-2-1 (Sonnet), and its card moved to In QA. 4.2 and 5.1 are being implemented; 5.1 touches only App and Platform.Desktop.
+- 2026-11-03: QA on 3.7 (`23d77f4`, then `9c080ff` after a rebase that dropped a stray develop commit; src/tests identical): **QA PASS**, 0 code findings. 3.7 merged (`d254a0c`, `refactor(engine): merge 3.7-refactor-sweep`; develop was already an ancestor, so no rebuild), ticket marked done. Verified before: Release build 0 warnings; Platform.Windows 25, Core 63, Engine 148 (18 explicit skipped), App 65 (5 skipped); publish 0 IL warnings. Epic 3 is complete: next the coordinator marks it `status: done` and releases `v0.3.0`.
+- 2026-11-03: QA round 1 on 3.7 (`23d77f4`): **QA FAIL**, 1 low docs finding (line endings on a develop docs file, from a stale develop commit). 3.7 rebased onto the current develop (`9c080ff`). The coordinator checked that the code diff between `23d77f4` and `9c080ff` is empty and counted that as round 2, **QA PASS**. 3.7 was told to merge. 5.1 is READY FOR QA at `a768339` (App and Platform.Desktop only), QA started on qa-1-14 (Sonnet), and its card is In QA.

@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -7,6 +6,7 @@ using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Audio;
+using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Core.Settings;
 using ReplayBuffer.Engine.Audio;
@@ -47,6 +47,12 @@ internal sealed record EngineHostOptions
     /// <summary><c>serve --debug-capture</c>: a capture session follows the Target Game.</summary>
     public bool DebugCapture { get; init; }
 
+    /// <summary>
+    /// Whether a Replay Buffer session follows the Target Game and a <c>save</c> press writes a
+    /// Clip (R1, R4); null is on for every instance but a test one. <see cref="DebugCapture"/> wins.
+    /// </summary>
+    public bool? ReplayBuffer { get; init; }
+
     /// <summary>The time between Game Detection polls.</summary>
     public TimeSpan GameScanInterval { get; init; } = TimeSpan.FromSeconds(1);
 
@@ -57,11 +63,11 @@ internal sealed record EngineHostOptions
 /// The engine's composition root for <c>serve</c>: claims the instance's pipe, opens the settings
 /// store, and serves its commands and events until <c>engine.shutdown</c>. It publishes the
 /// heartbeat and supervises the App that attaches (AD-16). It composes the SessionOrchestrator
-/// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; only <c>--debug-capture</c> starts a session yet.
+/// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; a session starts only on the Target Game.
 /// The orchestrator owns mic mute, kept in the instance's <c>runtime.json</c> (AD-5) and loaded
 /// before the pipe serves. It registers the Hotkeys (AD-11) before the pipe accepts connections; the
 /// orchestrator publishes each press as <c>hotkey.pressed</c>, and a <c>micMute</c> press also toggles
-/// mic mute; no other action is bound to one yet. Once the pipe serves, it
+/// mic mute, and a <c>save</c> press saves a Clip. Once the pipe serves, it
 /// probes the video encoders off that path and publishes the result as <c>capture.videoOptions</c>.
 /// It lists the audio devices before the hub exists, so the first snapshot holds them, and then
 /// publishes <c>devices.changed</c> when the endpoints or the Track Layouts change them (R1).
@@ -70,7 +76,9 @@ internal sealed record EngineHostOptions
 /// publishes <c>meters.levels</c> until <c>meters.unwatch</c> or the next watch; the orchestrator's
 /// mic mute reaches the meters as it does a session (R6).
 /// Game Detection proposes the Target Game to the orchestrator, which publishes <c>target.changed</c>;
-/// with <c>--debug-capture</c> a capture session follows the Target.
+/// a Replay Buffer session follows the Target, its audio from the snapshot's Track Layout, and a
+/// <c>save</c> press writes a Clip, published as <c>clip.saved</c>. With <c>--debug-capture</c> a
+/// capture session writing one file follows the Target instead.
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
@@ -166,6 +174,8 @@ internal sealed class EngineHost : IAsyncDisposable
         var log = loggers.CreateLogger("Ipc");
         var hotkeyLog = loggers.CreateLogger("Hotkeys");
         var gameLog = loggers.CreateLogger("Games");
+        var clipLog = loggers.CreateLogger("Clips");
+        var replay = !hostOptions.DebugCapture && (hostOptions.ReplayBuffer ?? !instance.IsTest);
 
         // The pipe first: a second engine must fail before it touches the settings file.
         var server = new IpcServer(Contracts.Ipc.PipeName.ForCurrentUser(instance.Name), options ?? new IpcServerOptions(), log);
@@ -207,7 +217,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 loggers.CreateLogger("Audio"));
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
-                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions") },
+                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay },
                     loggers,
                     audio,
                     encoders),
@@ -226,12 +236,27 @@ internal sealed class EngineHost : IAsyncDisposable
                 changed => hub.Publish(GameMessages.TargetChanged, changed),
                 hostOptions.DebugCapture
                     ? new TargetCapture(
-                        () => SessionAudio.None,
+                        _ => SessionAudio.None,
                         (target, e) => gameLog.LogWarning(e, "The debug capture of {Name} (process {Pid}) failed", target.Name, target.ProcessId))
+                    : replay
+                        ? new TargetCapture(
+                            snapshot => SessionAudio.FromLayout(snapshot.TrackLayout),
+                            (target, e) => gameLog.LogWarning(e, "The Replay Buffer of {Name} (process {Pid}) failed", target.Name, target.ProcessId))
+                        : null,
+                replay
+                    ? new ReplayClips(
+                        OutputPathAllocator.System,
+                        () => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name),
+                        saved =>
+                        {
+                            hub.Publish(CaptureMessages.Saved, saved);
+                            clipLog.LogInformation("Clip saved to {Path}", saved.Path);
+                        },
+                        e => clipLog.LogWarning("The save failed: {Message}", e.Message))
                     : null);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
-            if (hostOptions.GameWindows is not null || hostOptions.DebugCapture || !instance.IsTest)
+            if (hostOptions.GameWindows is not null || hostOptions.DebugCapture || replay || !instance.IsTest)
             {
                 SessionOrchestrator proposeTo = sessions;
                 var listed = ListedGames(new GameConfigStore(gameLog), () => load.Store.Current);
@@ -243,10 +268,16 @@ internal sealed class EngineHost : IAsyncDisposable
                     gameLog,
                     listed,
                     InstallFolder(),
-                    game => hub.Publish(GameMessages.Detected, game),
+                    game =>
+                    {
+                        // The profile exists before anything names it (story 3.4).
+                        GameProfiles.EnsureProfile(load.Store, game.ProfileId, game.Name, gameLog);
+                        hub.Publish(GameMessages.Detected, game);
+                    },
                     game => hub.Publish(GameMessages.Exited, game),
                     () => hub.State.TargetGame?.ProcessId,
-                    hostOptions.Time);
+                    hostOptions.Time,
+                    id => load.Store.Current.Profiles.TryGetValue(id, out var profile) && profile.Ignored);
             }
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
@@ -266,6 +297,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 return ValueTask.FromResult(Empty.Value);
             });
             router.Register(FeedbackMessages.Dismiss, (dismiss, _) => ValueTask.FromResult(warnings.Dismiss(dismiss)));
+            router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
                 EngineMessages.Shutdown,
@@ -405,25 +437,12 @@ internal sealed class EngineHost : IAsyncDisposable
             if (!ReferenceEquals(list, fromList) || !ReferenceEquals(document, fromSettings))
             {
                 var union = new HashSet<string>(list, StringComparer.Ordinal);
-                union.UnionWith(SettingsResolver.Resolve(document, null).ManualGames.Select(CanonicalOrLowercase));
+                union.UnionWith(SettingsResolver.Resolve(document, null).ManualGames.Select(GamePaths.CanonicalOrLowercase));
                 (fromList, fromSettings, listed) = (list, document, union);
             }
 
             return listed;
         };
-    }
-
-    // AD-18: a listed path is matched canonical, or in lowercase when it isn't on disk.
-    private static string CanonicalOrLowercase(string path)
-    {
-        try
-        {
-            return GamePaths.Canonicalize(path);
-        }
-        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return path.ToLowerInvariant();
-        }
     }
 
     /// <summary>The engine's install folder, canonical with a trailing <c>\</c>; nothing under it is a game.</summary>
@@ -434,7 +453,7 @@ internal sealed class EngineHost : IAsyncDisposable
         {
             folder = GamePaths.Canonicalize(AppContext.BaseDirectory);
         }
-        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception e) when (GamePaths.CanonicalizeFailed(e))
         {
             folder = Path.GetFullPath(AppContext.BaseDirectory).ToLowerInvariant();
         }

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Core.Audio;
+using ReplayBuffer.Core.Replay;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Engine.Audio;
 using ReplayBuffer.Media;
@@ -15,12 +16,20 @@ using VideoCodec = ReplayBuffer.Contracts.Settings.VideoCodec;
 namespace ReplayBuffer.Engine.Sessions;
 
 /// <summary>
-/// The engine's own session options: where the file goes, and <c>debug-capture</c>'s measurement
-/// and encoder experiments. None of it is part of <see cref="SessionSpec"/>.
+/// The engine's own session options: where the file goes (or that there is none, only a Replay
+/// Buffer), and <c>debug-capture</c>'s measurement and encoder experiments. None of it is part of
+/// <see cref="SessionSpec"/>.
 /// </summary>
 internal sealed record CaptureSessionOptions
 {
     public static readonly TimeSpan DefaultFirstFrameTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// The Replay Buffer (R1, AD-8): the encoders write into a Memory-mode ring sized from the
+    /// snapshot instead of a file, and each <see cref="CaptureSession.Save"/> writes a Clip from it.
+    /// No path is allocated, and the outcome has none.
+    /// </summary>
+    public bool Replay { get; init; }
 
     /// <summary>The folder a file is allocated in when neither <see cref="OutputPath"/> nor the snapshot's Output Folder is set.</summary>
     public required string OutputFolder { get; init; }
@@ -103,12 +112,20 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// unbroken set of streams. Mic mute (AD-13) is one <see cref="MicMuteSchedule"/>, set from the spec
 /// before anything opens and then by <see cref="SetMicMuted"/>; each Mic Device's input to each
 /// <c>muteAffected</c> Track passes through a <see cref="MicMuteGate"/>, so it is silenced there,
-/// before the mix, from the press's frame, and stays audible in every other Track.
+/// before the mix, from the press's frame, and stays audible in every other Track. In Replay mode
+/// (<see cref="CaptureSessionOptions.Replay"/>) the streams go into a <see cref="ReplayRingSink"/>
+/// instead of a file, and <see cref="Save"/> writes a Clip from it on a thread of its own.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
+    /// <summary>AAC packets a second (48 kHz in 1024-sample frames), rounded up, for sizing the ring.</summary>
+    private const int AacPacketsPerSecond = 47;
+
     /// <summary>How often a Track with no devices is advanced to the current QPC.</summary>
     private static readonly TimeSpan SilenceInterval = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>How long a save waits for every stream to pass the press before it cuts.</summary>
+    private static readonly TimeSpan SaveWait = TimeSpan.FromSeconds(1);
 
     private readonly SessionSpec _spec;
     private readonly ISessionEvents _events;
@@ -130,13 +147,15 @@ internal sealed class CaptureSession : ICaptureSession
     private bool _silenceStopped;
 
     private WindowInfo? _window;
-    private string _path = "";
+    private string? _path;
     private D3D11Device? _device;
     private WindowCapture? _capture;
     private D3D11VAFrames? _frames;
     private FrameScaler? _scaler;
     private PacedVideoEncoder? _paced;
     private FragmentedMp4Muxer? _muxer;
+    private ReplayRingSink? _ring;
+    private volatile bool _outputFinished;
     private VideoEncoder? _video;
     private readonly IVideoEncoderCatalog _encoders;
     private readonly VideoSize _outputSize;
@@ -171,10 +190,20 @@ internal sealed class CaptureSession : ICaptureSession
         (_encoderName, _codec) = ResolveEncoder();
         var target = _spec.Target;
         _window = WindowFinder.FromHandle(target.Window);
-        _path = _options.OutputPath is { } explicitPath
-            ? Path.GetFullPath(explicitPath)
-            : OutputNaming.Allocate(_spec.Snapshot.OutputFolder ?? _options.OutputFolder, _window?.Title ?? "Capture", DateTime.Now, File.Exists);
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        if (_options.Replay)
+        {
+            if (_spec.Snapshot.ReplayStorage == Contracts.Settings.ReplayStorage.Disk)
+            {
+                _log.LogInformation("The Disk-mode Replay Buffer is not built yet; buffering in memory");
+            }
+        }
+        else
+        {
+            _path = _options.OutputPath is { } explicitPath
+                ? Path.GetFullPath(explicitPath)
+                : OutputNaming.Allocate(_spec.Snapshot.OutputFolder ?? _options.OutputFolder, _window?.Title ?? "Capture", DateTime.Now, File.Exists);
+            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        }
 
         _device = D3D11Device.Create(target.Window, _loggers.CreateLogger<D3D11Device>());
         if (_options.GpuPriority is { } priority)
@@ -299,15 +328,42 @@ internal sealed class CaptureSession : ICaptureSession
         }
         finally
         {
+            // A save still waiting has every packet it will get.
+            _outputFinished = true;
             DisposeAll();
         }
 
         if (_failure is null)
         {
-            _log.LogInformation("Wrote {Seconds:0.0} s to {Path}", (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency, _path);
+            var seconds = (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency;
+            if (_path is null)
+            {
+                _log.LogInformation("Buffered {Seconds:0.0} s; the Replay Buffer is released once no save holds it", seconds);
+            }
+            else
+            {
+                _log.LogInformation("Wrote {Seconds:0.0} s to {Path}", seconds, _path);
+            }
         }
 
         return new SessionOutcome(_path, _stopReason, _failure);
+    }
+
+    /// <summary>
+    /// In Replay mode, once the output is open: a write of the Clip up to <paramref name="qpc"/>.
+    /// It runs on a thread of its own, which waits up to <see cref="SaveWait"/> for every stream to
+    /// pass the press (encoding and the AAC FIFO lag it), cuts
+    /// <c>[press - bufferWindow, press]</c> from the first keyframe in it, and writes the Clip.
+    /// </summary>
+    public IClipWrite? Save(long qpc)
+    {
+        // The anchor's release write publishes the ring.
+        if (!_options.Replay || !Volatile.Read(ref _anchored) || _ring is not { } ring)
+        {
+            return null;
+        }
+
+        return new ClipWrite(this, ring, qpc);
     }
 
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>
@@ -446,13 +502,28 @@ internal sealed class CaptureSession : ICaptureSession
         _log.LogInformation("Anchor QPC {Anchor}; output {Size}, content {Content}", anchorQpc, _outputSize, contentSize);
 
         _stats?.SnapshotAnchor();
-        _muxer = new FragmentedMp4Muxer(_path, _loggers.CreateLogger<FragmentedMp4Muxer>());
+        PacketSink packets;
+        var video = _spec.Snapshot.Video;
+        if (_options.Replay)
+        {
+            var window = _spec.Snapshot.BufferWindow;
+            var perSecond = video.Fps + (_spec.Audio.Tracks.Count * AacPacketsPerSecond) + 1;
+            var capacity = (int)Math.Min((window + 3L) * perSecond, 1 << 24);
+            _ring = new ReplayRingSink(new PacketRing(window * 1_000_000L, capacity));
+            packets = _ring;
+            _log.LogInformation("Replay Buffer of {Window} s in memory, {Capacity} packets preallocated", window, capacity);
+        }
+        else
+        {
+            _muxer = new FragmentedMp4Muxer(_path!, _loggers.CreateLogger<FragmentedMp4Muxer>());
+            packets = _muxer;
+        }
+
         var nv12 = _options.Color == ColorPath.X2;
         _frames = new D3D11VAFrames(_device!.NativeDevice, _outputSize.Width, _outputSize.Height, VideoEncoder.PoolSize, nv12);
         _scaler = new FrameScaler(_device, _outputSize, nv12, 2 * VideoEncoder.PoolSize, _loggers.CreateLogger<FrameScaler>());
 
-        var video = _spec.Snapshot.Video;
-        _video = new VideoEncoder(_frames, _muxer, _qpcFrequency, anchorQpc, _loggers.CreateLogger<VideoEncoder>(), _stats?.Latency,
+        _video = new VideoEncoder(_frames, packets, _qpcFrequency, anchorQpc, _loggers.CreateLogger<VideoEncoder>(), _stats?.Latency,
             new VideoEncoderOptions(_options.NvencPreset, _options.NvencTune, _encoderName, _codec, video.Fps, video.BitrateKbps, video.RateControl));
         if (_options.Stages == CaptureStages.Full)
         {
@@ -464,12 +535,12 @@ internal sealed class CaptureSession : ICaptureSession
         var tracks = _spec.Audio.Tracks;
         for (var i = 0; i < tracks.Count; i++)
         {
-            var encoder = new AacEncoder(_muxer, tracks[i].Name, isDefault: i == 0, _loggers.CreateLogger<AacEncoder>());
+            var encoder = new AacEncoder(packets, tracks[i].Name, isDefault: i == 0, _loggers.CreateLogger<AacEncoder>());
             _audioEncoders.Add(encoder);
             _mixers.Add(new TrackMixer(tracks[i].DeviceIndexes.Count, encoder));
         }
 
-        _muxer.Start();
+        _muxer?.Start();
 
         // The hub's streams have run since Open; each device takes blocks from here, cut at the anchor
         // once, and fanned out to every Track that holds it.
@@ -500,7 +571,7 @@ internal sealed class CaptureSession : ICaptureSession
 
     private void Finish()
     {
-        if (_muxer is null || _video is null || _audioEncoders.Count != _spec.Audio.Tracks.Count)
+        if ((_muxer is null && _ring is null) || _video is null || _audioEncoders.Count != _spec.Audio.Tracks.Count)
         {
             return;
         }
@@ -534,7 +605,7 @@ internal sealed class CaptureSession : ICaptureSession
             audio.Flush();
         }
 
-        _muxer.Finish();
+        _muxer?.Finish();
         if (_paced?.Pacer is { } pacer)
         {
             _log.LogInformation(
@@ -692,7 +763,7 @@ internal sealed class CaptureSession : ICaptureSession
         var report = new CaptureStatsReport(
             CaptureStatsReport.CurrentSchema,
             DateTimeOffset.Now,
-            _path,
+            _path ?? "",
             _window?.Title ?? "",
             _window?.ProcessName,
             _device?.AdapterName ?? "",
@@ -819,6 +890,9 @@ internal sealed class CaptureSession : ICaptureSession
         _audioTracks.Add(track);
     }
 
+    /// <summary>Microseconds since the anchor at <paramref name="qpc"/>.</summary>
+    private long MicrosAt(long qpc) => (long)((Int128)(qpc - _anchorQpc) * 1_000_000 / _qpcFrequency);
+
     private void DisposeAll()
     {
         // The device threads write into the encoders: unsubscribe before anything they touch is freed.
@@ -839,6 +913,91 @@ internal sealed class CaptureSession : ICaptureSession
         _scaler?.Dispose();
         _frames?.Dispose();
         _muxer?.Dispose();
+
+        // A save still writing holds its own lease and pins; the ring goes when the last is released.
+        _ring?.Dispose();
         _device?.Dispose();
+    }
+
+    /// <summary>
+    /// One save's write (AD-8): it leases the ring on the orchestrator thread, so ending the session
+    /// can't free it, then waits, cuts (pinning the slabs and releasing the lease) and writes on a
+    /// background thread of its own, which never blocks the ring.
+    /// </summary>
+    private sealed class ClipWrite(CaptureSession session, ReplayRingSink ring, long qpc) : IClipWrite
+    {
+        public void Write(string path, Action<Exception?> done)
+        {
+            ArgumentNullException.ThrowIfNull(path);
+            ArgumentNullException.ThrowIfNull(done);
+            if (!ring.Lease())
+            {
+                throw new InvalidOperationException("The Replay Buffer has already been released.");
+            }
+
+            try
+            {
+                new Thread(() => done(Run(path))) { Name = "ClipWriter", IsBackground = true }.Start();
+            }
+            catch
+            {
+                ring.Release();
+                throw;
+            }
+        }
+
+        private Exception? Run(string path)
+        {
+            var log = session._log;
+            var leased = true;
+            try
+            {
+                var pressUs = session.MicrosAt(qpc);
+                var deadline = Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * session._qpcFrequency);
+                while (!ring.AllStreamsPast(pressUs) && !session._outputFinished && Stopwatch.GetTimestamp() < deadline)
+                {
+                    Thread.Sleep(10);
+                }
+
+                var windowUs = session._spec.Snapshot.BufferWindow * 1_000_000L;
+                using var source = ring.Cut(pressUs - windowUs, pressUs);
+                ring.Release();
+                leased = false;
+                if (source is null)
+                {
+                    throw new InvalidOperationException("The Replay Buffer holds no keyframe before the press yet; there is nothing to save.");
+                }
+
+                ClipWriter.Write(source, path, log);
+                log.LogInformation(
+                    "Clip of {Seconds:0.00} s ({Packets} packets) written to {Path}",
+                    (source.Cut.EndUs - source.Cut.StartUs) / 1e6, source.Cut.Packets.Count, path);
+                return null;
+            }
+            catch (Exception e)
+            {
+                // No file is left behind: neither the part nor the reserved one.
+                foreach (var file in new[] { path + ClipWriter.PartExtension, path })
+                {
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch (Exception deleteFailure) when (deleteFailure is IOException or UnauthorizedAccessException)
+                    {
+                        log.LogWarning("Could not delete {Path}: {Message}", file, deleteFailure.Message);
+                    }
+                }
+
+                return e;
+            }
+            finally
+            {
+                if (leased)
+                {
+                    ring.Release();
+                }
+            }
+        }
     }
 }

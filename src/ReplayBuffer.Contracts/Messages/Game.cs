@@ -46,6 +46,13 @@ public sealed record TargetChanged(TargetGame? From, TargetGame? To, TargetChang
 /// <param name="ProcessId">The game's process.</param>
 public sealed record DetectedGame(string ProfileId, string Name, int ProcessId);
 
+/// <summary><c>game.add</c>: hand-adds an executable to <c>manualGames</c> (R1). The engine canonicalizes <see cref="Path"/> (AD-18).</summary>
+/// <param name="Path">The executable's path as typed or browsed.</param>
+public sealed record GameAdd(string Path);
+
+/// <summary>The reply to <c>game.add</c>: the canonical path now in <c>manualGames</c>.</summary>
+public sealed record GameAdded(string Path);
+
 /// <summary>
 /// Game messages (epic-game-detection-profiles): Game Detection, the Target Game and Game Profiles.
 /// The area's payloads, its own JSON context and its entries in these lists are added here only (AD-22).
@@ -73,7 +80,14 @@ public static class GameMessages
         "detectedGames",
         (snapshot, game) => snapshot with { DetectedGames = [.. Without(snapshot.DetectedGames, game.ProcessId)] });
 
-    public static IReadOnlyList<CommandType> Commands { get; } = [];
+    /// <summary>
+    /// Adds an executable to <c>manualGames</c> once, canonical; a path that isn't an existing executable
+    /// is refused with <c>invalid-arguments</c>.
+    /// </summary>
+    public static CommandType<GameAdd, GameAdded> Add { get; } =
+        new("game.add", GameJsonContext.Default.GameAdd, GameJsonContext.Default.GameAdded);
+
+    public static IReadOnlyList<CommandType> Commands { get; } = [Add];
 
     public static IReadOnlyList<EventType> Events { get; } = [TargetChanged, Detected, Exited];
 
@@ -89,4 +103,6 @@ public static class GameMessages
 [JsonSerializable(typeof(TargetChanged))]
 [JsonSerializable(typeof(TargetGame))]
 [JsonSerializable(typeof(DetectedGame))]
+[JsonSerializable(typeof(GameAdd))]
+[JsonSerializable(typeof(GameAdded))]
 public sealed partial class GameJsonContext : JsonSerializerContext;

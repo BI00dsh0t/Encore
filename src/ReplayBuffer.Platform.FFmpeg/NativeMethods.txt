@@ -7,3 +7,5 @@ WaitForMultipleObjects
 CloseHandle
 CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 SYNCHRONIZATION_ACCESS_RIGHTS
+SetThreadPriority
+GetCurrentThread

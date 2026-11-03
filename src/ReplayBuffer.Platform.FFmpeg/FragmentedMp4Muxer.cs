@@ -8,7 +8,7 @@ namespace ReplayBuffer.Platform.FFmpeg;
 /// every second. Encoders hand it packets in their own time base; it converts them to
 /// stream time and writes them under one lock.
 /// </summary>
-public sealed unsafe class FragmentedMp4Muxer : IDisposable
+public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 {
     // MKTAG('h', 'v', 'c', '1').
     private const uint HevcTag = 'h' | ('v' << 8) | ('c' << 16) | ((uint)'1' << 24);
@@ -30,11 +30,11 @@ public sealed unsafe class FragmentedMp4Muxer : IDisposable
 
     public string Path { get; }
 
-    /// <summary>Encoders must set <c>AV_CODEC_FLAG_GLOBAL_HEADER</c> when this is true.</summary>
-    internal bool NeedsGlobalHeader => (_context->oformat->flags & ffmpeg.AVFMT_GLOBALHEADER) != 0;
+    /// <inheritdoc/>
+    internal override bool NeedsGlobalHeader => (_context->oformat->flags & ffmpeg.AVFMT_GLOBALHEADER) != 0;
 
     /// <summary>Adds a stream for an opened encoder. Call before <see cref="Start"/>.</summary>
-    internal int AddStream(AVCodecContext* encoder, string? title, bool isDefault)
+    internal override int AddStream(AVCodecContext* encoder, string? title, bool isDefault)
     {
         if (_started)
         {
@@ -93,14 +93,13 @@ public sealed unsafe class FragmentedMp4Muxer : IDisposable
     }
 
     /// <summary>Writes one packet and takes its reference. <paramref name="timeBase"/> is the encoder's.</summary>
-    internal void Write(AVPacket* packet, int streamIndex, AVRational timeBase)
+    internal override void Write(AVPacket* packet, int streamIndex, AVRational timeBase)
     {
         lock (_lock)
         {
             // fMP4 with an empty moov has no edit list, so a packet that ends at or before
             // time 0 (AAC's 1024-sample priming) would be played and delay the stream.
-            var beforeStart = packet->pts != ffmpeg.AV_NOPTS_VALUE && packet->pts + packet->duration <= 0;
-            if (!_started || _finished || beforeStart)
+            if (!_started || _finished || BeforeStart(packet))
             {
                 ffmpeg.av_packet_unref(packet);
                 return;

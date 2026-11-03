@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
 
 namespace ReplayBuffer.Core.Tests;
@@ -310,7 +311,7 @@ public sealed class SessionOrchestratorTests : IDisposable
             () => Volatile.Read(ref _document),
             _ => { },
             targetChanged: c => changes.Writer.TryWrite(c),
-            targetCapture: new TargetCapture(() => NoAudio, (_, e) => failures.Enqueue(e)));
+            targetCapture: new TargetCapture(_ => NoAudio, (_, e) => failures.Enqueue(e)));
         var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
         var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
 
@@ -362,8 +363,10 @@ public sealed class SessionOrchestratorTests : IDisposable
         Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Focus), await NextAsync(changes));
     }
 
-    [Fact]
-    public async Task AnExitHandoverCommitsThroughARunningRecording()
+    [Theory]
+    [InlineData(TargetChangeReason.Exit)]
+    [InlineData(TargetChangeReason.Ignored)]
+    public async Task AnExitOrIgnoredHandoverCommitsThroughARunningRecording(TargetChangeReason reason)
     {
         var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
         using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
@@ -373,12 +376,11 @@ public sealed class SessionOrchestratorTests : IDisposable
         orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
         orchestrator.Post(new RecordingRunning(true));
         orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
-        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Exit));
-        orchestrator.Post(new RecordingRunning(false));
+        orchestrator.Post(new ProposeTarget(b, reason));
         await HandledAsync(orchestrator);
 
         Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
-        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Exit), await NextAsync(changes));
+        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), reason), await NextAsync(changes));
         Assert.False(changes.Reader.TryRead(out _));
     }
 
@@ -396,7 +398,7 @@ public sealed class SessionOrchestratorTests : IDisposable
             () => Volatile.Read(ref _document),
             _ => { },
             targetChanged: c => changes.Writer.TryWrite(c),
-            targetCapture: new TargetCapture(() => NoAudio, (t, e) => failures.Writer.TryWrite((t, e))));
+            targetCapture: new TargetCapture(_ => NoAudio, (t, e) => failures.Writer.TryWrite((t, e))));
         var failure = new ErrorCodeException(ErrorCodes.CaptureFailed, "no window");
         _factory.FailNextStart = failure;
         var game = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
@@ -406,6 +408,42 @@ public sealed class SessionOrchestratorTests : IDisposable
         Assert.Equal(game.ToTargetGame(), (await NextAsync(changes)).To);
         Assert.Equal((game, (Exception)failure), await failures.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token));
         Assert.Empty(_factory.Sessions);
+    }
+
+    [Fact]
+    public async Task ASavePressOnTheGameSessionSavesAClipInItsProfileFolderAndOneWithNoSessionIsIgnored()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = SettingsDocument.Empty.Global.SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(folder)) };
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var failures = new ConcurrentQueue<Exception>();
+            var writes = new ConcurrentQueue<string>();
+            var factory = new FakeFactory { Save = _ => new FakeWrite(writes) };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(OutputPathAllocator.System, () => throw new InvalidOperationException("the Global folder is set"), s => saved.Writer.TryWrite(s), failures.Enqueue));
+
+            // No session: nothing is reserved or written.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+
+            var clip = await NextAsync(saved);
+            Assert.Equal(Path.Combine(folder, "Game"), Path.GetDirectoryName(clip.Path));
+            Assert.StartsWith("Game_", Path.GetFileName(clip.Path), StringComparison.Ordinal);
+            Assert.Equal([clip.Path], writes);
+            Assert.Equal([clip.Path], Directory.GetFiles(folder, "*", SearchOption.AllDirectories));
+            Assert.Empty(failures);
+            Assert.False(saved.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
     private static async Task<T> NextAsync<T>(System.Threading.Channels.Channel<T> channel) =>
@@ -491,6 +529,9 @@ public sealed class SessionOrchestratorTests : IDisposable
 
         public Exception? FailNextStart { get; set; }
 
+        /// <summary>What each session's <c>Save</c> returns; none when null.</summary>
+        public Func<long, IClipWrite?>? Save { get; init; }
+
         public IReadOnlyList<FakeSession> Sessions
         {
             get
@@ -512,10 +553,20 @@ public sealed class SessionOrchestratorTests : IDisposable
 
             lock (_sessions)
             {
-                var session = new FakeSession(spec, events, _sessions.Count + 1);
+                var session = new FakeSession(spec, events, _sessions.Count + 1) { SaveWith = Save };
                 _sessions.Add(session);
                 return session;
             }
+        }
+    }
+
+    /// <summary>A write that records its path and completes at once, from another thread, leaving the reserved file.</summary>
+    private sealed class FakeWrite(ConcurrentQueue<string> writes) : IClipWrite
+    {
+        public void Write(string path, Action<Exception?> done)
+        {
+            writes.Enqueue(path);
+            ThreadPool.QueueUserWorkItem(_ => done(null));
         }
     }
 
@@ -563,6 +614,10 @@ public sealed class SessionOrchestratorTests : IDisposable
         public Exception? EndFailure { get; set; }
 
         public IEnumerable<(bool Muted, long Qpc)> MicMutes => _micMutes;
+
+        public Func<long, IClipWrite?>? SaveWith { get; init; }
+
+        public IClipWrite? Save(long qpc) => SaveWith?.Invoke(qpc);
 
         public void SetMicMuted(bool muted, long qpc)
         {

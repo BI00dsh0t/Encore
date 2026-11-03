@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
@@ -86,16 +85,8 @@ public sealed class GameConfigStore(ILogger log)
             return mapped;
         }
 
-        try
-        {
-            mapped = GamePaths.Canonicalize(raw);
-        }
-        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            // Not on disk (an uninstalled game): matched by its raw form.
-            mapped = raw.ToLowerInvariant();
-        }
-
+        // Canonical, or in lowercase when it is not on disk (an uninstalled game).
+        mapped = GamePaths.CanonicalOrLowercase(raw);
         _mapped[raw] = mapped;
         return mapped;
     }

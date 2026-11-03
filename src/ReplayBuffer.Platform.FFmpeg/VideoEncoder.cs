@@ -127,7 +127,7 @@ public sealed unsafe class VideoEncoder : IDisposable
     private const int HwFramesContextMethod = 0x02;
 
     private readonly D3D11VAFrames _frames;
-    private readonly FragmentedMp4Muxer? _muxer;
+    private readonly PacketSink? _muxer;
     private readonly long _qpcFrequency;
     private readonly long _anchorQpc;
     private readonly ILogger _logger;
@@ -155,7 +155,7 @@ public sealed unsafe class VideoEncoder : IDisposable
     private long _flushed;
     private long _poolMisses;
 
-    /// <param name="muxer">Where packets go; null counts and discards them (the encoder probe).</param>
+    /// <param name="muxer">Where packets go (a file or the Replay Buffer); null counts and discards them (the encoder probe).</param>
     /// <param name="latency">
     /// When given, each new frame's capture→encoded latency is recorded into it: QPC as its packet
     /// leaves <c>avcodec_receive_packet</c> minus the frame's capture QPC. Repeated frames have no
@@ -164,7 +164,7 @@ public sealed unsafe class VideoEncoder : IDisposable
     /// </param>
     public VideoEncoder(
         D3D11VAFrames frames,
-        FragmentedMp4Muxer? muxer,
+        PacketSink? muxer,
         long qpcFrequency,
         long anchorQpc,
         ILogger logger,

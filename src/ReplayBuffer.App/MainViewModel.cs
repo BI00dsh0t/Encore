@@ -29,6 +29,7 @@ internal sealed class MainViewModel : Observable
         Pages = SettingsPages.Create(new SettingsSender(engine), engine);
         General = Pages.OfType<GeneralSettingsPage>().Single();
         TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
+        GameProfiles = Pages.OfType<GameProfilesPage>().Single();
         _selectedPage = Pages[0];
         engine.Changed += () => post(Refresh);
         Refresh();
@@ -41,6 +42,9 @@ internal sealed class MainViewModel : Observable
 
     /// <summary>The Track Layout page, which takes the snapshot's device list as well as its settings.</summary>
     public TrackLayoutPage TrackLayout { get; }
+
+    /// <summary>The Game Profiles page.</summary>
+    public GameProfilesPage GameProfiles { get; }
 
     public SettingsPage SelectedPage
     {

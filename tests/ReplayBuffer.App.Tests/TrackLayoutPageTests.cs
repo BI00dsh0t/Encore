@@ -469,7 +469,7 @@ public sealed class TrackLayoutPageTests
     {
         SetState(revision: 1, layout: null, Speakers, Headset with { Available = false }, Mic, new AudioDevice("{out-3}", "Line Out", "Realtek", AudioFlow.Output, true));
         var model = new MainViewModel(_engine, action => action());
-        Assert.Equal(["General", "Track Layout"], model.Pages.Select(p => p.Title));
+        Assert.Equal(["General", "Track Layout", "Game Profiles"], model.Pages.Select(p => p.Title));
         model.SelectedPage = model.TrackLayout;
         var page = model.TrackLayout;
         Add(page, Speakers);
@@ -541,20 +541,5 @@ public sealed class TrackLayoutPageTests
         model.IsWindowShown = true;
         model.IsSettingsTabSelected = true;
         model.SelectedPage = model.TrackLayout;
-    }
-
-    private sealed class BindingErrors : TraceListener
-    {
-        public List<string> Messages { get; } = [];
-
-        public override void Write(string? message)
-        {
-            lock (Messages)
-            {
-                Messages.Add(message ?? "");
-            }
-        }
-
-        public override void WriteLine(string? message) => Write(message);
     }
 }
