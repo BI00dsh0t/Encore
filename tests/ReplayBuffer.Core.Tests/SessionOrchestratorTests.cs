@@ -990,7 +990,8 @@ public sealed class SessionOrchestratorTests : IDisposable
                     s => events.Writer.TryWrite(s),
                     s => events.Writer.TryWrite(s),
                     e => events.Writer.TryWrite(e),
-                    library));
+                    library,
+                    Open: library));
             await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
             var press = System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -1016,7 +1017,8 @@ public sealed class SessionOrchestratorTests : IDisposable
             orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press + 2));
             Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
             Assert.Equal([press + 2], recording.Stops);
-            Assert.Equal([$"begin {started.Path} {ProfileId}", $"end {started.Path} Written"], library.Calls);
+            // The path is open from just after the Library's begin to just after its end (FR-12).
+            Assert.Equal([$"begin {started.Path} {ProfileId}", $"opened {started.Path}", $"end {started.Path} Written", $"closed {started.Path}"], library.Calls);
             Assert.Equal([RecordingState.Off, RecordingState.Running, RecordingState.Off], published.Select(p => p.Recording));
             Assert.Single(made);
 
@@ -1159,8 +1161,8 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
-    /// <summary>Records each Library call, in order.</summary>
-    private sealed class FakeLibraryWrites : ILibraryWrites
+    /// <summary>Records each Library call, and each open-Recording call, in order.</summary>
+    private sealed class FakeLibraryWrites : ILibraryWrites, IOpenRecordings
     {
         private readonly ConcurrentQueue<string> _calls = new();
 
@@ -1169,6 +1171,10 @@ public sealed class SessionOrchestratorTests : IDisposable
         public void BeginWrite(string path, string? profileId) => _calls.Enqueue($"begin {path} {profileId}");
 
         public void EndWrite(string path, WriteOutcome outcome) => _calls.Enqueue($"end {path} {outcome}");
+
+        public void Opened(string path) => _calls.Enqueue($"opened {path}");
+
+        public void Closed(string path) => _calls.Enqueue($"closed {path}");
     }
 
     /// <summary>A store that starts with <paramref name="saved"/> and records each save.</summary>

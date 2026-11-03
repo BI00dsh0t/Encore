@@ -3,7 +3,7 @@ title: 'Crash-safe Recordings and recording-interrupted'
 type: 'feature'
 ticket: '2'
 created: '2026-11-03'
-status: 'ready-for-dev'
+status: 'in-progress'
 baseline_revision: '368522baa927322d54ddae7cbe83638bd8684055'
 route: 'full'
 route_source: 'auto'
@@ -70,14 +70,14 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `DurableOutput.cs`, `FragmentedMp4Muxer.cs` -- the durable mode -- R3 flush per fragment
-- [ ] `RecordingWriter.cs` -- pending, cut and drain -- R3 interleave and cadence
-- [ ] `Mp4File.cs` -- the box walk, `IsComplete`, trim -- shared with 7.2
-- [ ] `CaptureSessionPorts.cs`, `TargetGames.cs`, `SessionOrchestrator.cs` -- `IOpenRecordings` -- R1 restart tracking
-- [ ] `RuntimeStateStore.cs`, `InterruptedRecordings.cs`, `EngineHost.cs`, `ErrorCodes.cs` -- the store, recovery and warning -- R1 no resume
-- [ ] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- the existing Recording test also asserts `Opened` then `Closed` for the path, in order with `BeginWrite`/`EndWrite`
-- [ ] `tests/ReplayBuffer.Engine.Tests/RuntimeStateStoreTests.cs` -- one test: `Opened`/`Closed` persist beside `micMuted`, `TakeInterrupted` returns them once and leaves `{"micMuted":…}`
-- [ ] `tests/ReplayBuffer.Engine.Tests/RecordingCrashTests.cs` (new) -- 6.1's setup with a `RuntimeStateStore` on a test instance as `micMute` and `Open`. A "kill" at T copies the Recording's bytes and `runtime.json` (`FileShare.ReadWrite`), which is exactly what a killed process leaves. Default `[Fact]`: one kill about 3 s in; Heavy explicit: ten kills at random 20–90 s points in one Recording. Then the Recording stops normally, and the finished file has a `moof` holding 4 `traf`s at least every 0.5 s of its length. Copies truncated at each fragment boundary, and one cut mid-fragment then trimmed, all play (ffprobe, 4 streams). The kill copy is put back with its `runtime.json`, and `EngineHost.Start` on that instance is checked (third AC)
+- [x] `DurableOutput.cs`, `FragmentedMp4Muxer.cs` -- the durable mode -- R3 flush per fragment
+- [x] `RecordingWriter.cs` -- pending, cut and drain -- R3 interleave and cadence
+- [x] `Mp4File.cs` -- the box walk, `IsComplete`, trim -- shared with 7.2
+- [x] `CaptureSessionPorts.cs`, `TargetGames.cs`, `SessionOrchestrator.cs` -- `IOpenRecordings` -- R1 restart tracking
+- [x] `RuntimeStateStore.cs`, `InterruptedRecordings.cs`, `EngineHost.cs`, `ErrorCodes.cs` -- the store, recovery and warning -- R1 no resume
+- [x] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- the existing Recording test also asserts `Opened` then `Closed` for the path, in order with `BeginWrite`/`EndWrite`
+- [x] `tests/ReplayBuffer.Engine.Tests/RuntimeStateStoreTests.cs` -- one test: `Opened`/`Closed` persist beside `micMuted`, `TakeInterrupted` returns them once and leaves `{"micMuted":…}`
+- [x] `tests/ReplayBuffer.Engine.Tests/RecordingCrashTests.cs` (new) -- 6.1's setup with a `RuntimeStateStore` on a test instance as `micMute` and `Open`. A "kill" at T copies the Recording's bytes and `runtime.json` (`FileShare.ReadWrite`), which is exactly what a killed process leaves. Default `[Fact]`: one kill about 3 s in; Heavy explicit: ten kills at random 20–90 s points in one Recording. Then the Recording stops normally, and the finished file has a `moof` holding 4 `traf`s at least every 0.5 s of its length. Copies truncated at each fragment boundary, and one cut mid-fragment then trimmed, all play (ffprobe, 4 streams). The kill copy is put back with its `runtime.json`, and `EngineHost.Start` on that instance is checked (third AC)
 
 **Acceptance Criteria:**
 - Given a Recording of three Tracks, when the engine is killed T s in, then the file left plays with h264 + 3 AAC streams, its video ends under 1 s before T (measured from the press, an upper bound), and each Track's end is within one AAC frame plus one video frame of the video's.
@@ -85,6 +85,11 @@ deferred: []
 - Given the killed Recording's file and `runtime.json`, when the engine starts on that instance, then its first snapshot holds exactly one dismissable overlay `recording-interrupted` warning naming the path, Recording is off, the file is trimmed (`IsComplete`), and `runtime.json` lists no open Recording.
 
 ## Implementation Notes
+
+- `WritePending` writes each fragment's packets sorted by start time across the streams (each stream's own order kept), as the interleaver did. Written in arrival order, an AAC packet rebased a few ms before 0 could follow the video's first packet, and the muxer logged "Packets poorly interleaved, failed to avoid negative timestamp".
+- `InterruptedRecordings.Recover` returns the warning message for each path, in order. The message says what happened to that file: trimmed, gone, emptied and deleted, or couldn't be trimmed.
+- `RuntimeStateStore` logs under a new "Runtime" category in `EngineHost`, since it now holds Recordings as well as mic mute. `TracerCapture` keeps its own store, which is unchanged.
+- The crash test's cadence check is the writer's own rule: each fragment's last video frame starts within 0.5 s of its first. A plain gap of at most 0.5 s plus one frame between `tfdt`s failed on 1 of 183 fragments in one heavy run, where frames came late under load.
 
 ## Plan Change Log
 
