@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.6 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.7 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.6 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.1 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
@@ -412,3 +412,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA on 5.6 (`ea6ea9a`): **QA PASS**, 0 findings and 3 non-blocking notes. The verdict reached the coordinator by direct message, so the wake rule works. Merge order: 4.6 (merging), then 7.1, then 5.6. qa-1-14 is back in the pool.
 - 2026-11-03: QA on 6.1 (`a4f2814`): **QA PASS**, 0 findings, and Engine passed three times. Merge order is 4.6, 7.1, 5.6, then 6.1. 6.1 expects conflicts with 4.6 in the capture session and ring sink, and re-verifies after syncing. Both QA workers are back in the pool.
 - 2026-11-03: 4.6 merged into `develop` as `e7058ea` (QA PASS at `3ae6b4e`, docs-only `c9c7700` on top, develop merged in with no conflicts, rebuilt 0 warnings, Core 78/78, Engine 171 and publish clean). The Engine suite failed once on the first run after each fresh build, with no name captured, and then passed 7 times in a row; likely a cold-start timing test. 4.6 deferred two items for 4.9, recorded in the epic Notes: decide the cut's generation before the claim is published, and drain in-flight saves (or convert per generation) before `Restart`.
+- 2026-11-03: 4.6 merged (`e7058ea`, done `0cf9c59`), and its card is in Done. 7.1 merges next. 4.7 (Disk-mode ring) went to slice-epic-4 (Opus, medium effort), and its card is In progress.
