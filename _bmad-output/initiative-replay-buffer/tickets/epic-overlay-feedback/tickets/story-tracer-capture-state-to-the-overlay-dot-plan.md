@@ -3,7 +3,7 @@ title: 'Tracer: capture state to the Overlay dot'
 type: 'feature'
 ticket: '1'
 created: '2026-11-03'
-status: 'in-review'
+status: 'built'
 baseline_revision: 'cc6c2d180eb8ff3bac681ef97cf4626d70b9acf3'
 route: 'full'
 route_source: 'auto'
@@ -102,6 +102,16 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-03 — Review pass
+- verdicts: 6 findings — high 0, medium 1, low 4, false 1, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` Refresh set TargetProcessId before Dot, so a snapshot that clears the Target and stops the Replay Buffer together (a game exit) placed and showed the window on the primary monitor before hiding it — fixed: `Refresh` sets `Dot` first when it goes to none and `TargetProcessId` first otherwise.
+  - `[low]` `[reject]` The dot is placed only on a model or DPI change, so it doesn't follow a game moved to another monitor — real but rare; detection needs the game's window, so it exists when the Target is set; following moves needs a timer or a WinEvent hook. Left for the Overlay lane's later stories.
+  - `[low]` `[reject]` A `Win32Exception` from `Monitors.ForProcess` or `SetWindowPos` would reach the dispatcher unhandled — only when the primary monitor can't be read or the App's own window is gone; the fix is a new guard.
+  - `[low]` `[reject]` A minimized game window ranks by its tiny iconic rect — the dot's monitor barely matters while the game is minimized; the fix is a new branch.
+  - `[false]` `[reject]` The default style test shows a topmost window and so needs a visible desktop — showing a window needs no foreground, focus or visible desktop; it only reads styles and `IsVisible`, and passed in the default run. The foreground and pixel checks are Heavy.
+  - `[low]` `[patch]` Nothing tested that `TargetProcessId` follows `State.TargetGame` and clears when disconnected — fixed: two asserts added to `TheDotFollowsTheCaptureState`.
+
 ## Design Notes
 
 The window is hidden rather than drawn empty when the dot is none, so no topmost layered window sits over a game with nothing to show (helps independent flip; spike 5.2 measures it). Placement uses `SetWindowPos` in physical pixels with a `Viewbox` filling the window, so WPF's DIP conversion across mixed-DPI monitors doesn't matter. The ticket's WGC monitor capture check uses a GDI screen copy instead: no WGC monitor capture exists in the repo, and both go through DWM's display-affinity exclusion.
@@ -115,3 +125,30 @@ The window is hidden rather than drawn empty when the dot is none, so no topmost
 
 **Manual checks (if no CLI):**
 - Builder: play a borderless game; the hollow dot appears top-right within 1 s of the Replay Buffer starting, focus stays in the game, the dot goes when it stops.
+
+## Auto Run Result
+
+- **Summary:** The App gets an Overlay. `OverlayViewModel` derives none, hollow or solid from `IEngineSession.State.Capture`, and none whenever the App isn't connected. `OverlayWindow`, a `ShellWindow` and so capture-excluded, is topmost, click-through, never activated and a tool window. It sits top-right on the Target Game's monitor (else the primary), 24 DIP in, at that monitor's DPI, and is hidden when there is no dot. The Win32 calls are in Platform.Desktop. The App declares PerMonitorV2.
+- **Files:**
+  - `src/ReplayBuffer.Platform.Desktop/OverlayWindowStyle.cs`: the extended styles, the no-activate place-and-show, the foreground read.
+  - `src/ReplayBuffer.Platform.Desktop/Monitors.cs`: the Target's monitor and DPI, and the top-right placement maths.
+  - `src/ReplayBuffer.Platform.Desktop/NativeMethods.txt`: the new Win32 entries.
+  - `src/ReplayBuffer.App/Overlay/OverlayViewModel.cs`: the dot rule.
+  - `src/ReplayBuffer.App/Overlay/OverlayWindow.cs`: the window.
+  - `src/ReplayBuffer.App/app.manifest` and `ReplayBuffer.App.csproj`: PerMonitorV2.
+  - `src/ReplayBuffer.App/ShellApp.cs`: creates the Overlay and closes it on Quit.
+  - `tests/ReplayBuffer.App.Tests/OverlayTests.cs`: 2 default tests and 2 Heavy.
+  - `tests/ReplayBuffer.App.Tests/ReplayBuffer.App.Tests.csproj`: `UseWindowsForms` for `System.Drawing`.
+  - `tests/ReplayBuffer.Platform.Desktop.Tests/MonitorsTests.cs`: placement and the primary-monitor fallback.
+- **Review:** 2 patches applied (1 medium, 1 low), applied in the main session rather than by the implementer. Nothing deferred. 4 rejected (3 low, 1 false), with reasons in the Review Triage Log.
+- **Follow-up review recommended:** false. Only 1 medium was patched.
+- **Verification:**
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings.
+  - App.Tests: 67 passed, 7 Heavy skipped.
+  - Platform.Desktop.Tests: 11 of 11 passed.
+  - The implementer ran the two Heavy Overlay tests (`--explicit only`), and both passed.
+  - No engine code changed, so there was no NativeAOT publish.
+- **Residual risks:**
+  - The dot doesn't follow a game moved to another monitor.
+  - The mixed-DPI re-place after WPF's own DPI resize is untested.
+  - A real borderless game, focus and the visual check are for the builder.

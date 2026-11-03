@@ -45,10 +45,22 @@ internal sealed class OverlayViewModel : Observable
     public void Refresh()
     {
         var state = _engine.Status == EngineStatus.Connected ? _engine.State : null;
-        TargetProcessId = state?.TargetGame?.ProcessId;
-        Dot = state?.Capture is not { } capture ? OverlayDot.None
+        var dot = state?.Capture is not { } capture ? OverlayDot.None
             : capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running ? OverlayDot.Solid
             : capture.Replay is ReplayState.Buffering or ReplayState.Draining ? OverlayDot.Hollow
             : OverlayDot.None;
+
+        // The window updates per property: hide before the Target moves, and move before showing,
+        // so the dot never flashes on the wrong monitor.
+        if (dot == OverlayDot.None)
+        {
+            Dot = dot;
+            TargetProcessId = state?.TargetGame?.ProcessId;
+        }
+        else
+        {
+            TargetProcessId = state?.TargetGame?.ProcessId;
+            Dot = dot;
+        }
     }
 }

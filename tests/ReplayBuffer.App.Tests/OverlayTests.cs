@@ -29,10 +29,15 @@ public sealed class OverlayTests
         Assert.Equal(OverlayDot.Solid, After(engine, model, CaptureState.Initial with { MonitorRecording = RecordingState.Running }));
         Assert.Equal(OverlayDot.None, After(engine, model, CaptureState.Initial));
 
+        // The Overlay sits on the Target Game's monitor, so it follows the Target's process.
+        engine.State = engine.State! with { TargetGame = new TargetGame("game", "game.exe", 77) };
         Assert.Equal(OverlayDot.Hollow, After(engine, model, Buffering));
+        Assert.Equal(77, model.TargetProcessId);
+
         engine.Status = EngineStatus.Disconnected;
         engine.RaiseChanged();
         Assert.Equal(OverlayDot.None, model.Dot);
+        Assert.Null(model.TargetProcessId);
     }
 
     [Fact]
