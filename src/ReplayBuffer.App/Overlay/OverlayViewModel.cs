@@ -14,19 +14,27 @@ internal enum OverlayDot
 /// <summary>
 /// The Overlay's state, derived only from <see cref="IEngineSession.State"/> and its status (AD-3, AD-15).
 /// A snapshot read at reconnect is treated as any event: the dot and the saving icon follow it.
+/// The snapshot's <c>overlay: true</c> warnings queue (R3): each shows as <see cref="Message"/> for
+/// <see cref="MessageDuration"/>, oldest first, and an unseen repeat of a waiting one takes its place.
+/// Which warnings were shown is the Overlay's own fact, kept by id, so a reconnect never replays one.
 /// </summary>
 internal sealed class OverlayViewModel : Observable
 {
     private readonly IEngineSession _engine;
     private readonly Action<Action> _post;
     private readonly TimeProvider _time;
+    private readonly List<Warning> _waiting = [];
+    private readonly HashSet<string> _seen = [];
     private ITimer? _cooldownEnd;
+    private ITimer? _messageEnd;
+    private Warning? _shown;
+    private Warning? _message;
     private OverlayDot _dot;
     private bool _saving;
     private int? _targetProcessId;
 
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
-    /// <param name="time">Times the Save Cooldown's end; <see cref="TimeProvider.System"/> when null.</param>
+    /// <param name="time">Times the Save Cooldown's end and each message; <see cref="TimeProvider.System"/> when null.</param>
     public OverlayViewModel(IEngineSession engine, Action<Action> post, TimeProvider? time = null)
     {
         _engine = engine;
@@ -50,6 +58,16 @@ internal sealed class OverlayViewModel : Observable
     {
         get => _saving;
         private set => Set(ref _saving, value);
+    }
+
+    /// <summary>How long each queued message shows.</summary>
+    public static TimeSpan MessageDuration { get; } = TimeSpan.FromSeconds(4);
+
+    /// <summary>The queued Overlay warning showing now, or <c>null</c>.</summary>
+    public Warning? Message
+    {
+        get => _message;
+        private set => Set(ref _message, value);
     }
 
     /// <summary>The Target Game's process, whose monitor the Overlay sits on; <c>null</c> for the primary monitor.</summary>
@@ -79,13 +97,15 @@ internal sealed class OverlayViewModel : Observable
         }
 
         var saving = current is not null && (current.ClipsWriting > 0 || remaining > TimeSpan.Zero);
+        var message = NextMessage(state);
 
         // The window updates per property: hide before the Target moves, and move before showing,
-        // so the dot and the icon never flash on the wrong monitor.
-        if (dot == OverlayDot.None && !saving)
+        // so the dot, the icon and the message never flash on the wrong monitor.
+        if (dot == OverlayDot.None && !saving && message is null)
         {
             Dot = dot;
             Saving = saving;
+            Message = message;
             TargetProcessId = state?.TargetGame?.ProcessId;
         }
         else
@@ -93,6 +113,74 @@ internal sealed class OverlayViewModel : Observable
             TargetProcessId = state?.TargetGame?.ProcessId;
             Dot = dot;
             Saving = saving;
+            Message = message;
         }
+    }
+
+    // Queues the unseen Overlay warnings and picks the one to show; null while disconnected.
+    private Warning? NextMessage(StateSnapshot? state)
+    {
+        if (state is null)
+        {
+            // What was showing has been seen; what was waiting still waits.
+            EndMessage();
+            return null;
+        }
+
+        var active = state.Warnings.Where(w => w.Overlay).ToList();
+        var activeIds = active.Select(w => w.Id).ToHashSet();
+        _seen.RemoveWhere(id => !activeIds.Contains(id));
+        foreach (var warning in active.OrderBy(w => w.At))
+        {
+            if (!_seen.Add(warning.Id))
+            {
+                continue;
+            }
+
+            // A repeat of a waiting message takes its place; a repeat of the one on screen queues.
+            var repeat = _waiting.FindIndex(w => w.Code == warning.Code && w.Message == warning.Message);
+            if (repeat >= 0)
+            {
+                _waiting[repeat] = warning;
+            }
+            else
+            {
+                _waiting.Add(warning);
+            }
+        }
+
+        // Dismissed before their turn, or while showing.
+        _waiting.RemoveAll(w => !activeIds.Contains(w.Id));
+        if (_shown is not null && !activeIds.Contains(_shown.Id))
+        {
+            EndMessage();
+        }
+
+        if (_shown is null && _waiting.Count > 0)
+        {
+            var shown = _waiting[0];
+            _waiting.RemoveAt(0);
+            _shown = shown;
+            _messageEnd = _time.CreateTimer(_ => _post(() => Expire(shown)), null, MessageDuration, Timeout.InfiniteTimeSpan);
+        }
+
+        return _shown;
+    }
+
+    // A timer already queued when its message ended early must not end the next one.
+    private void Expire(Warning shown)
+    {
+        if (ReferenceEquals(_shown, shown))
+        {
+            EndMessage();
+            Refresh();
+        }
+    }
+
+    private void EndMessage()
+    {
+        _messageEnd?.Dispose();
+        _messageEnd = null;
+        _shown = null;
     }
 }
