@@ -138,7 +138,7 @@ internal static class MediaAnalysis
     }
 
     /// <summary>Every packet's pts and duration, s, per stream index, without decoding.</summary>
-    private static Dictionary<int, List<(double Pts, double Duration)>> PacketTimes(FfmpegTools tools, string file)
+    internal static Dictionary<int, List<(double Pts, double Duration)>> PacketTimes(FfmpegTools tools, string file)
     {
         var result = new Dictionary<int, List<(double, double)>>();
         var text = Run(tools.Ffprobe, ["-v", "error", "-show_entries", "packet=stream_index,pts_time,duration_time", "-of", "csv=p=0", file]);
@@ -226,7 +226,7 @@ internal static class MediaAnalysis
         return true;
     }
 
-    private static string Run(string exe, IReadOnlyList<string> args)
+    internal static string Run(string exe, IReadOnlyList<string> args)
     {
         var text = "";
         RunTool(exe, args, output =>
@@ -238,7 +238,7 @@ internal static class MediaAnalysis
     }
 
     /// <summary>Runs a tool, hands its stdout to <paramref name="read"/>, and fails with its stderr on a nonzero exit.</summary>
-    private static void RunTool(string exe, IReadOnlyList<string> args, Action<Stream> read)
+    internal static void RunTool(string exe, IReadOnlyList<string> args, Action<Stream> read)
     {
         var start = new ProcessStartInfo(exe)
         {

@@ -33,11 +33,12 @@ internal sealed record BenchReport(
     DriftReport? Drift,
     PlaybackReport? Playback,
     HotkeyReport? Hotkey,
+    TracksReport? Tracks,
     IReadOnlyList<string> NotRun,
     IReadOnlyList<string> Errors);
 
 /// <summary>
-/// Merges the run folder's <c>fps.json</c>, <c>drift.json</c>, <c>playback.json</c> and <c>hotkey.json</c> into
+/// Merges the run folder's <c>fps.json</c>, <c>drift.json</c>, <c>playback.json</c>, <c>hotkey.json</c> and <c>tracks.json</c> into
 /// <c>report.json</c> and <c>report.md</c>: a section per measurement present, each figure beside its target
 /// with a pass or miss mark, and "not run" for the rest. A malformed file is named and skipped.
 /// </summary>
@@ -54,7 +55,8 @@ internal static class Report
         var drift = Load<DriftReport>(runFolder, DriftBenchmark.FileName, "Drift", errors, notRun);
         var playback = Load<PlaybackReport>(runFolder, PlaybackCheck.FileName, "Playback", errors, notRun);
         var hotkey = Load<HotkeyReport>(runFolder, HotkeyBenchmark.FileName, "Hotkey", errors, notRun);
-        var report = new BenchReport(DateTimeOffset.Now, runFolder, fps, drift, playback, hotkey, notRun, errors);
+        var tracks = Load<TracksReport>(runFolder, TracksCheck.FileName, "Named Tracks", errors, notRun);
+        var report = new BenchReport(DateTimeOffset.Now, runFolder, fps, drift, playback, hotkey, tracks, notRun, errors);
         BenchJson.Write(Path.Combine(runFolder, JsonName), report);
         File.WriteAllText(Path.Combine(runFolder, MarkdownName), Markdown(report));
         return report;
@@ -72,6 +74,7 @@ internal static class Report
         Drift(md, report.Drift);
         Playback(md, report.Playback);
         Hotkey(md, report.Hotkey);
+        Tracks(md, report.Tracks);
 
         if (report.Errors.Count > 0)
         {
@@ -339,6 +342,68 @@ internal static class Report
             Row("p99", Ms(hotkey.P99Ms), $"< {hotkey.TargetMs:0} ms; old bar {hotkey.OldBarMs:0} ms", OldBar(hotkey.P99Ms, hotkey)),
             Row("Mean", Ms(hotkey.MeanMs), "", ""),
         ]);
+    }
+
+    private static void Tracks(StringBuilder md, TracksReport? tracks)
+    {
+        md.AppendLine("## Named Tracks (R3, R7)");
+        md.AppendLine();
+        if (tracks is null)
+        {
+            md.AppendLine("Not run.");
+            md.AppendLine();
+            return;
+        }
+
+        md.AppendLine(CultureInfo.InvariantCulture,
+            $"{tracks.Minutes:0.#} min of the marker window, {tracks.Capture.Size} at {tracks.Capture.Fps} fps, CBR {tracks.Capture.BitrateKbps} kbps, with the Track Layout Everything = A + B + Mic, Game = A, Chat = B, Mic = Mic. Device A `{tracks.DeviceA}`, device B `{tracks.DeviceB}`{(tracks.BurstPhaseSeconds is { } phase ? $" (its bursts {phase:0.###} s after A's)" : "")}, Mic `{tracks.InputDevice}`; each plays at {tracks.ToneDbfs:0.#} dBFS. File `{tracks.File}`.");
+        md.AppendLine();
+        if (tracks.EngineError is not null)
+        {
+            md.AppendLine(CultureInfo.InvariantCulture, $"**The engine failed** (exit {tracks.EngineExit}): {tracks.EngineError}");
+            md.AppendLine();
+            TracksWarnings(md, tracks);
+            return;
+        }
+
+        md.AppendLine(CultureInfo.InvariantCulture, $"Verdict: **{tracks.Verdict}**. VLC is scripted through its HTTP interface; DaVinci Resolve needs a person.");
+        md.AppendLine();
+        md.AppendLine("| Check | Value | Target | Mark |");
+        md.AppendLine("|---|---|---|---|");
+        foreach (var check in tracks.Checks)
+        {
+            md.AppendLine(CultureInfo.InvariantCulture, $"| {check.Check} | {Cell(check.Figure)} | {Cell(check.Target)} | {check.Mark} |");
+        }
+
+        md.AppendLine();
+        if (tracks.Tracks.Count > 0)
+        {
+            md.AppendLine("| Track | Title | Default | Length | Onsets | Burst level | 99.9th percentile of abs(sample) | Max abs(sample), information only |");
+            md.AppendLine("|---|---|---|---|---|---|---|---|");
+            foreach (var t in tracks.Tracks)
+            {
+                var onsets = t.Onsets is { } n ? $"{n} (expected ≥ {t.ExpectedOnsets})" : "";
+                var level = t.BurstLevelDbfs is { } l ? string.Create(CultureInfo.InvariantCulture, $"{l:0.##} dBFS") : "";
+                md.AppendLine(CultureInfo.InvariantCulture, $"| {t.Index + 1} | {Cell(t.Title)} | {YesNo(t.Default)} | {t.DurationSeconds:0.###} s | {onsets} | {level} | {Num(t.P999)} | {Num(t.Peak)} |");
+            }
+
+            md.AppendLine();
+        }
+
+        TracksWarnings(md, tracks);
+    }
+
+    private static void TracksWarnings(StringBuilder md, TracksReport tracks)
+    {
+        foreach (var warning in tracks.Warnings)
+        {
+            md.AppendLine("- Warning: " + warning);
+        }
+
+        if (tracks.Warnings.Count > 0)
+        {
+            md.AppendLine();
+        }
     }
 
     private static string OldBar(double? value, HotkeyReport hotkey) =>

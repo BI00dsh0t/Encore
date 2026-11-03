@@ -283,6 +283,150 @@ internal static class PlayerScripts
         }
     }
 
+    /// <summary><c>--vlc</c> when that file exists, or VLC where its installers put it; null when there is none.</summary>
+    public static string? FindVlc(string? given)
+    {
+        if (given is not null)
+        {
+            return File.Exists(given) ? Path.GetFullPath(given) : null;
+        }
+
+        string[] roots =
+        [
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+        ];
+        return roots.Where(r => r.Length > 0)
+            .Select(r => Path.Combine(r, "VideoLAN", "VLC", "vlc.exe"))
+            .FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>
+    /// Opens <paramref name="clip"/> in VLC with only its HTTP interface (on 127.0.0.1, a free port and a random
+    /// password; dummy audio and video outputs, so no sound and no window), polls <c>status.json</c> until it lists
+    /// <paramref name="audioStreams"/> audio streams or <paramref name="timeout"/> passes, and returns each audio
+    /// stream's <c>Description</c> (its title, as VLC's Audio Track menu names it) in stream order. VLC is stopped
+    /// and killed afterwards, whatever happens.
+    /// </summary>
+    public static VlcListing RunVlc(string vlc, string clip, int audioStreams, TimeSpan timeout)
+    {
+        var port = FreePort();
+        var password = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+        var start = new ProcessStartInfo(vlc)
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in new[]
+        {
+            "--ignore-config", "--no-one-instance", "-I", "http", "--http-host", "127.0.0.1",
+            "--http-port", port.ToString(CultureInfo.InvariantCulture), "--http-password", password,
+            "--aout", "adummy", "--vout", "vdummy", "--play-and-pause", "--no-loop", "--no-repeat", clip,
+        })
+        {
+            start.ArgumentList.Add(arg);
+        }
+
+        // VLC names its info categories in its interface language.
+        start.Environment["LANG"] = "en";
+
+        var status = new Uri($"http://127.0.0.1:{port.ToString(CultureInfo.InvariantCulture)}/requests/status.json");
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(":" + password)));
+
+        Process? process = null;
+        try
+        {
+            process = Process.Start(start);
+            if (process is null)
+            {
+                return new VlcListing(true, null, $"could not start {vlc}");
+            }
+
+            _ = process.StandardOutput.ReadToEndAsync();
+            _ = process.StandardError.ReadToEndAsync();
+            var clock = Stopwatch.StartNew();
+            List<string>? labels = null;
+            string? lastError = null;
+            while (clock.Elapsed < timeout)
+            {
+                if (process.HasExited)
+                {
+                    return new VlcListing(true, labels, $"VLC exited (code {process.ExitCode}) before it listed the streams");
+                }
+
+                try
+                {
+                    labels = AudioLabels(http.GetStringAsync(status).GetAwaiter().GetResult());
+                    lastError = null;
+                    if (labels.Count >= audioStreams)
+                    {
+                        break;
+                    }
+                }
+                catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException)
+                {
+                    lastError = e.Message;
+                }
+
+                Thread.Sleep(250);
+            }
+
+            try
+            {
+                http.GetStringAsync(new Uri(status + "?command=pl_stop")).GetAwaiter().GetResult();
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            {
+                // It is killed next anyway.
+            }
+
+            return labels is { Count: >= 1 } && labels.Count >= audioStreams
+                ? new VlcListing(true, labels, null)
+                : new VlcListing(true, labels, $"VLC listed {labels?.Count ?? 0} of {audioStreams} audio streams within {timeout.TotalSeconds:0} s" + (lastError is null ? "" : $" ({lastError})"));
+        }
+        catch (System.ComponentModel.Win32Exception e)
+        {
+            return new VlcListing(true, null, $"could not start {vlc}: {e.Message}");
+        }
+        finally
+        {
+            Kill(process);
+        }
+    }
+
+    /// <summary>
+    /// The <c>Description</c> of each <c>Stream N</c> whose <c>Type</c> is <c>Audio</c> in a VLC <c>status.json</c>,
+    /// ordered by N; an untitled stream reads as an empty string.
+    /// </summary>
+    internal static List<string> AudioLabels(string statusJson)
+    {
+        using var document = JsonDocument.Parse(statusJson);
+        var streams = new List<(int N, string Label)>();
+        if (document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("information", out var information) && information.ValueKind == JsonValueKind.Object
+            && information.TryGetProperty("category", out var category) && category.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var entry in category.EnumerateObject())
+            {
+                if (!entry.Name.StartsWith("Stream ", StringComparison.Ordinal)
+                    || !int.TryParse(entry.Name.AsSpan("Stream ".Length), NumberStyles.None, CultureInfo.InvariantCulture, out var n)
+                    || entry.Value.ValueKind != JsonValueKind.Object
+                    || Text(entry.Value, "Type") != "Audio")
+                {
+                    continue;
+                }
+
+                streams.Add((n, entry.Value.TryGetProperty("Description", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() ?? "" : ""));
+            }
+        }
+
+        return [.. streams.OrderBy(s => s.N).Select(s => s.Label)];
+    }
+
     private static ScriptedPlayback Failed(string player, string error) =>
         new(player, null, null, null, null, null, null, null, null, null, null, error);
 

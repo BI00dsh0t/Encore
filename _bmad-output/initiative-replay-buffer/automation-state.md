@@ -16,6 +16,7 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 - **Unsliced epics (4–8):** a slicing session runs Sofia (`bmad-agent-po`) to break the epic into stories, choosing defaults where the PRD and architecture leave a gap, and lists each such choice in the Decisions Awaiting Review below.
 - The PC is kept awake and unlocked while sessions work (the app's keep-awake hold plus a display-required holder). Never change Windows settings.
 - Commit at every checkpoint and keep each plan's log current; the usage limit can land at any time.
+- **Model and effort per task (builder, 2026-11-02):** set them when starting a session (`start_session` `model`/`effort`) or, for a pool worker, before sending its brief (`set_session_model`/`set_session_effort`). Stories run on Opus (`claude-opus-5-5`), at high effort when the ticket's risk is high and at the default otherwise. QA rounds, merges, releases and syncs with develop run on Sonnet (`claude-sonnet-5-5`). A re-check after QA fixes (round 2 onward) runs at low effort. A story session that is told to merge may switch itself to Sonnet first.
 - **Scoped tests (builder, 2026-11-02):** don't run the full graphics or audio pipeline suites unless the change needs them. Run the 0-warning Release build, then only the test projects the diff touches plus their direct dependents (e.g. a UI change runs `ReplayBuffer.App.Tests`, not `Engine`, `Platform.Capture`, `Media` or `Platform.Audio`). The full `dotnet test --solution`, GPU capture runs and `bench` captures happen only when the diff touches the capture, encode, mux or audio path, or an AC needs the measurement. The NativeAOT publish runs only when engine code changed. Say in the report which projects ran and why the rest were skipped.
 
 ## Worker pool (builder, 2026-11-02)
@@ -26,20 +27,20 @@ The app starts a new session only from a turn the builder began. A READY FOR QA 
 2. Pick an idle worker from the table below that holds no queued message and isn't pinned or open on screen.
 3. Clear it (`clear_session`) so it starts with fresh context. If the clear is refused, send the task without clearing and note it in the Log.
 4. Send the full brief by `SendMessage`, the same brief a new session would get. Its first step: in its own worktree, discard nothing, check `git status` is clean, then cut the task's branch from `develop` (`git flow feature start ...`) or, for QA, check out the story's tip.
-5. Note in the Queue's Session column which worker took the task.
+5. Note in the Queue's Session column which worker took the task, and retitle the worker (`set_session_title`) to its new task. A finished session is retitled "Done: <task> (merged|passed)", and an idle pool worker "Pool: idle (was <task>)".
 
 Workers have Remote Control off, which `clear_session` requires. Sessions that are working keep Remote Control on.
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 2.9 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
-slice-epic-6, slice-epic-7 and story-1-14 still have Remote Control on (the auto-mode classifier declined to switch them off), so they can't be cleared. Use them only without a clear, as a last resort. When a session finishes its task (its story merged, its QA passed), it joins the pool. If its Remote Control is on, it joins only once the builder switches that off.
+When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
 ## Per-session procedure (stories)
 
@@ -68,8 +69,8 @@ The coordinator logs each QA round in the Log below.
 | # | Task | Session | Status |
 |---|------|---------|--------|
 | 1 | 1.14 amendment: synthetic GPU load, unattended `fps` and `drift`, injected-key `hotkey`, scripted playback; the runs; the epic Notes Decision; merge | story-1-14 | done |
-| 2 | 1.15 Refactor sweep | story-1-15 | in progress |
-| 3 | Release epic 1 (`v0.1.0`) | | pending |
+| 2 | 1.15 Refactor sweep | story-1-15 | done |
+| 3 | Release epic 1 (`v0.1.0`) | coordinator | done |
 | 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | done |
 | 5 | 2.2 Track mixer | story-2-2 | done |
 | 6 | 2.3 Live device list over IPC | story-2-3 | done |
@@ -79,7 +80,7 @@ The coordinator logs each QA round in the Log below.
 | 10 | 2.7 Track Layout editor in the Main App | story-2-7 (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 11 | 2.11 Mic Devices and double-count warning in the editor | | pending |
 | 12 | 2.8 Live meters in the Track Layout editor | | pending |
-| 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | in progress |
+| 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | done |
 | 14 | 2.10 Refactor sweep | | pending |
 | 15 | Release epic 2 (`v0.2.0`) | | pending |
 | 16 | 3.1 Tracer: detect a borderless game | | pending |
@@ -180,6 +181,7 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 1.14 | No WGC capture border | Compare `playback-border-before.png` and `playback-border-during.png` in `measurements/bench-1.14` | the screen grab: 726 yellow pixels before and during, from desktop icons |
 | 2.1 | Each Track plays only its own devices' audio, in sync with the video, in VLC (R2, R7) | Put the BEACN Game, Chat and Mic devices from `ReplayBuffer.Engine debug-list` into the Dev instance's `settings.json` as three Tracks (the engine stopped). Then run `ReplayBuffer.Engine debug-capture --window <game> --track-layout --seconds 30` with game audio, chat and speech going, and switch audio tracks in VLC | 30 s BEACN capture: three AAC streams Game, Chat, Mic in order, each within 0.07 s of the video, silent because nothing was playing. Tone proxy: a tone on System appeared in System and Both at −54 dB, and Game stayed silent (−91 dB) |
 | 2.1 | The Track names show in VLC's and DaVinci Resolve's audio-track lists | Open the capture above in both | ffprobe reads the names as each stream's `name` tag (the mp4 udta `name` box), not `title`; the pre-2.1 per-device streams behave the same |
+| 2.9 | The Track names Everything, Game, Chat, Mic show in DaVinci Resolve, in order, and the Tracks play in sync (R7) | Open `measurements/bench-2.9/tracks.mp4` from 2.9's worktree (`.claude/worktrees/festive-lamarr-1763e6`), or rerun `ReplayBuffer.Bench tracks --device-a <A> --device-b <B>`, in Resolve | `bench tracks`, 5 min: titles and order, only Track 1 default, sync max 0.271 ms, Game/Chat −0.01 dBFS, Everything p99.9 0.997; VLC's HTTP interface lists the four names in order. Resolve isn't installed on the PC |
 | 2.3 | Plugging in, unplugging, enabling or disabling a real audio device sends `devices.changed` within 2 s, and a layout device that is unplugged shows as unavailable (R6) | With the engine serving, plug a USB or Bluetooth audio device in and out (or toggle one in Sound settings) and watch the App or an IPC client | `DeviceListServeTests` with a fake endpoint source; `EndpointWatcherTests` call the real `IMMNotificationClient` CCW through its vtable; `devices.list` on the published engine returned all 30 endpoints |
 
 ## Decisions Awaiting Review
@@ -192,6 +194,7 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-02 | 1.14 | PLAN.md §6.3's "< 3 % of one modern CPU" is read as the whole processor: the engine uses 0.17 % of the machine, 4.2 % of one core | Spike 1.2 reported it that way; read per core, it misses |
 | 2026-11-02 | 1.14 | Path A stays the final stack although capture→encoded latency p99 under the synthetic load is 29.3 ms, against one frame | The FPS loss passes (1.47 %), and Path C changes the hot path's language, not its GPU work |
 | 2026-11-02 | 1.14 | Three real-time timing tests are accepted as known flakes under whole-suite parallelism: `ThePacedEncoderEncodesEverySlotWithAFastPreset`, `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile`, `OutputResolutionTests.AStatsRunOnAFastWindowMeetsTheLatencyGcAndAllocationBounds` | Each passes alone, and `7229d26` fails the first the same way; making them robust is a bugfix task, not yet queued |
+| 2026-11-02 | 2.9 | `bench tracks` judges "never above 0 dBFS" on Everything's 99.9th-percentile decoded sample (≤ 1.05), not the max; the max is reported only | The real capture decoded to max 2.02 from AAC ringing at the test tone's unfaded burst edges while the limited mix read 0.997; the same audio summed without a limiter reads 1.295. Separately: 2.2's limiter release takes ~0.7 s to snap back to 1 |
 | 2026-11-01 | 4 | 14 stories kept in one epic, past the usual 8 to 12 | R1 to R7 are the first usable version and deliver together; a split would change the initiative's epic set |
 | 2026-11-01 | 4.8 | Memory mode's safe margin: the ring stops growing below the larger of 4 GB and 15% of installed RAM available; a constant, not a setting | The PRD says only "a safe margin of the free RAM" |
 | 2026-11-01 | 4.2 | A press with under 1 s buffered is reported as a save failure `clip-too-short`, with no Reset | FR-4 says no Clip is made but not whether the user is told; this way the Overlay and sound say why |
@@ -270,3 +273,14 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: 2.3 merged into `develop` (`169e6a5`, `feat(audio): merge 2.3-device-list`) and marked done (`9ee9e22`). Before the merge, `develop` (with 2.2) was merged into the branch with no conflicts: Release build 0 warnings, 737 of 740 tests passed and the three that failed (the GPU encoder flake, `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile`, `EngineConnectionTests.AServerThatIsNotTheTrustedEngine...`) each passed on its one rerun, publish 0 IL warnings. One Human Check row added (a real device change). QA's two non-blocking notes not acted on: a watcher start that times out after 10 s logs an error but may still register later; a layout edit can publish `devices.changed` before `settings.changed`.
 - 2026-11-02 12:53: **STOP ALL TESTS by the builder.** The coordinator killed every running test host (from 2.9's worktree, plus an engine started by 1.15's App tests), and `.bench-running` says PAUSED. The 2.9 worker (slice-epic-4) was told to stop. qa-1-15 had hit the usage limit (it resets at 12:40) partway through QA round 2 at `58f18ea`. 2.3 is merged (`169e6a5`). 2.5 and 2.7 are ready but not yet assigned. **To resume:** the builder says so, the coordinator deletes `.bench-running`, tells qa-1-15 to redo round 2 and tells the 2.9 worker to continue, then hands 2.5 and 2.7 to pool workers.
 - 2026-11-02: **Resumed by the builder**, with a new standing rule: scoped tests. Full graphics and audio suites run only when the change needs them; see Standing decisions. The coordinator deleted `.bench-running`. qa-1-15 was told to redo QA round 2 on 1.15 at `58f18ea`, scoped to the round-1 fixes. The 2.9 worker (slice-epic-4) was told to continue its scoped verification from `2f8d212`. New sessions were started: story-2-5 (`local_ea1ff557-3cb9-4fe2-9a70-3029632aee7c`) and story-2-7 (`local_12351eee-812a-4dcb-8f13-6b288e96bce5`).
+- 2026-11-02: QA round 2 on 1.15 (`58f18ea`): **QA PASS**, 0 findings. Both round-1 fixes were verified, and the tests were scoped. 1.15 was told to sync with develop and merge. The `v0.1.0` release follows its merge. 2.9 is applying four review fixes and will reanalyze its existing 5-minute capture rather than run a new one. 2.5 and 2.7 are still being implemented.
+- 2026-11-02: 1.15 merged into `develop` (`925a08c`, `refactor(engine): merge 1.15-refactor-sweep`) and marked done (`5e316d4`). First, `develop` (with 2.1, 2.2 and 2.3) was merged into the branch with no conflicts (`b033157`). Only `CaptureEndTests.cs` had changed on both sides. Release build 0 warnings, and `CaptureEndTests` passed 5/5 (scoped: the merge changed no engine code, so no full suite, publish or bench). Watch for: `AudioStampStatsTests.RecordingDoesNotAllocate` flaked once (1,560 bytes); the fast-window stats test's p99 bound (16.67 ms) is close to this PC's p99 under parallel load, so it may need its rerun more often. Next: the `v0.1.0` release (row 3).
+- 2026-11-02: 1.15 merged (`925a08c`, marked done `5e316d4`). **Released `v0.1.0`** by the coordinator: `master` has merge `f3203f9`, the tag is `v0.1.0`, and the back-merge into develop is `d2dfcd0`. 2.9 is READY FOR QA at `8d87e66`, with a scoped run: Bench.Tests 164/164, and the 5-minute `bench tracks` capture passes. Pool worker qa-2-1 was cleared and given QA for 2.9 (scoped, reanalyze only). An orphaned `ReplayBuffer.Engine.exe` (PID 23088, started 12:53 from 2.9's worktree `tests/ReplayBuffer.Engine.Tests/bin`) survived the stop, and the auto-mode classifier refused the coordinator's kill. It blocks full-solution builds in that worktree only, so the builder should end it.
+- 2026-11-02: QA round 1 on 2.9 (`8d87e66`): **QA FAIL**, 3 low findings. 2.9 fixed them at `e9f3d31` (Bench.Tests 166/166). QA round 2 is running, and it is also asked to explain why Bench.Tests passed only on the third run in round 1.
+- 2026-11-02: QA round 2 on 2.9 (`e9f3d31`): **QA PASS**, 0 findings. Round 1's hotkey test failures came from overlapping Bench.Tests runs, outside the diff. 2.9 was told to sync with develop and merge, and qa-2-1 is back in the pool. 2.5 is running its scoped tests (Platform.Audio, Media, Contracts, Core, Engine). 2.7 is still in verification.
+- 2026-11-02: 2.9 synced with develop (1.15, v0.1.0; no conflicts; Bench.Tests 167/167, 0 warnings), merged into `develop` (`e11f94b`, `feat(bench): merge 2.9-named-tracks-players`) and marked done. One Human Check row (Resolve) and one Decisions row (the 99.9th-percentile full-scale check) added. Its worktree's orphaned engine (PID 23088) is still the builder's to end.
+- 2026-11-02: 2.9 merged (`e11f94b`, done `d98a6ff`), and its worker is back in the pool. 2.5 is READY FOR QA at `83fe5c1`: scoped tests pass (Platform.Audio, Media, Engine, Contracts, Core), along with the 10 s dropout AC and the publish (0 warnings). Pool worker qa-1-14 was cleared and switched to Sonnet at medium effort under the new model rule, then given QA for 2.5.
+- 2026-11-02: QA round 1 on 2.5 (`83fe5c1`): **QA FAIL**, 3 findings (1 medium, 2 low), sent to story-2-5, which is fixing them. Its scoped tests pass apart from the known `OutputResolutionTests` latency flake.
+- 2026-11-02: 2.5 fixed QA round 1 at `09fc14d`. QA round 2 is running on qa-1-14 at low effort. 2.7 is READY FOR QA at `bd91c0c`: Release build 0 warnings, App.Tests 71/71, 18 new AC tests. Pool worker qa-2-1 was cleared, switched to Sonnet at medium effort, and given QA for 2.7.
+- 2026-11-02: QA round 2 on 2.5 (`09fc14d`): **QA PASS**, 0 findings. QA on 2.7 (`bd91c0c`): **QA PASS**, 0 blocking findings and 2 low notes, which were accepted. Both story sessions were switched to Sonnet for their merges. 2.5 merges first, and 2.7 waits for it. Both QA workers are back in the pool.
+- 2026-11-03 00:31: story-2-5 and story-2-7 hit the usage limit (reset 00:30) mid-merge. 2.5 had merged develop into its branch (`aa4286a`), and its worktree is clean. It was told to resume its merge. 2.7 asked whether to merge first and was told to keep waiting for 2.5, because merges stay serialized.
