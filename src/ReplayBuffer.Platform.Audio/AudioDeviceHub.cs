@@ -335,6 +335,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
                         var sameEpisode = device.ResumedAt != 0 && now - device.ResumedAt < Stopwatch.Frequency * (long)SameDropoutWindow.TotalSeconds;
                         device.Drop();
                         device.QuietEpisode = sameEpisode;
+                        device.DroppedAt = now;
                         if (sameEpisode)
                         {
                             redropped.Add(device);
@@ -370,6 +371,13 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
                     }
                     else
                     {
+                        // A quiet re-drop that outlasts the window is a new outage: report it now.
+                        if (device.QuietEpisode && now - device.DroppedAt >= Stopwatch.Frequency * (long)SameDropoutWindow.TotalSeconds)
+                        {
+                            device.QuietEpisode = false;
+                            dropped.Add(ToDropout(device.Endpoint));
+                        }
+
                         retry = true;
                     }
                 }
@@ -469,33 +477,43 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
             return byId;
         }
 
+        // Two dropped devices that share a name can't tell which return is whose: only ids rebind them.
+        if (_devices.Values.Any(other => !ReferenceEquals(other, device) && !other.Closed && other.Dropped && SameName(other.Endpoint, endpoint)))
+        {
+            _log.LogDebug(
+                "'{Name}' ({Parent}) shares its name with another dropped device; it rebinds only by id",
+                endpoint.FriendlyName,
+                endpoint.ParentName);
+            return null;
+        }
+
+        // Endpoints another open device holds are never candidates, so a present twin doesn't make a return ambiguous.
         var byName = present
             .Where(p => p.Flow == flow
                 && string.Equals(p.FriendlyName, endpoint.FriendlyName, StringComparison.Ordinal)
-                && string.Equals(p.ParentName, endpoint.ParentName, StringComparison.Ordinal))
+                && string.Equals(p.ParentName, endpoint.ParentName, StringComparison.Ordinal)
+                && !_devices.Values.Any(other => !ReferenceEquals(other, device)
+                    && !other.Closed
+                    && other.Endpoint.Flow == endpoint.Flow
+                    && string.Equals(other.Endpoint.Id, p.EndpointId, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         if (byName.Count > 1)
         {
             _log.LogDebug(
-                "'{Name}' ({Parent}) matches {Count} present endpoints by name and none by id; it stays dropped",
+                "'{Name}' ({Parent}) matches {Count} free present endpoints by name and none by id; it stays dropped",
                 endpoint.FriendlyName,
                 endpoint.ParentName,
                 byName.Count);
             return null;
         }
 
-        if (byName.Count == 0)
-        {
-            return null;
-        }
-
-        var candidate = byName[0];
-        var taken = _devices.Values.Any(other => !ReferenceEquals(other, device)
-            && !other.Closed
-            && other.Endpoint.Flow == endpoint.Flow
-            && string.Equals(other.Endpoint.Id, candidate.EndpointId, StringComparison.OrdinalIgnoreCase));
-        return taken ? null : candidate;
+        return byName.Count == 1 ? byName[0] : null;
     }
+
+    private static bool SameName(AudioEndpoint a, AudioEndpoint b) =>
+        a.Flow == b.Flow
+        && string.Equals(a.FriendlyName, b.FriendlyName, StringComparison.Ordinal)
+        && string.Equals(a.ParentName, b.ParentName, StringComparison.Ordinal);
 
     private void Raise(Action<AudioDeviceDropout>? handlers, AudioDeviceDropout dropout)
     {
@@ -623,7 +641,13 @@ internal sealed class HubDevice : IAudioPcmSubscriber
     /// <summary>When the device last resumed from a dropout (QPC), or 0; under the hub's gate.</summary>
     public long ResumedAt { get; set; }
 
-    /// <summary>Whether the current dropout continues one already reported, so its resume is quiet; under the hub's gate.</summary>
+    /// <summary>When the device was last dropped (QPC); under the hub's gate.</summary>
+    public long DroppedAt { get; set; }
+
+    /// <summary>
+    /// Whether the current dropout continues one already reported, so its resume is quiet; it is
+    /// reported after all once it outlasts the same-dropout window. Under the hub's gate.
+    /// </summary>
     public bool QuietEpisode { get; set; }
 
     public bool OnCaptureThread => _client?.OnCaptureThread == true || _hold?.OnCaptureThread == true;

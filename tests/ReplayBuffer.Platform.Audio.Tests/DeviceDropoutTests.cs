@@ -364,6 +364,67 @@ public sealed class DeviceDropoutTests : IDisposable
     }
 
     [Fact]
+    public void TwoDroppedDevicesWithOneNameRebindOnlyById()
+    {
+        // B is renamed to A's names: both drop, then one returns under a new id. Whose it is can't be told.
+        RenameB("Game", "BEACN");
+        using var a = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());
+        using var b = _hub.SubscribeDevice(B, SettingsFlow.Output, new EnergySubscriber());
+        Unplug(A);
+        Unplug(B);
+        Assert.True(Wait.Until(() => _dropped.Count == 2, DropWithin));
+
+        _source.Add(ANew, "Game", "BEACN", SettingsFlow.Output);
+        Thread.Sleep(1200);
+        Assert.Empty(_resumed);
+        Assert.Equal(0, _bank.Attempts(ANew));
+
+        // B under its own id still rebinds, and A stays out.
+        Replug(B, "Game");
+        Assert.True(Wait.Until(() => _resumed.Count == 1, ResumeWithin));
+        Assert.Equal(B, Assert.Single(_resumed).Dropout.EndpointId);
+        Assert.Equal(1, _hub.DroppedDeviceCount);
+    }
+
+    [Fact]
+    public void APresentTwinDoesNotMakeAReturnAmbiguous()
+    {
+        // B, open and playing, has A's names; A returns under a new id, the only free name match.
+        RenameB("Game", "BEACN");
+        using var a = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());
+        using var b = _hub.SubscribeDevice(B, SettingsFlow.Output, new EnergySubscriber());
+        Unplug(A);
+        Assert.True(Wait.Until(() => _dropped.Count == 1, DropWithin));
+
+        _source.Add(ANew, "Game", "BEACN", SettingsFlow.Output);
+        Assert.True(Wait.Until(() => _resumed.Count == 1, ResumeWithin), "A didn't rebind to its new id");
+        Assert.Equal(ANew, Assert.Single(_resumed).Dropout.EndpointId);
+        Assert.Equal(0, _hub.DroppedDeviceCount);
+        Assert.Equal(1, _bank.Attempts(B));
+    }
+
+    [Fact]
+    public void AQuietRedropThatOutlastsTheWindowIsReported()
+    {
+        using var subscription = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());
+        Unplug(A);
+        Assert.True(Wait.Until(() => _dropped.Count == 1, DropWithin));
+
+        // A comes back, is invalidated as it starts, and then stays out.
+        _bank.InvalidateNextOnStart(A);
+        Replug(A, "Game");
+        Assert.True(Wait.Until(() => _bank.Opens(A) == 2, ResumeWithin));
+        Unplug(A);
+
+        Assert.True(Wait.Until(() => _dropped.Count == 2, TimeSpan.FromSeconds(4)), "the long re-drop wasn't reported");
+        Assert.Single(_resumed);
+
+        Replug(A, "Game");
+        Assert.True(Wait.Until(() => _resumed.Count == 2, ResumeWithin), "A's return after the reported re-drop wasn't reported");
+        Assert.Equal(0, _hub.DroppedDeviceCount);
+    }
+
+    [Fact]
     public void AFaultStaysReadableAfterTheLastSubscriberLeaves()
     {
         var subscription = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());

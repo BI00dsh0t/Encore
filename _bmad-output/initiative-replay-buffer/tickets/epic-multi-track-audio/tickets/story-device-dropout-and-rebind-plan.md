@@ -109,6 +109,13 @@ deferred: []
   - `[medium]` `[patch]` A rebound WASAPI client invalidated again as it starts (BEACN still restarting) re-triggered an immediate reconcile, giving a second `Dropped`, warning and Warning log per restart with no throttle — fixed: a re-drop within 2 s of a resume is the same dropout (Debug only, no events, no rebind in that pass); test `ARedropJustAfterAResumeIsTheSameDropout`.
   - `[low]` `[reject]` A real resume writes two Information lines: `WasapiCapture`'s existing "Opened … device" line and the hub's "returned; resumed" — the ticket asks for one log entry per dropout, not per resume; the "Opened" line is the client's pre-existing diagnostic on every open, and removing it only on rebind needs a new parameter for a cosmetic gain.
 
+### 2026-11-02 — QA round 1 (qa session, at 83fe5c1)
+- verdicts: 3 findings — high 0, medium 1, low 2, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` Two dropped devices with the same flow and names could swap: the first one iterated took the other's return under a new id — fixed: name matching is off for a device while another dropped device shares its names (ids still rebind); test `TwoDroppedDevicesWithOneNameRebindOnlyById`.
+  - `[low]` `[patch]` A quiet re-drop (within 2 s of a resume) that then stays out was never reported — fixed: once it outlasts the 2 s window without a resume it raises `Dropped` (warning and log), and its later resume raises `Resumed`; test `AQuietRedropThatOutlastsTheWindowIsReported`.
+  - `[low]` `[patch]` The name-match count included endpoints other open devices hold, so a device with a present open twin never rebound — fixed: held endpoints are filtered out before the count; test `APresentTwinDoesNotMakeAReturnAmbiguous`.
+
 ## Design Notes
 
 Why the hub owns dropout, not the session: the hub owns the one client per endpoint and the `DeviceStream` every subscriber hangs off. Swapping the client underneath the stream keeps every Track sample-aligned and continuous without the session knowing; a session-level rebind would need new subscriptions, a re-anchored timeline and mixer surgery.
@@ -164,3 +171,4 @@ Why a separate `SilenceHold` thread rather than keeping the dead client in its f
 - A BEACN restart on real hardware is the builder's check.
 - An invalidation from a format change, with the endpoint still listed, drops and reopens the device in one pass. That raises a `device-dropout` warning even though no audio was lost.
 - A layout device that is absent when the capture starts still fails the start, as before.
+- After QA round 1 (3 findings, all patched): Release build 0 warnings; Platform.Audio 35/35, Media 127/127, Contracts 109/109, Core 52/52, Engine 212/212; publish 0 IL/AOT warnings (9.9 MB).
