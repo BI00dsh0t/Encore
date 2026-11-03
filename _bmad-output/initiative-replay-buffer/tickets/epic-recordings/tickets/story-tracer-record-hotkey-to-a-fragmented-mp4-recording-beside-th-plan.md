@@ -3,7 +3,7 @@ title: 'Tracer: Record Hotkey to a fragmented MP4 Recording beside the Replay Bu
 type: 'feature'
 ticket: '1'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'd6b57b6ef463e170bf92f9b0f96ea25e148f419d'
 route: 'full'
 route_source: 'auto'
