@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 3.8 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 2.8 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
@@ -80,7 +80,7 @@ The coordinator logs each QA round in the Log below.
 | 9 | 2.6 Track meters in the engine | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
 | 10 | 2.7 Track Layout editor in the Main App | story-2-7 (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 11 | 2.11 Mic Devices and double-count warning in the editor | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done |
-| 12 | 2.8 Live meters in the Track Layout editor | | pending |
+| 12 | 2.8 Live meters in the Track Layout editor | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | done |
 | 14 | 2.10 Refactor sweep | | pending |
 | 15 | Release epic 2 (`v0.2.0`) | | pending |
@@ -322,3 +322,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: The builder added a user-settings allow rule for `git [-C %USERPROFILE%/Documents/repos/ReplayBuffer] merge --no-ff feature/*` (Bash and PowerShell), after auto mode blocked the merge twice as "Merge Without Review" and blocked the coordinator's own settings edit as "Self-Modification". Merges must use exactly that form. 2.6 was told to retry its merge.
 - 2026-11-03: 2.6 merged into `develop` (`9b9d7e0`, `feat(engine): merge 2.6-track-meters`) and marked done. Verified on the synced tree `0d32806` (3.1 merged in): Release build 0 warnings; Contracts 89, Core 56, App 58, Engine 142, 0 failures; publish 0 IL/AOT warnings. QA had passed at `1410061`. Human Check: none new (the integrated meters check is 2.8's). 2.11 can sync with develop now.
 - 2026-11-03: 2.6 merged (`9b9d7e0`) under the new allow rule. The 2.11 session hit its usage limit after syncing and verifying (`71b6d6b`: build 0 warnings, App.Tests 60 passed), so the coordinator merged 2.11 itself (`bc4cbc8`) and marked it done. The 2.11 editor Human Check row was added.
+- 2026-11-03: Spike 3.8 was told to sync and merge (switched to Sonnet). 2.8 (live meters in the editor, low risk) went to pool worker slice-epic-8 (Opus, medium effort). Workers for 2.6, 2.11 and QA 3.8 are back in the pool. Once 2.8 merges, 2.10 and then epic 2's refactor sweep are left.
