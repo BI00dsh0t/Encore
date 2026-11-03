@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
@@ -558,7 +557,7 @@ public sealed class GameMonitor : IDisposable
         {
             profileId = GamePaths.Canonicalize(process.ImagePath);
         }
-        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception e) when (GamePaths.CanonicalizeFailed(e))
         {
             _log.LogDebug(e, "The executable of process {Pid} couldn't be canonicalized; it is never detected", pid);
             profileId = null;
@@ -615,14 +614,7 @@ public sealed class GameMonitor : IDisposable
             desiredExited |= desired == seen.Pid;
         }
 
-        if (committedExited)
-        {
-            Propose(Best(), TargetChangeReason.Exit);
-        }
-        else if (desiredExited && desired != committed)
-        {
-            Propose(committed is null ? Best() : Detected(committed), TargetChangeReason.Exit);
-        }
+        HandOver(committed, desired, committedExited, desiredExited, TargetChangeReason.Exit);
     }
 
     // Un-detects each detected game whose profile is now Ignored, as ForgetExited does for an exit but
@@ -652,13 +644,20 @@ public sealed class GameMonitor : IDisposable
             desiredIgnored |= desired == seen.Pid;
         }
 
-        if (committedIgnored)
+        HandOver(committed, desired, committedIgnored, desiredIgnored, TargetChangeReason.Ignored);
+    }
+
+    // When the committed Target is gone, hands over to the best other game (or none); when only a
+    // desired Target held from it is gone, proposes the committed one again, which drops the held switch.
+    private void HandOver(int? committed, int? desired, bool committedGone, bool desiredGone, TargetChangeReason reason)
+    {
+        if (committedGone)
         {
-            Propose(Best(), TargetChangeReason.Ignored);
+            Propose(Best(), reason);
         }
-        else if (desiredIgnored && desired != committed)
+        else if (desiredGone && desired != committed)
         {
-            Propose(committed is null ? Best() : Detected(committed), TargetChangeReason.Ignored);
+            Propose(committed is null ? Best() : Detected(committed), reason);
         }
     }
 

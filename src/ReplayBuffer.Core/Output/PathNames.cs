@@ -5,6 +5,9 @@ namespace ReplayBuffer.Core.Output;
 /// <summary>The one file- and folder-name sanitizer for output paths (AD-21).</summary>
 public static class PathNames
 {
+    /// <summary>The name of a game folder or file whose name sanitizes to nothing.</summary>
+    internal const string GameFallback = "Game";
+
     private const int MaxLength = 100;
 
     private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)

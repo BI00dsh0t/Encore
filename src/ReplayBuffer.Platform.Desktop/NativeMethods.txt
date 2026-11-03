@@ -2,3 +2,16 @@ SetWindowDisplayAffinity
 GetWindowDisplayAffinity
 WINDOW_DISPLAY_AFFINITY
 GetNamedPipeServerProcessId
+GetWindowLongPtr
+SetWindowLongPtr
+SetWindowPos
+FindWindowEx
+GetWindowThreadProcessId
+IsWindowVisible
+GetWindowRect
+MonitorFromWindow
+MonitorFromPoint
+GetMonitorInfo
+GetDpiForMonitor
+GetForegroundWindow
+WINDOW_EX_STYLE

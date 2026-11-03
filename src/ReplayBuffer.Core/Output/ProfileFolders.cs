@@ -12,8 +12,6 @@ public static class ProfileFolders
     /// <summary>The folder Monitor Recordings go in; no Game Profile gets it.</summary>
     public const string MonitorRecordings = "Monitor Recordings";
 
-    private const string Fallback = "Game";
-
     /// <summary>
     /// Gives each profile without a folder, in id order, its sanitized name, or that name with
     /// <c> (2)</c>, <c> (3)</c>… so it is unique, case-insensitively, among every profile's folder
@@ -34,7 +32,7 @@ public static class ProfileFolders
 
         foreach (var (id, profile) in profiles.Where(p => p.Value.Folder is null).ToList())
         {
-            var name = PathNames.Sanitize(profile.Name, Fallback);
+            var name = PathNames.Sanitize(profile.Name, PathNames.GameFallback);
             var folder = name;
             for (var n = 2; taken.Contains(folder); n++)
             {

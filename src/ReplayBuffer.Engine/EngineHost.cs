@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -444,25 +443,12 @@ internal sealed class EngineHost : IAsyncDisposable
             if (!ReferenceEquals(list, fromList) || !ReferenceEquals(document, fromSettings))
             {
                 var union = new HashSet<string>(list, StringComparer.Ordinal);
-                union.UnionWith(SettingsResolver.Resolve(document, null).ManualGames.Select(CanonicalOrLowercase));
+                union.UnionWith(SettingsResolver.Resolve(document, null).ManualGames.Select(GamePaths.CanonicalOrLowercase));
                 (fromList, fromSettings, listed) = (list, document, union);
             }
 
             return listed;
         };
-    }
-
-    // AD-18: a listed path is matched canonical, or in lowercase when it isn't on disk.
-    private static string CanonicalOrLowercase(string path)
-    {
-        try
-        {
-            return GamePaths.Canonicalize(path);
-        }
-        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return path.ToLowerInvariant();
-        }
     }
 
     /// <summary>The engine's install folder, canonical with a trailing <c>\</c>; nothing under it is a game.</summary>
@@ -473,7 +459,7 @@ internal sealed class EngineHost : IAsyncDisposable
         {
             folder = GamePaths.Canonicalize(AppContext.BaseDirectory);
         }
-        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception e) when (GamePaths.CanonicalizeFailed(e))
         {
             folder = Path.GetFullPath(AppContext.BaseDirectory).ToLowerInvariant();
         }
