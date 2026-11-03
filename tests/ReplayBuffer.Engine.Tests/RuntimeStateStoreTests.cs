@@ -32,7 +32,7 @@ public sealed class RuntimeStateStoreTests : IDisposable
     }
 
     [Fact]
-    public void OpenRecordingsPersistBesideMicMuteAndAreTakenOnce()
+    public void OpenRecordingsPersistBesideMicMuteUntilCleared()
     {
         var store = Store();
         Assert.True(store.Load());
@@ -42,11 +42,13 @@ public sealed class RuntimeStateStoreTests : IDisposable
         store.Closed("D:/Videos/a.mp4");
         Assert.Equal("""{"micMuted":false,"openRecordings":["D:/Videos/b.mp4"]}""", File.ReadAllText(FilePath));
 
-        // The next run: the paths come back once, and the file keeps only its mic mute.
+        // The next run: reading leaves the paths; once cleared, the file keeps only its mic mute.
         var next = Store();
-        Assert.Equal(["D:/Videos/b.mp4"], next.TakeInterrupted());
+        Assert.Equal(["D:/Videos/b.mp4"], next.ReadInterrupted());
+        Assert.Contains("openRecordings", File.ReadAllText(FilePath), StringComparison.Ordinal);
+        next.ClearInterrupted();
         Assert.Equal("""{"micMuted":false}""", File.ReadAllText(FilePath));
-        Assert.Empty(next.TakeInterrupted());
+        Assert.Empty(next.ReadInterrupted());
         Assert.False(next.Load());
     }
 

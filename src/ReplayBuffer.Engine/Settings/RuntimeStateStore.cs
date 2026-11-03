@@ -24,6 +24,7 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     private readonly Lock _lock = new();
     private readonly List<string> _open = [];
     private bool? _muted;
+    private bool _interrupted;
 
     /// <param name="folder">Normally <see cref="Contracts.Instance.LocalDataFolder"/>.</param>
     public RuntimeStateStore(string folder, ILogger log)
@@ -100,11 +101,11 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     }
 
     /// <summary>
-    /// The Recordings the last run left open (FR-12), once: they are removed from the file, which
-    /// keeps its mic mute as it was. Empty when there are none or the file can't be read. Call it
-    /// before anything opens a Recording.
+    /// The Recordings the last run left open (FR-12), read without changing the file; empty when
+    /// there are none or the file can't be read. Call it before anything opens a Recording, and
+    /// <see cref="ClearInterrupted"/> once they have been reported.
     /// </summary>
-    public IReadOnlyList<string> TakeInterrupted()
+    public IReadOnlyList<string> ReadInterrupted()
     {
         lock (_lock)
         {
@@ -125,14 +126,30 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
             }
 
             _log.LogWarning("{File} lists {Count} Recording(s) the last run left open", FileName, open.Count);
-            _muted = state.MicMuted;
-            _open.Clear();
-            if (Write() is { } error)
+            _interrupted = true;
+            _muted ??= state.MicMuted;
+            return open;
+        }
+    }
+
+    /// <summary>
+    /// Rewrites the file without the Recordings <see cref="ReadInterrupted"/> found, keeping its mic
+    /// mute; nothing happens when it found none. Call it once they have been reported.
+    /// </summary>
+    public void ClearInterrupted()
+    {
+        lock (_lock)
+        {
+            if (!_interrupted)
             {
-                _log.LogWarning("The interrupted Recordings could not be cleared from {Path}: {Message}; the next start reports them again", _path, error);
+                return;
             }
 
-            return open;
+            _interrupted = false;
+            if (Write() is { } error)
+            {
+                _log.LogWarning("The interrupted Recordings could not be cleared from {Path}: {Message}; they stay in it until the next successful write", _path, error);
+            }
         }
     }
 

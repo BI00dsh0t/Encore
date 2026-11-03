@@ -3,14 +3,14 @@ title: 'Crash-safe Recordings and recording-interrupted'
 type: 'feature'
 ticket: '2'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '368522baa927322d54ddae7cbe83638bd8684055'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
@@ -90,10 +90,20 @@ deferred: []
 - `InterruptedRecordings.Recover` returns the warning message for each path, in order. The message says what happened to that file: trimmed, gone, emptied and deleted, or couldn't be trimmed.
 - `RuntimeStateStore` logs under a new "Runtime" category in `EngineHost`, since it now holds Recordings as well as mic mute. `TracerCapture` keeps its own store, which is unchanged.
 - The crash test's cadence check is the writer's own rule: each fragment's last video frame starts within 0.5 s of its first. A plain gap of at most 0.5 s plus one frame between `tfdt`s failed on 1 of 183 fragments in one heavy run, where frames came late under load.
+- After the merge of `develop` (7.2): `Mp4File.cs` is one file. 7.2's `IsComplete` keeps its contract and its behaviour, now on the same box reader as `PlayableLength` and `TrimToLastFragment`. 7.2's `LibraryActorTests` pass on it. The interrupted warnings are raised just before 7.2's `library-corrupt` warning.
+- After review: `TakeInterrupted` became `ReadInterrupted` (before the Library loads) plus `ClearInterrupted` (once the warnings are raised), so a start that fails in between reports them next time. The Code Map's `TakeInterrupted` refers to that pair.
+- `InterruptedRecordingsTests` covers the Matrix's "Nothing written" and "file missing" rows. A file holding only `ftyp` + `moov` is deleted, a missing one is still reported, and a torn one is trimmed to `IsComplete`.
 
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 3 findings — high 0, medium 1, low 2, false 0, maybe-false 0
+- findings:
+  - `[low]` `[patch]` The merge commit of `develop` had no `Co-Authored-By` trailer (only git's `# Conflicts:` block) — fixed: the merge commit's message was amended (unpushed, parents unchanged) to the Conventional form with `Refs: 6.2` and the trailer.
+  - `[medium]` `[patch]` `TakeInterrupted` cleared `openRecordings` from `runtime.json` before the warnings were raised, so a start that threw in between lost the report for good — fixed: split into `ReadInterrupted` and `ClearInterrupted`, with the clear called right after the warnings; `RuntimeStateStoreTests` was adjusted.
+  - `[low]` `[patch]` The log line for a failed clearing write said "the next start reports them again", but the in-memory list was already empty — fixed: it now says they stay in the file until the next successful write.
 
 ## Design Notes
 
@@ -110,3 +120,38 @@ The kill copy and a real kill leave the same bytes: both hold what reached the O
 - `dotnet test --project tests/ReplayBuffer.Core.Tests -c Release --no-build`, then the same for `ReplayBuffer.Engine.Tests`, `ReplayBuffer.Platform.FFmpeg.Tests` and `ReplayBuffer.Contracts.Tests` -- expected: all pass
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-class *RecordingCrashTests` -- expected: the ten-kill run passes
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL/AOT warnings
+
+## Auto Run Result
+
+- **Summary:** a Recording can now be killed and still play. `RecordingWriter` cuts its own fragments, at each video keyframe and at least every 0.5 s. Each fragment holds every Track up to the same instant; audio is waited for, up to 250 ms of video. Each one is written whole through a custom AVIO and flushed to disk (`avio_flush` + `FlushFileBuffers`) before the next, on the writer's background-I/O thread. Each open Recording's path is kept in `runtime.json` beside the mic mute, from `BeginWrite` to `EndWrite`. At the next start each such file is trimmed to its last whole fragment, or deleted when it holds none, before the Library loads. One dismissable overlay `recording-interrupted` warning naming the path is raised for each, and nothing resumes.
+- **Files:**
+  - Platform.FFmpeg:
+    - `DurableOutput.cs` (new): the custom AVIO over a `FileStream`, with unmanaged write and seek callbacks and the original exception kept.
+    - `FragmentedMp4Muxer.cs`: the durable mode (`frag_custom`, `av_write_frame`, `CutFragment`, the header flushed); the non-durable path is unchanged.
+    - `RecordingWriter.cs`: pending packets, the cut rule, a time-ordered write per fragment, and the drain.
+  - Core:
+    - `Library/Mp4File.cs`: 7.2's `IsComplete` plus `PlayableLength` and `TrimToLastFragment`, on one box reader.
+    - `CaptureSessionPorts.cs` (`IOpenRecordings`), `TargetGames.cs` (`Recordings.Open`), `SessionOrchestrator.cs` (`Opened` after `BeginWrite`, `Closed` after every `EndWrite`).
+  - Engine:
+    - `RuntimeStateStore.cs`: `openRecordings`, `ReadInterrupted` and `ClearInterrupted`, with `{"micMuted":…}` unchanged when nothing is open.
+    - `Sessions/InterruptedRecordings.cs` (new): trim, delete or report each path.
+    - `EngineHost.cs`: the wiring and the warnings.
+  - Contracts: the `ErrorCodes.RecordingInterrupted` doc comment.
+  - Tests:
+    - `RecordingCrashTests` (new): a default kill about 3 s in, and a Heavy ten kills at 20–90 s. It covers fragment cadence and trafs, cuts at every boundary and mid-fragment, and the restart warning.
+    - `InterruptedRecordingsTests` (new).
+    - `RuntimeStateStoreTests` and `SessionOrchestratorTests` (Opened and Closed order).
+- **Review:** 3 findings (1 medium, 2 low), all patched; nothing deferred or rejected.
+- **Follow-up review recommended:** false. One medium and no high were patched.
+- **Verification:**
+  - After the merge and the patches, `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+  - Core 96/96, Contracts 113/113 and Platform.FFmpeg 33 passed (1 skipped). These ran after the merge; the patches touched only Engine.
+  - Engine 163 passed (20 explicit skipped), plus `InterruptedRecordingsTests` 1/1 run alone after it was added.
+  - The Heavy `RecordingCrashTests` (ten kills) passed.
+  - `tools/publish-engine.ps1` published with no IL or AOT warnings.
+- **Residual risks:**
+  - The AVIO's unmanaged callbacks have run only under the JIT in tests. The AOT publish compiles them cleanly but doesn't run them.
+  - Power loss relies on `FlushFileBuffers`, which only the builder can check.
+  - The write-failure rethrow (a full disk's `IOException`) is untested, as 6.7 owns it.
+  - The crash is simulated by copying the file and `runtime.json` at T (the bytes a killed process leaves), not by killing a child engine process.
+  - A Recording at engine shutdown still gets no `EndWrite` (6.4), so the next start reports it as interrupted until 6.4 lands.

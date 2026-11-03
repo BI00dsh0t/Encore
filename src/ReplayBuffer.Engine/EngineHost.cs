@@ -228,7 +228,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
             // FR-12: the Recordings the last run left open are trimmed before the Library sees them.
             var runtime = new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Runtime"));
-            var interrupted = InterruptedRecordings.Recover(runtime.TakeInterrupted(), recordingLog);
+            var interrupted = InterruptedRecordings.Recover(runtime.ReadInterrupted(), recordingLog);
 
             var libraryFile = Path.Combine(instance.RoamingDataFolder, "library.json");
 
@@ -505,6 +505,9 @@ internal sealed class EngineHost : IAsyncDisposable
             {
                 warnings.Raise(ErrorCodes.RecordingInterrupted, WarningSeverity.Warning, "recordings", message, overlay: true);
             }
+
+            // Only once they are reported: a start that fails before here reports them next time.
+            runtime.ClearInterrupted();
 
             if (libraryLoad.Corrupt)
             {
