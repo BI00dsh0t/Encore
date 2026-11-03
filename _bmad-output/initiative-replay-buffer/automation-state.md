@@ -89,7 +89,7 @@ The coordinator logs each QA round in the Log below.
 | 18 | 3.2 Detection sources and exclusions | | pending |
 | 19 | 3.3 Target Game rule | | pending |
 | 20 | 3.4 Game Profile auto-creation and Ignored | | pending |
-| 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `af89823`) |
 | 22 | 3.6 Game Profiles page in the Main App | | pending |
 | 23 | 3.7 Refactor sweep | | pending |
 | 24 | Release epic 3 (`v0.3.0`) | | pending |
@@ -298,3 +298,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: Epic 1's own `status` was never set, which kept epic 3 waiting behind it. It's now marked `status: done` (`a27cd5c`), so mark each epic done at its release from now on. 3.1 (game-detection tracer, high risk, HITL) went to pool worker slice-epic-8 (Opus, high effort). 3.5 (OutputPathAllocator) went to pool worker 2-1-tracer (Opus, medium effort). Both were told to keep their tests lean.
 - 2026-11-03: 3.5 is READY FOR QA at `30d6c19`: Release build 0 warnings, Core and scoped Engine tests pass, publish clean. Pool worker qa-1-14 (Sonnet, medium effort) was given its QA. 2.4 is finishing its scoped tests, 3.1 is being implemented, and test-trim is on its after-run.
 - 2026-11-03: QA on 3.5 (`30d6c19`): **QA PASS**, 0 findings (Core 58/58, Contracts 109/109). 3.5 was switched to Sonnet and told to merge. qa-1-14 is back in the pool. test-trim committed its trim (`e0e828d`) and is running the opt-in heavy category before its docs commit.
+- 2026-11-03: 3.5 merged into develop (`af89823`, --no-ff) after QA PASS at `30d6c19`; ticket marked done. Deferred: pre-existing NullReferenceException in `SettingsStore.Open` for a profile with no `overrides` property (hand-edited files only). `SettingsStoreTests.cs` has a one-line change that may conflict with test-trim.
