@@ -26,7 +26,7 @@ The app starts a new session only from a turn the builder began. A READY FOR QA 
 2. Pick an idle worker from the table below that holds no queued message and isn't pinned or open on screen.
 3. Clear it (`clear_session`) so it starts with fresh context. If the clear is refused, send the task without clearing and note it in the Log.
 4. Send the full brief by `SendMessage`, the same brief a new session would get. Its first step: in its own worktree, discard nothing, check `git status` is clean, then cut the task's branch from `develop` (`git flow feature start ...`) or, for QA, check out the story's tip.
-5. Note in the Queue's Session column which worker took the task.
+5. Note in the Queue's Session column which worker took the task, and retitle the worker (`set_session_title`) to its new task. A finished session is retitled "Done: <task> (merged|passed)", and an idle pool worker "Pool: idle (was <task>)".
 
 Workers have Remote Control off, which `clear_session` requires. Sessions that are working keep Remote Control on.
 
