@@ -3,15 +3,19 @@ using System.Runtime.InteropServices;
 namespace ReplayBuffer.Core.Replay;
 
 /// <summary>
-/// The Memory-mode Replay Buffer (AD-8): encoded packets of every stream, newest last, their bytes
-/// in reference-counted native slabs, trimmed to the Buffer Window plus <see cref="SlackUs"/> of GOP
+/// The Replay Buffer (AD-8): encoded packets of every stream, newest last, their bytes in
+/// reference-counted slabs, trimmed to the Buffer Window plus <see cref="SlackUs"/> of GOP
 /// slack. The entry array is preallocated and circular (it doubles only when full), and the bytes go
 /// into the current slab, so an append allocates nothing managed. A keyframe index beside it (the
 /// sequence numbers of the video keyframe entries, as long as the entry array and grown with it)
 /// lets a cut find its keyframe without scanning every entry. A slab is freed once the ring no
 /// longer needs it and no <see cref="RingCut"/> pins it, so trimming or disposing the ring never frees
 /// bytes a writer is reading. <see cref="Append"/> and <see cref="Cut"/> take one short lock; a cut's
-/// bytes are read with none, since they are never rewritten.
+/// bytes are read with none, since they are never rewritten. In Memory mode a slab is native memory;
+/// in Disk mode (R3) it is one block of a <see cref="RingFile"/> the ring owns, and only a packet
+/// bigger than a block, or a slab wanted with no block free, is native memory
+/// (<see cref="MemorySlabs"/>). The index, the pins and the trimming are the same in both. The file
+/// is closed, and so deleted, once the ring is disposed and its last slab freed.
 /// </summary>
 public sealed class PacketRing : IDisposable
 {
@@ -51,7 +55,12 @@ public sealed class PacketRing : IDisposable
     private Slab? _current;
     private long _newestUs = long.MinValue;
     private int _liveSlabs;
+    private int _memorySlabs;
     private bool _disposed;
+
+    // Disk mode's file, and the bytes a copy out of it reads through, grown as needed.
+    private readonly RingFile? _file;
+    private byte[] _scratch = [];
 
     /// <param name="windowUs">The Buffer Window, in µs.</param>
     /// <param name="capacity">The entries preallocated: the packets the window and its slack hold.</param>
@@ -66,6 +75,19 @@ public sealed class PacketRing : IDisposable
         _entries = new RingEntry[capacity];
         _keys = new long[capacity];
     }
+
+    /// <summary>A Disk-mode ring: its slabs are <paramref name="file"/>'s blocks, and it owns the file.</summary>
+    /// <param name="windowUs">The Buffer Window, in µs.</param>
+    /// <param name="capacity">The entries preallocated: the packets the window and its slack hold.</param>
+    /// <param name="file">The ring file; the slab size is its block size.</param>
+    public PacketRing(long windowUs, int capacity, RingFile file)
+        : this(windowUs, capacity, (file ?? throw new ArgumentNullException(nameof(file))).BlockBytes)
+    {
+        _file = file;
+    }
+
+    /// <summary>Disk mode's ring file; null in Memory mode.</summary>
+    public RingFile? File => _file;
 
     /// <summary>The Buffer Window it was sized for, in µs.</summary>
     public long WindowUs => _windowUs;
@@ -108,6 +130,18 @@ public sealed class PacketRing : IDisposable
 
     /// <summary>Slabs not yet freed, whether the ring or a cut holds them.</summary>
     internal int LiveSlabs => Volatile.Read(ref _liveSlabs);
+
+    /// <summary>On a Disk-mode ring, the slabs that went to native memory instead of a block.</summary>
+    internal int MemorySlabs
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _memorySlabs;
+            }
+        }
+    }
 
     /// <summary>Registers a stream before its first packet; returns its index.</summary>
     /// <param name="timeBaseNum">The numerator of the time base its timestamps are in.</param>
@@ -159,7 +193,7 @@ public sealed class PacketRing : IDisposable
     /// Copies one packet in, then trims from the oldest while it starts more than the window plus
     /// <see cref="SlackUs"/> before the newest.
     /// </summary>
-    public unsafe void Append(int stream, ReadOnlySpan<byte> data, long pts, long dts, long duration, bool isKey)
+    public void Append(int stream, ReadOnlySpan<byte> data, long pts, long dts, long duration, bool isKey)
     {
         lock (_lock)
         {
@@ -167,7 +201,7 @@ public sealed class PacketRing : IDisposable
             var info = _streams[stream];
             var slab = SlabFor(data.Length);
             var offset = slab.Used;
-            data.CopyTo(new Span<byte>(slab.Data + offset, data.Length));
+            slab.Write(offset, data);
             slab.Used += data.Length;
             slab.Live++;
 
@@ -366,7 +400,7 @@ public sealed class PacketRing : IDisposable
     /// Copies up to <paramref name="max"/> entries from sequence number <paramref name="sequence"/>
     /// (or the head, if trimmed past it) into <paramref name="target"/>; returns the next sequence.
     /// </summary>
-    private unsafe long CopyBatchTo(PacketRing target, long sequence, int max)
+    private long CopyBatchTo(PacketRing target, long sequence, int max)
     {
         lock (_lock)
         {
@@ -386,7 +420,14 @@ public sealed class PacketRing : IDisposable
                 for (var i = first; i < end; i++)
                 {
                     var entry = EntryAt(i);
-                    target.Append(entry.Stream, new ReadOnlySpan<byte>(entry.Slab.Data + entry.Offset, entry.Length), entry.Pts, entry.Dts, entry.Duration, entry.IsKey);
+                    if (_scratch.Length < entry.Length)
+                    {
+                        _scratch = new byte[Math.Max(entry.Length, _scratch.Length * 2)];
+                    }
+
+                    var bytes = _scratch.AsSpan(0, entry.Length);
+                    entry.Slab.Read(entry.Offset, bytes);
+                    target.Append(entry.Stream, bytes, entry.Pts, entry.Dts, entry.Duration, entry.IsKey);
                 }
 
                 return _headSeq + Math.Max(end, first);
@@ -404,7 +445,7 @@ public sealed class PacketRing : IDisposable
                 return;
             }
 
-            _disposed = true;
+            Volatile.Write(ref _disposed, true);
             _count = 0;
             _current = null;
             foreach (var slab in _held)
@@ -416,6 +457,11 @@ public sealed class PacketRing : IDisposable
             _entries = [];
             _keys = [];
             _keyCount = 0;
+        }
+
+        if (LiveSlabs == 0)
+        {
+            _file?.Close();
         }
     }
 
@@ -485,7 +531,20 @@ public sealed class PacketRing : IDisposable
 
     private Slab NewSlab(int capacity)
     {
-        var slab = new Slab(capacity, this);
+        Slab slab;
+        if (_file is { } file && capacity <= file.BlockBytes && file.TryRent(out var block))
+        {
+            slab = new Slab(file.BlockBytes, this, file, block);
+        }
+        else
+        {
+            slab = new Slab(capacity, this);
+            if (_file is not null)
+            {
+                _memorySlabs++;
+            }
+        }
+
         Interlocked.Increment(ref _liveSlabs);
         _held.Add(slab);
         return slab;
@@ -541,7 +600,13 @@ public sealed class PacketRing : IDisposable
         _keyHead = 0;
     }
 
-    private void OnFreed() => Interlocked.Decrement(ref _liveSlabs);
+    private void OnFreed()
+    {
+        if (Interlocked.Decrement(ref _liveSlabs) == 0 && Volatile.Read(ref _disposed))
+        {
+            _file?.Close();
+        }
+    }
 
     private sealed class StreamInfo(int num, int den, bool isVideo)
     {
@@ -557,8 +622,10 @@ public sealed class PacketRing : IDisposable
     private readonly record struct RingEntry(Slab Slab, int Offset, int Length, int Stream, long Pts, long Dts, long Duration, bool IsKey, long TimeUs);
 
     /// <summary>
-    /// One native block of packet bytes. Its count is the ring's one reference (while it is current
-    /// or holds live entries) plus one per cut that reads it; it is freed at 0.
+    /// One block of packet bytes: native memory (<see cref="Data"/>), or a block of the ring file
+    /// (<see cref="File"/> at <see cref="FileOffset"/>). Its count is the ring's one reference (while
+    /// it is current or holds live entries) plus one per cut that reads it; at 0 its memory is freed
+    /// or its block returned.
     /// </summary>
     internal sealed unsafe class Slab
     {
@@ -572,7 +639,22 @@ public sealed class PacketRing : IDisposable
             Data = (byte*)NativeMemory.Alloc((nuint)capacity);
         }
 
+        public Slab(int capacity, PacketRing owner, RingFile file, long fileOffset)
+        {
+            _owner = owner;
+            Capacity = capacity;
+            File = file;
+            FileOffset = fileOffset;
+        }
+
+        /// <summary>A memory slab's bytes; null for a file slab.</summary>
         public byte* Data { get; private set; }
+
+        /// <summary>A file slab's ring file; null for a memory slab.</summary>
+        public RingFile? File { get; }
+
+        /// <summary>Where a file slab's block starts in the file.</summary>
+        public long FileOffset { get; }
 
         public int Capacity { get; }
 
@@ -588,14 +670,48 @@ public sealed class PacketRing : IDisposable
         /// <summary>The sequence number of the last entry appended into it. The ring's lock guards it.</summary>
         public long LastSeq { get; set; } = -1;
 
+        /// <summary>Writes <paramref name="data"/> at <paramref name="offset"/> into the slab; the ring's lock guards it.</summary>
+        public void Write(int offset, ReadOnlySpan<byte> data)
+        {
+            if (File is { } file)
+            {
+                file.Write(FileOffset + offset, data);
+            }
+            else
+            {
+                data.CopyTo(new Span<byte>(Data + offset, data.Length));
+            }
+        }
+
+        /// <summary>Reads <paramref name="destination"/>'s length from <paramref name="offset"/>; bytes once written never change.</summary>
+        public void Read(int offset, Span<byte> destination)
+        {
+            if (File is { } file)
+            {
+                file.Read(FileOffset + offset, destination);
+            }
+            else
+            {
+                new ReadOnlySpan<byte>(Data + offset, destination.Length).CopyTo(destination);
+            }
+        }
+
         public void AddRef() => Interlocked.Increment(ref _references);
 
         public void Release()
         {
             if (Interlocked.Decrement(ref _references) == 0)
             {
-                NativeMemory.Free(Data);
-                Data = null;
+                if (File is { } file)
+                {
+                    file.Return(FileOffset);
+                }
+                else
+                {
+                    NativeMemory.Free(Data);
+                    Data = null;
+                }
+
                 _owner.OnFreed();
             }
         }
@@ -637,7 +753,20 @@ public readonly struct RingPacket
 
     public int Length { get; }
 
-    public unsafe ReadOnlySpan<byte> Bytes => new(_slab.Data + _offset, Length);
+    /// <summary>Copies its bytes into the start of <paramref name="destination"/>, which must hold <see cref="Length"/>.</summary>
+    public void CopyTo(Span<byte> destination)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(destination.Length, Length, nameof(destination));
+        _slab.Read(_offset, destination[..Length]);
+    }
+
+    /// <summary>Its bytes, as a new array (for tests).</summary>
+    internal byte[] ToArray()
+    {
+        var bytes = new byte[Length];
+        CopyTo(bytes);
+        return bytes;
+    }
 }
 
 /// <summary>

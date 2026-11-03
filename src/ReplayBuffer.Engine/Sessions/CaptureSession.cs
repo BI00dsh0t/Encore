@@ -25,11 +25,15 @@ internal sealed record CaptureSessionOptions
     public static readonly TimeSpan DefaultFirstFrameTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// The Replay Buffer (R1, AD-8): the encoders write into a Memory-mode ring sized from the
-    /// snapshot instead of a file, and each <see cref="CaptureSession.Save"/> writes a Clip from it.
-    /// No path is allocated, and the outcome has none.
+    /// The Replay Buffer (R1, AD-8): the encoders write into a ring sized from the snapshot instead
+    /// of a file, in memory or on disk as its <c>replayStorage</c> says, and each
+    /// <see cref="CaptureSession.Save"/> writes a Clip from it. No path is allocated, and the outcome
+    /// has none.
     /// </summary>
     public bool Replay { get; init; }
+
+    /// <summary>Where a Disk-mode ring's file goes when the snapshot's <c>ringPath</c> is not set; null for none.</summary>
+    public string? RingFolder { get; init; }
 
     /// <summary>The folder a file is allocated in when neither <see cref="OutputPath"/> nor the snapshot's Output Folder is set.</summary>
     public required string OutputFolder { get; init; }
@@ -184,6 +188,9 @@ internal sealed class CaptureSession : ICaptureSession
     // The Buffer Window the ring holds, in seconds: set at the anchor, then by a resize at a Reset
     // (orchestrator thread). The window SetBufferWindow asked for, applied at the next Reset; 0 for none.
     private int _windowSeconds;
+
+    // A Disk-mode session's ring folder; null in Memory mode.
+    private string? _ringFolder;
     private volatile int _pendingWindow;
     private VideoEncoder? _video;
     private readonly IVideoEncoderCatalog _encoders;
@@ -223,7 +230,11 @@ internal sealed class CaptureSession : ICaptureSession
         {
             if (_spec.Snapshot.ReplayStorage == Contracts.Settings.ReplayStorage.Disk)
             {
-                _log.LogInformation("The Disk-mode Replay Buffer is not built yet; buffering in memory");
+                _ringFolder = _spec.Snapshot.RingPath ?? _options.RingFolder;
+                if (_ringFolder is null)
+                {
+                    _log.LogWarning("The Disk-mode Replay Buffer has no ring folder; buffering in memory");
+                }
             }
         }
         else
@@ -584,9 +595,10 @@ internal sealed class CaptureSession : ICaptureSession
         {
             var window = _spec.Snapshot.BufferWindow;
             _windowSeconds = window;
-            _ring = new ReplayRingSink(NewRing(window));
+            var first = NewRing(window);
+            _ring = new ReplayRingSink(first);
             packets = _ring;
-            _log.LogInformation("Replay Buffer of {Window} s in memory, {Capacity} packets preallocated", window, RingCapacity(window));
+            _log.LogInformation("Replay Buffer of {Window} s {Storage}, {Capacity} packets preallocated", window, StorageOf(first), RingCapacity(window));
         }
         else
         {
@@ -975,8 +987,18 @@ internal sealed class CaptureSession : ICaptureSession
         return (int)Math.Min((seconds + 3L) * perSecond, 1 << 24);
     }
 
-    /// <summary>An empty Replay Buffer ring of a <paramref name="seconds"/> s Buffer Window.</summary>
-    private PacketRing NewRing(int seconds) => new(seconds * 1_000_000L, RingCapacity(seconds));
+    /// <summary>An empty Replay Buffer ring of a <paramref name="seconds"/> s Buffer Window, on disk in Disk mode (R3) unless its file can't be made.</summary>
+    private PacketRing NewRing(int seconds) => ReplayRings.Create(
+        seconds * 1_000_000L,
+        RingCapacity(seconds),
+        _ringFolder,
+        ReplayStorageEstimate.Bytes(_spec.Snapshot.Video, _spec.Audio.Tracks.Count, seconds),
+        _log);
+
+    /// <summary>Where a ring keeps its bytes, for the log.</summary>
+    private static string StorageOf(PacketRing ring) => ring.File is { } file
+        ? $"on disk in {file.Path} ({file.Bytes / (1024 * 1024)} MiB)"
+        : "in memory";
 
     /// <summary>The Buffer Window from the next Reset on (AD-8); the orchestrator calls it just before a Reset.</summary>
     public void SetBufferWindow(int seconds) => _pendingWindow = seconds;
@@ -994,10 +1016,21 @@ internal sealed class CaptureSession : ICaptureSession
             return;
         }
 
-        var generation = ring.Resize(NewRing(pending), us);
+        var next = NewRing(pending);
+        int generation;
+        try
+        {
+            generation = ring.Resize(next, us);
+        }
+        catch
+        {
+            next.Dispose();
+            throw;
+        }
+
         _log.LogInformation(
-            "Buffer Window {Old} s -> {New} s at the Reset {Reset:0.000} s after the anchor: ring generation {Generation}, {Capacity} packets preallocated",
-            _windowSeconds, pending, us / 1e6, generation, RingCapacity(pending));
+            "Buffer Window {Old} s -> {New} s at the Reset {Reset:0.000} s after the anchor: ring generation {Generation} {Storage}, {Capacity} packets preallocated",
+            _windowSeconds, pending, us / 1e6, generation, StorageOf(next), RingCapacity(pending));
         _windowSeconds = pending;
     }
 

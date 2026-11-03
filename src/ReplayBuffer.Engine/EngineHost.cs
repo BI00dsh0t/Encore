@@ -9,6 +9,7 @@ using ReplayBuffer.Core.Audio;
 using ReplayBuffer.Core.Feedback;
 using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
+using ReplayBuffer.Core.Replay;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Core.Settings;
 using ReplayBuffer.Engine.Audio;
@@ -230,9 +231,22 @@ internal sealed class EngineHost : IAsyncDisposable
                 hostOptions.MeterAudio ?? audio,
                 levels => hub.Publish(AudioMessages.Levels, levels),
                 loggers.CreateLogger("Audio"));
+            // Ring files a killed engine left (DeleteOnClose covers a crash, not a power loss), before any session makes one.
+            var ringFolder = Path.Combine(instance.LocalDataFolder, "ring");
+            var stale = RingFile.RemoveStale(ringFolder);
+            if (SettingsResolver.Resolve(load.Store.Current, null).RingPath is { Length: > 0 } ringPath)
+            {
+                stale += RingFile.RemoveStale(ringPath);
+            }
+
+            if (stale > 0)
+            {
+                clipLog.LogInformation("Removed {Count} stale Replay Buffer ring files", stale);
+            }
+
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
-                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay },
+                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay, RingFolder = ringFolder },
                     loggers,
                     audio,
                     encoders),
