@@ -149,7 +149,7 @@ internal static class MarkedCapture
         return (exit, stderr, log);
     }
 
-    private static AudioEndpoint ResolveDevice(AudioFlow flow, string? query)
+    internal static AudioEndpoint ResolveDevice(AudioFlow flow, string? query)
     {
         if (query is null)
         {

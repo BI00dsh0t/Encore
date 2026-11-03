@@ -53,6 +53,39 @@ public sealed class OptionsTests
     }
 
     [Fact]
+    public void TracksReadsItsDevicesAndOptions()
+    {
+        var options = BenchOptions.Parse(["tracks", "--device-a", "Speakers A", "--device-b", "Speakers B", "--input-device", "Mic", "--minutes", "2", "--vlc", "vlc.exe"]);
+
+        Assert.Equal(("Speakers A", "Speakers B"), TracksCheck.Devices(options));
+        Assert.Equal(new CaptureSettings(1920, 1080, 60, 20_000, null, "Mic"), options.CaptureSettings());
+        Assert.Equal(2, options.Double("minutes", 5, 1, 60));
+        Assert.Equal("vlc.exe", options.Text("vlc"));
+    }
+
+    [Theory]
+    [InlineData("tracks", "--device-b", "Speakers B")]
+    [InlineData("tracks", "--device-a", "Speakers A")]
+    [InlineData("tracks", "--device-a", "Speakers A", "--device-b", "speakers a ")]
+    public void TracksNeedsTwoDifferentDevices(params string[] args) =>
+        Assert.Throws<BenchUsageException>(() => TracksCheck.Devices(BenchOptions.Parse(args)));
+
+    [Theory]
+    [InlineData("tracks", "--output-device", "Speakers")]
+    [InlineData("tracks", "--players", "VLC")]
+    [InlineData("tracks", "--device-a")]
+    public void TracksRefusesOptionsItDoesNotTake(params string[] args) =>
+        Assert.Throws<BenchUsageException>(() => BenchOptions.Parse(args));
+
+    [Fact]
+    public void ANoDeviceTracksRunIsAUsageError()
+    {
+        using var run = new BenchRun();
+
+        Assert.Throws<BenchUsageException>(() => TracksCheck.Run(run.Context("tracks", "--device-b", "B")));
+    }
+
+    [Fact]
     public void ListsAreCommaSeparated()
     {
         var options = BenchOptions.Parse(["playback", "--players", "VLC, Chrome ,,"]);
