@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.7 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.8 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.2 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
@@ -103,7 +103,7 @@ The coordinator logs each QA round in the Log below.
 | 25.5 | 4.5 Failed saves, retry and the file-being-written signal | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `9da03df`) |
 | 25.6 | 4.6 Ring generations and Buffer Window resizing | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e7058ea`) |
 | 25.7 | 4.7 Disk-mode ring | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c96ab9c`) |
-| 25.8 | 4.8 Memory-mode RAM margin | | pending |
+| 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 25.9 | 4.9 Per-Game-Profile settings at the next Reset | | pending |
 | 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | | pending |
 | 25.11 | 4.11 Game Profile overrides in the Main App | | pending |
@@ -430,3 +430,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA 4.7 at `f507443`: **QA PASS**, 0 blocking and 5 advisory notes. 4.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-03: 5.5 is READY FOR QA at `65e61c8` (build 0 warnings; App.Tests 75 pass). QA started on qa-2-1 (Sonnet), and its card is In QA.
 - 2026-11-03: 4.7 merged into `develop` (`c96ab9c`, `feat(engine): merge 4.7-disk-mode-ring`) and marked done, after QA PASS at `f507443` and a conflict-resolved merge of `develop` (EngineHost and CaptureSession, keeping both 6.1's recording tap and 4.7's disk ring; rebuilt 0 warnings, Core 90, FFmpeg 33, Engine 159 pass, publish clean). QA's five advisories are recorded in the epic Notes: spill to RAM while a long Clip pins blocks (for 4.8/4.10), up to 2x disk use across a resize, a mid-session write failure fails the session, `RemoveStale` should match `ring-<digits>.bin`, and `DiskRingClipTests` should be Explicit (the last two for the 4.13 sweep).
+- 2026-11-03: 4.7 merged (`c96ab9c`, marked done `458013c`), and its card is Done. 4.8 is now ready and was given to slice-epic-4 (Opus, high effort), with its card In progress. The rest of epic 4 waits on 4.8.
