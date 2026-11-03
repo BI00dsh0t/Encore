@@ -142,6 +142,8 @@ deferred: []
 - Titles come from the `name` tag, then `title`; never `handler_name` (the engine writes the name there too, so a missing title would pass). Everything's expected onsets are Game's plus Chat's. `--reanalyze` keeps the capture's warnings from the previous `tracks.json`.
 - The throwaway instance's engine logs are copied to `tracks-instance-logs/` in the run folder before its folders are deleted.
 
+- QA round 1 (3 low findings, fixed): `--reanalyze` of a capture whose engine failed keeps `failed`, its exit and its error instead of analysing the partial file; report.md shows a failed run's warnings; tests cover both and the carried warnings (`AReanalysisKeepsTheCapturesWarnings`, `AReanalysisOfAFailedCaptureStaysFailed`, `AFailedTracksRunShowsTheEngineError`).
+
 ## Plan Change Log
 
 ## Review Triage Log

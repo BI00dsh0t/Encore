@@ -362,6 +362,7 @@ internal static class Report
         {
             md.AppendLine(CultureInfo.InvariantCulture, $"**The engine failed** (exit {tracks.EngineExit}): {tracks.EngineError}");
             md.AppendLine();
+            TracksWarnings(md, tracks);
             return;
         }
 
@@ -389,6 +390,11 @@ internal static class Report
             md.AppendLine();
         }
 
+        TracksWarnings(md, tracks);
+    }
+
+    private static void TracksWarnings(StringBuilder md, TracksReport tracks)
+    {
         foreach (var warning in tracks.Warnings)
         {
             md.AppendLine("- Warning: " + warning);

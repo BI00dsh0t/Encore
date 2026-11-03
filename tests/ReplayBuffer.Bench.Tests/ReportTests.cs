@@ -59,11 +59,12 @@ public sealed class ReportTests : IDisposable
         BenchJson.Write(Path.Combine(_folder, TracksCheck.FileName), new TracksReport(
             DateTimeOffset.Now, 5, "engine.exe", new CaptureSettings(1920, 1080, 60, 20_000, null, null), 0,
             "Speakers A", "Speakers B", "Mic", "tracks.mp4", 1, "error audio-device-not-found: gone", null, null,
-            [], null, [], null, TrackAnalysis.FailedVerdict, []));
+            [], null, [], null, TrackAnalysis.FailedVerdict, ["Could not delete the test instance's folder C:\\x."]));
 
         var md = Report.Markdown(Report.Generate(_folder));
 
         Assert.Contains("**The engine failed** (exit 1): error audio-device-not-found: gone", md, StringComparison.Ordinal);
+        Assert.Contains("- Warning: Could not delete the test instance's folder C:\\x.", md, StringComparison.Ordinal);
     }
 
     [Fact]

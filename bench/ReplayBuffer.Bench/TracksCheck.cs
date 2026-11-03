@@ -99,10 +99,11 @@ internal static class TracksCheck
             }
 
             engine = "(reanalysed)";
+            string? engineError = null;
             try
             {
                 var previous = JsonSerializer.Deserialize<TracksReport>(File.ReadAllText(reportPath), BenchJson.Options);
-                (engine, exit) = (previous?.Engine ?? engine, previous?.EngineExit);
+                (engine, exit, engineError) = (previous?.Engine ?? engine, previous?.EngineExit, previous?.EngineError);
 
                 // The capture's own warnings (B's offset, a tone player or marker failure, an instance folder left behind).
                 warnings.AddRange(previous?.Warnings ?? []);
@@ -110,6 +111,14 @@ internal static class TracksCheck
             catch (Exception e) when (e is IOException or JsonException)
             {
                 // No earlier tracks.json, or a malformed one.
+            }
+
+            // A capture whose engine failed stays failed, whatever its partial file holds.
+            if (engineError is not null)
+            {
+                BenchJson.Write(reportPath, Failed(log, engine, exit, engineError, mp4, warnings));
+                Console.Error.WriteLine($"The engine failed: {engineError}");
+                return 1;
             }
 
             Console.WriteLine($"Reanalysing {mp4}");
@@ -126,9 +135,7 @@ internal static class TracksCheck
             if (code != 0 || !File.Exists(mp4))
             {
                 var error = stderr.Length > 0 ? stderr : $"the engine exited with {code} and wrote no file";
-                BenchJson.Write(reportPath, new TracksReport(
-                    DateTimeOffset.Now, minutes, engine, settings, toneDbfs, log.DeviceA, log.DeviceB, log.InputDevice, mp4, exit, error,
-                    null, null, [], null, [], null, TrackAnalysis.FailedVerdict, warnings));
+                BenchJson.Write(reportPath, Failed(log, engine, exit, error, mp4, warnings));
                 Console.Error.WriteLine($"The engine failed: {error}");
                 return 1;
             }
@@ -146,6 +153,11 @@ internal static class TracksCheck
         Print(report);
         return report.Verdict == TrackAnalysis.PassVerdict ? 0 : 1;
     }
+
+    /// <summary>The report of a capture whose engine failed: no analysis, verdict <c>failed</c>.</summary>
+    private static TracksReport Failed(TracksMarkerLog log, string engine, int? exit, string error, string mp4, List<string> warnings) =>
+        new(DateTimeOffset.Now, log.Minutes, engine, log.Capture, log.ToneDbfs, log.DeviceA, log.DeviceB, log.InputDevice, mp4, exit, error,
+            null, null, [], null, [], null, TrackAnalysis.FailedVerdict, warnings);
 
     /// <summary><c>--device-a</c> and <c>--device-b</c>: both required, and not the same.</summary>
     /// <exception cref="BenchUsageException">One is missing, or they are equal.</exception>

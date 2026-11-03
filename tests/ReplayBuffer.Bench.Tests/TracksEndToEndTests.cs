@@ -86,19 +86,64 @@ public sealed class TracksEndToEndTests : IDisposable
         Assert.Equal(["Everything", "Game", "Chat", "Mic"], listing.Labels!);
     }
 
-    private (int Exit, TracksReport Report) Reanalyze()
+    [Fact]
+    public void AReanalysisKeepsTheCapturesWarnings()
+    {
+        var tools = Tools();
+        Make(tools, _run.PathOf(TracksCheck.ClipName), gameDelaySeconds: 0);
+        const string Warning = "B's bursts come 0.2 s after A's, not about 0.5 s.";
+
+        var (exit, report) = Reanalyze(Previous(1, null, Warning));
+
+        Assert.Equal(0, exit);
+        Assert.Equal(TrackAnalysis.PassVerdict, report.Verdict);
+        Assert.Contains(Warning, report.Warnings);
+    }
+
+    [Fact]
+    public void AReanalysisOfAFailedCaptureStaysFailed()
+    {
+        var tools = Tools();
+        Make(tools, _run.PathOf(TracksCheck.ClipName), gameDelaySeconds: 0);
+        const string Warning = "Could not delete the test instance's folder C:\\x.";
+
+        var (exit, report) = Reanalyze(Previous(1, "error encode-failed: the encoder stopped", Warning));
+
+        Assert.Equal(1, exit);
+        Assert.Equal(TrackAnalysis.FailedVerdict, report.Verdict);
+        Assert.Equal(1, report.EngineExit);
+        Assert.Equal("error encode-failed: the encoder stopped", report.EngineError);
+        Assert.Contains(Warning, report.Warnings);
+    }
+
+    /// <summary>An earlier tracks.json for the run: its engine exit and error, and one capture-time warning.</summary>
+    private static TracksReport Previous(int exit, string? error, string warning) => new(
+        DateTimeOffset.Now, Seconds / 60.0, "engine.exe", new CaptureSettings(320, 180, 60, 2_000, null, null), ToneDbfs,
+        "A", "B", "Mic", "tracks.mp4", exit, error, null, null, [], null, [], null,
+        error is null ? TrackAnalysis.PassVerdict : TrackAnalysis.FailedVerdict, [warning]);
+
+    /// <param name="previous">An earlier <c>tracks.json</c> to write first, as a capture run leaves it.</param>
+    private (int Exit, TracksReport Report) Reanalyze(TracksReport? previous = null)
     {
         var bursts = Enumerable.Range(0, Seconds).Select(k => (long)k * 10_000_000).ToList();
         var log = new TracksMarkerLog(
             10_000_000, 0, "ReplayBuffer-Test-bench-00000000", "0x0", "A", "a", "B", "b", "Mic", "m", ToneDbfs, Seconds / 60.0,
             new CaptureSettings(320, 180, 60, 2_000, null, null), bursts, [.. bursts.Select(q => q + 5_000_000)]);
         File.WriteAllText(_run.PathOf(TracksCheck.MarkersName), JsonSerializer.Serialize(log, BenchJson.Options));
+        if (previous is not null)
+        {
+            BenchJson.Write(_run.PathOf(TracksCheck.FileName), previous);
+        }
 
         // A --vlc that isn't there leaves VLC not-checked, whatever is installed.
         var exit = TracksCheck.Run(_run.Context("tracks", "--reanalyze", "--vlc", _run.PathOf("no-vlc.exe")));
         var report = JsonSerializer.Deserialize<TracksReport>(File.ReadAllText(_run.PathOf(TracksCheck.FileName)), BenchJson.Options)!;
         Assert.Equal(-6, report.ToneDbfs);
-        Assert.Equal(0.5, report.BurstPhaseSeconds);
+        if (report.EngineError is null)
+        {
+            Assert.Equal(0.5, report.BurstPhaseSeconds);
+        }
+
         return (exit, report);
     }
 
