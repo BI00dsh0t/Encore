@@ -3,7 +3,7 @@ title: 'Named Tracks in players and editors, end to end'
 type: 'feature'
 ticket: '9'
 created: '2026-11-02'
-status: 'built'
+status: done
 baseline_revision: 'e283cd20c40f061692f4919f4a41b5e96fa64b12'
 route: 'full'
 route_source: 'auto'
