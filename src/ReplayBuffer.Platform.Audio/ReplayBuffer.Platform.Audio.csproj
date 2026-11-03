@@ -5,6 +5,8 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ReplayBuffer.Platform.Audio.Tests" />
+    <!-- The device dropout AC builds the hub over fake clients. -->
+    <InternalsVisibleTo Include="ReplayBuffer.Engine.Tests" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
