@@ -120,7 +120,9 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// <c>muteAffected</c> Track passes through a <see cref="MicMuteGate"/>, so it is silenced there,
 /// before the mix, from the press's frame, and stays audible in every other Track. In Replay mode
 /// (<see cref="CaptureSessionOptions.Replay"/>) the streams go into a <see cref="ReplayRingSink"/>
-/// instead of a file, and <see cref="Save"/> writes a Clip from it on a thread of its own.
+/// instead of a file, and <see cref="Save"/> writes a Clip from it on a thread of its own. The
+/// encoders write into the ring through a <see cref="RecordingTap"/>, and <see cref="Record"/>
+/// attaches a <see cref="RecordingWriter"/> to it: a Recording from the same encoder chain.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -164,6 +166,7 @@ internal sealed class CaptureSession : ICaptureSession
     private PacedVideoEncoder? _paced;
     private FragmentedMp4Muxer? _muxer;
     private ReplayRingSink? _ring;
+    private RecordingTap? _tap;
     private volatile bool _outputFinished;
 
     // R1's exit drain, orchestrator thread only: the teardown keeps the ring for saves until Release.
@@ -349,8 +352,9 @@ internal sealed class CaptureSession : ICaptureSession
         }
         finally
         {
-            // A save still waiting has every packet it will get.
+            // A save still waiting has every packet it will get, and so has a Recording.
             _outputFinished = true;
+            _tap?.Close();
             DisposeAll();
         }
 
@@ -429,6 +433,23 @@ internal sealed class CaptureSession : ICaptureSession
 
         // A drained session's encoder is already disposed: never ask it for a keyframe.
         return new ClipWrite(this, ring, _outputFinished ? null : video, qpc);
+    }
+
+    /// <summary>
+    /// In Replay mode, once the output is open and while it runs: a Recording from
+    /// <paramref name="qpc"/> on the session's own encoders, through the tap; null once drained or
+    /// released, before the anchor, or while a Recording is attached.
+    /// </summary>
+    public IRecordingWrite? Record(long qpc)
+    {
+        // The anchor's release write publishes the tap and the encoder.
+        if (!_options.Replay || _released || _outputFinished || !Volatile.Read(ref _anchored)
+            || _tap is not { HasWriter: false } tap || _video is not { } video)
+        {
+            return null;
+        }
+
+        return new RecordingWrite(this, tap, video, qpc);
     }
 
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>
@@ -575,7 +596,8 @@ internal sealed class CaptureSession : ICaptureSession
             var perSecond = video.Fps + (_spec.Audio.Tracks.Count * AacPacketsPerSecond) + 1;
             var capacity = (int)Math.Min((window + 3L) * perSecond, 1 << 24);
             _ring = new ReplayRingSink(new PacketRing(window * 1_000_000L, capacity));
-            packets = _ring;
+            _tap = new RecordingTap(_ring);
+            packets = _tap;
             _log.LogInformation("Replay Buffer of {Window} s in memory, {Capacity} packets preallocated", window, capacity);
         }
         else
@@ -995,6 +1017,9 @@ internal sealed class CaptureSession : ICaptureSession
         _frames?.Dispose();
         _muxer?.Dispose();
 
+        // A Recording still finishing owns its own copies of the streams.
+        _tap?.Dispose();
+
         // A save still writing holds its own lease and pins; the ring goes when the last is released.
         // A drained session keeps it for saves until Release.
         if (!_keepRing)
@@ -1180,5 +1205,60 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         private long Deadline() => Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * session._qpcFrequency);
+    }
+
+    /// <summary>
+    /// One Recording (R2): <see cref="Start"/> asks the encoder for a keyframe after the press, and
+    /// attaches a <see cref="RecordingWriter"/> with its own copies of the streams to the tap; the
+    /// writer's thread does the rest. <see cref="Stop"/> hands it the press as µs since the anchor.
+    /// </summary>
+    private sealed class RecordingWrite(CaptureSession session, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
+    {
+        private RecordingWriter? _writer;
+
+        public void Start(string path, Action<Exception?> done)
+        {
+            ArgumentNullException.ThrowIfNull(path);
+            ArgumentNullException.ThrowIfNull(done);
+            if (_writer is not null)
+            {
+                throw new InvalidOperationException("The Recording has already started.");
+            }
+
+            var ticket = video.RequestKeyframe(qpc);
+            var streams = tap.CopyStreams();
+            RecordingWriter writer;
+            try
+            {
+                writer = new RecordingWriter(
+                    path,
+                    streams,
+                    () => video.TryGetForcedKey(ticket, out var pts) ? pts : null,
+                    session.MicrosAt(qpc),
+                    session._loggers.CreateLogger<RecordingWriter>(),
+                    done);
+            }
+            catch
+            {
+                streams.Dispose();
+                throw;
+            }
+
+            try
+            {
+                tap.Attach(writer);
+                writer.Start();
+            }
+            catch
+            {
+                writer.Abandon();
+                throw;
+            }
+
+            _writer = writer;
+            session._log.LogInformation("Recording to {Path}", path);
+        }
+
+        public void Stop(long qpc) => _writer?.Stop(session.MicrosAt(qpc));
     }
 }

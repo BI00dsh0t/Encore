@@ -3,14 +3,14 @@ title: 'Tracer: Record Hotkey to a fragmented MP4 Recording beside the Replay Bu
 type: 'feature'
 ticket: '1'
 created: '2026-11-03'
-status: 'ready-for-dev'
+status: 'in-review'
 baseline_revision: 'd6b57b6ef463e170bf92f9b0f96ea25e148f419d'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
@@ -70,13 +70,13 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/Messages/Recording.cs`, `Engine.cs` -- the payloads, events, context and snapshot fields -- the R7 events.
-- [ ] `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` -- samples for both events -- the registry coverage test requires them.
-- [ ] `src/ReplayBuffer.Core/Sessions/CaptureSessionPorts.cs`, `TargetGames.cs`, `SessionOrchestrator.cs` -- the ports, `Recordings`, `ChainKey`, and the toggle, gate, start, stop, post-back and session-end handling -- R1 and R8.
-- [ ] `src/ReplayBuffer.Platform.FFmpeg/FragmentedMp4Muxer.cs`, `ClipWriter.cs`, `RecordingTap.cs`, `RecordingWriter.cs` -- the sink and the writer -- R2.
-- [ ] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs`, `EngineHost.cs` -- the wiring -- R2.
-- [ ] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- one test with a fake session and a fake `IRecordingWrite`. With `recordingsEnabled` off, a press calls nothing and publishes nothing. Switched on, two presses start, then stop, with `BeginWrite` and `EndWrite` once each, `recording.started` then `recording.stopped "stopped"`, and the state running then off.
-- [ ] `tests/ReplayBuffer.Engine.Tests/RecordingCaptureTests.cs` (new) -- in process, a three-Track ToneHub profile with `RecordingsEnabled = true`, and two `recordToggle` presses `seconds` apart. A default `[Fact]` records about 4 s, and an explicit Heavy one records 60 s, through a shared body. The checks are in the second AC below.
+- [x] `src/ReplayBuffer.Contracts/Messages/Recording.cs`, `Engine.cs` -- the payloads, events, context and snapshot fields -- the R7 events.
+- [x] `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` -- samples for both events -- the registry coverage test requires them.
+- [x] `src/ReplayBuffer.Core/Sessions/CaptureSessionPorts.cs`, `TargetGames.cs`, `SessionOrchestrator.cs` -- the ports, `Recordings`, `ChainKey`, and the toggle, gate, start, stop, post-back and session-end handling -- R1 and R8.
+- [x] `src/ReplayBuffer.Platform.FFmpeg/FragmentedMp4Muxer.cs`, `ClipWriter.cs`, `RecordingTap.cs`, `RecordingWriter.cs` -- the sink and the writer -- R2.
+- [x] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs`, `EngineHost.cs` -- the wiring -- R2.
+- [x] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- one test with a fake session and a fake `IRecordingWrite`. With `recordingsEnabled` off, a press calls nothing and publishes nothing. Switched on, two presses start, then stop, with `BeginWrite` and `EndWrite` once each, `recording.started` then `recording.stopped "stopped"`, and the state running then off.
+- [x] `tests/ReplayBuffer.Engine.Tests/RecordingCaptureTests.cs` (new) -- in process, a three-Track ToneHub profile with `RecordingsEnabled = true`, and two `recordToggle` presses `seconds` apart. A default `[Fact]` records about 4 s, and an explicit Heavy one records 60 s, through a shared body. The checks are in the second AC below.
 
 **Acceptance Criteria:**
 - Given a game session buffering and its profile's `recordingsEnabled` off, when `recordToggle` is pressed, then no file, event, Library call or state change follows.
@@ -84,6 +84,12 @@ deferred: []
 - Given the same run, then `BeginWrite` and `EndWrite(Written)` were called once each, for that path. `capture.stateChanged` went `recording: running`, then `off`. `recording.started` and `recording.stopped "stopped"` carry the path, and the Replay Buffer stayed `buffering` throughout.
 
 ## Implementation Notes
+
+- `ClipStream` is internal to Platform.FFmpeg, so `RecordingTap.CopyStreams()` returns a public `RecordingStreams` (disposable, owns its parameter copies) that `RecordingWriter` takes over. A stream's "is video" comes from its parameters' `codec_type`, so `ClipStream` and `ReplayRingSink.cs` are unchanged.
+- `RecordingWriter` is public with `Start`, `Stop(us)` and `Abandon` (frees a writer whose attach or thread start failed); `Offer` and `OutputEnded` are internal, called by the tap. The forced key reaches it as a `Func<long?>` over `VideoEncoder.TryGetForcedKey`.
+- A writer that ends with nothing written (no keyframe before the stop or the output's end) fails with `save-failed` and deletes the file. On any writer failure the orchestrator reports `EndWrite(Written)` when the file still exists (the writer keeps and finishes one that holds data), else `EndWrite(Failed)`.
+- Rebased audio can start up to half an AAC frame before K; the fragmented mp4 muxer's default `avoid_negative_ts` (make_zero, since it writes no edit list) shifts every stream by the same amount, so the streams stay in step.
+- `ReplayClipCaptureTests.TopLevelBoxes` became `internal` so the Recording test reuses it.
 
 ## Plan Change Log
 

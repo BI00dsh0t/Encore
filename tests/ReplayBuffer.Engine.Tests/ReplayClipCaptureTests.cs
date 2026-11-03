@@ -321,7 +321,7 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
     }
 
     /// <summary>The types of the file's top-level MP4 boxes, in order.</summary>
-    private static List<string> TopLevelBoxes(string file)
+    internal static List<string> TopLevelBoxes(string file)
     {
         var types = new List<string>();
         using var stream = File.OpenRead(file);
