@@ -38,8 +38,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 3.6 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 3.6 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 4.1 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.1 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -349,3 +349,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 3.4 merged (`31c2830`, `feat(engine): merge 3.4-game-profiles`; develop merged into the branch first with no conflicts, then Release build 0 warnings, Platform.Windows 25, Core 59 and Engine 146 passed), ticket marked done. A profile deleted while its game is still detected isn't recreated until the next detection (QA note, out of scope). 3.6 (Game Profiles page) is unblocked.
 - 2026-11-03: 3.4 merged (`31c2830`, done `5560509`), and its card is in Done. 3.6 (Game Profiles page, low risk, HITL) went to pool worker slice-epic-5 (Opus, medium effort), and its card is In progress. 4.1 is still being implemented. After 3.6 comes 3.7 (epic 3's refactor sweep), then `v0.3.0`.
 - 2026-11-03: 3.6 is READY FOR QA at `c6aad2d` (Game Profiles page plus a `game.add` command; build 0 warnings; App, Contracts and Engine pass). QA started on qa-2-1 (Sonnet), and its card moved to In QA. 4.1 is in review.
+- 2026-11-03: QA on 3.6 (`c6aad2d`): **QA PASS**, 0 blocking findings and one accepted optional note on the Add catch. 3.6 was told to merge. 4.1 is READY FOR QA at `48b5cd7` (build 0 warnings; Core, Contracts, FFmpeg and Engine pass; publish clean; a real-game Save check is queued for the builder). QA started on qa-1-14 (Sonnet), and its card is In QA.

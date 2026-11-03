@@ -3,7 +3,7 @@ title: 'Game Profiles page in the Main App'
 type: 'feature'
 ticket: '6'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'd484e0992d8edfa09e84279defdf9a0aab10fd49'
 route: 'full'
 route_source: 'auto'
