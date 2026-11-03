@@ -100,6 +100,10 @@ In any detected game, pressing the Save Hotkey produces a playable multi-Track C
   - A ring file write that fails mid-session (the drive is gone) fails the session; only file creation falls back to memory. Accepted.
   - `RingFile.RemoveStale` deletes every `ring-*.bin` in the ring folder. It should match `ring-<digits>.bin` only (a foreign `ring-notes.bin` in a user-set `ringPath` would go). For the 4.13 sweep.
   - `DiskRingClipTests` runs a real NVENC encode in the default suite. CLAUDE.md marks GPU encode tests Heavy/Explicit; the Core-level Memory-vs-Disk test already covers identity. For the 4.13 sweep.
+- Decision: 2026-11-03, from 4.8 (RAM margin; QA PASS, two non-blocking notes, not acted on):
+  - `MemoryMargin.Raised` runs `Warnings.Raise` on the encoder thread while the ring's lock is held, once per entry into the margin. It doesn't call back into the ring.
+  - With every older slab pinned and the margin refused, the ring still allocates the new slab; the pins go when their writes end.
+  - `memory-margin` warnings are not withdrawn on leaving the margin; they go only by `warning.dismiss`. Epic 5's status line may want to withdraw them.
 - Waits on epic-engine-baseline because: it needs the encoder and fragmented MP4 writer.
 - Waits on epic-multi-track-audio because: it needs the Track Layouts and the mixed Track audio.
 - Waits on epic-game-detection-profiles because: it needs the Target Game appeared and exited events, Game Profiles, and per-game folders and file names.
