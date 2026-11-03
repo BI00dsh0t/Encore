@@ -114,7 +114,7 @@ The coordinator logs each QA round in the Log below.
 | 26.1 | 5.1 Tracer: capture state to the Overlay dot | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `c1afee0`) |
 | 26.2 | 5.2 Spike Q-4: the Overlay over exclusive fullscreen and its borderless FPS cost | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `5db7981`) |
 | 26.3 | 5.3 Saving icon through the Save Cooldown | | pending |
-| 26.4 | 5.4 Feedback notices in the engine, with a dev simulator | | pending |
+| 26.4 | 5.4 Feedback notices in the engine, with a dev simulator | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `9c364fa`) |
 | 26.5 | 5.5 Overlay message queue | | pending |
 | 26.6 | 5.6 Feedback Sounds in the engine | | pending |
 | 26.7 | 5.7 Mic-muted icon and the disk-full red X | | pending |
@@ -397,3 +397,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   qa-1-14 and qa-2-1 are free for QA. 6.1 shares the encode chain with the Replay Buffer, so it expects to sync with 4.6 before merging.
 - 2026-11-03: 5.4 is READY FOR QA at `1809c60` (build 0 warnings; Contracts, Core and Engine pass; publish clean). QA started on qa-1-14 (Sonnet), and its card is In QA. 4.6, 6.1 and 7.1 are being implemented.
 - 2026-11-03: QA on 5.4 (`1809c60`): **QA PASS**, 0 blocking findings and two accepted notes (`dev.simulate` is refused at runtime in the installed instance; repeated failure notices stack). 5.4 was told to merge.
+- 2026-11-03: 5.4 merged into `develop` (`9c364fa`, `feat(engine): merge 5.4-feedback-notices`) and marked done, after QA PASS at `1809c60`; `develop` (state-file lines only) was merged into the branch first, so no re-verification. QA's two notes are accepted: `dev.simulate` is registered everywhere but refused at runtime in the installed instance, and repeated clip-failed and disk-full notices stack until the next save or Recording.
