@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 7.4 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 5.7 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.4 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.12 |
@@ -466,3 +466,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 4.10 merged (`518e4d9`, marked done `cf86e75`). Its card is Done with its label detached, and qa-1-14 is back in the pool. 4.12 went to story-2-7 (Opus, medium effort), with its card In progress. 4.11 still waits on 4.9.
 - 2026-11-03: 5.7 stalled from 21:48 to 22:38, with uncommitted work waiting on a review subagent whose completion never arrived. The coordinator nudged it: review the diff itself if the lens is lost, sync with develop, then READY FOR QA. On each all-idle event, check every story's `lastActivityAt` for one stuck over 30 minutes.
 - 2026-11-03: 5.7 is READY FOR QA at `7b82d69` after the nudge. QA started on qa-1-14 (Sonnet), and its card is In QA.
+- 2026-11-03: QA 5.7 at `7b82d69`: **QA PASS**, 0 findings. 5.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
