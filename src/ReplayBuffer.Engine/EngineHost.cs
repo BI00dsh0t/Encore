@@ -250,6 +250,10 @@ internal sealed class EngineHost : IAsyncDisposable
             load.Store.Changed += document => hub.Publish(SettingsMessages.Changed, new SettingsChanged(document.Revision, document));
             load.Store.Changed += devices.OnSettingsChanged;
 
+            // Every commit re-resolves the game session's settings (R7, R8), once the orchestrator exists.
+            SessionOrchestrator? settingsTo = null;
+            load.Store.Changed += _ => Volatile.Read(ref settingsTo)?.Post(new SettingsUpdated());
+
             var libraryActor = library = new LibraryActor(
                 libraryLoad.Items,
                 OutputFolder,
@@ -321,7 +325,14 @@ internal sealed class EngineHost : IAsyncDisposable
             var defaultOutputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
-                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay, RingFolder = ringFolder, Margin = margin },
+                    new CaptureSessionOptions
+                    {
+                        OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"),
+                        Replay = replay,
+                        RingFolder = ringFolder,
+                        Margin = margin,
+                        ResetGap = message => warnings.Raise(ErrorCodes.ResetGap, WarningSeverity.Warning, "replay", message, overlay: false),
+                    },
                     loggers,
                     audio,
                     encoders),
@@ -391,6 +402,8 @@ internal sealed class EngineHost : IAsyncDisposable
                         libraryActor,
                         message => recordingLog.LogInformation("{Message}", message))
                     : null);
+
+            Volatile.Write(ref settingsTo, sessions);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
             if (hostOptions.GameWindows is not null || hostOptions.DebugCapture || replay || !instance.IsTest)

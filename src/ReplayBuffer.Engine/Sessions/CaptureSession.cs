@@ -79,6 +79,13 @@ internal sealed record CaptureSessionOptions
 
     /// <summary>With no first frame by then, the session posts a <see cref="ErrorCodes.CaptureFailed"/> failure.</summary>
     public TimeSpan FirstFrameTimeout { get; init; } = DefaultFirstFrameTimeout;
+
+    /// <summary>
+    /// Called on a background thread with the message when a switch to a profile's new encoder
+    /// chain left a gap of more than one frame before the next Clip (<see cref="ErrorCodes.ResetGap"/>);
+    /// null ignores it.
+    /// </summary>
+    public Action<string>? ResetGap { get; init; }
 }
 
 /// <summary>
@@ -114,9 +121,9 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// device is subscribed once and cut at the anchor by one <see cref="AudioTimeline"/>, which feeds
 /// every Track holding it (<see cref="AudioFanOut"/>); each Track's <see cref="TrackMixer"/> sums its
 /// devices by frame position, through a limiter that acts only above full scale. A Track with no
-/// devices is silence, advanced from QPC every <see cref="SilenceInterval"/> by a timer, off the
-/// capture thread; at the end every Track is padded with silence to one common end frame, the
-/// longest device's or the last video frame's, whichever is later. The first frame is the anchor, every stream's PTS 0. The snapshot's
+/// devices is silence, advanced from QPC by a timer, off the capture thread; at the end every Track
+/// is padded with silence to one common end frame, the longest device's or the last video frame's,
+/// whichever is later. The first frame is the anchor, every stream's PTS 0. The snapshot's
 /// <c>video</c> sets the encoder (the probe's for its codec, else H.264), the output size, the fps,
 /// the bitrate and the rate control. The capture thread only scales each frame into the fixed output,
 /// letterboxed (<see cref="FrameScaler"/>), and posts it; the encoder thread emits exactly one frame
@@ -125,25 +132,26 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// unbroken set of streams. Mic mute (AD-13) is one <see cref="MicMuteSchedule"/>, set from the spec
 /// before anything opens and then by <see cref="SetMicMuted"/>; each Mic Device's input to each
 /// <c>muteAffected</c> Track passes through a <see cref="MicMuteGate"/>, so it is silenced there,
-/// before the mix, from the press's frame, and stays audible in every other Track. In Replay mode
-/// (<see cref="CaptureSessionOptions.Replay"/>) the streams go into a <see cref="ReplayRingSink"/>
-/// instead of a file, and <see cref="Save"/> writes a Clip from it on a thread of its own. The ring
-/// is sized from the snapshot's Buffer Window at the anchor; a new window from
-/// <see cref="SetBufferWindow"/> resizes it at the next Reset (AD-8), into a new ring generation
-/// seeded from the Reset keyframe, so Clips stay gapless. The encoders write into the ring through a
-/// <see cref="RecordingTap"/>, and <see cref="Record"/> attaches a <see cref="RecordingWriter"/> to it:
-/// a Recording from the same encoder chain.
+/// before the mix, from the press's frame, and stays audible in every other Track. All of that per
+/// spec is one <see cref="EncoderChain"/>. In Replay mode (<see cref="CaptureSessionOptions.Replay"/>)
+/// the streams go into the chain's <see cref="ReplayRingSink"/> instead of a file, and
+/// <see cref="Save"/> writes a Clip from it on a thread of its own. The ring is sized from the
+/// snapshot's Buffer Window at the anchor; a new window from <see cref="SetBufferWindow"/> resizes
+/// it at the next Reset (AD-8), into a new ring generation seeded from the Reset keyframe, so Clips
+/// stay gapless. The encoders write into the ring through a <see cref="RecordingTap"/>, and
+/// <see cref="Record"/> attaches a <see cref="RecordingWriter"/> to it: a Recording from the same
+/// encoder chain. A profile's new Tracks or video (<see cref="PrepareChain"/>, R7, R8) get a chain
+/// of their own, built in advance on a background thread and idle; the next save press whose write
+/// starts arms it: its audio starts at the press, and the first frame captured after the press
+/// makes it the current chain, which later saves cut from. The old chain is fed until every save
+/// bound to it has cut, then torn down off the capture and orchestrator threads, so at most two
+/// chains live at once (AD-7). A new chain whose first keyframe comes more than a frame after the
+/// old Clip's end raises <see cref="CaptureSessionOptions.ResetGap"/>.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
-    /// <summary>AAC packets a second (48 kHz in 1024-sample frames), rounded up, for sizing the ring.</summary>
-    private const int AacPacketsPerSecond = 47;
-
     /// <summary>One AAC frame (1024 samples at 48 kHz) in µs, rounded up.</summary>
     private const long AacFrameUs = ((1024 * 1_000_000L) + AudioTimeline.SampleRate - 1) / AudioTimeline.SampleRate;
-
-    /// <summary>How often a Track with no devices is advanced to the current QPC.</summary>
-    private static readonly TimeSpan SilenceInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>How long a save waits for every stream to pass the press before it cuts.</summary>
     private static readonly TimeSpan SaveWait = TimeSpan.FromSeconds(1);
@@ -156,27 +164,14 @@ internal sealed class CaptureSession : ICaptureSession
     private readonly long _qpcFrequency = Stopwatch.Frequency;
     private readonly Lock _gate = new();
     private readonly IAudioDeviceHub _audio;
-    private readonly List<SessionAudioTrack> _audioTracks = []; // one per device
-    private readonly List<AacEncoder> _audioEncoders = []; // one per Track
-    private readonly List<TrackMixer> _mixers = []; // one per Track
-    private readonly List<AudioTimeline> _audioTimelines = [];
     private readonly MicMuteSchedule _micMute;
     private readonly CaptureStatsCollector? _stats;
     private readonly Timer _firstFrameTimer;
-    private readonly Lock _silenceGate = new();
-    private Timer? _silenceTimer;
-    private bool _silenceStopped;
 
     private WindowInfo? _window;
     private string? _path;
     private D3D11Device? _device;
     private WindowCapture? _capture;
-    private D3D11VAFrames? _frames;
-    private FrameScaler? _scaler;
-    private PacedVideoEncoder? _paced;
-    private FragmentedMp4Muxer? _muxer;
-    private ReplayRingSink? _ring;
-    private RecordingTap? _tap;
     private volatile bool _outputFinished;
 
     // R1's exit drain, orchestrator thread only: the teardown keeps the ring for saves until Release.
@@ -191,18 +186,27 @@ internal sealed class CaptureSession : ICaptureSession
     // end of the newest write before it, so two concurrent Clips never overlap.
     private readonly ClipClaim _claim = new();
 
-    // The Buffer Window the ring holds, in seconds: set at the anchor, then by a resize at a Reset
-    // (orchestrator thread). The window SetBufferWindow asked for, applied at the next Reset; 0 for none.
-    private int _windowSeconds;
+    // The window SetBufferWindow asked for, applied at the next Reset; 0 for none.
     private volatile int _pendingWindow;
 
-    // A Disk-mode session's ring folder; null in Memory mode.
-    private string? _ringFolder;
-    private VideoEncoder? _video;
+    // The encoder chains (4.9). _chainLock guards them all, and is only ever taken after _gate,
+    // never before it. The chain the capture thread draws into and saves cut from, the one armed
+    // at a press (with the press) and the replaced one still fed are written under both locks, so
+    // the capture thread reads them under _gate. The rest is under _chainLock only: the chain built
+    // and idle, the spec asked for, a build running, the background threads, and whether End has
+    // closed them.
+    private readonly Lock _chainLock = new();
+    private readonly List<Thread> _workers = [];
+    private EncoderChain? _current;
+    private EncoderChain? _armed;
+    private long _armedPressQpc;
+    private EncoderChain? _retiring;
+    private EncoderChain? _prepared;
+    private SessionSpec? _wanted;
+    private bool _building;
+    private volatile bool _chainsClosed;
+
     private readonly IVideoEncoderCatalog _encoders;
-    private readonly VideoSize _outputSize;
-    private string _encoderName = "";
-    private VideoCodec _codec;
     private long _anchorQpc;
     private long _lastFrameQpc;
     private bool _anchored;
@@ -217,7 +221,6 @@ internal sealed class CaptureSession : ICaptureSession
         _events = events;
         _options = options;
         _encoders = encoders;
-        _outputSize = new VideoSize(spec.Snapshot.Video.Width, spec.Snapshot.Video.Height);
         _loggers = loggers;
         _log = loggers.CreateLogger<CaptureSession>();
         _stats = options.Stats;
@@ -229,21 +232,10 @@ internal sealed class CaptureSession : ICaptureSession
     public void Open()
     {
         // Before anything is opened: the first codec use may run the probe.
-        (_encoderName, _codec) = ResolveEncoder();
+        var (encoder, codec) = ResolveEncoder(_spec);
         var target = _spec.Target;
         _window = WindowFinder.FromHandle(target.Window);
-        if (_options.Replay)
-        {
-            if (_spec.Snapshot.ReplayStorage == Contracts.Settings.ReplayStorage.Disk)
-            {
-                _ringFolder = _spec.Snapshot.RingPath ?? _options.RingFolder;
-                if (_ringFolder is null)
-                {
-                    _log.LogWarning("The Disk-mode Replay Buffer has no ring folder; buffering in memory");
-                }
-            }
-        }
-        else
+        if (!_options.Replay)
         {
             _path = _options.OutputPath is { } explicitPath
                 ? Path.GetFullPath(explicitPath)
@@ -257,11 +249,17 @@ internal sealed class CaptureSession : ICaptureSession
             SetGpuPriority(priority);
         }
 
-        foreach (var device in _spec.Audio.Devices)
+        // The first chain: its taps hold the last second of blocks until the anchor starts its audio.
+        var first = new EncoderChain(_spec, encoder, codec, _path, _options, _device, _audio, _micMute, _loggers, _log, Fail);
+        lock (_gate)
         {
-            Subscribe(device);
+            lock (_chainLock)
+            {
+                _current = first;
+            }
         }
 
+        first.Subscribe();
         _log.LogInformation("Mic {State} at start; mic mute covers {Inputs} Mic Device input(s) in muteAffected Tracks",
             _spec.MicMuted ? "muted" : "unmuted", _spec.Audio.GatedMicInputs().Count());
 
@@ -341,6 +339,12 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         _firstFrameTimer.Dispose();
+        EncoderChain? chain;
+        lock (_chainLock)
+        {
+            chain = _current;
+        }
+
         try
         {
             if (anchored)
@@ -357,26 +361,23 @@ internal sealed class CaptureSession : ICaptureSession
             }
 
             // No frame can arrive now; let the encoder thread offer what is queued before the flush.
-            _paced?.Complete();
+            chain!.CompleteVideo();
 
             // Capture is stopped and no frame is in flight; stop audio, then drain everything.
-            // Once a subscription is disposed, its track gets no further block.
-            foreach (var track in _audioTracks)
-            {
-                track.Subscription?.Dispose();
-            }
+            chain.StopTaps();
 
             // Silent Tracks stop with the device taps, not after the teardown below.
-            StopSilenceClock();
-            ReportAudioFaults();
-            Finish();
-            WriteStats();
+            chain.StopSilenceClock();
+            chain.ReportAudioFaults();
+            chain.Finish(_lastFrameQpc);
+            WriteStats(chain);
         }
         finally
         {
             // A save still waiting has every packet it will get, and so has a Recording.
             _outputFinished = true;
-            _tap?.Close();
+            chain?.Tap?.Close();
+            CloseChains();
             DisposeAll();
         }
 
@@ -419,7 +420,13 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         _released = true;
-        if (_ring is { } ring)
+        ReplayRingSink? ring;
+        lock (_chainLock)
+        {
+            ring = _current?.Ring;
+        }
+
+        if (ring is not null)
         {
             ring.Dispose();
             _log.LogInformation("The drained Replay Buffer is released once no save holds it");
@@ -428,25 +435,41 @@ internal sealed class CaptureSession : ICaptureSession
 
     /// <summary>
     /// In Replay mode, once the output is open: a write of the Clip up to <paramref name="qpc"/>
-    /// (AD-10). Its write asks the encoder for a keyframe on the first frame captured after the
-    /// press, which is where the Clip ends and, once the orchestrator Resets, where the next one
-    /// starts; no keyframe is asked for unless the write starts. Its own thread waits up to
-    /// <see cref="SaveWait"/> for that keyframe (else the Clip ends at the press), then up to as long
-    /// again for every stream to pass it by an AAC frame (encoding and the AAC FIFO lag it), cuts
-    /// <c>[max(key - bufferWindow, last Reset, earlier write's claim), key)</c> from the first
-    /// keyframe in it, and writes the Clip. The Buffer Window is the one in effect at the press (a
-    /// resize applies at a Reset), and the cut comes from one ring generation: less than 1 s past
-    /// a generation's boundary, the previous one up to the boundary, where the Clip then ends and
-    /// the next one starts (<see cref="RingGenerations.Cut"/>). The claim (<see cref="ClipClaim"/>) keeps a Clip written
-    /// while an earlier one still writes from cutting back over it. A press less than 1 s after the anchor is refused with
-    /// <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe is asked for. Once drained
-    /// (<see cref="Drain"/>), the encoders are flushed and gone: the write asks for no keyframe, and
-    /// the Clip runs to the end of the ring; after <see cref="Release"/> there is nothing to save.
+    /// (AD-10), bound here to the current encoder chain, whose sink and encoder it uses throughout.
+    /// Its write asks the encoder for a keyframe on the first frame captured after the press, which
+    /// is where the Clip ends and, once the orchestrator Resets, where the next one starts; no
+    /// keyframe is asked for unless the write starts. A write that starts with a chain prepared
+    /// (<see cref="PrepareChain"/>) and no Recording attached also arms the switch to it. Its own
+    /// thread waits up to <see cref="SaveWait"/> for that keyframe (else the Clip ends at the
+    /// press), then up to as long again for every stream to pass it by an AAC frame (encoding and
+    /// the AAC FIFO lag it), cuts <c>[max(key - bufferWindow, last Reset, earlier write's claim), key)</c>
+    /// from the first keyframe in it, and writes the Clip. The Buffer Window is the one in effect at
+    /// the press (a resize applies at a Reset), and the cut comes from one ring generation: less
+    /// than 1 s past a generation's boundary, the previous one up to the boundary, where the Clip
+    /// then ends and the next one starts (<see cref="RingGenerations.Cut"/>). A chain started
+    /// mid-session cuts from its first keyframe when that is under a frame before the start
+    /// (<see cref="EncoderChain.SnapStart"/>). The claim (<see cref="ClipClaim"/>) keeps a Clip
+    /// written while an earlier one still writes from cutting back over it. A press less than 1 s
+    /// after the anchor is refused with <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe
+    /// is asked for. Once drained (<see cref="Drain"/>), the encoders are flushed and gone: the
+    /// write asks for no keyframe, and the Clip runs to the end of the ring; after
+    /// <see cref="Release"/> there is nothing to save.
     /// </summary>
     public IClipWrite? Save(long qpc)
     {
-        // The anchor's release write publishes the ring and the encoder.
-        if (!_options.Replay || _released || !Volatile.Read(ref _anchored) || _ring is not { } ring || _video is not { } video)
+        // The anchor's release write publishes the chain's ring and encoder.
+        if (!_options.Replay || _released || !Volatile.Read(ref _anchored))
+        {
+            return null;
+        }
+
+        EncoderChain? chain;
+        lock (_chainLock)
+        {
+            chain = _current;
+        }
+
+        if (chain?.Ring is null || chain.Video is not { } video)
         {
             return null;
         }
@@ -457,24 +480,91 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         // A drained session's encoder is already disposed: never ask it for a keyframe.
-        return new ClipWrite(this, ring, _outputFinished ? null : video, qpc, _windowSeconds);
+        return new ClipWrite(this, chain, _outputFinished ? null : video, qpc, chain.WindowSeconds);
     }
 
     /// <summary>
     /// In Replay mode, once the output is open and while it runs: a Recording from
-    /// <paramref name="qpc"/> on the session's own encoders, through the tap; null once drained or
-    /// released, before the anchor, or while a Recording is attached.
+    /// <paramref name="qpc"/> on the current chain's encoders, through its tap; null once drained or
+    /// released, before the anchor, while a Recording is attached, or while a chain switch is armed.
     /// </summary>
     public IRecordingWrite? Record(long qpc)
     {
         // The anchor's release write publishes the tap and the encoder.
-        if (!_options.Replay || _released || _outputFinished || !Volatile.Read(ref _anchored)
-            || _tap is not { HasWriter: false } tap || _video is not { } video)
+        if (!_options.Replay || _released || _outputFinished || !Volatile.Read(ref _anchored))
+        {
+            return null;
+        }
+
+        EncoderChain? chain;
+        lock (_chainLock)
+        {
+            if (_armed is not null)
+            {
+                return null;
+            }
+
+            chain = _current;
+        }
+
+        if (chain?.Tap is not { HasWriter: false } tap || chain.Video is not { } video)
         {
             return null;
         }
 
         return new RecordingWrite(this, tap, video, qpc);
+    }
+
+    /// <summary>
+    /// Builds <paramref name="next"/>'s chain in advance, on a background thread, for the next save
+    /// press (4.9); null, or the spec of the chain that is or will be current, drops a chain prepared
+    /// and not yet armed. The spec already asked for changes nothing. A build waits for the anchor,
+    /// for a replaced chain to be torn down and for an armed one to take over, and starts then; one
+    /// a newer spec superseded is torn down, and a failed one is logged and forgotten, so the next
+    /// call retries it. Nothing in file mode, once drained or stopped.
+    /// </summary>
+    public void PrepareChain(SessionSpec? next)
+    {
+        if (!_options.Replay)
+        {
+            return;
+        }
+
+        lock (_chainLock)
+        {
+            if (_chainsClosed || _keepRing || _outputFinished || Volatile.Read(ref _stopped))
+            {
+                return;
+            }
+
+            var current = (_armed ?? _current)?.Spec ?? _spec;
+            EncoderChain? drop;
+            if (next is null || ChainKey.SameChain(next, current))
+            {
+                drop = _prepared;
+                _prepared = null;
+                _wanted = null;
+            }
+            else if (_wanted is { } wanted && ChainKey.SameChain(next, wanted))
+            {
+                return;
+            }
+            else
+            {
+                _log.LogInformation("The profile's settings need another encoder chain ({Size} at {Fps} fps, {Tracks} Tracks); it is built for the next save",
+                    $"{next.Snapshot.Video.Width}x{next.Snapshot.Video.Height}", next.Snapshot.Video.Fps, next.Audio.Tracks.Count);
+                _wanted = next;
+                drop = _prepared;
+                _prepared = null;
+                StartBuildLocked();
+            }
+
+            if (drop is not null)
+            {
+                _log.LogInformation("The prepared encoder chain is no longer needed; it is torn down");
+                StartWorkerLocked("Encoder chain teardown", drop.Dispose);
+            }
+        }
     }
 
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>
@@ -502,7 +592,13 @@ internal sealed class CaptureSession : ICaptureSession
 
     private WindowCapture NewCapture(nint window)
     {
-        var capture = new WindowCapture(_device!, window, _spec.Snapshot.Video.Fps, OnFrame, _loggers.CreateLogger<WindowCapture>());
+        int fps;
+        lock (_chainLock)
+        {
+            fps = _current?.Fps ?? _spec.Snapshot.Video.Fps;
+        }
+
+        var capture = new WindowCapture(_device!, window, fps, OnFrame, _loggers.CreateLogger<WindowCapture>());
         capture.Closed += () => OnClosed(capture);
         capture.Failed += Fail;
         return capture;
@@ -517,7 +613,7 @@ internal sealed class CaptureSession : ICaptureSession
                 return;
             }
 
-            if (_video is null)
+            if (!_anchored)
             {
                 StartOutput(qpc, contentSize);
             }
@@ -529,50 +625,28 @@ internal sealed class CaptureSession : ICaptureSession
                 return;
             }
 
-            if (_paced is null)
+            // The first frame captured after an armed press: the new chain's first, and the one the
+            // old chain's forced keyframe lands on, so the next Clip starts where this one ends.
+            if (_armed is { } armed && qpc > _armedPressQpc)
             {
-                // --stages copy: the scale alone; submit it, then hand the texture back unencoded.
-                if (_video!.TryAcquireFrame(out var drawn))
-                {
-                    try
-                    {
-                        _scaler!.Draw(texture, contentSize, drawn.Texture, drawn.Subresource);
-                        _device!.Flush();
-                    }
-                    finally
-                    {
-                        VideoEncoder.Release(drawn);
-                    }
-                }
-
-                return;
+                SwitchTo(armed, qpc);
             }
 
-            // Only draw here; the encoder thread paces, submits and drains. A full hand-off drops the frame.
-            if (!_paced.TryReserve() || !_video!.TryAcquireFrame(out var frame))
+            if (_retiring is { Fed: true } retiring)
             {
-                return;
+                retiring.Draw(qpc, texture, contentSize);
             }
 
-            try
-            {
-                _scaler!.Draw(texture, contentSize, frame.Texture, frame.Subresource);
-            }
-            catch
-            {
-                VideoEncoder.Release(frame);
-                throw;
-            }
-
-            _paced.Post(frame, qpc);
+            _current!.Draw(qpc, texture, contentSize);
         }
     }
 
     /// <summary>
-    /// The encoder and codec: the forced encoder, else the probe's for the snapshot's codec, else
-    /// (a codec this PC can't encode, from a hand-edited or copied document) H.264's.
+    /// The encoder and codec for <paramref name="spec"/>: the forced encoder, else the probe's for
+    /// the snapshot's codec, else (a codec this PC can't encode, from a hand-edited or copied
+    /// document) H.264's.
     /// </summary>
-    private (string Encoder, VideoCodec Codec) ResolveEncoder()
+    private (string Encoder, VideoCodec Codec) ResolveEncoder(SessionSpec spec)
     {
         if (_options.Encoder is { } forced)
         {
@@ -582,7 +656,7 @@ internal sealed class CaptureSession : ICaptureSession
             return (forced, forcedCodec);
         }
 
-        var codec = _spec.Snapshot.Video.Codec;
+        var codec = spec.Snapshot.Video.Codec;
         string? encoder;
         try
         {
@@ -606,190 +680,318 @@ internal sealed class CaptureSession : ICaptureSession
             : throw new EngineFailure(ErrorCodes.EncodeFailed, "No H.264 encoder works on this PC.");
     }
 
-    /// <summary>The first frame is the session anchor: every stream's PTS 0 is its QPC.</summary>
+    /// <summary>The first frame is the session anchor: every stream's PTS 0 is its QPC. Under the gate.</summary>
     private void StartOutput(long anchorQpc, VideoSize contentSize)
     {
         _anchorQpc = anchorQpc;
-        _log.LogInformation("Anchor QPC {Anchor}; output {Size}, content {Content}", anchorQpc, _outputSize, contentSize);
+        var chain = _current!;
+        _log.LogInformation("Anchor QPC {Anchor}; output {Size}, content {Content}", anchorQpc, chain.OutputSize, contentSize);
 
         _stats?.SnapshotAnchor();
-        PacketSink packets;
-        var video = _spec.Snapshot.Video;
-        if (_options.Replay)
-        {
-            var window = _spec.Snapshot.BufferWindow;
-            _windowSeconds = window;
-            var first = NewRing(window);
-            _ring = new ReplayRingSink(first);
-            _tap = new RecordingTap(_ring);
-            packets = _tap;
-            _log.LogInformation("Replay Buffer of {Window} s {Storage}, {Capacity} packets preallocated", window, StorageOf(first), RingCapacity(window));
-        }
-        else
-        {
-            _muxer = new FragmentedMp4Muxer(_path!, _loggers.CreateLogger<FragmentedMp4Muxer>());
-            packets = _muxer;
-        }
-
-        var nv12 = _options.Color == ColorPath.X2;
-        _frames = new D3D11VAFrames(_device!.NativeDevice, _outputSize.Width, _outputSize.Height, VideoEncoder.PoolSize, nv12);
-        _scaler = new FrameScaler(_device, _outputSize, nv12, 2 * VideoEncoder.PoolSize, _loggers.CreateLogger<FrameScaler>());
-
-        _video = new VideoEncoder(_frames, packets, _qpcFrequency, anchorQpc, _loggers.CreateLogger<VideoEncoder>(), _stats?.Latency,
-            new VideoEncoderOptions(_options.NvencPreset, _options.NvencTune, _encoderName, _codec, video.Fps, video.BitrateKbps, video.RateControl));
-        if (_options.Stages == CaptureStages.Full)
-        {
-            var pacer = new FramePacer(_qpcFrequency, video.Fps, anchorQpc, VideoEncoder.TimeBase);
-            _paced = new PacedVideoEncoder(_video, pacer, _loggers.CreateLogger<PacedVideoEncoder>());
-            _paced.Failed += e => Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "Video encode failed: " + e.Message, e));
-        }
-
-        var tracks = _spec.Audio.Tracks;
-        for (var i = 0; i < tracks.Count; i++)
-        {
-            var encoder = new AacEncoder(packets, tracks[i].Name, isDefault: i == 0, _loggers.CreateLogger<AacEncoder>());
-            _audioEncoders.Add(encoder);
-            _mixers.Add(new TrackMixer(tracks[i].DeviceIndexes.Count, encoder));
-        }
-
-        _muxer?.Start();
+        chain.Build(anchorQpc, first: true, _stats?.Latency);
 
         // The hub's streams have run since Open; each device takes blocks from here, its held ones
         // replayed first, cut at the anchor once, and fanned out to every Track that holds it.
-        var inputs = tracks.Select(t => t.DeviceIndexes).ToList();
-        for (var d = 0; d < _audioTracks.Count; d++)
-        {
-            var sink = TrackWiring.DeviceSink(d, _audioTracks[d].Device.IsMic, tracks, inputs, _mixers, _micMute, _qpcFrequency, anchorQpc);
-            var timeline = new AudioTimeline(_qpcFrequency, anchorQpc, sink);
-            _audioTimelines.Add(timeline);
-            _audioTracks[d].Publish(timeline);
-        }
+        chain.StartAudio(anchorQpc);
 
-        if (_mixers.Any(m => m.Inputs == 0))
-        {
-            lock (_silenceGate)
-            {
-                if (!_silenceStopped)
-                {
-                    _silenceTimer = new Timer(_ => AdvanceSilence(), null, SilenceInterval, SilenceInterval);
-                }
-            }
-        }
-
-        // A release write: SetMicMuted reads the anchor without the gate.
+        // A release write: SetMicMuted, Save and Record read the anchor without the gate.
         Volatile.Write(ref _anchored, true);
+
+        // A chain asked for before the anchor is built from here.
+        lock (_chainLock)
+        {
+            StartBuildLocked();
+        }
+
         _options.Anchored?.Invoke(anchorQpc);
     }
 
-    private void Finish()
+    /// <summary>
+    /// Makes the armed chain current at the frame captured at <paramref name="qpc"/>; the old one is
+    /// fed until every save bound to it has cut, then torn down. Under the gate.
+    /// </summary>
+    private void SwitchTo(EncoderChain armed, long qpc)
     {
-        if ((_muxer is null && _ring is null) || _video is null || _audioEncoders.Count != _spec.Audio.Tracks.Count)
+        lock (_chainLock)
+        {
+            var old = _current!;
+            _current = armed;
+            _armed = null;
+            _retiring = old;
+            old.Retiring = true;
+            old.Successor = armed;
+            TakeRetirementLocked(old);
+        }
+
+        _log.LogInformation("The encoder chain switched at the frame {At:0.000} s after the anchor: {Size}, {Tracks} Tracks from here on",
+            MicrosAt(qpc) / 1e6, armed.OutputSize, armed.Spec.Audio.Tracks.Count);
+    }
+
+    /// <summary>
+    /// Arms the prepared chain at the press <paramref name="qpc"/>, for a write bound to the
+    /// current <paramref name="chain"/> that has just asked for its keyframe: when one is ready,
+    /// nothing is armed or retiring, no Recording is attached and the session is live. Its audio
+    /// starts at the press. Returns it, or null. Orchestrator thread.
+    /// </summary>
+    private EncoderChain? TryArm(EncoderChain chain, long qpc)
+    {
+        EncoderChain? armed = null;
+        lock (_gate)
+        {
+            if (_stopped)
+            {
+                return null;
+            }
+
+            lock (_chainLock)
+            {
+                if (_prepared is { } prepared && _armed is null && _retiring is null && ReferenceEquals(chain, _current)
+                    && chain.Tap is { HasWriter: false } && !_outputFinished && !_keepRing && !_chainsClosed)
+                {
+                    _prepared = null;
+                    _wanted = null;
+                    _armed = prepared;
+                    _armedPressQpc = qpc;
+                    armed = prepared;
+                }
+            }
+        }
+
+        if (armed is null)
+        {
+            return null;
+        }
+
+        // Audio flows into it only once its taps are published, here.
+        armed.StartAudio(qpc);
+        _log.LogInformation("The save press {At:0.000} s after the anchor switches the Replay Buffer to the prepared encoder chain",
+            MicrosAt(qpc) / 1e6);
+        return armed;
+    }
+
+    /// <summary>Ends a save's registration on <paramref name="chain"/>, once it has cut or failed; the switching save first records its Clip's end.</summary>
+    private void EndWriter(EncoderChain chain, long? switchEndUs)
+    {
+        lock (_chainLock)
+        {
+            if (switchEndUs is { } end)
+            {
+                chain.SwitchEndUs = end;
+            }
+
+            chain.Writers--;
+            TakeRetirementLocked(chain);
+        }
+    }
+
+    /// <summary>Starts <paramref name="chain"/>'s retirement once it is replaced and no save is bound to it. Under the chain lock.</summary>
+    private void TakeRetirementLocked(EncoderChain chain)
+    {
+        if (!chain.Retiring || chain.Writers > 0 || chain.RetireStarted || _chainsClosed)
         {
             return;
         }
 
-        _video.Flush();
-
-        // The devices are unsubscribed and the silence clock stopped: pad every Track with silence to
-        // one end frame, the longest device's or the video's end, whichever is later (or where the
-        // clock already took a silent Track, should that be later still), then drain the encoders.
-        // The video ends where its pacer's next slot starts: one past the last emitted slot, skips
-        // included, which repeats can take past the last captured frame.
-        StopSilenceClock();
-        var end = FramesAt(_lastFrameQpc);
-        if (_paced?.Pacer is { } slots)
-        {
-            end = Math.Max(end, (long)((Int128)slots.NextSlot * AudioTimeline.SampleRate / slots.Fps));
-        }
-
-        foreach (var mixer in _mixers)
-        {
-            end = Math.Max(end, mixer.Inputs == 0 ? mixer.EmittedFrames : mixer.LongestInputFrames);
-        }
-
-        foreach (var mixer in _mixers)
-        {
-            mixer.PadTo(end);
-        }
-
-        foreach (var audio in _audioEncoders)
-        {
-            audio.Flush();
-        }
-
-        _muxer?.Finish();
-        if (_paced?.Pacer is { } pacer)
-        {
-            _log.LogInformation(
-                "Video slots: {Fresh} new, {Repeated} repeated, {Skipped} skipped; {Replaced} held frames replaced, {Stale} stale, {QueueDrops} not drawn",
-                pacer.FreshSlots, pacer.RepeatedSlots, pacer.SkippedSlots, pacer.HeldReplaced, pacer.StaleFrames, _paced.QueueDrops + _video.PoolMisses);
-        }
-
-        _log.LogInformation("Audio written: {Frames} frames per Track; limited: {Limited} frames per Track",
-            string.Join(", ", _audioEncoders.Select(a => a.SamplesWritten)), string.Join(", ", _mixers.Select(m => m.LimitedFrames)));
+        chain.RetireStarted = true;
+        StartWorkerLocked("Encoder chain retirement", () => Retire(chain));
     }
 
-    /// <summary>Frames since the anchor at <paramref name="qpc"/>; 0 before it.</summary>
-    private long FramesAt(long qpc) =>
-        qpc <= _anchorQpc ? 0 : (long)((Int128)(qpc - _anchorQpc) * AudioTimeline.SampleRate / _qpcFrequency);
-
-    /// <summary>The silence clock's tick: advances every Track with no devices to the current QPC.</summary>
-    private void AdvanceSilence()
+    /// <summary>
+    /// On a background thread: takes the replaced chain out of the capture thread's feed and tears
+    /// it down, with no flush; checks the new chain started within a frame of the old Clip's end
+    /// (else <c>reset-gap</c>); sets the capture to the new chain's fps; then starts a build asked
+    /// for meanwhile.
+    /// </summary>
+    private void Retire(EncoderChain old)
     {
-        Exception? failure = null;
-        lock (_silenceGate)
+        lock (_gate)
         {
-            if (_silenceStopped)
+            old.Fed = false;
+        }
+
+        old.Dispose();
+        _log.LogInformation("The replaced encoder chain is torn down");
+        var next = old.Successor!;
+        CheckGap(old, next);
+        if (next.Fps != old.Fps)
+        {
+            lock (_gate)
             {
-                return;
+                _capture?.SetFps(next.Fps);
+            }
+        }
+
+        lock (_gate)
+        {
+            lock (_chainLock)
+            {
+                if (ReferenceEquals(_retiring, old))
+                {
+                    _retiring = null;
+                }
+
+                StartBuildLocked();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Waits up to <see cref="SaveWait"/> for <paramref name="next"/>'s first keyframe; when it is
+    /// more than one of its frames after the switching Clip's end, raises <c>reset-gap</c> with the gap.
+    /// </summary>
+    private void CheckGap(EncoderChain old, EncoderChain next)
+    {
+        var end = old.SwitchEndUs;
+        if (end == long.MinValue || next.Ring is not { } ring)
+        {
+            return;
+        }
+
+        var deadline = Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * _qpcFrequency);
+        while (ring.FirstKeyUs == long.MaxValue && !_chainsClosed && Stopwatch.GetTimestamp() < deadline)
+        {
+            Thread.Sleep(10);
+        }
+
+        if (_chainsClosed)
+        {
+            return;
+        }
+
+        var first = ring.FirstKeyUs;
+        if (first <= end + next.FrameUs)
+        {
+            return;
+        }
+
+        var message = first == long.MaxValue
+            ? $"The Replay Buffer's new encoder chain had no frame {(MicrosAt(Stopwatch.GetTimestamp()) - end) / 1000} ms after the last Clip's end; the next Clip starts at its first frame."
+            : $"The Replay Buffer's new encoder chain started {(first - end) / 1000} ms after the last Clip's end; the next Clip starts that much later.";
+        _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
+        _options.ResetGap?.Invoke(message);
+    }
+
+    /// <summary>
+    /// Starts the build of the spec asked for, when there is one, the session has anchored, it is
+    /// not built yet, and no build, armed chain or retirement is in the way. Under the chain lock.
+    /// </summary>
+    private void StartBuildLocked()
+    {
+        if (_wanted is not { } spec || _chainsClosed || !Volatile.Read(ref _anchored) || _building
+            || _prepared is not null || _armed is not null || _retiring is not null)
+        {
+            return;
+        }
+
+        _building = true;
+        StartWorkerLocked("Encoder chain build", () => Build(spec));
+    }
+
+    /// <summary>
+    /// On a background thread: builds <paramref name="spec"/>'s chain, idle, and hands it over as
+    /// prepared when it is still the one asked for and the session is live; otherwise it is torn
+    /// down. A failure is logged and forgets the request, so the next one retries.
+    /// </summary>
+    private void Build(SessionSpec spec)
+    {
+        EncoderChain? chain = null;
+        try
+        {
+            var (encoder, codec) = ResolveEncoder(spec);
+            chain = new EncoderChain(spec, encoder, codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
+            chain.Subscribe();
+            chain.Build(_anchorQpc, first: false, latency: null);
+            _log.LogInformation("The encoder chain for the next save is built: {Size} at {Fps} fps, {Tracks} Tracks",
+                chain.OutputSize, chain.Fps, spec.Audio.Tracks.Count);
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning("The encoder chain for the profile's new settings couldn't be built; the session keeps its own until the next Reset or settings change: {Message}", e.Message);
+            chain?.Dispose();
+            chain = null;
+        }
+
+        var unused = chain;
+        lock (_chainLock)
+        {
+            _building = false;
+            if (chain is not null && !_chainsClosed && !_outputFinished && !Volatile.Read(ref _stopped)
+                && _wanted is { } wanted && ChainKey.SameChain(wanted, spec))
+            {
+                _prepared = chain;
+                unused = null;
+            }
+            else if (chain is null && ReferenceEquals(_wanted, spec))
+            {
+                _wanted = null;
             }
 
+            // A newer spec asked for while this one built.
+            StartBuildLocked();
+        }
+
+        unused?.Dispose();
+    }
+
+    /// <summary>Starts a background thread the session's End waits for. Under the chain lock.</summary>
+    private void StartWorkerLocked(string name, Action work)
+    {
+        _workers.RemoveAll(t => !t.IsAlive);
+        var thread = new Thread(() =>
+        {
             try
             {
-                var now = FramesAt(Stopwatch.GetTimestamp());
-                foreach (var mixer in _mixers)
-                {
-                    if (mixer.Inputs == 0)
-                    {
-                        mixer.PadTo(now);
-                    }
-                }
+                work();
             }
             catch (Exception e)
             {
-                // The encoder or muxer broke: the clock stops and the session fails.
-                _silenceStopped = true;
-                failure = e;
+                _log.LogError(e, "{Name} failed", name);
+            }
+        })
+        {
+            Name = name,
+            IsBackground = true,
+        };
+        _workers.Add(thread);
+        thread.Start();
+    }
+
+    /// <summary>
+    /// End's side of the chains: no build, teardown or retirement starts from here, those running
+    /// are waited for, and the prepared and armed chains are torn down. The replaced chain still
+    /// fed, if any, goes in <see cref="DisposeAll"/>.
+    /// </summary>
+    private void CloseChains()
+    {
+        List<Thread> workers;
+        EncoderChain? prepared;
+        lock (_chainLock)
+        {
+            _chainsClosed = true;
+            workers = [.. _workers];
+            _workers.Clear();
+            prepared = _prepared;
+            _prepared = null;
+            _wanted = null;
+        }
+
+        foreach (var worker in workers)
+        {
+            worker.Join();
+        }
+
+        EncoderChain? armed;
+        lock (_gate)
+        {
+            lock (_chainLock)
+            {
+                armed = _armed;
+                _armed = null;
             }
         }
 
-        if (failure is not null)
-        {
-            Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "Audio encode failed: " + failure.Message, failure));
-        }
-    }
-
-    /// <summary>Stops the silence clock and waits for a tick in progress; no tick runs after it returns.</summary>
-    private void StopSilenceClock()
-    {
-        Timer? timer;
-        lock (_silenceGate)
-        {
-            _silenceStopped = true;
-            timer = _silenceTimer;
-            _silenceTimer = null;
-        }
-
-        if (timer is null)
-        {
-            return;
-        }
-
-        using var done = new ManualResetEvent(false);
-        if (timer.Dispose(done))
-        {
-            done.WaitOne();
-        }
+        prepared?.Dispose();
+        armed?.Dispose();
     }
 
     /// <summary>Sets the device's GPU thread priority once (AD-7); a failure is logged and the run goes on.</summary>
@@ -823,10 +1025,11 @@ internal sealed class CaptureSession : ICaptureSession
     }
 
     /// <summary>Writes the stats file once the trailer is written.</summary>
-    private void WriteStats()
+    private void WriteStats(EncoderChain chain)
     {
-        if (_stats is null || _options.StatsPath is not { } path || _video is null
-            || _audioEncoders.Count != _spec.Audio.Tracks.Count || _audioTimelines.Count != _audioTracks.Count)
+        var encoder = chain.Video;
+        if (_stats is null || _options.StatsPath is not { } path || encoder is null
+            || chain.AudioEncoders.Count != chain.Spec.Audio.Tracks.Count || chain.AudioTimelines.Count != chain.AudioTracks.Count)
         {
             return;
         }
@@ -836,16 +1039,17 @@ internal sealed class CaptureSession : ICaptureSession
         var stepped = arrived - cadence.NonIncreasing; // frames that advanced the capture clock
         var span = cadence.SpanSeconds;
         var slots = stepped + cadence.MissedSlots;
-        var pacer = _paced?.Pacer;
+        var paced = chain.Paced;
+        var pacer = paced?.Pacer;
         var emitted = pacer?.EmittedSlots ?? 0;
         var repeated = pacer?.RepeatedSlots ?? 0;
         var video = new VideoReport(
-            _outputSize.Width,
-            _outputSize.Height,
+            chain.OutputSize.Width,
+            chain.OutputSize.Height,
             arrived,
-            _video.EncodedFrames,
+            encoder.EncodedFrames,
             repeated,
-            (_paced?.QueueDrops ?? 0) + _video.PoolMisses,
+            (paced?.QueueDrops ?? 0) + encoder.PoolMisses,
             cadence.NonIncreasing,
             cadence.MissedSlots,
             cadence.Gaps,
@@ -860,15 +1064,15 @@ internal sealed class CaptureSession : ICaptureSession
         // Every device, with the hub's stamp and stream readouts, and the samples encoded by the
         // first Track that holds it.
         var audio = new List<AudioReport>();
-        for (var i = 0; i < _audioTracks.Count; i++)
+        for (var i = 0; i < chain.AudioTracks.Count; i++)
         {
-            var track = _audioTracks[i];
+            var track = chain.AudioTracks[i];
             if (track.Subscription is AudioDeviceSubscription { Diagnostics: var diagnostics })
             {
                 var role = track.Device.Flow == SessionFlow.Output ? "output" : "input";
-                var first = _spec.Audio.FirstTrackOf(i);
-                var samples = first >= 0 ? _audioEncoders[first].SamplesWritten : 0;
-                audio.Add(CaptureStatsCollector.Report(role, track.Device.FriendlyName, diagnostics.Stamps, diagnostics.Stream, _audioTimelines[i], samples));
+                var first = chain.Spec.Audio.FirstTrackOf(i);
+                var samples = first >= 0 ? chain.AudioEncoders[first].SamplesWritten : 0;
+                audio.Add(CaptureStatsCollector.Report(role, track.Device.FriendlyName, diagnostics.Stamps, diagnostics.Stream, chain.AudioTimelines[i], samples));
             }
         }
 
@@ -888,9 +1092,9 @@ internal sealed class CaptureSession : ICaptureSession
                 _options.NvencPreset,
                 _options.NvencTune,
                 _options.Color == ColorPath.X2 ? "x2" : "x1",
-                _paced is not null),
+                paced is not null),
             video,
-            CaptureStatsCollector.Report(_stats.Latency, _video.FlushedPackets),
+            CaptureStatsCollector.Report(_stats.Latency, encoder.FlushedPackets),
             _stats.Resources(),
             audio);
 
@@ -906,30 +1110,6 @@ internal sealed class CaptureSession : ICaptureSession
 
         _log.LogInformation("Stats written to {Path}: {Encoded} frames encoded ({Fresh} new), latency p99 {P99:0.0} ms",
             path, video.FramesEncoded, video.FreshSlots, report.Latency.P99Ms);
-    }
-
-    private void ReportAudioFaults()
-    {
-        foreach (var track in _audioTracks)
-        {
-            var name = track.Device.FriendlyName;
-            if (track.Subscription?.SubscriberFault is ErrorCodeException { Code: ErrorCodes.EncodeFailed or ErrorCodes.DiskFull or ErrorCodes.AccessDenied } encodeFault)
-            {
-                // The encoder or muxer broke (Check maps a full disk or denied access to their own codes), not the device: the file is damaged.
-                Fail(encodeFault);
-            }
-            else if (track.Subscription?.SubscriberFault is { } trackFault)
-            {
-                _log.LogWarning("{Code}: the session's tap on '{Name}' stopped taking audio: {Message}",
-                    ErrorCodes.AudioDeviceFailed, name, trackFault.Message);
-            }
-
-            if (track.Subscription?.DeviceFault is { } fault)
-            {
-                _log.LogWarning("{Code}: '{Name}' failed during capture and was held silent: {Message}",
-                    ErrorCodes.AudioDeviceFailed, name, fault.Message);
-            }
-        }
     }
 
     private void OnClosed(WindowCapture capture)
@@ -986,67 +1166,37 @@ internal sealed class CaptureSession : ICaptureSession
         _stopped = true;
     }
 
-    /// <summary>Subscribes a tap to its device; it holds its last second of blocks until the anchor publishes its timeline.</summary>
-    private void Subscribe(SessionAudioDevice device)
-    {
-        var track = new SessionAudioTrack(device);
-        try
-        {
-            track.Subscription = _audio.Subscribe(device.EndpointId, device.Flow, track);
-        }
-        catch (ErrorCodeException e)
-        {
-            throw new EngineFailure(e.Code, e.Message);
-        }
-
-        _audioTracks.Add(track);
-    }
-
     /// <summary>Microseconds since the anchor at <paramref name="qpc"/>.</summary>
     private long MicrosAt(long qpc) => (long)((Int128)(qpc - _anchorQpc) * 1_000_000 / _qpcFrequency);
-
-    /// <summary>The packets a ring of <paramref name="seconds"/> preallocates: the window and its slack, capped at 2^24.</summary>
-    private int RingCapacity(int seconds)
-    {
-        var perSecond = _spec.Snapshot.Video.Fps + (_spec.Audio.Tracks.Count * AacPacketsPerSecond) + 1;
-        return (int)Math.Min((seconds + 3L) * perSecond, 1 << 24);
-    }
-
-    /// <summary>An empty Replay Buffer ring of a <paramref name="seconds"/> s Buffer Window, on disk in Disk mode (R3) unless its file can't be made.</summary>
-    private PacketRing NewRing(int seconds) => ReplayRings.Create(
-        seconds * 1_000_000L,
-        RingCapacity(seconds),
-        _ringFolder,
-        ReplayStorageEstimate.Bytes(_spec.Snapshot.Video, _spec.Audio.Tracks.Count, seconds),
-        _options.Margin,
-        _log);
-
-    /// <summary>Where a ring keeps its bytes, for the log.</summary>
-    private static string StorageOf(PacketRing ring) => ring.File is { } file
-        ? $"on disk in {file.Path} ({file.Bytes / (1024 * 1024)} MiB)"
-        : "in memory";
 
     /// <summary>The Buffer Window from the next Reset on (AD-8); the orchestrator calls it just before a Reset.</summary>
     public void SetBufferWindow(int seconds) => _pendingWindow = seconds;
 
     /// <summary>
-    /// At the Reset <paramref name="us"/> (orchestrator thread): moves the Replay Buffer to a ring of
-    /// the Buffer Window <see cref="SetBufferWindow"/> asked for, seeded from the Reset keyframe on,
-    /// when that differs from the ring's. Nothing on a drained session, or one without a ring.
+    /// At the Reset <paramref name="us"/> (orchestrator thread): moves the current chain's Replay
+    /// Buffer to a ring of the Buffer Window <see cref="SetBufferWindow"/> asked for, seeded from
+    /// the Reset keyframe on (<see cref="EncoderChain.SnapStart"/>), when that differs from the
+    /// ring's. Nothing on a drained session, or one without a ring.
     /// </summary>
     private void ResizeAt(long us)
     {
         var pending = _pendingWindow;
-        if (_keepRing || _outputFinished || _ring is not { } ring || pending < 1 || pending == _windowSeconds)
+        EncoderChain? chain;
+        lock (_chainLock)
+        {
+            chain = _current;
+        }
+
+        if (_keepRing || _outputFinished || chain?.Ring is not { } ring || pending < 1 || pending == chain.WindowSeconds)
         {
             return;
         }
 
-        var next = NewRing(pending);
+        var next = chain.NewRing(pending);
         int generation;
         try
         {
-            generation = ring.Resize(next, us);
+            generation = ring.Resize(next, chain.SnapStart(us));
         }
         catch
         {
@@ -1056,8 +1206,8 @@ internal sealed class CaptureSession : ICaptureSession
 
         _log.LogInformation(
             "Buffer Window {Old} s -> {New} s at the Reset {Reset:0.000} s after the anchor: ring generation {Generation} {Storage}, {Capacity} packets preallocated",
-            _windowSeconds, pending, us / 1e6, generation, StorageOf(next), RingCapacity(pending));
-        _windowSeconds = pending;
+            chain.WindowSeconds, pending, us / 1e6, generation, EncoderChain.StorageOf(next), chain.RingCapacity(pending));
+        chain.WindowSeconds = pending;
     }
 
     /// <summary>Moves the Reset forward to <paramref name="us"/> (µs since the anchor); an earlier one is ignored.</summary>
@@ -1076,54 +1226,47 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
+    /// <summary>Frees the replaced chain, if any, the current one (a drained session keeps its ring until Release) and the device.</summary>
     private void DisposeAll()
     {
-        // The device threads write into the encoders: unsubscribe before anything they touch is freed.
-        for (var i = _audioTracks.Count - 1; i >= 0; i--)
+        EncoderChain? retiring;
+        EncoderChain? current;
+        lock (_chainLock)
         {
-            _audioTracks[i].Subscription?.Dispose();
+            retiring = _retiring;
+            current = _current;
         }
 
-        // The silence clock writes into the encoders too.
-        StopSilenceClock();
-        for (var i = _audioEncoders.Count - 1; i >= 0; i--)
-        {
-            _audioEncoders[i].Dispose();
-        }
-
-        _paced?.Dispose(); // joined before the encoder it submits to is freed
-        _video?.Dispose();
-        _scaler?.Dispose();
-        _frames?.Dispose();
-        _muxer?.Dispose();
-
-        // A Recording still finishing owns its own copies of the streams.
-        _tap?.Dispose();
+        retiring?.Dispose();
 
         // A save still writing holds its own lease and pins; the ring goes when the last is released.
-        // A drained session keeps it for saves until Release.
-        if (!_keepRing)
-        {
-            _ring?.Dispose();
-        }
-
+        current?.Dispose(keepRing: _keepRing);
         _device?.Dispose();
     }
 
     /// <summary>
-    /// One save's write (AD-8): it leases the ring on the orchestrator thread, so ending the session
-    /// can't free it, then waits, cuts (pinning the slabs and releasing the lease) and writes on a
-    /// background thread of its own, which never blocks the ring. <see cref="Write"/> requests the
-    /// keyframe after the press before that thread starts; with no <paramref name="video"/> (a
-    /// drained session) it asks for none, and the Clip ends at the press.
+    /// One save's write (AD-8), bound to one encoder chain: its sink and encoder throughout, so it
+    /// never mixes two chains' PTS. It leases the ring on the orchestrator thread, so ending the
+    /// session can't free it, and registers on the chain, so a switch can't tear it down before the
+    /// cut; it then waits, cuts (pinning the slabs and releasing the lease) and writes on a
+    /// background thread of its own, which never blocks the ring, and ends its registration once.
+    /// <see cref="Write"/> requests the keyframe after the press before that thread starts, and may
+    /// arm the switch to a prepared chain (<see cref="SwitchesTo"/>); with no
+    /// <paramref name="video"/> (a drained session) it asks for none, and the Clip ends at the press.
     /// </summary>
-    private sealed class ClipWrite(CaptureSession session, ReplayRingSink ring, VideoEncoder? video, long qpc, int windowSeconds) : IClipWrite
+    private sealed class ClipWrite(CaptureSession session, EncoderChain chain, VideoEncoder? video, long qpc, int windowSeconds) : IClipWrite
     {
+        private EncoderChain _chain = chain;
+        private VideoEncoder? _video = video;
+        private int _windowSeconds = windowSeconds;
+
         // Where the written Clip ends, in µs since the anchor; set before done is called.
         private long _endUs = long.MinValue;
 
         // The keyframe request's ticket, taken in Write before the writer thread starts.
         private long _ticket;
+
+        public SessionSpec? SwitchesTo { get; private set; }
 
         /// <summary>The session's next Clip starts at this one's end: the keyframe it stopped before.</summary>
         public void Reset()
@@ -1140,24 +1283,43 @@ internal sealed class CaptureSession : ICaptureSession
         {
             ArgumentNullException.ThrowIfNull(path);
             ArgumentNullException.ThrowIfNull(done);
+            lock (session._chainLock)
+            {
+                // Replaced and torn down since Save (an earlier press's switch took a frame in
+                // between): the press cuts from the chain that replaced it.
+                if (_chain.RetireStarted && session._current is { } current && !ReferenceEquals(current, _chain))
+                {
+                    _chain = current;
+                    _video = session._outputFinished ? null : current.Video;
+                    _windowSeconds = current.WindowSeconds;
+                }
+
+                _chain.Writers++;
+            }
+
+            var bound = _chain;
+            var ring = bound.Ring!;
             if (!ring.Lease())
             {
+                session.EndWriter(bound, null);
                 throw new InvalidOperationException("The Replay Buffer has already been released.");
             }
 
             try
             {
                 // Only a write that starts asks for its keyframe; starting the thread publishes the ticket to it.
-                if (video is not null)
+                if (_video is not null)
                 {
-                    _ticket = video.RequestKeyframe(qpc);
+                    _ticket = _video.RequestKeyframe(qpc);
                 }
 
+                SwitchesTo = session.TryArm(bound, qpc)?.Spec;
                 new Thread(() => done(Run(path))) { Name = "ClipWriter", IsBackground = true }.Start();
             }
             catch
             {
                 ring.Release();
+                session.EndWriter(bound, SwitchesTo is null ? null : session.MicrosAt(qpc));
                 throw;
             }
         }
@@ -1165,12 +1327,25 @@ internal sealed class CaptureSession : ICaptureSession
         private Exception? Run(string path)
         {
             var log = session._log;
+            var chain = _chain;
+            var ring = chain.Ring!;
             var leased = true;
+            var registered = true;
             long? claimed = null;
+            long? end = null;
+
+            // The chain may retire once its last save has cut; the switching save first records where its Clip ends.
+            void EndRegistration()
+            {
+                registered = false;
+                session.EndWriter(chain, SwitchesTo is null ? null : end ?? session.MicrosAt(qpc));
+            }
+
             try
             {
                 var pressUs = session.MicrosAt(qpc);
-                var toUs = WaitForKey(pressUs);
+                var toUs = WaitForKey(ring, pressUs);
+                end = toUs;
 
                 // Claimed as soon as the end is known: a later write starts here, not back over this one.
                 var previous = session._claim.Claim(toUs);
@@ -1183,7 +1358,7 @@ internal sealed class CaptureSession : ICaptureSession
                     Thread.Sleep(10);
                 }
 
-                var windowUs = windowSeconds * 1_000_000L;
+                var windowUs = _windowSeconds * 1_000_000L;
                 // The window back from the Clip's end, the key after the press, so the Clip never exceeds it.
                 var ownFromUs = Math.Max(toUs - windowUs, Volatile.Read(ref session._resetUs));
                 var fromUs = Math.Max(ownFromUs, previous);
@@ -1201,9 +1376,12 @@ internal sealed class CaptureSession : ICaptureSession
                     throw new ErrorCodeException(ErrorCodes.ClipTooShort, "An earlier Clip still being written leaves less than 1 s to save.");
                 }
 
-                using var source = ring.Cut(fromUs, toUs);
+                using var source = ring.Cut(chain.SnapStart(fromUs), toUs);
                 ring.Release();
                 leased = false;
+
+                // The cut holds its own pins and parameters: the chain's encoders are no longer needed.
+                EndRegistration();
                 if (source is null)
                 {
                     throw new ErrorCodeException(
@@ -1257,6 +1435,11 @@ internal sealed class CaptureSession : ICaptureSession
                 {
                     ring.Release();
                 }
+
+                if (registered)
+                {
+                    EndRegistration();
+                }
             }
         }
 
@@ -1265,9 +1448,9 @@ internal sealed class CaptureSession : ICaptureSession
         /// after the request; the press itself when that takes longer than <see cref="SaveWait"/> or
         /// the output has finished first.
         /// </summary>
-        private long WaitForKey(long pressUs)
+        private long WaitForKey(ReplayRingSink ring, long pressUs)
         {
-            if (video is null)
+            if (_video is not { } video)
             {
                 // Drained: the ring already holds everything it will.
                 return pressUs;

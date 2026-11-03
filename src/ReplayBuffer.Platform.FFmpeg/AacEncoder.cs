@@ -22,12 +22,21 @@ public sealed unsafe class AacEncoder : IAudioSampleSink, IDisposable
     private AVAudioFifo* _fifo;
     private AVFrame* _frame;
     private AVPacket* _packet;
+    private long _startSample;
     private long _samplesSent;
 
     /// <param name="muxer">Where packets go: a file or the Replay Buffer.</param>
-    public AacEncoder(PacketSink muxer, string title, bool isDefault, ILogger logger)
+    /// <param name="startSample">
+    /// The PTS of its first sample, in samples since the session anchor: 0 for a stream that starts
+    /// at the anchor; later for an encoder chain that starts mid-session (4.9), whose priming
+    /// packets, ending at or before it, are dropped here as a sink drops them at 0.
+    /// </param>
+    public AacEncoder(PacketSink muxer, string title, bool isDefault, ILogger logger, long startSample = 0)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(startSample);
         _muxer = muxer;
+        _startSample = startSample;
+        _samplesSent = startSample;
 
         var codec = ffmpeg.avcodec_find_encoder(AVCodecID.AV_CODEC_ID_AAC);
         if (codec is null)
@@ -64,6 +73,26 @@ public sealed unsafe class AacEncoder : IAudioSampleSink, IDisposable
 
     /// <summary>Frames written into the encoder so far, silence included.</summary>
     public long SamplesWritten { get; private set; }
+
+    /// <summary>
+    /// Sets the first sample's PTS, as the constructor's <c>startSample</c> does, for an encoder
+    /// opened before its start is known (a chain built in advance, 4.9). Only before the first write.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">A sample has already been written.</exception>
+    public void StartAt(long startSample)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(startSample);
+        lock (_lock)
+        {
+            if (SamplesWritten != 0)
+            {
+                throw new InvalidOperationException("The AAC stream has already started.");
+            }
+
+            _startSample = startSample;
+            _samplesSent = startSample;
+        }
+    }
 
     public void Write(ReadOnlySpan<float> interleaved)
     {
@@ -206,6 +235,13 @@ public sealed unsafe class AacEncoder : IAudioSampleSink, IDisposable
             }
 
             FFmpegLibrary.Check(result, "avcodec_receive_packet(aac)");
+            if (_startSample > 0 && _packet->pts != ffmpeg.AV_NOPTS_VALUE && _packet->pts + _packet->duration <= _startSample)
+            {
+                // The priming before a mid-session start: played, it would delay the stream.
+                ffmpeg.av_packet_unref(_packet);
+                continue;
+            }
+
             _muxer.Write(_packet, _streamIndex, _context->time_base);
         }
     }

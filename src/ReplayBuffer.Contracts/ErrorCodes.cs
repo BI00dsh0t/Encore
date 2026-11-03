@@ -195,6 +195,14 @@ public static class ErrorCodes
     /// </summary>
     public const string MemoryMargin = "memory-margin";
 
+    /// <summary>
+    /// A warning (AD-7): the Replay Buffer switched to a profile's new encoder chain at a save, and
+    /// the new chain's first keyframe came more than one frame after the old Clip's end, so the
+    /// next Clip starts that much later (no frame arrived after the press, a static window, say).
+    /// Raised once per such switch, with the gap's length.
+    /// </summary>
+    public const string ResetGap = "reset-gap";
+
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
 
@@ -251,6 +259,7 @@ public static class ErrorCodes
         LibraryCorrupt,
         FeedbackDeviceCaptured,
         MemoryMargin,
+        ResetGap,
         NotDevInstance,
     ];
 }

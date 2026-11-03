@@ -5,6 +5,7 @@ using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Core.Settings;
 
 namespace ReplayBuffer.Core.Tests;
 
@@ -945,6 +946,131 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task AProfilesVideoAndOwnMicApplyAtStartAndAnotherGameGetsTheGlobalOnes()
+    {
+        var globalMic = new LayoutDevice(Guid.NewGuid(), "global-mic", "Global mic", "", AudioFlow.Input, IsMic: true);
+        var ownMic = new LayoutDevice(Guid.NewGuid(), "own-mic", "Own mic", "", AudioFlow.Input, IsMic: true);
+        var plainGlobalMic = globalMic with { Key = Guid.NewGuid(), IsMic = false };
+        var global = new TrackLayout([globalMic], [new Track(Guid.NewGuid(), "Mic", [globalMic.Key], MuteAffected: true)]);
+        var own = new TrackLayout(
+            [plainGlobalMic, ownMic],
+            [new Track(Guid.NewGuid(), "Voice", [plainGlobalMic.Key], MuteAffected: true), new Track(Guid.NewGuid(), "Mic", [ownMic.Key], MuteAffected: true)]);
+        var video = new VideoSettings(VideoCodec.H264, 1920, 1080, 60, 20_000, RateControl.Vbr);
+        const string other = @"c:\games\other.exe";
+        _document = Revision(3) with
+        {
+            Global = SettingsDocument.Empty.Global.SetItem(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(global)),
+            Profiles = SettingsMaps.EmptyProfiles
+                .Add(ProfileId, new GameProfile
+                {
+                    Name = "Game",
+                    Overrides = SettingsMaps.EmptyValues
+                        .Add(Keys.Video.Name, Keys.Video.ToJson(video))
+                        .Add(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(own)),
+                })
+                .Add(other, new GameProfile { Name = "Other" }),
+        };
+        using var orchestrator = new SessionOrchestrator(
+            _factory,
+            () => Volatile.Read(ref _document),
+            _ => { },
+            targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, _) => { }));
+
+        orchestrator.Post(new ProposeTarget(new TargetCandidate(Pid, 1, ProfileId, "Game.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => _factory.Sessions.Count == 1);
+        orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+        orchestrator.Post(new ProposeTarget(new TargetCandidate(Pid + 1, 2, other, "Other.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => _factory.Sessions.Count == 2);
+
+        var (first, second) = (_factory.Sessions[0].Spec, _factory.Sessions[1].Spec);
+        Assert.Equal(video, first.Snapshot.Video);
+        Assert.Equal([("Mic", "own-mic")], first.Audio.GatedMicInputs().Select(i => (i.Track.Name, i.Device.EndpointId)));
+        Assert.Equal(SettingsResolver.Resolve(_document, null).Video, second.Snapshot.Video);
+        Assert.NotEqual(video, second.Snapshot.Video);
+        Assert.Equal([("Mic", "global-mic")], second.Audio.GatedMicInputs().Select(i => (i.Track.Name, i.Device.EndpointId)));
+    }
+
+    [Fact]
+    public async Task ASettingsChangeNeedingAnotherChainIsPreparedDroppedOnARevertAndTakenAtTheSwitchingSave()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            var game = new LayoutDevice(Guid.NewGuid(), "game", "Game", "", AudioFlow.Output, IsMic: false);
+            var mic = new LayoutDevice(Guid.NewGuid(), "mic", "Mic", "", AudioFlow.Input, IsMic: true);
+            var mic2 = new LayoutDevice(Guid.NewGuid(), "mic2", "Mic 2", "", AudioFlow.Input, IsMic: true);
+            TrackLayout Global(bool muteAffected) => new(
+                [game, mic],
+                [new Track(Guid.NewGuid(), "Game", [game.Key], MuteAffected: false), new Track(Guid.NewGuid(), "Mic", [mic.Key], muteAffected)]);
+            var changed = new TrackLayout(
+                [game, mic with { IsMic = false }, mic2],
+                [
+                    new Track(Guid.NewGuid(), "Game", [game.Key], MuteAffected: false),
+                    new Track(Guid.NewGuid(), "Voice", [mic.Key], MuteAffected: false),
+                    new Track(Guid.NewGuid(), "Mic2", [mic2.Key], MuteAffected: true),
+                ]);
+            SettingsDocument With(TrackLayout globalLayout, TrackLayout? profileLayout)
+            {
+                var document = Revision(3) with { Global = InFolder(folder, cooldown: 0).SetItem(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(globalLayout)) };
+                return profileLayout is null
+                    ? document
+                    : document with { Profiles = document.Profiles.SetItem(ProfileId, document.Profiles[ProfileId] with { Overrides = document.Profiles[ProfileId].Overrides.SetItem(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(profileLayout)) }) };
+            }
+
+            var start = With(Global(muteAffected: true), null);
+            _document = start;
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+            var writes = new ConcurrentQueue<string>();
+            FakeSession? session = null;
+            var factory = new FakeFactory { Save = _ => new FakeWrite(writes) { SwitchesTo = session!.Prepares.Last() } };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                press => presses.Writer.TryWrite(press),
+                targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, _) => { }),
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => saved.Writer.TryWrite(s), _ => { }));
+            orchestrator.Post(new ProposeTarget(new TargetCandidate(Pid, 1, ProfileId, "Game.exe"), TargetChangeReason.Detected));
+            await WaitUntil(() => factory.Sessions.Count == 1);
+            session = factory.Sessions[0];
+
+            // The profile's own layout: one chain with its Tracks.
+            Volatile.Write(ref _document, With(Global(muteAffected: true), changed));
+            orchestrator.Post(new SettingsUpdated());
+            await WaitUntil(() => session.Prepares.Count == 1);
+            Assert.Equal(["Game", "Voice", "Mic2"], session.Prepares.Last()!.Audio.Tracks.Select(t => t.Name));
+
+            // Back to the session's own: the prepared chain is dropped.
+            Volatile.Write(ref _document, start);
+            orchestrator.Post(new SettingsUpdated());
+            await WaitUntil(() => session.Prepares.Count == 2);
+            Assert.Null(session.Prepares.Last());
+
+            // Only muteAffected changes: still another chain.
+            Volatile.Write(ref _document, With(Global(muteAffected: false), null));
+            orchestrator.Post(new SettingsUpdated());
+            await WaitUntil(() => session.Prepares.Count == 3);
+            Assert.Empty(session.Prepares.Last()!.Audio.GatedMicInputs());
+
+            // The save that switches to it: its Reset, and a later commit with no change, ask for nothing.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            await NextAsync(saved);
+            orchestrator.Post(new SettingsUpdated());
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, System.Diagnostics.Stopwatch.GetTimestamp()));
+            while ((await NextPress(presses)).Action != HotkeyAction.RecordToggle)
+            {
+            }
+
+            Assert.Equal(3, session.Prepares.Count);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     private static TaskCompletionSource NewGate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>The Global values with the Output Folder <paramref name="folder"/> and, when given, <paramref name="cooldown"/> as <c>saveCooldown</c>.</summary>
@@ -1171,6 +1297,8 @@ public sealed class SessionOrchestratorTests : IDisposable
 
         public int Resets => Volatile.Read(ref _resets);
 
+        public SessionSpec? SwitchesTo { get; init; }
+
         public void Write(string path, Action<Exception?> done)
         {
             writes.Enqueue(path);
@@ -1284,6 +1412,11 @@ public sealed class SessionOrchestratorTests : IDisposable
         public ConcurrentQueue<string>? Log { get; init; }
 
         public void SetBufferWindow(int seconds) => Log?.Enqueue($"window {seconds}");
+
+        /// <summary>Each <c>PrepareChain</c> call's spec, null for a drop, in order.</summary>
+        public ConcurrentQueue<SessionSpec?> Prepares { get; } = new();
+
+        public void PrepareChain(SessionSpec? next) => Prepares.Enqueue(next);
 
         public void SetMicMuted(bool muted, long qpc)
         {

@@ -59,6 +59,17 @@ public interface ICaptureSession
     }
 
     /// <summary>
+    /// Builds <paramref name="next"/>'s encoder chain in advance, idle, for the next save press
+    /// (R7, R8): the first press whose write starts once it is built switches the session to it, so
+    /// the Clip after that one has its Tracks and video, with no gap. Null drops any chain prepared
+    /// and not yet switched to. A session holding no Replay Buffer ignores it; a failed build is
+    /// logged and dropped, and the next call retries. Called on the orchestrator thread; never blocks.
+    /// </summary>
+    void PrepareChain(SessionSpec? next)
+    {
+    }
+
+    /// <summary>
     /// A Clip of the Replay Buffer up to <paramref name="qpc"/> (the press, AD-6), not yet written;
     /// null when this session holds no Replay Buffer, or nothing yet. The session asks its encoder for
     /// a keyframe on the next frame (AD-10), where the Clip ends. Throws an
@@ -109,6 +120,14 @@ public interface IClipWrite
     /// never blocks.
     /// </summary>
     void Write(string path, Action<Exception?> done);
+
+    /// <summary>
+    /// The spec this write's press switched the session to (<see cref="ICaptureSession.PrepareChain"/>),
+    /// set once <see cref="Write"/> has armed the switch; null for none. The switch stands whatever
+    /// the write's outcome: the session's later Clips come from the new chain. Read on the
+    /// orchestrator thread, after <see cref="Write"/> returns.
+    /// </summary>
+    SessionSpec? SwitchesTo => null;
 
     /// <summary>
     /// Makes this Clip's end the Replay Buffer's Reset (R5): the session's next Clip starts at the

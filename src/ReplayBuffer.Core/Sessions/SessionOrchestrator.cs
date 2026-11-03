@@ -32,6 +32,12 @@ public sealed record EndSession(string Reason, TaskCompletionSource<SessionOutco
 public sealed record HotkeyPressed(HotkeyAction Action, long Qpc) : SessionMessage;
 
 /// <summary>
+/// The settings document was committed; any thread. The game session's settings are resolved again,
+/// and a profile's new Tracks or video apply from its next Clip (R7, R8).
+/// </summary>
+public sealed record SettingsUpdated : SessionMessage;
+
+/// <summary>
 /// A started session: its spec as of Start, and a task that completes with its outcome however it
 /// ends (an <c>End</c>, its window closing, a failure, or the orchestrator stopping).
 /// </summary>
@@ -61,7 +67,12 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// profile has <c>recordingsEnabled</c> on (read live, R1) reserves a path beside the game's Clips
 /// and has the session start a Recording there; the next press stops it, and the writer posts its
 /// result back before <see cref="CaptureState.Recording"/> goes off. A session that ends mid-Recording
-/// finishes it with everything encoded.
+/// finishes it with everything encoded. With <see cref="ReplayClips"/>, the game session's settings
+/// are resolved again for its profile on each <see cref="SettingsUpdated"/> and after each Reset
+/// (R7, R8): when they need another encoder chain (<see cref="ChainKey.SameChain"/>), the session is
+/// asked to prepare it (<see cref="ICaptureSession.PrepareChain"/>), and a later change back drops
+/// it. The save press whose write switches the session to it (<see cref="IClipWrite.SwitchesTo"/>)
+/// updates the session's spec: its snapshot and audio, its Target kept.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -290,6 +301,14 @@ public sealed class SessionOrchestrator : IDisposable
                 OnClipWritten(written);
                 break;
 
+            case SettingsUpdated:
+                if (_active is { } active)
+                {
+                    ApplySettings(active);
+                }
+
+                break;
+
             case RecordingWritten recorded:
                 OnRecordingWritten(recorded);
                 break;
@@ -347,12 +366,13 @@ public sealed class SessionOrchestrator : IDisposable
         // A drained ring never outlives the start of a new session.
         ReleaseDrain();
 
-        // AD-5: resolved once, here; a retarget or a later settings change never touches it.
+        // AD-5: resolved here; a retarget never touches it, and a later settings change reaches a
+        // game session only through a chain switch at a save (ApplySettings).
         var snapshot = SettingsResolver.Resolve(_currentDocument(), target.ProfileId);
         var spec = new SessionSpec(kind, target, snapshot, audio(snapshot), _state.MicMuted);
         var id = ++_nextSessionId;
         var session = _factory.Start(spec, new Events(this, id));
-        var active = new Active(id, session, spec) { GameName = gameName };
+        var active = new Active(id, session, spec, audio) { GameName = gameName };
         _active = active;
         SetState(_state with { Replay = kind == SessionKind.Game ? ReplayState.Buffering : ReplayState.Off });
         return new RunningSession(spec, active.Ended.Task);
@@ -755,11 +775,27 @@ public sealed class SessionOrchestrator : IDisposable
             // It never started: nothing else will remove the reserved file.
             TryDelete(path);
             library.EndWrite(path, WriteOutcome.Failed);
+            TakeSwitch(active, write);
             ReportSaveFailure(e);
             return;
         }
 
+        TakeSwitch(active, write);
         SetState(_state with { ClipsWriting = _writing });
+    }
+
+    /// <summary>
+    /// When <paramref name="write"/>'s press switched the session's encoder chain (4.9), the spec
+    /// takes the prepared one's snapshot and audio, its Target kept: the session's later Clips have
+    /// its Tracks and video, whatever this write's outcome.
+    /// </summary>
+    private static void TakeSwitch(Active active, IClipWrite write)
+    {
+        if (write.SwitchesTo is { } switched)
+        {
+            active.Spec = active.Spec with { Snapshot = switched.Snapshot, Audio = switched.Audio };
+            active.Pending = false;
+        }
     }
 
     /// <summary>
@@ -823,9 +859,63 @@ public sealed class SessionOrchestrator : IDisposable
 
             written.Write.Reset();
             active.ResetQpc = active.ResetQpc is { } reset ? Math.Max(reset, written.Qpc) : written.Qpc;
+
+            // Each Reset resolves the settings again, so a failed in-advance build is asked for once more.
+            if (ReferenceEquals(active, _active))
+            {
+                ApplySettings(active);
+            }
         }
 
         _clips?.Saved(new ClipSaved(written.Path));
+    }
+
+    /// <summary>
+    /// Resolves the game session's settings again for its profile (R7, R8). When they need another
+    /// encoder chain than the session's (<see cref="ChainKey.SameChain"/>), the session is asked to
+    /// prepare it for its next save press; when they no longer do, a chain asked for is dropped.
+    /// Only for a game session with Replay Clips; a Track Layout that can't be resolved is skipped,
+    /// and a failure of the session is swallowed, as for mic mute.
+    /// </summary>
+    private void ApplySettings(Active active)
+    {
+        if (_clips is null || active.Spec.Kind != SessionKind.Game)
+        {
+            return;
+        }
+
+        SessionSpec next;
+        try
+        {
+            var snapshot = SettingsResolver.Resolve(_currentDocument(), active.Spec.Target.ProfileId);
+            next = active.Spec with { Snapshot = snapshot, Audio = active.Audio(snapshot) };
+        }
+        catch (Exception)
+        {
+            // An invalid Track Layout: the session keeps its chain.
+            return;
+        }
+
+        try
+        {
+            if (ChainKey.SameChain(next, active.Spec))
+            {
+                if (active.Pending)
+                {
+                    active.Pending = false;
+                    active.Session.PrepareChain(null);
+                }
+            }
+            else
+            {
+                active.Pending = true;
+                active.Session.PrepareChain(next);
+            }
+        }
+        catch (Exception)
+        {
+            // The session's own failure path ends it if it is broken.
+        }
     }
 
     /// <summary>
@@ -1011,13 +1101,20 @@ public sealed class SessionOrchestrator : IDisposable
         _publish(next);
     }
 
-    private sealed class Active(long id, ICaptureSession session, SessionSpec spec)
+    private sealed class Active(long id, ICaptureSession session, SessionSpec spec, Func<EffectiveSettings, SessionAudio> audio)
     {
         public long Id { get; } = id;
 
         public ICaptureSession Session { get; } = session;
 
+        /// <summary>The session's spec: its Target follows a retarget, its snapshot and audio a chain switch.</summary>
         public SessionSpec Spec { get; set; } = spec;
+
+        /// <summary>The session's audio from a snapshot, as at Start.</summary>
+        public Func<EffectiveSettings, SessionAudio> Audio { get; } = audio;
+
+        /// <summary>Whether the session was last asked to prepare a chain, not to drop one.</summary>
+        public bool Pending { get; set; }
 
         /// <summary>The Target's display name at <see cref="StartOnTarget"/>; null for a session started otherwise.</summary>
         public string? GameName { get; init; }

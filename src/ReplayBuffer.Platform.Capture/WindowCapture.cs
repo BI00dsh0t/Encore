@@ -108,6 +108,24 @@ public sealed unsafe class WindowCapture : IDisposable
 
     public VideoSize ItemSize => new(_item.Size.Width, _item.Size.Height);
 
+    /// <summary>
+    /// Sets the output frame rate as the constructor does: <c>MinUpdateInterval</c> half a slot of
+    /// <paramref name="fps"/>. A failure is logged and the old interval kept.
+    /// </summary>
+    public void SetFps(int fps)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(fps, 1);
+        try
+        {
+            _session.MinUpdateInterval = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / (2L * fps));
+            _logger.LogInformation("Capturing at most {Fps} fps", 2 * fps);
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning("The capture rate could not be set to {Fps} fps: {Message}", 2 * fps, e.Message);
+        }
+    }
+
     public void Start()
     {
         _session.StartCapture();

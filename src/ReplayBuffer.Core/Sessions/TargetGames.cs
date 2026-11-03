@@ -183,6 +183,19 @@ public sealed record ChainKey(SessionKind Kind, int ProcessId, VideoSettings Vid
         return Of(kind, target, snapshot.Video, audio);
     }
 
+    /// <summary>
+    /// Whether <paramref name="a"/> and <paramref name="b"/> encode on one chain (4.9): equal
+    /// <see cref="ChainKey"/>s and the same mic mute inputs (<see cref="SessionAudio.GatedMicInputs"/>,
+    /// each a Track name and a device endpoint, ignoring case, and flow, in order). A change of
+    /// <c>isMic</c> or <c>muteAffected</c> alone so needs another chain too.
+    /// </summary>
+    public static bool SameChain(SessionSpec a, SessionSpec b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        return Of(a) == Of(b) && GatedInputs(a.Audio).SequenceEqual(GatedInputs(b.Audio));
+    }
+
     public bool Equals(ChainKey? other) =>
         other is not null
         && Kind == other.Kind
@@ -203,6 +216,9 @@ public sealed record ChainKey(SessionKind Kind, int ProcessId, VideoSettings Vid
 
         return hash.ToHashCode();
     }
+
+    private static IEnumerable<(string Track, ChainDevice Device)> GatedInputs(SessionAudio audio) =>
+        audio.GatedMicInputs().Select(input => (input.Track.Name, new ChainDevice(input.Device.EndpointId, input.Device.Flow)));
 
     private static ChainKey Of(SessionKind kind, CaptureTarget target, VideoSettings video, SessionAudio audio) => new(
         kind,

@@ -23,6 +23,7 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
     private int _references = 1;
     private int _disposed;
     private volatile bool _closed;
+    private long _firstKeyUs = long.MaxValue;
 
     /// <param name="ring">Generation 1's ring.</param>
     public ReplayRingSink(PacketRing ring)
@@ -49,6 +50,12 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
 
     /// <summary>The current ring generation, counting from 1.</summary>
     public int Generation => _generations.Current;
+
+    /// <summary>
+    /// The first video keyframe ever written, in µs since the anchor; <see cref="long.MaxValue"/>
+    /// until then. An encoder chain started mid-session (4.9) begins its Clips there.
+    /// </summary>
+    public long FirstKeyUs => Volatile.Read(ref _firstKeyUs);
 
     internal override int AddStream(AVCodecContext* encoder, string? title, bool isDefault)
     {
@@ -86,13 +93,20 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
                 return;
             }
 
+            var isKey = (packet->flags & ffmpeg.AV_PKT_FLAG_KEY) != 0;
             _generations.Append(
                 streamIndex,
                 new ReadOnlySpan<byte>(packet->data, packet->size),
                 packet->pts,
                 packet->dts,
                 packet->duration,
-                (packet->flags & ffmpeg.AV_PKT_FLAG_KEY) != 0);
+                isKey);
+
+            // Set once: the steady state costs this one field read.
+            if (_firstKeyUs == long.MaxValue && isKey && streamIndex == _generations.Ring.VideoStream)
+            {
+                Volatile.Write(ref _firstKeyUs, _generations.ToMicros(streamIndex, packet->pts));
+            }
         }
         finally
         {
