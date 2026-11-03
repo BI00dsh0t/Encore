@@ -3,7 +3,7 @@ title: 'Live meters in the Track Layout editor'
 type: 'feature'
 ticket: '8'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '778a9e78c56c1161c07ad89be08e7f809d9f1a21'
 route: 'full'
 route_source: 'auto'
