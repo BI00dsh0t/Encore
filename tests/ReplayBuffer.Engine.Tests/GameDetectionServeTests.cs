@@ -45,6 +45,9 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
             });
         _events = Channel.CreateUnbounded<IpcEvent>();
         _client = await EngineClient.ConnectAsync(_host.PipeName, new EngineClientOptions { OnEvent = e => _events.Writer.TryWrite(e) }, Token);
+
+        // Past the first poll, so the games the tests add aren't a cold start.
+        await _probe.PolledAsync(2);
     }
 
     public async ValueTask DisposeAsync()
@@ -91,6 +94,29 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         Assert.Equal(expected, detected);
         Assert.Equal(new TargetChanged(null, new TargetGame(expected.ProfileId, expected.Name, GamePid), TargetChangeReason.Detected), changed);
         Assert.Equal([expected], _client.State!.DetectedGames!);
+    }
+
+    [Fact]
+    public async Task TheTargetExitingHandsOverToABackgroundListedGame()
+    {
+        var update = new SettingsUpdate(0, [SettingsOp.SetGlobal("manualGames", JsonSerializer.SerializeToElement<IReadOnlyList<string>>([GamePath], SettingsJsonContext.Default.IReadOnlyListString))]);
+        await _client.SendAsync(SettingsMessages.Update, update, Token);
+        await NextAsync("settings.changed");
+        var a = _probe.Add(GamePid, GamePath);
+        _probe.Foreground = new GameWindow(0x10, GamePid);
+        await NextAsync("game.detected");
+        var target = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload).To;
+
+        _probe.Add(GamePid + 2, GamePath);
+        _probe.AddWindow(new GameWindow(0x50, GamePid + 2));
+        var other = GameMessages.Detected.Read((await NextAsync("game.detected")).Payload);
+        await _probe.PolledAsync(2);
+        _probe.Foreground = null;
+        a.HasExited = true;
+
+        await NextAsync("game.exited");
+        var changed = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload);
+        Assert.Equal(new TargetChanged(target, new TargetGame(other.ProfileId, other.Name, GamePid + 2), TargetChangeReason.Exit), changed);
     }
 
     [Fact]
@@ -208,6 +234,8 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         private volatile bool _hasExited;
 
         public string ImagePath { get; } = imagePath;
+
+        public DateTime StartTime { get; } = DateTime.UtcNow;
 
         public bool HasExited
         {

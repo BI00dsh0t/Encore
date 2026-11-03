@@ -60,6 +60,8 @@ public sealed class SessionOrchestrator : IDisposable
     // Orchestrator thread only.
     private Active? _active;
     private TargetCandidate? _target;
+    private bool _recordingRunning;
+    private ProposeTarget? _pendingTarget;
     private CaptureState _state = CaptureState.Initial;
     private long _nextSessionId;
 
@@ -219,6 +221,15 @@ public sealed class SessionOrchestrator : IDisposable
 
             case ProposeTarget propose:
                 CommitTarget(propose);
+                break;
+
+            case RecordingRunning recording:
+                _recordingRunning = recording.Running;
+                if (!_recordingRunning && _pendingTarget is { } pending)
+                {
+                    CommitTarget(pending);
+                }
+
                 break;
 
             case SessionClosed closed when _active?.Id == closed.SessionId:
@@ -391,7 +402,10 @@ public sealed class SessionOrchestrator : IDisposable
 
     /// <summary>
     /// Commits a proposed Target Game (AD-19). Another process, or none, becomes the Target and is
-    /// published; a new window of the Target's own process only moves the debug capture to it.
+    /// published; a new window of the Target's own process only moves the debug capture to it. While
+    /// a Recording runs, a switch from the Target to another game is held as pending, each later one
+    /// replacing it; a proposal of the Target itself drops it. An exit handover is never held: the
+    /// Target is gone.
     /// </summary>
     private void CommitTarget(ProposeTarget propose)
     {
@@ -399,6 +413,7 @@ public sealed class SessionOrchestrator : IDisposable
         var to = propose.To;
         if (to is not null && current is not null && to.ProcessId == current.ProcessId)
         {
+            _pendingTarget = null;
             if (to.Window != current.Window)
             {
                 _target = current with { Window = to.Window };
@@ -408,6 +423,13 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
+        if (_recordingRunning && current is not null && to is not null && propose.Reason != TargetChangeReason.Exit)
+        {
+            _pendingTarget = propose;
+            return;
+        }
+
+        _pendingTarget = null;
         if (to is null && current is null)
         {
             return;

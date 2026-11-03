@@ -335,6 +335,58 @@ public sealed class SessionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task ARunningRecordingHoldsASwitchUntilItClearsThenItCommitsAtOnce()
+    {
+        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+        using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
+        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+        var c = new TargetCandidate(Pid + 2, 5, @"c:\games\third.exe", "Third.exe");
+
+        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+        orchestrator.Post(new RecordingRunning(true));
+        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+        orchestrator.Post(new ProposeTarget(c, TargetChangeReason.Focus));
+
+        // A proposal of the Target itself drops the held switch: clearing the flag then commits nothing.
+        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Focus));
+        orchestrator.Post(new RecordingRunning(false));
+        orchestrator.Post(new RecordingRunning(true));
+        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+        await HandledAsync(orchestrator);
+        Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
+        Assert.False(changes.Reader.TryRead(out _));
+
+        orchestrator.Post(new RecordingRunning(false));
+
+        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Focus), await NextAsync(changes));
+    }
+
+    [Fact]
+    public async Task AnExitHandoverCommitsThroughARunningRecording()
+    {
+        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+        using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
+        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+
+        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+        orchestrator.Post(new RecordingRunning(true));
+        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Exit));
+        orchestrator.Post(new RecordingRunning(false));
+        await HandledAsync(orchestrator);
+
+        Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
+        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Exit), await NextAsync(changes));
+        Assert.False(changes.Reader.TryRead(out _));
+    }
+
+    // Every message posted before it has been handled: an End with no session is refused in order.
+    private static async Task HandledAsync(SessionOrchestrator orchestrator) =>
+        await Assert.ThrowsAsync<ErrorCodeException>(() => orchestrator.EndAsync().WaitAsync(Timeout, Token));
+
+    [Fact]
     public async Task AFailedStartOnTheTargetIsReportedAndTheTargetStaysCommitted()
     {
         var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
