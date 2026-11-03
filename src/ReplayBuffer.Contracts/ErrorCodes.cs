@@ -184,6 +184,13 @@ public static class ErrorCodes
     public const string LibraryCorrupt = "library-corrupt";
 
     /// <summary>
+    /// A Library command named an item by an identity (path, size and modified time, AD-3) that no
+    /// longer matches the index or the file on disk. Nothing changed; the App acts again on the
+    /// item the snapshot now shows. Never retried automatically.
+    /// </summary>
+    public const string LibraryItemChanged = "library-item-changed";
+
+    /// <summary>
     /// A warning: a Track of the active Track Layout mixes the Output Device that Feedback Sounds
     /// play on, so its recordings would hold the sounds. Withdrawn when that is no longer so.
     /// </summary>
@@ -250,6 +257,7 @@ public static class ErrorCodes
         RecordingStarted,
         RecordingStopped,
         LibraryCorrupt,
+        LibraryItemChanged,
         FeedbackDeviceCaptured,
         MemoryMargin,
         NotDevInstance,

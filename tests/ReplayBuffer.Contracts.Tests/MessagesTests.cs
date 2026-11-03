@@ -268,18 +268,26 @@ public sealed partial class MessagesTests
     [Fact]
     public void AnItemsLengthAndTheLibraryFolderRoundTripAndAreOptional()
     {
-        var item = new LibraryItem("clip.mp4", null, 48, DateTimeOffset.UnixEpoch, false, 30.5);
+        var modified = new DateTimeOffset(2026, 11, 3, 10, 0, 0, TimeSpan.Zero).AddTicks(1234567);
+        var item = new LibraryItem("clip.mp4", null, 48, DateTimeOffset.UnixEpoch, false, 30.5, true, modified);
         var json = JsonSerializer.Serialize(item, LibraryJsonContext.Default.LibraryItem);
 
         Assert.Contains("\"lengthSeconds\":30.5", json, StringComparison.Ordinal);
+        Assert.Contains("\"favourite\":true", json, StringComparison.Ordinal);
         Assert.Equal(item, JsonSerializer.Deserialize(json, LibraryJsonContext.Default.LibraryItem));
         Assert.Equal(@"C:\Videos", LibraryMessages.FolderChanged.Apply(StateSnapshot.Initial("e", 1, SettingsDocument.Empty), new LibraryFolderChanged(@"C:\Videos")).LibraryFolder);
+
+        // library.setFavourite's arguments carry the identity at full precision.
+        var favourite = JsonSerializer.Deserialize(
+            """{"path":"Game\\clip.mp4","size":48,"modified":"2026-11-03T10:00:00.1234567+00:00","favourite":true}""",
+            LibraryMessages.SetFavourite.ArgsType);
+        Assert.Equal(new LibrarySetFavourite(@"Game\clip.mp4", 48, modified, true), favourite);
 
         // AD-22, additive: an item and a snapshot from before story 7.3 read as no length and no folder.
         var old = JsonSerializer.Deserialize(
             """{"path":"clip.mp4","profileId":null,"size":48,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}""",
             LibraryJsonContext.Default.LibraryItem);
-        Assert.Null(old!.LengthSeconds);
+        Assert.Equal(((double?)null, false, (DateTimeOffset?)null), (old!.LengthSeconds, old.Favourite, old.Modified));
         Assert.Null(StateSnapshot.Initial("e", 1, SettingsDocument.Empty).LibraryFolder);
     }
 }
