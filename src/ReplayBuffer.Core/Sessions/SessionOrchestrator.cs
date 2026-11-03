@@ -45,7 +45,11 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// session with the press QPC. With <see cref="ReplayClips"/>, a <see cref="HotkeyAction.Save"/> press
 /// on the game session reserves a path and has the session write its Clip there; the writer posts
 /// its result back, and only then is the Clip published as saved and the session's Replay Buffer
-/// Reset at its end (R5); a press less than 1 s after that Reset is refused as too short.
+/// Reset at its end (R5); a press less than 1 s after that Reset is refused as too short. A game
+/// session whose Target exits, or whose window closes, is drained rather than ended (R1): it keeps
+/// its Replay Buffer, <see cref="ReplayState.Draining"/> is published, and <c>save</c> presses still
+/// cut from it until <see cref="ReplayClips.ExitDrain"/> passes, a new session starts, or the
+/// orchestrator stops. A switch to another game, or Ignored, ends it at once (FR-38).
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -64,6 +68,11 @@ public sealed class SessionOrchestrator : IDisposable
 
     // Orchestrator thread only.
     private Active? _active;
+
+    // The game session drained after its Target exited (R1), still holding its Replay Buffer, and
+    // the one-shot timer that posts its expiry. Never set while a session is active.
+    private Active? _drain;
+    private Timer? _drainTimer;
     private TargetCandidate? _target;
     private bool _recordingRunning;
     private ProposeTarget? _pendingTarget;
@@ -160,7 +169,7 @@ public sealed class SessionOrchestrator : IDisposable
         return reply.Task;
     }
 
-    /// <summary>Stops taking messages, handles those already posted, ends any running session, and joins the thread.</summary>
+    /// <summary>Stops taking messages, handles those already posted, ends any running session, releases any drain, and joins the thread.</summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -200,6 +209,8 @@ public sealed class SessionOrchestrator : IDisposable
         {
             EndActive("engine stopping", failure: null);
         }
+
+        ReleaseDrain();
     }
 
     private void Handle(SessionMessage message)
@@ -249,7 +260,20 @@ public sealed class SessionOrchestrator : IDisposable
                 break;
 
             case SessionClosed closed when _active?.Id == closed.SessionId:
-                EndActive(closed.Reason, failure: null);
+                // WGC can see the window close before Game Detection sees the exit: drain here too.
+                if (Drains(_active))
+                {
+                    DrainActive(closed.Reason);
+                }
+                else
+                {
+                    EndActive(closed.Reason, failure: null);
+                }
+
+                break;
+
+            case DrainExpired expired when _drain?.Id == expired.SessionId:
+                ReleaseDrain();
                 break;
 
             case SessionFailed failed when _active?.Id == failed.SessionId:
@@ -277,19 +301,23 @@ public sealed class SessionOrchestrator : IDisposable
     private RunningSession Start(StartSession start) => Start(start.Kind, start.Target, _ => start.Audio);
 
     /// <param name="audio">The session's audio, from the snapshot resolved here.</param>
-    private RunningSession Start(SessionKind kind, CaptureTarget target, Func<EffectiveSettings, SessionAudio> audio)
+    /// <param name="gameName">The Target's display name, kept for the session's Clips; null when not started on the Target.</param>
+    private RunningSession Start(SessionKind kind, CaptureTarget target, Func<EffectiveSettings, SessionAudio> audio, string? gameName = null)
     {
         if (_active is not null)
         {
             throw new ErrorCodeException(ErrorCodes.SessionRunning, "A session is already running.");
         }
 
+        // A drained ring never outlives the start of a new session.
+        ReleaseDrain();
+
         // AD-5: resolved once, here; a retarget or a later settings change never touches it.
         var snapshot = SettingsResolver.Resolve(_currentDocument(), target.ProfileId);
         var spec = new SessionSpec(kind, target, snapshot, audio(snapshot), _state.MicMuted);
         var id = ++_nextSessionId;
         var session = _factory.Start(spec, new Events(this, id));
-        var active = new Active(id, session, spec);
+        var active = new Active(id, session, spec) { GameName = gameName };
         _active = active;
         SetState(_state with { Replay = kind == SessionKind.Game ? ReplayState.Buffering : ReplayState.Off });
         return new RunningSession(spec, active.Ended.Task);
@@ -366,6 +394,76 @@ public sealed class SessionOrchestrator : IDisposable
         SetState(_state with { Replay = ReplayState.Off });
         active.Ended.TrySetResult(outcome);
         return outcome;
+    }
+
+    /// <summary>Whether <paramref name="active"/> is drained, not ended, when its Target goes (R1): a game session with Replay Clips.</summary>
+    private bool Drains(Active? active) => _clips is not null && active is { Spec.Kind: SessionKind.Game };
+
+    /// <summary>
+    /// Ends the active game session's capture but keeps its Replay Buffer for <c>save</c> presses
+    /// (R1): it becomes the drain, <see cref="ReplayState.Draining"/> is published, and a timer posts
+    /// <see cref="DrainExpired"/>, tagged with its id, after <see cref="ReplayClips.ExitDrain"/>.
+    /// </summary>
+    private void DrainActive(string reason)
+    {
+        var active = _active!;
+        _active = null;
+        ReleaseDrain();
+
+        SessionOutcome outcome;
+        try
+        {
+            outcome = active.Session.Drain(reason);
+        }
+        catch (Exception e)
+        {
+            outcome = new SessionOutcome(null, reason, e);
+        }
+
+        if (outcome.Failure is not null)
+        {
+            // It never anchored, failed or couldn't stop cleanly: there is nothing to keep.
+            SetState(_state with { Replay = ReplayState.Off });
+            TryRelease(active);
+            active.Ended.TrySetResult(outcome);
+            return;
+        }
+
+        _drain = active;
+        SetState(_state with { Replay = ReplayState.Draining });
+        active.Ended.TrySetResult(outcome);
+        var id = active.Id;
+        _drainTimer = new Timer(_ => Post(new DrainExpired(id)), null, _clips!.ExitDrain ?? ReplayClips.DefaultExitDrain, System.Threading.Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>Frees the drained session's Replay Buffer, if any; <see cref="ReplayState.Off"/> unless a session is active.</summary>
+    private void ReleaseDrain()
+    {
+        if (_drain is not { } drain)
+        {
+            return;
+        }
+
+        _drain = null;
+        _drainTimer?.Dispose();
+        _drainTimer = null;
+        TryRelease(drain);
+        if (_active is null)
+        {
+            SetState(_state with { Replay = ReplayState.Off });
+        }
+    }
+
+    private static void TryRelease(Active session)
+    {
+        try
+        {
+            session.Session.Release();
+        }
+        catch (Exception)
+        {
+            // Releasing is best effort: a save in flight keeps its own lease either way (AD-8).
+        }
     }
 
     /// <summary>The saved mic mute; muted when there is no store or it fails.</summary>
@@ -461,9 +559,23 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
+        // Only an exit to no game leaves a drain running (one a closed window started, say).
+        if (to is not null || propose.Reason != TargetChangeReason.Exit)
+        {
+            ReleaseDrain();
+        }
+
         if (_active is { Spec.Kind: SessionKind.Game })
         {
-            EndActive("target changed", failure: null);
+            // Only an exit with no other game drains (R1); a switch or Ignored ends at once (FR-38).
+            if (to is null && propose.Reason == TargetChangeReason.Exit && Drains(_active))
+            {
+                DrainActive("target exited");
+            }
+            else
+            {
+                EndActive("target changed", failure: null);
+            }
         }
 
         if (to is not null)
@@ -506,7 +618,7 @@ public sealed class SessionOrchestrator : IDisposable
     {
         try
         {
-            Start(SessionKind.Game, new CaptureTarget(target.ProcessId, target.Window, target.ProfileId), _targetCapture!.Audio);
+            Start(SessionKind.Game, new CaptureTarget(target.ProcessId, target.Window, target.ProfileId), _targetCapture!.Audio, target.Name);
         }
         catch (Exception e)
         {
@@ -522,10 +634,12 @@ public sealed class SessionOrchestrator : IDisposable
     /// session, or one with nothing to save yet. A press less than 1 s after the session's last
     /// Reset (R5) is refused here, before the session is asked for anything: no keyframe, no Clip,
     /// no Reset, only <see cref="ReplayClips.NotSaved"/> with <see cref="ErrorCodes.ClipTooShort"/>.
+    /// With no game session, a drained one (R1) takes the press and cuts to the end of what it holds.
     /// </summary>
     private void SaveClip(long qpc)
     {
-        if (_clips is null || _active is not { Spec.Kind: SessionKind.Game } active)
+        var active = _active is { Spec.Kind: SessionKind.Game } game ? game : _drain;
+        if (_clips is null || active is null)
         {
             return;
         }
@@ -549,7 +663,7 @@ public sealed class SessionOrchestrator : IDisposable
             var document = _currentDocument();
             var folder = SettingsResolver.Resolve(document, null).OutputFolder ?? _clips.DefaultOutputFolder();
             var profileId = active.Spec.Target.ProfileId;
-            path = _clips.Paths.AllocateForGame(document, profileId, GameName(active.Spec.Target), folder, qpc);
+            path = _clips.Paths.AllocateForGame(document, profileId, GameName(active), folder, qpc);
         }
         catch (Exception e)
         {
@@ -583,11 +697,22 @@ public sealed class SessionOrchestrator : IDisposable
         }
     }
 
-    /// <summary>The Target's name when the session is on it, else the profile's executable name.</summary>
-    private string GameName(CaptureTarget target) =>
-        _target is { } candidate && candidate.ProcessId == target.ProcessId
+    /// <summary>
+    /// The Target's name the session was started on (kept after the Target exits), else the Target's
+    /// when the session is on it, else the profile's executable name.
+    /// </summary>
+    private string GameName(Active active)
+    {
+        if (active.GameName is { } name)
+        {
+            return name;
+        }
+
+        var target = active.Spec.Target;
+        return _target is { } candidate && candidate.ProcessId == target.ProcessId
             ? candidate.Name
             : target.ProfileId is { } profileId ? Path.GetFileName(profileId) : "Game";
+    }
 
     /// <summary>
     /// A writer's result. A Clip written for the still-running session Resets its Replay Buffer
@@ -602,7 +727,9 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
-        if (_active is { } active && active.Id == written.SessionId)
+        // The session still running, or the drained one (R1): either still holds its Replay Buffer.
+        var active = _active?.Id == written.SessionId ? _active : _drain?.Id == written.SessionId ? _drain : null;
+        if (active is not null)
         {
             written.Write.Reset();
             active.ResetQpc = active.ResetQpc is { } reset ? Math.Max(reset, written.Qpc) : written.Qpc;
@@ -642,6 +769,9 @@ public sealed class SessionOrchestrator : IDisposable
 
         public SessionSpec Spec { get; set; } = spec;
 
+        /// <summary>The Target's display name at <see cref="StartOnTarget"/>; null for a session started otherwise.</summary>
+        public string? GameName { get; init; }
+
         /// <summary>The press QPC of the session's last Reset (R5); null before its first Clip.</summary>
         public long? ResetQpc { get; set; }
 
@@ -654,6 +784,9 @@ public sealed class SessionOrchestrator : IDisposable
     private sealed record ClipWritten(long SessionId, long Qpc, IClipWrite Write, string Path, Exception? Error) : SessionMessage;
 
     private sealed record SessionFailed(long SessionId, Exception Failure) : SessionMessage;
+
+    /// <summary>The drain timer of session <paramref name="SessionId"/> fired; ignored once that drain is gone.</summary>
+    private sealed record DrainExpired(long SessionId) : SessionMessage;
 
     /// <summary>One session's post-backs, tagged with its id so a late one from an ended session is ignored.</summary>
     private sealed class Events(SessionOrchestrator owner, long id) : ISessionEvents

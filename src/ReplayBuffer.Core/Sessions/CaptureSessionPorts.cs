@@ -35,6 +35,21 @@ public interface ICaptureSession
     SessionOutcome End(string reason);
 
     /// <summary>
+    /// Stops capture and finishes the output as <see cref="End"/> does, but a session holding a
+    /// Replay Buffer keeps it (R1's exit drain): <see cref="Save"/> still cuts from it, up to the end
+    /// of what it holds, until <see cref="Release"/>. A session with no Replay Buffer just ends.
+    /// </summary>
+    SessionOutcome Drain(string reason) => End(reason);
+
+    /// <summary>
+    /// Frees a Replay Buffer kept by <see cref="Drain"/>; a later <see cref="Save"/> makes nothing.
+    /// A write in flight keeps its own lease, so its Clip still completes (AD-8). Never blocks.
+    /// </summary>
+    void Release()
+    {
+    }
+
+    /// <summary>
     /// A Clip of the Replay Buffer up to <paramref name="qpc"/> (the press, AD-6), not yet written;
     /// null when this session holds no Replay Buffer, or nothing yet. The session asks its encoder for
     /// a keyframe on the next frame (AD-10), where the Clip ends. Throws an

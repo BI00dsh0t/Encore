@@ -46,9 +46,18 @@ public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, 
 /// Called on the orchestrator thread when a save was refused and made no Clip, e.g. with
 /// <see cref="Contracts.ErrorCodes.ClipTooShort"/>; null ignores it.
 /// </param>
+/// <param name="ExitDrain">
+/// How long a game session that lost its Target by exit keeps its Replay Buffer for a <c>save</c>
+/// (R1); null is <see cref="DefaultExitDrain"/>.
+/// </param>
 public sealed record ReplayClips(
     OutputPathAllocator Paths,
     Func<string> DefaultOutputFolder,
     Action<ClipSaved> Saved,
     Action<Exception> Failed,
-    Action<ClipFailed>? NotSaved = null);
+    Action<ClipFailed>? NotSaved = null,
+    TimeSpan? ExitDrain = null)
+{
+    /// <summary>R1's exit drain: 30 s.</summary>
+    public static readonly TimeSpan DefaultExitDrain = TimeSpan.FromSeconds(30);
+}

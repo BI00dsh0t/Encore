@@ -20,7 +20,8 @@ namespace ReplayBuffer.Engine.Tests;
 /// the Game Profile "Test Game" overrides the Track Layout with three Tracks, and its game is
 /// proposed as the Target on a pwsh window. A <c>save</c> press right after the anchor is refused
 /// as too short (story 4.2); about 4 s after the anchor one saves a Clip, read back with ffprobe and
-/// as MP4 boxes, and about 2 s later another saves the time between the two presses.
+/// as MP4 boxes, and about 2 s later another saves the time between the two presses. Killing the
+/// game drains the session (story 4.3): a save during the drain still cuts its last moments.
 /// </summary>
 public sealed partial class ReplayClipCaptureTests : IDisposable
 {
@@ -189,6 +190,82 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
         var nextVideo = SessionTestKit.Probe(next.Path, "-show_streams").GetProperty("streams").EnumerateArray()
             .First(s => s.GetProperty("codec_type").GetString() == "video");
         Assert.InRange(double.Parse(nextVideo.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture), between - 0.1, between + 0.1);
+    }
+
+    [Fact]
+    public async Task AKilledTargetIsDrainedSoASaveStillCutsItsLastMomentsUntilTheDrainExpires()
+    {
+        SessionTestKit.RequireFFmpeg();
+        using var hub = new ToneHub(new Dictionary<string, (double, double)> { ["game"] = (0.1, 440) });
+        var game = new LayoutDevice(Guid.NewGuid(), "game", "Game device", "", SettingsFlow.Output, IsMic: false);
+        var layout = new TrackLayout([game], [new Track(Guid.NewGuid(), "Game", [game.Key], MuteAffected: false)]);
+        var document = SettingsDocument.Empty with
+        {
+            Global = SettingsDocument.Empty.Global
+                .SetItem(Keys.Video.Name, Keys.Video.ToJson(new VideoSettings(VideoCodec.H264, 640, 480, 30, 4_000, RateControl.Cbr)))
+                .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory)),
+            Profiles = SettingsMaps.EmptyProfiles.Add(ProfileId, new GameProfile
+            {
+                Name = "Test Game",
+                Overrides = SettingsMaps.EmptyValues.Add(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(layout)),
+            }),
+        };
+
+        var window = SessionTestKit.OpenWindow(_directory, _processes, WindowScript);
+        var anchored = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+        var options = new CaptureSessionOptions { OutputFolder = _directory, Replay = true, Anchored = qpc => anchored.TrySetResult(qpc) };
+        var published = new ConcurrentQueue<CaptureState>();
+
+        long anchor, killed;
+        ClipSaved clip;
+        using (var orchestrator = new SessionOrchestrator(
+            new CaptureSessionFactory(options, NullLoggerFactory.Instance, hub),
+            () => document,
+            published.Enqueue,
+            targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, e) => saved.Writer.TryComplete(e)),
+            clips: new ReplayClips(OutputPathAllocator.System, () => _directory, c => saved.Writer.TryWrite(c), e => saved.Writer.TryComplete(e), ExitDrain: TimeSpan.FromSeconds(3))))
+        {
+            orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+            anchor = await anchored.Task.WaitAsync(Timeout, Token);
+
+            // About 3 s in, the game dies; its window closing drains the session.
+            await Task.Delay(TimeSpan.FromSeconds(3), Token);
+            using (var owner = Process.GetProcessById((int)window.ProcessId))
+            {
+                killed = Stopwatch.GetTimestamp();
+                owner.Kill();
+                owner.WaitForExit(TimeSpan.FromSeconds(10));
+            }
+
+            await WaitForReplay(published, ReplayState.Draining);
+            await Task.Delay(TimeSpan.FromSeconds(1), Token);
+            Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+            clip = await saved.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+
+            // Once the drain expires the ring is gone: a press makes nothing.
+            await WaitForReplay(published, ReplayState.Off);
+            Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+            await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+            Assert.False(saved.Reader.TryRead(out _));
+        }
+
+        // The Clip runs from the anchor's keyframe to the game's last moments.
+        var video = SessionTestKit.Probe(clip.Path, "-show_streams").GetProperty("streams").EnumerateArray()
+            .First(s => s.GetProperty("codec_type").GetString() == "video");
+        var killSeconds = (double)(killed - anchor) / Stopwatch.Frequency;
+        Assert.InRange(double.Parse(video.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture), killSeconds - 0.5, killSeconds + 0.5);
+        Assert.Single(Directory.GetFiles(_directory, "*.mp4", SearchOption.AllDirectories));
+    }
+
+    private static async Task WaitForReplay(ConcurrentQueue<CaptureState> published, ReplayState state)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (published.LastOrDefault()?.Replay != state)
+        {
+            Assert.True(deadline.Elapsed < Timeout, $"The state never became {state}.");
+            await Task.Delay(20, Token);
+        }
     }
 
     /// <summary>The types of the file's top-level MP4 boxes, in order.</summary>

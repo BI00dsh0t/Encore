@@ -160,6 +160,10 @@ internal sealed class CaptureSession : ICaptureSession
     private ReplayRingSink? _ring;
     private volatile bool _outputFinished;
 
+    // R1's exit drain, orchestrator thread only: the teardown keeps the ring for saves until Release.
+    private bool _keepRing;
+    private bool _released;
+
     // The Replay Buffer's last Reset in µs since the anchor (R5): the end of the last Clip the
     // orchestrator Reset at. It only moves forward.
     private long _resetUs = long.MinValue;
@@ -343,7 +347,11 @@ internal sealed class CaptureSession : ICaptureSession
         if (_failure is null)
         {
             var seconds = (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency;
-            if (_path is null)
+            if (_path is null && _keepRing)
+            {
+                _log.LogInformation("Draining: buffered {Seconds:0.0} s; the Replay Buffer is kept for saves until the drain is released", seconds);
+            }
+            else if (_path is null)
             {
                 _log.LogInformation("Buffered {Seconds:0.0} s; the Replay Buffer is released once no save holds it", seconds);
             }
@@ -357,6 +365,32 @@ internal sealed class CaptureSession : ICaptureSession
     }
 
     /// <summary>
+    /// <see cref="End"/>'s teardown, but in Replay mode the ring is kept (R1): <see cref="Save"/>
+    /// still cuts from it, to the end of what it holds, until <see cref="Release"/>.
+    /// </summary>
+    public SessionOutcome Drain(string reason)
+    {
+        _keepRing = _options.Replay;
+        return End(reason);
+    }
+
+    /// <summary>Frees the ring <see cref="Drain"/> kept, once; a save still writing keeps its own lease (AD-8).</summary>
+    public void Release()
+    {
+        if (!_keepRing || _released)
+        {
+            return;
+        }
+
+        _released = true;
+        if (_ring is { } ring)
+        {
+            ring.Dispose();
+            _log.LogInformation("The drained Replay Buffer is released once no save holds it");
+        }
+    }
+
+    /// <summary>
     /// In Replay mode, once the output is open: a write of the Clip up to <paramref name="qpc"/>
     /// (AD-10). Its write asks the encoder for a keyframe on the first frame captured after the
     /// press, which is where the Clip ends and, once the orchestrator Resets, where the next one
@@ -365,12 +399,14 @@ internal sealed class CaptureSession : ICaptureSession
     /// again for every stream to pass it by an AAC frame (encoding and the AAC FIFO lag it), cuts
     /// <c>[max(press - bufferWindow, last Reset), key)</c> from the first keyframe in it, and writes
     /// the Clip. A press less than 1 s after the anchor is refused with
-    /// <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe is asked for.
+    /// <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe is asked for. Once drained
+    /// (<see cref="Drain"/>), the encoders are flushed and gone: the write asks for no keyframe, and
+    /// the Clip runs to the end of the ring; after <see cref="Release"/> there is nothing to save.
     /// </summary>
     public IClipWrite? Save(long qpc)
     {
         // The anchor's release write publishes the ring and the encoder.
-        if (!_options.Replay || !Volatile.Read(ref _anchored) || _ring is not { } ring || _video is not { } video)
+        if (!_options.Replay || _released || !Volatile.Read(ref _anchored) || _ring is not { } ring || _video is not { } video)
         {
             return null;
         }
@@ -380,7 +416,8 @@ internal sealed class CaptureSession : ICaptureSession
             throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The Replay Buffer holds less than 1 s; there is nothing to save yet.");
         }
 
-        return new ClipWrite(this, ring, video, qpc);
+        // A drained session's encoder is already disposed: never ask it for a keyframe.
+        return new ClipWrite(this, ring, _outputFinished ? null : video, qpc);
     }
 
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>
@@ -948,7 +985,12 @@ internal sealed class CaptureSession : ICaptureSession
         _muxer?.Dispose();
 
         // A save still writing holds its own lease and pins; the ring goes when the last is released.
-        _ring?.Dispose();
+        // A drained session keeps it for saves until Release.
+        if (!_keepRing)
+        {
+            _ring?.Dispose();
+        }
+
         _device?.Dispose();
     }
 
@@ -956,9 +998,10 @@ internal sealed class CaptureSession : ICaptureSession
     /// One save's write (AD-8): it leases the ring on the orchestrator thread, so ending the session
     /// can't free it, then waits, cuts (pinning the slabs and releasing the lease) and writes on a
     /// background thread of its own, which never blocks the ring. <see cref="Write"/> requests the
-    /// keyframe after the press before that thread starts.
+    /// keyframe after the press before that thread starts; with no <paramref name="video"/> (a
+    /// drained session) it asks for none, and the Clip ends at the press.
     /// </summary>
-    private sealed class ClipWrite(CaptureSession session, ReplayRingSink ring, VideoEncoder video, long qpc) : IClipWrite
+    private sealed class ClipWrite(CaptureSession session, ReplayRingSink ring, VideoEncoder? video, long qpc) : IClipWrite
     {
         // Where the written Clip ends, in µs since the anchor; set before done is called.
         private long _endUs = long.MinValue;
@@ -988,7 +1031,11 @@ internal sealed class CaptureSession : ICaptureSession
             try
             {
                 // Only a write that starts asks for its keyframe; starting the thread publishes the ticket to it.
-                _ticket = video.RequestKeyframe(qpc);
+                if (video is not null)
+                {
+                    _ticket = video.RequestKeyframe(qpc);
+                }
+
                 new Thread(() => done(Run(path))) { Name = "ClipWriter", IsBackground = true }.Start();
             }
             catch
@@ -1064,6 +1111,12 @@ internal sealed class CaptureSession : ICaptureSession
         /// </summary>
         private long WaitForKey(long pressUs)
         {
+            if (video is null)
+            {
+                // Drained: the ring already holds everything it will.
+                return pressUs;
+            }
+
             var deadline = Deadline();
             while (true)
             {
