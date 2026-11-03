@@ -15,6 +15,7 @@
                 <TextBlock FontWeight="SemiBold" Text="{Binding Status}" TextWrapping="Wrap" />
                 <TextBlock Margin="0,8,0,0" Text="{Binding EngineDetails}" />
                 <TextBlock Margin="0,4,0,0" Text="{Binding Capture}" TextWrapping="Wrap" />
+                <TextBlock Margin="0,4,0,0" Text="{Binding TargetGame}" TextWrapping="Wrap" />
                 <TextBlock Margin="0,4,0,0">
                     <Run Text="Settings revision" />
                     <Run Text="{Binding SettingsRevision, Mode=OneWay}" />

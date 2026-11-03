@@ -13,6 +13,7 @@ using ReplayBuffer.Engine.Sessions;
 using ReplayBuffer.Engine.Settings;
 using ReplayBuffer.Engine.Supervision;
 using ReplayBuffer.Platform.Audio;
+using ReplayBuffer.Platform.Windows;
 
 namespace ReplayBuffer.Engine;
 
@@ -31,6 +32,21 @@ internal sealed record EngineHostOptions
     /// <summary>The PC's audio endpoints for the device list; <c>null</c> for the engine's <see cref="AudioDeviceHub"/>.</summary>
     public IAudioEndpointSource? AudioEndpoints { get; init; }
 
+    /// <summary>The hub the Track meters subscribe to; <c>null</c> for the engine's <see cref="AudioDeviceHub"/>.</summary>
+    public IAudioDeviceHub? MeterAudio { get; init; }
+
+    /// <summary>
+    /// The foreground window probe of Game Detection; <c>null</c> for the real one. Injecting one turns
+    /// detection on for a test instance, where it is otherwise off unless <see cref="DebugCapture"/> is set.
+    /// </summary>
+    public IGameWindowProbe? GameWindows { get; init; }
+
+    /// <summary><c>serve --debug-capture</c>: a capture session follows the Target Game.</summary>
+    public bool DebugCapture { get; init; }
+
+    /// <summary>The time between Game Detection polls.</summary>
+    public TimeSpan GameScanInterval { get; init; } = TimeSpan.FromSeconds(1);
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
@@ -38,7 +54,7 @@ internal sealed record EngineHostOptions
 /// The engine's composition root for <c>serve</c>: claims the instance's pipe, opens the settings
 /// store, and serves its commands and events until <c>engine.shutdown</c>. It publishes the
 /// heartbeat and supervises the App that attaches (AD-16). It composes the SessionOrchestrator
-/// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; nothing starts a session yet.
+/// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; only <c>--debug-capture</c> starts a session yet.
 /// The orchestrator owns mic mute, kept in the instance's <c>runtime.json</c> (AD-5) and loaded
 /// before the pipe serves. It registers the Hotkeys (AD-11) before the pipe accepts connections; the
 /// orchestrator publishes each press as <c>hotkey.pressed</c>, and a <c>micMute</c> press also toggles
@@ -47,6 +63,11 @@ internal sealed record EngineHostOptions
 /// It lists the audio devices before the hub exists, so the first snapshot holds them, and then
 /// publishes <c>devices.changed</c> when the endpoints or the Track Layouts change them (R1).
 /// Each audio device dropout the hub reports raises a <c>device-dropout</c> warning (R5).
+/// <c>meters.watch</c> meters a Track Layout on the hub with its own mixer, nothing captured, and
+/// publishes <c>meters.levels</c> until <c>meters.unwatch</c> or the next watch; the orchestrator's
+/// mic mute reaches the meters as it does a session (R6).
+/// Game Detection proposes the Target Game to the orchestrator, which publishes <c>target.changed</c>;
+/// with <c>--debug-capture</c> a capture session follows the Target.
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
@@ -71,6 +92,7 @@ internal sealed class EngineHost : IAsyncDisposable
     private readonly CancellationTokenSource _stopProbe = new();
     private Task _heartbeat = Task.CompletedTask;
     private Task _probe = Task.CompletedTask;
+    private GameMonitor? _games;
     private int _disposed;
 
     private EngineHost(
@@ -84,8 +106,10 @@ internal sealed class EngineHost : IAsyncDisposable
         HotkeyService hotkeys,
         DeviceListPublisher devices,
         DeviceDropoutReporter dropouts,
+        TrackMeters meters,
         AudioDeviceHub audio)
     {
+        Meters = meters;
         Devices = devices;
         Dropouts = dropouts;
         Audio = audio;
@@ -121,6 +145,9 @@ internal sealed class EngineHost : IAsyncDisposable
     /// <summary>Raises <c>device-dropout</c> for each audio device dropout (R5).</summary>
     public DeviceDropoutReporter Dropouts { get; }
 
+    /// <summary>The Track meters (R6), served by <c>meters.watch</c> and <c>meters.unwatch</c>.</summary>
+    public TrackMeters Meters { get; }
+
     /// <summary>The engine's one audio hub (AD-20); disposed last, after every session has ended.</summary>
     public AudioDeviceHub Audio { get; }
 
@@ -135,6 +162,7 @@ internal sealed class EngineHost : IAsyncDisposable
         hostOptions ??= new EngineHostOptions();
         var log = loggers.CreateLogger("Ipc");
         var hotkeyLog = loggers.CreateLogger("Hotkeys");
+        var gameLog = loggers.CreateLogger("Games");
 
         // The pipe first: a second engine must fail before it touches the settings file.
         var server = new IpcServer(Contracts.Ipc.PipeName.ForCurrentUser(instance.Name), options ?? new IpcServerOptions(), log);
@@ -142,6 +170,8 @@ internal sealed class EngineHost : IAsyncDisposable
         HotkeyService? hotkeys = null;
         DeviceListPublisher? devices = null;
         DeviceDropoutReporter? dropouts = null;
+        TrackMeters? meters = null;
+        GameMonitor? games = null;
         var audio = new AudioDeviceHub(loggers);
         try
         {
@@ -168,6 +198,10 @@ internal sealed class EngineHost : IAsyncDisposable
                 hostOptions.Time,
                 loggers.CreateLogger("Supervision"));
             var encoders = new VideoEncoderCatalog(loggers);
+            var trackMeters = meters = new TrackMeters(
+                hostOptions.MeterAudio ?? audio,
+                levels => hub.Publish(AudioMessages.Levels, levels),
+                loggers.CreateLogger("Audio"));
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
                     new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions") },
@@ -175,20 +209,52 @@ internal sealed class EngineHost : IAsyncDisposable
                     audio,
                     encoders),
                 () => load.Store.Current,
-                state => hub.Publish(CaptureMessages.StateChanged, state),
+                state =>
+                {
+                    hub.Publish(CaptureMessages.StateChanged, state);
+                    trackMeters.SetMicMuted(state.MicMuted);
+                },
                 press =>
                 {
                     hub.Publish(HotkeyMessages.Pressed, press);
                     HotkeyService.LogPress(hotkeyLog, press);
                 },
-                new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Audio")));
+                new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Audio")),
+                changed => hub.Publish(GameMessages.TargetChanged, changed),
+                hostOptions.DebugCapture
+                    ? new TargetCapture(
+                        () => SessionAudio.None,
+                        (target, e) => gameLog.LogWarning(e, "The debug capture of {Name} (process {Pid}) failed", target.Name, target.ProcessId))
+                    : null);
+
+            // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
+            if (hostOptions.GameWindows is not null || hostOptions.DebugCapture || !instance.IsTest)
+            {
+                SessionOrchestrator proposeTo = sessions;
+                games = new GameMonitor(
+                    hostOptions.GameWindows ?? new ForegroundGameWindowProbe(),
+                    pid => pid == Environment.ProcessId || pid == hub.State.AppPid,
+                    (to, reason) => proposeTo.Post(new ProposeTarget(to, reason)),
+                    hostOptions.GameScanInterval,
+                    gameLog);
+            }
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, audio);
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games };
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
             router.Register(AudioMessages.List, (_, _) => ValueTask.FromResult(devices.Current));
+            router.Register(AudioMessages.Watch, (watch, _) =>
+            {
+                trackMeters.Watch(watch.Layout);
+                return ValueTask.FromResult(Empty.Value);
+            });
+            router.Register(AudioMessages.Unwatch, (_, _) =>
+            {
+                trackMeters.Unwatch();
+                return ValueTask.FromResult(Empty.Value);
+            });
             router.Register(FeedbackMessages.Dismiss, (dismiss, _) => ValueTask.FromResult(warnings.Dismiss(dismiss)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
@@ -238,6 +304,7 @@ internal sealed class EngineHost : IAsyncDisposable
             }
 
             server.Start(hub, router);
+            games?.Start();
             if (hostOptions.ProbeEncoders)
             {
                 host._probe = host.ProbeAsync(encoders);
@@ -251,8 +318,10 @@ internal sealed class EngineHost : IAsyncDisposable
         }
         catch
         {
+            games?.Dispose();
             hotkeys?.Dispose();
             sessions?.Dispose();
+            meters?.Dispose();
             devices?.Dispose();
             dropouts?.Dispose();
             audio.Dispose();
@@ -276,12 +345,16 @@ internal sealed class EngineHost : IAsyncDisposable
         await _probe.ConfigureAwait(false);
         Apps.Dispose();
 
-        // No more presses are posted to the orchestrator once this returns.
+        // No more presses or proposals are posted to the orchestrator once these return.
         Hotkeys.Dispose();
+        _games?.Dispose();
 
         // Ends a running session, finishing its file, and joins the orchestrator thread.
         Sessions.Dispose();
         await Server.DisposeAsync().ConfigureAwait(false);
+
+        // Closes the watch's subscriptions before the hub goes.
+        Meters.Dispose();
         Devices.Dispose();
         Dropouts.Dispose();
         Audio.Dispose();
