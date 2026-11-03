@@ -1,3 +1,4 @@
+using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.Core.Audio;
@@ -65,4 +66,20 @@ public interface IAudioDeviceHub
     /// Throws an <c>audio-device-failed</c> error when the device can't be opened.
     /// </summary>
     IAudioSubscription Subscribe(string endpointId, AudioFlow flow, IAudioPcmSubscriber subscriber);
+}
+
+/// <summary>
+/// The PC's audio endpoints (R1): the present ones of both flows, and a signal when they change.
+/// </summary>
+public interface IAudioEndpointSource
+{
+    /// <summary>Every active Output and Input endpoint, each <see cref="AudioDevice.Available"/>.</summary>
+    /// <exception cref="Exception">The platform couldn't list them; callers log it and keep their last list.</exception>
+    IReadOnlyList<AudioDevice> ListPresent();
+
+    /// <summary>
+    /// An endpoint was added, removed, enabled, disabled or renamed. Raised on any thread, coalesced
+    /// (a burst raises once); handlers must not block. Carries nothing: re-list with <see cref="ListPresent"/>.
+    /// </summary>
+    event Action? EndpointsChanged;
 }

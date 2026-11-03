@@ -28,3 +28,4 @@ IUnknown
 RPC_E_CHANGED_MODE
 IAudioRenderClient
 IAudioClock
+IMMNotificationClient

@@ -26,6 +26,7 @@ public sealed partial class MessagesTests
         ["app.attached"] = """{"pid":7}""",
         ["hotkey.status"] = """{"bindings":[{"action":"save","binding":{"vk":135,"modifiers":7},"registered":true,"code":null},{"action":"micMute","binding":null,"registered":false,"code":"hotkey-unbound"}]}""",
         ["hotkey.pressed"] = """{"action":"monitorRecordToggle","qpc":123456789}""",
+        ["devices.changed"] = """{"devices":[{"endpointId":"{0.0.0.00000000}.{a}","friendlyName":"Speakers","parentName":"Realtek","flow":"output","available":true},{"endpointId":"{0.0.1.00000000}.{b}","friendlyName":"Mic","parentName":"","flow":"input","available":false}]}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);
@@ -193,6 +194,25 @@ public sealed partial class MessagesTests
             """{"engineInstanceId":"e","pid":1,"seq":0,"settings":{"schemaVersion":1,"revision":0,"global":{},"profiles":{}},"capture":{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null},"warnings":[]}""",
             EngineJsonContext.Default.StateSnapshot)!;
         Assert.Equal(VideoOptions.Unprobed, old.VideoOptions);
+    }
+
+    [Fact]
+    public void TheDeviceListHasItsShapeAndAnOldSnapshotReadsAsEmpty()
+    {
+        var list = new AudioDeviceList([new AudioDevice("{0.0.0.00000000}.{a}", "Speakers", "USB DAC", AudioFlow.Output, false)]);
+
+        Assert.Equal(
+            """{"devices":[{"endpointId":"{0.0.0.00000000}.{a}","friendlyName":"Speakers","parentName":"USB DAC","flow":"output","available":false}]}""",
+            JsonSerializer.Serialize(list, AudioJsonContext.Default.AudioDeviceList));
+        Assert.Equal(list, new AudioDeviceList([.. list.Devices]));
+        Assert.Equal(list.GetHashCode(), new AudioDeviceList([.. list.Devices]).GetHashCode());
+        Assert.NotEqual(AudioDeviceList.Empty, list);
+        Assert.Equal(AudioDeviceList.Empty, StateSnapshot.Initial("e", 2, SettingsDocument.Empty).Devices);
+
+        var old = JsonSerializer.Deserialize(
+            """{"engineInstanceId":"e","pid":1,"seq":0,"settings":{"schemaVersion":1,"revision":0,"global":{},"profiles":{}},"capture":{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null},"warnings":[]}""",
+            EngineJsonContext.Default.StateSnapshot)!;
+        Assert.Equal(AudioDeviceList.Empty, old.Devices);
     }
 
     [Theory]

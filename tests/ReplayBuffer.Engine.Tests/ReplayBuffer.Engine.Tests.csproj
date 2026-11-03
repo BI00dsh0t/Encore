@@ -5,5 +5,7 @@
   <ItemGroup>
     <!-- The encoder probe's oracle, shared with the FFmpeg tests. -->
     <Compile Include="..\ReplayBuffer.Platform.FFmpeg.Tests\EncoderOracle.cs" Link="EncoderOracle.cs" />
+    <!-- The retry rule for the real-time timing tests, shared with the FFmpeg tests. -->
+    <Compile Include="..\ReplayBuffer.Platform.FFmpeg.Tests\RealTimeAttempts.cs" Link="RealTimeAttempts.cs" />
   </ItemGroup>
 </Project>
