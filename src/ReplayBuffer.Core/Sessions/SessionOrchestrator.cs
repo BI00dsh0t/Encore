@@ -49,7 +49,8 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// its result back, and only then is the Clip published as saved and the session's Replay Buffer
 /// Reset at its end (R5); a press less than 1 s after that Reset is refused as too short. A press
 /// within the Global <c>saveCooldown</c> of the last accepted one is ignored (R5); an accepted one
-/// publishes <see cref="CaptureState.CooldownUntil"/> and <c>clip.saving</c> at once, and is refused
+/// publishes <see cref="CaptureState.CooldownUntil"/> and <c>clip.saving</c> at once, and
+/// <see cref="CaptureState.ClipsWriting"/> follows each write as it starts and ends; it is refused
 /// with <see cref="ErrorCodes.SaveBusy"/> while <see cref="ReplayClips.MaxWriters"/> Clips are being
 /// written (R6). A game
 /// session whose Target exits, or whose window closes, is drained rather than ended (R1): it keeps
@@ -674,7 +675,8 @@ public sealed class SessionOrchestrator : IDisposable
     /// Before any of that, the Save Cooldown (R5): a press less than the Global <c>saveCooldown</c>
     /// after the last accepted one is ignored, with only <see cref="ReplayClips.Ignored"/>. Any other
     /// press is accepted: it starts the next cooldown, publishes <see cref="CaptureState.CooldownUntil"/>
-    /// and calls <see cref="ReplayClips.Saving"/>, and an outcome always follows. With
+    /// and calls <see cref="ReplayClips.Saving"/>, and an outcome always follows. A write that starts
+    /// publishes <see cref="CaptureState.ClipsWriting"/>. With
     /// <see cref="ReplayClips.MaxWriters"/> writes in flight it is refused with
     /// <see cref="ErrorCodes.SaveBusy"/> (R6), before the session is asked for anything. Once the
     /// path is reserved, <see cref="ReplayClips.Library"/> is told the write begins, and
@@ -754,7 +756,10 @@ public sealed class SessionOrchestrator : IDisposable
             TryDelete(path);
             library.EndWrite(path, WriteOutcome.Failed);
             ReportSaveFailure(e);
+            return;
         }
+
+        SetState(_state with { ClipsWriting = _writing });
     }
 
     /// <summary>
@@ -798,6 +803,7 @@ public sealed class SessionOrchestrator : IDisposable
     {
         // Whatever the session: the write is no longer in flight.
         _writing--;
+        SetState(_state with { ClipsWriting = _writing });
         (_clips?.Library ?? NoLibraryWrites.Instance).EndWrite(written.Path, written.Error is null ? WriteOutcome.Written : WriteOutcome.Failed);
         if (written.Error is not null)
         {

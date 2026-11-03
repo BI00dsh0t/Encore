@@ -100,11 +100,17 @@ public sealed partial class MessagesTests
     [Fact]
     public void CaptureStateHasTheSharedShape()
     {
-        var state = new CaptureState(ReplayState.Draining, RecordingState.Off, RecordingState.Running, true, new DateTimeOffset(2026, 10, 25, 12, 0, 0, TimeSpan.Zero));
+        var state = new CaptureState(ReplayState.Draining, RecordingState.Off, RecordingState.Running, true, new DateTimeOffset(2026, 10, 25, 12, 0, 0, TimeSpan.Zero), ClipsWriting: 1);
 
         Assert.Equal(
-            """{"replay":"draining","recording":"off","monitorRecording":"running","micMuted":true,"cooldownUntil":"2026-10-25T12:00:00+00:00"}""",
+            """{"replay":"draining","recording":"off","monitorRecording":"running","micMuted":true,"cooldownUntil":"2026-10-25T12:00:00+00:00","clipsWriting":1}""",
             JsonSerializer.Serialize(state, CaptureJsonContext.Default.CaptureState));
+
+        // AD-22, additive: JSON from before clipsWriting reads as no Clip being written.
+        var old = JsonSerializer.Deserialize(
+            """{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null}""",
+            CaptureJsonContext.Default.CaptureState);
+        Assert.Equal(0, old!.ClipsWriting);
     }
 
     [Fact]

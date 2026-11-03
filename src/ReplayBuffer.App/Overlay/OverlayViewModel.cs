@@ -13,17 +13,25 @@ internal enum OverlayDot
 
 /// <summary>
 /// The Overlay's state, derived only from <see cref="IEngineSession.State"/> and its status (AD-3, AD-15).
+/// A snapshot read at reconnect is treated as any event: the dot and the saving icon follow it.
 /// </summary>
 internal sealed class OverlayViewModel : Observable
 {
     private readonly IEngineSession _engine;
+    private readonly Action<Action> _post;
+    private readonly TimeProvider _time;
+    private ITimer? _cooldownEnd;
     private OverlayDot _dot;
+    private bool _saving;
     private int? _targetProcessId;
 
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
-    public OverlayViewModel(IEngineSession engine, Action<Action> post)
+    /// <param name="time">Times the Save Cooldown's end; <see cref="TimeProvider.System"/> when null.</param>
+    public OverlayViewModel(IEngineSession engine, Action<Action> post, TimeProvider? time = null)
     {
         _engine = engine;
+        _post = post;
+        _time = time ?? TimeProvider.System;
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -32,6 +40,16 @@ internal sealed class OverlayViewModel : Observable
     {
         get => _dot;
         private set => Set(ref _dot, value);
+    }
+
+    /// <summary>
+    /// Whether the saving icon shows (R2): a Clip is being written, or the Save Cooldown of the last
+    /// accepted press hasn't ended yet.
+    /// </summary>
+    public bool Saving
+    {
+        get => _saving;
+        private set => Set(ref _saving, value);
     }
 
     /// <summary>The Target Game's process, whose monitor the Overlay sits on; <c>null</c> for the primary monitor.</summary>
@@ -50,17 +68,31 @@ internal sealed class OverlayViewModel : Observable
             : capture.Replay is ReplayState.Buffering or ReplayState.Draining ? OverlayDot.Hollow
             : OverlayDot.None;
 
+        // The cooldown ends without an event, so a one-shot timer reads the session again then.
+        _cooldownEnd?.Dispose();
+        _cooldownEnd = null;
+        var current = state?.Capture;
+        var remaining = current?.CooldownUntil is { } until ? until - _time.GetUtcNow() : TimeSpan.Zero;
+        if (remaining > TimeSpan.Zero)
+        {
+            _cooldownEnd = _time.CreateTimer(_ => _post(Refresh), null, remaining, Timeout.InfiniteTimeSpan);
+        }
+
+        var saving = current is not null && (current.ClipsWriting > 0 || remaining > TimeSpan.Zero);
+
         // The window updates per property: hide before the Target moves, and move before showing,
-        // so the dot never flashes on the wrong monitor.
-        if (dot == OverlayDot.None)
+        // so the dot and the icon never flash on the wrong monitor.
+        if (dot == OverlayDot.None && !saving)
         {
             Dot = dot;
+            Saving = saving;
             TargetProcessId = state?.TargetGame?.ProcessId;
         }
         else
         {
             TargetProcessId = state?.TargetGame?.ProcessId;
             Dot = dot;
+            Saving = saving;
         }
     }
 }
