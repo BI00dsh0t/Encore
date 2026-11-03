@@ -141,15 +141,15 @@ Untested by design (lean tests; engine-internal timing), but required behaviour:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- `ResetGap` -- the AD-7 warning code
-- [ ] `src/ReplayBuffer.Core/Sessions/{TargetGames,CaptureSessionPorts,SessionOrchestrator}.cs` -- `SameChain`, `PrepareChain`, `SwitchesTo`, `SettingsUpdated`, `ApplySettings` -- the re-resolve and the orchestrator's view of the switch
-- [ ] `src/ReplayBuffer.Media/FramePacer.cs`, `src/ReplayBuffer.Platform.FFmpeg/{AacEncoder,ReplayRingSink}.cs`, `src/ReplayBuffer.Platform.Capture/WindowCapture.cs` -- mid-session start points, the first key, the capture rate
-- [ ] `src/ReplayBuffer.Engine/Sessions/{EncoderChain,CaptureSession}.cs`, `EngineHost.cs` -- the chain extraction, the build in advance, the switch at the press, retirement, reset-gap
-- [ ] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- two tests:
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- `ResetGap` -- the AD-7 warning code
+- [x] `src/ReplayBuffer.Core/Sessions/{TargetGames,CaptureSessionPorts,SessionOrchestrator}.cs` -- `SameChain`, `PrepareChain`, `SwitchesTo`, `SettingsUpdated`, `ApplySettings` -- the re-resolve and the orchestrator's view of the switch
+- [x] `src/ReplayBuffer.Media/FramePacer.cs`, `src/ReplayBuffer.Platform.FFmpeg/{AacEncoder,ReplayRingSink}.cs`, `src/ReplayBuffer.Platform.Capture/WindowCapture.cs` -- mid-session start points, the first key, the capture rate
+- [x] `src/ReplayBuffer.Engine/Sessions/{EncoderChain,CaptureSession}.cs`, `EngineHost.cs` -- the chain extraction, the build in advance, the switch at the press, retirement, reset-gap
+- [x] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- two tests:
   - Profile at start: a profile overriding `video` 1920×1080 and a layout with only its own mic `isMic` in a `muteAffected` Track, started through `ProposeTarget` with a `TargetCapture` from the layout. The factory's spec has 1920×1080 and `GatedMicInputs` holding only that mic. After its exit, a game with no profile overrides gets the Global video and the Global layout's mic.
   - Change: `SettingsUpdated` after a profile `trackLayout` override gives one `PrepareChain` with the new Track names. Reverting it gives `PrepareChain(null)`. A mute-only edit gives another `PrepareChain`. A save whose `FakeWrite.SwitchesTo` is the prepared spec makes the next `SettingsUpdated` with no change call nothing, and its Reset re-resolves (no call while it is the same chain).
-- [ ] `tests/ReplayBuffer.Media.Tests/FramePacerTests.cs` -- one test: with `firstFrameTakesNearestSlot`, a first frame at 5 s (30 fps) emits slot 150 with no repeats before it
-- [ ] New `tests/ReplayBuffer.Engine.Tests/ChainSwitchCaptureTests.cs` -- one Heavy test (Explicit, `Category=Heavy`), in process, `saveCooldown` 0, muted at start (no store):
+- [x] `tests/ReplayBuffer.Media.Tests/FramePacerTests.cs` -- one test: with `firstFrameTakesNearestSlot`, a first frame at 5 s (30 fps) emits slot 150 with no repeats before it
+- [x] New `tests/ReplayBuffer.Engine.Tests/ChainSwitchCaptureTests.cs` -- one Heavy test (Explicit, `Category=Heavy`), in process, `saveCooldown` 0, muted at start (no store):
   - Global is 640×480 with Tracks Game and Mic. In the Global layout, the Global mic device `mic` is `isMic` in Mic (`muteAffected`).
   - ~3 s after the anchor: the profile overrides `video` to 1280×720 and the layout to three Tracks: Game; Voice (`mic`, not `isMic` here); and Mic2 (`mic2`, the profile's own mic, `isMic`, `muteAffected`). Then post `SettingsUpdated`.
   - After 1.5 s, save; 3 s later, save. Expected:
@@ -166,7 +166,18 @@ Untested by design (lean tests; engine-internal timing), but required behaviour:
 
 ## Implementation Notes
 
+- `AacEncoder` also has `StartAt(long startSample)`, beside the `startSample` constructor parameter. A chain's AAC encoders are opened in advance, before the switching press (and so `StartSample`) is known. `EncoderChain.StartAudio(press)` sets it, then wires the timelines and publishes the taps, so no sample reaches an encoder before it.
+- `EncoderChain` is built in two steps: `Subscribe` + `Build(sessionAnchor, first)` (the sink, the video side, the AAC encoders and mixers), then `StartAudio(audioAnchor)` (the gates, the timelines, the published taps and the silence clock). The first chain is made in `Open` (taps subscribed there, as before) and built at the anchor, so `_current` exists from `Open` on; saves and Recordings still wait for the anchor.
+- A save's writer registration is taken in `ClipWrite.Write`, not `Save`: a `Save` whose path allocation then throws never calls `Write`, and would otherwise hold the old chain forever. If the chain `Save` bound has started retiring by then (an earlier armed switch took a frame in between), `Write` rebinds to the current chain before any claim. The registration ends right after the cut (the cut holds its own pins and parameters), or in `finally` on a failure before it, once.
+- Background work (builds, retirements, teardowns of a dropped prepared chain) runs on tracked threads; `End`/`Drain` close the chains (no new work starts), join them, then dispose the prepared and armed chains, and `DisposeAll` the retiring one before the current one and the device. A retiring chain with a save still waiting at `End` is disposed after `_outputFinished` is set; the waiting save reads only its leased ring and the encoder's key ticket, both safe after that.
+- The orchestrator applies `SwitchesTo` also when `Write` throws after arming (`TakeSwitch`), so its spec never lags the session's chain.
+- `FrameUs` is rounded up (33 334 µs at 30 fps): slot PTS converted to µs differ by 33 333 or 33 334, and `SnapStart`'s window must take both.
+- For the 4.13 sweep: `ReplayRingSink.Restart` / `RingGenerations.Restart` and the previous-generation fallback are left untouched and still unused by any engine path; the chain switch uses a sink per chain instead. Their deferred hazards from 4.6 don't arise, and the code could go.
+- Verified: the Heavy `ChainSwitchCaptureTests` logged Clip 1 at 0.000 s to 4.633 s and Clip 2 at 4.633 s to 7.867 s after the anchor, the switch at the frame 4.625 s after the anchor, and the old chain torn down after the switching cut.
+
 ## Plan Change Log
+
+- 2026-11-03: `AacEncoder.StartAt` added (see Implementation Notes); the writer registration moved from `Save` to `ClipWrite.Write` and ends at the cut, not at the end of the file write.
 
 ## Review Triage Log
 
