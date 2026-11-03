@@ -111,6 +111,13 @@ public sealed record StateSnapshot
         init => _library = value ?? [];
     }
 
+    /// <summary>
+    /// Whether Cleanup is held off (R2): the index was rebuilt from the Output Folder because
+    /// <c>library.json</c> was corrupt, and the <c>library-corrupt</c> warning hasn't been dismissed.
+    /// </summary>
+    /// <remarks>A snapshot without the field (an engine from before story 7.2) reads as false.</remarks>
+    public bool CleanupBlocked { get; init; }
+
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
 

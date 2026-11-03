@@ -17,6 +17,15 @@ public sealed record LibraryItem(string Path, string? ProfileId, long Size, Date
 /// <summary><c>library.itemRemoved</c>: the item at <see cref="Path"/> (relative to the Output Folder) left the Library.</summary>
 public sealed record LibraryItemRemoved(string Path);
 
+/// <summary><c>library.reset</c>: the Library is now exactly <see cref="Items"/>, e.g. after the Output Folder changed.</summary>
+public sealed record LibraryReset(IReadOnlyList<LibraryItem> Items);
+
+/// <summary>
+/// <c>library.cleanupBlockedChanged</c>: whether Cleanup is held off because the index was rebuilt
+/// from the Output Folder (a corrupt <c>library.json</c>) and that hasn't been acknowledged yet.
+/// </summary>
+public sealed record LibraryCleanupBlocked(bool Blocked);
+
 /// <summary>
 /// Library messages (epic-library-cleanup): the Library index and Cleanup.
 /// The area's payloads, its own JSON context and its entries in these lists are added here only (AD-22).
@@ -45,9 +54,23 @@ public static class LibraryMessages
         "library",
         (snapshot, removed) => snapshot with { Library = [.. Without(snapshot.Library, removed.Path)] });
 
+    /// <summary>The whole Library was rebuilt; its items replace the list.</summary>
+    public static EventType<LibraryReset> Reset { get; } = new(
+        "library.reset",
+        LibraryJsonContext.Default.LibraryReset,
+        "library",
+        (snapshot, reset) => snapshot with { Library = [.. reset.Items] });
+
+    /// <summary>Cleanup was blocked by a rebuilt index, or the rebuild was acknowledged.</summary>
+    public static EventType<LibraryCleanupBlocked> CleanupBlockedChanged { get; } = new(
+        "library.cleanupBlockedChanged",
+        LibraryJsonContext.Default.LibraryCleanupBlocked,
+        "cleanupBlocked",
+        (snapshot, blocked) => snapshot with { CleanupBlocked = blocked.Blocked });
+
     public static IReadOnlyList<CommandType> Commands { get; } = [];
 
-    public static IReadOnlyList<EventType> Events { get; } = [ItemAdded, ItemChanged, ItemRemoved];
+    public static IReadOnlyList<EventType> Events { get; } = [ItemAdded, ItemChanged, ItemRemoved, Reset, CleanupBlockedChanged];
 
     private static IEnumerable<LibraryItem> Without(IReadOnlyList<LibraryItem>? items, string path) =>
         (items ?? []).Where(i => !string.Equals(i.Path, path, StringComparison.OrdinalIgnoreCase));
@@ -76,4 +99,6 @@ public static class LibraryMessages
     RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(LibraryItem))]
 [JsonSerializable(typeof(LibraryItemRemoved))]
+[JsonSerializable(typeof(LibraryReset))]
+[JsonSerializable(typeof(LibraryCleanupBlocked))]
 public sealed partial class LibraryJsonContext : JsonSerializerContext;

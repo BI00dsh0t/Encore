@@ -24,12 +24,14 @@ internal sealed class EventHub
 
     /// <param name="devices">The device list the engine starts with; in the initial state, so no event and no <c>seq</c>.</param>
     /// <param name="library">The Library items the engine starts with; in the initial state likewise.</param>
-    public EventHub(SettingsDocument settings, AudioDeviceList? devices = null, IReadOnlyList<LibraryItem>? library = null)
+    /// <param name="cleanupBlocked">Whether Cleanup starts blocked by a rebuilt index; in the initial state likewise.</param>
+    public EventHub(SettingsDocument settings, AudioDeviceList? devices = null, IReadOnlyList<LibraryItem>? library = null, bool cleanupBlocked = false)
     {
         _state = StateSnapshot.Initial(Guid.NewGuid().ToString("N"), Environment.ProcessId, settings) with
         {
             Devices = devices ?? AudioDeviceList.Empty,
             Library = library ?? [],
+            CleanupBlocked = cleanupBlocked,
         };
     }
 

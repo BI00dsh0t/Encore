@@ -175,6 +175,13 @@ public static class ErrorCodes
     /// <summary>A notice: a Recording stopped. Info, with the <c>recordingStopped</c> sound; the engine dismisses it after 10 s.</summary>
     public const string RecordingStopped = "recording-stopped";
 
+    /// <summary>
+    /// <c>library.json</c> and its <c>.bak</c> were both unreadable, so the Library index was rebuilt
+    /// from the Output Folder and Favourites may be lost. A dismissable warning; Cleanup stays off
+    /// (<c>cleanupBlocked</c>) until it is dismissed.
+    /// </summary>
+    public const string LibraryCorrupt = "library-corrupt";
+
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
 
@@ -228,6 +235,7 @@ public static class ErrorCodes
         ClipFailed,
         RecordingStarted,
         RecordingStopped,
+        LibraryCorrupt,
         NotDevInstance,
     ];
 }
