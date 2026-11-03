@@ -11,6 +11,7 @@ using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Tests;
 
+[Collection(nameof(WpfCollection))]
 public sealed class TrackLayoutPageTests
 {
     private static readonly AudioDevice Speakers = new("{out-1}", "Speakers", "USB DAC", AudioFlow.Output, true);
@@ -397,6 +398,73 @@ public sealed class TrackLayoutPageTests
     }
 
     [Fact]
+    public void AnOpenPageWatchesItsDraftAndShowsOnlyTheFedTracksLevel()
+    {
+        var model = CreateMetered(out var saved);
+        Assert.Empty(_engine.Sent);
+
+        Open(model);
+        Assert.Equal(Json(saved), Json(Assert.IsType<MetersWatch>(Assert.Single(_engine.Sent)).Layout));
+
+        var page = model.TrackLayout;
+        page.AddTrackCommand.Execute(null);
+        var draft = Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout;
+        Assert.Equal(2, _engine.Sent.Count);
+        Assert.Equal(3, draft.Tracks.Count);
+        Assert.Equal(Json(page.ToLayout()), Json(draft));
+
+        page.SelectedTrack!.Name = "Renamed";
+        Assert.Equal(2, _engine.Sent.Count);
+
+        _engine.State = _engine.State! with
+        {
+            Seq = 2,
+            Meters = new MeterLevels([new TrackLevel(saved.Tracks[0].Id, 0), new TrackLevel(saved.Tracks[1].Id, 0.5f)]),
+        };
+        _engine.RaiseChanged();
+        Assert.Equal(0, page.Tracks[0].Level);
+        Assert.True(page.Tracks[1].Level > 0);
+        Assert.Equal(0, page.Tracks[2].Level);
+        Assert.True(page.IsDirty);
+
+        _engine.State = _engine.State with { Seq = 1, EngineInstanceId = "run-2" };
+        _engine.RaiseChanged();
+        Assert.Equal(3, _engine.Sent.Count);
+        Assert.Equal(Json(page.ToLayout()), Json(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout));
+    }
+
+    [Fact]
+    public void ClosingThePageUnwatchesAndZeroesTheLevels()
+    {
+        var model = CreateMetered(out var saved);
+        Open(model);
+        _engine.State = _engine.State! with { Seq = 2, Meters = new MeterLevels([new TrackLevel(saved.Tracks[1].Id, 0.5f)]) };
+        _engine.RaiseChanged();
+        Assert.True(model.TrackLayout.Tracks[1].Level > 0);
+
+        model.SelectedPage = model.General;
+
+        Assert.Same(Empty.Value, _engine.Sent[^1]);
+        Assert.Single(_engine.Sent, a => a is Empty);
+        Assert.All(model.TrackLayout.Tracks, t => Assert.Equal(0, t.Level));
+
+        model.SelectedPage = model.TrackLayout;
+        Assert.IsType<MetersWatch>(_engine.Sent[^1]);
+        model.IsWindowShown = false;
+        Assert.Same(Empty.Value, _engine.Sent[^1]);
+        Assert.Equal(2, _engine.Sent.Count(a => a is Empty));
+
+        // An unwatch lost to a dropped link goes out again once the same engine run is back.
+        model.IsWindowShown = true;
+        _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.EngineDisconnected, "Gone.");
+        model.IsWindowShown = false;
+        _engine.Reply = (_, _) => Empty.Value;
+        _engine.RaiseChanged();
+        Assert.Same(Empty.Value, _engine.Sent[^1]);
+        Assert.Equal(4, _engine.Sent.Count(a => a is Empty));
+    }
+
+    [Fact]
     public void TheSettingsTabListsThePageAndItsViewRendersWithoutBindingErrors() => Sta.Run(() =>
     {
         SetState(revision: 1, layout: null, Speakers, Headset with { Available = false }, Mic, new AudioDevice("{out-3}", "Line Out", "Realtek", AudioFlow.Output, true));
@@ -458,6 +526,22 @@ public sealed class TrackLayoutPageTests
         _engine.State = _engine.State! with { Settings = Document(revision, layout), Devices = new AudioDeviceList(devices) };
 
     private MainViewModel Create() => new(_engine, action => action());
+
+    /// <summary>A view model over a saved layout of two Tracks, with meters.* replying <c>{}</c>.</summary>
+    private MainViewModel CreateMetered(out TrackLayout saved)
+    {
+        saved = new TrackLayout([], [new Track(Keys.EverythingTrackId, "Everything", [], true), new Track(Guid.NewGuid(), "Chat", [], false)]);
+        SetState(revision: 1, layout: saved);
+        _engine.Reply = (_, _) => Empty.Value;
+        return Create();
+    }
+
+    private static void Open(MainViewModel model)
+    {
+        model.IsWindowShown = true;
+        model.IsSettingsTabSelected = true;
+        model.SelectedPage = model.TrackLayout;
+    }
 
     private sealed class BindingErrors : TraceListener
     {

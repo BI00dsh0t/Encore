@@ -3,6 +3,7 @@ using ReplayBuffer.Platform.Desktop;
 
 namespace ReplayBuffer.App.Tests;
 
+[Collection(nameof(WpfCollection))]
 public sealed class MainWindowTests
 {
     [Fact]
