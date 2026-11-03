@@ -35,6 +35,9 @@ internal sealed record CaptureSessionOptions
     /// <summary>Where a Disk-mode ring's file goes when the snapshot's <c>ringPath</c> is not set; null for none.</summary>
     public string? RingFolder { get; init; }
 
+    /// <summary>The engine's RAM margin (R3), shared by every ring of every session; null for none.</summary>
+    public MemoryMargin? Margin { get; init; }
+
     /// <summary>The folder a file is allocated in when neither <see cref="OutputPath"/> nor the snapshot's Output Folder is set.</summary>
     public required string OutputFolder { get; init; }
 
@@ -1015,6 +1018,7 @@ internal sealed class CaptureSession : ICaptureSession
         RingCapacity(seconds),
         _ringFolder,
         ReplayStorageEstimate.Bytes(_spec.Snapshot.Video, _spec.Audio.Tracks.Count, seconds),
+        _options.Margin,
         _log);
 
     /// <summary>Where a ring keeps its bytes, for the log.</summary>
