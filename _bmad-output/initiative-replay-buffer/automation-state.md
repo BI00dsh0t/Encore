@@ -36,10 +36,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.6 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.4 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.6 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.1 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 7.1 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 4.6 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.1 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -398,3 +398,8 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 5.4 is READY FOR QA at `1809c60` (build 0 warnings; Contracts, Core and Engine pass; publish clean). QA started on qa-1-14 (Sonnet), and its card is In QA. 4.6, 6.1 and 7.1 are being implemented.
 - 2026-11-03: QA on 5.4 (`1809c60`): **QA PASS**, 0 blocking findings and two accepted notes (`dev.simulate` is refused at runtime in the installed instance; repeated failure notices stack). 5.4 was told to merge.
 - 2026-11-03: 5.4 merged into `develop` (`9c364fa`, `feat(engine): merge 5.4-feedback-notices`) and marked done, after QA PASS at `1809c60`; `develop` (state-file lines only) was merged into the branch first, so no re-verification. QA's two notes are accepted: `dev.simulate` is registered everywhere but refused at runtime in the installed instance, and repeated clip-failed and disk-full notices stack until the next save or Recording.
+- 2026-11-03: 5.4 merged (`9c364fa`, done `e60c0f8`), and its card is in Done. That unblocked 5.3 (Saving icon) and 5.6 (Feedback Sounds).
+  - 4.6 is READY FOR QA at `3ae6b4e`. QA started on qa-2-1, and is asked to name an Engine test that failed once.
+  - 7.1 is READY FOR QA at `ca49444`. QA started on qa-1-14.
+  - 5.6 went to slice-epic-5 (Opus, medium effort).
+  - 5.3 waits for the next free worker; its card is in Ready. The pool is fully used: four story workers and two QA workers. story-2-7 can't be cleared because the app keeps it.
