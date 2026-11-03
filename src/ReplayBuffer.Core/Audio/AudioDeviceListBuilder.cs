@@ -73,7 +73,7 @@ public static class AudioDeviceListBuilder
         public static KeyComparer Instance { get; } = new();
 
         public bool Equals((string Id, AudioFlow Flow) x, (string Id, AudioFlow Flow) y) =>
-            x.Flow == y.Flow && string.Equals(x.Id, y.Id, StringComparison.OrdinalIgnoreCase);
+            AudioEndpointMatch.Same(x.Id, x.Flow, y.Id, y.Flow);
 
         public int GetHashCode((string Id, AudioFlow Flow) obj) =>
             HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Id), obj.Flow);

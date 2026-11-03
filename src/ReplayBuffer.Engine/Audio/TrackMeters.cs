@@ -124,11 +124,11 @@ internal sealed class TrackMeters : IDisposable
             try
             {
                 // Each device's tap drops blocks until its timeline is published below.
-                var taps = new MeterTap?[audio.Devices.Count];
+                var taps = new AudioTimelineTap?[audio.Devices.Count];
                 for (var d = 0; d < audio.Devices.Count; d++)
                 {
                     var device = audio.Devices[d];
-                    var tap = new MeterTap();
+                    var tap = new AudioTimelineTap();
                     try
                     {
                         _subscriptions.Add(hub.Subscribe(device.EndpointId, device.Flow, tap));
@@ -161,21 +161,8 @@ internal sealed class TrackMeters : IDisposable
                         continue;
                     }
 
-                    var sinks = new List<IAudioSampleSink>();
-                    for (var t = 0; t < tracks.Count; t++)
-                    {
-                        var input = inputs[t].IndexOf(d);
-                        if (input >= 0)
-                        {
-                            // Mic mute acts before the mix, and only on a Mic Device in a Track it affects.
-                            var sink = mixers[t].Input(input);
-                            sinks.Add(audio.Devices[d].IsMic && tracks[t].MuteAffected
-                                ? new MicMuteGate(sink, Schedule, frequency, anchorQpc)
-                                : sink);
-                        }
-                    }
-
-                    tap.Publish(new AudioTimeline(frequency, anchorQpc, sinks.Count == 1 ? sinks[0] : new AudioFanOut(sinks)));
+                    var sink = TrackWiring.DeviceSink(d, audio.Devices[d].IsMic, tracks, inputs, mixers, Schedule, frequency, anchorQpc);
+                    tap.Publish(new AudioTimeline(frequency, anchorQpc, sink));
                 }
             }
             catch
@@ -252,17 +239,6 @@ internal sealed class TrackMeters : IDisposable
                 _publish(new MeterLevels(levels));
             }
         }
-    }
-
-    /// <summary>A watch's tap on one hub device: drops blocks until its timeline is published. Called on the device's thread.</summary>
-    private sealed class MeterTap : IAudioPcmSubscriber
-    {
-        private volatile AudioTimeline? _timeline;
-
-        public void Publish(AudioTimeline timeline) => _timeline = timeline;
-
-        public void OnPcm(in AudioBlock block) =>
-            _timeline?.Push(block.StartQpc, block.Frames, block.Interleaved, block.IsSilent ? AudioPacketFlags.Silent : AudioPacketFlags.None);
     }
 }
 

@@ -1,5 +1,6 @@
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Audio;
 
 namespace ReplayBuffer.Core.Sessions;
 
@@ -67,7 +68,7 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
 
         // Any key naming an endpoint and flow as a mic makes that device a mic.
         bool IsMic(LayoutDevice device) => layout.Devices.Any(d =>
-            d.IsMic && d.Flow == device.Flow && string.Equals(d.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
+            d.IsMic && AudioEndpointMatch.Same(d.EndpointId, d.Flow, device.EndpointId, device.Flow));
 
         var devices = new List<SessionAudioDevice>();
         var tracks = new List<SessionTrack>();
@@ -81,8 +82,7 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
                     throw new ErrorCodeException(ErrorCodes.InvalidArguments, $"Track '{track.Name}' names device {key}, which the layout doesn't hold.");
                 }
 
-                var index = devices.FindIndex(d =>
-                    d.Flow == device.Flow && string.Equals(d.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
+                var index = devices.FindIndex(d => AudioEndpointMatch.Same(d.EndpointId, d.Flow, device.EndpointId, device.Flow));
                 if (index < 0)
                 {
                     index = devices.Count;
@@ -101,6 +101,26 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
 
         return new SessionAudio(devices, tracks);
     }
+
+    /// <summary>The first Track that mixes device <paramref name="device"/>, or -1.</summary>
+    public int FirstTrackOf(int device)
+    {
+        for (var t = 0; t < Tracks.Count; t++)
+        {
+            if (Tracks[t].DeviceIndexes.Contains(device))
+            {
+                return t;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>The (<c>muteAffected</c> Track, Mic Device) pairs mic mute silences, in Track order, then each Track's device order.</summary>
+    public IEnumerable<(SessionTrack Track, SessionAudioDevice Device)> GatedMicInputs() =>
+        Tracks
+            .Where(t => t.MuteAffected)
+            .SelectMany(t => t.DeviceIndexes.Where(i => Devices[i].IsMic).Select(i => (t, Devices[i])));
 }
 
 /// <summary>
