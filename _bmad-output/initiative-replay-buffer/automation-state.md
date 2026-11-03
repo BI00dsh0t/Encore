@@ -37,12 +37,12 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 7.4 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 4.10 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.4 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.3 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -147,7 +147,7 @@ The coordinator logs each QA round in the Log below.
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
 | 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `a8f4c23`) |
 | 28.3 | 7.3 Length and thumbnails | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `c2508c3`) |
-| 28.4 | 7.4 Favourite | | pending |
+| 28.4 | 7.4 Favourite | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 28.5 | 7.5 Group and filter by game, date and Favourite | | pending |
 | 28.6 | 7.6 Open, show in Explorer and copy for Discord | | pending |
 | 28.7 | 7.7 Rename and delete, locked while being written | | pending |
@@ -459,4 +459,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA 7.3 at `a38a811`: **QA PASS**, 0 blocking and 2 non-blocking notes. 7.3 has been told to merge (Sonnet), and slice-epic-5 is back in the pool.
 - 2026-11-03: QA 4.10 at `9cb23a0`: **QA PASS**, 0 blocking and 3 advisories. 4.10 has been told to merge (Sonnet), and slice-epic-4 is back in the pool. QA expects 4.9 to conflict with it in `EngineHost`, `EventHub` and Contracts, and 4.9 has been told to sync and keep both sides.
 
-- 2026-11-03: 7.3 merged into `develop` (`c2508c3`, `feat(core): merge 7.3-length-thumbnails`) and marked done, after QA PASS at `a38a811`. Develop was synced in first (6.2, 6.3): build 0 warnings; Contracts 116, Core 102, FFmpeg 36, Desktop 11, App 78, Engine 185 pass; publish clean. A 7.3 row is in the Human Check Queue. The deferred review item (a length read opens the file without `FILE_SHARE_DELETE`, so a rename/delete during the read could fail) is for 7.6 to check.
+- 2026-11-03: 7.3 merged into `develop` (`c2508c3`, `feat(core): merge 7.3-length-thumbnails`) and marked done, after QA PASS at `a38a811`. Develop was synced in first (6.2, 6.3): build 0 warnings; Contracts 116, Core 102, FFmpeg 36, Desktop 11, App 78, Engine 185 pass; publish clean. A 7.3 row is in the Human Check Queue. The deferred review item (a length read opens the file without `FILE_SHARE_DELETE`, so a rename/delete during the read could fail) is for 7.6 to check.- 2026-11-03: 7.3 merged (`c2508c3`, marked done `684fb5b`). Its card is Done with its label detached, and story-2-7 is back in the pool. 7.4 went to slice-epic-5 (Opus, medium effort), with its card In progress.
