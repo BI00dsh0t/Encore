@@ -182,6 +182,12 @@ public static class ErrorCodes
     /// </summary>
     public const string LibraryCorrupt = "library-corrupt";
 
+    /// <summary>
+    /// A warning: a Track of the active Track Layout mixes the Output Device that Feedback Sounds
+    /// play on, so its recordings would hold the sounds. Withdrawn when that is no longer so.
+    /// </summary>
+    public const string FeedbackDeviceCaptured = "feedback-device-captured";
+
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
 
@@ -236,6 +242,7 @@ public static class ErrorCodes
         RecordingStarted,
         RecordingStopped,
         LibraryCorrupt,
+        FeedbackDeviceCaptured,
         NotDevInstance,
     ];
 }

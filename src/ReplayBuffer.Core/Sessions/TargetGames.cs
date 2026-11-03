@@ -84,3 +84,129 @@ public sealed record ReplayClips(
     /// <summary>R1's exit drain: 30 s.</summary>
     public static readonly TimeSpan DefaultExitDrain = TimeSpan.FromSeconds(30);
 }
+
+/// <summary>
+/// How the orchestrator turns a <c>recordToggle</c> press into a Recording (R1, R2, AD-19, AD-21):
+/// one fragmented MP4 from the game session's own encoder chain, beside its Replay Buffer.
+/// </summary>
+/// <param name="Paths">Reserves each Recording's path, in the same folder as the game's Clips.</param>
+/// <param name="DefaultOutputFolder">The Output Folder when the profile's <c>outputFolder</c> is unset.</param>
+/// <param name="Started">Called on the orchestrator thread once a Recording has started.</param>
+/// <param name="Stopped">Called on the orchestrator thread once a Recording's writer has finished.</param>
+/// <param name="Failed">
+/// Called on the orchestrator thread with the exception when a Recording could not start, or its
+/// writer failed, for logging.
+/// </param>
+/// <param name="Library">
+/// Told when each Recording whose path was reserved starts and ends being written (R6), on the
+/// orchestrator thread; null is <see cref="NoLibraryWrites.Instance"/>.
+/// </param>
+/// <param name="Info">
+/// Called on the orchestrator thread with why a press made no Recording, or what a started one
+/// shares that differs from the profile's settings; null ignores it.
+/// </param>
+public sealed record Recordings(
+    OutputPathAllocator Paths,
+    Func<string> DefaultOutputFolder,
+    Action<RecordingStarted> Started,
+    Action<RecordingStopped> Stopped,
+    Action<Exception> Failed,
+    ILibraryWrites? Library = null,
+    Action<string>? Info = null);
+
+/// <summary>One audio device of a <see cref="ChainKey"/>: its endpoint, compared ignoring case, and flow.</summary>
+public readonly record struct ChainDevice
+{
+    public ChainDevice(string endpointId, AudioFlow flow)
+    {
+        ArgumentNullException.ThrowIfNull(endpointId);
+        EndpointId = endpointId.ToUpperInvariant();
+        Flow = flow;
+    }
+
+    public string EndpointId { get; }
+
+    public AudioFlow Flow { get; }
+}
+
+/// <summary>One Track of a <see cref="ChainKey"/>: its name and the devices it mixes, in order.</summary>
+public sealed record ChainTrack(string Name, IReadOnlyList<ChainDevice> Devices)
+{
+    public bool Equals(ChainTrack? other) =>
+        other is not null && string.Equals(Name, other.Name, StringComparison.Ordinal) && Devices.SequenceEqual(other.Devices);
+
+    public override int GetHashCode()
+    {
+        var hash = default(HashCode);
+        hash.Add(Name, StringComparer.Ordinal);
+        foreach (var device in Devices)
+        {
+            hash.Add(device);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
+/// <summary>
+/// What decides whether a Recording can share a session's encoder chain (epic-recordings): the
+/// session's kind and process, its <c>video</c>, and its Tracks' names and devices. Two equal keys
+/// encode the same streams.
+/// </summary>
+public sealed record ChainKey(SessionKind Kind, int ProcessId, VideoSettings Video, IReadOnlyList<ChainTrack> Tracks)
+{
+    /// <summary>The chain a running session encodes.</summary>
+    public static ChainKey Of(SessionSpec spec)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        return Of(spec.Kind, spec.Target, spec.Snapshot.Video, spec.Audio);
+    }
+
+    /// <summary>
+    /// The chain a session of <paramref name="kind"/> on <paramref name="target"/> would encode from
+    /// <paramref name="snapshot"/>; null when its Track Layout can't be resolved, which matches no chain.
+    /// </summary>
+    public static ChainKey? Of(SessionKind kind, CaptureTarget target, EffectiveSettings snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        SessionAudio audio;
+        try
+        {
+            audio = SessionAudio.FromLayout(snapshot.TrackLayout);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        return Of(kind, target, snapshot.Video, audio);
+    }
+
+    public bool Equals(ChainKey? other) =>
+        other is not null
+        && Kind == other.Kind
+        && ProcessId == other.ProcessId
+        && Video == other.Video
+        && Tracks.SequenceEqual(other.Tracks);
+
+    public override int GetHashCode()
+    {
+        var hash = default(HashCode);
+        hash.Add(Kind);
+        hash.Add(ProcessId);
+        hash.Add(Video);
+        foreach (var track in Tracks)
+        {
+            hash.Add(track);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    private static ChainKey Of(SessionKind kind, CaptureTarget target, VideoSettings video, SessionAudio audio) => new(
+        kind,
+        target.ProcessId,
+        video,
+        [.. audio.Tracks.Select(t => new ChainTrack(t.Name, [.. t.DeviceIndexes.Select(i => new ChainDevice(audio.Devices[i].EndpointId, audio.Devices[i].Flow))]))]);
+}

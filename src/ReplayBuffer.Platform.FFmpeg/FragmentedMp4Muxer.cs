@@ -36,6 +36,24 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     /// <summary>Adds a stream for an opened encoder. Call before <see cref="Start"/>.</summary>
     internal override int AddStream(AVCodecContext* encoder, string? title, bool isDefault)
     {
+        var stream = NewStream();
+        FFmpegLibrary.Check(ffmpeg.avcodec_parameters_from_context(stream->codecpar, encoder), "avcodec_parameters_from_context");
+        return Describe(stream, encoder->time_base, title, isDefault);
+    }
+
+    /// <summary>
+    /// Adds a stream from copied codec parameters (a Recording's, from a <see cref="RecordingTap"/>)
+    /// in <paramref name="timeBase"/>. Call before <see cref="Start"/>.
+    /// </summary>
+    internal int AddStream(AVCodecParameters* parameters, AVRational timeBase, string? title, bool isDefault)
+    {
+        var stream = NewStream();
+        FFmpegLibrary.Check(ffmpeg.avcodec_parameters_copy(stream->codecpar, parameters), "avcodec_parameters_copy");
+        return Describe(stream, timeBase, title, isDefault);
+    }
+
+    private AVStream* NewStream()
+    {
         if (_started)
         {
             throw new InvalidOperationException("Streams must be added before the header is written.");
@@ -47,14 +65,19 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             throw new InvalidOperationException("avformat_new_stream failed.");
         }
 
-        FFmpegLibrary.Check(ffmpeg.avcodec_parameters_from_context(stream->codecpar, encoder), "avcodec_parameters_from_context");
-        if (encoder->codec_id == AVCodecID.AV_CODEC_ID_HEVC)
+        return stream;
+    }
+
+    // The tag, time base, disposition and title every stream gets, whatever its parameters came from.
+    private static int Describe(AVStream* stream, AVRational timeBase, string? title, bool isDefault)
+    {
+        if (stream->codecpar->codec_id == AVCodecID.AV_CODEC_ID_HEVC)
         {
             // hvc1 (parameter sets in the sample entry) rather than mp4's default hev1: Apple players need it.
             stream->codecpar->codec_tag = HevcTag;
         }
 
-        stream->time_base = encoder->time_base;
+        stream->time_base = timeBase;
         stream->disposition = isDefault ? ffmpeg.AV_DISPOSITION_DEFAULT : 0;
         if (title is not null)
         {

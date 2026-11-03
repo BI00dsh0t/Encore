@@ -12,7 +12,7 @@ namespace ReplayBuffer.Platform.Audio;
 /// <summary>
 /// Watches the MMDevice endpoints (R1): registers an <c>IMMNotificationClient</c> on its own MTA
 /// thread and raises a coalesced callback there when an endpoint is added, removed, changes state
-/// or is renamed. The notification callbacks only set an event; after one, the thread waits
+/// or is renamed, or the default communications render endpoint changes. The notification callbacks only set an event; after one, the thread waits
 /// <see cref="CoalesceWindow"/>, so a burst raises the callback once.
 /// </summary>
 internal sealed unsafe class EndpointWatcher : IDisposable
@@ -181,8 +181,10 @@ internal sealed unsafe class EndpointWatcher : IDisposable
 
         public HRESULT OnDeviceRemoved(PCWSTR pwstrDeviceId) => Signal();
 
-        // The default device isn't in the list.
-        public HRESULT OnDefaultDeviceChanged(EDataFlow flow, ERole role, PCWSTR pwstrDefaultDeviceId) => Ok;
+        // The default device isn't in the list, but the default communications render endpoint is
+        // where Feedback Sounds play, so the capture check re-runs.
+        public HRESULT OnDefaultDeviceChanged(EDataFlow flow, ERole role, PCWSTR pwstrDefaultDeviceId) =>
+            flow == EDataFlow.eRender && role == ERole.eCommunications ? Signal() : Ok;
 
         // Only the two names the list shows; the store raises many other keys.
         public HRESULT OnPropertyValueChanged(PCWSTR pwstrDeviceId, PROPERTYKEY key) =>

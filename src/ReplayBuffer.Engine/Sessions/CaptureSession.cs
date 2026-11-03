@@ -25,11 +25,15 @@ internal sealed record CaptureSessionOptions
     public static readonly TimeSpan DefaultFirstFrameTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// The Replay Buffer (R1, AD-8): the encoders write into a Memory-mode ring sized from the
-    /// snapshot instead of a file, and each <see cref="CaptureSession.Save"/> writes a Clip from it.
-    /// No path is allocated, and the outcome has none.
+    /// The Replay Buffer (R1, AD-8): the encoders write into a ring sized from the snapshot instead
+    /// of a file, in memory or on disk as its <c>replayStorage</c> says, and each
+    /// <see cref="CaptureSession.Save"/> writes a Clip from it. No path is allocated, and the outcome
+    /// has none.
     /// </summary>
     public bool Replay { get; init; }
+
+    /// <summary>Where a Disk-mode ring's file goes when the snapshot's <c>ringPath</c> is not set; null for none.</summary>
+    public string? RingFolder { get; init; }
 
     /// <summary>The folder a file is allocated in when neither <see cref="OutputPath"/> nor the snapshot's Output Folder is set.</summary>
     public required string OutputFolder { get; init; }
@@ -123,7 +127,9 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// instead of a file, and <see cref="Save"/> writes a Clip from it on a thread of its own. The ring
 /// is sized from the snapshot's Buffer Window at the anchor; a new window from
 /// <see cref="SetBufferWindow"/> resizes it at the next Reset (AD-8), into a new ring generation
-/// seeded from the Reset keyframe, so Clips stay gapless.
+/// seeded from the Reset keyframe, so Clips stay gapless. The encoders write into the ring through a
+/// <see cref="RecordingTap"/>, and <see cref="Record"/> attaches a <see cref="RecordingWriter"/> to it:
+/// a Recording from the same encoder chain.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -167,6 +173,7 @@ internal sealed class CaptureSession : ICaptureSession
     private PacedVideoEncoder? _paced;
     private FragmentedMp4Muxer? _muxer;
     private ReplayRingSink? _ring;
+    private RecordingTap? _tap;
     private volatile bool _outputFinished;
 
     // R1's exit drain, orchestrator thread only: the teardown keeps the ring for saves until Release.
@@ -185,6 +192,9 @@ internal sealed class CaptureSession : ICaptureSession
     // (orchestrator thread). The window SetBufferWindow asked for, applied at the next Reset; 0 for none.
     private int _windowSeconds;
     private volatile int _pendingWindow;
+
+    // A Disk-mode session's ring folder; null in Memory mode.
+    private string? _ringFolder;
     private VideoEncoder? _video;
     private readonly IVideoEncoderCatalog _encoders;
     private readonly VideoSize _outputSize;
@@ -223,7 +233,11 @@ internal sealed class CaptureSession : ICaptureSession
         {
             if (_spec.Snapshot.ReplayStorage == Contracts.Settings.ReplayStorage.Disk)
             {
-                _log.LogInformation("The Disk-mode Replay Buffer is not built yet; buffering in memory");
+                _ringFolder = _spec.Snapshot.RingPath ?? _options.RingFolder;
+                if (_ringFolder is null)
+                {
+                    _log.LogWarning("The Disk-mode Replay Buffer has no ring folder; buffering in memory");
+                }
             }
         }
         else
@@ -357,8 +371,9 @@ internal sealed class CaptureSession : ICaptureSession
         }
         finally
         {
-            // A save still waiting has every packet it will get.
+            // A save still waiting has every packet it will get, and so has a Recording.
             _outputFinished = true;
+            _tap?.Close();
             DisposeAll();
         }
 
@@ -440,6 +455,23 @@ internal sealed class CaptureSession : ICaptureSession
 
         // A drained session's encoder is already disposed: never ask it for a keyframe.
         return new ClipWrite(this, ring, _outputFinished ? null : video, qpc, _windowSeconds);
+    }
+
+    /// <summary>
+    /// In Replay mode, once the output is open and while it runs: a Recording from
+    /// <paramref name="qpc"/> on the session's own encoders, through the tap; null once drained or
+    /// released, before the anchor, or while a Recording is attached.
+    /// </summary>
+    public IRecordingWrite? Record(long qpc)
+    {
+        // The anchor's release write publishes the tap and the encoder.
+        if (!_options.Replay || _released || _outputFinished || !Volatile.Read(ref _anchored)
+            || _tap is not { HasWriter: false } tap || _video is not { } video)
+        {
+            return null;
+        }
+
+        return new RecordingWrite(this, tap, video, qpc);
     }
 
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>
@@ -584,9 +616,11 @@ internal sealed class CaptureSession : ICaptureSession
         {
             var window = _spec.Snapshot.BufferWindow;
             _windowSeconds = window;
-            _ring = new ReplayRingSink(NewRing(window));
-            packets = _ring;
-            _log.LogInformation("Replay Buffer of {Window} s in memory, {Capacity} packets preallocated", window, RingCapacity(window));
+            var first = NewRing(window);
+            _ring = new ReplayRingSink(first);
+            _tap = new RecordingTap(_ring);
+            packets = _tap;
+            _log.LogInformation("Replay Buffer of {Window} s {Storage}, {Capacity} packets preallocated", window, StorageOf(first), RingCapacity(window));
         }
         else
         {
@@ -975,8 +1009,18 @@ internal sealed class CaptureSession : ICaptureSession
         return (int)Math.Min((seconds + 3L) * perSecond, 1 << 24);
     }
 
-    /// <summary>An empty Replay Buffer ring of a <paramref name="seconds"/> s Buffer Window.</summary>
-    private PacketRing NewRing(int seconds) => new(seconds * 1_000_000L, RingCapacity(seconds));
+    /// <summary>An empty Replay Buffer ring of a <paramref name="seconds"/> s Buffer Window, on disk in Disk mode (R3) unless its file can't be made.</summary>
+    private PacketRing NewRing(int seconds) => ReplayRings.Create(
+        seconds * 1_000_000L,
+        RingCapacity(seconds),
+        _ringFolder,
+        ReplayStorageEstimate.Bytes(_spec.Snapshot.Video, _spec.Audio.Tracks.Count, seconds),
+        _log);
+
+    /// <summary>Where a ring keeps its bytes, for the log.</summary>
+    private static string StorageOf(PacketRing ring) => ring.File is { } file
+        ? $"on disk in {file.Path} ({file.Bytes / (1024 * 1024)} MiB)"
+        : "in memory";
 
     /// <summary>The Buffer Window from the next Reset on (AD-8); the orchestrator calls it just before a Reset.</summary>
     public void SetBufferWindow(int seconds) => _pendingWindow = seconds;
@@ -994,10 +1038,21 @@ internal sealed class CaptureSession : ICaptureSession
             return;
         }
 
-        var generation = ring.Resize(NewRing(pending), us);
+        var next = NewRing(pending);
+        int generation;
+        try
+        {
+            generation = ring.Resize(next, us);
+        }
+        catch
+        {
+            next.Dispose();
+            throw;
+        }
+
         _log.LogInformation(
-            "Buffer Window {Old} s -> {New} s at the Reset {Reset:0.000} s after the anchor: ring generation {Generation}, {Capacity} packets preallocated",
-            _windowSeconds, pending, us / 1e6, generation, RingCapacity(pending));
+            "Buffer Window {Old} s -> {New} s at the Reset {Reset:0.000} s after the anchor: ring generation {Generation} {Storage}, {Capacity} packets preallocated",
+            _windowSeconds, pending, us / 1e6, generation, StorageOf(next), RingCapacity(pending));
         _windowSeconds = pending;
     }
 
@@ -1037,6 +1092,9 @@ internal sealed class CaptureSession : ICaptureSession
         _scaler?.Dispose();
         _frames?.Dispose();
         _muxer?.Dispose();
+
+        // A Recording still finishing owns its own copies of the streams.
+        _tap?.Dispose();
 
         // A save still writing holds its own lease and pins; the ring goes when the last is released.
         // A drained session keeps it for saves until Release.
@@ -1230,5 +1288,63 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         private long Deadline() => Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * session._qpcFrequency);
+    }
+
+    /// <summary>
+    /// One Recording (R2): <see cref="Start"/> attaches a <see cref="RecordingWriter"/> with its own
+    /// copies of the streams to the tap, then asks the encoder for a keyframe after the press; the
+    /// writer's thread does the rest. <see cref="Stop"/> hands it the press as µs since the anchor.
+    /// </summary>
+    private sealed class RecordingWrite(CaptureSession session, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
+    {
+        private RecordingWriter? _writer;
+
+        public void Start(string path, Action<Exception?> done)
+        {
+            ArgumentNullException.ThrowIfNull(path);
+            ArgumentNullException.ThrowIfNull(done);
+            if (_writer is not null)
+            {
+                throw new InvalidOperationException("The Recording has already started.");
+            }
+
+            // Set before the writer thread starts, which publishes it to the lambda.
+            long ticket = 0;
+            var streams = tap.CopyStreams();
+            RecordingWriter writer;
+            try
+            {
+                writer = new RecordingWriter(
+                    path,
+                    streams,
+                    () => video.TryGetForcedKey(ticket, out var pts) ? pts : null,
+                    session.MicrosAt(qpc),
+                    session._loggers.CreateLogger<RecordingWriter>(),
+                    done);
+            }
+            catch
+            {
+                streams.Dispose();
+                throw;
+            }
+
+            try
+            {
+                // Attached before the keyframe is asked for, so the forced key can't pass the tap unseen.
+                tap.Attach(writer);
+                ticket = video.RequestKeyframe(qpc);
+                writer.Start();
+            }
+            catch
+            {
+                writer.Abandon();
+                throw;
+            }
+
+            _writer = writer;
+            session._log.LogInformation("Recording to {Path}", path);
+        }
+
+        public void Stop(long qpc) => _writer?.Stop(session.MicrosAt(qpc));
     }
 }
