@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Hotkeys;
 using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Settings;
@@ -57,9 +58,10 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// its Replay Buffer, <see cref="ReplayState.Draining"/> is published, and <c>save</c> presses still
 /// cut from it until <see cref="ReplayClips.ExitDrain"/> passes, a new session starts, or the
 /// orchestrator stops. A switch to another game, or Ignored, ends it at once (FR-38). With
-/// <see cref="Recordings"/>, a <see cref="HotkeyAction.RecordToggle"/> press on a game session whose
+/// <see cref="Recordings"/>, a Record press that starts (<c>recordToggle</c>, or <c>recordStart</c>
+/// in separate mode, as <c>recordHotkeyMode</c> reads live) on a game session whose
 /// profile has <c>recordingsEnabled</c> on (read live, R1) reserves a path beside the game's Clips
-/// and has the session start a Recording there; the next press stops it, and the writer posts its
+/// and has the session start a Recording there; a later Record press stops it, and the writer posts its
 /// result back before <see cref="CaptureState.Recording"/> goes off. A session that ends mid-Recording
 /// finishes it with everything encoded.
 /// </summary>
@@ -118,7 +120,7 @@ public sealed class SessionOrchestrator : IDisposable
     /// <param name="targetChanged">Receives each committed change of the Target Game, on the orchestrator thread.</param>
     /// <param name="targetCapture">When given, each new Target Game ends the game session and starts one on its window.</param>
     /// <param name="clips">When given, a <c>save</c> press on the game session writes a Clip.</param>
-    /// <param name="recordings">When given, a <c>recordToggle</c> press on the game session starts or stops a Recording.</param>
+    /// <param name="recordings">When given, Record presses on the game session start and stop a Recording.</param>
     public SessionOrchestrator(
         ICaptureSessionFactory factory,
         Func<SettingsDocument> currentDocument,
@@ -264,9 +266,9 @@ public sealed class SessionOrchestrator : IDisposable
                 {
                     SaveClip(pressed.Qpc);
                 }
-                else if (pressed.Action == HotkeyAction.RecordToggle)
+                else if (pressed.Action is HotkeyAction.RecordToggle or HotkeyAction.RecordStart or HotkeyAction.RecordStop)
                 {
-                    ToggleRecording(pressed.Qpc);
+                    OnRecordPress(pressed.Action, pressed.Qpc);
                 }
 
                 _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
@@ -829,25 +831,50 @@ public sealed class SessionOrchestrator : IDisposable
     }
 
     /// <summary>
-    /// A <c>recordToggle</c> press (R1): stops the running Recording, else starts one. A press while
-    /// a Recording is stopping is ignored.
+    /// A Record press (R1), in <c>recordHotkeyMode</c> read live from the current document, so a
+    /// committed mode change applies at the next press. An action the mode doesn't use is ignored.
+    /// <c>recordToggle</c> stops the running Recording, else starts one; <c>recordStart</c> starts
+    /// one only while none runs, and <c>recordStop</c> stops only a running one. A stop isn't gated
+    /// by <c>recordingsEnabled</c>, so a Recording switched off keeps running until it is stopped.
+    /// A press while a Recording is stopping is ignored.
     /// </summary>
-    private void ToggleRecording(long qpc)
+    private void OnRecordPress(HotkeyAction action, long qpc)
     {
-        if (_recordings is null)
+        if (_recordings is not { } recordings)
         {
+            return;
+        }
+
+        // One document per press, so its mode and its profile's switch come from one revision.
+        var document = _currentDocument();
+        var mode = SettingsResolver.Resolve(document, null).RecordHotkeyMode;
+        if (!HotkeyPlan.IsActive(action, mode))
+        {
+            recordings.Info?.Invoke($"The {action} press isn't used in the {mode} Record Hotkey mode; it was ignored");
             return;
         }
 
         if (_recording is not { } running)
         {
-            StartRecording(qpc);
+            if (action == HotkeyAction.RecordStop)
+            {
+                recordings.Info?.Invoke("The Record Stop press came with no Recording running; it was ignored");
+                return;
+            }
+
+            StartRecording(qpc, document);
+            return;
+        }
+
+        if (action == HotkeyAction.RecordStart)
+        {
+            recordings.Info?.Invoke("The Record Start press came while a Recording runs; it was ignored");
             return;
         }
 
         if (running.Reason is not null)
         {
-            _recordings.Info?.Invoke("The Record press came while the Recording was stopping; it was ignored");
+            recordings.Info?.Invoke("The Record press came while the Recording was stopping; it was ignored");
             return;
         }
 
@@ -859,7 +886,7 @@ public sealed class SessionOrchestrator : IDisposable
         catch (Exception e)
         {
             // The writer still finishes when the session's output ends.
-            _recordings.Failed(e);
+            recordings.Failed(e);
         }
     }
 
@@ -869,11 +896,12 @@ public sealed class SessionOrchestrator : IDisposable
     /// gives the Output Folder, else the default one, where the path is reserved (AD-21) beside the
     /// game's Clips, and the chain the profile asks for: a mismatch with the session's still shares
     /// the session's chain, and <see cref="Recordings.Info"/> says so. Once the path is reserved,
-    /// <see cref="Recordings.Library"/> is told the write begins, and <see cref="OnRecordingWritten"/>
-    /// (or a write that never started) tells it how it ended. No game session, a drain only, no
+    /// <see cref="Recordings.Library"/> is told the write begins, then <see cref="Recordings.Open"/>
+    /// keeps the path, and <see cref="OnRecordingWritten"/> (or a write that never started) tells the
+    /// Library how it ended, then lets the path go. No game session, a drain only, no
     /// profile, the flag off, or a session that can't record yet: nothing happens but the Info.
     /// </summary>
-    private void StartRecording(long qpc)
+    private void StartRecording(long qpc, SettingsDocument document)
     {
         var recordings = _recordings!;
         if (_active is not { Spec.Kind: SessionKind.Game } active)
@@ -884,7 +912,6 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
-        var document = _currentDocument();
         var profileId = active.Spec.Target.ProfileId;
         if (profileId is null || !document.Profiles.TryGetValue(profileId, out var profile))
         {
@@ -927,6 +954,7 @@ public sealed class SessionOrchestrator : IDisposable
 
         var library = recordings.Library ?? NoLibraryWrites.Instance;
         library.BeginWrite(path, profileId);
+        recordings.Open?.Opened(path);
         var recording = new RecordingRun(active.Id, path, write);
         try
         {
@@ -937,6 +965,7 @@ public sealed class SessionOrchestrator : IDisposable
             // It never started: nothing else will remove the reserved file.
             TryDelete(path);
             library.EndWrite(path, WriteOutcome.Failed);
+            recordings.Open?.Closed(path);
             recordings.Failed(e);
             return;
         }
@@ -978,6 +1007,7 @@ public sealed class SessionOrchestrator : IDisposable
         // A failed writer deletes a file that holds nothing; one with data is kept, finished as far as it got.
         var kept = error is null || File.Exists(recording.Path);
         (recordings.Library ?? NoLibraryWrites.Instance).EndWrite(recording.Path, kept ? WriteOutcome.Written : WriteOutcome.Failed);
+        recordings.Open?.Closed(recording.Path);
         if (error is not null)
         {
             recordings.Failed(error);

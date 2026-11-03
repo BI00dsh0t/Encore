@@ -31,11 +31,28 @@
                     <DataTemplate>
                         <Grid Margin="0,4">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel>
+                            <Border Width="96"
+                                    Height="54"
+                                    Background="#E6E6E6"
+                                    ClipToBounds="True">
+                                <Grid>
+                                    <!-- The generic video glyph, shown until the shell has a thumbnail. -->
+                                    <Path HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Data="M 0,0 L 14,8 L 0,16 Z"
+                                          Fill="#A0A0A0" />
+                                    <Image Source="{Binding Thumbnail}"
+                                           Stretch="Uniform"
+                                           Visibility="{Binding HasThumbnail, Converter={StaticResource Visible}}" />
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
                                 <TextBlock Text="{Binding Name}"
                                            TextTrimming="CharacterEllipsis"
                                            ToolTip="{Binding Path}" />
@@ -44,11 +61,17 @@
                                            Text="{Binding Game}"
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
-                            <TextBlock Grid.Column="1"
+                            <TextBlock Grid.Column="2"
                                        Margin="12,0,0,0"
                                        VerticalAlignment="Top"
                                        Text="{Binding Date}" />
-                            <TextBlock Grid.Column="2"
+                            <TextBlock Grid.Column="3"
+                                       MinWidth="48"
+                                       Margin="12,0,0,0"
+                                       VerticalAlignment="Top"
+                                       Text="{Binding Length}"
+                                       TextAlignment="Right" />
+                            <TextBlock Grid.Column="4"
                                        MinWidth="64"
                                        Margin="12,0,0,0"
                                        VerticalAlignment="Top"

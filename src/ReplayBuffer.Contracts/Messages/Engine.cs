@@ -130,6 +130,13 @@ public sealed record StateSnapshot
     /// <remarks>A snapshot without the field (an engine from before story 7.2) reads as false.</remarks>
     public bool CleanupBlocked { get; init; }
 
+    /// <summary>
+    /// The absolute Output Folder the Library indexes (story 7.3), which each item's path is relative
+    /// to; <c>null</c> when unknown.
+    /// </summary>
+    /// <remarks>A snapshot without the field (an engine from before story 7.3) reads as <c>null</c>.</remarks>
+    public string? LibraryFolder { get; init; }
+
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
 
