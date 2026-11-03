@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -63,9 +65,11 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         var game = _probe.Add(GamePid, GamePath);
         _probe.Foreground = new GameWindow(0x10, GamePid);
 
+        await NextAsync("settings.changed");
         await NextAsync("game.detected");
         var detected = await NextAsync("target.changed");
         var expected = new TargetGame(GamePaths.Canonicalize(GamePath), "Game.EXE", GamePid);
+        Assert.Equal("Game", _client.State!.Settings.Profiles[expected.ProfileId].Name);
         Assert.Equal(new TargetChanged(null, expected, TargetChangeReason.Detected), GameMessages.TargetChanged.Read(detected.Payload));
         Assert.Equal(expected.ProfileId.ToLowerInvariant(), expected.ProfileId);
         Assert.Equal(expected, _client.State!.TargetGame);
@@ -88,12 +92,33 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         _probe.Add(GamePid, GamePath);
         _probe.AddWindow(new GameWindow(0x40, GamePid));
 
+        await NextAsync("settings.changed");
+        Assert.Equal(2, _client.State!.Settings.Revision);
         var detected = GameMessages.Detected.Read((await NextAsync("game.detected")).Payload);
         var changed = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload);
         var expected = new DetectedGame(GamePaths.Canonicalize(GamePath), "Game.EXE", GamePid);
         Assert.Equal(expected, detected);
         Assert.Equal(new TargetChanged(null, new TargetGame(expected.ProfileId, expected.Name, GamePid), TargetChangeReason.Detected), changed);
         Assert.Equal([expected], _client.State!.DetectedGames!);
+    }
+
+    [Fact]
+    public async Task GameAddWritesTheCanonicalPathOnceAndRefusesAMissingOne()
+    {
+        var raw = Path.Combine(_folder, "..", Path.GetFileName(_folder), "Game.EXE");
+        var expected = GamePaths.Canonicalize(GamePath);
+
+        var added = await _client.SendAsync(GameMessages.Add, new GameAdd(raw), Token);
+        var document = SettingsMessages.Changed.Read((await NextAsync("settings.changed")).Payload).Document;
+        Assert.Equal(new GameAdded(expected), added);
+        Assert.True(Keys.ManualGames.TryRead(document.Global[Keys.ManualGames.Name], out var listed));
+        Assert.Equal([expected], listed);
+
+        Assert.Equal(new GameAdded(expected), await _client.SendAsync(GameMessages.Add, new GameAdd(GamePath), Token));
+        Assert.Equal(document.Revision, _client.State!.Settings.Revision);
+
+        var refused = await Assert.ThrowsAsync<ErrorCodeException>(() => _client.SendAsync(GameMessages.Add, new GameAdd(Path.Combine(_folder, "Missing.exe")), Token));
+        Assert.Equal(ErrorCodes.InvalidArguments, refused.Code);
     }
 
     [Fact]
@@ -104,6 +129,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         await NextAsync("settings.changed");
         var a = _probe.Add(GamePid, GamePath);
         _probe.Foreground = new GameWindow(0x10, GamePid);
+        await NextAsync("settings.changed");
         await NextAsync("game.detected");
         var target = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload).To;
 
@@ -117,6 +143,86 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         await NextAsync("game.exited");
         var changed = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload);
         Assert.Equal(new TargetChanged(target, new TargetGame(other.ProfileId, other.Name, GamePid + 2), TargetChangeReason.Exit), changed);
+    }
+
+    [Fact]
+    public async Task AFirstDetectionCreatesItsProfileOnceEvenThroughAJunction()
+    {
+        File.Copy(typeof(GameDetectionServeTests).Assembly.Location, GamePath, overwrite: true);
+        var product = typeof(GameDetectionServeTests).Assembly.GetCustomAttribute<AssemblyProductAttribute>()!.Product;
+        var a = _probe.Add(GamePid, GamePath);
+        _probe.Foreground = new GameWindow(0x10, GamePid);
+
+        var created = SettingsMessages.Changed.Read((await NextAsync("settings.changed")).Payload).Document;
+        var first = GameMessages.Detected.Read((await NextAsync("game.detected")).Payload);
+        var profile = Assert.Single(created.Profiles);
+        Assert.Equal(first.ProfileId, profile.Key);
+        Assert.Equal(product, profile.Value.Name);
+        Assert.False(profile.Value.Ignored);
+        Assert.False(profile.Value.RecordingsEnabled);
+        Assert.Empty(profile.Value.Overrides);
+        Assert.False(string.IsNullOrEmpty(profile.Value.Folder));
+        await NextAsync("target.changed");
+        a.HasExited = true;
+        await NextAsync("game.exited");
+        await NextAsync("target.changed");
+
+        var link = _folder + "-link";
+        Junction(link, _folder);
+        try
+        {
+            _probe.Add(GamePid + 2, Path.Combine(link, "Game.EXE"));
+            _probe.Foreground = new GameWindow(0x20, GamePid + 2);
+
+            var second = GameMessages.Detected.Read((await NextAsync("game.detected")).Payload);
+            Assert.Equal(first.ProfileId, second.ProfileId);
+            await NextAsync("target.changed");
+            Assert.Single(_client.State!.Settings.Profiles);
+        }
+        finally
+        {
+            Directory.Delete(link);
+        }
+    }
+
+    [Fact]
+    public async Task AnUpdateAtTheRevisionReadBeforeTheProfileWasCreatedConflicts()
+    {
+        var read = _client.State!.Settings.Revision;
+        _probe.Add(GamePid, GamePath);
+        _probe.Foreground = new GameWindow(0x10, GamePid);
+        await NextAsync("settings.changed");
+        var game = GameMessages.Detected.Read((await NextAsync("game.detected")).Payload);
+
+        var update = new SettingsUpdate(read, [SettingsOp.SetGlobal("manualGames", JsonSerializer.SerializeToElement<IReadOnlyList<string>>([], SettingsJsonContext.Default.IReadOnlyListString))]);
+        var refused = await Assert.ThrowsAsync<ErrorCodeException>(() => _client.SendAsync(SettingsMessages.Update, update, Token));
+
+        Assert.Equal(ErrorCodes.SettingsConflict, refused.Code);
+        Assert.True(_client.State!.Settings.Profiles.ContainsKey(game.ProfileId));
+    }
+
+    [Fact]
+    public async Task IgnoringTheTargetEndsItAndClearingTheFlagDetectsItAgain()
+    {
+        _probe.Add(GamePid, GamePath);
+        _probe.Foreground = new GameWindow(0x10, GamePid);
+        await NextAsync("settings.changed");
+        await NextAsync("game.detected");
+        var target = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload).To!;
+
+        // A poll can see the new document before settings.changed goes out, so these three come in any order.
+        await SetIgnoredAsync(target.ProfileId, true);
+        var ignoring = await NextOfAsync("settings.changed", "game.exited", "target.changed");
+        var ignored = GameMessages.TargetChanged.Read(ignoring["target.changed"].Payload);
+        Assert.Equal(new TargetChanged(target, null, TargetChangeReason.Ignored), ignored);
+        Assert.Empty(_client.State!.DetectedGames!);
+        await _probe.PolledAsync(3);
+        Assert.False(_events.Reader.TryRead(out _));
+
+        await SetIgnoredAsync(target.ProfileId, false);
+        var clearing = await NextOfAsync("settings.changed", "game.detected", "target.changed");
+        var again = GameMessages.TargetChanged.Read(clearing["target.changed"].Payload);
+        Assert.Equal(new TargetChanged(null, target, TargetChangeReason.Detected), again);
     }
 
     [Fact]
@@ -135,6 +241,35 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         Assert.Equal((0, 0), (app.Opens, engine.Opens));
         Assert.False(_events.Reader.TryRead(out _));
         Assert.Null(_host.Hub.State.TargetGame);
+    }
+
+    private static void Junction(string link, string target)
+    {
+        using var mklink = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!;
+        mklink.StandardOutput.ReadToEnd();
+        mklink.WaitForExit();
+        Assert.Equal(0, mklink.ExitCode);
+    }
+
+    private async Task SetIgnoredAsync(string profileId, bool ignored)
+    {
+        var value = JsonSerializer.SerializeToElement(ignored, SettingsJsonContext.Default.Boolean);
+        var update = new SettingsUpdate(_client.State!.Settings.Revision, [SettingsOp.SetProfile(profileId, ProfileAttributes.Ignored, value)]);
+        await _client.SendAsync(SettingsMessages.Update, update, Token);
+    }
+
+    /// <summary>The next events, one of each of <paramref name="types"/> in any order, by type.</summary>
+    private async Task<Dictionary<string, IpcEvent>> NextOfAsync(params string[] types)
+    {
+        var events = new Dictionary<string, IpcEvent>();
+        while (events.Count < types.Length)
+        {
+            var next = await _events.Reader.ReadAsync(Token).AsTask().WaitAsync(Within, Token);
+            Assert.Contains(next.Type, types);
+            Assert.True(events.TryAdd(next.Type, next), $"A second {next.Type}.");
+        }
+
+        return events;
     }
 
     private async Task<IpcEvent> NextAsync(string type)
