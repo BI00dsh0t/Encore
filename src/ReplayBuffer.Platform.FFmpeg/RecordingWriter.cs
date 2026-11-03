@@ -50,6 +50,7 @@ public sealed unsafe class RecordingWriter
     private long _stopUs = long.MaxValue;
     private long _stopQpc;
     private int _started;
+    private long _keyDeadline;
 
     // Writer thread only.
     private int _videoStream = -1;
@@ -91,7 +92,18 @@ public sealed unsafe class RecordingWriter
             throw new InvalidOperationException("The Recording has already started.");
         }
 
-        new Thread(Run) { Name = "RecordingWriter", IsBackground = true }.Start();
+        // The forced key's wait runs from the press's handling, not from the file's opening.
+        _keyDeadline = Stopwatch.GetTimestamp() + (long)(KeyWait.TotalSeconds * Stopwatch.Frequency);
+        try
+        {
+            new Thread(Run) { Name = "RecordingWriter", IsBackground = true }.Start();
+        }
+        catch
+        {
+            // Never started: Abandon frees it.
+            Volatile.Write(ref _started, 0);
+            throw;
+        }
     }
 
     /// <summary>Frees a writer that never started: detaches it, frees what it was handed and its streams; never calls back.</summary>
@@ -267,7 +279,7 @@ public sealed unsafe class RecordingWriter
 
     private void Loop(FragmentedMp4Muxer muxer)
     {
-        var keyDeadline = Stopwatch.GetTimestamp() + (long)(KeyWait.TotalSeconds * Stopwatch.Frequency);
+        var keyDeadline = _keyDeadline;
         while (true)
         {
             _signal.Wait(Poll);
@@ -379,11 +391,20 @@ public sealed unsafe class RecordingWriter
         }
 
         _log.LogInformation("The Recording starts on the keyframe {Seconds:0.000} s after the anchor ({Press:0.000} s after the press)", keyUs / 1e6, (keyUs - _pressUs) / 1e6);
-        var held = _held.ToArray();
-        _held.Clear();
-        for (var i = 0; i < held.Length; i++)
+        // Each packet leaves the hold as it is emitted (Emit frees it even on a throw), so a failed
+        // write leaves only the rest held, for Release to free.
+        var emitted = 0;
+        try
         {
-            Emit(muxer, held[i].Packet, held[i].Stream, held[i].AtUs);
+            while (emitted < _held.Count)
+            {
+                var held = _held[emitted++];
+                Emit(muxer, held.Packet, held.Stream, held.AtUs);
+            }
+        }
+        finally
+        {
+            _held.RemoveRange(0, emitted);
         }
     }
 

@@ -3,7 +3,7 @@ title: 'Tracer: Record Hotkey to a fragmented MP4 Recording beside the Replay Bu
 type: 'feature'
 ticket: '1'
 created: '2026-11-03'
-status: 'in-review'
+status: 'built'
 baseline_revision: 'd6b57b6ef463e170bf92f9b0f96ea25e148f419d'
 route: 'full'
 route_source: 'auto'
@@ -16,7 +16,14 @@ followup_review_recommended: false
 context:
   - '{project-root}/CLAUDE.md'
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      A Recording running when the orchestrator is disposed (engine shutdown) never gets EndWrite or recording.stopped, and its background writer thread may not finish the trailer before the process exits.
+    evidence: |-
+      Dispose completes the channel; Run's EndActive closes the tap, the writer finishes and Post(RecordingWritten) fails on the completed channel, so OnRecordingWritten never runs. Clip writes share the pattern (4.5's deferred). Story 6.4 owns Tray Quit finishing the file within its 5 s wait (reason shutdown).
+    location: >-
+      src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs Run/Dispose
+    severity: medium
 ---
 
 <intent-contract>
@@ -90,10 +97,20 @@ deferred: []
 - A writer that ends with nothing written (no keyframe before the stop or the output's end) fails with `save-failed` and deletes the file. On any writer failure the orchestrator reports `EndWrite(Written)` when the file still exists (the writer keeps and finishes one that holds data), else `EndWrite(Failed)`.
 - Rebased audio can start up to half an AAC frame before K; the fragmented mp4 muxer's default `avoid_negative_ts` (make_zero, since it writes no edit list) shifts every stream by the same amount, so the streams stay in step.
 - `ReplayClipCaptureTests.TopLevelBoxes` became `internal` so the Recording test reuses it.
+- Verification (parent): the orchestrator test gained the session-ended case, so the matrix row "Session ends mid-Recording" is covered.
 
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 5 findings — high 0, medium 2, low 3, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `RecordingWrite.Start` requested the keyframe before attaching the writer, so the forced key packet could pass the tap unseen and the Recording start ~1 s late — fixed: attach first, then `RequestKeyframe`, then start the thread.
+  - `[low]` `[patch]` A throwing `Thread.Start` left `_started` set, so `Abandon` returned without detaching and the tap cloned into an undrained queue — fixed: `Start` resets `_started` and rethrows.
+  - `[low]` `[patch]` `StartAt` cleared `_held` before emitting, leaking the rest on a write failure — fixed: packets leave `_held` as they are emitted, and `Release` frees what is left.
+  - `[medium]` `[defer]` A Recording at engine shutdown gets no `EndWrite` or `recording.stopped`, since the post-back hits a completed channel — deferred to 6.4 (Tray Quit, reason shutdown), and Clips share the pattern.
+  - `[low]` `[patch]` The 1 s forced-key wait was measured from `Loop` start, after `Open()` — fixed: the deadline is set in `Start()`.
 
 ## Design Notes
 
@@ -109,3 +126,26 @@ Audio PTS are frames since the anchor in 1/48000. Video PTS are 1/90000 since th
 - `dotnet build ReplayBuffer.slnx -c Release` -- 0 warnings, 0 errors
 - `dotnet test --project tests/ReplayBuffer.Contracts.Tests -c Release --no-build`, `... Core.Tests ...`, `... Platform.FFmpeg.Tests ...`, `... Engine.Tests ...` -- all pass (the Explicit 60 s test runs separately with `--explicit only --filter-method *Sixty*`)
 - `pwsh tools/publish-engine.ps1` -- 0 IL or AOT warnings
+
+## Auto Run Result
+
+- **Summary:** a `recordToggle` press in the Target Game, with its profile's `recordingsEnabled` read live, starts a Recording on the Replay Buffer's own encoder chain. A `RecordingTap` between the encoders and the ring hands each packet to a `RecordingWriter`, which writes fragmented MP4 in place from a keyframe forced after the press, at low I/O priority, until the next press. The orchestrator reserves the path in the game's folder, calls `BeginWrite` and `EndWrite`, and publishes `capture.stateChanged` (`recording` running, then off), `recording.started` and `recording.stopped`.
+- **Files:**
+  - Contracts: `Recording.cs` (payloads, events, JSON context), `Engine.cs` (two snapshot fields).
+  - Core: `CaptureSessionPorts.cs` (`IRecordingWrite`, `ICaptureSession.Record`), `TargetGames.cs` (`Recordings`, `ChainKey`), `SessionOrchestrator.cs` (the toggle, gate, start, stop, post-back and session end).
+  - Platform.FFmpeg: `RecordingTap.cs`, `RecordingWriter.cs` (new), `FragmentedMp4Muxer.cs` (an `AddStream` overload from parameters), `ClipWriter.cs` (`EnterBackgroundMode` made internal).
+  - Engine: `CaptureSession.cs` (the tap's wiring and `Record`), `EngineHost.cs` (`recordings:`).
+  - Tests: `MessagesTests.cs` (samples), `SessionOrchestratorTests.cs` (gate, start, stop, session-ended), `RecordingCaptureTests.cs` (a 4 s default test, a 60 s Explicit Heavy test), `ReplayClipCaptureTests.cs` (`TopLevelBoxes` made internal).
+- **Review:** 5 findings: 4 patched (1 medium, 3 low), 1 deferred (medium, shutdown, to 6.4), 0 rejected.
+- **Follow-up review recommended:** false. Only one medium was patched, and no high.
+- **Verification:**
+  - Release build: 0 warnings, 0 errors.
+  - Contracts 103/103, Core 73/73 and Platform.FFmpeg 32 passed (1 skipped).
+  - Engine: 152 passed before the patches. After them, 151 passed and 1 failed: `CaptureEndTests.ClosingTheWindowEndsCaptureAndFinalizesTheFile`, an out-of-process debug-capture test that doesn't use the tap. It passed twice alone, with about 47 `dotnet` processes from parallel sessions running.
+  - The Explicit Heavy 60 s Recording passed after the patches.
+  - `tools/publish-engine.ps1`: 0 IL or AOT warnings.
+- **Residual risks:**
+  - Shutdown mid-Recording, deferred to 6.4.
+  - Untested: the 1 s fallback when no forced keyframe arrives, a failure in the writer, and the file finishing when the session ends mid-Recording (only the orchestrator side is tested).
+  - Rebased audio may start up to half an AAC frame before K, which relies on the muxer's `avoid_negative_ts`.
+  - A real Record Hotkey press in a real game is untested: it needs the builder.

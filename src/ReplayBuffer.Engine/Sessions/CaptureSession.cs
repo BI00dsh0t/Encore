@@ -1208,8 +1208,8 @@ internal sealed class CaptureSession : ICaptureSession
     }
 
     /// <summary>
-    /// One Recording (R2): <see cref="Start"/> asks the encoder for a keyframe after the press, and
-    /// attaches a <see cref="RecordingWriter"/> with its own copies of the streams to the tap; the
+    /// One Recording (R2): <see cref="Start"/> attaches a <see cref="RecordingWriter"/> with its own
+    /// copies of the streams to the tap, then asks the encoder for a keyframe after the press; the
     /// writer's thread does the rest. <see cref="Stop"/> hands it the press as µs since the anchor.
     /// </summary>
     private sealed class RecordingWrite(CaptureSession session, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
@@ -1225,7 +1225,8 @@ internal sealed class CaptureSession : ICaptureSession
                 throw new InvalidOperationException("The Recording has already started.");
             }
 
-            var ticket = video.RequestKeyframe(qpc);
+            // Set before the writer thread starts, which publishes it to the lambda.
+            long ticket = 0;
             var streams = tap.CopyStreams();
             RecordingWriter writer;
             try
@@ -1246,7 +1247,9 @@ internal sealed class CaptureSession : ICaptureSession
 
             try
             {
+                // Attached before the keyframe is asked for, so the forced key can't pass the tap unseen.
                 tap.Attach(writer);
+                ticket = video.RequestKeyframe(qpc);
                 writer.Start();
             }
             catch
