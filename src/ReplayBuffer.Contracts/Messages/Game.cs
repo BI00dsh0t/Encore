@@ -38,6 +38,15 @@ public enum TargetChangeReason
 public sealed record TargetChanged(TargetGame? From, TargetGame? To, TargetChangeReason Reason);
 
 /// <summary>
+/// A running game Game Detection found (any source), known until its process exits. Informational:
+/// it isn't the Target Game, which only <c>target.changed</c> sets (AD-19).
+/// </summary>
+/// <param name="ProfileId">The executable as <c>Canonicalize</c> made it (AD-18).</param>
+/// <param name="Name">The game's display name; the executable's file name until Game Profiles name it.</param>
+/// <param name="ProcessId">The game's process.</param>
+public sealed record DetectedGame(string ProfileId, string Name, int ProcessId);
+
+/// <summary>
 /// Game messages (epic-game-detection-profiles): Game Detection, the Target Game and Game Profiles.
 /// The area's payloads, its own JSON context and its entries in these lists are added here only (AD-22).
 /// </summary>
@@ -50,9 +59,26 @@ public static class GameMessages
         "targetGame",
         (snapshot, changed) => snapshot with { TargetGame = changed.To });
 
+    /// <summary>A game was detected; it replaces any entry with the same process. Published by Game Detection.</summary>
+    public static EventType<DetectedGame> Detected { get; } = new(
+        "game.detected",
+        GameJsonContext.Default.DetectedGame,
+        "detectedGames",
+        (snapshot, game) => snapshot with { DetectedGames = [.. Without(snapshot.DetectedGames, game.ProcessId), game] });
+
+    /// <summary>A detected game's process exited; its entry is removed. Published by Game Detection.</summary>
+    public static EventType<DetectedGame> Exited { get; } = new(
+        "game.exited",
+        GameJsonContext.Default.DetectedGame,
+        "detectedGames",
+        (snapshot, game) => snapshot with { DetectedGames = [.. Without(snapshot.DetectedGames, game.ProcessId)] });
+
     public static IReadOnlyList<CommandType> Commands { get; } = [];
 
-    public static IReadOnlyList<EventType> Events { get; } = [TargetChanged];
+    public static IReadOnlyList<EventType> Events { get; } = [TargetChanged, Detected, Exited];
+
+    private static IEnumerable<DetectedGame> Without(IReadOnlyList<DetectedGame>? games, int processId) =>
+        (games ?? []).Where(g => g.ProcessId != processId);
 }
 
 [JsonSourceGenerationOptions(
@@ -62,4 +88,5 @@ public static class GameMessages
     RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(TargetChanged))]
 [JsonSerializable(typeof(TargetGame))]
+[JsonSerializable(typeof(DetectedGame))]
 public sealed partial class GameJsonContext : JsonSerializerContext;

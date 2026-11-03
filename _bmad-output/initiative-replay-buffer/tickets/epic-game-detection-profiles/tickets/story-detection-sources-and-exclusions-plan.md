@@ -3,14 +3,14 @@ title: 'Detection sources and exclusions'
 type: 'feature'
 ticket: '2'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '80f43f68543ea69995a1a88968b991e9cebace9e'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -74,11 +74,11 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/Messages/Game.cs`, `Messages/Engine.cs` -- `DetectedGame(string ProfileId, string Name, int ProcessId)`; events `game.detected` (adds, replacing any entry with the same pid) and `game.exited` (removes by pid) on snapshot field `detectedGames`; `StateSnapshot.DetectedGames` (`IReadOnlyList<DetectedGame>?`, `[]` in `Initial`) -- informational detection state (AD-18).
-- [ ] `src/ReplayBuffer.Platform.Windows/GameConfigStore.cs` -- `public sealed class GameConfigStore(ILogger log)` with `IReadOnlySet<string> Paths()`: re-reads `HKCU\System\GameConfigStore\Children` at most every 5 s (read-only), keeps `Type == 1` children's string `MatchedExeFullPath`, maps each raw path through a cache to `Canonicalize` or its lowercase raw form; on a missing key or any exception keeps the last set and logs once -- spike 3.8's source.
-- [ ] `src/ReplayBuffer.Platform.Windows/GameMonitor.cs` -- probe members above (real implementation included); `GameMonitor` constructor gains, after the existing parameters, `Func<IReadOnlySet<string>>? listed = null`, `string? installFolder = null`, `Action<DetectedGame>? detected = null`, `Action<DetectedGame>? exited = null`; `Poll` per the matrix: forget exited (all known games fire `exited`; the proposed one also proposes null/exit), then the fullscreen rule, then the listed source over `Windows()` (plus the foreground window), classifying each new non-excluded pid once into a seen-cache that holds its handle and is pruned when the process exits; a known Target whose foreground window changes to a fullscreen window or one of its `Windows()` entries is re-proposed with it (existing follow rule); with no Target, a known game in front is proposed (existing) -- R1's sources, stickiness and exclusions.
-- [ ] `src/ReplayBuffer.Engine/EngineHost.cs` -- build `GameConfigStore`; `listed` = union of its paths and `ManualGames` lowercased, recomputed only when either source returns a different instance; `installFolder` from `AppContext.BaseDirectory`; `detected`/`exited` publish `game.detected`/`game.exited` to the hub.
-- [ ] Tests (lean): Platform.Windows -- a windowed `listed` game is detected and proposed; a detected game stays known through polls with no foreground or window, then its exit fires `exited` and proposes null; a fullscreen and a listed process under the install folder are never detected; a background listed game doesn't take over the Target but one in front does; a captioned, unlisted window's process is opened once across polls and never proposed; `GameConfigStore.Paths()` reads the real HKCU without throwing and returns lowercase paths (read-only). Engine -- `settings.update` `manualGames` with the fake game's path and a captioned (non-fullscreen) window in `Windows()` yields `game.detected` and `target.changed`; fix the two existing tests for the new event order. Contracts -- samples for the two events.
+- [x] `src/ReplayBuffer.Contracts/Messages/Game.cs`, `Messages/Engine.cs` -- `DetectedGame(string ProfileId, string Name, int ProcessId)`; events `game.detected` (adds, replacing any entry with the same pid) and `game.exited` (removes by pid) on snapshot field `detectedGames`; `StateSnapshot.DetectedGames` (`IReadOnlyList<DetectedGame>?`, `[]` in `Initial`) -- informational detection state (AD-18).
+- [x] `src/ReplayBuffer.Platform.Windows/GameConfigStore.cs` -- `public sealed class GameConfigStore(ILogger log)` with `IReadOnlySet<string> Paths()`: re-reads `HKCU\System\GameConfigStore\Children` at most every 5 s (read-only), keeps `Type == 1` children's string `MatchedExeFullPath`, maps each raw path through a cache to `Canonicalize` or its lowercase raw form; on a missing key or any exception keeps the last set and logs once -- spike 3.8's source.
+- [x] `src/ReplayBuffer.Platform.Windows/GameMonitor.cs` -- probe members above (real implementation included); `GameMonitor` constructor gains, after the existing parameters, `Func<IReadOnlySet<string>>? listed = null`, `string? installFolder = null`, `Action<DetectedGame>? detected = null`, `Action<DetectedGame>? exited = null`; `Poll` per the matrix: forget exited (all known games fire `exited`; the proposed one also proposes null/exit), then the fullscreen rule, then the listed source over `Windows()` (plus the foreground window), classifying each new non-excluded pid once into a seen-cache that holds its handle and is pruned when the process exits; a known Target whose foreground window changes to a fullscreen window or one of its `Windows()` entries is re-proposed with it (existing follow rule); with no Target, a known game in front is proposed (existing) -- R1's sources, stickiness and exclusions.
+- [x] `src/ReplayBuffer.Engine/EngineHost.cs` -- build `GameConfigStore`; `listed` = union of its paths and `ManualGames` lowercased, recomputed only when either source returns a different instance; `installFolder` from `AppContext.BaseDirectory`; `detected`/`exited` publish `game.detected`/`game.exited` to the hub.
+- [x] Tests (lean): Platform.Windows -- a windowed `listed` game is detected and proposed; a detected game stays known through polls with no foreground or window, then its exit fires `exited` and proposes null; a fullscreen and a listed process under the install folder are never detected; a background listed game doesn't take over the Target but one in front does; a captioned, unlisted window's process is opened once across polls and never proposed; `GameConfigStore.Paths()` reads the real HKCU without throwing and returns lowercase paths (read-only). Engine -- `settings.update` `manualGames` with the fake game's path and a captioned (non-fullscreen) window in `Windows()` yields `game.detected` and `target.changed`; fix the two existing tests for the new event order. Contracts -- samples for the two events.
 
 **Acceptance Criteria:**
 - Given the engine serving with `manualGames` holding a game's canonical path, when that game runs with only a captioned window, then within 5 s the client receives `game.detected` and `target.changed { reason: "detected" }` naming it, and `detectedGames` lists it.
@@ -88,9 +88,22 @@ deferred: []
 
 ## Implementation Notes
 
+- GameMonitor keeps one cache of classified processes (`Seen`: limited handle, canonical path or null, lowercase raw path, eligible), pruned on exit; a detected one carries its `TargetCandidate`. The fullscreen rule and the listed source both classify through it, so a fullscreen process is opened once too, and a canonicalize failure is cached as never detected (the tracer retried it each poll).
+- `listed` in EngineHost is rebuilt when `GameConfigStore.Paths()` or `load.Store.Current` (the SettingsDocument) is a different instance; `ManualGames` comes from `SettingsResolver.Resolve(document, null)`, whose list is new on every call.
+- `tests/ReplayBuffer.Engine.Tests/IpcTests.cs` (outside the Code Map): its snapshot comparison now also copies `DetectedGames`, a list compared by reference like `Warnings`.
+- The new engine test waits for `settings.changed` before the game appears, so `game.detected` can't race it.
+- Coordinator fix before review: `Classify` checks the exclusion before the cache, so an App whose window was classified before it attached is still never detected.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 3 findings — high 0, medium 1, low 1, false 1, maybe-false 0
+- findings:
+  - `[low]` `[patch]` `manualGames` entries were only lowercased, so an on-disk entry spelled differently (8.3 name, junction, `..`) never matched — fixed: `EngineHost.CanonicalOrLowercase` canonicalizes each entry (lowercase when not on disk), recomputed only when the settings document changes.
+  - `[false]` `[reject]` AC 4 (a real Windows-listed game while windowed) unconfirmed — it is a HITL check by design, queued for the builder; the listed source is source-agnostic and covered by `AWindowedListedGameIsDetectedAndProposed`, and `GameConfigStore` by its real read-only HKCU test.
+  - `[medium]` `[patch]` A newly detected listed game could take an owned dialog, tool window or splash in front as its capture window, while following used only `Windows()` entries — fixed: the foreground window counts in the listed scan only when it is one of `Windows()`; the test's in-front window is now listed too.
 
 ## Design Notes
 
@@ -108,3 +121,13 @@ deferred: []
 
 **Manual checks (if no CLI):**
 - Human Check: a real Windows-listed game detected while windowed; `ReplayBuffer.Engine serve --debug-capture` with a GameConfigStore game launched windowed shows it as the Target.
+
+## Auto Run Result
+
+- **Change:** Game Detection gains Windows' game list (GameConfigStore `MatchedExeFullPath`, read-only, re-read at most every 5 s, per spike 3.8) and `manualGames` as sources matched by canonical path even when windowed; every detected game stays known until its process exits; nothing under the engine's install folder is detected; new informational `game.detected`/`game.exited` events keep a `detectedGames` snapshot list.
+- **Files:** Contracts `Messages/Game.cs` (`DetectedGame`, two events), `Messages/Engine.cs` (`DetectedGames`); Platform.Windows `GameConfigStore.cs` (new), `GameMonitor.cs` (probe `ForegroundWindow`/`Windows`, classification cache, listed scan, install-folder exclusion, events), `NativeMethods.txt`; Engine `EngineHost.cs` (listed union, install folder, event publishing); tests in Platform.Windows (`GameMonitorTests`), Engine (`GameDetectionServeTests`, `IpcTests`), Contracts (`MessagesTests`).
+- **Review:** 2 patches applied (1 medium, 1 low), 1 false finding rejected (AC 4 is the Human Check), nothing deferred.
+- **Follow-up review recommended:** false (one medium patched, no high).
+- **Verification:** Release build 0 warnings; Platform.Windows 20/20, Contracts 93/93, Engine 143 passed (17 explicit skipped); `publish-engine.ps1` clean. App.Tests passed in the implementer's run (60, 5 skipped); App code is untouched.
+- **Residual risks:** a real Windows-listed game detected while windowed is a Human Check; a non-game GameConfigStore lists (launchers such as `LeagueClientUx.exe`) is detected while it runs until Ignored (3.4); a newly detected listed game in the background doesn't become the Target while another is (3.3's focus rule).
+

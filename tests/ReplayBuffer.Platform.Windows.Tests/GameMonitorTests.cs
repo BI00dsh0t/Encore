@@ -15,13 +15,28 @@ public sealed class GameMonitorTests : IDisposable
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "rb-game-" + Guid.NewGuid().ToString("N"));
     private readonly FakeProbe _probe = new();
     private readonly List<(TargetCandidate? To, TargetChangeReason Reason)> _proposals = [];
+    private readonly List<int> _detected = [];
+    private readonly List<int> _exited = [];
+    private readonly HashSet<string> _listed = new(StringComparer.Ordinal);
     private readonly GameMonitor _monitor;
 
     public GameMonitorTests()
     {
         Directory.CreateDirectory(Path.Combine(_folder, "Sub"));
+        Directory.CreateDirectory(Path.Combine(_folder, "Install"));
         File.WriteAllBytes(Path.Combine(_folder, "Game.EXE"), []);
-        _monitor = new GameMonitor(_probe, pid => pid == AppPid, (to, reason) => _proposals.Add((to, reason)), TimeSpan.FromSeconds(1), NullLogger.Instance);
+        File.WriteAllBytes(Path.Combine(_folder, "Other.exe"), []);
+        File.WriteAllBytes(Path.Combine(_folder, "Install", "Tool.exe"), []);
+        _monitor = new GameMonitor(
+            _probe,
+            pid => pid == AppPid,
+            (to, reason) => _proposals.Add((to, reason)),
+            TimeSpan.FromSeconds(1),
+            NullLogger.Instance,
+            () => _listed,
+            GamePaths.Canonicalize(Path.Combine(_folder, "Install")),
+            game => _detected.Add(game.ProcessId),
+            game => _exited.Add(game.ProcessId));
     }
 
     private string ExpectedProfileId => GamePaths.Canonicalize(Path.Combine(_folder, "Game.EXE"));
@@ -174,15 +189,128 @@ public sealed class GameMonitorTests : IDisposable
         Assert.True(game.Disposed);
     }
 
+    [Fact]
+    public void AWindowedListedGameIsDetectedAndProposed()
+    {
+        _probe.Add(GamePid, Path.Combine(_folder, "Game.EXE"));
+        _listed.Add(ExpectedProfileId);
+        _probe.Windows.Add(new GameWindow(5, GamePid));
+
+        _monitor.Poll();
+
+        Assert.Equal([GamePid], _detected);
+        Assert.Equal([(new TargetCandidate(GamePid, 5, ExpectedProfileId, "Game.EXE"), TargetChangeReason.Detected)], _proposals);
+    }
+
+    [Fact]
+    public void ADetectedGameStaysKnownWithNoWindowUntilItsExit()
+    {
+        var game = _probe.Add(GamePid, Path.Combine(_folder, "Game.EXE"));
+        _listed.Add(ExpectedProfileId);
+        _probe.Windows.Add(new GameWindow(5, GamePid));
+        _monitor.Poll();
+
+        _probe.Windows.Clear();
+        _monitor.Poll();
+        _monitor.Poll();
+        Assert.Single(_proposals);
+        Assert.Empty(_exited);
+
+        game.HasExited = true;
+        _monitor.Poll();
+
+        Assert.Equal([GamePid], _exited);
+        Assert.Equal(((TargetCandidate?)null, TargetChangeReason.Exit), _proposals[^1]);
+        Assert.Equal(2, _proposals.Count);
+    }
+
+    [Fact]
+    public void NothingUnderTheInstallFolderIsDetected()
+    {
+        var tool = Path.Combine(_folder, "Install", "Tool.exe");
+        _probe.Add(GamePid, tool);
+        _probe.Add(GamePid + 1, tool);
+        _listed.Add(GamePaths.Canonicalize(tool));
+        _probe.Foreground = new GameWindow(1, GamePid);
+        _probe.Windows.Add(new GameWindow(2, GamePid + 1));
+
+        _monitor.Poll();
+        _monitor.Poll();
+
+        Assert.Empty(_detected);
+        Assert.Empty(_proposals);
+    }
+
+    [Fact]
+    public void ABackgroundListedGameDoesNotTakeOverTheTargetButOneInFrontDoes()
+    {
+        _probe.Add(GamePid, Path.Combine(_folder, "Game.EXE"));
+        _probe.Add(GamePid + 1, Path.Combine(_folder, "Game.EXE"));
+        _probe.Add(GamePid + 2, Path.Combine(_folder, "Game.EXE"));
+        _listed.Add(ExpectedProfileId);
+        _probe.Foreground = new GameWindow(1, GamePid);
+        _monitor.Poll();
+
+        _probe.Windows.Add(new GameWindow(2, GamePid + 1));
+        _monitor.Poll();
+        Assert.Equal([GamePid, GamePid + 1], _detected);
+        Assert.Equal([GamePid], _proposals.Select(p => p.To!.ProcessId));
+
+        _probe.Foreground = null;
+        _probe.Front = new GameWindow(3, GamePid + 2);
+        _probe.Windows.Add(_probe.Front.Value);
+        _monitor.Poll();
+
+        Assert.Equal([GamePid, GamePid + 1, GamePid + 2], _detected);
+        Assert.Equal([GamePid, GamePid + 2], _proposals.Select(p => p.To!.ProcessId));
+    }
+
+    [Fact]
+    public void AnUnlistedWindowsProcessIsOpenedOnceAndNeverProposed()
+    {
+        var other = _probe.Add(GamePid, Path.Combine(_folder, "Other.exe"));
+        _listed.Add(ExpectedProfileId);
+        _probe.Windows.Add(new GameWindow(7, GamePid));
+
+        _monitor.Poll();
+        _monitor.Poll();
+        _monitor.Poll();
+
+        Assert.Equal(1, other.Opens);
+        Assert.Empty(_detected);
+        Assert.Empty(_proposals);
+    }
+
+    [Fact]
+    public void GameConfigStoreReadsTheRealListAsLowercasePaths()
+    {
+        var store = new GameConfigStore(NullLogger.Instance);
+
+        var paths = store.Paths();
+
+        Assert.All(paths, path => Assert.Equal(path.ToLowerInvariant(), path));
+        Assert.Same(paths, store.Paths());
+    }
+
     private sealed class FakeProbe : IGameWindowProbe
     {
         private readonly Dictionary<int, FakeProcess> _processes = [];
 
+        /// <summary>The fullscreen foreground window.</summary>
         public GameWindow? Foreground { get; set; }
+
+        /// <summary>The foreground window of any shape; the fullscreen one when unset.</summary>
+        public GameWindow? Front { get; set; }
+
+        public List<GameWindow> Windows { get; } = [];
 
         public FakeProcess Add(int pid, string imagePath) => _processes[pid] = new FakeProcess(imagePath);
 
         public GameWindow? ForegroundGameWindow() => Foreground;
+
+        public GameWindow? ForegroundWindow() => Front ?? Foreground;
+
+        IReadOnlyList<GameWindow> IGameWindowProbe.Windows() => Windows;
 
         public IGameProcess? Open(int processId)
         {
