@@ -36,8 +36,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 2.5 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 2.7 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -282,3 +282,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: 2.9 merged (`e11f94b`, done `d98a6ff`), and its worker is back in the pool. 2.5 is READY FOR QA at `83fe5c1`: scoped tests pass (Platform.Audio, Media, Engine, Contracts, Core), along with the 10 s dropout AC and the publish (0 warnings). Pool worker qa-1-14 was cleared and switched to Sonnet at medium effort under the new model rule, then given QA for 2.5.
 - 2026-11-02: QA round 1 on 2.5 (`83fe5c1`): **QA FAIL**, 3 findings (1 medium, 2 low), sent to story-2-5, which is fixing them. Its scoped tests pass apart from the known `OutputResolutionTests` latency flake.
 - 2026-11-02: 2.5 fixed QA round 1 at `09fc14d`. QA round 2 is running on qa-1-14 at low effort. 2.7 is READY FOR QA at `bd91c0c`: Release build 0 warnings, App.Tests 71/71, 18 new AC tests. Pool worker qa-2-1 was cleared, switched to Sonnet at medium effort, and given QA for 2.7.
+- 2026-11-02: QA round 2 on 2.5 (`09fc14d`): **QA PASS**, 0 findings. QA on 2.7 (`bd91c0c`): **QA PASS**, 0 blocking findings and 2 low notes, which were accepted. Both story sessions were switched to Sonnet for their merges. 2.5 merges first, and 2.7 waits for it. Both QA workers are back in the pool.
