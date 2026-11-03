@@ -176,6 +176,13 @@ public static class ErrorCodes
     public const string RecordingStopped = "recording-stopped";
 
     /// <summary>
+    /// <c>library.json</c> and its <c>.bak</c> were both unreadable, so the Library index was rebuilt
+    /// from the Output Folder and Favourites may be lost. A dismissable warning; Cleanup stays off
+    /// (<c>cleanupBlocked</c>) until it is dismissed.
+    /// </summary>
+    public const string LibraryCorrupt = "library-corrupt";
+
+    /// <summary>
     /// A warning: a Track of the active Track Layout mixes the Output Device that Feedback Sounds
     /// play on, so its recordings would hold the sounds. Withdrawn when that is no longer so.
     /// </summary>
@@ -234,6 +241,7 @@ public static class ErrorCodes
         ClipFailed,
         RecordingStarted,
         RecordingStopped,
+        LibraryCorrupt,
         FeedbackDeviceCaptured,
         NotDevInstance,
     ];

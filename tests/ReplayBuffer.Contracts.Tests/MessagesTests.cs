@@ -39,6 +39,8 @@ public sealed partial class MessagesTests
         ["library.itemAdded"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":"c:\\games\\game.exe","size":0,"date":"2026-11-03T10:00:00+00:00","beingWritten":true}""",
         ["library.itemChanged"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":null,"size":1024,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}""",
         ["library.itemRemoved"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4"}""",
+        ["library.reset"] = """{"items":[{"path":"clip.mp4","profileId":null,"size":48,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}]}""",
+        ["library.cleanupBlockedChanged"] = """{"blocked":true}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);
