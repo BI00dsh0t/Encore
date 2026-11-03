@@ -20,7 +20,7 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
     public string? Message
     {
         get => _message;
-        private set => Set(ref _message, value);
+        protected set => Set(ref _message, value);
     }
 
     public FrameworkElement View => _view ??= CreateView();
@@ -86,5 +86,6 @@ internal static class SettingsPages
     public static IReadOnlyList<SettingsPage> Create(SettingsSender sender) =>
     [
         new GeneralSettingsPage(sender),
+        new TrackLayoutPage(sender),
     ];
 }

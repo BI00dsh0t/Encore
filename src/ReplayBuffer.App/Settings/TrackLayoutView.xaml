@@ -1,0 +1,78 @@
+<UserControl x:Class="ReplayBuffer.App.Settings.TrackLayoutView"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <DataTemplate x:Key="DeviceTemplate">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Label}" />
+                <TextBlock Margin="8,0,0,0" Foreground="DarkRed" Text="{Binding Note}" />
+            </StackPanel>
+        </DataTemplate>
+        <Style x:Key="Row" TargetType="Button">
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="Padding" Value="8,2" />
+        </Style>
+    </UserControl.Resources>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+            <TextBlock FontWeight="SemiBold" Text="Devices" />
+            <ListBox Height="110"
+                     Margin="0,6,0,0"
+                     ItemTemplate="{StaticResource DeviceTemplate}"
+                     ItemsSource="{Binding Devices}"
+                     SelectedItem="{Binding SelectedDevice}" />
+            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                <Button Command="{Binding RemoveDeviceCommand}" Content="Remove" Style="{StaticResource Row}" />
+            </StackPanel>
+            <DockPanel Margin="0,6,0,0">
+                <Button Command="{Binding AddDeviceCommand}"
+                        Content="Add"
+                        DockPanel.Dock="Right"
+                        Margin="6,0,0,0"
+                        Padding="8,2" />
+                <ComboBox ItemTemplate="{StaticResource DeviceTemplate}"
+                          ItemsSource="{Binding Choices}"
+                          SelectedItem="{Binding SelectedChoice}" />
+            </DockPanel>
+
+            <TextBlock Margin="0,18,0,0" FontWeight="SemiBold" Text="Tracks" />
+            <ListBox Height="110"
+                     Margin="0,6,0,0"
+                     DisplayMemberPath="Name"
+                     ItemsSource="{Binding Tracks}"
+                     SelectedItem="{Binding SelectedTrack}" />
+            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                <Button Command="{Binding AddTrackCommand}" Content="Add Track" Style="{StaticResource Row}" />
+                <Button Command="{Binding MoveUpCommand}" Content="Up" Style="{StaticResource Row}" />
+                <Button Command="{Binding MoveDownCommand}" Content="Down" Style="{StaticResource Row}" />
+                <Button Command="{Binding DeleteTrackCommand}" Content="Delete" Style="{StaticResource Row}" />
+            </StackPanel>
+            <StackPanel Margin="0,12,0,0" DataContext="{Binding SelectedTrack}">
+                <TextBlock Text="Name" />
+                <TextBox Margin="0,4,0,0" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBlock Margin="0,8,0,0" Text="Devices on this Track" />
+                <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding Checks}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Margin="0,2" IsChecked="{Binding IsChecked}">
+                                <ContentPresenter Content="{Binding Device}" ContentTemplate="{StaticResource DeviceTemplate}" />
+                            </CheckBox>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <StackPanel Margin="0,18,0,0" Orientation="Horizontal">
+                <Button Command="{Binding SaveCommand}"
+                        Content="Save"
+                        IsEnabled="{Binding IsDirty}"
+                        Style="{StaticResource Row}" />
+                <Button Command="{Binding RevertCommand}"
+                        Content="Revert"
+                        IsEnabled="{Binding IsDirty}"
+                        Style="{StaticResource Row}" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -25,6 +25,7 @@ internal sealed class MainViewModel : Observable
         _engine = engine;
         Pages = SettingsPages.Create(new SettingsSender(engine));
         General = Pages.OfType<GeneralSettingsPage>().Single();
+        TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
         _selectedPage = Pages[0];
         engine.Changed += () => post(Refresh);
         Refresh();
@@ -34,6 +35,9 @@ internal sealed class MainViewModel : Observable
 
     /// <summary>The General page, which the tray's Start with Windows item shares.</summary>
     public GeneralSettingsPage General { get; }
+
+    /// <summary>The Track Layout page, which takes the snapshot's device list as well as its settings.</summary>
+    public TrackLayoutPage TrackLayout { get; }
 
     public SettingsPage SelectedPage
     {
@@ -94,6 +98,7 @@ internal sealed class MainViewModel : Observable
             $"Monitor Recording {Name(capture.MonitorRecording)}, mic {(capture.MicMuted ? "muted" : "live")}";
         SettingsRevision = state.Settings.Revision.ToString(CultureInfo.InvariantCulture);
         Warnings = [.. state.Warnings.Select(w => $"{w.Severity}: {w.Message} ({w.Code})")];
+        TrackLayout.ShowDevices(state.Devices);
         foreach (var page in Pages)
         {
             page.Render(state.Settings);
