@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 2.10 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 2.10 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.1 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -342,3 +342,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 3.3 merged (`22b214e`; develop merged into the branch first, no conflicts; build 0 warnings, Platform.Windows 25, Core 58 and Engine 143 passed), ticket marked done. QA's non-blocking note is accepted: if a Recording holds a switch to B, the user goes back to A, and the Recording stops before A has had 10 s of focus, B still becomes the Target. The real `RecordingRunning` is epic-recordings'.
 - 2026-11-03: 3.3 merged (`22b214e`, done `d70af41`), and its card is in Done. That unblocked 3.4 (Game Profiles, medium risk), which went to pool worker slice-epic-4 (Opus, medium effort), and 4.1 (replay buffer tracer, high risk, HITL), which went to pool worker 2-1-tracer (Opus, high effort). Both cards are In progress. 2.10 has its plan committed (`8857c3c`) and is implementing.
 - 2026-11-03: 2.10 is READY FOR QA at `3240a1f` (epic 2's duplicated audio wiring moved into shared helpers; build, Core, Engine and publish clean). QA started on qa-2-1 (Sonnet), checking for any behaviour change, and its card moved to In QA. 3.4 and 4.1 are being implemented.
+- 2026-11-03: QA on 2.10 (`3240a1f`): **QA PASS**, 0 findings, no behaviour change. 2.10 was switched to Sonnet and told to merge. Next, the coordinator marks epic 2 `status: done` and releases `v0.2.0`.
