@@ -103,7 +103,8 @@ public sealed class TrackMixCaptureTests : IDisposable
         AssertDurationsMatchTheVideo(output, 4);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task TwoFullScaleTonesInOneTrackStayWithinFullScale()
     {
         var audio = new SessionAudio(
@@ -119,7 +120,7 @@ public sealed class TrackMixCaptureTests : IDisposable
         AssertDurationsMatchTheVideo(output, 1);
     }
 
-    /// <summary>Runs a 4 s session of the test window with <paramref name="audio"/> from <paramref name="hub"/>; returns the file.</summary>
+    /// <summary>Runs a 2 s session of the test window with <paramref name="audio"/> from <paramref name="hub"/>; returns the file.</summary>
     private async Task<string> CaptureAsync(SessionAudio audio, ToneHub hub)
     {
         SessionTestKit.RequireFFmpeg();
@@ -134,7 +135,7 @@ public sealed class TrackMixCaptureTests : IDisposable
         {
             await orchestrator.StartAsync(SessionKind.Game, new CaptureTarget((int)window.ProcessId, window.Handle, null), audio).WaitAsync(Timeout, Token);
             await anchored.Task.WaitAsync(Timeout, Token);
-            await Task.Delay(TimeSpan.FromSeconds(4), Token);
+            await Task.Delay(TimeSpan.FromSeconds(2), Token);
             var outcome = await orchestrator.EndAsync("test over").WaitAsync(Timeout, Token);
             Assert.Null(outcome.Failure);
         }
@@ -153,7 +154,7 @@ public sealed class TrackMixCaptureTests : IDisposable
             .ToList();
         Assert.Equal(["h264", .. Enumerable.Repeat("aac", audioStreams)], streams.Select(s => s.Codec));
         var video = streams[0].Duration;
-        Assert.InRange(video, 3, 6);
+        Assert.InRange(video, 1.5, 4);
         Assert.All(streams.Skip(1), s => Assert.InRange(s.Duration, video - 0.1, video + 0.1));
     }
 

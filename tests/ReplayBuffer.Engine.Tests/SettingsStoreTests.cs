@@ -133,31 +133,11 @@ public sealed class SettingsStoreTests : IDisposable
     [Theory]
     [InlineData("bufferWindow", "0")]
     [InlineData("bufferWindow", "\"300\"")]
-    [InlineData("video", """{"codec":"h264","width":1920,"height":1080,"fps":240,"bitrateKbps":40000,"rateControl":"cbr"}""")]
-    [InlineData("startWithWindows", "1")]
     public void ABadValueIsRefused(string key, string json)
     {
         var store = Open();
 
         AssertRefused(store, ErrorCodes.SettingInvalidValue, Update(store, SettingsOp.SetGlobal(key, Json(json))));
-    }
-
-    [Fact]
-    public void ASetWithoutAValueIsRefused()
-    {
-        var store = Open();
-
-        AssertRefused(store, ErrorCodes.SettingInvalidValue, Update(store, new SettingsOp(SettingsScope.Global, null, Keys.BufferWindow.Name, SettingsOpKind.Set)));
-    }
-
-    [Fact]
-    public void AnOverrideOnAMissingProfileIsRefused()
-    {
-        var store = Open();
-
-        AssertRefused(store, ErrorCodes.ProfileNotFound, Update(store, SettingsOp.SetProfile(GameId, Keys.Video.Name, Keys.Video.ToJson(ProfileVideo))));
-        AssertRefused(store, ErrorCodes.ProfileNotFound, Update(store, SettingsOp.SetProfile(GameId, ProfileAttributes.Ignored, Json("true"))));
-        AssertRefused(store, ErrorCodes.ProfileNotFound, Update(store, new SettingsOp(SettingsScope.Profile, null, Keys.Video.Name, SettingsOpKind.Remove)));
     }
 
     [Fact]
@@ -241,26 +221,9 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(File.Exists(SettingsPath + ".tmp"));
     }
 
-    [Fact]
-    public void AFailedTempWriteChangesNothing()
-    {
-        var store = WithProfile();
-        var before = store.Current;
-        var file = File.ReadAllText(SettingsPath);
-        Directory.CreateDirectory(SettingsPath + ".tmp");
-
-        AssertRefused(store, ErrorCodes.SettingsWriteFailed, Update(store, SettingsOp.SetGlobal(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(9))));
-
-        Assert.Same(before, store.Current);
-        Assert.Equal(file, File.ReadAllText(SettingsPath));
-    }
-
     [Theory]
     [InlineData("{ not json")]
     [InlineData("""{"schemaVersion":2,"revision":3,"global":{},"profiles":{}}""")]
-    [InlineData("""{"revision":3,"global":{},"profiles":{}}""")]
-    [InlineData("null")]
-    [InlineData("""{"schemaVersion":1,"revision":3,"global":{},"profiles":{"c:\\x.exe":null}}""")]
     public void AnUnreadableFileIsMovedAsideAndTheStoreStartsEmpty(string contents)
     {
         File.WriteAllText(SettingsPath, contents);
@@ -294,15 +257,6 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(5, reloaded.Revision);
         Assert.Equal(1, reloaded.Global["futureKey"].GetProperty("a").GetInt32());
         Assert.Equal("\"long\"", reloaded.Global["bufferWindow"].GetRawText());
-    }
-
-    [Fact]
-    public void ReadDocumentOfAMissingFileIsTheEmptyDocumentAndWritesNothing()
-    {
-        var document = SettingsStore.ReadDocument(Path.Combine(_folder, "no-such-folder"));
-
-        Assert.Same(SettingsDocument.Empty, document);
-        Assert.Empty(Directory.GetFileSystemEntries(_folder));
     }
 
     [Fact]

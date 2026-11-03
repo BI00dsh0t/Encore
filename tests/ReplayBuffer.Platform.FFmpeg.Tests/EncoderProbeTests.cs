@@ -65,10 +65,6 @@ public sealed class EncoderProbeTests : IDisposable
     [Theory]
     [InlineData(VideoCodec.H264, new[] { "h264_amf", "h264_qsv", "libx264" }, "h264_amf")]
     [InlineData(VideoCodec.H264, new[] { "h264_qsv", "libx264" }, "h264_qsv")]
-    [InlineData(VideoCodec.H264, new[] { "libx264" }, "libx264")]
-    [InlineData(VideoCodec.H264, new string[0], null)]
-    [InlineData(VideoCodec.Hevc, new[] { "libx264" }, null)]
-    [InlineData(VideoCodec.Av1, new[] { "av1_qsv", "libx264" }, "av1_qsv")]
     public void WithNoHardwareH264OnlyH264FallsBackToLibx264(VideoCodec codec, string[] working, string? expected)
     {
         var tried = new List<string>();

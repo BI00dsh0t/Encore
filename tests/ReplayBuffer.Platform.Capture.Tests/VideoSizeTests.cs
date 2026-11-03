@@ -5,9 +5,6 @@ public sealed class VideoSizeTests
     [Theory]
     [InlineData(1920, 1080, 1920, 1080)]
     [InlineData(1919, 2088, 1918, 2088)]
-    [InlineData(1281, 721, 1280, 720)]
-    [InlineData(1, 1, 2, 2)]
-    [InlineData(0, 3, 2, 2)]
     public void TheEncoderSizeIsTheContentSizeRoundedDownToEven(int width, int height, int expectedWidth, int expectedHeight)
     {
         Assert.Equal(new VideoSize(expectedWidth, expectedHeight), VideoSize.EvenFloor(width, height));

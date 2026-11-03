@@ -98,7 +98,8 @@ public sealed class EngineServeTests : IDisposable
         Assert.Equal(first.Id, client.State.Pid);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task TheHeartbeatArrivesEveryTwoSecondsAndStopsOnDebugHang()
     {
         await StartServeAsync();

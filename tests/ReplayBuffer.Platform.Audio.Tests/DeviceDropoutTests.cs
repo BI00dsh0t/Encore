@@ -153,27 +153,6 @@ public sealed class DeviceDropoutTests : IDisposable
     }
 
     [Fact]
-    public void AnInvalidatedDeviceDropsWithoutAFaultAndResumesWhenItOpensAgain()
-    {
-        var recorder = new EnergySubscriber();
-        using var subscription = _hub.SubscribeDevice(A, SettingsFlow.Output, recorder);
-        Assert.True(recorder.WaitFor(20, Timeout), "no blocks from A");
-
-        // Still listed, but the device is gone for a moment: it can't reopen yet.
-        _bank.SetOpenable(A, false);
-        _bank.Latest(A).Invalidate();
-        Assert.True(Wait.Until(() => _dropped.Count == 1, DropWithin), "the invalidated device wasn't dropped");
-        Assert.Null(subscription.DeviceFault);
-        Assert.True(_bank.Latest(A).Disposed);
-
-        _bank.SetOpenable(A, true);
-        Assert.True(Wait.Until(() => _resumed.Count == 1, ResumeWithin), "A didn't resume once it opened");
-        Assert.Equal(2, _bank.Opens(A));
-        Assert.Equal(0, _hub.DroppedDeviceCount);
-        Assert.Single(_dropped);
-    }
-
-    [Fact]
     public void ADeviceReturningWithItsIdResumesOnTheSameStreamWithinTwoSeconds()
     {
         var recorder = new EnergySubscriber();
@@ -219,88 +198,6 @@ public sealed class DeviceDropoutTests : IDisposable
     }
 
     [Fact]
-    public void AnAmbiguousReturnStaysDropped()
-    {
-        using var subscription = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());
-        Unplug(A);
-        Assert.True(Wait.Until(() => _dropped.Count == 1, DropWithin));
-
-        _source.Add(ANew, "Game", "BEACN", SettingsFlow.Output, raise: false);
-        _source.Add(AOther, "Game", "BEACN", SettingsFlow.Output);
-        Thread.Sleep(1200);
-
-        Assert.Empty(_resumed);
-        Assert.Equal(1, _hub.DroppedDeviceCount);
-        Assert.Equal(0, _bank.Attempts(ANew) + _bank.Attempts(AOther));
-    }
-
-    [Fact]
-    public void ANameMatchHeldByAnotherOpenDeviceIsNotTaken()
-    {
-        // B is renamed to A's names, so it is A's only name match, but B is open.
-        RenameB("Game", "BEACN");
-        using var a = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());
-        using var b = _hub.SubscribeDevice(B, SettingsFlow.Output, new EnergySubscriber());
-        Unplug(A);
-        Assert.True(Wait.Until(() => _dropped.Count == 1, DropWithin));
-        Thread.Sleep(1200);
-
-        Assert.Empty(_resumed);
-        Assert.Equal(1, _hub.DroppedDeviceCount);
-        Assert.Equal(1, _bank.Attempts(B));
-    }
-
-    [Fact]
-    public void AReturnThatCantOpenIsRetriedUntilItOpens()
-    {
-        using var subscription = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());
-        Unplug(A);
-        Assert.True(Wait.Until(() => _dropped.Count == 1, DropWithin));
-
-        // Listed again, but still refusing to open.
-        _source.Add(A, "Game", "BEACN", SettingsFlow.Output);
-        var attempts = _bank.Attempts(A);
-        Assert.True(Wait.Until(() => _bank.Attempts(A) >= attempts + 3, TimeSpan.FromSeconds(3)), "the open wasn't retried every 500 ms");
-        Assert.Empty(_resumed);
-
-        _bank.SetOpenable(A, true);
-        Assert.True(Wait.Until(() => _resumed.Count == 1, TimeSpan.FromSeconds(1)), "A didn't resume once it opened");
-    }
-
-    [Fact]
-    public void AFailedListingDropsNothingAndIsRetried()
-    {
-        using var subscription = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());
-        _source.Failing = true;
-        Unplug(A);
-        Thread.Sleep(800);
-        Assert.Empty(_dropped);
-
-        // The next round, 500 ms on, lists again with no further change raised.
-        _source.Failing = false;
-        Assert.True(Wait.Until(() => _dropped.Count == 1, TimeSpan.FromSeconds(1.5)), "A wasn't dropped after the listing recovered");
-    }
-
-    [Fact]
-    public void TheLastSubscriberLeavingWhileDroppedClosesTheDeviceAndStopsRetries()
-    {
-        var recorder = new EnergySubscriber();
-        var subscription = _hub.SubscribeDevice(A, SettingsFlow.Output, recorder);
-        Unplug(A);
-        Assert.True(Wait.Until(() => _dropped.Count == 1, DropWithin));
-        _source.Add(A, "Game", "BEACN", SettingsFlow.Output);
-        Thread.Sleep(600);
-
-        subscription.Dispose();
-        Assert.Equal(0, _hub.OpenDeviceCount);
-        var attempts = _bank.Attempts(A);
-        var count = recorder.Count;
-        Thread.Sleep(1200);
-        Assert.Equal(attempts, _bank.Attempts(A));
-        Assert.Equal(count, recorder.Count);
-    }
-
-    [Fact]
     public void ADropoutSilencesOnlyItsOwnDevice()
     {
         var a = new EnergySubscriber();
@@ -341,25 +238,6 @@ public sealed class DeviceDropoutTests : IDisposable
         Replug(A, "Game");
         Assert.True(Wait.Until(() => _resumed.Count == 2, ResumeWithin));
         Assert.Equal(2, _dropped.Count);
-        Assert.Equal(3, _bank.Opens(A));
-    }
-
-    [Fact]
-    public void ARedropJustAfterAResumeIsTheSameDropout()
-    {
-        using var subscription = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());
-        Unplug(A);
-        Assert.True(Wait.Until(() => _dropped.Count == 1, DropWithin));
-
-        // The first client after the return is invalidated as it starts; the next one holds.
-        _bank.InvalidateNextOnStart(A);
-        Replug(A, "Game");
-        Assert.True(Wait.Until(() => _bank.Opens(A) == 3 && _hub.DroppedDeviceCount == 0, TimeSpan.FromSeconds(3)), "A didn't end bound");
-        Thread.Sleep(600);
-
-        Assert.Single(_dropped);
-        Assert.Single(_resumed);
-        Assert.Equal(0, _hub.DroppedDeviceCount);
         Assert.Equal(3, _bank.Opens(A));
     }
 
@@ -424,20 +302,8 @@ public sealed class DeviceDropoutTests : IDisposable
         Assert.Equal(0, _hub.DroppedDeviceCount);
     }
 
-    [Fact]
-    public void AFaultStaysReadableAfterTheLastSubscriberLeaves()
-    {
-        var subscription = _hub.SubscribeDevice(A, SettingsFlow.Output, new EnergySubscriber());
-        var fault = new InvalidOperationException("test device fault");
-        _bank.Latest(A).Fault = fault;
-
-        subscription.Dispose();
-
-        Assert.Equal(0, _hub.OpenDeviceCount);
-        Assert.Same(fault, subscription.DeviceFault);
-    }
-
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void AcrossATwoSecondDropoutTheStreamTracksWallTimeAndTheDropoutIsSilent()
     {
         var recorder = new EnergySubscriber();

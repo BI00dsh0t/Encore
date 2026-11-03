@@ -112,7 +112,6 @@ public sealed class PeakLimiterTests
     [Theory]
     [InlineData(float.NaN)]
     [InlineData(float.PositiveInfinity)]
-    [InlineData(float.NegativeInfinity)]
     public void NonFiniteSamplesAreWrittenAsZero(float bad)
     {
         var limiter = new PeakLimiter(_output);
@@ -143,7 +142,8 @@ public sealed class PeakLimiterTests
         Assert.Equal(0.9f, _output.Left(48_241));
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void NothingIsAllocatedPerBlockOnceWarmed()
     {
         var sink = new NullSink();

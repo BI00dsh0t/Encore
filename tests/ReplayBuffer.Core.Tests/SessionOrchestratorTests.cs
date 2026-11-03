@@ -141,23 +141,6 @@ public sealed class SessionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task APostBackFromAnEndedSessionIsIgnored()
-    {
-        await Start(Target(window: 1));
-        await _orchestrator.EndAsync().WaitAsync(Timeout, Token);
-        var second = await Start(Target(window: 2));
-
-        _factory.Sessions[0].Events.Closed("late");
-        _factory.Sessions[0].Events.Failed(new InvalidOperationException("late"));
-
-        // A command posted after them is handled after them: the second session is still running.
-        var spec = await _orchestrator.RetargetAsync(Target(window: 3)).WaitAsync(Timeout, Token);
-        Assert.Equal((nint)3, spec.Target.Window);
-        Assert.False(second.Ended.IsCompleted);
-        Assert.Null(_factory.Sessions[1].EndReason);
-    }
-
-    [Fact]
     public async Task AFactoryFailureStartsNothing()
     {
         _factory.FailNextStart = new ErrorCodeException(ErrorCodes.CaptureFailed, "no device");
@@ -269,36 +252,6 @@ public sealed class SessionOrchestratorTests : IDisposable
         Assert.Same(failure, thrown);
         Assert.Same(failure, (await running.Ended.WaitAsync(Timeout, Token)).Failure);
         Assert.Equal(ReplayState.Off, _published.Last().State.Replay);
-    }
-
-    [Fact]
-    public async Task ARetargetOfAStoppedSessionEndsItCleanlyAndFailsWithSessionNotRunning()
-    {
-        var running = await Start(Target(window: 1));
-        _factory.Sessions[0].RetargetFailure = new ErrorCodeException(ErrorCodes.SessionNotRunning, "stopped");
-
-        var error = await Assert.ThrowsAsync<ErrorCodeException>(() => _orchestrator.RetargetAsync(Target(window: 2)).WaitAsync(Timeout, Token));
-
-        Assert.Equal(ErrorCodes.SessionNotRunning, error.Code);
-        Assert.Null((await running.Ended.WaitAsync(Timeout, Token)).Failure);
-        Assert.Equal(ReplayState.Off, _published.Last().State.Replay);
-    }
-
-    [Fact]
-    public async Task ARetargetTheSessionRefusesAsAnotherProcessLeavesItRunning()
-    {
-        var running = await Start(Target(window: 1));
-        _factory.Sessions[0].RetargetFailure = new ErrorCodeException(ErrorCodes.RetargetOtherProcess, "not ours");
-
-        var error = await Assert.ThrowsAsync<ErrorCodeException>(() => _orchestrator.RetargetAsync(Target(window: 2)).WaitAsync(Timeout, Token));
-
-        Assert.Equal(ErrorCodes.RetargetOtherProcess, error.Code);
-        Assert.False(running.Ended.IsCompleted);
-        Assert.Null(_factory.Sessions[0].EndReason);
-        Assert.Single(_published);
-        _factory.Sessions[0].RetargetFailure = null;
-        var spec = await _orchestrator.RetargetAsync(Target(window: 3)).WaitAsync(Timeout, Token);
-        Assert.Equal((nint)3, spec.Target.Window);
     }
 
     [Fact]

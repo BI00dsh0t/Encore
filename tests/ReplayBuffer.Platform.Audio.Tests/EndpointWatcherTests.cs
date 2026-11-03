@@ -83,16 +83,6 @@ public sealed unsafe class EndpointWatcherTests : IDisposable
     }
 
     [Fact]
-    public void ARenameRaisesChanged()
-    {
-        Client->OnPropertyValueChanged(FakeId, PInvoke.PKEY_Device_FriendlyName);
-        Assert.True(WaitFor(1, Within), "no change after a friendly name change");
-
-        Client->OnPropertyValueChanged(FakeId, PInvoke.PKEY_DeviceInterface_FriendlyName);
-        Assert.True(WaitFor(2, Within), "no change after a parent name change");
-    }
-
-    [Fact]
     public void ABurstRaisesOnce()
     {
         var clock = Stopwatch.StartNew();

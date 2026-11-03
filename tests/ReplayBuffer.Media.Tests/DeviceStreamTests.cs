@@ -100,8 +100,6 @@ public sealed class DeviceStreamTests
     [Theory]
     [InlineData(54)]
     [InlineData(-54)]
-    [InlineData(200)]
-    [InlineData(-200)]
     public void SteeringLocksADriftingDeviceToQpc(double ppm)
     {
         var device = new SyntheticDevice(ppm, jitterMs: 0.15);

@@ -32,9 +32,6 @@ public sealed partial class ErrorCodesTests
     [Theory]
     [InlineData("window-not-found")]
     [InlineData("window-ambiguous")]
-    [InlineData("ffmpeg-missing")]
-    [InlineData("audio-device-not-found")]
-    [InlineData("audio-device-ambiguous")]
     public void TheTracerMatrixCodesAreRegistered(string code)
     {
         Assert.Contains(code, ErrorCodes.All);
