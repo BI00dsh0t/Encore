@@ -3,14 +3,14 @@ title: 'Tracer: capture state to the Overlay dot'
 type: 'feature'
 ticket: '1'
 created: '2026-11-03'
-status: 'ready-for-dev'
+status: 'in-review'
 baseline_revision: 'cc6c2d180eb8ff3bac681ef97cf4626d70b9acf3'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -74,14 +74,14 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Platform.Desktop/OverlayWindowStyle.cs` (+ `NativeMethods.txt`) -- `Apply(hwnd)` ORs the five extended styles into `GWL_EXSTYLE`; `ExtendedStyle(hwnd)` reads them; `ShowWithoutActivation(hwnd, x, y, width, height)` via `SetWindowPos(HWND_TOPMOST, …, SWP_NOACTIVATE | SWP_SHOWWINDOW)`; `Hide(hwnd)` via `ShowWindow(SW_HIDE)`; `ForegroundWindow()` -- Win32 stays in Platform.Desktop (AD-2).
-- [ ] `src/ReplayBuffer.Platform.Desktop/Monitors.cs` -- `MonitorArea ForProcess(int? processId)`: largest visible top-level window of the pid → `MonitorFromWindow(NEAREST)`, else `MonitorFromPoint(0,0, PRIMARY)`; returns `rcMonitor` (physical px) and effective DPI; `static (int X, int Y, int Size) TopRight(MonitorArea, double sizeDip, double insetDip)` pure placement maths.
-- [ ] `src/ReplayBuffer.App/Overlay/OverlayViewModel.cs` -- `OverlayDot { None, Hollow, Solid }`; `Dot`, `TargetProcessId`; refreshes on `Changed` via `post` -- the dot rule above.
-- [ ] `src/ReplayBuffer.App/Overlay/OverlayWindow.cs` -- code-only `ShellWindow`: `WindowStyle.None`, `AllowsTransparency`, transparent background, `ShowActivated = false`, `ShowInTaskbar = false`, `Topmost`, not hit-testable; content a `Viewbox` with an `Ellipse` (hollow: red stroke; solid: red fill); applies `OverlayWindowStyle.Apply` in `OnSourceInitialized`; on model change: none → hide, else place with `Monitors` and show without activation; re-place on `DpiChanged`.
-- [ ] `src/ReplayBuffer.App/app.manifest`, `ReplayBuffer.App.csproj` -- PerMonitorV2 DPI awareness.
-- [ ] `src/ReplayBuffer.App/ShellApp.cs` -- create the Overlay model and window at startup; close it in `QuitAsync`.
-- [ ] `tests/ReplayBuffer.App.Tests/OverlayTests.cs` -- default: (1) a fake session driven off → buffering → draining → recording running → off (and disconnected) moves `Dot` through none, hollow, hollow, solid, none; (2) the created window has the five styles and `CaptureExclusion.IsApplied`. Heavy/Explicit: (3) a shown, activated helper window stays foreground (and keeps keyboard focus) while the Overlay is shown and updated; (4) a screen copy of the Overlay's rectangle over a green helper window has no red pixels (exclusion proxy for the WGC monitor capture).
-- [ ] `tests/ReplayBuffer.Platform.Desktop.Tests/MonitorsTests.cs` -- `TopRight` at 144 DPI on a 1920×1080 monitor; `ForProcess(null)` is the primary monitor.
+- [x] `src/ReplayBuffer.Platform.Desktop/OverlayWindowStyle.cs` (+ `NativeMethods.txt`) -- `Apply(hwnd)` ORs the five extended styles into `GWL_EXSTYLE`; `ExtendedStyle(hwnd)` reads them; `ShowWithoutActivation(hwnd, x, y, width, height)` via `SetWindowPos(HWND_TOPMOST, …, SWP_NOACTIVATE | SWP_SHOWWINDOW)`; `Hide(hwnd)` via `ShowWindow(SW_HIDE)`; `ForegroundWindow()` -- Win32 stays in Platform.Desktop (AD-2).
+- [x] `src/ReplayBuffer.Platform.Desktop/Monitors.cs` -- `MonitorArea ForProcess(int? processId)`: largest visible top-level window of the pid → `MonitorFromWindow(NEAREST)`, else `MonitorFromPoint(0,0, PRIMARY)`; returns `rcMonitor` (physical px) and effective DPI; `static (int X, int Y, int Size) TopRight(MonitorArea, double sizeDip, double insetDip)` pure placement maths.
+- [x] `src/ReplayBuffer.App/Overlay/OverlayViewModel.cs` -- `OverlayDot { None, Hollow, Solid }`; `Dot`, `TargetProcessId`; refreshes on `Changed` via `post` -- the dot rule above.
+- [x] `src/ReplayBuffer.App/Overlay/OverlayWindow.cs` -- code-only `ShellWindow`: `WindowStyle.None`, `AllowsTransparency`, transparent background, `ShowActivated = false`, `ShowInTaskbar = false`, `Topmost`, not hit-testable; content a `Viewbox` with an `Ellipse` (hollow: red stroke; solid: red fill); applies `OverlayWindowStyle.Apply` in `OnSourceInitialized`; on model change: none → hide, else place with `Monitors` and show without activation; re-place on `DpiChanged`.
+- [x] `src/ReplayBuffer.App/app.manifest`, `ReplayBuffer.App.csproj` -- PerMonitorV2 DPI awareness.
+- [x] `src/ReplayBuffer.App/ShellApp.cs` -- create the Overlay model and window at startup; close it in `QuitAsync`.
+- [x] `tests/ReplayBuffer.App.Tests/OverlayTests.cs` -- default: (1) a fake session driven off → buffering → draining → recording running → off (and disconnected) moves `Dot` through none, hollow, hollow, solid, none; (2) the created window has the five styles and `CaptureExclusion.IsApplied`. Heavy/Explicit: (3) a shown, activated helper window stays foreground (and keeps keyboard focus) while the Overlay is shown and updated; (4) a screen copy of the Overlay's rectangle over a green helper window has no red pixels (exclusion proxy for the WGC monitor capture).
+- [x] `tests/ReplayBuffer.Platform.Desktop.Tests/MonitorsTests.cs` -- `TopRight` at 144 DPI on a 1920×1080 monitor; `ForProcess(null)` is the primary monitor.
 
 **Acceptance Criteria:**
 - Given the App connected to an engine, when `capture.stateChanged` moves the Replay Buffer to buffering or draining, then the Overlay shows a hollow red dot within 1 s; when a Recording or Monitor Recording runs, a solid red dot; when all are off, nothing.
@@ -91,6 +91,12 @@ deferred: []
 - Given a Target Game on a monitor, when the dot shows, then it sits in that monitor's top-right corner 24 DIP in at its DPI; with no Target Game, on the primary monitor's.
 
 ## Implementation Notes
+
+- Visibility goes through WPF's own `Show()` (with `ShowActivated = false`, so `SW_SHOWNA`) and `Hide()`, so WPF's visibility state and render target follow the window. `OverlayWindowStyle.ShowWithoutActivation` places the window and raises it in the topmost band (`SWP_NOACTIVATE | SWP_SHOWWINDOW`) before `Show()`, so it never flashes at a stale spot. There's no `OverlayWindowStyle.Hide`, and so no `ShowWindow` in `NativeMethods.txt`.
+- The dot is 16 DIP (`OverlayWindow.DotSizeDip`); the inset is 24 DIP (`InsetDip`). The hollow dot is a 2 DIP stroke.
+- `DpiChanged` re-places through `Dispatcher.BeginInvoke`, not inside WPF's `WM_DPICHANGED` handling.
+- `tests/ReplayBuffer.App.Tests` sets `UseWindowsForms` (with its global usings removed) for `System.Drawing`'s `CopyFromScreen` in Heavy test (4).
+- I checked by hand that the dot renders: a throwaway test cleared the display affinity and found 194 of 256 pixels red after show, hide and show again. I removed the test afterwards. Without that check, Heavy test (4) would also pass if the dot never drew.
 
 ## Plan Change Log
 
