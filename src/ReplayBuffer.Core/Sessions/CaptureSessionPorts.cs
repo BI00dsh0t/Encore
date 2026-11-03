@@ -66,6 +66,35 @@ public interface ICaptureSession
     /// when the press is less than 1 s after the session's start. Called on the orchestrator thread.
     /// </summary>
     IClipWrite? Save(long qpc) => null;
+
+    /// <summary>
+    /// A Recording from <paramref name="qpc"/> (the press, AD-6) on this session's encoder chain,
+    /// not yet started; null when this session can't record now: it holds no Replay Buffer, hasn't
+    /// anchored, its output has finished, or a Recording is already attached to it. Called on the
+    /// orchestrator thread; never blocks.
+    /// </summary>
+    IRecordingWrite? Record(long qpc) => null;
+}
+
+/// <summary>A Recording a session can write (R2): one fragmented MP4 from the session's encoders.</summary>
+public interface IRecordingWrite
+{
+    /// <summary>
+    /// Starts writing to <paramref name="path"/>, which the allocator reserved (AD-21), off the
+    /// calling thread, from the first video keyframe after the press. The write runs until
+    /// <see cref="Stop"/>, or until the session's output ends; then <paramref name="done"/> is called
+    /// once, from the writer's thread, with null or the failure. A failed write whose file holds data
+    /// keeps it, finished as far as it got; one that wrote nothing leaves no file behind, the reserved
+    /// one included. A throw means nothing was started. Called on the orchestrator thread; never blocks.
+    /// </summary>
+    void Start(string path, Action<Exception?> done);
+
+    /// <summary>
+    /// Ends the Recording at <paramref name="qpc"/> (the press): it keeps what was captured before
+    /// it, then finishes its file and calls the <see cref="Start"/> callback. Called on the
+    /// orchestrator thread; never blocks on the file.
+    /// </summary>
+    void Stop(long qpc);
 }
 
 /// <summary>A Clip a session can write (AD-8, AD-9).</summary>

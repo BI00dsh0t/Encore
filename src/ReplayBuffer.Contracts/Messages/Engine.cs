@@ -16,6 +16,7 @@ public sealed record StateSnapshot
     private readonly VideoOptions _videoOptions = VideoOptions.Unprobed;
     private readonly AudioDeviceList _devices = AudioDeviceList.Empty;
     private readonly MeterLevels _meters = MeterLevels.Empty;
+    private readonly IReadOnlyList<LibraryItem> _library = [];
 
     /// <summary>Identifies one engine run; a new value means a restarted engine.</summary>
     public required string EngineInstanceId { get; init; }
@@ -63,6 +64,14 @@ public sealed record StateSnapshot
     /// <remarks>A snapshot without the field (an engine from before story 4.2) reads as none.</remarks>
     public ClipFailed? LastClipFailure { get; init; }
 
+    /// <summary>The last Recording started, or <c>null</c> before one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 6.1) reads as none.</remarks>
+    public RecordingStarted? LastRecordingStarted { get; init; }
+
+    /// <summary>The last Recording stopped, or <c>null</c> before one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 6.1) reads as none.</remarks>
+    public RecordingStopped? LastRecordingStopped { get; init; }
+
     /// <summary>What the <c>video</c> key can be set to on this PC (R2); unprobed until <c>capture.videoOptions</c>.</summary>
     /// <remarks>A snapshot without the field (an engine from before story 10) reads as unprobed.</remarks>
     public VideoOptions VideoOptions
@@ -100,6 +109,16 @@ public sealed record StateSnapshot
     /// <remarks>A snapshot without the field (an engine from before story 3.2) reads as <c>null</c>.</remarks>
     public IReadOnlyList<DetectedGame>? DetectedGames { get; init; }
 
+    /// <summary>The Library's items (R1), in no particular order; the App sorts them.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 7.1) reads as the empty list.</remarks>
+    public IReadOnlyList<LibraryItem> Library
+    {
+        get => _library;
+
+        // The generated deserializer passes null for a missing field.
+        init => _library = value ?? [];
+    }
+
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
 
@@ -118,6 +137,7 @@ public sealed record StateSnapshot
         Meters = MeterLevels.Empty,
         TargetGame = null,
         DetectedGames = [],
+        Library = [],
     };
 }
 
