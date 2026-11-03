@@ -106,6 +106,7 @@ internal sealed class EngineHost : IAsyncDisposable
     private Task _heartbeat = Task.CompletedTask;
     private Task _probe = Task.CompletedTask;
     private GameMonitor? _games;
+    private LibraryActor _library = null!;
     private int _disposed;
 
     private EngineHost(
@@ -164,6 +165,9 @@ internal sealed class EngineHost : IAsyncDisposable
     /// <summary>The engine's one audio hub (AD-20); disposed last, after every session has ended.</summary>
     public AudioDeviceHub Audio { get; }
 
+    /// <summary>The LibraryActor, which a writer tells about each file it writes (R6).</summary>
+    internal ILibraryWrites Library => _library;
+
     public string PipeName => Server.PipeName;
 
     /// <summary>Completes once <c>engine.shutdown</c> has been answered.</summary>
@@ -177,6 +181,7 @@ internal sealed class EngineHost : IAsyncDisposable
         var hotkeyLog = loggers.CreateLogger("Hotkeys");
         var gameLog = loggers.CreateLogger("Games");
         var clipLog = loggers.CreateLogger("Clips");
+        var libraryLog = loggers.CreateLogger("Library");
         var replay = !hostOptions.DebugCapture && (hostOptions.ReplayBuffer ?? !instance.IsTest);
 
         // The pipe first: a second engine must fail before it touches the settings file.
@@ -187,10 +192,21 @@ internal sealed class EngineHost : IAsyncDisposable
         DeviceDropoutReporter? dropouts = null;
         TrackMeters? meters = null;
         GameMonitor? games = null;
+        LibraryActor? library = null;
         var audio = new AudioDeviceHub(loggers);
         try
         {
             var load = SettingsStore.Open(instance.RoamingDataFolder);
+
+            // The Library at start seeds the hub's initial state, as the device list does.
+            string OutputFolder() =>
+                SettingsResolver.Resolve(load.Store.Current, null).OutputFolder
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
+            var libraryFile = Path.Combine(instance.RoamingDataFolder, "library.json");
+            var libraryItems = LibraryActor.Load(
+                OutputFolder(),
+                libraryFile,
+                e => libraryLog.LogWarning("The Library couldn't be read in full: {Message}", e.Message));
 
             // The device list seeds the hub's initial state; a change is published once the hub exists.
             EventHub? publishTo = null;
@@ -199,10 +215,19 @@ internal sealed class EngineHost : IAsyncDisposable
                 () => load.Store.Current,
                 list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
                 loggers.CreateLogger("Audio"));
-            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list));
+            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryItems));
             load.Store.Changed += document => hub.Publish(SettingsMessages.Changed, new SettingsChanged(document.Revision, document));
             load.Store.Changed += devices.OnSettingsChanged;
 
+            var libraryActor = library = new LibraryActor(
+                libraryItems,
+                OutputFolder,
+                libraryFile,
+                item => hub.Publish(LibraryMessages.ItemAdded, item),
+                item => hub.Publish(LibraryMessages.ItemChanged, item),
+                removed => hub.Publish(LibraryMessages.ItemRemoved, removed),
+                hostOptions.Time,
+                e => libraryLog.LogWarning("library.json couldn't be written: {Message}", e.Message));
             var warnings = new Warnings(hub, hostOptions.Time);
             dropouts = new DeviceDropoutReporter(audio, warnings);
             var router = new CommandRouter(log);
@@ -267,9 +292,7 @@ internal sealed class EngineHost : IAsyncDisposable
                         },
                         Ignored: since => clipLog.LogInformation(
                             "The save press came {Seconds:0.0} s after the last accepted one, inside the Save Cooldown; it was ignored", since.TotalSeconds),
-
-                        // The LibraryActor (epic-library-cleanup) takes this place.
-                        Library: NoLibraryWrites.Instance)
+                        Library: libraryActor)
                     : null);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
@@ -299,7 +322,7 @@ internal sealed class EngineHost : IAsyncDisposable
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games };
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor };
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
             router.Register(AudioMessages.List, (_, _) => ValueTask.FromResult(devices.Current));
@@ -380,6 +403,7 @@ internal sealed class EngineHost : IAsyncDisposable
             games?.Dispose();
             hotkeys?.Dispose();
             sessions?.Dispose();
+            library?.Dispose();
             meters?.Dispose();
             devices?.Dispose();
             dropouts?.Dispose();
@@ -410,6 +434,9 @@ internal sealed class EngineHost : IAsyncDisposable
 
         // Ends a running session, finishing its file, and joins the orchestrator thread.
         Sessions.Dispose();
+
+        // After the orchestrator, so every write it ended has been saved. A write still in flight here gets no EndWrite (4.5 deferred) and is found by the next start scan without its profile.
+        _library.Dispose();
         await Server.DisposeAsync().ConfigureAwait(false);
 
         // Closes the watch's subscriptions before the hub goes.

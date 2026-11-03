@@ -23,11 +23,13 @@ internal sealed class EventHub
     private StateSnapshot _state;
 
     /// <param name="devices">The device list the engine starts with; in the initial state, so no event and no <c>seq</c>.</param>
-    public EventHub(SettingsDocument settings, AudioDeviceList? devices = null)
+    /// <param name="library">The Library items the engine starts with; in the initial state likewise.</param>
+    public EventHub(SettingsDocument settings, AudioDeviceList? devices = null, IReadOnlyList<LibraryItem>? library = null)
     {
         _state = StateSnapshot.Initial(Guid.NewGuid().ToString("N"), Environment.ProcessId, settings) with
         {
             Devices = devices ?? AudioDeviceList.Empty,
+            Library = library ?? [],
         };
     }
 

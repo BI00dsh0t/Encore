@@ -3,14 +3,14 @@ title: 'Tracer: a saved Clip appears in the Library within 2 s'
 type: 'feature'
 ticket: '1'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'd6b57b6ef463e170bf92f9b0f96ea25e148f419d'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -72,15 +72,15 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/Messages/Library.cs` -- `LibraryItem(string Path, string? ProfileId, long Size, DateTimeOffset Date, bool BeingWritten)`, `LibraryItemRemoved(string Path)`, `ItemAdded`/`ItemChanged` (replace or append by Path) and `ItemRemoved`, `LibraryJsonContext` -- R1 events
-- [ ] `src/ReplayBuffer.Contracts/Messages/Engine.cs` -- `IReadOnlyList<LibraryItem> Library` defaulting to empty; in `Initial` -- R1 snapshot field
-- [ ] `src/ReplayBuffer.Core/Library/LibraryActor.cs` (new) -- `sealed class LibraryActor : ILibraryWrites, IDisposable`. `static IReadOnlyList<LibraryItem> Load(string outputFolder, string libraryFile, TimeProvider, Action<Exception> failed)` does the start scan + json merge (Matrix rows Restart/Scan/Gone/Bad json) and the constructor takes those items, `Func<string> outputFolder`, the file path, publish delegates for the three events, the clock and `failed`. A Core-private JSON context persists `{ "version": 1, "items": [...] }` -- R1 actor, AD-17
-- [ ] `src/ReplayBuffer.Engine/EngineHost.cs` -- load the items before the `EventHub` and seed its first snapshot with them (`EventHub` takes them, or a `with` after construction—whichever is smaller); construct the actor publishing through `hub`; pass it as `ReplayClips.Library`; expose `internal ILibraryWrites Library`; dispose after `Sessions`, also in the catch cleanup -- wiring
-- [ ] `src/ReplayBuffer.App/Library/LibraryPage.cs`, `LibraryView.xaml(.cs)` (new), `MainViewModel.cs`, `MainWindow.xaml` -- `LibraryPage : Observable` with `View`, `Render(StateSnapshot)` diffing `ObservableCollection<LibraryRow>` by Path, newest first by Date; a row shows name (file name), game (profile name, else the relative path's top-level folder, else "Other"), local date `yyyy-MM-dd HH:mm`, size (B/KB/MB/GB, one decimal) and a lock marker ("Saving…") when `BeingWritten` -- R1, R3 part
-- [ ] `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` -- three `Samples` entries -- every library event maps to the snapshot field
-- [ ] `tests/ReplayBuffer.Engine.Tests/LibraryServeTests.cs` (new) -- (1) temp instance, set `outputFolder` to a temp dir, `host.Library.BeginWrite(abs, "c:\\games\\a.exe")`, write bytes, `EndWrite(Written)`: one `library.itemAdded` within 2 s, then `itemChanged`; the client's `State.Library` holds the item with its profileId and size. (2) the same then dispose and restart the host on the same instance: the new client's first snapshot holds the item with its profileId. (3) Begin then End(Failed): `itemRemoved` and no item
-- [ ] `tests/ReplayBuffer.Core.Tests/LibraryActorTests.cs` (new) -- two quick tests for the Matrix rows the engine test doesn't reach: (1) `Load` over a temp folder with a json-listed file, an unlisted file, a zero-length `.mp4`, a `.rbpart` and a json entry whose file is gone, and (2) a bad `library.json` loads from the scan alone and a save whose target is a directory calls `failed` while the events still arrive
-- [ ] `tests/ReplayBuffer.App.Tests/LibraryPageTests.cs` (new) -- items list newest first with game name, size text and a locked being-written row; the view renders without binding errors
+- [x] `src/ReplayBuffer.Contracts/Messages/Library.cs` -- `LibraryItem(string Path, string? ProfileId, long Size, DateTimeOffset Date, bool BeingWritten)`, `LibraryItemRemoved(string Path)`, `ItemAdded`/`ItemChanged` (replace or append by Path) and `ItemRemoved`, `LibraryJsonContext` -- R1 events
+- [x] `src/ReplayBuffer.Contracts/Messages/Engine.cs` -- `IReadOnlyList<LibraryItem> Library` defaulting to empty; in `Initial` -- R1 snapshot field
+- [x] `src/ReplayBuffer.Core/Library/LibraryActor.cs` (new) -- `sealed class LibraryActor : ILibraryWrites, IDisposable`. `static IReadOnlyList<LibraryItem> Load(string outputFolder, string libraryFile, TimeProvider, Action<Exception> failed)` does the start scan + json merge (Matrix rows Restart/Scan/Gone/Bad json) and the constructor takes those items, `Func<string> outputFolder`, the file path, publish delegates for the three events, the clock and `failed`. A Core-private JSON context persists `{ "version": 1, "items": [...] }` -- R1 actor, AD-17
+- [x] `src/ReplayBuffer.Engine/EngineHost.cs` -- load the items before the `EventHub` and seed its first snapshot with them (`EventHub` takes them, or a `with` after construction—whichever is smaller); construct the actor publishing through `hub`; pass it as `ReplayClips.Library`; expose `internal ILibraryWrites Library`; dispose after `Sessions`, also in the catch cleanup -- wiring
+- [x] `src/ReplayBuffer.App/Library/LibraryPage.cs`, `LibraryView.xaml(.cs)` (new), `MainViewModel.cs`, `MainWindow.xaml` -- `LibraryPage : Observable` with `View`, `Render(StateSnapshot)` diffing `ObservableCollection<LibraryRow>` by Path, newest first by Date; a row shows name (file name), game (profile name, else the relative path's top-level folder, else "Other"), local date `yyyy-MM-dd HH:mm`, size (B/KB/MB/GB, one decimal) and a lock marker ("Saving…") when `BeingWritten` -- R1, R3 part
+- [x] `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` -- three `Samples` entries -- every library event maps to the snapshot field
+- [x] `tests/ReplayBuffer.Engine.Tests/LibraryServeTests.cs` (new) -- (1) temp instance, set `outputFolder` to a temp dir, `host.Library.BeginWrite(abs, "c:\\games\\a.exe")`, write bytes, `EndWrite(Written)`: one `library.itemAdded` within 2 s, then `itemChanged`; the client's `State.Library` holds the item with its profileId and size. (2) the same then dispose and restart the host on the same instance: the new client's first snapshot holds the item with its profileId. (3) Begin then End(Failed): `itemRemoved` and no item
+- [x] `tests/ReplayBuffer.Core.Tests/LibraryActorTests.cs` (new) -- two quick tests for the Matrix rows the engine test doesn't reach: (1) `Load` over a temp folder with a json-listed file, an unlisted file, a zero-length `.mp4`, a `.rbpart` and a json entry whose file is gone, and (2) a bad `library.json` loads from the scan alone and a save whose target is a directory calls `failed` while the events still arrive
+- [x] `tests/ReplayBuffer.App.Tests/LibraryPageTests.cs` (new) -- items list newest first with game name, size text and a locked being-written row; the view renders without binding errors
 
 **Acceptance Criteria:**
 - Given a running engine with a temp Output Folder, when a writer's `BeginWrite` then `EndWrite(Written)` run for a file in it, then the App client receives `library.itemAdded` within 2 s and its next `state.snapshot` holds the item with its profileId.
@@ -90,9 +90,24 @@ deferred: []
 
 ## Implementation Notes
 
+- Implemented by a fresh subagent from this plan; three review patches applied in the main session.
+- `LibraryActor.Load` takes no `TimeProvider`: nothing in the load reads a clock (a scanned file's date is its creation time). The constructor takes it for a write's date.
+- Dates are stored in UTC; the App shows them in local time. An `EndWrite(Written)` for a file that's gone gives size 0.
+- `IpcTests.TheSnapshotComesFirstAndEventsFollowInSeqOrder` now copies `Library` from the hub's state, as it already did `DetectedGames` (equal lists, different objects).
+- The fourth AC (the builder saves a Clip in a game and sees it in the Library tab within 2 s) is in the Human Check Queue, unverified here.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 5 findings — high 0, medium 0, low 3, false 2, maybe-false 0
+- findings:
+  - `low` `patch` A `null` element in `library.json`'s items throws `NullReferenceException` out of `Load` and stops engine start — `ReadFile` now skips null entries.
+  - `low` `patch` The `_library.Dispose()` comment in `EngineHost.DisposeAsync` claims every begun write was saved; a write in flight at shutdown gets no `EndWrite` (4.5 deferred) — comment reworded to say so.
+  - `low` `patch` `LibraryPageTests` binding-error filter `"LibraryRow"` misses errors on `LibraryPage` — filter is now `"Library"`.
+  - `false` `reject` `Load` drops the plan's `TimeProvider` — nothing in the load reads a clock, so no behaviour differs; recorded in Implementation Notes.
+  - `false` `reject` Plan checkboxes and notes not updated — the fix edits this build's plan, which triage rejects; finalization updates them anyway.
 
 ## Design Notes
 
@@ -104,3 +119,22 @@ deferred: []
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors
 - `dotnet test --project tests/ReplayBuffer.Contracts.Tests -c Release --no-build`, then `.../ReplayBuffer.Core.Tests`, `.../ReplayBuffer.Engine.Tests`, `.../ReplayBuffer.App.Tests` -- expected: all pass
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL/AOT warnings
+
+## Auto Run Result
+
+**Summary:** A single-threaded `LibraryActor` in Core replaces 4.5's no-op `ILibraryWrites`. It indexes the Output Folder's non-empty `*.mp4` files at start, merged with `library.json` (roaming instance folder, written atomically), and publishes `library.itemAdded` (locked, at `BeginWrite`), `itemChanged` (size, at `EndWrite(Written)`) and `itemRemoved` (at `EndWrite(Failed)`). These keep the new `state.snapshot.library` field current. A Library tab in the Main App lists the items newest first with name, game, date and size; an item being written shows "Saving…".
+
+**Files changed:**
+- `src/ReplayBuffer.Contracts/Messages/Library.cs` -- `LibraryItem`, `LibraryItemRemoved`, the three events, `LibraryJsonContext`
+- `src/ReplayBuffer.Contracts/Messages/Engine.cs` -- `StateSnapshot.Library`, empty by default
+- `src/ReplayBuffer.Core/Library/LibraryActor.cs` -- the actor, start scan and `library.json`
+- `src/ReplayBuffer.Engine/EngineHost.cs`, `Ipc/EventHub.cs` -- load, seed the first snapshot, wire and dispose the actor
+- `src/ReplayBuffer.App/Library/*`, `MainViewModel.cs`, `MainWindow.xaml` -- the Library tab
+- Tests: `Core.Tests/LibraryActorTests.cs` (2), `Engine.Tests/LibraryServeTests.cs` (3), `App.Tests/LibraryPageTests.cs` (2), three samples in `Contracts.Tests/MessagesTests.cs`, one line in `Engine.Tests/IpcTests.cs`
+
+**Review:** 3 low patches applied, 0 deferred, 2 rejected as false (see the Review Triage Log). Follow-up review: not recommended (patched: high 0, medium 0, low 3).
+
+**Verification:** `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings. Default runs: Contracts 105, Core 74, App 69 (7 explicit skipped) and Engine 154 (18 explicit skipped) passed. After the patches, one Engine run had flaky failures in GPU capture tests this diff doesn't touch (`CaptureEndTests.ClosingTheWindowEndsCaptureAndFinalizesTheFile`, `TrackLayoutCaptureTests.EachTrackIsOneTitledAacStreamInLayoutOrder`) while parallel stories loaded the GPU; reruns passed. `pwsh tools/publish-engine.ps1`: no IL/AOT warnings.
+
+**Residual risks:** A Clip still writing at engine shutdown gets no `EndWrite`, so the next start scan finds it without its profile and dated by creation time (4.5 deferred; 7.2's reconciliation). `outputFolder` changes aren't followed until 7.2/7.9. The builder's in-game check (AC 4) is pending.
+
