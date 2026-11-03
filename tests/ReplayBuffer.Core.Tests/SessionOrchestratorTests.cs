@@ -1091,6 +1091,140 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task TheRecordHotkeyModeIsReadAtEachPressAndOnlyItsActionsAct()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var (orchestrator, events, presses, made, published) = NewRecordingOrchestrator();
+            using var owned = orchestrator;
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            // Toggle mode (the default): Start and Stop do nothing; press, press gives start, stop.
+            await Press(orchestrator, presses, HotkeyAction.RecordStart, qpc);
+            await Press(orchestrator, presses, HotkeyAction.RecordStop, qpc + 1);
+            Assert.Empty(made);
+            Assert.False(events.Reader.TryRead(out _));
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 2);
+            var first = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 3);
+            Assert.Equal(new RecordingStopped(first.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+
+            // Separate mode, committed mid-session: the toggle does nothing, Start twice gives one
+            // Recording, Stop stops it, and Stop with none running does nothing.
+            var document = Volatile.Read(ref _document);
+            Volatile.Write(ref _document, document with { Global = document.Global.SetItem(Keys.RecordHotkeyMode.Name, Keys.RecordHotkeyMode.ToJson(RecordHotkeyMode.Separate)) });
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 4);
+            Assert.Single(made);
+            await Press(orchestrator, presses, HotkeyAction.RecordStart, qpc + 5);
+            var second = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            await Press(orchestrator, presses, HotkeyAction.RecordStart, qpc + 6);
+            Assert.Equal(2, made.Count);
+            await Press(orchestrator, presses, HotkeyAction.RecordStop, qpc + 7);
+            Assert.Equal(new RecordingStopped(second.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+            Assert.Equal([qpc + 7], made.Last().Stops);
+            await Press(orchestrator, presses, HotkeyAction.RecordStop, qpc + 8);
+            Assert.Equal(2, made.Count);
+            Assert.False(events.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task TheRecordingsSwitchIsReadAtEachPressAndGatesOnlyTheStart()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var (orchestrator, events, presses, made, published) = NewRecordingOrchestrator();
+            using var owned = orchestrator;
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            // No Target Game, so no game session: nothing, even with the switch on.
+            SetRecordingsEnabled(true);
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc);
+            Assert.Empty(made);
+            Assert.False(events.Reader.TryRead(out _));
+
+            // Off: the press does nothing, no event and no state change.
+            SetRecordingsEnabled(false);
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 1);
+            Assert.Empty(made);
+            Assert.False(events.Reader.TryRead(out _));
+            Assert.Empty(Directory.GetFiles(folder, "*", SearchOption.AllDirectories));
+            Assert.All(published, p => Assert.Equal(RecordingState.Off, p.Recording));
+
+            // Switching it on starts nothing; the next press does.
+            SetRecordingsEnabled(true);
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 2);
+            Assert.Empty(made);
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 3);
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
+
+            // Switching it off mid-Recording leaves it running until it is stopped.
+            SetRecordingsEnabled(false);
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 4);
+            Assert.Empty(made.Single().Stops);
+            Assert.False(events.Reader.TryRead(out _));
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 5);
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    private void SetRecordingsEnabled(bool enabled)
+    {
+        var document = Volatile.Read(ref _document);
+        Volatile.Write(ref _document, document with { Profiles = document.Profiles.SetItem(ProfileId, document.Profiles[ProfileId] with { RecordingsEnabled = enabled }) });
+    }
+
+    private static async Task Press(SessionOrchestrator orchestrator, System.Threading.Channels.Channel<HotkeyPress> presses, HotkeyAction action, long qpc)
+    {
+        orchestrator.Post(new HotkeyPressed(action, qpc));
+        await NextPress(presses);
+    }
+
+    private (SessionOrchestrator Orchestrator, System.Threading.Channels.Channel<object> Events, System.Threading.Channels.Channel<HotkeyPress> Presses, ConcurrentQueue<FakeRecording> Made, ConcurrentQueue<CaptureState> Published) NewRecordingOrchestrator()
+    {
+        var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+        var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+        var made = new ConcurrentQueue<FakeRecording>();
+        var published = new ConcurrentQueue<CaptureState>();
+        var factory = new FakeFactory
+        {
+            Record = _ =>
+            {
+                var recording = new FakeRecording();
+                made.Enqueue(recording);
+                return recording;
+            },
+        };
+        var orchestrator = new SessionOrchestrator(
+            factory,
+            () => Volatile.Read(ref _document),
+            published.Enqueue,
+            press => presses.Writer.TryWrite(press),
+            recordings: new Recordings(
+                OutputPathAllocator.System,
+                () => throw new InvalidOperationException("the Global folder is set"),
+                s => events.Writer.TryWrite(s),
+                s => events.Writer.TryWrite(s),
+                e => events.Writer.TryWrite(e)));
+        return (orchestrator, events, presses, made, published);
+    }
+
     private static async Task<HotkeyPress> NextPress(System.Threading.Channels.Channel<HotkeyPress> presses) =>
         await presses.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
