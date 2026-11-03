@@ -6,39 +6,49 @@ namespace ReplayBuffer.Platform.FFmpeg;
 /// <summary>
 /// The Replay Buffer's <see cref="PacketSink"/> (AD-8): each packet's bytes are copied into a
 /// <see cref="PacketRing"/>, and each stream's codec parameters, title, default flag and time base
-/// are kept for the Clips cut from it. It owns the ring. Its count is the session's one reference
-/// plus one per <see cref="Lease"/>: a save leases it until it has cut, so ending the session never
-/// frees the ring under a waiting writer.
+/// are kept for the Clips cut from it. The rings are <see cref="RingGenerations"/> (R5): an encoder
+/// <see cref="Restart"/> opens a generation with streams of its own, and a Buffer Window
+/// <see cref="Resize"/> one that shares the old generation's streams; a Clip is cut from one
+/// generation, with that generation's parameters. It owns the rings. Its count is the session's one
+/// reference plus one per <see cref="Lease"/>: a save leases it until it has cut, so ending the
+/// session never frees the rings under a waiting writer.
 /// </summary>
 public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
 {
-    private readonly PacketRing _ring;
+    private readonly RingGenerations _generations;
     private readonly Lock _lock = new();
-    private readonly List<ClipStream> _streams = [];
+
+    // Each generation's streams; a resize's generation shares its predecessor's list.
+    private readonly Dictionary<int, List<ClipStream>> _streams = [];
     private int _references = 1;
     private int _disposed;
     private volatile bool _closed;
 
+    /// <param name="ring">Generation 1's ring.</param>
     public ReplayRingSink(PacketRing ring)
     {
         ArgumentNullException.ThrowIfNull(ring);
-        _ring = ring;
+        _generations = new RingGenerations(ring);
+        _streams[1] = [];
     }
 
     /// <summary>Clips carry their codec headers in the sample entry.</summary>
     internal override bool NeedsGlobalHeader => true;
 
-    /// <summary>The streams added, in index order.</summary>
+    /// <summary>The current generation's streams.</summary>
     public int StreamCount
     {
         get
         {
             lock (_lock)
             {
-                return _streams.Count;
+                return _streams[_generations.Current].Count;
             }
         }
     }
+
+    /// <summary>The current ring generation, counting from 1.</summary>
+    public int Generation => _generations.Current;
 
     internal override int AddStream(AVCodecContext* encoder, string? title, bool isDefault)
     {
@@ -61,8 +71,8 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
         lock (_lock)
         {
             var timeBase = encoder->time_base;
-            var index = _ring.AddStream(timeBase.num, timeBase.den, encoder->codec_type == AVMediaType.AVMEDIA_TYPE_VIDEO);
-            _streams.Add(new ClipStream(parameters, title, isDefault, timeBase));
+            var index = _generations.AddStream(timeBase.num, timeBase.den, encoder->codec_type == AVMediaType.AVMEDIA_TYPE_VIDEO);
+            _streams[_generations.Current].Add(new ClipStream(parameters, title, isDefault, timeBase));
             return index;
         }
     }
@@ -76,7 +86,7 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
                 return;
             }
 
-            _ring.Append(
+            _generations.Append(
                 streamIndex,
                 new ReadOnlySpan<byte>(packet->data, packet->size),
                 packet->pts,
@@ -91,34 +101,78 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
     }
 
     /// <summary>Whether every stream's newest packet ends at or after <paramref name="us"/> (µs since the anchor).</summary>
-    public bool AllStreamsPast(long us) => _ring.AllStreamsPast(us);
+    public bool AllStreamsPast(long us) => _generations.AllStreamsPast(us);
 
     /// <summary>
     /// The video stream's <paramref name="pts"/> as µs since the anchor, exactly as the ring times
     /// that packet, so a cut can end at it.
     /// </summary>
-    public long VideoMicros(long pts) => _ring.ToMicros(_ring.VideoStream, pts);
+    public long VideoMicros(long pts) => _generations.ToMicros(_generations.Ring.VideoStream, pts);
 
     /// <summary>
-    /// Pins <c>[fromUs, toUs)</c> (µs since the anchor) from the first video keyframe at or after
-    /// <paramref name="fromUs"/>, as <see cref="PacketRing.Cut"/> splits it, with its own copies of
-    /// the streams' parameters, so it outlives the sink; null with no keyframe before <paramref name="toUs"/>.
+    /// Opens a ring generation on <paramref name="next"/> for a restarted encoder chain (R5): the
+    /// old chain must have stopped writing, and the new chain's encoders then add their streams to
+    /// it. Its first video keyframe is a boundary no Clip spans. Returns its number.
+    /// Precondition: no save may be waiting for its keyframe or its streams (the caller drains or
+    /// waits for in-flight saves first): <see cref="VideoMicros"/> and <see cref="AllStreamsPast"/>
+    /// read the current generation, so they would convert the old encoder's PTS with the new one's
+    /// streams, and its video stream is -1 until the new chain adds its streams.
     /// </summary>
-    public ClipSource? Cut(long fromUs, long toUs)
+    public int Restart(PacketRing next)
     {
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(Volatile.Read(ref _references) == 0, this);
-            var cut = _ring.Cut(fromUs, toUs);
-            if (cut is null)
+            var number = _generations.Restart(next);
+            _streams[number] = [];
+            return number;
+        }
+    }
+
+    /// <summary>
+    /// Moves the Replay Buffer to <paramref name="next"/>, a ring of a new Buffer Window, at the
+    /// Reset <paramref name="fromUs"/> (AD-8): it is seeded with the current ring's packets from the
+    /// keyframe there on and keeps the same streams, and the old ring is retired. Returns the new
+    /// generation's number.
+    /// </summary>
+    public int Resize(PacketRing next, long fromUs)
+    {
+        lock (_lock)
+        {
+            var previous = _generations.Current;
+            var number = _generations.Resize(next, fromUs);
+            _streams[number] = _streams[previous];
+            return number;
+        }
+    }
+
+    /// <summary>
+    /// Pins <c>[fromUs, toUs)</c> (µs since the anchor) from one ring generation, as
+    /// <see cref="RingGenerations.Cut"/> picks it, from the first video keyframe at or after its
+    /// start, with its own copies of that generation's streams' parameters, so it outlives the sink;
+    /// null when there is nothing to cut. The cut runs outside the sink's lock.
+    /// </summary>
+    public ClipSource? Cut(long fromUs, long toUs)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _references) == 0, this);
+        if (_generations.Cut(fromUs, toUs) is not { } picked)
+        {
+            return null;
+        }
+
+        var (cut, generation) = picked;
+        lock (_lock)
+        {
+            // Released between the cut and here: the parameters are gone.
+            if (Volatile.Read(ref _references) == 0 || !_streams.TryGetValue(generation, out var source))
             {
-                return null;
+                cut.Dispose();
+                throw new ObjectDisposedException(nameof(ReplayRingSink));
             }
 
-            var streams = new List<ClipStream>(_streams.Count);
+            var streams = new List<ClipStream>(source.Count);
             try
             {
-                foreach (var stream in _streams)
+                foreach (var stream in source)
                 {
                     var copy = ffmpeg.avcodec_parameters_alloc();
                     if (copy is null)
@@ -168,11 +222,16 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
 
         lock (_lock)
         {
-            _ring.Dispose();
-            foreach (var stream in _streams)
+            _generations.Dispose();
+            foreach (var list in _streams.Values.Distinct())
             {
-                var parameters = stream.Parameters;
-                ffmpeg.avcodec_parameters_free(&parameters);
+                foreach (var stream in list)
+                {
+                    var parameters = stream.Parameters;
+                    ffmpeg.avcodec_parameters_free(&parameters);
+                }
+
+                list.Clear();
             }
 
             _streams.Clear();

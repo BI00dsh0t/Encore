@@ -20,7 +20,7 @@ public sealed class ClipClaimTests
 
         // After a success at 30, two concurrent failures, B first then A, fall back to 30.
         claim.Claim(30);
-        claim.Succeeded(30);
+        claim.Succeeded(30, 30);
         Assert.Equal(30, claim.Claim(40));
         Assert.Equal(40, claim.Claim(50));
         claim.Failed(50);

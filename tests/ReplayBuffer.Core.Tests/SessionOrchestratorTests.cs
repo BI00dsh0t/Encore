@@ -505,6 +505,48 @@ public sealed class SessionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task AWrittenClipGivesTheSessionTheEffectiveBufferWindowBeforeItsReset()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var writes = new ConcurrentQueue<string>();
+            var log = new ConcurrentQueue<string>();
+            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var factory = new FakeFactory { Save = _ => new FakeWrite(writes, gate: gate.Task, log: log), Log = log };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => saved.Writer.TryWrite(s), _ => { }, _ => { }));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            // Press 1 writes; meanwhile the Game Profile's Buffer Window changes from 60 s to 30 s.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            await WaitUntil(() => !writes.IsEmpty);
+            Volatile.Write(ref _document, Revision(4) with
+            {
+                Global = InFolder(folder, cooldown: 0),
+                Profiles = SettingsMaps.EmptyProfiles.Add(ProfileId, new GameProfile
+                {
+                    Name = "Game",
+                    Overrides = SettingsMaps.EmptyValues.Add(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(30)),
+                }),
+            });
+            gate.SetResult();
+
+            await NextAsync(saved);
+            Assert.Equal(["window 30", "reset"], log);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AnExitDrainsTheSessionSoASaveStillCutsUntilTheDrainExpiresAndReleasesIt()
     {
         var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
@@ -953,6 +995,9 @@ public sealed class SessionOrchestratorTests : IDisposable
         /// <summary>What each session's <c>Save</c> returns; none when null.</summary>
         public Func<long, IClipWrite?>? Save { get; init; }
 
+        /// <summary>Where each session records its <c>SetBufferWindow</c> calls, as "window N".</summary>
+        public ConcurrentQueue<string>? Log { get; init; }
+
         public IReadOnlyList<FakeSession> Sessions
         {
             get
@@ -974,7 +1019,7 @@ public sealed class SessionOrchestratorTests : IDisposable
 
             lock (_sessions)
             {
-                var session = new FakeSession(spec, events, _sessions.Count + 1) { SaveWith = Save };
+                var session = new FakeSession(spec, events, _sessions.Count + 1) { SaveWith = Save, Log = Log };
                 _sessions.Add(session);
                 return session;
             }
@@ -986,7 +1031,7 @@ public sealed class SessionOrchestratorTests : IDisposable
     /// <paramref name="gate"/> completes, leaving the reserved file, or failing with
     /// <paramref name="failure"/>; it counts its Resets.
     /// </summary>
-    private sealed class FakeWrite(ConcurrentQueue<string> writes, Exception? failure = null, Task? gate = null) : IClipWrite
+    private sealed class FakeWrite(ConcurrentQueue<string> writes, Exception? failure = null, Task? gate = null, ConcurrentQueue<string>? log = null) : IClipWrite
     {
         private int _resets;
 
@@ -998,7 +1043,11 @@ public sealed class SessionOrchestratorTests : IDisposable
             (gate ?? Task.CompletedTask).ContinueWith(_ => done(failure), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
 
-        public void Reset() => Interlocked.Increment(ref _resets);
+        public void Reset()
+        {
+            Interlocked.Increment(ref _resets);
+            log?.Enqueue("reset");
+        }
     }
 
     /// <summary>Records each Library call, in order.</summary>
@@ -1063,6 +1112,10 @@ public sealed class SessionOrchestratorTests : IDisposable
         public Func<long, IClipWrite?>? SaveWith { get; init; }
 
         public IClipWrite? Save(long qpc) => SaveWith?.Invoke(qpc);
+
+        public ConcurrentQueue<string>? Log { get; init; }
+
+        public void SetBufferWindow(int seconds) => Log?.Enqueue($"window {seconds}");
 
         public void SetMicMuted(bool muted, long qpc)
         {
