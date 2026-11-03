@@ -37,8 +37,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 3.3 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 2.8 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 3.3 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 2.10 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
@@ -83,7 +83,7 @@ The coordinator logs each QA round in the Log below.
 | 11 | 2.11 Mic Devices and double-count warning in the editor | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done |
 | 12 | 2.8 Live meters in the Track Layout editor | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged) |
 | 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | done |
-| 14 | 2.10 Refactor sweep | | pending |
+| 14 | 2.10 Refactor sweep | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 15 | Release epic 2 (`v0.2.0`) | | pending |
 | 16 | 3.1 Tracer: detect a borderless game | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `a7de027`) |
 | 17 | 3.8 Spike: which Windows game list to read | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
@@ -338,3 +338,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 2.8 is READY FOR QA at `81023ce` (build 0 warnings, App.Tests 62 passed and 5 Heavy skipped). The full-suite hang was fixed by running the three WPF test classes one at a time. QA started on qa-2-1 (Sonnet, medium effort), and the Trello card moved to In QA. 3.3 is applying two review patches.
 - 2026-11-03: QA on 2.8 (`81023ce`): **QA PASS**, 0 findings, with the full App.Tests run done in 27 s. 2.8 was switched to Sonnet and told to merge. 3.3 is READY FOR QA at `4b3f7f5` (scoped build, tests and publish pass), and QA started on qa-1-14 (Sonnet). Its Trello card moved to In QA.
 - 2026-11-03: 2.8 merged (develop merged into the branch first; build 0 warnings, App.Tests 62 passed and 5 Heavy skipped), ticket marked done. Human check queued. Its worker returns to the pool.
+- 2026-11-03: 2.8 merged (`a223d8f`, done `edfca63`), and its card is in Done. QA on 3.3 (`4b3f7f5`): **QA PASS**, 0 findings, with one accepted note on a Recording-hold edge case. 3.3 was told to merge. 2.10 (epic 2 refactor sweep) went to pool worker slice-epic-8 (Opus, medium effort), and its card is In progress. After 2.10 merges: mark epic 2 `status: done` and release `v0.2.0`.
