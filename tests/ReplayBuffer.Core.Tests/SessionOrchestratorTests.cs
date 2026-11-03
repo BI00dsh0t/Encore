@@ -340,8 +340,190 @@ public sealed class SessionOrchestratorTests : IDisposable
         Assert.Equal(new HotkeyPress(HotkeyAction.MicMute, 200), second.Press);
         Assert.Equal(_orchestrator.ThreadId, first.ThreadId);
         Assert.Equal(_orchestrator.ThreadId, second.ThreadId);
-        Assert.Empty(_published);
+
+        // Only the mic mute press changed the state.
+        var (state, _) = Assert.Single(_published);
+        Assert.Equal(CaptureState.Initial with { MicMuted = false }, state);
         Assert.Empty(_factory.Sessions);
+    }
+
+    [Fact]
+    public async Task WithNoStoreItStartsMutedAndPublishesNothingUntilAChange()
+    {
+        var running = await Start(Target(window: 1));
+
+        Assert.True(running.Spec.MicMuted);
+        var (state, _) = Assert.Single(_published);
+        Assert.True(state.MicMuted);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheLoadedMuteIsInTheFirstStateAndTheFirstSessionsSpec(bool saved)
+    {
+        var store = new FakeMicMuteStore(saved);
+        var published = new ConcurrentQueue<CaptureState>();
+        var factory = new FakeFactory();
+        using (var orchestrator = new SessionOrchestrator(factory, () => _document, published.Enqueue, micMute: store))
+        {
+            var running = await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            Assert.Equal(saved, running.Spec.MicMuted);
+            Assert.Equal(saved, Assert.Single(factory.Sessions).Spec.MicMuted);
+        }
+
+        // An unmute differs from the initial state, so it is published before anything else.
+        var expected = new List<CaptureState>();
+        if (!saved)
+        {
+            expected.Add(CaptureState.Initial with { MicMuted = false });
+        }
+
+        expected.Add(CaptureState.Initial with { MicMuted = saved, Replay = ReplayState.Buffering });
+        expected.Add(CaptureState.Initial with { MicMuted = saved });
+        Assert.Equal(expected, published);
+        Assert.Equal(1, store.Loads);
+        Assert.Empty(store.Saves);
+    }
+
+    [Fact]
+    public async Task AStoreThatThrowsOnLoadStartsMuted()
+    {
+        var store = new FakeMicMuteStore(false) { LoadFailure = new IOException("disk gone") };
+        var (orchestrator, published, _) = NewOrchestrator(store, out _);
+        using (orchestrator)
+        {
+            var running = await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            Assert.True(running.Spec.MicMuted);
+            Assert.Equal([CaptureState.Initial with { Replay = ReplayState.Buffering }], published);
+        }
+    }
+
+    [Fact]
+    public async Task AnIdleMicMutePressTogglesSavesAndPublishesOnceEach()
+    {
+        var store = new FakeMicMuteStore(true);
+        var (orchestrator, published, presses) = NewOrchestrator(store, out _);
+        using (orchestrator)
+        {
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 100));
+            Assert.Equal(new HotkeyPress(HotkeyAction.MicMute, 100), await NextPress(presses));
+            Assert.Equal([false], store.Saves);
+            Assert.Equal([CaptureState.Initial with { MicMuted = false }], published);
+            Assert.False(presses.Reader.TryRead(out _));
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 200));
+            await NextPress(presses);
+            Assert.Equal([false, true], store.Saves);
+            Assert.Equal([CaptureState.Initial with { MicMuted = false }, CaptureState.Initial], published);
+        }
+    }
+
+    [Fact]
+    public async Task AMicMutePressMidSessionHandsItsQpcToTheSession()
+    {
+        var store = new FakeMicMuteStore(true);
+        var (orchestrator, published, presses) = NewOrchestrator(store, out var factory);
+        using (orchestrator)
+        {
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 1_000));
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 4_000));
+            await NextPress(presses);
+            await NextPress(presses);
+
+            var session = Assert.Single(factory.Sessions);
+            Assert.Equal([(false, 1_000L), (true, 4_000L)], session.MicMutes);
+            Assert.Equal([orchestrator.ThreadId], session.ThreadIds.Distinct());
+            Assert.Equal([true, false, true], published.Select(p => p.MicMuted));
+            Assert.Equal([false, true], store.Saves);
+        }
+    }
+
+    [Fact]
+    public async Task AThrowingSaveStillTogglesAndTheOrchestratorKeepsRunning()
+    {
+        var store = new FakeMicMuteStore(true) { SaveFailure = new InvalidOperationException("faulty store") };
+        var (orchestrator, published, presses) = NewOrchestrator(store, out var factory);
+        using (orchestrator)
+        {
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 100));
+            await NextPress(presses);
+
+            Assert.Equal([CaptureState.Initial with { MicMuted = false }], published);
+            var running = await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            Assert.False(running.Spec.MicMuted);
+            Assert.Single(factory.Sessions);
+        }
+    }
+
+    [Fact]
+    public async Task ASessionThatThrowsOnSetMicMutedLeavesTheMuteCommitted()
+    {
+        var store = new FakeMicMuteStore(true);
+        var (orchestrator, published, presses) = NewOrchestrator(store, out var factory);
+        using (orchestrator)
+        {
+            var running = await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            factory.Sessions[0].MicMuteFailure = new InvalidOperationException("broken");
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 100));
+            await NextPress(presses);
+
+            Assert.Equal([false], store.Saves);
+            Assert.False(published.Last().MicMuted);
+            Assert.False(running.Ended.IsCompleted);
+        }
+    }
+
+    [Fact]
+    public async Task APressOfAnotherActionLeavesMuteAlone()
+    {
+        var store = new FakeMicMuteStore(true);
+        var (orchestrator, published, presses) = NewOrchestrator(store, out var factory);
+        using (orchestrator)
+        {
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, 100));
+            Assert.Equal(HotkeyAction.Save, (await NextPress(presses)).Action);
+
+            Assert.Empty(store.Saves);
+            Assert.Empty(factory.Sessions[0].MicMutes);
+            Assert.True(Assert.Single(published).MicMuted);
+        }
+    }
+
+    [Fact]
+    public async Task TheNextSessionStartsWithTheMuteAsToggled()
+    {
+        var store = new FakeMicMuteStore(true);
+        var (orchestrator, _, presses) = NewOrchestrator(store, out _);
+        using (orchestrator)
+        {
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 100));
+            await NextPress(presses);
+
+            var running = await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            Assert.False(running.Spec.MicMuted);
+        }
+    }
+
+    private static async Task<HotkeyPress> NextPress(System.Threading.Channels.Channel<HotkeyPress> presses) =>
+        await presses.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+
+    private (SessionOrchestrator Orchestrator, ConcurrentQueue<CaptureState> Published, System.Threading.Channels.Channel<HotkeyPress> Presses) NewOrchestrator(
+        IMicMuteStore store, out FakeFactory factory)
+    {
+        var published = new ConcurrentQueue<CaptureState>();
+        var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+        factory = new FakeFactory();
+        var orchestrator = new SessionOrchestrator(factory, () => _document, published.Enqueue, press => presses.Writer.TryWrite(press), store);
+        return (orchestrator, published, presses);
     }
 
     private static CaptureTarget Target(nint window) => new(Pid, window, ProfileId);
@@ -393,9 +575,39 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    /// <summary>A store that starts with <paramref name="saved"/> and records each save.</summary>
+    private sealed class FakeMicMuteStore(bool saved) : IMicMuteStore
+    {
+        private readonly ConcurrentQueue<bool> _saves = new();
+
+        public Exception? LoadFailure { get; init; }
+
+        public Exception? SaveFailure { get; init; }
+
+        public int Loads { get; private set; }
+
+        public IEnumerable<bool> Saves => _saves;
+
+        public bool Load()
+        {
+            Loads++;
+            return LoadFailure is { } failure ? throw failure : saved;
+        }
+
+        public void Save(bool muted)
+        {
+            _saves.Enqueue(muted);
+            if (SaveFailure is { } failure)
+            {
+                throw failure;
+            }
+        }
+    }
+
     private sealed class FakeSession(SessionSpec spec, ISessionEvents events, int number) : ICaptureSession
     {
         private readonly ConcurrentQueue<nint> _retargets = new();
+        private readonly ConcurrentQueue<(bool, long)> _micMutes = new();
         private int _inside;
         private int _maxConcurrency;
 
@@ -416,6 +628,21 @@ public sealed class SessionOrchestratorTests : IDisposable
         public Exception? RetargetFailure { get; set; }
 
         public Exception? EndFailure { get; set; }
+
+        public Exception? MicMuteFailure { get; set; }
+
+        public IEnumerable<(bool Muted, long Qpc)> MicMutes => _micMutes;
+
+        public void SetMicMuted(bool muted, long qpc)
+        {
+            ThreadIds.Enqueue(Environment.CurrentManagedThreadId);
+            if (MicMuteFailure is { } failure)
+            {
+                throw failure;
+            }
+
+            _micMutes.Enqueue((muted, qpc));
+        }
 
         public void Retarget(CaptureTarget target)
         {

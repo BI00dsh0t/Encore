@@ -26,7 +26,7 @@ public sealed class SessionAudioTests
         Assert.Equal(["Game", "Chat", "Mic"], audio.Tracks.Select(t => t.Name));
         Assert.Equal(["Speakers", "Chat", "Mic"], audio.Devices.Select(d => d.FriendlyName));
         Assert.Equal([[0], [1], [2]], audio.Tracks.Select(t => t.DeviceIndexes.ToArray()));
-        Assert.Equal(new SessionAudioDevice(Mic.EndpointId, AudioFlow.Input, "Mic"), audio.Devices[2]);
+        Assert.Equal(new SessionAudioDevice(Mic.EndpointId, AudioFlow.Input, "Mic", IsMic: true), audio.Devices[2]);
     }
 
     [Fact]
@@ -86,6 +86,48 @@ public sealed class SessionAudioTests
         Assert.Equal(["Silent", "Game", "Quiet", "Both"], audio.Tracks.Select(t => t.Name));
         Assert.Equal(["Speakers", "Mic"], audio.Devices.Select(d => d.FriendlyName));
         Assert.Equal([[], [0], [], [0, 1]], audio.Tracks.Select(t => t.DeviceIndexes.ToArray()));
+    }
+
+    [Fact]
+    public void MicDevicesAndMuteAffectedTracksAreCarriedOver()
+    {
+        var layout = new TrackLayout(
+            [Speakers, Mic],
+            [
+                Track("Everything", Speakers, Mic) with { MuteAffected = true },
+                Track("Game", Speakers),
+                Track("Mic", Mic) with { MuteAffected = true },
+                Track("MicRaw", Mic),
+            ]);
+
+        var audio = SessionAudio.FromLayout(layout);
+
+        Assert.Equal([false, true], audio.Devices.Select(d => d.IsMic));
+        Assert.Equal([true, false, true, false], audio.Tracks.Select(t => t.MuteAffected));
+    }
+
+    [Fact]
+    public void AnEndpointIsAMicWhenAnyKeyNamingItIsOne()
+    {
+        var notMic = Mic with { IsMic = false };
+        var asMic = Mic with { Key = Guid.NewGuid(), FriendlyName = "Mic again" };
+        var layout = new TrackLayout([notMic, asMic], [Track("A", notMic), Track("B", asMic)]);
+
+        var audio = SessionAudio.FromLayout(layout);
+
+        var device = Assert.Single(audio.Devices);
+        Assert.True(device.IsMic);
+        Assert.Equal("Mic", device.FriendlyName);
+    }
+
+    [Fact]
+    public void AMicMarkOnAnotherFlowOfTheSameEndpointIdDoesNotCount()
+    {
+        var line = Mic with { IsMic = false };
+        var output = Speakers with { Key = Guid.NewGuid(), EndpointId = Mic.EndpointId, IsMic = true };
+        var layout = new TrackLayout([line, output], [Track("A", line)]);
+
+        Assert.False(Assert.Single(SessionAudio.FromLayout(layout).Devices).IsMic);
     }
 
     [Fact]

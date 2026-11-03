@@ -65,16 +65,16 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Core/Sessions/SessionSpec.cs`, `CaptureSessionPorts.cs` -- mic fields, `MicMuted`, `SetMicMuted`, `IMicMuteStore` -- the session's mute inputs
-- [ ] `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs` -- load, toggle, save, publish, forward -- AD-19 ownership
-- [ ] `src/ReplayBuffer.Media/MicMuteGate.cs` -- schedule and gate -- mute before the mix from the press frame
-- [ ] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs` -- gate wiring -- only `isMic` × `muteAffected`
-- [ ] `src/ReplayBuffer.Engine/Settings/RuntimeStateStore.cs`, `EngineHost.cs`, `TracerCapture.cs` -- `runtime.json` -- AD-5 persistence
-- [ ] `tests/ReplayBuffer.Media.Tests/MicMuteGateTests.cs` (new) -- sample-exact: a gate over a capturing sink, frames before the press frame bit-identical, from it zero; unmute; change before anchor; change inside one write; silent writes pass through; a single-input and a two-input `TrackMixer` behind gates; no allocation per write after warm-up
-- [ ] `tests/ReplayBuffer.Core.Tests` -- `SessionAudioTests`: `FromLayout` mic/muteAffected mapping; `SessionOrchestratorTests`: every orchestrator matrix row (fake store: load false publishes `micMuted: false` first; toggle saves, publishes, forwards QPC to the fake session; a throwing fake `Save` still toggles and the orchestrator keeps running; `save` press doesn't; spec carries `MicMuted`)
-- [ ] `tests/ReplayBuffer.Engine.Tests/RuntimeStateStoreTests.cs` (new) -- missing, corrupt, wrong shape → muted; round-trip; no temp file left; a failed write (folder made read-only or a directory where the temp file goes) returns, logs, and leaves the old file
-- [ ] `tests/ReplayBuffer.Engine.Tests/MicMuteCaptureTests.cs` (new) -- the capture AC below
-- [ ] `tests/ReplayBuffer.Engine.Tests` (host test, beside `DeviceListServeTests`) -- the restart AC below
+- [x] `src/ReplayBuffer.Core/Sessions/SessionSpec.cs`, `CaptureSessionPorts.cs` -- mic fields, `MicMuted`, `SetMicMuted`, `IMicMuteStore` -- the session's mute inputs
+- [x] `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs` -- load, toggle, save, publish, forward -- AD-19 ownership
+- [x] `src/ReplayBuffer.Media/MicMuteGate.cs` -- schedule and gate -- mute before the mix from the press frame
+- [x] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs` -- gate wiring -- only `isMic` × `muteAffected`
+- [x] `src/ReplayBuffer.Engine/Settings/RuntimeStateStore.cs`, `EngineHost.cs`, `TracerCapture.cs` -- `runtime.json` -- AD-5 persistence
+- [x] `tests/ReplayBuffer.Media.Tests/MicMuteGateTests.cs` (new) -- sample-exact: a gate over a capturing sink, frames before the press frame bit-identical, from it zero; unmute; change before anchor; change inside one write; silent writes pass through; a single-input and a two-input `TrackMixer` behind gates; no allocation per write after warm-up
+- [x] `tests/ReplayBuffer.Core.Tests` -- `SessionAudioTests`: `FromLayout` mic/muteAffected mapping; `SessionOrchestratorTests`: every orchestrator matrix row (fake store: load false publishes `micMuted: false` first; toggle saves, publishes, forwards QPC to the fake session; a throwing fake `Save` still toggles and the orchestrator keeps running; `save` press doesn't; spec carries `MicMuted`)
+- [x] `tests/ReplayBuffer.Engine.Tests/RuntimeStateStoreTests.cs` (new) -- missing, corrupt, wrong shape → muted; round-trip; no temp file left; a failed write (folder made read-only or a directory where the temp file goes) returns, logs, and leaves the old file
+- [x] `tests/ReplayBuffer.Engine.Tests/MicMuteCaptureTests.cs` (new) -- the capture AC below
+- [x] `tests/ReplayBuffer.Engine.Tests` (host test, beside `DeviceListServeTests`) -- the restart AC below
 
 **Acceptance Criteria:**
 - Given an in-process capture over a `ToneHub` with a game device G (440 Hz, not mic) and a mic device M (1 kHz, `IsMic`), Tracks `Everything`={G, M} `muteAffected`, `Game`={G}, `Mic`={M} `muteAffected`, `MicRaw`={M} not affected, started unmuted (a fake store), when a `micMute` press is posted mid-capture at QPC P and a second one ~3 s later, then: `Mic` is silent (below −60 dBFS RMS) from 50 ms after P's frame to the second press and carries the tone before P and after it; `MicRaw` carries M's tone throughout; `Everything` carries G throughout and M's 1 kHz only outside the muted span (measured by a 1 kHz band check, e.g. Goertzel, against the 440 Hz); `Game` is unchanged; every stream lasts as long as the video to within 0.1 s; and the orchestrator published `micMuted` true then false.
@@ -83,7 +83,15 @@ deferred: []
 
 ## Implementation Notes
 
+- `ToneHub` moved out of `TrackMixCaptureTests` into its own `tests/ReplayBuffer.Engine.Tests/ToneHub.cs` (internal), so `MicMuteCaptureTests` reuses it unchanged.
+- `MicMuteGate.FrameFrom(qpc, anchor, frequency)` is public: the session logs "Mic muted/unmuted from frame N" with the same mapping the gates cut at.
+- `CaptureSession.SetMicMuted` reads the anchor with `Volatile.Read` instead of taking the capture gate, which a first frame opening the encoders can hold.
+- `RuntimeState` is `bool? MicMuted`: a file without the field counts as unreadable (muted), like invalid JSON.
+- The capture AC's muted span ends 50 ms before the second press as well as starting 50 ms after the first: AAC's transform window spreads the unmute edge back over about 2048 frames.
+
 ## Plan Change Log
+
+- `HotkeyPressed(MicMute)` order: flip, `SetMicMuted` on the running session, `Save`, `SetState` (the plan had the session last). Handing the QPC to the session before the flushed disk write keeps the frames that pass the gate between the press and its handling (the leak the Design Notes bound) as few as possible; the state is still published after the save, and a throw from either is still swallowed.
 
 ## Review Triage Log
 
