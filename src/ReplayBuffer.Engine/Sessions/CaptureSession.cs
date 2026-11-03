@@ -188,10 +188,10 @@ internal sealed class CaptureSession : ICaptureSession
     // The Buffer Window the ring holds, in seconds: set at the anchor, then by a resize at a Reset
     // (orchestrator thread). The window SetBufferWindow asked for, applied at the next Reset; 0 for none.
     private int _windowSeconds;
+    private volatile int _pendingWindow;
 
     // A Disk-mode session's ring folder; null in Memory mode.
     private string? _ringFolder;
-    private volatile int _pendingWindow;
     private VideoEncoder? _video;
     private readonly IVideoEncoderCatalog _encoders;
     private readonly VideoSize _outputSize;

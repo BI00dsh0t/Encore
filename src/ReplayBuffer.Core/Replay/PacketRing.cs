@@ -400,7 +400,7 @@ public sealed class PacketRing : IDisposable
     /// Copies up to <paramref name="max"/> entries from sequence number <paramref name="sequence"/>
     /// (or the head, if trimmed past it) into <paramref name="target"/>; returns the next sequence.
     /// </summary>
-    private long CopyBatchTo(PacketRing target, long sequence, int max)
+    private unsafe long CopyBatchTo(PacketRing target, long sequence, int max)
     {
         lock (_lock)
         {
@@ -420,13 +420,24 @@ public sealed class PacketRing : IDisposable
                 for (var i = first; i < end; i++)
                 {
                     var entry = EntryAt(i);
-                    if (_scratch.Length < entry.Length)
+                    ReadOnlySpan<byte> bytes;
+                    if (entry.Slab.File is null)
                     {
-                        _scratch = new byte[Math.Max(entry.Length, _scratch.Length * 2)];
+                        // A memory slab is read in place.
+                        bytes = new ReadOnlySpan<byte>(entry.Slab.Data + entry.Offset, entry.Length);
+                    }
+                    else
+                    {
+                        if (_scratch.Length < entry.Length)
+                        {
+                            _scratch = new byte[Math.Max(entry.Length, _scratch.Length * 2)];
+                        }
+
+                        var read = _scratch.AsSpan(0, entry.Length);
+                        entry.Slab.Read(entry.Offset, read);
+                        bytes = read;
                     }
 
-                    var bytes = _scratch.AsSpan(0, entry.Length);
-                    entry.Slab.Read(entry.Offset, bytes);
                     target.Append(entry.Stream, bytes, entry.Pts, entry.Dts, entry.Duration, entry.IsKey);
                 }
 

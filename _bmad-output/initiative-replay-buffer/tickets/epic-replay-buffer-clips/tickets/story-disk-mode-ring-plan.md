@@ -3,14 +3,14 @@ title: 'Disk-mode ring'
 type: 'feature'
 ticket: '7'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'ab97142fa244e23889a37a93ef5518bf32f3e5f5'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -125,6 +125,19 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-03 — Review pass
+- verdicts: 9 findings — high 0, medium 0, low 8, false 1, maybe-false 0
+- findings:
+  - `[low]` `[reject]` A ring file write or read failing mid-session (a removed drive) throws on the encoder thread or the writer, and the session fails. Only creation falls back to memory. This needs the volume to vanish under a preallocated file. The failure is loud and ends in the session's normal failure path. A per-write fallback would add a branch to every append.
+  - `[low]` `[reject]` While a long Clip is writing, its pins hold trimmed blocks, so new slabs fall back to native memory until it finishes. This is the planned fallback: the disk stays within the estimate, and RAM grows only as Memory mode's always does, and only during the write. Pin headroom in the estimate belongs to story 10 (the estimate) and story 8 (the RAM margin); noted for them.
+  - `[low]` `[patch]` `CopyBatchTo` sent memory slabs through the scratch buffer too: an extra memcpy per packet on a Memory-mode resize. Fixed: memory slabs are read in place, and only file slabs use the scratch buffer.
+  - `[low]` `[reject]` `ring-<n>` counts per process, so two engine instances sharing one custom `ringPath` collide on `ring-1.bin`, and the second falls back to memory with a warning. Instances have separate default folders, so this takes a deliberately shared custom path. The ticket fixes the name.
+  - `[low]` `[reject]` The stale sweep deletes every `ring-*.bin` in a user-chosen `ringPath`. The plan specifies this, and the pattern is specific to the ring.
+  - `[low]` `[patch]` `_ringFolder` split `_windowSeconds`'s comment from `_pendingWindow`. Fixed: the field now comes after `_pendingWindow`.
+  - `[false]` `[reject]` The FFmpeg test cuts `[0, 3 s)` instead of at an encoder key. `Cut` starts at the first keyframe at or after 0 and ends at 3 s in both rings, and the AC needs only the same cut in both. The Clips are compared byte for byte.
+  - `[low]` `[reject]` AC 4 (`ring-<n>.bin` under `ringPath` or the default folder) has no session-level test. The wiring is two lines (`RingPath ?? RingFolder`; `<LocalDataFolder>ing`), and a session test needs a GPU capture (lean tests).
+  - `[low]` `[reject]` `FileIoPriority.SetLow` discards the result. Best effort with no log is what the plan specifies.
+
 ## Design Notes
 
 **Why `ring-<n>` is process-wide.** A drained session keeps its ring for 30 s while the next Target's session starts, and each resize opens a new ring. A per-session generation number would collide. Each file is still one ring generation; the number just counts across the engine.
@@ -139,3 +152,37 @@ deferred: []
 - `dotnet test --project tests/ReplayBuffer.Platform.FFmpeg.Tests -c Release --no-build` -- expected: all pass (ClipWriter changed)
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- expected: all pass (the session changed)
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL/AOT warnings
+
+## Auto Run Result
+
+- **Summary:** R3's Disk mode.
+  - With `replayStorage = disk`, the ring's slabs are blocks of a preallocated `ring-<n>.bin` under `ringPath`, or `<LocalDataFolder>ing` by default.
+  - The file is sized from the new `ReplayStorageEstimate` and opened `DeleteOnClose` with the low I/O priority hint.
+  - The index, pins, trimming and generations are the same as in Memory mode.
+  - The file is deleted once its ring is disposed and its last pin drops. Stale files are swept at engine start.
+  - If the file can't be made, the session uses a Memory ring and logs a warning.
+- **Files:**
+  - Core: new `Replay/RingFile.cs` and `Replay/ReplayStorageEstimate.cs`. `Replay/PacketRing.cs` gains file slabs, `MemorySlabs`, closing the file at the last free, and `RingPacket.CopyTo`.
+  - Platform.FFmpeg: `ClipWriter.cs` reads through `CopyTo`.
+  - Platform.Windows: new `FileIoPriority.cs`, and `NativeMethods.txt`.
+  - Engine:
+    - New `Sessions/ReplayRings.cs`: create a disk ring, or fall back.
+    - `Sessions/CaptureSession.cs`: the mode from the snapshot, plus log lines.
+    - `EngineHost.cs`: the default folder and the stale sweep.
+  - Tests:
+    - New `DiskRingTests` (3), `ReplayRingsTests` (1) and `DiskRingClipTests` (1, GPU).
+    - `PacketRingTests` and `RingGenerationsTests` use `ToArray()`.
+- **Review:** quick lens, 9 findings: 2 low patched, 7 rejected (6 low, 1 false, reasons in the triage log), 0 deferred.
+- **Follow-up review recommended:** false. Only two lows were patched.
+- **Verification (after the patches):**
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings.
+  - Core 81/81.
+  - Platform.FFmpeg 33 passed, 1 skipped (an Explicit test). The GPU byte-identical Clip test ran and passed.
+  - Engine 154 passed, 18 Explicit skipped.
+  - `tools/publish-engine.ps1`: clean, 10.7 MB.
+  - Heavy not run: the capture and encode paths are unchanged, and the Clip read path is covered by the default GPU test.
+- **Residual risks:**
+  - Per-packet positional writes run on the encoder thread under the ring lock. Into the system cache that is a memcpy, but under heavy dirty-page throttling it could stall an encoder.
+  - A mid-session I/O failure fails the session; there is no fallback to memory.
+  - During a long Clip's write, pinned blocks push new slabs into RAM. That is for stories 8 and 10.
+  - No in-process capture runs Disk mode end to end. Story 14 does.
