@@ -3,7 +3,7 @@ title: 'Mic Devices and mic mute'
 type: 'feature'
 ticket: '4'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '03d62ebf472c91bd0c3455a56c843f7e3cd087d8'
 route: 'full'
 route_source: 'auto'
