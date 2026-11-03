@@ -57,14 +57,14 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/Settings/SettingsDocument.cs` -- add optional `GameProfile.Folder` -- persisted folder (AD-22 additive).
-- [ ] `src/ReplayBuffer.Core/Output/PathNames.cs` -- `public static string Sanitize(string name, string fallback)` holding the sanitizer moved from `OutputNaming` -- one sanitizer.
-- [ ] `src/ReplayBuffer.Core/Output/ProfileFolders.cs` -- `MonitorRecordings = "Monitor Recordings"`; `AssignMissing(ImmutableSortedDictionary<string, GameProfile>.Builder)` (or an equivalent shape the store and allocator both use) giving each folder-less profile, in id order, `Sanitize(name)` or `name (2)`, `(3)`… unique case-insensitively among all assigned folders and the reserved one -- assign once.
-- [ ] `src/ReplayBuffer.Core/Output/OutputPathAllocator.cs` -- sealed class over a `TimeProvider` (static `System` instance). `Allocate(SettingsDocument, string profileId, string outputFolder, long qpc)`: profile's `Folder` (or, if null, the one `ProfileFolders` would assign in that document), file stem `Sanitize(Name)_<local time of qpc, yyyy-MM-dd_HH-mm-ss>`; `Reserve(string folder, string name, DateTime localTime)` public (epic-recordings uses it with `Monitor Recordings`): create the directory, `new FileStream(path, FileMode.CreateNew)` and dispose, on `IOException` with the path now existing try `_2`, `_3`…. QPC → local: `GetLocalNow() - (GetTimestamp() - qpc) / TimestampFrequency`.
-- [ ] `src/ReplayBuffer.Engine/Settings/SettingsStore.cs` -- call `ProfileFolders` in `Apply` -- folders persisted through the op queue commit.
-- [ ] `src/ReplayBuffer.Engine/OutputNaming.cs` -- `Sanitize` delegates to `PathNames.Sanitize(title, "capture")`.
-- [ ] `tests/ReplayBuffer.Core.Tests/OutputPathAllocatorTests.cs` -- one test per verify item (I/O matrix rows 1–5), in a temp folder, with a fixed `TimeProvider` subclass.
-- [ ] `tests/ReplayBuffer.Engine.Tests/ProfileFolderStoreTests.cs` -- one test: a profile created through `SettingsStore.Update` gets `folder`, it's in the reopened file, and a rename keeps it. New file so the parallel test-trim work on `SettingsStoreTests.cs` doesn't conflict.
+- [x] `src/ReplayBuffer.Contracts/Settings/SettingsDocument.cs` -- add optional `GameProfile.Folder` -- persisted folder (AD-22 additive).
+- [x] `src/ReplayBuffer.Core/Output/PathNames.cs` -- `public static string Sanitize(string name, string fallback)` holding the sanitizer moved from `OutputNaming` -- one sanitizer.
+- [x] `src/ReplayBuffer.Core/Output/ProfileFolders.cs` -- `MonitorRecordings = "Monitor Recordings"`; `AssignMissing(ImmutableSortedDictionary<string, GameProfile>.Builder)` (or an equivalent shape the store and allocator both use) giving each folder-less profile, in id order, `Sanitize(name)` or `name (2)`, `(3)`… unique case-insensitively among all assigned folders and the reserved one -- assign once.
+- [x] `src/ReplayBuffer.Core/Output/OutputPathAllocator.cs` -- sealed class over a `TimeProvider` (static `System` instance). `Allocate(SettingsDocument, string profileId, string outputFolder, long qpc)`: profile's `Folder` (or, if null, the one `ProfileFolders` would assign in that document), file stem `Sanitize(Name)_<local time of qpc, yyyy-MM-dd_HH-mm-ss>`; `Reserve(string folder, string name, DateTime localTime)` public (epic-recordings uses it with `Monitor Recordings`): create the directory, `new FileStream(path, FileMode.CreateNew)` and dispose, on `IOException` with the path now existing try `_2`, `_3`…. QPC → local: `GetLocalNow() - (GetTimestamp() - qpc) / TimestampFrequency`.
+- [x] `src/ReplayBuffer.Engine/Settings/SettingsStore.cs` -- call `ProfileFolders` in `Apply` -- folders persisted through the op queue commit.
+- [x] `src/ReplayBuffer.Engine/OutputNaming.cs` -- `Sanitize` delegates to `PathNames.Sanitize(title, "capture")`.
+- [x] `tests/ReplayBuffer.Core.Tests/OutputPathAllocatorTests.cs` -- one test per verify item (I/O matrix rows 1–5), in a temp folder, with a fixed `TimeProvider` subclass.
+- [x] `tests/ReplayBuffer.Engine.Tests/ProfileFolderStoreTests.cs` -- one test: a profile created through `SettingsStore.Update` gets `folder`, it's in the reopened file, and a rename keeps it. New file so the parallel test-trim work on `SettingsStoreTests.cs` doesn't conflict.
 
 **Acceptance Criteria:**
 - Given a profile in a document, when `Allocate` runs twice with QPCs in the same second, then two distinct `.mp4` paths are returned under `<outputFolder>\<folder>` and both exist on disk.
@@ -72,6 +72,10 @@ deferred: []
 - Given the Release build, then it has 0 warnings and the NativeAOT engine publish has 0 IL warnings.
 
 ## Implementation Notes
+
+- `ProfileFolders.FolderOf(document, id)` is the allocator's shared shape: the profile's folder, or the one `AssignMissing` would give it in that document.
+- The folder name's fallback (a name that sanitizes to nothing) is `Game`, as is the file stem's in `Reserve`; `OutputNaming` keeps `capture`.
+- `SettingsStoreTests.SettingANameCreatesTheProfileAndAttributesSetInPlace` compared a whole `GameProfile`; it now carries `Folder = created.Folder`, since the store assigns one.
 
 ## Plan Change Log
 
