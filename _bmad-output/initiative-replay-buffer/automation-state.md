@@ -104,7 +104,7 @@ The coordinator logs each QA round in the Log below.
 | 25.5 | 4.5 Failed saves, retry and the file-being-written signal | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `9da03df`) |
 | 25.6 | 4.6 Ring generations and Buffer Window resizing | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e7058ea`) |
 | 25.7 | 4.7 Disk-mode ring | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c96ab9c`) |
-| 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `2b218ae`) |
 | 25.9 | 4.9 Per-Game-Profile settings at the next Reset | | pending |
 | 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | | pending |
 | 25.11 | 4.11 Game Profile overrides in the Main App | | pending |
@@ -443,3 +443,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 7.2 merged (`a8f4c23`, marked done `dfa2f5b`). Its card is Done with its label detached, and 2-1-tracer is back in the pool. 7.3 is now ready and was given to story-2-7 (Opus, medium effort), with its card In progress.
 - 2026-11-03: 4.8 is READY FOR QA at `40f2800` (its own review found and fixed two margin-trim bugs, a false short-ring warning and a weak assertion). QA started on qa-2-1 (Sonnet), and its card is In QA.
 - 2026-11-03: QA 4.8 at `40f2800`: **QA PASS**, 0 findings and 2 non-blocking notes. One App.Tests load-timeout flake (`AKilledAppIsRelaunchedByTheEngine`) passed on rerun; it's the second App flake today, so watch it. 4.8 has been told to merge (Sonnet), and qa-2-1 is back in the pool.
+- 2026-11-03: 4.8 merged into `develop` (`2b218ae`, `feat(engine): merge 4.8-memory-ram-margin`) and marked done, after QA PASS at `40f2800`. `develop` (7.2, 5.5) was merged into the branch first; the Release build (0 warnings), Core 99, Contracts 113, Engine 181 (19 Explicit skipped) and the publish passed again. QA's two notes are in the epic Notes: the warning is raised on the encoder thread under the ring's lock, and a fully pinned ring still allocates; also `memory-margin` warnings aren't withdrawn on leaving the margin (epic 5 may want that). Human checks: none.

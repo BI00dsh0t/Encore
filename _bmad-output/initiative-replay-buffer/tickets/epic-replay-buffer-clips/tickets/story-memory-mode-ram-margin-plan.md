@@ -3,7 +3,7 @@ title: 'Memory-mode RAM margin'
 type: 'feature'
 ticket: '8'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '2b0eb895423eb38e8d4b60ec4945c12394cd0d57'
 route: 'full'
 route_source: 'auto'
