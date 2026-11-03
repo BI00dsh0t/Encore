@@ -83,7 +83,7 @@ The coordinator logs each QA round in the Log below.
 | 11 | 2.11 Mic Devices and double-count warning in the editor | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done |
 | 12 | 2.8 Live meters in the Track Layout editor | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged) |
 | 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | done |
-| 14 | 2.10 Refactor sweep | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
+| 14 | 2.10 Refactor sweep | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged) |
 | 15 | Release epic 2 (`v0.2.0`) | | pending |
 | 16 | 3.1 Tracer: detect a borderless game | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `a7de027`) |
 | 17 | 3.8 Spike: which Windows game list to read | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
@@ -343,3 +343,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 3.3 merged (`22b214e`, done `d70af41`), and its card is in Done. That unblocked 3.4 (Game Profiles, medium risk), which went to pool worker slice-epic-4 (Opus, medium effort), and 4.1 (replay buffer tracer, high risk, HITL), which went to pool worker 2-1-tracer (Opus, high effort). Both cards are In progress. 2.10 has its plan committed (`8857c3c`) and is implementing.
 - 2026-11-03: 2.10 is READY FOR QA at `3240a1f` (epic 2's duplicated audio wiring moved into shared helpers; build, Core, Engine and publish clean). QA started on qa-2-1 (Sonnet), checking for any behaviour change, and its card moved to In QA. 3.4 and 4.1 are being implemented.
 - 2026-11-03: QA on 2.10 (`3240a1f`): **QA PASS**, 0 findings, no behaviour change. 2.10 was switched to Sonnet and told to merge. Next, the coordinator marks epic 2 `status: done` and releases `v0.2.0`.
+- 2026-11-03: 2.10 merged into `develop` (`refactor(audio): merge 2.10-refactor-sweep`; develop, state files only, merged into the branch first, so nothing was rebuilt) and marked done. Verified before: Release build 0 warnings; Core 58, Engine 143 (18 explicit skipped), publish 0 IL warnings; Heavy mic-mute and Track-mix tests passed. Epic 2 is ready to be marked done and released as `v0.2.0` by the coordinator.
