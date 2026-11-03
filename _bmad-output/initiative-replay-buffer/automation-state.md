@@ -36,11 +36,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.1 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 4.2 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.2 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -363,3 +363,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA round 1 on 3.7 (`23d77f4`): **QA FAIL**, 1 low docs finding (line endings on a develop docs file, from a stale develop commit). 3.7 rebased onto the current develop (`9c080ff`). The coordinator checked that the code diff between `23d77f4` and `9c080ff` is empty and counted that as round 2, **QA PASS**. 3.7 was told to merge. 5.1 is READY FOR QA at `a768339` (App and Platform.Desktop only), QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-03: 3.7 merged (`d254a0c`, done `6569732`). **Epic 3 is complete:** it was marked `status: done` (`ca8e2dc`) and **`v0.3.0` was released** by the coordinator (master `aa86a3f`, tag `v0.3.0`, back-merge `f5e90f8`). The 3.7 card is in Done with a release comment. QA on 5.1 (`a768339`): **QA PASS**, 0 blocking findings and two optional notes. 5.1 was told to merge. 4.2 is being implemented.
 - 2026-11-03: 5.1 merged (`c1afee0`, `feat(app): merge 5.1-overlay-dot-tracer`, after merging develop in cleanly: build 0 warnings, App 67 passed and Platform.Desktop 11 passed). QA's two optional notes are accepted as tracer-scope: (1) a `Win32Exception` from `Monitors.ForProcess` or `SetWindowPos` in `OverlayWindow.Place()` would be unhandled on the UI thread and crash the App; (2) the dot is placed only when the model changes, so it doesn't follow a game moved to another monitor. Neither is fixed; later Overlay-lane stories (5.8, 5.9) revisit placement. Human Check row added for the visual check.
+- 2026-11-03: 5.1 merged (`c1afee0`, done `6d4457b`), and its card is in Done. 5.2 (Q-4 spike: Overlay over exclusive fullscreen and borderless FPS cost, high risk) went to pool worker 2-1-tracer (Opus, high effort), and its card is In progress. The builder connects over Remote Desktop, where independent flip and exclusive fullscreen aren't available. So the spike checks for a remote session first. If it's remote, it runs a labelled short measurement, applies the ticket's unattended defaults, and queues a console rerun as a Human Check. It holds `.bench-running` only while the GPU runs. 4.2 is still being implemented.
