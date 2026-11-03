@@ -6,14 +6,27 @@ namespace ReplayBuffer.Bench.GpuLoad;
 internal sealed class LoadUsageException(string message) : Exception(message);
 
 /// <summary>
+/// How the load presents (story 5.2): a borderless popup (<c>borderless</c>), DXGI fullscreen on the
+/// flip-model swap chain, which Windows runs with fullscreen optimizations as most games' "exclusive
+/// fullscreen" is today (<c>fullscreen</c>), or legacy exclusive fullscreen on a blt-model swap chain,
+/// which Bench starts with fullscreen optimizations off (<c>exclusive</c>).
+/// </summary>
+internal enum LoadMode
+{
+    Borderless,
+    Fullscreen,
+    Exclusive,
+}
+
+/// <summary>
 /// The load's command line: <c>--target-fps</c> (default 80, spike 1.2's ≈ 78 fps in Cyberpunk at
 /// 2560×1440), <c>--parent &lt;pid&gt;</c> (exit when it does), <c>--size WxH</c> (default: the primary
-/// monitor) and <c>--warmup</c> seconds of calibration.
+/// monitor), <c>--warmup</c> seconds of calibration and <c>--mode</c> (<see cref="LoadMode"/>, default borderless).
 /// </summary>
-internal sealed record LoadOptions(double TargetFps, int? ParentPid, int? Width, int? Height, double WarmupSeconds)
+internal sealed record LoadOptions(double TargetFps, int? ParentPid, int? Width, int? Height, double WarmupSeconds, LoadMode Mode = LoadMode.Borderless)
 {
     public const string Usage =
-        "Usage: ReplayBuffer.Bench.GpuLoad [--target-fps 80] [--parent <pid>] [--size WxH] [--warmup 10]";
+        "Usage: ReplayBuffer.Bench.GpuLoad [--target-fps 80] [--parent <pid>] [--size WxH] [--warmup 10] [--mode borderless|fullscreen|exclusive]";
 
     public const double DefaultTargetFps = 80;
     public const double DefaultWarmupSeconds = 10;
@@ -22,6 +35,7 @@ internal sealed record LoadOptions(double TargetFps, int? ParentPid, int? Width,
     {
         double target = DefaultTargetFps, warmup = DefaultWarmupSeconds;
         int? parent = null, width = null, height = null;
+        var mode = LoadMode.Borderless;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < args.Count; i++)
         {
@@ -62,12 +76,21 @@ internal sealed record LoadOptions(double TargetFps, int? ParentPid, int? Width,
 
                     (width, height) = (w, h);
                     break;
+                case "--mode":
+                    mode = value switch
+                    {
+                        "borderless" => LoadMode.Borderless,
+                        "fullscreen" => LoadMode.Fullscreen,
+                        "exclusive" => LoadMode.Exclusive,
+                        _ => throw new LoadUsageException($"--mode '{value}' is not borderless, fullscreen or exclusive."),
+                    };
+                    break;
                 default:
                     throw new LoadUsageException($"Unknown option '{name}'.");
             }
         }
 
-        return new LoadOptions(target, parent, width, height, warmup);
+        return new LoadOptions(target, parent, width, height, warmup, mode);
     }
 
     private static double Number(string name, string text, double min, double max) =>
