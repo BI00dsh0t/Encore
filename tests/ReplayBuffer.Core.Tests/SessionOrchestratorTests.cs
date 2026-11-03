@@ -505,6 +505,48 @@ public sealed class SessionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task AWrittenClipGivesTheSessionTheEffectiveBufferWindowBeforeItsReset()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var writes = new ConcurrentQueue<string>();
+            var log = new ConcurrentQueue<string>();
+            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var factory = new FakeFactory { Save = _ => new FakeWrite(writes, gate: gate.Task, log: log), Log = log };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => saved.Writer.TryWrite(s), _ => { }, _ => { }));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            // Press 1 writes; meanwhile the Game Profile's Buffer Window changes from 60 s to 30 s.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            await WaitUntil(() => !writes.IsEmpty);
+            Volatile.Write(ref _document, Revision(4) with
+            {
+                Global = InFolder(folder, cooldown: 0),
+                Profiles = SettingsMaps.EmptyProfiles.Add(ProfileId, new GameProfile
+                {
+                    Name = "Game",
+                    Overrides = SettingsMaps.EmptyValues.Add(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(30)),
+                }),
+            });
+            gate.SetResult();
+
+            await NextAsync(saved);
+            Assert.Equal(["window 30", "reset"], log);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AnExitDrainsTheSessionSoASaveStillCutsUntilTheDrainExpiresAndReleasesIt()
     {
         var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
@@ -971,6 +1013,82 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task ARecordTogglePressRecordsOnlyWhenTheProfileEnablesItAndTheNextOneStopsIt()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+            var published = new ConcurrentQueue<CaptureState>();
+            var library = new FakeLibraryWrites();
+            var made = new ConcurrentQueue<FakeRecording>();
+            var factory = new FakeFactory
+            {
+                Record = _ =>
+                {
+                    var recording = new FakeRecording();
+                    made.Enqueue(recording);
+                    return recording;
+                },
+            };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                published.Enqueue,
+                press => presses.Writer.TryWrite(press),
+                recordings: new Recordings(
+                    OutputPathAllocator.System,
+                    () => throw new InvalidOperationException("the Global folder is set"),
+                    s => events.Writer.TryWrite(s),
+                    s => events.Writer.TryWrite(s),
+                    e => events.Writer.TryWrite(e),
+                    library));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            // recordingsEnabled off: nothing at all.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press));
+            await NextPress(presses);
+            Assert.Empty(made);
+            Assert.Empty(library.Calls);
+            Assert.False(events.Reader.TryRead(out _));
+            Assert.Empty(Directory.GetFiles(folder, "*", SearchOption.AllDirectories));
+            Assert.Equal([RecordingState.Off], published.Select(p => p.Recording));
+
+            // Read live at the press.
+            var document = Volatile.Read(ref _document);
+            Volatile.Write(ref _document, document with { Profiles = document.Profiles.SetItem(ProfileId, document.Profiles[ProfileId] with { RecordingsEnabled = true }) });
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press + 1));
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            var recording = Assert.Single(made);
+            Assert.Equal(started.Path, recording.Path);
+            Assert.Equal(Path.Combine(folder, "Game"), Path.GetDirectoryName(started.Path));
+            Assert.Equal([RecordingState.Off, RecordingState.Running], published.Select(p => p.Recording));
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press + 2));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+            Assert.Equal([press + 2], recording.Stops);
+            Assert.Equal([$"begin {started.Path} {ProfileId}", $"end {started.Path} Written"], library.Calls);
+            Assert.Equal([RecordingState.Off, RecordingState.Running, RecordingState.Off], published.Select(p => p.Recording));
+            Assert.Single(made);
+
+            // A session ending under a Recording stops it as session-ended once its writer finishes.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press + 3));
+            var again = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            await orchestrator.EndAsync().WaitAsync(Timeout, Token);
+            made.Last().Finish();
+            Assert.Equal(new RecordingStopped(again.Path, RecordingStopReasons.SessionEnded), await NextAsync(events));
+            Assert.Equal(RecordingState.Off, published.Last().Recording);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     private static async Task<HotkeyPress> NextPress(System.Threading.Channels.Channel<HotkeyPress> presses) =>
         await presses.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
@@ -1008,6 +1126,12 @@ public sealed class SessionOrchestratorTests : IDisposable
         /// <summary>What each session's <c>Save</c> returns; none when null.</summary>
         public Func<long, IClipWrite?>? Save { get; init; }
 
+        /// <summary>What each session's <c>Record</c> returns; none when null.</summary>
+        public Func<long, IRecordingWrite?>? Record { get; init; }
+
+        /// <summary>Where each session records its <c>SetBufferWindow</c> calls, as "window N".</summary>
+        public ConcurrentQueue<string>? Log { get; init; }
+
         public IReadOnlyList<FakeSession> Sessions
         {
             get
@@ -1029,7 +1153,7 @@ public sealed class SessionOrchestratorTests : IDisposable
 
             lock (_sessions)
             {
-                var session = new FakeSession(spec, events, _sessions.Count + 1) { SaveWith = Save };
+                var session = new FakeSession(spec, events, _sessions.Count + 1) { SaveWith = Save, RecordWith = Record, Log = Log };
                 _sessions.Add(session);
                 return session;
             }
@@ -1041,7 +1165,7 @@ public sealed class SessionOrchestratorTests : IDisposable
     /// <paramref name="gate"/> completes, leaving the reserved file, or failing with
     /// <paramref name="failure"/>; it counts its Resets.
     /// </summary>
-    private sealed class FakeWrite(ConcurrentQueue<string> writes, Exception? failure = null, Task? gate = null) : IClipWrite
+    private sealed class FakeWrite(ConcurrentQueue<string> writes, Exception? failure = null, Task? gate = null, ConcurrentQueue<string>? log = null) : IClipWrite
     {
         private int _resets;
 
@@ -1053,7 +1177,41 @@ public sealed class SessionOrchestratorTests : IDisposable
             (gate ?? Task.CompletedTask).ContinueWith(_ => done(failure), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
 
-        public void Reset() => Interlocked.Increment(ref _resets);
+        public void Reset()
+        {
+            Interlocked.Increment(ref _resets);
+            log?.Enqueue("reset");
+        }
+    }
+
+    /// <summary>A Recording that records its path and stops, and finishes from another thread on its stop.</summary>
+    private sealed class FakeRecording : IRecordingWrite
+    {
+        private readonly ConcurrentQueue<long> _stops = new();
+        private Action<Exception?>? _done;
+
+        public string? Path { get; private set; }
+
+        public IEnumerable<long> Stops => _stops;
+
+        public void Start(string path, Action<Exception?> done)
+        {
+            Path = path;
+            _done = done;
+        }
+
+        public void Stop(long qpc)
+        {
+            _stops.Enqueue(qpc);
+            Finish();
+        }
+
+        /// <summary>Finishes as the session's output ending would, from another thread.</summary>
+        public void Finish()
+        {
+            var done = _done!;
+            Task.Run(() => done(null), CancellationToken.None);
+        }
     }
 
     /// <summary>Records each Library call, in order.</summary>
@@ -1118,6 +1276,14 @@ public sealed class SessionOrchestratorTests : IDisposable
         public Func<long, IClipWrite?>? SaveWith { get; init; }
 
         public IClipWrite? Save(long qpc) => SaveWith?.Invoke(qpc);
+
+        public Func<long, IRecordingWrite?>? RecordWith { get; init; }
+
+        public IRecordingWrite? Record(long qpc) => RecordWith?.Invoke(qpc);
+
+        public ConcurrentQueue<string>? Log { get; init; }
+
+        public void SetBufferWindow(int seconds) => Log?.Enqueue($"window {seconds}");
 
         public void SetMicMuted(bool muted, long qpc)
         {

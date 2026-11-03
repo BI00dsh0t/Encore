@@ -22,6 +22,8 @@ public sealed partial class MessagesTests
         ["clip.saved"] = """{"path":"C:\\Videos\\Game\\Game_2026-11-03_10-00-00.mp4"}""",
         ["clip.saving"] = """{"at":"2026-11-03T10:00:00+00:00"}""",
         ["clip.failed"] = """{"reason":"clip-too-short"}""",
+        ["recording.started"] = """{"path":"C:\\Videos\\Game\\Game_2026-11-03_10-00-00.mp4"}""",
+        ["recording.stopped"] = """{"path":"C:\\Videos\\Game\\Game_2026-11-03_10-00-00.mp4","reason":"stopped"}""",
         ["capture.videoOptions"] = """{"probed":true,"codecs":[{"codec":"h264","encoder":"h264_nvenc","mayNotPlayEverywhere":false},{"codec":"av1","encoder":"av1_nvenc","mayNotPlayEverywhere":true}],"resolutions":[{"width":1920,"height":1080}],"maxFps":120}""",
         ["warning.raised"] = """{"id":"w2","code":"settings-unreadable","severity":"warning","source":"settings","message":"m","at":"2026-10-25T12:00:00+00:00","overlay":true,"sound":null,"dismissable":true}""",
         ["warning.dismissed"] = """{"id":"w1"}""",
@@ -34,6 +36,9 @@ public sealed partial class MessagesTests
         ["target.changed"] = """{"from":null,"to":{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7},"reason":"detected"}""",
         ["game.detected"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
         ["game.exited"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
+        ["library.itemAdded"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":"c:\\games\\game.exe","size":0,"date":"2026-11-03T10:00:00+00:00","beingWritten":true}""",
+        ["library.itemChanged"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":null,"size":1024,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}""",
+        ["library.itemRemoved"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4"}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);

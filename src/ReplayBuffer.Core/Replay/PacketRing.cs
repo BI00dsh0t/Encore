@@ -26,6 +26,9 @@ public sealed class PacketRing : IDisposable
     /// <summary>How far before a cut's keyframe its copy reaches back, for audio that leads the video and was appended before it.</summary>
     private const long LookBackUs = MicrosPerSecond;
 
+    /// <summary>The entries <see cref="CopyTailTo"/> copies per hold of the locks.</summary>
+    private const int CopyBatch = 256;
+
     private readonly Lock _lock = new();
     private readonly long _windowUs;
     private readonly int _slabBytes;
@@ -62,6 +65,21 @@ public sealed class PacketRing : IDisposable
         _slabBytes = slabBytes;
         _entries = new RingEntry[capacity];
         _keys = new long[capacity];
+    }
+
+    /// <summary>The Buffer Window it was sized for, in µs.</summary>
+    public long WindowUs => _windowUs;
+
+    /// <summary>The oldest indexed video keyframe's start, in µs since the anchor; <see cref="long.MaxValue"/> when there is none.</summary>
+    internal long FirstKeyUs
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _keyCount == 0 ? long.MaxValue : EntryAt((int)(_keys[_keyHead] - _headSeq)).TimeUs;
+            }
+        }
     }
 
     /// <summary>The packets held.</summary>
@@ -224,35 +242,19 @@ public sealed class PacketRing : IDisposable
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            var key = -1;
-            for (var k = 0; k < _keyCount; k++)
-            {
-                var position = (int)(_keys[(_keyHead + k) % _keys.Length] - _headSeq);
-                if (_entries[(_head + position) % _entries.Length].TimeUs >= fromUs)
-                {
-                    key = position;
-                    break;
-                }
-            }
-
+            var key = KeyAtOrAfter(fromUs);
             if (key < 0)
             {
                 return null;
             }
 
-            keyEntry = _entries[(_head + key) % _entries.Length];
+            keyEntry = EntryAt(key);
             if (keyEntry.TimeUs >= toUs)
             {
                 return null;
             }
 
-            // Lagging audio is appended after K and is caught by the copy to the tail; the look-back
-            // catches audio that leads the video, appended before K though it overlaps it.
-            var first = key;
-            while (first > 0 && _entries[(_head + first - 1) % _entries.Length].TimeUs > keyEntry.TimeUs - LookBackUs)
-            {
-                first--;
-            }
+            var first = LookBack(key, keyEntry.TimeUs);
 
             copied = new RingEntry[_count - first];
             var start = (_head + first) % _entries.Length;
@@ -302,6 +304,96 @@ public sealed class PacketRing : IDisposable
         return new RingCut(packets, slabs, origins, keyUs, toUs);
     }
 
+    /// <summary>
+    /// Seeds <paramref name="target"/> (a Buffer Window resize, AD-8) with this ring's packets from
+    /// where a <see cref="Cut"/> from <paramref name="fromUs"/> would copy (its keyframe, less the
+    /// audio look-back; with no keyframe, the first packet at or after <paramref name="fromUs"/> less
+    /// the look-back) to the newest at the time. A target with no streams first gets this ring's, in
+    /// the same order. The tail can span the whole time a long Clip took to write, so it is copied in
+    /// batches of <see cref="CopyBatch"/> entries, each under this ring's lock and then the target's
+    /// only, so appends go on between them. Returns the sequence number of the next entry to copy,
+    /// for <see cref="CopyFrom"/>.
+    /// </summary>
+    internal long CopyTailTo(PacketRing target, long fromUs)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        long sequence;
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var key = KeyAtOrAfter(fromUs);
+            int first;
+            if (key >= 0)
+            {
+                first = LookBack(key, EntryAt(key).TimeUs);
+            }
+            else
+            {
+                first = 0;
+                while (first < _count && EntryAt(first).TimeUs < fromUs - LookBackUs)
+                {
+                    first++;
+                }
+            }
+
+            sequence = _headSeq + first;
+        }
+
+        while (true)
+        {
+            var next = CopyBatchTo(target, sequence, CopyBatch);
+            if (next - sequence < CopyBatch)
+            {
+                return next;
+            }
+
+            sequence = next;
+        }
+    }
+
+    /// <summary>
+    /// Copies every entry from sequence number <paramref name="sequence"/> to the newest into
+    /// <paramref name="target"/>, in one hold of both locks: the remainder after
+    /// <see cref="CopyTailTo"/>, appended while it ran.
+    /// </summary>
+    internal void CopyFrom(PacketRing target, long sequence)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        CopyBatchTo(target, sequence, int.MaxValue);
+    }
+
+    /// <summary>
+    /// Copies up to <paramref name="max"/> entries from sequence number <paramref name="sequence"/>
+    /// (or the head, if trimmed past it) into <paramref name="target"/>; returns the next sequence.
+    /// </summary>
+    private unsafe long CopyBatchTo(PacketRing target, long sequence, int max)
+    {
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            lock (target._lock)
+            {
+                if (target._streams.Count == 0)
+                {
+                    foreach (var stream in _streams)
+                    {
+                        target.AddStream(stream.Num, stream.Den, stream.IsVideo);
+                    }
+                }
+
+                var first = (int)Math.Max(0, sequence - _headSeq);
+                var end = (int)Math.Min(_count, (long)first + max);
+                for (var i = first; i < end; i++)
+                {
+                    var entry = EntryAt(i);
+                    target.Append(entry.Stream, new ReadOnlySpan<byte>(entry.Slab.Data + entry.Offset, entry.Length), entry.Pts, entry.Dts, entry.Duration, entry.IsKey);
+                }
+
+                return _headSeq + Math.Max(end, first);
+            }
+        }
+    }
+
     /// <summary>Drops every packet and the ring's own references; slabs a cut pins live until it is disposed.</summary>
     public void Dispose()
     {
@@ -325,6 +417,39 @@ public sealed class PacketRing : IDisposable
             _keys = [];
             _keyCount = 0;
         }
+    }
+
+    private RingEntry EntryAt(int position) => _entries[(_head + position) % _entries.Length];
+
+    /// <summary>The position of the first video keyframe at or after <paramref name="fromUs"/>; -1 when there is none. Under the lock.</summary>
+    private int KeyAtOrAfter(long fromUs)
+    {
+        for (var k = 0; k < _keyCount; k++)
+        {
+            var position = (int)(_keys[(_keyHead + k) % _keys.Length] - _headSeq);
+            if (EntryAt(position).TimeUs >= fromUs)
+            {
+                return position;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// The first position a copy from the keyframe at <paramref name="key"/> takes. Lagging audio is
+    /// appended after K and is caught by the copy to the tail; the look-back catches audio that leads
+    /// the video, appended before K though it overlaps it. Under the lock.
+    /// </summary>
+    private int LookBack(int key, long keyUs)
+    {
+        var first = key;
+        while (first > 0 && EntryAt(first - 1).TimeUs > keyUs - LookBackUs)
+        {
+            first--;
+        }
+
+        return first;
     }
 
     private static long ToMicros(long ticks, StreamInfo stream) =>

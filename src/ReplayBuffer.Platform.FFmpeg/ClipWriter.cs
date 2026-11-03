@@ -145,7 +145,7 @@ public static unsafe class ClipWriter
     }
 
     /// <summary>Background I/O and memory priority for the calling thread (AD-7); false when Windows refused it.</summary>
-    private static bool EnterBackgroundMode(ILogger logger)
+    internal static bool EnterBackgroundMode(ILogger logger)
     {
         if (PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_BEGIN))
         {
