@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 6.3 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 7.3 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 4.10 |
@@ -131,7 +131,7 @@ The coordinator logs each QA round in the Log below.
 | 27 | Slice epic 6 (Recordings) | slice-epic-6 | done |
 | 27.1 | 6.1 Tracer: Record Hotkey to a fragmented MP4 Recording beside the Replay Buffer | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f9c5a66`) |
 | 27.2 | 6.2 Crash-safe Recordings and recording-interrupted | 6.2 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ee4e90f`) |
-| 27.3 | 6.3 Record Hotkey modes and the Recordings switch | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 27.3 | 6.3 Record Hotkey modes and the Recordings switch | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `eee32cb`) |
 | 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | | pending |
 | 27.5 | 6.5 Clips during a Recording on one encoder chain | | pending |
 | 27.6 | 6.6 One file however long, and forced encoder restarts | | pending |
@@ -453,3 +453,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 6.3 is READY FOR QA at `9687ebd`. QA started on qa-2-1 (Sonnet), and its card is In QA.
 - 2026-11-03: 7.3 is READY FOR QA at `a38a811`. QA started on slice-epic-5 (Sonnet), and its card is In QA.
 - 2026-11-03: QA 6.3 at `9687ebd`: **QA PASS**, 0 findings. 6.3 has been told to merge (Sonnet), and qa-2-1 is back in the pool.
+- 2026-11-03: 6.3 merged (`eee32cb`, marked done on develop). slice-epic-4 is back in the pool.

@@ -3,7 +3,7 @@ title: 'Record Hotkey modes and the Recordings switch'
 type: 'feature'
 ticket: '3'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '4e98914249fec57c4d05703c01d8e46b933ccbcc'
 route: 'oneshot'
 route_source: 'auto'
