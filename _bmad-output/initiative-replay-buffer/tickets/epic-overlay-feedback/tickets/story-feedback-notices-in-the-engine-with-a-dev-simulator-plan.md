@@ -3,7 +3,7 @@ title: 'Feedback notices in the engine, with a dev simulator'
 type: 'feature'
 ticket: '4'
 created: '2026-11-03'
-status: 'in-review'
+status: 'built'
 baseline_revision: 'd6b57b6ef463e170bf92f9b0f96ea25e148f419d'
 route: 'full'
 route_source: 'auto'
@@ -99,6 +99,11 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-03 — Review pass
+- verdicts: 1 findings — high 0, medium 0, low 0, false 1, maybe-false 0
+- findings:
+  - `[false]` `[reject]` Two saves within 10 s leave two `clip-saved` notices active (and started/stopped stack), against "exactly one" — refuted: the AC is about one saved Clip, and epic R3 says messages that arrive close together queue and never overwrite; withdrawing the earlier notice early would drop it from story 5.5's Overlay queue. Each save getting its own notice and its own 10 s timer is the intended behaviour.
+
 ## Design Notes
 
 - The router derives Recording notices from `CaptureState` transitions, so epic-recordings gets them by publishing state, with no extra call. It remembers the last `Recording` it saw.
@@ -112,3 +117,32 @@ deferred: []
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors
 - `dotnet test --project tests/ReplayBuffer.Contracts.Tests -c Release --no-build`, same for `ReplayBuffer.Core.Tests` and `ReplayBuffer.Engine.Tests` -- expected: all pass
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL warnings
+
+## Auto Run Result
+
+**Summary:** A Core `FeedbackRouter` turns saved Clips, failed saves, Recording state changes and disk full into `warning.raised` notices (overlay, dismissable, with their `feedbackSounds` name) through the `IFeedbackNotices` port that the engine's `Warnings` implements. `clip-saved`, `recording-started` and `recording-stopped` are withdrawn after 10 s. `clip-failed` lasts until the next saved Clip, and `disk-full` until the next Recording starts, or until the user dismisses either. `dev.simulate` (in its own Contracts area) injects a stub Recording state through the orchestrator, a disk full, or a save failure, and the installed instance refuses it with `not-dev-instance`.
+
+**Files changed:**
+- `src/ReplayBuffer.Contracts/ErrorCodes.cs`: five new codes added to `All`.
+- `src/ReplayBuffer.Contracts/Messages/Dev.cs`: new `dev.simulate` command area.
+- `src/ReplayBuffer.Contracts/Ipc/MessageTypes.cs`: registers `DevMessages`.
+- `src/ReplayBuffer.Core/Feedback/FeedbackRouter.cs`: new router, notice record and port.
+- `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs` and `TargetGames.cs`: `RecordingRunning` now also sets `CaptureState.Recording`.
+- `src/ReplayBuffer.Engine/Ipc/Warnings.cs`: implements the port and adds `Withdraw`.
+- `src/ReplayBuffer.Engine/Sessions/DevSimulator.cs`: new simulator with the installed-instance refusal.
+- `src/ReplayBuffer.Engine/EngineHost.cs`: wires in the router and `dev.simulate`, and disposes the router after the sessions.
+- `tests/ReplayBuffer.Core.Tests/FeedbackRouterTests.cs` and `tests/ReplayBuffer.Engine.Tests/DevSimulateServeTests.cs`: new tests.
+
+**Review:** quick lens, 1 finding, rejected as false (see the triage log). No patches, and nothing deferred.
+
+**Follow-up review recommended:** false. No patches were applied.
+
+**Verification:**
+- Release build: 0 warnings.
+- Contracts: 99/99 passed.
+- Core: 74/74 passed.
+- Engine: 150 passed and 3 failed in the first run, which ran while other sessions were running tests. The rerun had 0 failures (heavy tests skipped).
+- `tools/publish-engine.ps1`: published with no IL warnings.
+- Matrix audit: rows 1 and 2 are covered by `FeedbackRouterTests`, and rows 3 to 5 by `DevSimulateServeTests`.
+
+**Residual risks:** the router calls `Warnings` while holding its own lock, which is safe because `Warnings` never calls back into it. The notice texts other than "Clip not saved: <reason>" are defaults: "Clip saved", "Recording started", "Recording stopped" and "The disk is full".
