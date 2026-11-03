@@ -35,8 +35,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 3.4 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 3.6 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
@@ -91,7 +91,7 @@ The coordinator logs each QA round in the Log below.
 | 19 | 3.3 Target Game rule | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `22b214e`) |
 | 20 | 3.4 Game Profile auto-creation and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `31c2830`) |
 | 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `af89823`) |
-| 22 | 3.6 Game Profiles page in the Main App | | pending |
+| 22 | 3.6 Game Profiles page in the Main App | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 23 | 3.7 Refactor sweep | | pending |
 | 24 | Release epic 3 (`v0.3.0`) | | pending |
 | 25 | Slice epic 4 (Replay Buffer and Clips) | | done |
@@ -347,3 +347,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 2.10 merged (`0770b95`, done `e54dd81`). **Epic 2 is complete:** it was marked `status: done` (`e6216ae`) and **`v0.2.0` was released** by the coordinator (master `02bcd8e`, tag `v0.2.0`, back-merge `b44e0eb`). The 2.10 card is in Done with a release comment. 3.4 is READY FOR QA at `c456b1d`, and QA started on qa-1-14 (Sonnet); its card is In QA. 4.1 is being implemented.
 - 2026-11-03: QA on 3.4 (`c456b1d`): **QA PASS**, 0 findings. 3.4 was switched to Sonnet and told to merge. Once it lands, 3.6 (Game Profiles page) and 4.3 (once 4.2 is done) can follow.
 - 2026-11-03: 3.4 merged (`31c2830`, `feat(engine): merge 3.4-game-profiles`; develop merged into the branch first with no conflicts, then Release build 0 warnings, Platform.Windows 25, Core 59 and Engine 146 passed), ticket marked done. A profile deleted while its game is still detected isn't recreated until the next detection (QA note, out of scope). 3.6 (Game Profiles page) is unblocked.
+- 2026-11-03: 3.4 merged (`31c2830`, done `5560509`), and its card is in Done. 3.6 (Game Profiles page, low risk, HITL) went to pool worker slice-epic-5 (Opus, medium effort), and its card is In progress. 4.1 is still being implemented. After 3.6 comes 3.7 (epic 3's refactor sweep), then `v0.3.0`.
