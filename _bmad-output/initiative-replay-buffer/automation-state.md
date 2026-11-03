@@ -37,8 +37,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 2.4 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 3.1 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 2.4 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 3.1 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -304,3 +304,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: test-trim merged into develop (`bbfb0e6`, `test: merge test-suite-trim`, --no-ff). The default suite went from about 400 s to about 88 s (Engine 188 → 21 s, App 80 → 25 s, Platform.Audio 61 → 10 s, Bench 59 → 20 s; 829 → 620 cases, all pass). 36 slow, hardware-bound or flaky tests are opt-in (`Explicit` + `Heavy` trait; run with `--explicit only`, and they pass), and 183 redundant cases were removed (after restoring 26 path and file-name safety theory rows). `develop` (3.5) was merged in first without conflicts; 3.5's tests were already lean. `CLAUDE.md` has a new "Tests" section. 2.4 and 3.1 sync with develop next and slim their own new tests.
 - 2026-11-03: test-trim merged (`bbfb0e6`). The default suite takes about 88 s (was about 400 s), and all 620 cases pass, including 26 restored safety rows. Its session was archived because Remote Control was on. 2.4 and 3.1 were told to sync with develop and slim their new tests before READY FOR QA.
 - 2026-11-03: 2.4 is READY FOR QA at `1d33ac5` (develop with test-trim merged in, scoped tests and both ACs pass, publish clean). 3.1 is READY FOR QA at `28570b3` (develop merged in, scoped tests and publish pass, the GPU-load proxy detected the window in under 1 s). QA started on qa-1-14 for 2.4 and qa-2-1 for 3.1, both Sonnet at medium effort.
+- 2026-11-03: QA on 2.4 (`1d33ac5`): **QA PASS**, 0 findings. QA on 3.1 (`28570b3`): **QA PASS**, 0 findings. QA notes: `HotkeyServeTests` flakes when sessions use global hotkeys at once, and the tracer still takes any full-screen window, which 3.2 and 3.3 own. 2.4 merges first and 3.1 waits for it, both switched to Sonnet. Both QA workers are back in the pool.
