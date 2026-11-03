@@ -3,14 +3,14 @@ title: 'Game Profiles page in the Main App'
 type: 'feature'
 ticket: '6'
 created: '2026-11-03'
-status: 'ready-for-dev'
-baseline_revision: ''
+status: 'built'
+baseline_revision: 'd484e0992d8edfa09e84279defdf9a0aab10fd49'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -71,10 +71,10 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `Game.cs` -- `GameAdd`, `GameAdded`, `game.add`.
-- [ ] `ManualGames.cs`, `EngineHost.cs` -- the handler and its registration.
-- [ ] `GameProfilesPage.cs`, `GameProfilesView.xaml(.cs)`, `SettingsPage.cs` -- the page.
-- [ ] Tests (lean). App: (1) a document with two profiles lists both sorted with their flags; renaming one, ticking Recordings on the other and ticking Ignored each send one update at the rendered revision with the right op; a blank rename sends nothing. (2) Add sends `game.add` with the raw path and clears the field; a refusal shows the `Not added` message. (3) The existing view test lists "Game Profiles"; render the Game Profiles view off-screen with two rows and assert no binding errors mentioning it (reuse the existing helper pattern). Engine serve: `game.add` with a `..` path to `GamePath` → `settings.changed` with `manualGames == [Canonicalize(GamePath)]` and that reply; a second add of the same path → same reply, no new revision; a missing path → `invalid-arguments`.
+- [x] `Game.cs` -- `GameAdd`, `GameAdded`, `game.add`.
+- [x] `ManualGames.cs`, `EngineHost.cs` -- the handler and its registration.
+- [x] `GameProfilesPage.cs`, `GameProfilesView.xaml(.cs)`, `SettingsPage.cs` -- the page.
+- [x] Tests (lean). App: (1) a document with two profiles lists both sorted with their flags; renaming one, ticking Recordings on the other and ticking Ignored each send one update at the rendered revision with the right op; a blank rename sends nothing. (2) Add sends `game.add` with the raw path and clears the field; a refusal shows the `Not added` message. (3) The existing view test lists "Game Profiles"; render the Game Profiles view off-screen with two rows and assert no binding errors mentioning it (reuse the existing helper pattern). Engine serve: `game.add` with a `..` path to `GamePath` → `settings.changed` with `manualGames == [Canonicalize(GamePath)]` and that reply; a second add of the same path → same reply, no new revision; a missing path → `invalid-arguments`.
 
 **Acceptance Criteria:**
 - Given a settings document with Game Profiles, when the Game Profiles page is shown, then every profile is listed by name with its path, Ignored and Recordings state.
@@ -83,9 +83,19 @@ deferred: []
 
 ## Implementation Notes
 
+- `MainViewModel` exposes `GameProfiles` like `TrackLayout`, for tests. The private `BindingErrors` trace listener moved from `TrackLayoutPageTests` to a shared `tests/ReplayBuffer.App.Tests/BindingErrors.cs` so both view tests use it.
+- The view shows the page's `Message` through `MainWindow.xaml`'s existing `SelectedPage.Message` binding, so the view itself doesn't.
+- The review patch was applied by the session itself (one line per property), not by the implementing subagent.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 2 findings — high 0, medium 1, low 1, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `GameProfileItem.Show` raised `PropertyChanged` for every attribute on every render, so another profile's commit (e.g. 3.4 auto-creating a newly detected game) pushed the stored name back into a name box mid-edit (LostFocus binding). — `Show` now uses `Set`, raising only for values that changed. App.Tests 65/65.
+  - `[low]` `[reject]` `ManualGames.Add` accepts a directory whose name ends in `.exe`, since `Canonicalize` opens directories too. — Unlikely in everyday use: Browse picks existing files only (`CheckFileExists`), and a listed directory is never a running process, so it detects nothing. A guard adds a branch for a typed folder named `*.exe`.
 
 ## Design Notes
 
@@ -102,3 +112,22 @@ deferred: []
 
 **Manual checks (if no CLI):**
 - Builder (Human Check Queue): rename a detected game, toggle Ignored and see detection stop, switch Recordings on, add a windowed game by hand and see it detected.
+
+## Auto Run Result
+
+- **Change:** A Game Profiles page in Settings, after Track Layout, lists every profile in the snapshot's settings by name, with its path and its Ignored and Recordings checkboxes. Each rename or toggle sends one `settings.update` op against the rendered revision; a blank rename sends nothing. Add game by hand sends the new `game.add` command with the typed or browsed path. The engine canonicalizes it (AD-18), refuses one it can't open or that isn't a `.exe` with `invalid-arguments`, and appends it to `manualGames` once, retrying on a conflict.
+- **Files:**
+  - `Contracts/Messages/Game.cs`: `GameAdd`, `GameAdded`, `game.add`.
+  - `Engine/Settings/ManualGames.cs` (new): the handler. `Engine/EngineHost.cs`: its registration (one line).
+  - `App/Settings/GameProfilesPage.cs`, `GameProfilesView.xaml(.cs)` (new): the page. `SettingsPage.cs`: the page in the list. `MainViewModel.cs`: a `GameProfiles` property.
+  - Tests: `GameProfilesPageTests.cs` (3), `BindingErrors.cs` (shared helper), `TrackLayoutPageTests.cs` (the page titles), `GameDetectionServeTests.cs` (1 serve test for `game.add`).
+- **Review:** quick lens, 2 findings. 1 medium patched, 1 low rejected (reason in the triage log), nothing deferred.
+- **Follow-up review recommended:** false (one medium patched, no high).
+- **Verification:**
+  - Release build: 0 warnings.
+  - App 65 passed (5 explicit skipped), Contracts 93/93, Engine 147 passed (18 explicit skipped). App re-run after the patch: 65 passed.
+  - `publish-engine.ps1`: clean, no IL/AOT warnings.
+  - Media, Capture, Audio, Core and Platform.Windows suites weren't run: the diff doesn't touch them.
+- **Residual risks:**
+  - The page isn't checked by hand. That's the builder's Human Check Queue item.
+  - A hand-added game shows in the list only once it is detected, and `manualGames` can't be edited from the page (not in the ticket).

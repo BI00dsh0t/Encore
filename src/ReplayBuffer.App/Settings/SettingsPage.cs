@@ -88,5 +88,6 @@ internal static class SettingsPages
     [
         new GeneralSettingsPage(sender),
         new TrackLayoutPage(sender, engine),
+        new GameProfilesPage(sender, engine),
     ];
 }
