@@ -35,9 +35,9 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.5 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 4.4 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
@@ -385,3 +385,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 4.4 is READY FOR QA at `0c18681` (save cooldown, `clip.saving`, two concurrent writers and save-busy; build, four scoped suites and publish pass; three review findings fixed). QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-03: QA on 4.4 (`0c18681`): **QA PASS**, 0 blocking findings. Two notes were accepted and handed to 4.5: a writer failure after `clip.saving` is only logged until `clip.failed` exists, and a `saveCooldown` of 0 with a second press on the same keyframe makes an empty cut. 4.4 was told to merge.
 - 2026-11-03: 4.4 merged into `develop` (`8ce2703`, `feat(engine): merge 4.4-save-cooldown`) and marked done, after QA PASS at `0c18681` and a clean merge of `develop` (state-file lines only, so no re-verification). QA's two notes are accepted: a writer failure after `clip.saving` is only logged until 4.5's `clip.failed`, and a `saveCooldown` of 0 lets a second press on the same keyframe make an empty cut (handed to 4.5).
+- 2026-11-03: 4.4 merged (`8ce2703`), and its card is in Done. 4.5 (failed saves, retry and the file-being-written signal) went to pool worker slice-epic-4 (Opus, medium effort), with 4.4's two QA notes in its brief; its card is In progress. 4.5 is the gateway: its merge unblocks 4.6, 5.4, 6.1 and 7.1 in parallel.
