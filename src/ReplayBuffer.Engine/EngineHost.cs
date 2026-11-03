@@ -258,7 +258,14 @@ internal sealed class EngineHost : IAsyncDisposable
                         {
                             hub.Publish(CaptureMessages.Failed, failed);
                             clipLog.LogInformation("The save made no Clip: {Reason}", failed.Reason);
-                        })
+                        },
+                        Saving: saving =>
+                        {
+                            hub.Publish(CaptureMessages.Saving, saving);
+                            clipLog.LogDebug("Saving a Clip");
+                        },
+                        Ignored: since => clipLog.LogInformation(
+                            "The save press came {Seconds:0.0} s after the last accepted one, inside the Save Cooldown; it was ignored", since.TotalSeconds))
                     : null);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.

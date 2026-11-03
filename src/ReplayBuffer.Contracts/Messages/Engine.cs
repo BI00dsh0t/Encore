@@ -55,6 +55,10 @@ public sealed record StateSnapshot
     /// <remarks>A snapshot without the field (an engine from before story 4.1) reads as none.</remarks>
     public ClipSaved? LastClip { get; init; }
 
+    /// <summary>The last accepted save press, or <c>null</c> before one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 4.4) reads as none.</remarks>
+    public ClipSaving? LastClipSaving { get; init; }
+
     /// <summary>The last save that made no Clip, or <c>null</c> before one.</summary>
     /// <remarks>A snapshot without the field (an engine from before story 4.2) reads as none.</remarks>
     public ClipFailed? LastClipFailure { get; init; }

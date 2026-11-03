@@ -103,16 +103,43 @@ public sealed class ReplayCutTests : IDisposable
             audio.Flush();
             Assert.Equal([301, 601], servedAt);
 
-            // A save cuts from its window's start, or the last Reset, to its forced keyframe; the Reset is that keyframe.
-            var resetUs = long.MinValue;
-            for (var p = 0; p < Presses.Length; p++)
+            // A save cuts from its window's start, or the earlier save's end, to its forced keyframe.
+            // Both are cut first, then written by two writers at once (R6): neither corrupts the other.
+            var sources = new List<IDisposable>();
+            try
             {
-                var toUs = sink.VideoMicros(keys[p]);
-                var pressUs = (long)(Presses[p] * 1_000_000);
-                using var source = sink.Cut(Math.Max(pressUs - WindowUs, resetUs), toUs);
-                Assert.NotNull(source);
-                ClipWriter.Write(source, clips[p], log);
-                resetUs = toUs;
+                var startUs = long.MinValue;
+                var cuts = new List<(ClipSource Source, string Path)>();
+                for (var p = 0; p < Presses.Length; p++)
+                {
+                    var toUs = sink.VideoMicros(keys[p]);
+                    var pressUs = (long)(Presses[p] * 1_000_000);
+                    var source = sink.Cut(Math.Max(pressUs - WindowUs, startUs), toUs);
+                    Assert.NotNull(source);
+                    sources.Add(source);
+                    cuts.Add((source, clips[p]));
+                    startUs = toUs;
+                }
+
+                var failures = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+                var writers = cuts.Select(cut => new Thread(() =>
+                {
+                    try
+                    {
+                        ClipWriter.Write(cut.Source, cut.Path, log);
+                    }
+                    catch (Exception e)
+                    {
+                        failures.Enqueue(e);
+                    }
+                })).ToList();
+                writers.ForEach(t => t.Start());
+                writers.ForEach(t => t.Join());
+                Assert.Empty(failures);
+            }
+            finally
+            {
+                sources.ForEach(s => s.Dispose());
             }
         }
 

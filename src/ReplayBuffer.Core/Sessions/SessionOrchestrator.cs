@@ -45,7 +45,11 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// session with the press QPC. With <see cref="ReplayClips"/>, a <see cref="HotkeyAction.Save"/> press
 /// on the game session reserves a path and has the session write its Clip there; the writer posts
 /// its result back, and only then is the Clip published as saved and the session's Replay Buffer
-/// Reset at its end (R5); a press less than 1 s after that Reset is refused as too short. A game
+/// Reset at its end (R5); a press less than 1 s after that Reset is refused as too short. A press
+/// within the Global <c>saveCooldown</c> of the last accepted one is ignored (R5); an accepted one
+/// publishes <see cref="CaptureState.CooldownUntil"/> and <c>clip.saving</c> at once, and is refused
+/// with <see cref="ErrorCodes.SaveBusy"/> while <see cref="ReplayClips.MaxWriters"/> Clips are being
+/// written (R6). A game
 /// session whose Target exits, or whose window closes, is drained rather than ended (R1): it keeps
 /// its Replay Buffer, <see cref="ReplayState.Draining"/> is published, and <c>save</c> presses still
 /// cut from it until <see cref="ReplayClips.ExitDrain"/> passes, a new session starts, or the
@@ -78,6 +82,13 @@ public sealed class SessionOrchestrator : IDisposable
     private ProposeTarget? _pendingTarget;
     private CaptureState _state = CaptureState.Initial;
     private long _nextSessionId;
+
+    // The Hotkey QPC of the last accepted save press, which the Save Cooldown runs from (R5); null
+    // before the first. Global: a new session doesn't clear it.
+    private long? _cooldownFrom;
+
+    // Clip writes started and not yet posted back, across sessions (R6).
+    private int _writing;
 
     private int _disposed;
 
@@ -635,12 +646,42 @@ public sealed class SessionOrchestrator : IDisposable
     /// Reset (R5) is refused here, before the session is asked for anything: no keyframe, no Clip,
     /// no Reset, only <see cref="ReplayClips.NotSaved"/> with <see cref="ErrorCodes.ClipTooShort"/>.
     /// With no game session, a drained one (R1) takes the press and cuts to the end of what it holds.
+    /// Before any of that, the Save Cooldown (R5): a press less than the Global <c>saveCooldown</c>
+    /// after the last accepted one is ignored, with only <see cref="ReplayClips.Ignored"/>. Any other
+    /// press is accepted: it starts the next cooldown, publishes <see cref="CaptureState.CooldownUntil"/>
+    /// and calls <see cref="ReplayClips.Saving"/>, and an outcome always follows. With
+    /// <see cref="ReplayClips.MaxWriters"/> writes in flight it is refused with
+    /// <see cref="ErrorCodes.SaveBusy"/> (R6), before the session is asked for anything.
     /// </summary>
     private void SaveClip(long qpc)
     {
         var active = _active is { Spec.Kind: SessionKind.Game } game ? game : _drain;
         if (_clips is null || active is null)
         {
+            return;
+        }
+
+        // R5: read at each press (Global, Immediate); measured in Hotkey QPC from the accepted press.
+        var document = _currentDocument();
+        var global = SettingsResolver.Resolve(document, null);
+        var cooldown = Math.Max(0, global.SaveCooldown) * Stopwatch.Frequency;
+        if (_cooldownFrom is { } from && qpc - from < cooldown)
+        {
+            _clips.Ignored?.Invoke(TimeSpan.FromSeconds((qpc - from) / (double)Stopwatch.Frequency));
+            return;
+        }
+
+        _cooldownFrom = qpc;
+        DateTimeOffset? until = cooldown == 0
+            ? null
+            : DateTimeOffset.UtcNow + TimeSpan.FromSeconds((qpc + cooldown - Stopwatch.GetTimestamp()) / (double)Stopwatch.Frequency);
+        SetState(_state with { CooldownUntil = until });
+        _clips.Saving?.Invoke(new ClipSaving(DateTimeOffset.UtcNow));
+
+        if (_writing >= ReplayClips.MaxWriters)
+        {
+            // R6: the ring keeps capturing; nothing is cut and nothing is Reset.
+            _clips.NotSaved?.Invoke(new ClipFailed(ErrorCodes.SaveBusy));
             return;
         }
 
@@ -657,10 +698,11 @@ public sealed class SessionOrchestrator : IDisposable
             write = active.Session.Save(qpc);
             if (write is null)
             {
+                // Nothing to save yet; the accepted press still gets its outcome.
+                _clips.NotSaved?.Invoke(new ClipFailed(ErrorCodes.ClipTooShort));
                 return;
             }
 
-            var document = _currentDocument();
             var folder = SettingsResolver.Resolve(document, null).OutputFolder ?? _clips.DefaultOutputFolder();
             var profileId = active.Spec.Target.ProfileId;
             path = _clips.Paths.AllocateForGame(document, profileId, GameName(active), folder, qpc);
@@ -675,6 +717,7 @@ public sealed class SessionOrchestrator : IDisposable
         try
         {
             write.Write(path, error => Post(new ClipWritten(sessionId, qpc, write, path, error)));
+            _writing++;
         }
         catch (Exception e)
         {
@@ -721,6 +764,8 @@ public sealed class SessionOrchestrator : IDisposable
     /// </summary>
     private void OnClipWritten(ClipWritten written)
     {
+        // Whatever the session: the write is no longer in flight.
+        _writing--;
         if (written.Error is not null)
         {
             ReportSaveFailure(written.Error);

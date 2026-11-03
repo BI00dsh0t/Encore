@@ -136,6 +136,12 @@ public static class ErrorCodes
     /// </summary>
     public const string ClipTooShort = "clip-too-short";
 
+    /// <summary>
+    /// A save was refused (R6): two Clips were already being written. No Clip is made, the session
+    /// isn't asked for anything and nothing is Reset.
+    /// </summary>
+    public const string SaveBusy = "save-busy";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -178,5 +184,6 @@ public static class ErrorCodes
         HotkeyInactive,
         DeviceDropout,
         ClipTooShort,
+        SaveBusy,
     ];
 }
