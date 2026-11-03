@@ -3,7 +3,7 @@ title: 'Replay Buffer lifecycle: Target switch, exit drain and Ignored'
 type: 'feature'
 ticket: '3'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '7bd8a7da0f6bfc778b6bbee96a62b3e05b8322e6'
 route: 'full'
 route_source: 'auto'

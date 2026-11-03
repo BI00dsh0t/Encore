@@ -97,7 +97,7 @@ The coordinator logs each QA round in the Log below.
 | 25 | Slice epic 4 (Replay Buffer and Clips) | | done |
 | 25.1 | 4.1 Tracer: Save Hotkey to a multi-Track Clip from a Memory ring | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `01f2795`) |
 | 25.2 | 4.2 Exact save cut and gapless Reset | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `02b0b95`) |
-| 25.3 | 4.3 Replay Buffer lifecycle: Target switch, exit drain and Ignored | | pending |
+| 25.3 | 4.3 Replay Buffer lifecycle: Target switch, exit drain and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e0c3931`) |
 | 25.4 | 4.4 Save Cooldown, save events and two concurrent writers | | pending |
 | 25.5 | 4.5 Failed saves, retry and the file-being-written signal | | pending |
 | 25.6 | 4.6 Ring generations and Buffer Window resizing | | pending |
@@ -379,3 +379,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: Spike 5.2 merged (`5db7981`, state `9fe22eb`), and its card is in Done. `.gitattributes` merged (`4dd8a16`). Both workers are back in the pool. 4.3 is being implemented.
 - 2026-11-03: 4.3 is READY FOR QA at `8446562` (build 0 warnings, Core and Engine pass, publish clean). QA started on qa-2-1 (Sonnet), and its card is In QA. No other story is ready until 4.3 merges.
 - 2026-11-03: QA on 4.3 (`8446562`): **QA PASS**, 0 blocking findings and two accepted low notes, logged in the plan at `f031d48`. 4.3 was told to merge. Once it lands, 4.4 is next.
+- 2026-11-03: 4.3 merged into `develop` (`e0c3931`, `feat(engine): merge 4.3-replay-buffer-lifecycle`) and marked done, after QA PASS at `8446562` with 0 blocking findings. `develop` (5.2, `.gitattributes`) was merged into the branch first without conflicts; it touched only bench and docs, so the Release build, Core, Engine and publish from `8446562` stand. QA's two low notes are accepted without change: (1) a window close starts the drain, so its 30 s runs from the window close, not the process exit, and a process that outlives its window gets a drain that ends sooner after the exit; (2) marking an exited game Ignored makes no proposal, so its drain runs to expiry, at most 30 s. Residual: a game that recreates its window drops the drained buffer; the `End` command with only a drain held is refused. The Human Check Queue gains: quit or crash a game, press Save within 30 s, and confirm the Clip holds its last moments. 4.4 is next.
