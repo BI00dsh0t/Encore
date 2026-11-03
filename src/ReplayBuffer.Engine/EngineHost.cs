@@ -19,6 +19,7 @@ using ReplayBuffer.Engine.Sessions;
 using ReplayBuffer.Engine.Settings;
 using ReplayBuffer.Engine.Supervision;
 using ReplayBuffer.Platform.Audio;
+using ReplayBuffer.Platform.FFmpeg;
 using ReplayBuffer.Platform.Windows;
 
 namespace ReplayBuffer.Engine;
@@ -126,6 +127,8 @@ internal sealed class EngineHost : IAsyncDisposable
     private LibraryActor _library = null!;
     private FeedbackRouter? _feedback;
     private FeedbackDeviceCheck? _feedbackCheck;
+    private MemoryMarginReporter? _marginReporter;
+    private EstimatePublisher? _estimates;
     private FeedbackSoundPlayer? _sounds;
     private int _disposed;
 
@@ -203,6 +206,7 @@ internal sealed class EngineHost : IAsyncDisposable
         var clipLog = loggers.CreateLogger("Clips");
         var recordingLog = loggers.CreateLogger("Recordings");
         var libraryLog = loggers.CreateLogger("Library");
+        var ffmpegLog = loggers.CreateLogger("FFmpeg");
         var replay = !hostOptions.DebugCapture && (hostOptions.ReplayBuffer ?? !instance.IsTest);
 
         // The pipe first: a second engine must fail before it touches the settings file.
@@ -211,6 +215,8 @@ internal sealed class EngineHost : IAsyncDisposable
         HotkeyService? hotkeys = null;
         DeviceListPublisher? devices = null;
         DeviceDropoutReporter? dropouts = null;
+        MemoryMarginReporter? marginReporter = null;
+        EstimatePublisher? estimates = null;
         TrackMeters? meters = null;
         GameMonitor? games = null;
         LibraryActor? library = null;
@@ -226,10 +232,19 @@ internal sealed class EngineHost : IAsyncDisposable
             string OutputFolder() =>
                 SettingsResolver.Resolve(load.Store.Current, null).OutputFolder
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
+            // FR-12: the Recordings the last run left open are trimmed before the Library sees them.
+            var runtime = new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Runtime"));
+            var interrupted = InterruptedRecordings.Recover(runtime.ReadInterrupted(), recordingLog);
+
             var libraryFile = Path.Combine(instance.RoamingDataFolder, "library.json");
-            var libraryItems = LibraryActor.Load(
+
+            // A top-level folder's Game Profile, for files found on disk (AD-21).
+            string? ProfileForFolder(string folder) =>
+                load.Store.Current.Profiles.FirstOrDefault(p => string.Equals(p.Value.Folder, folder, StringComparison.OrdinalIgnoreCase)).Key;
+            var libraryLoad = LibraryActor.Load(
                 OutputFolder(),
                 libraryFile,
+                ProfileForFolder,
                 e => libraryLog.LogWarning("The Library couldn't be read in full: {Message}", e.Message));
 
             // The device list seeds the hub's initial state; a change is published once the hub exists.
@@ -239,19 +254,41 @@ internal sealed class EngineHost : IAsyncDisposable
                 () => load.Store.Current,
                 list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
                 loggers.CreateLogger("Audio"));
-            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryItems));
+            // The storage estimate (R2) seeds the initial state likewise.
+            estimates = new EstimatePublisher(
+                () => load.Store.Current,
+                new SystemMemoryStatus(),
+                EstimatePublisher.FreeDiskBytes,
+                Path.Combine(instance.LocalDataFolder, "ring"),
+                e => Volatile.Read(ref publishTo)?.Publish(CaptureMessages.EstimateChanged, e),
+                hostOptions.Time);
+            var estimate = estimates.Seed();
+            var libraryFolder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(OutputFolder()));
+            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryLoad.Items, libraryLoad.Corrupt, libraryFolder, estimate));
             load.Store.Changed += document => hub.Publish(SettingsMessages.Changed, new SettingsChanged(document.Revision, document));
             load.Store.Changed += devices.OnSettingsChanged;
+            load.Store.Changed += estimates.OnSettingsChanged;
 
             var libraryActor = library = new LibraryActor(
-                libraryItems,
+                libraryLoad.Items,
                 OutputFolder,
                 libraryFile,
+                ProfileForFolder,
+                libraryLoad.Corrupt,
                 item => hub.Publish(LibraryMessages.ItemAdded, item),
                 item => hub.Publish(LibraryMessages.ItemChanged, item),
                 removed => hub.Publish(LibraryMessages.ItemRemoved, removed),
+                reset => hub.Publish(LibraryMessages.Reset, reset),
+                blocked => hub.Publish(LibraryMessages.CleanupBlockedChanged, blocked),
                 hostOptions.Time,
-                e => libraryLog.LogWarning("library.json couldn't be written: {Message}", e.Message));
+                e => libraryLog.LogWarning("A Library disk operation failed: {Message}", e.Message),
+                createMissingFolder: !instance.IsTest,
+                readLength: path => MediaLength.Read(path, ffmpegLog),
+                folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed));
+
+            // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.
+            load.Store.Changed += _ => libraryActor.OutputFolderChanged();
+            string? corruptWarning = null;
             var warnings = new Warnings(hub, hostOptions.Time);
             var feedbackLog = loggers.CreateLogger("Feedback");
             var player = sounds = new FeedbackSoundPlayer(
@@ -273,6 +310,10 @@ internal sealed class EngineHost : IAsyncDisposable
                 notices.ClipNotSaved(failed);
             };
             dropouts = new DeviceDropoutReporter(audio, warnings);
+
+            // One margin for the engine: every session and ring generation shares it, so neither re-arms the warning.
+            var margin = new MemoryMargin(new SystemMemoryStatus());
+            marginReporter = new MemoryMarginReporter(margin, warnings);
             var router = new CommandRouter(log);
             var apps = new AppSupervisor(
                 hub,
@@ -301,7 +342,7 @@ internal sealed class EngineHost : IAsyncDisposable
             var defaultOutputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
-                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay, RingFolder = ringFolder },
+                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay, RingFolder = ringFolder, Margin = margin },
                     loggers,
                     audio,
                     encoders),
@@ -317,7 +358,7 @@ internal sealed class EngineHost : IAsyncDisposable
                     hub.Publish(HotkeyMessages.Pressed, press);
                     HotkeyService.LogPress(hotkeyLog, press);
                 },
-                new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Audio")),
+                runtime,
                 changed =>
                 {
                     hub.Publish(GameMessages.TargetChanged, changed);
@@ -369,7 +410,8 @@ internal sealed class EngineHost : IAsyncDisposable
                         },
                         e => recordingLog.LogWarning("The Recording failed: {Message}", e.Message),
                         libraryActor,
-                        message => recordingLog.LogInformation("{Message}", message))
+                        message => recordingLog.LogInformation("{Message}", message),
+                        runtime)
                     : null);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
@@ -399,7 +441,7 @@ internal sealed class EngineHost : IAsyncDisposable
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor, _feedback = notices, _feedbackCheck = soundCheck, _sounds = player };
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor, _feedback = notices, _feedbackCheck = soundCheck, _sounds = player, _marginReporter = marginReporter, _estimates = estimates };
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
             router.Register(AudioMessages.List, (_, _) => ValueTask.FromResult(devices.Current));
@@ -413,7 +455,18 @@ internal sealed class EngineHost : IAsyncDisposable
                 trackMeters.Unwatch();
                 return ValueTask.FromResult(Empty.Value);
             });
-            router.Register(FeedbackMessages.Dismiss, (dismiss, _) => ValueTask.FromResult(warnings.Dismiss(dismiss)));
+            router.Register(FeedbackMessages.Dismiss, (dismiss, _) =>
+            {
+                var dismissed = warnings.Dismiss(dismiss);
+
+                // Dismissing library-corrupt acknowledges the rebuilt index, so Cleanup may run again.
+                if (dismiss.Id == corruptWarning)
+                {
+                    libraryActor.AcknowledgeCorrupt();
+                }
+
+                return ValueTask.FromResult(dismissed);
+            });
             router.Register(FeedbackMessages.Preview, (preview, _) =>
             {
                 player.Preview(preview.Sound);
@@ -470,6 +523,25 @@ internal sealed class EngineHost : IAsyncDisposable
                     overlay: false);
             }
 
+            // AD-16: an interrupted Recording is never resumed, only reported.
+            foreach (var message in interrupted)
+            {
+                warnings.Raise(ErrorCodes.RecordingInterrupted, WarningSeverity.Warning, "recordings", message, overlay: true);
+            }
+
+            // Only once they are reported: a start that fails before here reports them next time.
+            runtime.ClearInterrupted();
+
+            if (libraryLoad.Corrupt)
+            {
+                corruptWarning = warnings.Raise(
+                    ErrorCodes.LibraryCorrupt,
+                    WarningSeverity.Warning,
+                    "library",
+                    "The Library index was unreadable and was rebuilt from the Output Folder; Favourites may be lost. Cleanup stays off until this is acknowledged.",
+                    overlay: false).Id;
+            }
+
             soundCheck.Check();
             server.Start(hub, router);
             games?.Start();
@@ -496,6 +568,8 @@ internal sealed class EngineHost : IAsyncDisposable
             meters?.Dispose();
             devices?.Dispose();
             dropouts?.Dispose();
+            marginReporter?.Dispose();
+            estimates?.Dispose();
             audio.Dispose();
             server.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
@@ -539,6 +613,8 @@ internal sealed class EngineHost : IAsyncDisposable
         Meters.Dispose();
         Devices.Dispose();
         Dropouts.Dispose();
+        _marginReporter?.Dispose();
+        _estimates?.Dispose();
         Audio.Dispose();
         _stopHeartbeat.Dispose();
         _stopProbe.Dispose();

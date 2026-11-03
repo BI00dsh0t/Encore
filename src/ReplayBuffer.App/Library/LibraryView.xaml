@@ -2,19 +2,57 @@
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
+    </UserControl.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel>
+            <Border Margin="0,0,0,12"
+                    Padding="10,8"
+                    Background="#FFF4E5"
+                    BorderBrush="#E0A040"
+                    BorderThickness="1"
+                    Visibility="{Binding IsCleanupBlocked, Converter={StaticResource Visible}}">
+                <DockPanel>
+                    <Button Command="{Binding AcknowledgeCommand}"
+                            Content="Acknowledge"
+                            DockPanel.Dock="Right"
+                            Margin="12,0,0,0"
+                            Padding="8,2"
+                            VerticalAlignment="Center" />
+                    <TextBlock VerticalAlignment="Center"
+                               Text="The Library index couldn't be read, so it was rebuilt from the Output Folder. Cleanup is off until you acknowledge this."
+                               TextWrapping="Wrap" />
+                </DockPanel>
+            </Border>
             <TextBlock FontWeight="SemiBold" Text="Library" />
             <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding Rows}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Grid Margin="0,4">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel>
+                            <Border Width="96"
+                                    Height="54"
+                                    Background="#E6E6E6"
+                                    ClipToBounds="True">
+                                <Grid>
+                                    <!-- The generic video glyph, shown until the shell has a thumbnail. -->
+                                    <Path HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Data="M 0,0 L 14,8 L 0,16 Z"
+                                          Fill="#A0A0A0" />
+                                    <Image Source="{Binding Thumbnail}"
+                                           Stretch="Uniform"
+                                           Visibility="{Binding HasThumbnail, Converter={StaticResource Visible}}" />
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
                                 <TextBlock Text="{Binding Name}"
                                            TextTrimming="CharacterEllipsis"
                                            ToolTip="{Binding Path}" />
@@ -23,11 +61,17 @@
                                            Text="{Binding Game}"
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
-                            <TextBlock Grid.Column="1"
+                            <TextBlock Grid.Column="2"
                                        Margin="12,0,0,0"
                                        VerticalAlignment="Top"
                                        Text="{Binding Date}" />
-                            <TextBlock Grid.Column="2"
+                            <TextBlock Grid.Column="3"
+                                       MinWidth="48"
+                                       Margin="12,0,0,0"
+                                       VerticalAlignment="Top"
+                                       Text="{Binding Length}"
+                                       TextAlignment="Right" />
+                            <TextBlock Grid.Column="4"
                                        MinWidth="64"
                                        Margin="12,0,0,0"
                                        VerticalAlignment="Top"
