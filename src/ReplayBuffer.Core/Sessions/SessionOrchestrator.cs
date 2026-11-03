@@ -261,6 +261,7 @@ public sealed class SessionOrchestrator : IDisposable
 
             case RecordingRunning recording:
                 _recordingRunning = recording.Running;
+                SetState(_state with { Recording = recording.Running ? RecordingState.Running : RecordingState.Off });
                 if (!_recordingRunning && _pendingTarget is { } pending)
                 {
                     CommitTarget(pending);
