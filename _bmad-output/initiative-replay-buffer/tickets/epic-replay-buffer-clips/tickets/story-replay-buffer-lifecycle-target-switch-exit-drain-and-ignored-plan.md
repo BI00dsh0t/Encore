@@ -133,3 +133,6 @@ deferred: []
   - If the Target recreates its window while the process lives, the new session releases the drained buffer (as before 4.3, when a closed window ended the session).
   - The `End` command with only a drain held is refused with `SessionNotRunning`; the drain runs on until it expires.
   - No test waits the real 30 s; tests shorten `ExitDrain`.
+- QA (2026-11-03, at `8446562`): PASS, 0 blocking. Two low notes, accepted without change:
+  - A window close starts the drain, so the 30 s runs from the close, not the process exit. A process that outlives its window gets a drain that ends sooner after the exit. Nothing leaks.
+  - Marking an exited game Ignored makes no proposal (no Target is left), so its drain runs to expiry, at most 30 s. Detection never starts a buffer for an Ignored game.
