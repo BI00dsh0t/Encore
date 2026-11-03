@@ -114,7 +114,7 @@ The coordinator logs each QA round in the Log below.
 | 26 | Slice epic 5 (Overlay and Feedback Sounds) | slice-epic-5 | done |
 | 26.1 | 5.1 Tracer: capture state to the Overlay dot | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `c1afee0`) |
 | 26.2 | 5.2 Spike Q-4: the Overlay over exclusive fullscreen and its borderless FPS cost | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `5db7981`) |
-| 26.3 | 5.3 Saving icon through the Save Cooldown | worker slice-epic-8 (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `1441a92`) |
+| 26.3 | 5.3 Saving icon through the Save Cooldown | pool worker | done (merged `1441a92`) |
 | 26.4 | 5.4 Feedback notices in the engine, with a dev simulator | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `9c364fa`) |
 | 26.5 | 5.5 Overlay message queue | | pending |
 | 26.6 | 5.6 Feedback Sounds in the engine | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ac6a3a2`) |
