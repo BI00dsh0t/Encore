@@ -52,8 +52,10 @@ internal sealed record EngineHostOptions
 /// store, and serves its commands and events until <c>engine.shutdown</c>. It publishes the
 /// heartbeat and supervises the App that attaches (AD-16). It composes the SessionOrchestrator
 /// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; only <c>--debug-capture</c> starts a session yet.
-/// It registers the Hotkeys (AD-11) before the pipe accepts connections; the orchestrator publishes
-/// each press as <c>hotkey.pressed</c>, and no action is bound to one yet. Once the pipe serves, it
+/// The orchestrator owns mic mute, kept in the instance's <c>runtime.json</c> (AD-5) and loaded
+/// before the pipe serves. It registers the Hotkeys (AD-11) before the pipe accepts connections; the
+/// orchestrator publishes each press as <c>hotkey.pressed</c>, and a <c>micMute</c> press also toggles
+/// mic mute; no other action is bound to one yet. Once the pipe serves, it
 /// probes the video encoders off that path and publishes the result as <c>capture.videoOptions</c>.
 /// It lists the audio devices before the hub exists, so the first snapshot holds them, and then
 /// publishes <c>devices.changed</c> when the endpoints or the Track Layouts change them (R1).
@@ -197,6 +199,7 @@ internal sealed class EngineHost : IAsyncDisposable
                     hub.Publish(HotkeyMessages.Pressed, press);
                     HotkeyService.LogPress(hotkeyLog, press);
                 },
+                new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Audio")),
                 changed => hub.Publish(GameMessages.TargetChanged, changed),
                 hostOptions.DebugCapture
                     ? new TargetCapture(
