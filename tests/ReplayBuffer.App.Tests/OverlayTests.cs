@@ -41,6 +41,46 @@ public sealed class OverlayTests
     }
 
     [Fact]
+    public void TheSavingIconLastsUntilTheLaterOfTheCooldownAndTheWrite()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        Assert.False(model.Saving);
+
+        // Writing, in the cooldown; the cooldown passes with the write still going.
+        Shift(engine, Buffering with { CooldownUntil = time.GetUtcNow().AddSeconds(5), ClipsWriting = 1 });
+        Assert.True(model.Saving);
+        time.Advance(TimeSpan.FromSeconds(6));
+        Assert.True(model.Saving);
+        Shift(engine, engine.State!.Capture with { ClipsWriting = 0 });
+        Assert.False(model.Saving);
+
+        // The write ended first: the timer reads the session again at the cooldown's end.
+        Shift(engine, Buffering with { CooldownUntil = time.GetUtcNow().AddSeconds(5) });
+        Assert.True(model.Saving);
+        time.Advance(TimeSpan.FromSeconds(4.9));
+        Assert.True(model.Saving);
+        time.Advance(TimeSpan.FromSeconds(0.1));
+        Assert.False(model.Saving);
+    }
+
+    [Fact]
+    public void AReconnectMidCooldownShowsTheSavingIconAndADisconnectHidesIt()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        engine.State = engine.State! with { Capture = CaptureState.Initial with { CooldownUntil = time.GetUtcNow().AddSeconds(3) } };
+
+        var model = new OverlayViewModel(engine, action => action(), time);
+        Assert.True(model.Saving);
+
+        engine.Status = EngineStatus.Disconnected;
+        engine.RaiseChanged();
+        Assert.False(model.Saving);
+    }
+
+    [Fact]
     public void TheWindowIsTopmostClickThroughNeverActivatedAndExcludedFromCapture() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession();
@@ -55,6 +95,13 @@ public sealed class OverlayTests
             Shift(engine, Buffering);
             Assert.True(window.IsVisible);
             Assert.Equal(OverlayWindowStyle.Styles, OverlayWindowStyle.ExtendedStyle(hwnd) & OverlayWindowStyle.Styles);
+
+            Shift(engine, CaptureState.Initial);
+            Assert.False(window.IsVisible);
+
+            // Saving with no dot still shows the window.
+            Shift(engine, CaptureState.Initial with { ClipsWriting = 1 });
+            Assert.True(window.IsVisible);
 
             Shift(engine, CaptureState.Initial);
             Assert.False(window.IsVisible);
@@ -162,6 +209,49 @@ public sealed class OverlayTests
     {
         engine.State = engine.State! with { Capture = capture };
         engine.RaiseChanged();
+    }
+
+    /// <summary>A clock that moves only when told, firing the one-shot timers that come due.</summary>
+    private sealed class ManualTime : TimeProvider
+    {
+        private readonly List<ManualTimer> _timers = [];
+        private DateTimeOffset _now = new(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new ManualTimer(this, callback, state, _now + dueTime);
+            _timers.Add(timer);
+            return timer;
+        }
+
+        public void Advance(TimeSpan by)
+        {
+            _now += by;
+            foreach (var due in _timers.Where(t => t.DueAt <= _now).ToList())
+            {
+                _timers.Remove(due);
+                due.Fire();
+            }
+        }
+
+        private sealed class ManualTimer(ManualTime owner, TimerCallback callback, object? state, DateTimeOffset dueAt) : ITimer
+        {
+            public DateTimeOffset DueAt { get; } = dueAt;
+
+            public void Fire() => callback(state);
+
+            public bool Change(TimeSpan dueTime, TimeSpan period) => throw new NotSupportedException();
+
+            public void Dispose() => owner._timers.Remove(this);
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 
     // Runs the dispatcher for a while, so windows show, render and settle.
