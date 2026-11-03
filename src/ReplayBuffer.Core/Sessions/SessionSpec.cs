@@ -16,14 +16,18 @@ public enum SessionKind
 /// </summary>
 public sealed record CaptureTarget(int ProcessId, nint Window, string? ProfileId);
 
-/// <summary>One audio device a session captures: loopback for an Output Device, capture for an Input Device (AD-13).</summary>
-public sealed record SessionAudioDevice(string EndpointId, AudioFlow Flow, string FriendlyName);
+/// <summary>
+/// One audio device a session captures: loopback for an Output Device, capture for an Input Device
+/// (AD-13). <paramref name="IsMic"/> marks a Mic Device, which mic mute silences in the Tracks it affects.
+/// </summary>
+public sealed record SessionAudioDevice(string EndpointId, AudioFlow Flow, string FriendlyName, bool IsMic = false);
 
 /// <summary>
 /// One Track of a session: its stream title, and the devices it mixes, as indexes into
-/// <see cref="SessionAudio.Devices"/>.
+/// <see cref="SessionAudio.Devices"/>. In a <paramref name="MuteAffected"/> Track, mic mute silences
+/// its Mic Devices before the mix (AD-13).
 /// </summary>
-public sealed record SessionTrack(string Name, IReadOnlyList<int> DeviceIndexes);
+public sealed record SessionTrack(string Name, IReadOnlyList<int> DeviceIndexes, bool MuteAffected = false);
 
 /// <summary>
 /// A session's audio: the distinct devices it subscribes to, once each (AD-20), and the Tracks
@@ -45,7 +49,9 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
     /// The session audio of a Track Layout: its Tracks in layout order, and the distinct devices
     /// some Track references, in first-reference order. A device is one endpoint and flow, however
     /// many layout keys name it; a device the layout holds but no Track uses is left out. A Track
-    /// with no devices is a silent Track (no device indexes), written as silence.
+    /// with no devices is a silent Track (no device indexes), written as silence. A device is a Mic
+    /// Device when any layout key naming it is one (the safe side for a privacy control), and each
+    /// Track keeps its <c>muteAffected</c>.
     /// </summary>
     /// <exception cref="ErrorCodeException">
     /// <see cref="ErrorCodes.InvalidArguments"/>: a Track names a device key the layout doesn't hold.
@@ -58,6 +64,10 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
         {
             byKey.TryAdd(device.Key, device);
         }
+
+        // Any key naming an endpoint and flow as a mic makes that device a mic.
+        bool IsMic(LayoutDevice device) => layout.Devices.Any(d =>
+            d.IsMic && d.Flow == device.Flow && string.Equals(d.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
 
         var devices = new List<SessionAudioDevice>();
         var tracks = new List<SessionTrack>();
@@ -77,7 +87,7 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
                 {
                     index = devices.Count;
                     var name = string.IsNullOrWhiteSpace(device.FriendlyName) ? device.EndpointId : device.FriendlyName;
-                    devices.Add(new SessionAudioDevice(device.EndpointId, device.Flow, name));
+                    devices.Add(new SessionAudioDevice(device.EndpointId, device.Flow, name, IsMic(device)));
                 }
 
                 if (!indexes.Contains(index))
@@ -86,7 +96,7 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
                 }
             }
 
-            tracks.Add(new SessionTrack(track.Name, indexes));
+            tracks.Add(new SessionTrack(track.Name, indexes, track.MuteAffected));
         }
 
         return new SessionAudio(devices, tracks);
@@ -96,5 +106,8 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
 /// <summary>
 /// A session's description (AD-22): its kind, its target, the settings snapshot resolved once at
 /// Start (AD-5), and its audio. Only <see cref="Target"/> changes over a session, on a retarget.
+/// <paramref name="MicMuted"/> is the mic mute at Start, in place before the first audio frame;
+/// later toggles reach the session through <see cref="ICaptureSession.SetMicMuted"/>, and the spec
+/// keeps the Start value.
 /// </summary>
-public sealed record SessionSpec(SessionKind Kind, CaptureTarget Target, EffectiveSettings Snapshot, SessionAudio Audio);
+public sealed record SessionSpec(SessionKind Kind, CaptureTarget Target, EffectiveSettings Snapshot, SessionAudio Audio, bool MicMuted = true);
