@@ -173,9 +173,8 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     /// <summary>Says which Mic Device inputs the session's starting mic mute silences, if any.</summary>
     private void LogMicMute(SessionSpec spec)
     {
-        var silenced = spec.Audio.Tracks
-            .Where(t => t.MuteAffected)
-            .SelectMany(t => t.DeviceIndexes.Where(i => spec.Audio.Devices[i].IsMic).Select(i => $"'{spec.Audio.Devices[i].FriendlyName}' in '{t.Name}'"))
+        var silenced = spec.Audio.GatedMicInputs()
+            .Select(p => $"'{p.Device.FriendlyName}' in '{p.Track.Name}'")
             .ToList();
         if (!spec.MicMuted)
         {

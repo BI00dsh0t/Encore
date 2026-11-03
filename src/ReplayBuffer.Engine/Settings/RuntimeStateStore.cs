@@ -31,8 +31,6 @@ internal sealed class RuntimeStateStore : IMicMuteStore
         _log = log;
     }
 
-    public string FilePath => _path;
-
     public bool Load()
     {
         byte[] json;
