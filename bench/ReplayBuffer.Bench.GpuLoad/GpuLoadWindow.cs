@@ -19,6 +19,9 @@ namespace ReplayBuffer.Bench.GpuLoad;
 /// flip-model swap chain (FLIP_DISCARD; ALLOW_TEARING when the system supports it, presented with sync
 /// interval 0) that draws one fullscreen triangle. Its pixel shader runs a <c>[loop]</c> of N trig
 /// iterations animated by time, so every frame is new to WGC and the GPU does the work a game would.
+/// With <c>--mode fullscreen</c> the flip-model swap chain goes DXGI fullscreen; with <c>--mode exclusive</c> a
+/// blt-model (DISCARD) one does, as an older exclusive-fullscreen game's would (story 5.2). Both present with
+/// sync interval 0 and no tearing flag, which exclusive fullscreen refuses.
 /// </summary>
 internal sealed unsafe class GpuLoadWindow : IDisposable
 {
@@ -27,6 +30,9 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
 
     /// <summary>Presents measured with N frozen, after the warm-up, for the calibrated rate.</summary>
     private const double VerifySeconds = 3;
+
+    /// <summary>How often a fullscreen load checks it is still fullscreen, and prints <c>fullscreen &lt;bool&gt;</c> when that changes.</summary>
+    private const double FullscreenCheckSeconds = 1;
 
     private const string Shader =
         """
@@ -69,6 +75,13 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
     private ID3D11PixelShader* _pixelShader;
     private ID3D11Buffer* _constants;
     private bool _tearing;
+    private bool _fullscreen;
+    private uint _bufferCount;
+    private uint _swapFlags;
+    private int _recoveries;
+
+    /// <summary>A fullscreen load gives up after this many buffer rebuilds: something keeps taking fullscreen from it.</summary>
+    private const int MaxRecoveries = 20;
     private string _adapter = "";
     private int _width;
     private int _height;
@@ -114,6 +127,7 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
         var settle = Calibrator.SettleFrames;
         var windowStart = Stopwatch.GetTimestamp();
         var windowFrames = 0;
+        var nextFullscreenCheck = 0.0;
         var parameters = new Params { Width = _width, Height = _height, Iterations = calibrator.Iterations };
 
         while (true)
@@ -139,6 +153,15 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
                 return LoadExit.DeviceRemoved;
             }
 
+            // After a fullscreen transition (focus taken, mode change) a flip-model swap chain refuses Present until
+            // its buffers are resized: rebuild them, take fullscreen back as a game does, and go on.
+            if (presented == HRESULT.DXGI_ERROR_INVALID_CALL && _options.Mode != LoadMode.Borderless && _recoveries++ < MaxRecoveries)
+            {
+                Console.Error.WriteLine("Present refused after a fullscreen change; rebuilding the buffers.");
+                Recover();
+                continue;
+            }
+
             if (presented.Failed)
             {
                 Console.Error.WriteLine($"error: Present failed (0x{(uint)presented.Value:X8}).");
@@ -147,6 +170,12 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
 
             if (phase == Phase.Running)
             {
+                if (_options.Mode != LoadMode.Borderless && clock.Elapsed.TotalSeconds >= nextFullscreenCheck)
+                {
+                    nextFullscreenCheck = clock.Elapsed.TotalSeconds + FullscreenCheckSeconds;
+                    ReportFullscreen();
+                }
+
                 continue;
             }
 
@@ -187,7 +216,7 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
             }
             else if (elapsed >= VerifySeconds && windowFrames >= Calibrator.MinWindowFrames)
             {
-                var line = ReadyLine.Format((nint)_hwnd.Value, _width, _height, _options.TargetFps, windowFrames / elapsed, parameters.Iterations, _adapter, _tearing);
+                var line = ReadyLine.Format((nint)_hwnd.Value, _width, _height, _options.TargetFps, windowFrames / elapsed, parameters.Iterations, _adapter, _tearing, _options.Mode, IsFullscreen());
                 Console.Out.WriteLine(line);
                 Console.Out.Flush();
                 phase = Phase.Running;
@@ -197,6 +226,19 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
 
     public void Dispose()
     {
+        // A swap chain must leave fullscreen before it is released.
+        if (_swapChain is not null && _options.Mode != LoadMode.Borderless)
+        {
+            try
+            {
+                _swapChain->SetFullscreenState(false, null);
+            }
+            catch (COMException)
+            {
+                // Already windowed, or the device is gone.
+            }
+        }
+
         Release(ref _constants);
         Release(ref _pixelShader);
         Release(ref _vertexShader);
@@ -227,6 +269,37 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
         }
 
         return PInvoke.DefWindowProc(hwnd, message, wParam, lParam);
+    }
+
+    /// <summary>Whether the swap chain is DXGI fullscreen now; false for a borderless load.</summary>
+    private bool IsFullscreen()
+    {
+        if (_options.Mode == LoadMode.Borderless)
+        {
+            return false;
+        }
+
+        try
+        {
+            _swapChain->GetFullscreenState(out var fullscreen, null);
+            return fullscreen;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Prints <c>fullscreen &lt;bool&gt;</c> when the state differs from the last one printed (or the ready line's).</summary>
+    private void ReportFullscreen()
+    {
+        var now = IsFullscreen();
+        if (now != _fullscreen)
+        {
+            _fullscreen = now;
+            Console.Out.WriteLine(now ? "fullscreen true" : "fullscreen false");
+            Console.Out.Flush();
+        }
     }
 
     private uint RemovedReason()
@@ -295,7 +368,36 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
         }
 
         PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_SHOW);
-        PInvoke.SetForegroundWindow(_hwnd);
+        TakeForeground();
+    }
+
+    /// <summary>
+    /// Brings the window to the front. A process started from a background shell is refused that, so it
+    /// shares the foreground thread's input state for the call; DXGI fullscreen and the shell's fullscreen
+    /// detection (story 5.2) both need the window in front, as a game launched by the user has it.
+    /// </summary>
+    private void TakeForeground()
+    {
+        if (PInvoke.SetForegroundWindow(_hwnd) || PInvoke.GetForegroundWindow() == _hwnd)
+        {
+            return;
+        }
+
+        var foregroundThread = PInvoke.GetWindowThreadProcessId(PInvoke.GetForegroundWindow(), null);
+        var thread = PInvoke.GetCurrentThreadId();
+        var attached = foregroundThread != 0 && foregroundThread != thread && PInvoke.AttachThreadInput(thread, foregroundThread, true);
+        try
+        {
+            PInvoke.BringWindowToTop(_hwnd);
+            PInvoke.SetForegroundWindow(_hwnd);
+        }
+        finally
+        {
+            if (attached)
+            {
+                PInvoke.AttachThreadInput(thread, foregroundThread, false);
+            }
+        }
     }
 
     private void CreateDevice()
@@ -343,7 +445,8 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
             }
 
             var factory5Iid = IDXGIFactory5.IID_Guid;
-            if (((IUnknown*)factory)->QueryInterface(&factory5Iid, (void**)&factory5).Succeeded)
+            // Exclusive fullscreen refuses DXGI_PRESENT_ALLOW_TEARING: only the borderless load tears.
+            if (_options.Mode == LoadMode.Borderless && ((IUnknown*)factory)->QueryInterface(&factory5Iid, (void**)&factory5).Succeeded)
             {
                 BOOL allow = false;
                 try
@@ -357,6 +460,7 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
                 }
             }
 
+            var exclusive = _options.Mode == LoadMode.Exclusive;
             var swapDesc = new DXGI_SWAP_CHAIN_DESC1
             {
                 Width = (uint)_width,
@@ -364,9 +468,9 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
                 Format = DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
                 SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
                 BufferUsage = DXGI_USAGE.DXGI_USAGE_RENDER_TARGET_OUTPUT,
-                BufferCount = 2,
+                BufferCount = exclusive ? 1u : 2u,
                 Scaling = DXGI_SCALING.DXGI_SCALING_STRETCH,
-                SwapEffect = DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD,
+                SwapEffect = exclusive ? DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_DISCARD : DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD,
                 AlphaMode = DXGI_ALPHA_MODE.DXGI_ALPHA_MODE_IGNORE,
                 Flags = _tearing ? DXGI_SWAP_CHAIN_FLAG.DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0,
             };
@@ -376,6 +480,11 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
             }
 
             factory->MakeWindowAssociation(_hwnd, DXGI_MWA_FLAGS.DXGI_MWA_NO_ALT_ENTER);
+            if (_options.Mode != LoadMode.Borderless)
+            {
+                (_bufferCount, _swapFlags) = (swapDesc.BufferCount, (uint)swapDesc.Flags);
+                EnterFullscreen();
+            }
 
             var textureIid = ID3D11Texture2D.IID_Guid;
             _swapChain->GetBuffer(0, &textureIid, (void**)&backBuffer);
@@ -392,6 +501,67 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
             if (adapter is not null) adapter->Release();
             if (factory5 is not null) factory5->Release();
             if (factory is not null) factory->Release();
+        }
+    }
+
+    /// <summary>
+    /// Takes the swap chain DXGI fullscreen on the window's output, retrying while DXGI says it is not available
+    /// yet (the window not yet in front), then resizes the buffers as DXGI asks after a switch.
+    /// </summary>
+    private void EnterFullscreen()
+    {
+        var deadline = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                _swapChain->SetFullscreenState(true, null);
+                break;
+            }
+            catch (COMException e) when (deadline.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                Console.Error.WriteLine($"SetFullscreenState refused (0x{(uint)e.HResult:X8}); retrying.");
+                TakeForeground();
+                Thread.Sleep(250);
+            }
+        }
+
+        _swapChain->ResizeBuffers(_bufferCount, (uint)_width, (uint)_height, DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM, _swapFlags);
+        _fullscreen = IsFullscreen();
+    }
+
+    /// <summary>Takes fullscreen back if it was lost, resizes the buffers and binds the new back buffer.</summary>
+    private void Recover()
+    {
+        Release(ref _target);
+        if (!IsFullscreen())
+        {
+            TakeForeground();
+            try
+            {
+                _swapChain->SetFullscreenState(true, null);
+            }
+            catch (COMException e)
+            {
+                Console.Error.WriteLine($"SetFullscreenState refused (0x{(uint)e.HResult:X8}); staying windowed.");
+            }
+        }
+
+        _swapChain->ResizeBuffers(_bufferCount, (uint)_width, (uint)_height, DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM, _swapFlags);
+        ReportFullscreen();
+        ID3D11Texture2D* backBuffer = null;
+        try
+        {
+            var textureIid = ID3D11Texture2D.IID_Guid;
+            _swapChain->GetBuffer(0, &textureIid, (void**)&backBuffer);
+            fixed (ID3D11RenderTargetView** target = &_target)
+            {
+                _device->CreateRenderTargetView((ID3D11Resource*)backBuffer, null, target);
+            }
+        }
+        finally
+        {
+            if (backBuffer is not null) backBuffer->Release();
         }
     }
 

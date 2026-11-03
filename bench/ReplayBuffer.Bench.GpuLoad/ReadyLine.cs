@@ -30,7 +30,7 @@ internal static class ReadyLine
 {
     public const string Prefix = "ready ";
 
-    public static string Format(nint hwnd, int width, int height, double targetFps, double calibratedFps, uint iterations, string adapter, bool tearing)
+    public static string Format(nint hwnd, int width, int height, double targetFps, double calibratedFps, uint iterations, string adapter, bool tearing, LoadMode mode = LoadMode.Borderless, bool fullscreen = false)
     {
         var buffer = new ArrayBufferWriter<byte>();
         using (var json = new Utf8JsonWriter(buffer))
@@ -44,6 +44,8 @@ internal static class ReadyLine
             json.WriteNumber("iterations", iterations);
             json.WriteString("adapter", adapter);
             json.WriteBoolean("tearing", tearing);
+            json.WriteString("mode", mode.ToString().ToLowerInvariant());
+            json.WriteBoolean("fullscreen", fullscreen);
             json.WriteNumber("pid", Environment.ProcessId);
             json.WriteEndObject();
         }

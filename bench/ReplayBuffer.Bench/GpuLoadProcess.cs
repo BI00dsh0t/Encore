@@ -19,7 +19,9 @@ internal sealed record GpuLoadInfo(
     double? CalibratedFps = null,
     long? Iterations = null,
     string? Adapter = null,
-    bool? Tearing = null)
+    bool? Tearing = null,
+    string? Mode = null,
+    bool? Fullscreen = null)
 {
     public const string Synthetic = "synthetic";
     public const string Game = "game";
@@ -39,7 +41,14 @@ internal sealed class GpuLoadProcess : IDisposable
     public const string ExeName = ProcessName + ".exe";
     public const double DefaultTargetFps = 80;
 
+    /// <summary>
+    /// Fullscreen optimizations off for the process (the "Disable fullscreen optimizations" compatibility
+    /// setting), so <c>--mode exclusive</c> gets legacy exclusive fullscreen rather than a promoted flip.
+    /// </summary>
+    public const string NoFullscreenOptimizationsLayer = "DisableDXMaximizedWindowedMode";
+
     private const string ReadyPrefix = "ready ";
+    private const string FullscreenPrefix = "fullscreen ";
     private const int NoHardwareGpuExit = 3;
 
     private readonly Process _process;
@@ -47,6 +56,7 @@ internal sealed class GpuLoadProcess : IDisposable
     private bool _exited;
 
     private readonly StringBuilder _stderr;
+    private readonly List<string> _fullscreenChanges = [];
 
     private GpuLoadProcess(Process process, GpuLoadInfo info, nint hwnd, StringBuilder stderr)
     {
@@ -64,6 +74,18 @@ internal sealed class GpuLoadProcess : IDisposable
 
     /// <summary>True once the load has exited, by itself or stopped by <see cref="Dispose"/>.</summary>
     public bool HasExited => _stopped ? _exited : _process.HasExited;
+
+    /// <summary>The <c>fullscreen &lt;bool&gt;</c> lines a fullscreen load printed after its ready line, with their times.</summary>
+    public IReadOnlyList<string> FullscreenChanges
+    {
+        get
+        {
+            lock (_fullscreenChanges)
+            {
+                return [.. _fullscreenChanges];
+            }
+        }
+    }
 
     /// <summary>What the load wrote on stderr so far.</summary>
     public string Stderr
@@ -109,7 +131,8 @@ internal sealed class GpuLoadProcess : IDisposable
     /// Starts the load and waits up to <paramref name="timeout"/> for its <c>ready</c> line.
     /// </summary>
     /// <exception cref="BenchFailure">It exited early or never said ready: its stderr, and it is stopped.</exception>
-    public static GpuLoadProcess Start(string exe, double targetFps, string? size, double? warmupSeconds, TimeSpan timeout)
+    /// <param name="mode">The load's <c>--mode</c>; null leaves it borderless. <c>exclusive</c> starts it with <see cref="NoFullscreenOptimizationsLayer"/>.</param>
+    public static GpuLoadProcess Start(string exe, double targetFps, string? size, double? warmupSeconds, TimeSpan timeout, string? mode = null)
     {
         var start = new ProcessStartInfo(exe)
         {
@@ -132,6 +155,16 @@ internal sealed class GpuLoadProcess : IDisposable
         {
             start.ArgumentList.Add("--warmup");
             start.ArgumentList.Add(warmup.ToString(CultureInfo.InvariantCulture));
+        }
+
+        if (mode is not null)
+        {
+            start.ArgumentList.Add("--mode");
+            start.ArgumentList.Add(mode);
+            if (mode == "exclusive")
+            {
+                start.Environment["__COMPAT_LAYER"] = NoFullscreenOptimizationsLayer;
+            }
         }
 
         Console.WriteLine($"GPU load: {exe} {string.Join(' ', start.ArgumentList)}");
@@ -211,11 +244,36 @@ internal sealed class GpuLoadProcess : IDisposable
             throw new BenchFailure(text.Length > 0 ? $"{failure}: {text}" : failure + ".");
         }
 
-        // Keep draining stdout, so the load never blocks on a full pipe.
-        _ = process.StandardOutput.ReadToEndAsync();
-        var info = new GpuLoadInfo(GpuLoadInfo.Synthetic, ProcessName, ready!.Width, ready.Height, ready.TargetFps, ready.CalibratedFps, ready.Iterations, ready.Adapter, ready.Tearing);
-        Console.WriteLine($"GPU load ready: {info.Width}x{info.Height} on {info.Adapter}, {info.CalibratedFps:0.##} fps (target {info.TargetFps:0.##}) at {info.Iterations} iterations; window {ready.HwndText}.");
-        return new GpuLoadProcess(process, info, ready.Hwnd, stderr);
+        var info = new GpuLoadInfo(
+            GpuLoadInfo.Synthetic, ProcessName, ready!.Width, ready.Height, ready.TargetFps, ready.CalibratedFps, ready.Iterations, ready.Adapter, ready.Tearing,
+            ready.Mode, ready.Fullscreen);
+        Console.WriteLine($"GPU load ready: {info.Width}x{info.Height} on {info.Adapter}, {info.CalibratedFps:0.##} fps (target {info.TargetFps:0.##}) at {info.Iterations} iterations; window {ready.HwndText}{(ready.Mode is { } m ? $", {m}, fullscreen {ready.Fullscreen}" : "")}.");
+        var load = new GpuLoadProcess(process, info, ready.Hwnd, stderr);
+
+        // Keep draining stdout, so the load never blocks on a full pipe, and keep its fullscreen changes.
+        _ = load.DrainAsync(process.StandardOutput);
+        return load;
+    }
+
+    private async Task DrainAsync(StreamReader output)
+    {
+        try
+        {
+            while (await output.ReadLineAsync().ConfigureAwait(false) is { } line)
+            {
+                if (line.StartsWith(FullscreenPrefix, StringComparison.Ordinal))
+                {
+                    lock (_fullscreenChanges)
+                    {
+                        _fullscreenChanges.Add($"{DateTimeOffset.Now:HH:mm:ss.fff} {line}");
+                    }
+                }
+            }
+        }
+        catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            // The load exited.
+        }
     }
 
     /// <summary>Parses the load's <c>ready {json}</c> line.</summary>
@@ -247,7 +305,9 @@ internal sealed class GpuLoadProcess : IDisposable
                 Required(root, "calibratedFps").GetDouble(),
                 Required(root, "iterations").GetInt64(),
                 Required(root, "adapter").GetString() ?? "",
-                root.TryGetProperty("tearing", out var tearing) && tearing.ValueKind is JsonValueKind.True or JsonValueKind.False ? tearing.GetBoolean() : null);
+                root.TryGetProperty("tearing", out var tearing) && tearing.ValueKind is JsonValueKind.True or JsonValueKind.False ? tearing.GetBoolean() : null,
+                root.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String ? mode.GetString() : null,
+                root.TryGetProperty("fullscreen", out var fullscreen) && fullscreen.ValueKind is JsonValueKind.True or JsonValueKind.False ? fullscreen.GetBoolean() : null);
         }
         catch (Exception e) when (e is JsonException or InvalidOperationException)
         {
@@ -344,4 +404,5 @@ internal sealed class GpuLoadProcess : IDisposable
 
 /// <summary>The load's ready line.</summary>
 internal sealed record GpuLoadReady(
-    nint Hwnd, string HwndText, int Width, int Height, double TargetFps, double CalibratedFps, long Iterations, string Adapter, bool? Tearing);
+    nint Hwnd, string HwndText, int Width, int Height, double TargetFps, double CalibratedFps, long Iterations, string Adapter, bool? Tearing,
+    string? Mode = null, bool? Fullscreen = null);

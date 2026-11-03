@@ -18,5 +18,7 @@
     <ProjectReference Include="..\..\src\ReplayBuffer.Platform.Audio\ReplayBuffer.Platform.Audio.csproj" />
     <!-- Built first, not referenced: bench fps starts its exe from its own output folder. -->
     <ProjectReference Include="..\ReplayBuffer.Bench.GpuLoad\ReplayBuffer.Bench.GpuLoad.csproj" ReferenceOutputAssembly="false" />
+    <!-- Built first, not referenced: bench overlay starts its exe from its own output folder. -->
+    <ProjectReference Include="..\ReplayBuffer.Bench.Overlay\ReplayBuffer.Bench.Overlay.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>
