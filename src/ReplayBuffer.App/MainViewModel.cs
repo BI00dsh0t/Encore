@@ -15,6 +15,7 @@ internal sealed class MainViewModel : Observable
     private string _status = "";
     private string _engineDetails = "";
     private string _capture = "";
+    private string _targetGame = "";
     private string _settingsRevision = "";
     private IReadOnlyList<string> _warnings = [];
     private SettingsPage _selectedPage;
@@ -63,6 +64,13 @@ internal sealed class MainViewModel : Observable
         private set => Set(ref _capture, value);
     }
 
+    /// <summary>The Target Game line: its name and process, or none.</summary>
+    public string TargetGame
+    {
+        get => _targetGame;
+        private set => Set(ref _targetGame, value);
+    }
+
     public string SettingsRevision
     {
         get => _settingsRevision;
@@ -96,6 +104,9 @@ internal sealed class MainViewModel : Observable
         var capture = state.Capture;
         Capture = $"Replay Buffer {Name(capture.Replay)}, Recording {Name(capture.Recording)}, " +
             $"Monitor Recording {Name(capture.MonitorRecording)}, mic {(capture.MicMuted ? "muted" : "live")}";
+        TargetGame = state.TargetGame is { } target
+            ? string.Create(CultureInfo.InvariantCulture, $"Target Game: {target.Name} (process {target.ProcessId})")
+            : "Target Game: none";
         SettingsRevision = state.Settings.Revision.ToString(CultureInfo.InvariantCulture);
         Warnings = [.. state.Warnings.Select(w => $"{w.Severity}: {w.Message} ({w.Code})")];
         TrackLayout.ShowDevices(state.Devices);

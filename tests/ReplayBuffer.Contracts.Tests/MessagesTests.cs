@@ -27,6 +27,7 @@ public sealed partial class MessagesTests
         ["hotkey.status"] = """{"bindings":[{"action":"save","binding":{"vk":135,"modifiers":7},"registered":true,"code":null},{"action":"micMute","binding":null,"registered":false,"code":"hotkey-unbound"}]}""",
         ["hotkey.pressed"] = """{"action":"monitorRecordToggle","qpc":123456789}""",
         ["devices.changed"] = """{"devices":[{"endpointId":"{0.0.0.00000000}.{a}","friendlyName":"Speakers","parentName":"Realtek","flow":"output","available":true},{"endpointId":"{0.0.1.00000000}.{b}","friendlyName":"Mic","parentName":"","flow":"input","available":false}]}""",
+        ["target.changed"] = """{"from":null,"to":{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7},"reason":"detected"}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);
@@ -213,6 +214,22 @@ public sealed partial class MessagesTests
             """{"engineInstanceId":"e","pid":1,"seq":0,"settings":{"schemaVersion":1,"revision":0,"global":{},"profiles":{}},"capture":{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null},"warnings":[]}""",
             EngineJsonContext.Default.StateSnapshot)!;
         Assert.Equal(AudioDeviceList.Empty, old.Devices);
+    }
+
+    [Fact]
+    public void TargetChangedHasItsShapeAndAnOldSnapshotHasNoTarget()
+    {
+        var changed = new TargetChanged(new TargetGame(@"c:\games\a.exe", "A.exe", 3), null, TargetChangeReason.ColdStart);
+
+        Assert.Equal(
+            """{"from":{"profileId":"c:\\games\\a.exe","name":"A.exe","processId":3},"to":null,"reason":"cold-start"}""",
+            JsonSerializer.Serialize(changed, GameJsonContext.Default.TargetChanged));
+        Assert.Null(GameMessages.TargetChanged.Apply(Base with { TargetGame = changed.From }, changed).TargetGame);
+
+        var old = JsonSerializer.Deserialize(
+            """{"engineInstanceId":"e","pid":1,"seq":0,"settings":{"schemaVersion":1,"revision":0,"global":{},"profiles":{}},"capture":{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null},"warnings":[]}""",
+            EngineJsonContext.Default.StateSnapshot)!;
+        Assert.Null(old.TargetGame);
     }
 
     [Theory]

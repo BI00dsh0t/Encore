@@ -16,6 +16,9 @@ public sealed class CommandLineTests
     {
         Assert.Null(Assert.IsType<ServeCommand>(CommandLine.Parse(["serve"]).Command).Instance);
         Assert.Equal("ReplayBuffer-Test-ab1-2", Assert.IsType<ServeCommand>(CommandLine.Parse(["serve", "--instance", "ReplayBuffer-Test-ab1-2"]).Command).Instance);
+        Assert.Equal(new ServeCommand(null, DebugCapture: true), CommandLine.Parse(["serve", "--debug-capture"]).Command);
+        Assert.Equal(new ServeCommand("ReplayBuffer-Test-gd31", DebugCapture: true), CommandLine.Parse(["serve", "--debug-capture", "--instance", "ReplayBuffer-Test-gd31"]).Command);
+        Assert.False(Assert.IsType<ServeCommand>(CommandLine.Parse(["serve"]).Command).DebugCapture);
     }
 
     [Theory]
@@ -26,6 +29,8 @@ public sealed class CommandLineTests
     [InlineData("serve", "--instance", "ReplayBuffer-Test-..\\x")]
     [InlineData("serve", "--window", "x")]
     [InlineData("serve", "--instance")]
+    [InlineData("serve", "--debug-capture", "--debug-capture")]
+    [InlineData("serve", "--instance", "ReplayBuffer-Test-a", "--instance", "ReplayBuffer-Test-b")]
     public void ServeRefusesAnythingElse(params string[] args)
     {
         Assert.NotNull(CommandLine.Parse(args).Error);
