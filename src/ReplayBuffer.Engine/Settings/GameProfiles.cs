@@ -9,8 +9,6 @@ namespace ReplayBuffer.Engine.Settings;
 /// <summary>Game Profile auto-creation (story 3.4).</summary>
 internal static class GameProfiles
 {
-    private const int Tries = 3;
-
     /// <summary>
     /// Creates the Game Profile <paramref name="profileId"/> when the document lacks it: one
     /// <c>name</c> set through <see cref="SettingsStore.Update"/> (AD-4), named from the executable's
@@ -20,32 +18,26 @@ internal static class GameProfiles
     /// </summary>
     public static void EnsureProfile(SettingsStore store, string profileId, string fileName, ILogger log)
     {
-        string? name = null;
-        for (var attempt = 1; attempt <= Tries; attempt++)
+        if (store.Current.Profiles.ContainsKey(profileId))
         {
-            var current = store.Current;
-            if (current.Profiles.ContainsKey(profileId))
-            {
-                return;
-            }
+            return;
+        }
 
-            name ??= GamePaths.ProductName(profileId, fileName);
-            var value = JsonSerializer.SerializeToElement(name, SettingsJsonContext.Default.String);
-            try
+        var name = GamePaths.ProductName(profileId, fileName);
+        var value = JsonSerializer.SerializeToElement(name, SettingsJsonContext.Default.String);
+        try
+        {
+            var created = SettingsRetry.Update(store, current => current.Profiles.ContainsKey(profileId)
+                ? null
+                : new SettingsUpdate(current.Revision, [SettingsOp.SetProfile(profileId, ProfileAttributes.Name, value)]));
+            if (created)
             {
-                store.Update(new SettingsUpdate(current.Revision, [SettingsOp.SetProfile(profileId, ProfileAttributes.Name, value)]));
                 log.LogInformation("Created the Game Profile {Name} at {ProfileId}", name, profileId);
-                return;
             }
-            catch (ErrorCodeException e) when (e.Code == ErrorCodes.SettingsConflict && attempt < Tries)
-            {
-                // Another write landed first: read it and try again.
-            }
-            catch (Exception e)
-            {
-                log.LogWarning(e, "The Game Profile of {ProfileId} couldn't be created", profileId);
-                return;
-            }
+        }
+        catch (Exception e)
+        {
+            log.LogWarning(e, "The Game Profile of {ProfileId} couldn't be created", profileId);
         }
     }
 }

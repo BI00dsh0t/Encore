@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
@@ -123,25 +124,13 @@ internal sealed class GameProfileItem(string profileId, GameProfilesPage page) :
     public bool Ignored
     {
         get => _ignored;
-        set
-        {
-            if (Set(ref _ignored, value))
-            {
-                page.Send(ProfileId, ProfileAttributes.Ignored, JsonSerializer.SerializeToElement(value, SettingsJsonContext.Default.Boolean));
-            }
-        }
+        set => SendFlag(ref _ignored, value, ProfileAttributes.Ignored);
     }
 
     public bool RecordingsEnabled
     {
         get => _recordingsEnabled;
-        set
-        {
-            if (Set(ref _recordingsEnabled, value))
-            {
-                page.Send(ProfileId, ProfileAttributes.RecordingsEnabled, JsonSerializer.SerializeToElement(value, SettingsJsonContext.Default.Boolean));
-            }
-        }
+        set => SendFlag(ref _recordingsEnabled, value, ProfileAttributes.RecordingsEnabled);
     }
 
     /// <summary>Raises only for values that changed, so another profile's commit doesn't reset a name being typed.</summary>
@@ -150,5 +139,14 @@ internal sealed class GameProfileItem(string profileId, GameProfilesPage page) :
         Set(ref _name, profile.Name, nameof(Name));
         Set(ref _ignored, profile.Ignored, nameof(Ignored));
         Set(ref _recordingsEnabled, profile.RecordingsEnabled, nameof(RecordingsEnabled));
+    }
+
+    // Sets a flag and, when it changed, sends it as the profile's attribute.
+    private void SendFlag(ref bool field, bool value, string attribute, [CallerMemberName] string? property = null)
+    {
+        if (Set(ref field, value, property))
+        {
+            page.Send(ProfileId, attribute, JsonSerializer.SerializeToElement(value, SettingsJsonContext.Default.Boolean));
+        }
     }
 }
