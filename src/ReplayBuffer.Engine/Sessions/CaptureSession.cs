@@ -64,6 +64,12 @@ internal sealed record CaptureSessionOptions
     /// <summary>Called once, on the capture thread, with the anchor QPC once the first frame has opened the output.</summary>
     public Action<long>? Anchored { get; init; }
 
+    /// <summary>
+    /// For tests: called on the writer thread with a Clip's final path just before it is written; a
+    /// non-null result is thrown as that write's failure.
+    /// </summary>
+    public Func<string, Exception?>? ClipWriteFault { get; init; }
+
     /// <summary>With no first frame by then, the session posts a <see cref="ErrorCodes.CaptureFailed"/> failure.</summary>
     public TimeSpan FirstFrameTimeout { get; init; } = DefaultFirstFrameTimeout;
 }
@@ -860,9 +866,9 @@ internal sealed class CaptureSession : ICaptureSession
         foreach (var track in _audioTracks)
         {
             var name = track.Device.FriendlyName;
-            if (track.Subscription?.SubscriberFault is ErrorCodeException { Code: ErrorCodes.EncodeFailed } encodeFault)
+            if (track.Subscription?.SubscriberFault is ErrorCodeException { Code: ErrorCodes.EncodeFailed or ErrorCodes.DiskFull or ErrorCodes.AccessDenied } encodeFault)
             {
-                // The encoder or muxer broke, not the device: the file is damaged.
+                // The encoder or muxer broke (Check maps a full disk or denied access to their own codes), not the device: the file is damaged.
                 Fail(encodeFault);
             }
             else if (track.Subscription?.SubscriberFault is { } trackFault)
@@ -1072,13 +1078,33 @@ internal sealed class CaptureSession : ICaptureSession
                 }
 
                 var windowUs = session._spec.Snapshot.BufferWindow * 1_000_000L;
-                var fromUs = Math.Max(Math.Max(pressUs - windowUs, Volatile.Read(ref session._resetUs)), previous);
+                var ownFromUs = Math.Max(pressUs - windowUs, Volatile.Read(ref session._resetUs));
+                var fromUs = Math.Max(ownFromUs, previous);
+
+                // R4: an empty cut, whatever set its start, makes no Clip.
+                if (toUs <= fromUs)
+                {
+                    throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The cut is empty: its start is at or after its end.");
+                }
+
+                // R4: an earlier write still in flight has claimed all but less than 1 s of the span. Strictly
+                // past the Reset: a succeeded claim equals the Reset once it lands, and the orchestrator gates that case.
+                if (previous > ownFromUs && toUs - fromUs < 1_000_000)
+                {
+                    throw new ErrorCodeException(ErrorCodes.ClipTooShort, "An earlier Clip still being written leaves less than 1 s to save.");
+                }
+
                 using var source = ring.Cut(fromUs, toUs);
                 ring.Release();
                 leased = false;
                 if (source is null)
                 {
                     throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The Replay Buffer holds no keyframe before the cut yet; there is nothing to save.");
+                }
+
+                if (session._options.ClipWriteFault?.Invoke(path) is { } fault)
+                {
+                    throw fault;
                 }
 
                 ClipWriter.Write(source, path, log);

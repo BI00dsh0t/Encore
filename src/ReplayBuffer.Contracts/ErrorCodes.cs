@@ -142,6 +142,24 @@ public static class ErrorCodes
     /// </summary>
     public const string SaveBusy = "save-busy";
 
+    /// <summary>
+    /// A save failed (R6) because the volume is full. Raised by the Clip writer now, and by the
+    /// Recording writer later. No file is left and nothing is Reset; the next press retries.
+    /// </summary>
+    public const string DiskFull = "disk-full";
+
+    /// <summary>
+    /// A save failed (R6) because the Output Folder or the file could not be written. Raised by the
+    /// Clip writer now, and by the Recording writer later. No file is left and nothing is Reset.
+    /// </summary>
+    public const string AccessDenied = "access-denied";
+
+    /// <summary>
+    /// A save failed (R6) for any other reason, such as a mux error. Raised by the Clip writer now,
+    /// and by the Recording writer later. No file is left and nothing is Reset.
+    /// </summary>
+    public const string SaveFailed = "save-failed";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -185,5 +203,8 @@ public static class ErrorCodes
         DeviceDropout,
         ClipTooShort,
         SaveBusy,
+        DiskFull,
+        AccessDenied,
+        SaveFailed,
     ];
 }

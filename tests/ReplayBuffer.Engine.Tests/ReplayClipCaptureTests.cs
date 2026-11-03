@@ -20,7 +20,10 @@ namespace ReplayBuffer.Engine.Tests;
 /// the Game Profile "Test Game" overrides the Track Layout with three Tracks, and its game is
 /// proposed as the Target on a pwsh window. A <c>save</c> press right after the anchor is refused
 /// as too short (story 4.2); about 4 s after the anchor one saves a Clip, read back with ffprobe and
-/// as MP4 boxes, and about 2 s later another saves the time between the two presses. Killing the
+/// as MP4 boxes. About 1.5 s later a save whose write fails with the disk full reports
+/// <c>disk-full</c> and leaves no file (story 4.5), so the next, 1.5 s after that, retries: it saves
+/// the time between the two saved presses. Two presses with one QPC then save one Clip and refuse
+/// the other as too short. Killing the
 /// game drains the session (story 4.3): a save during the drain still cuts its last moments.
 /// </summary>
 public sealed partial class ReplayClipCaptureTests : IDisposable
@@ -123,18 +126,35 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
         var window = SessionTestKit.OpenWindow(_directory, _processes, WindowScript);
         var anchored = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
         var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
-        var refused = new TaskCompletionSource<ClipFailed>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var options = new CaptureSessionOptions { OutputFolder = _directory, Replay = true, Anchored = qpc => anchored.TrySetResult(qpc) };
+        var refused = System.Threading.Channels.Channel.CreateUnbounded<ClipFailed>();
+        var fault = new FaultSwitch();
+        var options = new CaptureSessionOptions
+        {
+            OutputFolder = _directory,
+            Replay = true,
+            Anchored = qpc => anchored.TrySetResult(qpc),
+            ClipWriteFault = path =>
+            {
+                if (!fault.TakeArmed())
+                {
+                    return null;
+                }
+
+                // A part file was begun before the volume filled up.
+                File.WriteAllBytes(path + ClipWriter.PartExtension, [1, 2, 3]);
+                return new ErrorCodeException(ErrorCodes.DiskFull, "test volume full");
+            },
+        };
         var published = new ConcurrentQueue<CaptureState>();
 
         long anchor, press, nextPress;
-        ClipSaved clip, next;
+        ClipSaved clip, next, same;
         using (var orchestrator = new SessionOrchestrator(
             new CaptureSessionFactory(options, NullLoggerFactory.Instance, hub),
             () => document,
             published.Enqueue,
             targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, e) => saved.Writer.TryComplete(e)),
-            clips: new ReplayClips(OutputPathAllocator.System, () => _directory, c => saved.Writer.TryWrite(c), e => saved.Writer.TryComplete(e), f => refused.TrySetResult(f))))
+            clips: new ReplayClips(OutputPathAllocator.System, () => _directory, c => saved.Writer.TryWrite(c), _ => { }, f => refused.Writer.TryWrite(f))))
         {
             orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
             anchor = await anchored.Task.WaitAsync(Timeout, Token);
@@ -142,19 +162,39 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
 
             // Right after the anchor there is too little to save.
             Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
-            Assert.Equal(new ClipFailed(ErrorCodes.ClipTooShort), await refused.Task.WaitAsync(Timeout, Token));
+            Assert.Equal(new ClipFailed(ErrorCodes.ClipTooShort), await refused.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token));
 
             await Task.Delay(Buffered, Token);
             press = Stopwatch.GetTimestamp();
             Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press)));
             clip = await saved.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
-            // A second save, about 2 s later, runs from the first one's end while capture goes on.
-            await Task.Delay(TimeSpan.FromSeconds(2), Token);
+            // About 1.5 s later a save fails with the disk full: it Resets nothing.
+            await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+            fault.Arm();
+            Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+            Assert.Equal(new ClipFailed(ErrorCodes.DiskFull), await refused.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token));
+
+            // The retry, 1.5 s after that, runs from the first one's end while capture goes on.
+            await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
             nextPress = Stopwatch.GetTimestamp();
             Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, nextPress)));
             next = await saved.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+
+            // Two presses on one keyframe: one Clip, and the other press is too short.
+            await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+            var samePress = Stopwatch.GetTimestamp();
+            Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, samePress)));
+            Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, samePress)));
+            same = await saved.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+            Assert.Equal(new ClipFailed(ErrorCodes.ClipTooShort), await refused.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token));
         }
+
+        // Three Clips, none of them empty, and nothing left by the failed write or the refusal.
+        var clips = Directory.GetFiles(Path.Combine(_directory, "Test Game"), "*.mp4");
+        Assert.Equal(3, clips.Length);
+        Assert.Contains(same.Path, clips);
+        Assert.All(clips, c => Assert.True(new FileInfo(c).Length > 0, c));
 
         // <outputFolder>\<profile folder>\<Name>_<time>.mp4, and nothing else beside it.
         Assert.Equal(Path.Combine(_directory, "Test Game"), Path.GetDirectoryName(clip.Path));
@@ -191,6 +231,16 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
         var nextVideo = SessionTestKit.Probe(next.Path, "-show_streams").GetProperty("streams").EnumerateArray()
             .First(s => s.GetProperty("codec_type").GetString() == "video");
         Assert.InRange(double.Parse(nextVideo.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture), between - 0.1, between + 0.1);
+    }
+
+    /// <summary>A one-shot switch the test arms and the writer thread takes.</summary>
+    private sealed class FaultSwitch
+    {
+        private int _armed;
+
+        public void Arm() => Volatile.Write(ref _armed, 1);
+
+        public bool TakeArmed() => Interlocked.Exchange(ref _armed, 0) == 1;
     }
 
     [Fact]

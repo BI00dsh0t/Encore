@@ -3,6 +3,8 @@ using System.Threading.Channels;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Library;
+using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Settings;
 
 namespace ReplayBuffer.Core.Sessions;
@@ -651,7 +653,9 @@ public sealed class SessionOrchestrator : IDisposable
     /// press is accepted: it starts the next cooldown, publishes <see cref="CaptureState.CooldownUntil"/>
     /// and calls <see cref="ReplayClips.Saving"/>, and an outcome always follows. With
     /// <see cref="ReplayClips.MaxWriters"/> writes in flight it is refused with
-    /// <see cref="ErrorCodes.SaveBusy"/> (R6), before the session is asked for anything.
+    /// <see cref="ErrorCodes.SaveBusy"/> (R6), before the session is asked for anything. Once the
+    /// path is reserved, <see cref="ReplayClips.Library"/> is told the write begins, and
+    /// <see cref="OnClipWritten"/> (or a write that never started) tells it how it ended.
     /// </summary>
     private void SaveClip(long qpc)
     {
@@ -714,6 +718,8 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         var sessionId = active.Id;
+        var library = _clips.Library ?? NoLibraryWrites.Instance;
+        library.BeginWrite(path, active.Spec.Target.ProfileId);
         try
         {
             write.Write(path, error => Post(new ClipWritten(sessionId, qpc, write, path, error)));
@@ -723,21 +729,24 @@ public sealed class SessionOrchestrator : IDisposable
         {
             // It never started: nothing else will remove the reserved file.
             TryDelete(path);
+            library.EndWrite(path, WriteOutcome.Failed);
             ReportSaveFailure(e);
         }
     }
 
-    /// <summary>A save that made no Clip: refused (<see cref="ErrorCodes.ClipTooShort"/>) to <see cref="ReplayClips.NotSaved"/>, else to <see cref="ReplayClips.Failed"/>.</summary>
+    /// <summary>
+    /// A save that made no Clip: a failure that isn't a refusal (<see cref="ErrorCodes.ClipTooShort"/>,
+    /// <see cref="ErrorCodes.SaveBusy"/>) goes to <see cref="ReplayClips.Failed"/> for logging, and
+    /// every one to <see cref="ReplayClips.NotSaved"/> with <see cref="WriteFailures.ReasonOf"/>.
+    /// </summary>
     private void ReportSaveFailure(Exception e)
     {
-        if (e is ErrorCodeException { Code: ErrorCodes.ClipTooShort } refused)
-        {
-            _clips?.NotSaved?.Invoke(new ClipFailed(refused.Code));
-        }
-        else
+        if (e is not ErrorCodeException { Code: ErrorCodes.ClipTooShort or ErrorCodes.SaveBusy })
         {
             _clips?.Failed(e);
         }
+
+        _clips?.NotSaved?.Invoke(new ClipFailed(WriteFailures.ReasonOf(e)));
     }
 
     /// <summary>
@@ -766,6 +775,7 @@ public sealed class SessionOrchestrator : IDisposable
     {
         // Whatever the session: the write is no longer in flight.
         _writing--;
+        (_clips?.Library ?? NoLibraryWrites.Instance).EndWrite(written.Path, written.Error is null ? WriteOutcome.Written : WriteOutcome.Failed);
         if (written.Error is not null)
         {
             ReportSaveFailure(written.Error);
