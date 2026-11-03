@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Core.Audio;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Engine.Audio;
 using ReplayBuffer.Engine.Hotkeys;
 using ReplayBuffer.Engine.Ipc;
 using ReplayBuffer.Engine.Sessions;
@@ -26,6 +28,9 @@ internal sealed record EngineHostOptions
     /// <summary>Opens and starts the App; <c>null</c> for <c>ReplayBuffer.App.exe</c> beside the engine.</summary>
     public IAppLauncher? AppLauncher { get; init; }
 
+    /// <summary>The PC's audio endpoints for the device list; <c>null</c> for the engine's <see cref="AudioDeviceHub"/>.</summary>
+    public IAudioEndpointSource? AudioEndpoints { get; init; }
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
@@ -37,6 +42,8 @@ internal sealed record EngineHostOptions
 /// It registers the Hotkeys (AD-11) before the pipe accepts connections; the orchestrator publishes
 /// each press as <c>hotkey.pressed</c>, and no action is bound to one yet. Once the pipe serves, it
 /// probes the video encoders off that path and publishes the result as <c>capture.videoOptions</c>.
+/// It lists the audio devices before the hub exists, so the first snapshot holds them, and then
+/// publishes <c>devices.changed</c> when the endpoints or the Track Layouts change them (R1).
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
@@ -72,8 +79,10 @@ internal sealed class EngineHost : IAsyncDisposable
         AppSupervisor apps,
         SessionOrchestrator sessions,
         HotkeyService hotkeys,
+        DeviceListPublisher devices,
         AudioDeviceHub audio)
     {
+        Devices = devices;
         Audio = audio;
         Server = server;
         Settings = settings;
@@ -101,6 +110,9 @@ internal sealed class EngineHost : IAsyncDisposable
 
     public HotkeyService Hotkeys { get; }
 
+    /// <summary>The device list (R1), served by <c>devices.list</c> and published as <c>devices.changed</c>.</summary>
+    public DeviceListPublisher Devices { get; }
+
     /// <summary>The engine's one audio hub (AD-20); disposed last, after every session has ended.</summary>
     public AudioDeviceHub Audio { get; }
 
@@ -120,12 +132,22 @@ internal sealed class EngineHost : IAsyncDisposable
         var server = new IpcServer(Contracts.Ipc.PipeName.ForCurrentUser(instance.Name), options ?? new IpcServerOptions(), log);
         SessionOrchestrator? sessions = null;
         HotkeyService? hotkeys = null;
+        DeviceListPublisher? devices = null;
         var audio = new AudioDeviceHub(loggers);
         try
         {
             var load = SettingsStore.Open(instance.RoamingDataFolder);
-            var hub = new EventHub(load.Store.Current);
+
+            // The device list seeds the hub's initial state; a change is published once the hub exists.
+            EventHub? publishTo = null;
+            devices = new DeviceListPublisher(
+                hostOptions.AudioEndpoints ?? audio,
+                () => load.Store.Current,
+                list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
+                loggers.CreateLogger("Audio"));
+            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list));
             load.Store.Changed += document => hub.Publish(SettingsMessages.Changed, new SettingsChanged(document.Revision, document));
+            load.Store.Changed += devices.OnSettingsChanged;
 
             var warnings = new Warnings(hub, hostOptions.Time);
             var router = new CommandRouter(log);
@@ -152,9 +174,10 @@ internal sealed class EngineHost : IAsyncDisposable
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, audio);
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, audio);
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
+            router.Register(AudioMessages.List, (_, _) => ValueTask.FromResult(devices.Current));
             router.Register(FeedbackMessages.Dismiss, (dismiss, _) => ValueTask.FromResult(warnings.Dismiss(dismiss)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
@@ -219,6 +242,7 @@ internal sealed class EngineHost : IAsyncDisposable
         {
             hotkeys?.Dispose();
             sessions?.Dispose();
+            devices?.Dispose();
             audio.Dispose();
             server.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
@@ -246,6 +270,7 @@ internal sealed class EngineHost : IAsyncDisposable
         // Ends a running session, finishing its file, and joins the orchestrator thread.
         Sessions.Dispose();
         await Server.DisposeAsync().ConfigureAwait(false);
+        Devices.Dispose();
         Audio.Dispose();
         _stopHeartbeat.Dispose();
         _stopProbe.Dispose();

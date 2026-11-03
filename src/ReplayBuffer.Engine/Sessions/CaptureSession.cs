@@ -90,7 +90,10 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// an AAC stream summed from its devices' hub streams (AD-20), all into one fragmented MP4. Each
 /// device is subscribed once and cut at the anchor by one <see cref="AudioTimeline"/>, which feeds
 /// every Track holding it (<see cref="AudioFanOut"/>); each Track's <see cref="TrackMixer"/> sums its
-/// devices by frame position. The first frame is the anchor, every stream's PTS 0. The snapshot's
+/// devices by frame position, through a limiter that acts only above full scale. A Track with no
+/// devices is silence, advanced from QPC every <see cref="SilenceInterval"/> by a timer, off the
+/// capture thread; at the end every Track is padded with silence to one common end frame, the
+/// longest device's or the last video frame's, whichever is later. The first frame is the anchor, every stream's PTS 0. The snapshot's
 /// <c>video</c> sets the encoder (the probe's for its codec, else H.264), the output size, the fps,
 /// the bitrate and the rate control. The capture thread only scales each frame into the fixed output,
 /// letterboxed (<see cref="FrameScaler"/>), and posts it; the encoder thread emits exactly one frame
@@ -100,6 +103,9 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
+    /// <summary>How often a Track with no devices is advanced to the current QPC.</summary>
+    private static readonly TimeSpan SilenceInterval = TimeSpan.FromMilliseconds(100);
+
     private readonly SessionSpec _spec;
     private readonly ISessionEvents _events;
     private readonly CaptureSessionOptions _options;
@@ -114,6 +120,9 @@ internal sealed class CaptureSession : ICaptureSession
     private readonly List<AudioTimeline> _audioTimelines = [];
     private readonly CaptureStatsCollector? _stats;
     private readonly Timer _firstFrameTimer;
+    private readonly Lock _silenceGate = new();
+    private Timer? _silenceTimer;
+    private bool _silenceStopped;
 
     private WindowInfo? _window;
     private string _path = "";
@@ -264,6 +273,8 @@ internal sealed class CaptureSession : ICaptureSession
                 track.Subscription?.Dispose();
             }
 
+            // Silent Tracks stop with the device taps, not after the teardown below.
+            StopSilenceClock();
             ReportAudioFaults();
             Finish();
             WriteStats();
@@ -461,6 +472,17 @@ internal sealed class CaptureSession : ICaptureSession
             _audioTracks[d].Publish(timeline);
         }
 
+        if (_mixers.Any(m => m.Inputs == 0))
+        {
+            lock (_silenceGate)
+            {
+                if (!_silenceStopped)
+                {
+                    _silenceTimer = new Timer(_ => AdvanceSilence(), null, SilenceInterval, SilenceInterval);
+                }
+            }
+        }
+
         _anchored = true;
         _options.Anchored?.Invoke(anchorQpc);
     }
@@ -474,10 +496,26 @@ internal sealed class CaptureSession : ICaptureSession
 
         _video.Flush();
 
-        // The devices are unsubscribed: pad each Track to its longest device, then drain the encoders.
+        // The devices are unsubscribed and the silence clock stopped: pad every Track with silence to
+        // one end frame, the longest device's or the video's end, whichever is later (or where the
+        // clock already took a silent Track, should that be later still), then drain the encoders.
+        // The video ends where its pacer's next slot starts: one past the last emitted slot, skips
+        // included, which repeats can take past the last captured frame.
+        StopSilenceClock();
+        var end = FramesAt(_lastFrameQpc);
+        if (_paced?.Pacer is { } slots)
+        {
+            end = Math.Max(end, (long)((Int128)slots.NextSlot * AudioTimeline.SampleRate / slots.Fps));
+        }
+
         foreach (var mixer in _mixers)
         {
-            mixer.Flush();
+            end = Math.Max(end, mixer.Inputs == 0 ? mixer.EmittedFrames : mixer.LongestInputFrames);
+        }
+
+        foreach (var mixer in _mixers)
+        {
+            mixer.PadTo(end);
         }
 
         foreach (var audio in _audioEncoders)
@@ -493,7 +531,71 @@ internal sealed class CaptureSession : ICaptureSession
                 pacer.FreshSlots, pacer.RepeatedSlots, pacer.SkippedSlots, pacer.HeldReplaced, pacer.StaleFrames, _paced.QueueDrops + _video.PoolMisses);
         }
 
-        _log.LogInformation("Audio written: {Frames} frames per Track", string.Join(", ", _audioEncoders.Select(a => a.SamplesWritten)));
+        _log.LogInformation("Audio written: {Frames} frames per Track; limited: {Limited} frames per Track",
+            string.Join(", ", _audioEncoders.Select(a => a.SamplesWritten)), string.Join(", ", _mixers.Select(m => m.LimitedFrames)));
+    }
+
+    /// <summary>Frames since the anchor at <paramref name="qpc"/>; 0 before it.</summary>
+    private long FramesAt(long qpc) =>
+        qpc <= _anchorQpc ? 0 : (long)((Int128)(qpc - _anchorQpc) * AudioTimeline.SampleRate / _qpcFrequency);
+
+    /// <summary>The silence clock's tick: advances every Track with no devices to the current QPC.</summary>
+    private void AdvanceSilence()
+    {
+        Exception? failure = null;
+        lock (_silenceGate)
+        {
+            if (_silenceStopped)
+            {
+                return;
+            }
+
+            try
+            {
+                var now = FramesAt(Stopwatch.GetTimestamp());
+                foreach (var mixer in _mixers)
+                {
+                    if (mixer.Inputs == 0)
+                    {
+                        mixer.PadTo(now);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                // The encoder or muxer broke: the clock stops and the session fails.
+                _silenceStopped = true;
+                failure = e;
+            }
+        }
+
+        if (failure is not null)
+        {
+            Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "Audio encode failed: " + failure.Message, failure));
+        }
+    }
+
+    /// <summary>Stops the silence clock and waits for a tick in progress; no tick runs after it returns.</summary>
+    private void StopSilenceClock()
+    {
+        Timer? timer;
+        lock (_silenceGate)
+        {
+            _silenceStopped = true;
+            timer = _silenceTimer;
+            _silenceTimer = null;
+        }
+
+        if (timer is null)
+        {
+            return;
+        }
+
+        using var done = new ManualResetEvent(false);
+        if (timer.Dispose(done))
+        {
+            done.WaitOne();
+        }
     }
 
     /// <summary>Sets the device's GPU thread priority once (AD-7); a failure is logged and the run goes on.</summary>
@@ -742,6 +844,8 @@ internal sealed class CaptureSession : ICaptureSession
             _audioTracks[i].Subscription?.Dispose();
         }
 
+        // The silence clock writes into the encoders too.
+        StopSilenceClock();
         for (var i = _audioEncoders.Count - 1; i >= 0; i--)
         {
             _audioEncoders[i].Dispose();

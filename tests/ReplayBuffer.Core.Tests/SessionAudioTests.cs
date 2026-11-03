@@ -64,12 +64,28 @@ public sealed class SessionAudioTests
     }
 
     [Fact]
-    public void ATrackWithNoDevicesIsRefused()
+    public void ATrackWithNoDevicesIsASilentTrack()
     {
-        var e = Assert.Throws<ErrorCodeException>(() => SessionAudio.FromLayout(Keys.TrackLayout.Default));
+        var audio = SessionAudio.FromLayout(Keys.TrackLayout.Default);
 
-        Assert.Equal(ErrorCodes.InvalidArguments, e.Code);
-        Assert.StartsWith("Track 'Everything' has no devices", e.Message);
+        Assert.Empty(audio.Devices);
+        var track = Assert.Single(audio.Tracks);
+        Assert.Equal("Everything", track.Name);
+        Assert.Empty(track.DeviceIndexes);
+    }
+
+    [Fact]
+    public void SilentTracksAmongOthersKeepTheirIndexes()
+    {
+        var layout = new TrackLayout(
+            [Speakers, Mic],
+            [Track("Silent"), Track("Game", Speakers), Track("Quiet"), Track("Both", Speakers, Mic)]);
+
+        var audio = SessionAudio.FromLayout(layout);
+
+        Assert.Equal(["Silent", "Game", "Quiet", "Both"], audio.Tracks.Select(t => t.Name));
+        Assert.Equal(["Speakers", "Mic"], audio.Devices.Select(d => d.FriendlyName));
+        Assert.Equal([[], [0], [], [0, 1]], audio.Tracks.Select(t => t.DeviceIndexes.ToArray()));
     }
 
     [Fact]

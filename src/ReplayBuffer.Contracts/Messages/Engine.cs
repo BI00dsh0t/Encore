@@ -14,6 +14,7 @@ public sealed record StateSnapshot
 {
     private readonly HotkeyStatus _hotkeys = HotkeyStatus.Unbound;
     private readonly VideoOptions _videoOptions = VideoOptions.Unprobed;
+    private readonly AudioDeviceList _devices = AudioDeviceList.Empty;
 
     /// <summary>Identifies one engine run; a new value means a restarted engine.</summary>
     public required string EngineInstanceId { get; init; }
@@ -59,6 +60,16 @@ public sealed record StateSnapshot
         init => _videoOptions = value ?? VideoOptions.Unprobed;
     }
 
+    /// <summary>The audio devices the App can offer (R1); empty until the engine lists them.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 2.3) reads as the empty list.</remarks>
+    public AudioDeviceList Devices
+    {
+        get => _devices;
+
+        // The generated deserializer passes null for a missing field.
+        init => _devices = value ?? AudioDeviceList.Empty;
+    }
+
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
 
@@ -73,6 +84,7 @@ public sealed record StateSnapshot
         Warnings = [],
         Hotkeys = HotkeyStatus.Unbound,
         VideoOptions = VideoOptions.Unprobed,
+        Devices = AudioDeviceList.Empty,
     };
 }
 

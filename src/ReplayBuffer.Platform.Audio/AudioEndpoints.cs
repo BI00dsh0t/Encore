@@ -129,6 +129,17 @@ public static unsafe class AudioEndpoints
         }
     }
 
+    /// <summary>Creates an MMDevice enumerator, joining the MTA first if needed. The caller releases it.</summary>
+    internal static IMMDeviceEnumerator* CreateEnumerator()
+    {
+        EnsureCom();
+        var clsid = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
+        var iid = IMMDeviceEnumerator.IID_Guid;
+        IMMDeviceEnumerator* value = null;
+        PInvoke.CoCreateInstance(&clsid, null, CLSCTX.CLSCTX_ALL, &iid, (void**)&value).ThrowOnFailure();
+        return value;
+    }
+
     private static EDataFlow ToDataFlow(AudioFlow flow) => flow == AudioFlow.Output ? EDataFlow.eRender : EDataFlow.eCapture;
 
     internal static AudioEndpoint Describe(IMMDevice* device, AudioFlow flow)
@@ -183,15 +194,7 @@ public static unsafe class AudioEndpoints
 
         public IMMDeviceEnumerator* Value { get; }
 
-        public static Enumerator Create()
-        {
-            EnsureCom();
-            var clsid = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
-            var iid = IMMDeviceEnumerator.IID_Guid;
-            IMMDeviceEnumerator* value = null;
-            PInvoke.CoCreateInstance(&clsid, null, CLSCTX.CLSCTX_ALL, &iid, (void**)&value).ThrowOnFailure();
-            return new Enumerator(value);
-        }
+        public static Enumerator Create() => new(CreateEnumerator());
 
         public void Dispose() => Value->Release();
     }
