@@ -37,7 +37,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 2.4 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 3.1 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 3.5 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 3.5 |
 
@@ -297,3 +297,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: **Resumed by the builder.** The coordinator deleted `.bench-running`. The 2.4 worker was told to trim its tests lean, check `OutputResolutionTests` against develop, then verify, review and report READY FOR QA. test-trim was told to continue its baseline, trim and verify, and to merge after 2.4.
 - 2026-11-03: Epic 1's own `status` was never set, which kept epic 3 waiting behind it. It's now marked `status: done` (`a27cd5c`), so mark each epic done at its release from now on. 3.1 (game-detection tracer, high risk, HITL) went to pool worker slice-epic-8 (Opus, high effort). 3.5 (OutputPathAllocator) went to pool worker 2-1-tracer (Opus, medium effort). Both were told to keep their tests lean.
 - 2026-11-03: 3.5 is READY FOR QA at `30d6c19`: Release build 0 warnings, Core and scoped Engine tests pass, publish clean. Pool worker qa-1-14 (Sonnet, medium effort) was given its QA. 2.4 is finishing its scoped tests, 3.1 is being implemented, and test-trim is on its after-run.
+- 2026-11-03: QA on 3.5 (`30d6c19`): **QA PASS**, 0 findings (Core 58/58, Contracts 109/109). 3.5 was switched to Sonnet and told to merge. qa-1-14 is back in the pool. test-trim committed its trim (`e0e828d`) and is running the opt-in heavy category before its docs commit.
