@@ -3,7 +3,7 @@ title: 'Mic Devices and double-count warning in the editor'
 type: 'feature'
 ticket: '11'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '63d104d521d9c3af51c62a4308707424294a47a5'
 route: 'full'
 route_source: 'auto'

@@ -34,12 +34,12 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 2.6 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 3.8 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 3.8 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 2.11 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -79,7 +79,7 @@ The coordinator logs each QA round in the Log below.
 | 8 | 2.4 Mic Devices and mic mute | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged) |
 | 9 | 2.6 Track meters in the engine | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
 | 10 | 2.7 Track Layout editor in the Main App | story-2-7 (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
-| 11 | 2.11 Mic Devices and double-count warning in the editor | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 11 | 2.11 Mic Devices and double-count warning in the editor | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done |
 | 12 | 2.8 Live meters in the Track Layout editor | | pending |
 | 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | done |
 | 14 | 2.10 Refactor sweep | | pending |
@@ -189,6 +189,7 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 3.1 | A real borderless game becomes the Target Game within 5 s (R1, R2) | Start the Dev engine from a terminal with `ReplayBuffer.Engine serve --debug-capture`, then the Main App, then launch a borderless game. The Status tab should read `Target Game: <game>.exe (process <pid>)` and a file in `%LOCALAPPDATA%\ReplayBuffer-Dev\sessions` should follow the game's window; exit the game and the line goes back to `none` | The published engine with Bench's GPU-load window as the game: `target.changed` (lowercase canonical path, reason `detected`) within 1 s, a 50 MB session file following the window, `to: null, reason: exit` on close. `GameDetectionServeTests` over a real pipe with a fake probe |
 | 3.1 | The Main App's own window is never detected, and the Status line shows the Target Game | With the engine serving and the App attached, bring a borderless Main App window to the front; the Target Game stays `none`. Also try Alt+Tab and Task View: neither becomes the Target | `TheAttachedAppAndTheEngineAreNeverProposed`; the shell's process is skipped. `MainViewModelTests` covers the Status line; the Main App window is excluded from capture, so no screenshot |
 | 2.4 | The Mic Mute Hotkey with a real mic: mid-capture it silences the mic only in the `muteAffected` Tracks, `micMuted` flips in the App, and it survives an engine restart (R4) | With the engine serving and a game focused, put the BEACN Mic in `Everything` (affected) and a `MicRaw` Track (not affected) in the Dev instance's `settings.json`; bind `micMute`, capture, press it mid-capture, speak, press again, then check the file and `runtime.json`. `debug-capture` and `bench tracks` start muted with no `runtime.json`; write `{"micMuted": false}` there to record the mic | `MicMuteCaptureTests` (Heavy, in-process tone hub, 1.5 s phases, muted span silent below −60 dBFS, other Tracks unchanged), `MicMuteServeTests` (unmute saved, kept across a restart, muted again once the file is deleted), `MicMuteGateTests` (sample-exact cut) |
+| Track Layout editor: tick Mic and mute-affected for a device, put one device in two Tracks plus Everything and confirm the double-count warning shows, then save (2.11) | open |
 
 ## Decisions Awaiting Review
 
@@ -320,3 +321,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA on spike 3.8 (`11862f3`): **QA PASS**, 0 findings. The 2.6 merge retry (the builder said "Retry the merge") was **denied again** by the auto-mode classifier as "[Merge Without Review]". All merges into develop are on hold (2.6, then 2.11 and 3.8) until the builder runs them or allows them by permission rule.
 - 2026-11-03: The builder added a user-settings allow rule for `git [-C %USERPROFILE%/Documents/repos/ReplayBuffer] merge --no-ff feature/*` (Bash and PowerShell), after auto mode blocked the merge twice as "Merge Without Review" and blocked the coordinator's own settings edit as "Self-Modification". Merges must use exactly that form. 2.6 was told to retry its merge.
 - 2026-11-03: 2.6 merged into `develop` (`9b9d7e0`, `feat(engine): merge 2.6-track-meters`) and marked done. Verified on the synced tree `0d32806` (3.1 merged in): Release build 0 warnings; Contracts 89, Core 56, App 58, Engine 142, 0 failures; publish 0 IL/AOT warnings. QA had passed at `1410061`. Human Check: none new (the integrated meters check is 2.8's). 2.11 can sync with develop now.
+- 2026-11-03: 2.6 merged (`9b9d7e0`) under the new allow rule. The 2.11 session hit its usage limit after syncing and verifying (`71b6d6b`: build 0 warnings, App.Tests 60 passed), so the coordinator merged 2.11 itself (`bc4cbc8`) and marked it done. The 2.11 editor Human Check row was added.
