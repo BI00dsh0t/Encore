@@ -3,7 +3,7 @@ title: 'Replay Buffer and Output Settings page with the storage estimate'
 type: 'feature'
 ticket: '10'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'e83a7f8fe440e8f4274d1c7a960dcacd269e6bbe'
 route: 'full'
 route_source: 'auto'
