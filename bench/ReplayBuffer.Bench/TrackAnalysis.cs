@@ -5,16 +5,21 @@ namespace ReplayBuffer.Bench;
 /// <summary>One audio stream as ffprobe reports it: its title, default flag and the span of its packets.</summary>
 internal sealed record TrackProbe(string? Title, bool Default, double StartSeconds, double DurationSeconds);
 
-/// <summary>One decoded audio stream: its burst onsets (file time, s), each burst's level (dBFS) and its peak |sample|.</summary>
-internal sealed record TrackSignal(IReadOnlyList<double> OnsetSeconds, IReadOnlyList<double> BurstLevelsDbfs, double Peak);
+/// <summary>
+/// One decoded audio stream: its burst onsets (file time, s), each burst's level (dBFS), its peak |sample| and the
+/// 99.9th percentile of |sample| over both channels.
+/// </summary>
+internal sealed record TrackSignal(IReadOnlyList<double> OnsetSeconds, IReadOnlyList<double> BurstLevelsDbfs, double Peak, double P999);
 
 /// <summary>What VLC's HTTP interface listed. <see cref="Found"/> is false when no vlc.exe was found: the check is then <c>not-checked</c>.</summary>
 internal sealed record VlcListing(bool Found, IReadOnlyList<string>? Labels, string? Error);
 
 /// <summary>One audio stream's figures in <c>tracks.json</c>.</summary>
 /// <param name="Onsets">Burst onsets found; null for a stream not decoded (Mic).</param>
-/// <param name="ExpectedOnsets">At least this many whole bursts fit in the stream: its whole seconds less one.</param>
+/// <param name="ExpectedOnsets">At least this many whole bursts fit in the stream: its whole seconds less one; for Everything, which carries both devices' bursts, Game's and Chat's summed.</param>
 /// <param name="BurstLevelDbfs">The median burst level, dBFS (RMS of 5 to 45 ms after each onset, × √2).</param>
+/// <param name="Peak">The largest |sample|: information only (AAC rings past full scale at the bursts' edges).</param>
+/// <param name="P999">The 99.9th percentile of |sample|, both channels: what the fullScale check judges.</param>
 internal sealed record TrackFigures(
     int Index,
     string? Title,
@@ -23,7 +28,8 @@ internal sealed record TrackFigures(
     int? Onsets,
     int? ExpectedOnsets,
     double? BurstLevelDbfs,
-    double? Peak);
+    double? Peak,
+    double? P999 = null);
 
 /// <summary>Game's and Chat's onsets against Everything's.</summary>
 internal sealed record SyncFigures(
@@ -67,16 +73,21 @@ internal static class TrackAnalysis
     public const double MinMatchedFraction = 0.95;
     public const double LevelToleranceDb = 0.5;
 
-    /// <summary>AAC coding tolerance over full scale, as story 2.2's test.</summary>
+    /// <summary>AAC coding tolerance over full scale, as story 2.2's test; judged on the 99.9th percentile of |sample|.</summary>
     public const double MaxPeak = 1.05;
 
     public static TracksAnalysis Evaluate(double videoDurationSeconds, IReadOnlyList<TrackProbe> audio, IReadOnlyList<TrackSignal?> signals, double toneDbfs, VlcListing? vlc)
     {
         TrackSignal? Signal(int i) => i < signals.Count ? signals[i] : null;
 
+        int? Expected(int i) => i < audio.Count && Signal(i) is not null ? ExpectedOnsets(audio[i].DurationSeconds) : null;
+
         var tracks = audio.Select((probe, i) =>
         {
             var signal = Signal(i);
+
+            // Everything carries A's and B's bursts.
+            var expected = i == Everything && Expected(Game) is { } g && Expected(Chat) is { } c ? g + c : Expected(i);
             var level = signal is { BurstLevelsDbfs.Count: > 0 } s ? Math.Round(DriftMath.Median(s.BurstLevelsDbfs), 3) : (double?)null;
             return new TrackFigures(
                 i,
@@ -84,9 +95,10 @@ internal static class TrackAnalysis
                 probe.Default,
                 Math.Round(probe.DurationSeconds, 4),
                 signal?.OnsetSeconds.Count,
-                signal is null ? null : ExpectedOnsets(probe.DurationSeconds),
+                expected,
                 level,
-                signal is null ? null : Math.Round(signal.Peak, 4));
+                signal is null ? null : Math.Round(signal.Peak, 4),
+                signal is null ? null : Math.Round(signal.P999, 4));
         }).ToList();
 
         var checks = new List<NamedTrackCheck>
@@ -213,15 +225,16 @@ internal static class TrackAnalysis
 
     private static NamedTrackCheck FullScale(IReadOnlyList<TrackFigures> tracks)
     {
-        var target = string.Create(CultureInfo.InvariantCulture, $"Everything's peak ≤ {MaxPeak}");
-        if (tracks.Count == 0 || tracks[Everything].Peak is not { } peak)
+        var target = string.Create(CultureInfo.InvariantCulture, $"Everything's 99.9th percentile |sample| ≤ {MaxPeak} (max reported only)");
+        if (tracks.Count == 0 || tracks[Everything].P999 is not { } p999)
         {
             return new NamedTrackCheck("fullScale", "Everything not decoded", target, DriftMath.Miss);
         }
 
+        var max = tracks[Everything].Peak is { } peak ? string.Create(CultureInfo.InvariantCulture, $"; max {peak:0.####}") : "";
         var level = tracks[Everything].BurstLevelDbfs is { } l ? string.Create(CultureInfo.InvariantCulture, $"; median burst {l:0.##} dBFS") : "";
-        return new NamedTrackCheck("fullScale", string.Create(CultureInfo.InvariantCulture, $"peak {peak:0.####}{level}"), target,
-            peak <= MaxPeak ? DriftMath.Pass : DriftMath.Miss);
+        return new NamedTrackCheck("fullScale", string.Create(CultureInfo.InvariantCulture, $"99.9th percentile {p999:0.####}{max}{level}"), target,
+            p999 <= MaxPeak ? DriftMath.Pass : DriftMath.Miss);
     }
 
     private static NamedTrackCheck Vlc(IReadOnlyList<TrackProbe> audio, VlcListing? vlc)
@@ -252,12 +265,16 @@ internal static class TrackAnalysis
 /// <summary>
 /// Streams one decoded audio stream (48 kHz stereo f32, in any chunk sizes) through the onset detector, and
 /// measures each burst's level (the RMS of the mono samples 5 to 45 ms after its onset, × √2, so a sine reads
-/// its peak) and the stream's peak |sample|.
+/// its peak), the stream's peak |sample|, and the 99.9th percentile of |sample| over both channels from a fixed
+/// histogram (<see cref="BinWidth"/> bins up to <see cref="HistogramTop"/>), so the stream is never held whole.
 /// </summary>
 internal sealed class TrackSignalScanner
 {
     public const int LevelFromSamples = OnsetDetector.SampleRate * 5 / 1000;
     public const int LevelToSamples = OnsetDetector.SampleRate * 45 / 1000;
+    public const double BinWidth = 0.0005;
+    public const double HistogramTop = 4.0;
+    public const double Percentile = 0.999;
 
     private readonly OnsetDetector _detector;
     private readonly List<(long From, long To, double Sum)> _windows = [];
@@ -265,6 +282,8 @@ internal sealed class TrackSignalScanner
     private float[] _mono = new float[8192];
     private long _sample;
     private double _peak;
+    private readonly long[] _histogram = new long[(int)(HistogramTop / BinWidth) + 1];
+    private long _counted;
 
     public TrackSignalScanner(double burstDbfs) => _detector = new OnsetDetector(burstDbfs);
 
@@ -283,6 +302,8 @@ internal sealed class TrackSignalScanner
             var left = interleaved[2 * n];
             var right = interleaved[(2 * n) + 1];
             _peak = Math.Max(_peak, Math.Max(Math.Abs(left), Math.Abs(right)));
+            Count(left);
+            Count(right);
             _mono[n] = 0.5f * (left + right);
         }
 
@@ -332,7 +353,37 @@ internal sealed class TrackSignalScanner
         return new TrackSignal(
             [.. _detector.Onsets.Select(n => startSeconds + ((double)n / OnsetDetector.SampleRate))],
             [.. _levels],
-            _peak);
+            _peak,
+            PercentileOfAbs());
+    }
+
+    /// <summary>The nearest-rank <see cref="Percentile"/> of |sample|, as its bin's upper edge; the peak when it falls past the top bin.</summary>
+    private double PercentileOfAbs()
+    {
+        if (_counted == 0)
+        {
+            return 0;
+        }
+
+        var rank = (long)Math.Ceiling(Percentile * _counted);
+        long seen = 0;
+        for (var bin = 0; bin < _histogram.Length - 1; bin++)
+        {
+            seen += _histogram[bin];
+            if (seen >= rank)
+            {
+                return Math.Min((bin + 1) * BinWidth, _peak);
+            }
+        }
+
+        return _peak;
+    }
+
+    private void Count(float sample)
+    {
+        var bin = float.IsFinite(sample) ? (int)Math.Min(Math.Abs(sample) / BinWidth, _histogram.Length - 1) : _histogram.Length - 1;
+        _histogram[bin]++;
+        _counted++;
     }
 
     internal static double Dbfs(double amplitude) => amplitude > 0 ? Math.Max(-200, 20 * Math.Log10(amplitude)) : -200;

@@ -377,13 +377,13 @@ internal static class Report
         md.AppendLine();
         if (tracks.Tracks.Count > 0)
         {
-            md.AppendLine("| Track | Title | Default | Length | Onsets | Burst level | Peak |");
-            md.AppendLine("|---|---|---|---|---|---|---|");
+            md.AppendLine("| Track | Title | Default | Length | Onsets | Burst level | 99.9th percentile of abs(sample) | Max abs(sample), information only |");
+            md.AppendLine("|---|---|---|---|---|---|---|---|");
             foreach (var t in tracks.Tracks)
             {
                 var onsets = t.Onsets is { } n ? $"{n} (expected ≥ {t.ExpectedOnsets})" : "";
                 var level = t.BurstLevelDbfs is { } l ? string.Create(CultureInfo.InvariantCulture, $"{l:0.##} dBFS") : "";
-                md.AppendLine(CultureInfo.InvariantCulture, $"| {t.Index + 1} | {Cell(t.Title)} | {YesNo(t.Default)} | {t.DurationSeconds:0.###} s | {onsets} | {level} | {Num(t.Peak)} |");
+                md.AppendLine(CultureInfo.InvariantCulture, $"| {t.Index + 1} | {Cell(t.Title)} | {YesNo(t.Default)} | {t.DurationSeconds:0.###} s | {onsets} | {level} | {Num(t.P999)} | {Num(t.Peak)} |");
             }
 
             md.AppendLine();

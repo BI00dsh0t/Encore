@@ -36,6 +36,8 @@ public sealed class TracksEndToEndTests : IDisposable
         Assert.InRange(report.Tracks[TrackAnalysis.Game].BurstLevelDbfs!.Value, ToneDbfs - 0.5, ToneDbfs + 0.5);
         Assert.InRange(report.Tracks[TrackAnalysis.Game].Onsets!.Value, 19, 20);
         Assert.InRange(report.Tracks[TrackAnalysis.Everything].Onsets!.Value, 38, 40);
+        Assert.Equal(report.Tracks[TrackAnalysis.Game].ExpectedOnsets + report.Tracks[TrackAnalysis.Chat].ExpectedOnsets, report.Tracks[TrackAnalysis.Everything].ExpectedOnsets);
+        Assert.InRange(report.Tracks[TrackAnalysis.Everything].P999!.Value, 0.5, 1.05);
 
         var md = Report.Markdown(Report.Generate(_run.Folder));
         Assert.Contains("## Named Tracks (R3, R7)", md, StringComparison.Ordinal);
@@ -54,6 +56,19 @@ public sealed class TracksEndToEndTests : IDisposable
         Assert.Equal(TrackAnalysis.FailVerdict, report.Verdict);
         Assert.Equal(DriftMath.Miss, report.Checks.Single(c => c.Check == "sync").Mark);
         Assert.Equal(DriftMath.Pass, report.Checks.Single(c => c.Check == "titles").Mark);
+    }
+
+    [Fact]
+    public void NamesOnlyInTheHandlerNameFailTitles()
+    {
+        var tools = Tools();
+        Make(tools, _run.PathOf(TracksCheck.ClipName), gameDelaySeconds: 0, titleTag: "handler_name");
+
+        var (exit, report) = Reanalyze();
+
+        Assert.Equal(1, exit);
+        Assert.Equal(DriftMath.Miss, report.Checks.Single(c => c.Check == "titles").Mark);
+        Assert.All(report.Tracks, t => Assert.Null(t.Title));
     }
 
     [Fact]
@@ -114,7 +129,8 @@ public sealed class TracksEndToEndTests : IDisposable
         return $"({burst}*sin(2*PI*3000*{t})*{gate}+{tone}*sin(2*PI*440*{t})*(1-{gate}))";
     }
 
-    private static void Make(FfmpegTools tools, string file, double gameDelaySeconds)
+    /// <param name="titleTag">The stream tag the names go in: <c>title</c>, as the engine writes it, or <c>handler_name</c> alone.</param>
+    private static void Make(FfmpegTools tools, string file, double gameDelaySeconds, string titleTag = "title")
     {
         var game = Source(0.25, 0);
         var chat = Source(0.75, 0);
@@ -135,7 +151,7 @@ public sealed class TracksEndToEndTests : IDisposable
         string[] titles = ["Everything", "Game", "Chat", "Mic"];
         for (var i = 0; i < titles.Length; i++)
         {
-            args.AddRange([$"-metadata:s:a:{i}", $"title={titles[i]}", $"-disposition:a:{i}", i == 0 ? "default" : "0"]);
+            args.AddRange([$"-metadata:s:a:{i}", $"{titleTag}={titles[i]}", $"-disposition:a:{i}", i == 0 ? "default" : "0"]);
         }
 
         args.AddRange(["-movflags", "frag_keyframe+empty_moov+default_base_moof", file]);

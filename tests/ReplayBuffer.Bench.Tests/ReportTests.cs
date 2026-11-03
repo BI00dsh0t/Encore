@@ -24,9 +24,9 @@ public sealed class ReportTests : IDisposable
             DateTimeOffset.Now, 5, "engine.exe", new CaptureSettings(1920, 1080, 60, 20_000, null, null), 0,
             "Speakers A", "Speakers B", "Mic", "tracks.mp4", 0, null, 300.01, 0.5,
             [
-                new TrackFigures(0, "Everything", true, 300.02, 598, 299, -2.4, 0.998),
-                new TrackFigures(1, "Game", false, 300.02, 300, 299, -0.04, 1.0),
-                new TrackFigures(2, "Chat", false, 300.02, 299, 299, 0.02, 1.0),
+                new TrackFigures(0, "Everything", true, 300.02, 598, 598, -2.4, 2.02, 0.997),
+                new TrackFigures(1, "Game", false, 300.02, 300, 299, -0.04, 1.5, 0.998),
+                new TrackFigures(2, "Chat", false, 300.02, 299, 299, 0.02, 1.5, 0.998),
                 new TrackFigures(3, "Mic", false, 300.01, null, null, null, null),
             ],
             new SyncFigures(300, 299, 299, 299, 599, 1, 0.08, 0.02),
@@ -48,7 +48,8 @@ public sealed class ReportTests : IDisposable
         Assert.Contains("| titles | Everything, Game, Chat, Mic | Everything, Game, Chat, Mic | pass |", md, StringComparison.Ordinal);
         Assert.Contains("| sync | max /Δ/ 0.08 ms | ≤ 1 ms | pass |", md, StringComparison.Ordinal);
         Assert.Contains("| vlc | VLC not found | the file's titles, in order | not-checked |", md, StringComparison.Ordinal);
-        Assert.Contains("| 2 | Game | no | 300.02 s | 300 (expected ≥ 299) | -0.04 dBFS | 1 |", md, StringComparison.Ordinal);
+        Assert.Contains("| 1 | Everything | yes | 300.02 s | 598 (expected ≥ 598) | -2.4 dBFS | 0.997 | 2.02 |", md, StringComparison.Ordinal);
+        Assert.Contains("| 2 | Game | no | 300.02 s | 300 (expected ≥ 299) | -0.04 dBFS | 0.998 | 1.5 |", md, StringComparison.Ordinal);
         Assert.Contains("Verdict: **pass**", md, StringComparison.Ordinal);
     }
 

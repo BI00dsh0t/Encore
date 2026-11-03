@@ -103,6 +103,9 @@ internal static class TracksCheck
             {
                 var previous = JsonSerializer.Deserialize<TracksReport>(File.ReadAllText(reportPath), BenchJson.Options);
                 (engine, exit) = (previous?.Engine ?? engine, previous?.EngineExit);
+
+                // The capture's own warnings (B's offset, a tone player or marker failure, an instance folder left behind).
+                warnings.AddRange(previous?.Warnings ?? []);
             }
             catch (Exception e) when (e is IOException or JsonException)
             {
@@ -362,9 +365,10 @@ internal static class TracksCheck
         }
 
         var analysis = TrackAnalysis.Evaluate(video ?? 0, audio, signals, log.ToneDbfs, listing);
-        if (video is null)
+        const string NoVideo = "The file has no video stream.";
+        if (video is null && !warnings.Contains(NoVideo))
         {
-            warnings.Add("The file has no video stream.");
+            warnings.Add(NoVideo);
         }
 
         double? phase = null;
@@ -382,12 +386,13 @@ internal static class TracksCheck
     /// <summary>
     /// The video's duration and each audio stream's title, default flag and span, from its packets' timestamps.
     /// The mp4 muxer stores a stream's title in the track's udta <c>name</c> box, which FFmpeg reads back as
-    /// the <c>name</c> tag; <c>title</c> and <c>handler_name</c> are the fallbacks.
+    /// the <c>name</c> tag; <c>title</c> is the fallback. Never <c>handler_name</c>: the engine writes the name there
+    /// too, and a file whose title tag is missing must fail the titles check.
     /// </summary>
     internal static (double? VideoSeconds, List<TrackProbe> Audio) Probe(FfmpegTools tools, string file)
     {
         var json = MediaAnalysis.Run(tools.Ffprobe,
-            ["-v", "error", "-show_entries", "stream=index,codec_type,start_time,duration:stream_disposition=default:stream_tags=name,title,handler_name", "-of", "json", file]);
+            ["-v", "error", "-show_entries", "stream=index,codec_type,start_time,duration:stream_disposition=default:stream_tags=name,title", "-of", "json", file]);
         var packets = MediaAnalysis.PacketTimes(tools, file);
         using var document = JsonDocument.Parse(json);
         double? video = null;
@@ -411,7 +416,7 @@ internal static class TracksCheck
             string? title = null;
             if (stream.TryGetProperty("tags", out var tags))
             {
-                foreach (var name in new[] { "name", "title", "handler_name" })
+                foreach (var name in new[] { "name", "title" })
                 {
                     if (title is null && tags.TryGetProperty(name, out var value) && value.GetString() is { Length: > 0 } text)
                     {

@@ -19,6 +19,9 @@ public sealed class TrackAnalysisTests
         Assert.InRange(sync.MaxMs!.Value, 0, 0.1);
         Assert.Equal(299, sync.GameExpected);
         Assert.Equal(298, sync.ChatExpected);
+        Assert.Equal(299 + 298, result.Tracks[TrackAnalysis.Everything].ExpectedOnsets);
+        Assert.Equal(299, result.Tracks[TrackAnalysis.Game].ExpectedOnsets);
+        Assert.Null(result.Tracks[3].ExpectedOnsets);
         Assert.Equal(-0.1, result.Tracks[TrackAnalysis.Game].BurstLevelDbfs);
     }
 
@@ -99,10 +102,24 @@ public sealed class TrackAnalysisTests
     }
 
     [Fact]
-    public void APeakOverFullScaleFails()
+    public void ARareMaxOverFullScaleIsInformationOnly()
+    {
+        // As the real capture: AAC rings to 2.02 at the bursts' edges while 99.9 % of samples stay under full scale.
+        var signals = Signals();
+        signals[TrackAnalysis.Everything] = signals[TrackAnalysis.Everything]! with { Peak = 2.02, P999 = 0.9969 };
+
+        var result = Evaluate(Probes(), signals, null);
+
+        Assert.Equal(DriftMath.Pass, Check(result, "fullScale").Mark);
+        Assert.Contains("max 2.02", Check(result, "fullScale").Figure, StringComparison.Ordinal);
+        Assert.Equal(2.02, result.Tracks[TrackAnalysis.Everything].Peak);
+    }
+
+    [Fact]
+    public void ANinetyNinePointNinthPercentileOverFullScaleFails()
     {
         var signals = Signals();
-        signals[TrackAnalysis.Everything] = signals[TrackAnalysis.Everything]! with { Peak = 1.2 };
+        signals[TrackAnalysis.Everything] = signals[TrackAnalysis.Everything]! with { Peak = 1.3, P999 = 1.2 };
 
         var result = Evaluate(Probes(), signals, null);
 
@@ -221,6 +238,57 @@ public sealed class TrackAnalysisTests
         Assert.InRange(signal.OnsetSeconds[1], 1.25, 1.252);
         Assert.All(signal.BurstLevelsDbfs, l => Assert.InRange(l, -6.1, -5.9));
         Assert.InRange(signal.Peak, 0.49, 0.51);
+        Assert.InRange(signal.P999, 0.49, 0.51);
+    }
+
+    [Fact]
+    public void RareIsolatedSpikesPassFullScale()
+    {
+        // 0.9-amplitude bursts each second, with one 2.0 spike at each burst's edge.
+        var signal = Scan(burstAmplitude: 0.9, spike: 2.0);
+
+        Assert.Equal(2.0, signal.Peak, 3);
+        Assert.InRange(signal.P999, 0.85, 0.95);
+        Assert.Equal(DriftMath.Pass, Check(Evaluate(Probes(), WithEverything(signal), null), "fullScale").Mark);
+    }
+
+    [Fact]
+    public void SustainedBurstsOverFullScaleFail()
+    {
+        var signal = Scan(burstAmplitude: 1.25, spike: null);
+
+        Assert.InRange(signal.P999, 1.2, 1.3);
+        Assert.Equal(DriftMath.Miss, Check(Evaluate(Probes(), WithEverything(signal), null), "fullScale").Mark);
+    }
+
+    /// <summary>Ten seconds of a 3 kHz burst for 50 ms each second over a 440 Hz tone at 0.3.</summary>
+    private static TrackSignal Scan(double burstAmplitude, double? spike)
+    {
+        const int Rate = OnsetDetector.SampleRate;
+        var samples = new float[2 * 10 * Rate];
+        for (var n = 0; n < 10 * Rate; n++)
+        {
+            var t = (double)n / Rate;
+            var inBurst = (t % 1) is >= 0.25 and < 0.30;
+            var x = inBurst ? burstAmplitude * Math.Sin(2 * Math.PI * 3000 * t) : 0.3 * Math.Sin(2 * Math.PI * 440 * t);
+            if (spike is { } s && n % Rate == Rate / 4)
+            {
+                x = s;
+            }
+
+            samples[2 * n] = samples[(2 * n) + 1] = (float)x;
+        }
+
+        var scanner = new TrackSignalScanner(0);
+        scanner.FeedStereo(samples);
+        return scanner.Result(0);
+    }
+
+    private static List<TrackSignal?> WithEverything(TrackSignal everything)
+    {
+        var signals = Signals();
+        signals[TrackAnalysis.Everything] = signals[TrackAnalysis.Everything]! with { Peak = everything.Peak, P999 = everything.P999 };
+        return signals;
     }
 
     [Fact]
@@ -278,9 +346,9 @@ public sealed class TrackAnalysisTests
         var levels = Enumerable.Range(0, 300).Select(k => k % 3 == 0 ? -0.12 : -0.1).ToList();
         return
         [
-            new TrackSignal(everything, [.. Enumerable.Repeat(-2.5, 600)], 0.999),
-            new TrackSignal(game, levels, 0.99),
-            new TrackSignal(chat, levels, 0.99),
+            new TrackSignal(everything, [.. Enumerable.Repeat(-2.5, 600)], 0.999, 0.99),
+            new TrackSignal(game, levels, 0.99, 0.98),
+            new TrackSignal(chat, levels, 0.99, 0.98),
             null,
         ];
     }
