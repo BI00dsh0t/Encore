@@ -1,11 +1,14 @@
+using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Audio;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Core.Settings;
 using ReplayBuffer.Engine.Audio;
 using ReplayBuffer.Engine.Hotkeys;
 using ReplayBuffer.Engine.Ipc;
@@ -231,12 +234,17 @@ internal sealed class EngineHost : IAsyncDisposable
             if (hostOptions.GameWindows is not null || hostOptions.DebugCapture || !instance.IsTest)
             {
                 SessionOrchestrator proposeTo = sessions;
+                var listed = ListedGames(new GameConfigStore(gameLog), () => load.Store.Current);
                 games = new GameMonitor(
                     hostOptions.GameWindows ?? new ForegroundGameWindowProbe(),
                     pid => pid == Environment.ProcessId || pid == hub.State.AppPid,
                     (to, reason) => proposeTo.Post(new ProposeTarget(to, reason)),
                     hostOptions.GameScanInterval,
-                    gameLog);
+                    gameLog,
+                    listed,
+                    InstallFolder(),
+                    game => hub.Publish(GameMessages.Detected, game),
+                    game => hub.Publish(GameMessages.Exited, game));
             }
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
@@ -377,6 +385,59 @@ internal sealed class EngineHost : IAsyncDisposable
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
         }
+    }
+
+    /// <summary>
+    /// The listed games for Game Detection: Windows' game list and <c>manualGames</c> (canonical, or lowercase when not on disk),
+    /// rebuilt only when either source returns a different instance. Called on the monitor's thread.
+    /// </summary>
+    private static Func<IReadOnlySet<string>> ListedGames(GameConfigStore windowsList, Func<SettingsDocument> settings)
+    {
+        IReadOnlySet<string>? fromList = null;
+        SettingsDocument? fromSettings = null;
+        IReadOnlySet<string> listed = new HashSet<string>(StringComparer.Ordinal);
+        return () =>
+        {
+            var list = windowsList.Paths();
+            var document = settings();
+            if (!ReferenceEquals(list, fromList) || !ReferenceEquals(document, fromSettings))
+            {
+                var union = new HashSet<string>(list, StringComparer.Ordinal);
+                union.UnionWith(SettingsResolver.Resolve(document, null).ManualGames.Select(CanonicalOrLowercase));
+                (fromList, fromSettings, listed) = (list, document, union);
+            }
+
+            return listed;
+        };
+    }
+
+    // AD-18: a listed path is matched canonical, or in lowercase when it isn't on disk.
+    private static string CanonicalOrLowercase(string path)
+    {
+        try
+        {
+            return GamePaths.Canonicalize(path);
+        }
+        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return path.ToLowerInvariant();
+        }
+    }
+
+    /// <summary>The engine's install folder, canonical with a trailing <c>\</c>; nothing under it is a game.</summary>
+    private static string InstallFolder()
+    {
+        string folder;
+        try
+        {
+            folder = GamePaths.Canonicalize(AppContext.BaseDirectory);
+        }
+        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            folder = Path.GetFullPath(AppContext.BaseDirectory).ToLowerInvariant();
+        }
+
+        return folder.EndsWith('\\') ? folder : folder + '\\';
     }
 
     /// <summary>Publishes <c>engine.heartbeat</c> every <paramref name="interval"/> until stopped (AD-16).</summary>

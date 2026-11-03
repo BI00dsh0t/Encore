@@ -65,7 +65,7 @@ public sealed class IpcTests : IAsyncLifetime
         Assert.Equal((4L, 5L), (fourth.Seq, fifth.Seq));
         Assert.Equal(Recording, client.State.Capture);
         Assert.Equal("w1", Assert.Single(client.State.Warnings).Id);
-        Assert.Equal(_host.Hub.State, client.State with { Settings = _host.Hub.State.Settings, Warnings = _host.Hub.State.Warnings });
+        Assert.Equal(_host.Hub.State, client.State with { Settings = _host.Hub.State.Settings, Warnings = _host.Hub.State.Warnings, DetectedGames = _host.Hub.State.DetectedGames });
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 ---
 title: 'Spike: which Windows game list to read'
-type: 'spike'
+type: 'chore'
 ticket: '8'
 created: '2026-11-03'
 status: done

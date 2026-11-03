@@ -29,6 +29,8 @@ public sealed partial class MessagesTests
         ["devices.changed"] = """{"devices":[{"endpointId":"{0.0.0.00000000}.{a}","friendlyName":"Speakers","parentName":"Realtek","flow":"output","available":true},{"endpointId":"{0.0.1.00000000}.{b}","friendlyName":"Mic","parentName":"","flow":"input","available":false}]}""",
         ["meters.levels"] = """{"tracks":[{"trackId":"6f1c2a4e-0b7d-4e55-9a51-2f4c8d9e1a30","peak":0.5},{"trackId":"0d3e7b52-8c1a-4f6e-b2d9-7a5c3e1f4b68","peak":0}]}""",
         ["target.changed"] = """{"from":null,"to":{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7},"reason":"detected"}""",
+        ["game.detected"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
+        ["game.exited"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);

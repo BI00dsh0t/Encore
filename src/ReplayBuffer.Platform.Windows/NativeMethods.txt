@@ -34,3 +34,5 @@ GetFinalPathNameByHandle
 WINDOW_STYLE
 WINDOW_EX_STYLE
 GetSystemMetrics
+GetWindow
+GET_WINDOW_CMD
