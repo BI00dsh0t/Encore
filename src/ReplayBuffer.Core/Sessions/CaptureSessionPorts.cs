@@ -33,6 +33,24 @@ public interface ICaptureSession
     /// unless the session had already stopped itself (closed or failed), whose reason wins.
     /// </summary>
     SessionOutcome End(string reason);
+
+    /// <summary>
+    /// A Clip of the Replay Buffer up to <paramref name="qpc"/> (the press, AD-6), not yet written;
+    /// null when this session holds no Replay Buffer, or nothing yet. Called on the orchestrator thread.
+    /// </summary>
+    IClipWrite? Save(long qpc) => null;
+}
+
+/// <summary>A Clip a session can write (AD-8, AD-9).</summary>
+public interface IClipWrite
+{
+    /// <summary>
+    /// Writes the Clip to <paramref name="path"/>, which the allocator reserved (AD-21), off the
+    /// calling thread; then calls <paramref name="done"/> once, from the writer's thread, with null or
+    /// the failure. A failed write leaves no file behind, the reserved one included. Called on the
+    /// orchestrator thread; never blocks.
+    /// </summary>
+    void Write(string path, Action<Exception?> done);
 }
 
 /// <summary>

@@ -51,6 +51,10 @@ public sealed record StateSnapshot
     /// <summary>The last Hotkey press, or <c>null</c> before one.</summary>
     public HotkeyPress? LastHotkeyPress { get; init; }
 
+    /// <summary>The last Clip saved, or <c>null</c> before one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 4.1) reads as none.</remarks>
+    public ClipSaved? LastClip { get; init; }
+
     /// <summary>What the <c>video</c> key can be set to on this PC (R2); unprobed until <c>capture.videoOptions</c>.</summary>
     /// <remarks>A snapshot without the field (an engine from before story 10) reads as unprobed.</remarks>
     public VideoOptions VideoOptions

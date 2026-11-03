@@ -13,7 +13,7 @@ public sealed unsafe class AacEncoder : IAudioSampleSink, IDisposable
     private const int BitRate = 192_000;
     private const int ChunkFrames = 4096;
 
-    private readonly FragmentedMp4Muxer _muxer;
+    private readonly PacketSink _muxer;
     private readonly Lock _lock = new();
     private readonly int _streamIndex;
     private readonly float[] _left = new float[ChunkFrames];
@@ -24,7 +24,8 @@ public sealed unsafe class AacEncoder : IAudioSampleSink, IDisposable
     private AVPacket* _packet;
     private long _samplesSent;
 
-    public AacEncoder(FragmentedMp4Muxer muxer, string title, bool isDefault, ILogger logger)
+    /// <param name="muxer">Where packets go: a file or the Replay Buffer.</param>
+    public AacEncoder(PacketSink muxer, string title, bool isDefault, ILogger logger)
     {
         _muxer = muxer;
 

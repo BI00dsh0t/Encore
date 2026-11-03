@@ -41,7 +41,9 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// from its <see cref="IMicMuteStore"/> before any session can start (muted when nothing is saved),
 /// toggled by each <see cref="HotkeyAction.MicMute"/> press, saved, published as
 /// <see cref="CaptureState.MicMuted"/>, put in each session's spec at Start and handed to the running
-/// session with the press QPC.
+/// session with the press QPC. With <see cref="ReplayClips"/>, a <see cref="HotkeyAction.Save"/> press
+/// on the game session reserves a path and has the session write its Clip there; the writer posts
+/// its result back, and only then is the Clip published as saved.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -55,6 +57,7 @@ public sealed class SessionOrchestrator : IDisposable
     private readonly IMicMuteStore? _micMute;
     private readonly Action<TargetChanged>? _targetChanged;
     private readonly TargetCapture? _targetCapture;
+    private readonly ReplayClips? _clips;
     private readonly Thread _thread;
 
     // Orchestrator thread only.
@@ -80,6 +83,7 @@ public sealed class SessionOrchestrator : IDisposable
     /// </param>
     /// <param name="targetChanged">Receives each committed change of the Target Game, on the orchestrator thread.</param>
     /// <param name="targetCapture">When given, each new Target Game ends the game session and starts one on its window.</param>
+    /// <param name="clips">When given, a <c>save</c> press on the game session writes a Clip.</param>
     public SessionOrchestrator(
         ICaptureSessionFactory factory,
         Func<SettingsDocument> currentDocument,
@@ -87,7 +91,8 @@ public sealed class SessionOrchestrator : IDisposable
         Action<HotkeyPress>? hotkeyPressed = null,
         IMicMuteStore? micMute = null,
         Action<TargetChanged>? targetChanged = null,
-        TargetCapture? targetCapture = null)
+        TargetCapture? targetCapture = null,
+        ReplayClips? clips = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(currentDocument);
@@ -99,6 +104,7 @@ public sealed class SessionOrchestrator : IDisposable
         _micMute = micMute;
         _targetChanged = targetChanged;
         _targetCapture = targetCapture;
+        _clips = clips;
 
         // Before the thread runs, so no session can start with any other mute.
         _state = CaptureState.Initial with { MicMuted = LoadMicMuted(micMute) };
@@ -215,6 +221,10 @@ public sealed class SessionOrchestrator : IDisposable
                 {
                     ToggleMicMute(pressed.Qpc);
                 }
+                else if (pressed.Action == HotkeyAction.Save)
+                {
+                    SaveClip(pressed.Qpc);
+                }
 
                 _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
                 break;
@@ -230,6 +240,10 @@ public sealed class SessionOrchestrator : IDisposable
                     CommitTarget(pending);
                 }
 
+                break;
+
+            case ClipWritten written:
+                OnClipWritten(written);
                 break;
 
             case SessionClosed closed when _active?.Id == closed.SessionId:
@@ -258,7 +272,10 @@ public sealed class SessionOrchestrator : IDisposable
         }
     }
 
-    private RunningSession Start(StartSession start)
+    private RunningSession Start(StartSession start) => Start(start.Kind, start.Target, _ => start.Audio);
+
+    /// <param name="audio">The session's audio, from the snapshot resolved here.</param>
+    private RunningSession Start(SessionKind kind, CaptureTarget target, Func<EffectiveSettings, SessionAudio> audio)
     {
         if (_active is not null)
         {
@@ -266,13 +283,13 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         // AD-5: resolved once, here; a retarget or a later settings change never touches it.
-        var snapshot = SettingsResolver.Resolve(_currentDocument(), start.Target.ProfileId);
-        var spec = new SessionSpec(start.Kind, start.Target, snapshot, start.Audio, _state.MicMuted);
+        var snapshot = SettingsResolver.Resolve(_currentDocument(), target.ProfileId);
+        var spec = new SessionSpec(kind, target, snapshot, audio(snapshot), _state.MicMuted);
         var id = ++_nextSessionId;
         var session = _factory.Start(spec, new Events(this, id));
         var active = new Active(id, session, spec);
         _active = active;
-        SetState(_state with { Replay = start.Kind == SessionKind.Game ? ReplayState.Buffering : ReplayState.Off });
+        SetState(_state with { Replay = kind == SessionKind.Game ? ReplayState.Buffering : ReplayState.Off });
         return new RunningSession(spec, active.Ended.Task);
     }
 
@@ -487,16 +504,88 @@ public sealed class SessionOrchestrator : IDisposable
     {
         try
         {
-            Start(new StartSession(
-                SessionKind.Game,
-                new CaptureTarget(target.ProcessId, target.Window, target.ProfileId),
-                _targetCapture!.Audio(),
-                NewReply<RunningSession>()));
+            Start(SessionKind.Game, new CaptureTarget(target.ProcessId, target.Window, target.ProfileId), _targetCapture!.Audio);
         }
         catch (Exception e)
         {
             // The Target stays committed; only its capture failed.
             _targetCapture!.Failed(target, e);
+        }
+    }
+
+    /// <summary>
+    /// A <c>save</c> press (R4): with a game session holding a Replay Buffer, reserves the Clip's
+    /// path (AD-21) in the Global Output Folder, else the default one, and hands the session the
+    /// write; the writer posts its result back as a <see cref="ClipWritten"/>. Ignored with no game
+    /// session, or one with nothing to save yet.
+    /// </summary>
+    private void SaveClip(long qpc)
+    {
+        if (_clips is null || _active is not { Spec.Kind: SessionKind.Game } active)
+        {
+            return;
+        }
+
+        IClipWrite? write;
+        string path;
+        try
+        {
+            write = active.Session.Save(qpc);
+            if (write is null)
+            {
+                return;
+            }
+
+            var document = _currentDocument();
+            var folder = SettingsResolver.Resolve(document, null).OutputFolder ?? _clips.DefaultOutputFolder();
+            var profileId = active.Spec.Target.ProfileId;
+            path = _clips.Paths.AllocateForGame(document, profileId, GameName(active.Spec.Target), folder, qpc);
+        }
+        catch (Exception e)
+        {
+            _clips.Failed(e);
+            return;
+        }
+
+        try
+        {
+            write.Write(path, error => Post(new ClipWritten(path, error)));
+        }
+        catch (Exception e)
+        {
+            // It never started: nothing else will remove the reserved file.
+            TryDelete(path);
+            _clips.Failed(e);
+        }
+    }
+
+    /// <summary>The Target's name when the session is on it, else the profile's executable name.</summary>
+    private string GameName(CaptureTarget target) =>
+        _target is { } candidate && candidate.ProcessId == target.ProcessId
+            ? candidate.Name
+            : target.ProfileId is { } profileId ? Path.GetFileName(profileId) : "Game";
+
+    private void OnClipWritten(ClipWritten written)
+    {
+        if (written.Error is null)
+        {
+            _clips?.Saved(new ClipSaved(written.Path));
+        }
+        else
+        {
+            _clips?.Failed(written.Error);
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Best effort: an empty reserved file is all that is left.
         }
     }
 
@@ -523,6 +612,9 @@ public sealed class SessionOrchestrator : IDisposable
     }
 
     private sealed record SessionClosed(long SessionId, string Reason) : SessionMessage;
+
+    /// <summary>A Clip writer's result, posted from its thread.</summary>
+    private sealed record ClipWritten(string Path, Exception? Error) : SessionMessage;
 
     private sealed record SessionFailed(long SessionId, Exception Failure) : SessionMessage;
 

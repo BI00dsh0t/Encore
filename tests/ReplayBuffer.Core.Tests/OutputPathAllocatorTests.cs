@@ -29,6 +29,15 @@ public sealed class OutputPathAllocatorTests : IDisposable
     }
 
     [Fact]
+    public void AGameWithNoProfileYetGetsAFolderNamedAfterIt()
+    {
+        var path = _allocator.AllocateForGame(Document(), @"c:\games\new.exe", "new.exe", _output, 10_000);
+
+        Assert.Equal(Path.Combine(_output, "new.exe", "new.exe_2026-11-03_10-00-00.mp4"), path);
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
     public void AColonInTheNameIsReplacedInFolderAndFile()
     {
         var document = Document(("a", new GameProfile { Name = "Halo: Reach" }));

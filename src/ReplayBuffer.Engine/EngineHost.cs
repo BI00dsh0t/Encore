@@ -7,6 +7,7 @@ using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Audio;
+using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Core.Settings;
 using ReplayBuffer.Engine.Audio;
@@ -47,6 +48,12 @@ internal sealed record EngineHostOptions
     /// <summary><c>serve --debug-capture</c>: a capture session follows the Target Game.</summary>
     public bool DebugCapture { get; init; }
 
+    /// <summary>
+    /// Whether a Replay Buffer session follows the Target Game and a <c>save</c> press writes a
+    /// Clip (R1, R4); null is on for every instance but a test one. <see cref="DebugCapture"/> wins.
+    /// </summary>
+    public bool? ReplayBuffer { get; init; }
+
     /// <summary>The time between Game Detection polls.</summary>
     public TimeSpan GameScanInterval { get; init; } = TimeSpan.FromSeconds(1);
 
@@ -57,11 +64,11 @@ internal sealed record EngineHostOptions
 /// The engine's composition root for <c>serve</c>: claims the instance's pipe, opens the settings
 /// store, and serves its commands and events until <c>engine.shutdown</c>. It publishes the
 /// heartbeat and supervises the App that attaches (AD-16). It composes the SessionOrchestrator
-/// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; only <c>--debug-capture</c> starts a session yet.
+/// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; a session starts only on the Target Game.
 /// The orchestrator owns mic mute, kept in the instance's <c>runtime.json</c> (AD-5) and loaded
 /// before the pipe serves. It registers the Hotkeys (AD-11) before the pipe accepts connections; the
 /// orchestrator publishes each press as <c>hotkey.pressed</c>, and a <c>micMute</c> press also toggles
-/// mic mute; no other action is bound to one yet. Once the pipe serves, it
+/// mic mute, and a <c>save</c> press saves a Clip. Once the pipe serves, it
 /// probes the video encoders off that path and publishes the result as <c>capture.videoOptions</c>.
 /// It lists the audio devices before the hub exists, so the first snapshot holds them, and then
 /// publishes <c>devices.changed</c> when the endpoints or the Track Layouts change them (R1).
@@ -70,7 +77,9 @@ internal sealed record EngineHostOptions
 /// publishes <c>meters.levels</c> until <c>meters.unwatch</c> or the next watch; the orchestrator's
 /// mic mute reaches the meters as it does a session (R6).
 /// Game Detection proposes the Target Game to the orchestrator, which publishes <c>target.changed</c>;
-/// with <c>--debug-capture</c> a capture session follows the Target.
+/// a Replay Buffer session follows the Target, its audio from the snapshot's Track Layout, and a
+/// <c>save</c> press writes a Clip, published as <c>clip.saved</c>. With <c>--debug-capture</c> a
+/// capture session writing one file follows the Target instead.
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
@@ -166,6 +175,8 @@ internal sealed class EngineHost : IAsyncDisposable
         var log = loggers.CreateLogger("Ipc");
         var hotkeyLog = loggers.CreateLogger("Hotkeys");
         var gameLog = loggers.CreateLogger("Games");
+        var clipLog = loggers.CreateLogger("Clips");
+        var replay = !hostOptions.DebugCapture && (hostOptions.ReplayBuffer ?? !instance.IsTest);
 
         // The pipe first: a second engine must fail before it touches the settings file.
         var server = new IpcServer(Contracts.Ipc.PipeName.ForCurrentUser(instance.Name), options ?? new IpcServerOptions(), log);
@@ -207,7 +218,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 loggers.CreateLogger("Audio"));
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
-                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions") },
+                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay },
                     loggers,
                     audio,
                     encoders),
@@ -226,12 +237,27 @@ internal sealed class EngineHost : IAsyncDisposable
                 changed => hub.Publish(GameMessages.TargetChanged, changed),
                 hostOptions.DebugCapture
                     ? new TargetCapture(
-                        () => SessionAudio.None,
+                        _ => SessionAudio.None,
                         (target, e) => gameLog.LogWarning(e, "The debug capture of {Name} (process {Pid}) failed", target.Name, target.ProcessId))
+                    : replay
+                        ? new TargetCapture(
+                            snapshot => SessionAudio.FromLayout(snapshot.TrackLayout),
+                            (target, e) => gameLog.LogWarning(e, "The Replay Buffer of {Name} (process {Pid}) failed", target.Name, target.ProcessId))
+                        : null,
+                replay
+                    ? new ReplayClips(
+                        OutputPathAllocator.System,
+                        () => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name),
+                        saved =>
+                        {
+                            hub.Publish(CaptureMessages.Saved, saved);
+                            clipLog.LogInformation("Clip saved to {Path}", saved.Path);
+                        },
+                        e => clipLog.LogWarning("The save failed: {Message}", e.Message))
                     : null);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
-            if (hostOptions.GameWindows is not null || hostOptions.DebugCapture || !instance.IsTest)
+            if (hostOptions.GameWindows is not null || hostOptions.DebugCapture || replay || !instance.IsTest)
             {
                 SessionOrchestrator proposeTo = sessions;
                 var listed = ListedGames(new GameConfigStore(gameLog), () => load.Store.Current);
