@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReplayBuffer.Platform.Windows\ReplayBuffer.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>

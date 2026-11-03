@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="H.NotifyIcon.Wpf" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ReplayBuffer.App.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj" />
+    <ProjectReference Include="..\ReplayBuffer.Platform.Desktop\ReplayBuffer.Platform.Desktop.csproj" />
+    <!-- Build order only: the App never compiles against the engine (AD-2). -->
+    <ProjectReference Include="..\ReplayBuffer.Engine\ReplayBuffer.Engine.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- The App launches the engine from its own folder, so a dev build gets the engine beside it, as the install folder has it. -->
+  <Target Name="CopyEngineBesideApp" AfterTargets="Build">
+    <MSBuild Projects="..\ReplayBuffer.Engine\ReplayBuffer.Engine.csproj" Targets="GetTargetPath">
+      <Output TaskParameter="TargetOutputs" ItemName="_EngineTargetPath" />
+    </MSBuild>
+    <ItemGroup>
+      <_EngineFile Include="%(_EngineTargetPath.RootDir)%(_EngineTargetPath.Directory)**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_EngineFile)"
+          DestinationFiles="@(_EngineFile->'$(OutDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <FileWrites Include="@(_EngineFile->'$(OutDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
+</Project>

@@ -1,0 +1,4 @@
+SetWindowDisplayAffinity
+GetWindowDisplayAffinity
+WINDOW_DISPLAY_AFFINITY
+GetNamedPipeServerProcessId

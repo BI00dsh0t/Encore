@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Story 1.14: Bench's synthetic GPU-bound load, a borderless popup like a borderless game. -->
+    <OutputType>WinExe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CsWin32RunAsBuildTask>true</CsWin32RunAsBuildTask>
+    <!-- Per-monitor DPI aware, so the popup covers the primary monitor in physical pixels. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ReplayBuffer.Bench.Tests" />
+  </ItemGroup>
+</Project>

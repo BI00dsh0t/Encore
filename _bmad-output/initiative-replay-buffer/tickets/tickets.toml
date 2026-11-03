@@ -41,7 +41,11 @@ slug = "epic-overlay-feedback"
 title = "Overlay and Feedback Sounds"
 description = "An always-on-top Overlay shows the capture dot and a queue of messages, without appearing in captures or disturbing the game. Feedback Sounds and the Main App status line report Clip and Recording events. Q-4 (the Overlay in exclusive fullscreen) is settled by measurement."
 covers = ["R6", "R8", "R36"] # R36: Overlay FPS-cost part
-after = [{ epic = 4, needs = "Clip save, saving and failure events, and capture-state events to display" }]
+after = [
+  { epic = 4, needs = "Clip save, saving and failure events, and capture-state events to display" },
+  { epic = 1, needs = "the FPS benchmark (PresentMon, synthetic GPU load) to measure Q-4 and rerun with the Overlay" },
+  { epic = 2, needs = "mic mute state, device-dropout warnings, and the live Output Device list for the sound device picker" },
+]
 
 [[epic]]
 id = 6
@@ -52,6 +56,8 @@ covers = ["R9", "R10", "R11", "R12", "R13", "R21"]
 after = [
   { epic = 4, needs = "capture, Track and encoding pipeline, and the file-being-written signal" },
   { epic = 5, needs = "Overlay solid dot, red X, and Feedback Sounds channel" },
+  { epic = 3, needs = "the Target Game rule's stub Recording-running flag to replace, and Game Profiles to read recordingsEnabled from" },
+  { epic = 2, needs = "runtime.json, where mic mute is kept, to record which Recordings were left open" },
 ]
 
 [[epic]]
@@ -60,7 +66,10 @@ slug = "epic-library-cleanup"
 title = "Library and Cleanup"
 description = "The Main App's Library lists every Clip and Recording by game, date and Favourite, with its actions (open, Favourite, rename, delete, show in Explorer, copy to clipboard). Cleanup keeps the Output Folder within its size or age limit and never deletes Favourites."
 covers = ["R27", "R28", "R29"]
-after = [{ epic = 4, needs = "Clips written into per-game folders, and a signal for files being written" }]
+after = [
+  { epic = 4, needs = "Clips written into per-game folders, and a signal for files being written" },
+  { epic = 3, needs = "each Game Profile's persisted folder name, to give files found by the scan their game" },
+]
 
 [[epic]]
 id = 8
@@ -71,4 +80,9 @@ covers = ["R34", "R35", "R33", "R36"] # R33, R36: final conformance run
 after = [
   { epic = 6, needs = "Recordings to soak and crash-test" },
   { epic = 7, needs = "Library and Cleanup to include in the soak" },
+  { epic = 1, needs = "ReplayBuffer.Bench (FPS, drift, playback, injected Hotkeys) for the soak harness and the final conformance run, supervision, and Start with Windows" },
+  { epic = 4, needs = "the finished Clip path to soak, and ring generations to open on a GPU driver reset" },
+  { epic = 5, needs = "the status line that reports restarts, the Overlay to re-place on monitor changes, and bench fps --overlay" },
+  { epic = 2, needs = "device rebinding for resume and mixer restarts, and the named-Track checks for the conformance run" },
+  { epic = 3, needs = "Game Profiles to check for persistence across restarts" },
 ]

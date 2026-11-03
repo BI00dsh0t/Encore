@@ -1,3 +1,22 @@
 __pycache__/
 *.pyc
 _bmad/render/
+
+# .NET
+bin/
+obj/
+.vs/
+*.user
+TestResults/
+
+# FFmpeg DLLs, fetched by tools/fetch-ffmpeg.ps1
+native/ffmpeg/
+
+# PresentMon CLI, downloaded by the builder for tools/measure-path-a.ps1
+native/presentmon/
+
+# Run output of tools/measure-path-a.ps1 (MP4s, CSVs, stats)
+measurements/
+
+# NativeAOT engine output of tools/publish-engine.ps1
+publish/

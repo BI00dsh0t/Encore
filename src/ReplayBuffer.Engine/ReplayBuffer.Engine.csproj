@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <CopyFFmpegNative>true</CopyFFmpegNative>
+    <!-- AD-14: the engine ships NativeAOT (spike 1.3); tools/publish-engine.ps1 publishes it. -->
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ReplayBuffer.Engine.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj" />
+    <ProjectReference Include="..\ReplayBuffer.Core\ReplayBuffer.Core.csproj" />
+    <ProjectReference Include="..\ReplayBuffer.Media\ReplayBuffer.Media.csproj" />
+    <ProjectReference Include="..\ReplayBuffer.Platform.Capture\ReplayBuffer.Platform.Capture.csproj" />
+    <ProjectReference Include="..\ReplayBuffer.Platform.Audio\ReplayBuffer.Platform.Audio.csproj" />
+    <ProjectReference Include="..\ReplayBuffer.Platform.FFmpeg\ReplayBuffer.Platform.FFmpeg.csproj" />
+    <ProjectReference Include="..\ReplayBuffer.Platform.Windows\ReplayBuffer.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>
