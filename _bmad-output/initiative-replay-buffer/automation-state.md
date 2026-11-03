@@ -37,7 +37,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 2.6 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 3.1 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 2.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 2.11 |
 
@@ -308,3 +308,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA on 2.4 (`1d33ac5`): **QA PASS**, 0 findings. QA on 3.1 (`28570b3`): **QA PASS**, 0 findings. QA notes: `HotkeyServeTests` flakes when sessions use global hotkeys at once, and the tracer still takes any full-screen window, which 3.2 and 3.3 own. 2.4 merges first and 3.1 waits for it, both switched to Sonnet. Both QA workers are back in the pool.
 - 2026-11-03: 2.4 merged into `develop` (`a9e3f5c`, `feat(engine): merge 2.4-mic-devices`) and marked done. `develop` had only state-file commits since the last sync, so no rebuild. Verified before the merge: Release build 0 warnings, default Media, Core, Platform.Audio, App and Engine suites pass, the Heavy capture AC passes, publish 0 IL/AOT warnings. One Human Check row added (a real mic and the Hotkey). 3.1 can merge now.
 - 2026-11-03: 2.4 merged (`a9e3f5c`, done `5386af0`), and its worker is back in the pool. That unblocked 2.6 (track meters, medium risk), which went to pool worker slice-epic-4, and 2.11 (mic double-count warning, low risk), which went to pool worker 2-1-tracer. Both run on Opus at medium effort. 3.1 is merging after 2.4.
+- 2026-11-03: 2.11 is READY FOR QA at `119063a` (App-only, Release build 0 warnings, App.Tests pass). QA started on qa-1-14 (Sonnet, medium effort). 3.1 is rerunning its scoped tests after syncing with develop (2.4), and 2.6 is in review.
