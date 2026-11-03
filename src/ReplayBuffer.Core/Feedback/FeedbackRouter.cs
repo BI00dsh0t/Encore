@@ -9,8 +9,8 @@ namespace ReplayBuffer.Core.Feedback;
 /// </summary>
 /// <param name="Code">One of <see cref="ErrorCodes"/>.</param>
 /// <param name="Source">The engine area it is about, such as <c>clips</c> or <c>recordings</c>.</param>
-/// <param name="Sound">The <c>feedbackSounds</c> name it plays.</param>
-public sealed record FeedbackNotice(string Code, WarningSeverity Severity, string Source, string Message, string Sound);
+/// <param name="Sound">The <c>feedbackSounds</c> name it plays, or <c>null</c> once the router has found it switched off.</param>
+public sealed record FeedbackNotice(string Code, WarningSeverity Severity, string Source, string Message, string? Sound);
 
 /// <summary>Where the <see cref="FeedbackRouter"/> raises its notices; the engine's warnings.</summary>
 public interface IFeedbackNotices
@@ -26,9 +26,11 @@ public interface IFeedbackNotices
 /// Turns outcomes into notices (FR-6): Clip saved, Clip not saved, Recording started and stopped
 /// (from <see cref="CaptureState.Recording"/> transitions) and disk full. Info notices are withdrawn
 /// after <see cref="InfoLifetime"/>; a Clip not saved stays until the next saved Clip, a disk full
-/// until the next Recording starts, or until the user dismisses either. Thread-safe.
+/// until the next Recording starts, or until the user dismisses either. With a
+/// <see cref="FeedbackSoundPlayer"/>, each notice's sound is queued as it is raised; a sound that is
+/// switched off isn't played, and its notice carries no <see cref="FeedbackNotice.Sound"/>. Thread-safe.
 /// </summary>
-public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time) : IDisposable
+public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, FeedbackSoundPlayer? sounds = null) : IDisposable
 {
     /// <summary>How long an info notice stays before the engine dismisses it.</summary>
     public static readonly TimeSpan InfoLifetime = TimeSpan.FromSeconds(10);
@@ -70,7 +72,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time) 
                 return;
             }
 
-            _clipFailures.Add(notices.Raise(new FeedbackNotice(
+            _clipFailures.Add(Raise(new FeedbackNotice(
                 ErrorCodes.ClipFailed, WarningSeverity.Error, Clips, $"Clip not saved: {ShortReason(failed.Reason)}", "saveFailed")));
         }
     }
@@ -112,7 +114,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time) 
                 return;
             }
 
-            _diskFulls.Add(notices.Raise(new FeedbackNotice(
+            _diskFulls.Add(Raise(new FeedbackNotice(
                 ErrorCodes.DiskFull, WarningSeverity.Error, Recordings, "The disk is full", "diskFull")));
         }
     }
@@ -147,9 +149,20 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time) 
         }
     }
 
+    /// <summary>Queues the notice's sound (which never blocks, so it is safe under the lock) and raises it.</summary>
+    private string Raise(FeedbackNotice notice)
+    {
+        if (sounds is not null && !sounds.Play(notice.Sound))
+        {
+            notice = notice with { Sound = null };
+        }
+
+        return notices.Raise(notice);
+    }
+
     private void RaiseInfo(FeedbackNotice notice)
     {
-        var id = notices.Raise(notice);
+        var id = Raise(notice);
         _timers[id] = time.CreateTimer(Expire, id, InfoLifetime, Timeout.InfiniteTimeSpan);
     }
 
