@@ -3,7 +3,7 @@ title: 'Crash-safe Recordings and recording-interrupted'
 type: 'feature'
 ticket: '2'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '368522baa927322d54ddae7cbe83638bd8684055'
 route: 'full'
 route_source: 'auto'
