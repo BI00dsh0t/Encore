@@ -41,8 +41,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.2 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.3 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -146,7 +146,7 @@ The coordinator logs each QA round in the Log below.
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
 | 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `a8f4c23`) |
-| 28.3 | 7.3 Length and thumbnails | | pending |
+| 28.3 | 7.3 Length and thumbnails | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 28.4 | 7.4 Favourite | | pending |
 | 28.5 | 7.5 Group and filter by game, date and Favourite | | pending |
 | 28.6 | 7.6 Open, show in Explorer and copy for Discord | | pending |
@@ -440,3 +440,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA 7.2 at `5be972a`: **QA PASS**, 0 findings (one App flake that didn't recur on two reruns). 7.2 has been told to merge (Sonnet), and qa-1-14 is back in the pool. `Mp4File.IsComplete` matches 6.2's plan, and 6.2 will take it from develop.
 - 2026-11-03: The builder turned off Remote Control on story-2-7, so it joins the pool as a seventh worker.
 - 2026-11-03: 7.2 merged into `develop` (`a8f4c23`, `feat(core): merge 7.2-library-reconciliation`) and marked done, after QA PASS at `5be972a` (0 findings). `develop` (4.7, 5.5) was merged into the branch first (`f93a821`) with conflicts in `ErrorCodes` and `EngineHost` (the `library-corrupt` code and dismiss hook sit beside the feedback-sound code); both sides were kept. The Release build (0 warnings), Contracts 113, Core 96, Engine 161, App 76 and the publish all passed again. **6.2 must take `Mp4File.IsComplete` from `develop` (`src/ReplayBuffer.Core/Library/Mp4File.cs`) instead of adding its own copy, and add its trim function to that file.** Residuals: a copy that sets the file's full size up front and doesn't lock it can be listed before its data is in; `ReplayClips` still writes to `MyVideos\<instance>`, not the `outputFolder` setting, so with a custom Output Folder the engine's own Clips land outside the Library; `cleanupBlocked` waits for 7.5's Cleanup to be used. Human checks: none beyond 7.1's.
+- 2026-11-03: 7.2 merged (`a8f4c23`, marked done `dfa2f5b`). Its card is Done with its label detached, and 2-1-tracer is back in the pool. 7.3 is now ready and was given to story-2-7 (Opus, medium effort), with its card In progress.
