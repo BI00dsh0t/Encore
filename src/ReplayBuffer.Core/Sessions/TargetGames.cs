@@ -19,6 +19,12 @@ public sealed record TargetCandidate(int ProcessId, nint Window, string ProfileI
 public sealed record ProposeTarget(TargetCandidate? To, TargetChangeReason Reason) : SessionMessage;
 
 /// <summary>
+/// Whether a Recording is running (AD-19): while one is, a switch away from the Target is held, and
+/// it is committed the moment the flag clears. A stub until epic-recordings; only tests set it.
+/// </summary>
+public sealed record RecordingRunning(bool Running) : SessionMessage;
+
+/// <summary>
 /// The debug capture that follows the Target Game (<c>serve --debug-capture</c>), until the Replay
 /// Buffer starts sessions on <c>target.changed</c> (epic 4): each new Target ends the game session
 /// and starts one on the Target's window.

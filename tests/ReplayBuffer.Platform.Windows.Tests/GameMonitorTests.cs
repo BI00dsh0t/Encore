@@ -18,6 +18,7 @@ public sealed class GameMonitorTests : IDisposable
     private readonly List<int> _detected = [];
     private readonly List<int> _exited = [];
     private readonly HashSet<string> _listed = new(StringComparer.Ordinal);
+    private readonly ManualTime _time = new();
     private readonly GameMonitor _monitor;
 
     public GameMonitorTests()
@@ -27,25 +28,42 @@ public sealed class GameMonitorTests : IDisposable
         File.WriteAllBytes(Path.Combine(_folder, "Game.EXE"), []);
         File.WriteAllBytes(Path.Combine(_folder, "Other.exe"), []);
         File.WriteAllBytes(Path.Combine(_folder, "Install", "Tool.exe"), []);
-        _monitor = new GameMonitor(
-            _probe,
-            pid => pid == AppPid,
-            (to, reason) => _proposals.Add((to, reason)),
-            TimeSpan.FromSeconds(1),
-            NullLogger.Instance,
-            () => _listed,
-            GamePaths.Canonicalize(Path.Combine(_folder, "Install")),
-            game => _detected.Add(game.ProcessId),
-            game => _exited.Add(game.ProcessId));
+        _monitor = NewMonitor();
+
+        // An empty first poll, so the tests' polls aren't cold starts.
+        _monitor.Poll();
     }
 
     private string ExpectedProfileId => GamePaths.Canonicalize(Path.Combine(_folder, "Game.EXE"));
+
+    private string GamePath => Path.Combine(_folder, "Game.EXE");
 
     public void Dispose()
     {
         _monitor.Dispose();
         Directory.Delete(_folder, recursive: true);
     }
+
+    private GameMonitor NewMonitor(Func<int?>? target = null) => new(
+        _probe,
+        pid => pid == AppPid,
+        (to, reason) => _proposals.Add((to, reason)),
+        TimeSpan.FromSeconds(1),
+        NullLogger.Instance,
+        () => _listed,
+        GamePaths.Canonicalize(Path.Combine(_folder, "Install")),
+        game => _detected.Add(game.ProcessId),
+        game => _exited.Add(game.ProcessId),
+        target,
+        _time);
+
+    private void PollAfter(GameMonitor monitor, int seconds)
+    {
+        _time.Advance(TimeSpan.FromSeconds(seconds));
+        monitor.Poll();
+    }
+
+    private List<(int Pid, TargetChangeReason Reason)> Proposed() => [.. _proposals.Select(p => (p.To?.ProcessId ?? 0, p.Reason))];
 
     [Fact]
     public void CanonicalizeReturnsTheLowercaseFinalPath()
@@ -113,38 +131,184 @@ public sealed class GameMonitorTests : IDisposable
     }
 
     [Fact]
-    public void AnotherKnownGamesNewWindowDoesNotTakeOver()
+    public void ANewGameInFrontWithATargetIsOnlyDetected()
     {
-        _probe.Add(GamePid, Path.Combine(_folder, "Game.EXE"));
-        _probe.Add(GamePid + 1, Path.Combine(_folder, "Game.EXE"));
+        _probe.Add(GamePid, GamePath);
+        _probe.Add(GamePid + 1, GamePath);
         _probe.Foreground = new GameWindow(1, GamePid);
         _monitor.Poll();
+
         _probe.Foreground = new GameWindow(2, GamePid + 1);
-        _monitor.Poll();
+        PollAfter(_monitor, 1);
+        _probe.Foreground = new GameWindow(3, GamePid + 1);
+        PollAfter(_monitor, 1);
 
-        _probe.Foreground = new GameWindow(3, GamePid);
-        _monitor.Poll();
-
-        Assert.Equal([GamePid, GamePid + 1], _proposals.Select(p => p.To!.ProcessId));
+        Assert.Equal([GamePid, GamePid + 1], _detected);
+        Assert.Equal([(GamePid, TargetChangeReason.Detected)], Proposed());
     }
 
     [Fact]
-    public void AKnownGameInFrontIsProposedAgainOnceTheTargetHasExited()
+    public void AnotherGameIsProposedOnceAfterTenSecondsOfFocus()
     {
-        _probe.Add(GamePid, Path.Combine(_folder, "Game.EXE"));
-        var b = _probe.Add(GamePid + 1, Path.Combine(_folder, "Game.EXE"));
+        _probe.Add(GamePid, GamePath);
+        _probe.Add(GamePid + 1, GamePath);
+        _listed.Add(ExpectedProfileId);
         _probe.Foreground = new GameWindow(1, GamePid);
-        _monitor.Poll();
-        _probe.Foreground = new GameWindow(2, GamePid + 1);
+        _probe.Windows.Add(new GameWindow(2, GamePid + 1));
         _monitor.Poll();
 
+        // A windowed game in front: any foreground window counts as focus.
+        _probe.Foreground = null;
+        _probe.Front = new GameWindow(2, GamePid + 1);
+        PollAfter(_monitor, 1);
+        PollAfter(_monitor, 9);
+        Assert.Equal([(GamePid, TargetChangeReason.Detected)], Proposed());
+
+        PollAfter(_monitor, 1);
+        PollAfter(_monitor, 1);
+
+        Assert.Equal([(GamePid, TargetChangeReason.Detected), (GamePid + 1, TargetChangeReason.Focus)], Proposed());
+        Assert.Equal(2, _proposals[1].To!.Window);
+    }
+
+    [Fact]
+    public void ABrokenFocusStreakDoesNotSwitch()
+    {
+        _probe.Add(GamePid, GamePath);
+        _probe.Add(GamePid + 1, GamePath);
+        _listed.Add(ExpectedProfileId);
+        _probe.Foreground = new GameWindow(1, GamePid);
+        _probe.Windows.Add(new GameWindow(2, GamePid + 1));
+        _monitor.Poll();
+
+        _probe.Front = new GameWindow(2, GamePid + 1);
+        PollAfter(_monitor, 1);
+        PollAfter(_monitor, 6);
+        _probe.Front = null;
+        PollAfter(_monitor, 1);
+        _probe.Front = new GameWindow(2, GamePid + 1);
+        PollAfter(_monitor, 1);
+        PollAfter(_monitor, 6);
+
+        Assert.Equal([(GamePid, TargetChangeReason.Detected)], Proposed());
+    }
+
+    [Fact]
+    public void TheTargetExitingHandsOverToTheMostRecentlyFocusedThenTheMostRecentlyStarted()
+    {
+        var a = _probe.Add(GamePid, GamePath);
+        var b = _probe.Add(GamePid + 1, GamePath, startedAt: 10);
+        var c = _probe.Add(GamePid + 2, GamePath, startedAt: 20);
+        var d = _probe.Add(GamePid + 3, GamePath, startedAt: 30);
+        _listed.Add(ExpectedProfileId);
+        _probe.Foreground = new GameWindow(1, GamePid);
+        _probe.Windows.AddRange([new GameWindow(2, GamePid + 1), new GameWindow(3, GamePid + 2), new GameWindow(4, GamePid + 3)]);
+        _monitor.Poll();
+
+        // Only C is focused; D started last.
+        _probe.Foreground = null;
+        _probe.Front = new GameWindow(3, GamePid + 2);
+        PollAfter(_monitor, 1);
+        _probe.Front = null;
+        a.HasExited = true;
+        PollAfter(_monitor, 1);
+        c.HasExited = true;
+        PollAfter(_monitor, 1);
         b.HasExited = true;
-        _probe.Foreground = new GameWindow(1, GamePid);
-        _monitor.Poll();
-        _monitor.Poll();
+        d.HasExited = true;
+        PollAfter(_monitor, 1);
 
-        Assert.Equal([GamePid, GamePid + 1, 0, GamePid], _proposals.Select(p => p.To?.ProcessId ?? 0));
-        Assert.Equal(TargetChangeReason.Exit, _proposals[2].Reason);
+        Assert.Equal(
+            [(GamePid, TargetChangeReason.Detected), (GamePid + 2, TargetChangeReason.Exit), (GamePid + 3, TargetChangeReason.Exit), (0, TargetChangeReason.Exit)],
+            Proposed());
+    }
+
+    [Fact]
+    public void AColdStartProposesTheForegroundGameElseTheMostRecentlyStarted()
+    {
+        _probe.Add(GamePid, GamePath, startedAt: 10);
+        _probe.Add(GamePid + 1, GamePath, startedAt: 20);
+        _probe.Add(GamePid + 2, GamePath, startedAt: 30);
+        _listed.Add(ExpectedProfileId);
+        _probe.Windows.AddRange([new GameWindow(1, GamePid), new GameWindow(2, GamePid + 1)]);
+        _probe.Foreground = new GameWindow(1, GamePid);
+
+        using (var monitor = NewMonitor())
+        {
+            monitor.Poll();
+        }
+
+        _probe.Foreground = null;
+        _probe.Windows.Add(new GameWindow(3, GamePid + 2));
+        using (var monitor = NewMonitor())
+        {
+            monitor.Poll();
+        }
+
+        Assert.Equal([(GamePid, TargetChangeReason.ColdStart), (GamePid + 2, TargetChangeReason.ColdStart)], Proposed());
+    }
+
+    [Fact]
+    public void WithASwitchHeldTheCommittedTargetExitingHandsOver()
+    {
+        var (a, _) = HoldASwitch(out var monitor);
+        using (monitor)
+        {
+            a.HasExited = true;
+            PollAfter(monitor, 1);
+        }
+
+        Assert.Equal((GamePid + 1, TargetChangeReason.Exit), Proposed()[^1]);
+        Assert.Equal(3, _proposals.Count);
+    }
+
+    [Fact]
+    public void WithASwitchHeldTheHeldGameExitingProposesTheCommittedTargetAgain()
+    {
+        var (_, b) = HoldASwitch(out var monitor);
+        using (monitor)
+        {
+            b.HasExited = true;
+            PollAfter(monitor, 1);
+        }
+
+        Assert.Equal((GamePid, TargetChangeReason.Exit), Proposed()[^1]);
+        Assert.Equal(3, _proposals.Count);
+    }
+
+    [Fact]
+    public void WithASwitchHeldTheCommittedTargetsNewWindowIsProposed()
+    {
+        HoldASwitch(out var monitor);
+        using (monitor)
+        {
+            _probe.Foreground = _probe.Windows[0] = new GameWindow(9, GamePid);
+            PollAfter(monitor, 1);
+        }
+
+        Assert.Equal((GamePid, (nint)9), (_proposals[^1].To!.ProcessId, _proposals[^1].To!.Window));
+        Assert.Equal(3, _proposals.Count);
+    }
+
+    // A committed as the Target; B proposed on focus, but never committed (a Recording holds it).
+    private (FakeProcess A, FakeProcess B) HoldASwitch(out GameMonitor monitor)
+    {
+        var a = _probe.Add(GamePid, GamePath);
+        var b = _probe.Add(GamePid + 1, GamePath);
+        _listed.Add(ExpectedProfileId);
+        _probe.Windows.AddRange([new GameWindow(1, GamePid), new GameWindow(2, GamePid + 1)]);
+        _probe.Foreground = new GameWindow(1, GamePid);
+        int? committed = null;
+        monitor = NewMonitor(() => committed);
+        monitor.Poll();
+        committed = GamePid;
+
+        _probe.Foreground = new GameWindow(2, GamePid + 1);
+        PollAfter(monitor, 1);
+        PollAfter(monitor, 10);
+        _probe.Foreground = null;
+        Assert.Equal([(GamePid, TargetChangeReason.ColdStart), (GamePid + 1, TargetChangeReason.Focus)], Proposed());
+        return (a, b);
     }
 
     [Fact]
@@ -242,30 +406,6 @@ public sealed class GameMonitorTests : IDisposable
     }
 
     [Fact]
-    public void ABackgroundListedGameDoesNotTakeOverTheTargetButOneInFrontDoes()
-    {
-        _probe.Add(GamePid, Path.Combine(_folder, "Game.EXE"));
-        _probe.Add(GamePid + 1, Path.Combine(_folder, "Game.EXE"));
-        _probe.Add(GamePid + 2, Path.Combine(_folder, "Game.EXE"));
-        _listed.Add(ExpectedProfileId);
-        _probe.Foreground = new GameWindow(1, GamePid);
-        _monitor.Poll();
-
-        _probe.Windows.Add(new GameWindow(2, GamePid + 1));
-        _monitor.Poll();
-        Assert.Equal([GamePid, GamePid + 1], _detected);
-        Assert.Equal([GamePid], _proposals.Select(p => p.To!.ProcessId));
-
-        _probe.Foreground = null;
-        _probe.Front = new GameWindow(3, GamePid + 2);
-        _probe.Windows.Add(_probe.Front.Value);
-        _monitor.Poll();
-
-        Assert.Equal([GamePid, GamePid + 1, GamePid + 2], _detected);
-        Assert.Equal([GamePid, GamePid + 2], _proposals.Select(p => p.To!.ProcessId));
-    }
-
-    [Fact]
     public void AnUnlistedWindowsProcessIsOpenedOnceAndNeverProposed()
     {
         var other = _probe.Add(GamePid, Path.Combine(_folder, "Other.exe"));
@@ -304,7 +444,8 @@ public sealed class GameMonitorTests : IDisposable
 
         public List<GameWindow> Windows { get; } = [];
 
-        public FakeProcess Add(int pid, string imagePath) => _processes[pid] = new FakeProcess(imagePath);
+        public FakeProcess Add(int pid, string imagePath, int startedAt = 0) =>
+            _processes[pid] = new FakeProcess(imagePath) { StartTime = DateTime.UnixEpoch.AddSeconds(startedAt) };
 
         public GameWindow? ForegroundGameWindow() => Foreground;
 
@@ -330,10 +471,24 @@ public sealed class GameMonitorTests : IDisposable
 
         public bool HasExited { get; set; }
 
+        public DateTime StartTime { get; init; }
+
         public int Opens { get; set; }
 
         public bool Disposed { get; private set; }
 
         public void Dispose() => Disposed = true;
+    }
+
+    private sealed class ManualTime : TimeProvider
+    {
+        // Never 0: a game's last focus of 0 means never.
+        private long _ticks = TimeSpan.TicksPerHour;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => _ticks;
+
+        public void Advance(TimeSpan by) => _ticks += by.Ticks;
     }
 }

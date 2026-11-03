@@ -24,6 +24,9 @@ public interface IGameProcess : IDisposable
 
     /// <summary>Whether the process has exited.</summary>
     bool HasExited { get; }
+
+    /// <summary>When the process started, UTC; <see cref="DateTime.MinValue"/> when it couldn't be read.</summary>
+    DateTime StartTime { get; }
 }
 
 /// <summary>What Game Detection reads from the system; tests fake it.</summary>
@@ -127,7 +130,20 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
             return null;
         }
 
-        return new LimitedProcess(process, new string(buffer, 0, (int)size));
+        return new LimitedProcess(process, new string(buffer, 0, (int)size), StartTimeOf(process));
+    }
+
+    // Read once, on the limited handle (AD-12).
+    private static DateTime StartTimeOf(HANDLE process)
+    {
+        System.Runtime.InteropServices.ComTypes.FILETIME created, exited, kernel, user;
+        if (!PInvoke.GetProcessTimes(process, &created, &exited, &kernel, &user))
+        {
+            return DateTime.MinValue;
+        }
+
+        var ticks = ((long)(uint)created.dwHighDateTime << 32) | (uint)created.dwLowDateTime;
+        return DateTime.FromFileTimeUtc(ticks);
     }
 
     /// <summary>
@@ -214,11 +230,13 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
         return name.SequenceEqual("Progman") || name.SequenceEqual("WorkerW");
     }
 
-    private sealed class LimitedProcess(HANDLE handle, string imagePath) : IGameProcess
+    private sealed class LimitedProcess(HANDLE handle, string imagePath, DateTime startTime) : IGameProcess
     {
         private int _disposed;
 
         public string ImagePath { get; } = imagePath;
+
+        public DateTime StartTime { get; } = startTime;
 
         // AD-12: polled on the limited handle; no SYNCHRONIZE, so no wait.
         public bool HasExited
@@ -241,16 +259,22 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
 }
 
 /// <summary>
-/// Game Detection (stories 3.1, 3.2). Each poll it classifies each new process that owns a top-level
+/// Game Detection (stories 3.1 to 3.3). Each poll it classifies each new process that owns a top-level
 /// window once (limited open, image path, <c>Canonicalize</c>, AD-18) and detects it when its
 /// foreground window covers its monitor with no caption (the fullscreen rule) or its path is listed
 /// (Windows' game list or <c>manualGames</c>), even windowed. A detected game stays known, its limited
 /// handle held, until its process exits; minimizing it or closing its window doesn't end it.
 /// Excluded processes and those under the install folder are never detected. It only proposes
-/// (AD-19); the Target exiting proposes no Target, reason exit.
+/// (AD-19), by R2's rules (AD-18): with no Target, the foreground detected game, else the best
+/// (reason cold-start on the first poll, detected after); another detected game once it has held the
+/// focus for <see cref="FocusToSwitch"/> (reason focus); and when the Target exits, the best of the
+/// others, or none (reason exit). The best is the most recently focused, then the most recently started.
 /// </summary>
 public sealed class GameMonitor : IDisposable
 {
+    /// <summary>How long another detected game must hold the focus, without a break, to be proposed.</summary>
+    public static readonly TimeSpan FocusToSwitch = TimeSpan.FromSeconds(10);
+
     private static readonly IReadOnlySet<string> NothingListed = new HashSet<string>();
 
     private readonly IGameWindowProbe _probe;
@@ -262,11 +286,19 @@ public sealed class GameMonitor : IDisposable
     private readonly string? _installFolder;
     private readonly Action<DetectedGame>? _detected;
     private readonly Action<DetectedGame>? _exited;
+    private readonly Func<int?>? _target;
+    private readonly TimeProvider _time;
     private readonly ManualResetEventSlim _stop = new();
 
     // Poll's thread only: every process classified, until it exits; the detected ones have a Candidate.
     private readonly Dictionary<int, Seen> _seen = [];
+
+    // Poll's thread only: the desired Target (the last proposal), and the focus streak's process and start.
     private int? _proposed;
+    private TargetChangeReason _proposedReason;
+    private int? _focusPid;
+    private long _focusSince;
+    private bool _firstPoll = true;
 
     private Thread? _thread;
     private int _disposed;
@@ -279,6 +311,11 @@ public sealed class GameMonitor : IDisposable
     /// <param name="installFolder">The engine's install folder, canonical; nothing under it is detected.</param>
     /// <param name="detected">Receives each newly detected game, before any proposal of it.</param>
     /// <param name="exited">Receives each detected game whose process exited, before the exit proposal.</param>
+    /// <param name="target">
+    /// The committed Target's process, read each poll, so a Target whose switch is held (AD-19) is still
+    /// handed over on its exit; null takes the last proposal as committed.
+    /// </param>
+    /// <param name="time">Times the focus streak; <see cref="TimeProvider.System"/> when null.</param>
     public GameMonitor(
         IGameWindowProbe probe,
         Func<int, bool> isExcluded,
@@ -288,7 +325,9 @@ public sealed class GameMonitor : IDisposable
         Func<IReadOnlySet<string>>? listed = null,
         string? installFolder = null,
         Action<DetectedGame>? detected = null,
-        Action<DetectedGame>? exited = null)
+        Action<DetectedGame>? exited = null,
+        Func<int?>? target = null,
+        TimeProvider? time = null)
     {
         ArgumentNullException.ThrowIfNull(probe);
         ArgumentNullException.ThrowIfNull(isExcluded);
@@ -305,6 +344,8 @@ public sealed class GameMonitor : IDisposable
             : installFolder + '\\';
         _detected = detected;
         _exited = exited;
+        _target = target;
+        _time = time ?? TimeProvider.System;
     }
 
     /// <summary>Starts polling on a background thread, the first poll at once.</summary>
@@ -343,17 +384,21 @@ public sealed class GameMonitor : IDisposable
         _stop.Dispose();
     }
 
-    /// <summary>One poll: forgets exited processes, then applies the fullscreen rule, then the listed source.</summary>
+    /// <summary>
+    /// One poll: forgets exited processes (handing the Target over), detects new games without proposing
+    /// them, follows the focus, then decides whether to propose a Target.
+    /// </summary>
     internal void Poll()
     {
+        var now = _time.GetTimestamp();
         ForgetExited();
 
-        // The fullscreen rule: a newly detected game in front is always proposed (the tracer rule).
+        var foreground = _probe.ForegroundWindow();
         if (_probe.ForegroundGameWindow() is { } fullscreen && Classify(fullscreen.ProcessId) is { Eligible: true } game)
         {
             if (game.Candidate is null)
             {
-                Propose(Detect(game, fullscreen.Handle));
+                Detect(game, fullscreen.Handle);
             }
             else
             {
@@ -361,16 +406,17 @@ public sealed class GameMonitor : IDisposable
             }
         }
 
-        ScanListed();
+        ScanListed(foreground);
+        TrackFocus(foreground, now);
+        Decide(now);
+        _firstPoll = false;
     }
 
     // The listed source over every top-level window and the foreground one: a listed game is detected
-    // even windowed, and proposed only with no Target or when it owns the foreground window, so a game
-    // starting in the background never takes over the Target (focus is story 3.3's rule).
-    private void ScanListed()
+    // even windowed. Proposing is Decide's.
+    private void ScanListed(GameWindow? foreground)
     {
         var listed = _listed?.Invoke() ?? NothingListed;
-        var foreground = _probe.ForegroundWindow();
         var windows = _probe.Windows();
 
         var done = new HashSet<int>();
@@ -383,37 +429,89 @@ public sealed class GameMonitor : IDisposable
             }
 
             // A process's first window here is the foreground one when it is the process's, else its first in Z order.
-            var owns = foreground?.ProcessId == window.ProcessId;
             if (game.Candidate is null)
             {
                 if (listed.Contains(game.ProfileId!) || listed.Contains(game.RawPath))
                 {
-                    var candidate = Detect(game, window.Handle);
-                    if (_proposed is null || owns)
-                    {
-                        Propose(candidate);
-                    }
+                    Detect(game, window.Handle);
                 }
             }
-            else if (owns)
+            else if (foreground?.ProcessId == window.ProcessId)
             {
                 Follow(game, window.Handle);
             }
         }
     }
 
-    // A known game in front: the Target with a new window is proposed again, so the capture can follow
-    // it; with no Target (the last one exited), it is proposed. Another known game never takes over an
-    // existing Target here; switching on focus is story 3.3's rule.
+    // A known game in front: its window is the one to capture from now on. The desired or committed
+    // Target with a new window is proposed again, so the capture can follow it; any other game waits
+    // for its focus. Proposing the committed Target while a switch is held drops that switch: it is in front.
     private void Follow(Seen game, nint window)
     {
         var moved = game.Candidate!.Window != window;
         game.Candidate = game.Candidate with { Window = window };
-        if (_proposed is null || (moved && _proposed == game.Pid))
+        if (!moved)
         {
-            Propose(game.Candidate);
+            return;
+        }
+
+        if (_proposed == game.Pid)
+        {
+            // Its first reason: a switch held by a Recording still commits as what it was.
+            Propose(game.Candidate, _proposedReason);
+        }
+        else if (Committed() == game.Pid)
+        {
+            Propose(game.Candidate, TargetChangeReason.Detected);
         }
     }
+
+    // The committed Target's process: read from the orchestrator when given, else the last proposal.
+    private int? Committed() => _target is null ? _proposed : _target();
+
+    // The focus streak starts at the first poll that sees a process in front, detected or not; any other
+    // foreground (another process, the shell, none) breaks it.
+    private void TrackFocus(GameWindow? foreground, long now)
+    {
+        var pid = foreground?.ProcessId;
+        if (pid != _focusPid)
+        {
+            _focusPid = pid;
+            _focusSince = now;
+        }
+
+        if (pid is { } inFront && _seen.TryGetValue(inFront, out var seen))
+        {
+            seen.LastFocused = now;
+        }
+    }
+
+    private void Decide(long now)
+    {
+        if (_proposed is null)
+        {
+            if (_seen.Values.Any(seen => seen.Candidate is not null))
+            {
+                Propose(Detected(_focusPid) ?? Best(), _firstPoll ? TargetChangeReason.ColdStart : TargetChangeReason.Detected);
+            }
+
+            return;
+        }
+
+        if (_focusPid != _proposed && Detected(_focusPid) is { } focused && _time.GetElapsedTime(_focusSince, now) >= FocusToSwitch)
+        {
+            Propose(focused, TargetChangeReason.Focus);
+        }
+    }
+
+    private TargetCandidate? Detected(int? pid) => pid is { } p && _seen.TryGetValue(p, out var seen) ? seen.Candidate : null;
+
+    // The most recently focused detected game, then the most recently started; null when none is detected.
+    private TargetCandidate? Best() => _seen.Values
+        .Where(seen => seen.Candidate is not null)
+        .OrderByDescending(seen => seen.LastFocused)
+        .ThenByDescending(seen => seen.Process.StartTime)
+        .FirstOrDefault()?.Candidate;
 
     // The process's classification, cached with its limited handle until it exits; null when it is
     // excluded (never opened), can't be opened (retried next poll) or has already exited.
@@ -461,14 +559,16 @@ public sealed class GameMonitor : IDisposable
         return seen;
     }
 
-    private TargetCandidate Detect(Seen game, nint window)
+    private void Detect(Seen game, nint window)
     {
         var candidate = game.Candidate = new TargetCandidate(game.Pid, window, game.ProfileId!, Path.GetFileName(game.Process.ImagePath));
         _log.LogInformation("Detected {Name} (process {Pid}, window 0x{Window:X}) at {ProfileId}", candidate.Name, game.Pid, window, candidate.ProfileId);
         _detected?.Invoke(ToDetectedGame(candidate));
-        return candidate;
     }
 
+    // Forgets each exited process. When the committed Target exited, hands over to the best other game
+    // (or none); when only a desired Target held from it exited, proposes the committed one again, which
+    // drops the held switch.
     private void ForgetExited()
     {
         List<Seen>? exited = null;
@@ -485,6 +585,10 @@ public sealed class GameMonitor : IDisposable
             return;
         }
 
+        var committed = Committed();
+        var desired = _proposed;
+        var committedExited = false;
+        var desiredExited = false;
         foreach (var seen in exited)
         {
             _seen.Remove(seen.Pid);
@@ -496,19 +600,34 @@ public sealed class GameMonitor : IDisposable
 
             _log.LogInformation("{Name} (process {Pid}) exited", game.Name, seen.Pid);
             _exited?.Invoke(ToDetectedGame(game));
-            if (_proposed == seen.Pid)
-            {
-                _proposed = null;
-                _propose(null, TargetChangeReason.Exit);
-            }
+            committedExited |= committed == seen.Pid;
+            desiredExited |= desired == seen.Pid;
+        }
+
+        if (committedExited)
+        {
+            Propose(Best(), TargetChangeReason.Exit);
+        }
+        else if (desiredExited && desired != committed)
+        {
+            Propose(committed is null ? Best() : Detected(committed), TargetChangeReason.Exit);
         }
     }
 
-    private void Propose(TargetCandidate candidate)
+    private void Propose(TargetCandidate? candidate, TargetChangeReason reason)
     {
-        _proposed = candidate.ProcessId;
-        _log.LogInformation("Proposing {Name} (process {Pid}, window 0x{Window:X}) as the Target Game", candidate.Name, candidate.ProcessId, candidate.Window);
-        _propose(candidate, TargetChangeReason.Detected);
+        _proposed = candidate?.ProcessId;
+        _proposedReason = reason;
+        if (candidate is null)
+        {
+            _log.LogInformation("Proposing no Target Game ({Reason})", reason);
+        }
+        else
+        {
+            _log.LogInformation("Proposing {Name} (process {Pid}, window 0x{Window:X}) as the Target Game ({Reason})", candidate.Name, candidate.ProcessId, candidate.Window, reason);
+        }
+
+        _propose(candidate, reason);
     }
 
     private static DetectedGame ToDetectedGame(TargetCandidate candidate) => new(candidate.ProfileId, candidate.Name, candidate.ProcessId);
@@ -538,5 +657,8 @@ public sealed class GameMonitor : IDisposable
     {
         /// <summary>Set once the process is detected; it then stays detected until it exits.</summary>
         public TargetCandidate? Candidate { get; set; }
+
+        /// <summary>The timestamp of the last poll that saw it in front; 0 = never.</summary>
+        public long LastFocused { get; set; }
     }
 }

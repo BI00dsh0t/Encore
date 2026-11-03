@@ -244,7 +244,9 @@ internal sealed class EngineHost : IAsyncDisposable
                     listed,
                     InstallFolder(),
                     game => hub.Publish(GameMessages.Detected, game),
-                    game => hub.Publish(GameMessages.Exited, game));
+                    game => hub.Publish(GameMessages.Exited, game),
+                    () => hub.State.TargetGame?.ProcessId,
+                    hostOptions.Time);
             }
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
