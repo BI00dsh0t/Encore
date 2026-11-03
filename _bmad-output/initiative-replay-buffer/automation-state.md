@@ -34,7 +34,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 2.4 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
@@ -75,7 +75,7 @@ The coordinator logs each QA round in the Log below.
 | 5 | 2.2 Track mixer | story-2-2 | done |
 | 6 | 2.3 Live device list over IPC | story-2-3 | done |
 | 7 | 2.5 Device dropout and rebind | story-2-5 (local_ea1ff557-3cb9-4fe2-9a70-3029632aee7c) | done |
-| 8 | 2.4 Mic Devices and mic mute | | pending |
+| 8 | 2.4 Mic Devices and mic mute | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 9 | 2.6 Track meters in the engine | | pending |
 | 10 | 2.7 Track Layout editor in the Main App | story-2-7 (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 11 | 2.11 Mic Devices and double-count warning in the editor | | pending |
@@ -288,3 +288,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03 00:31: story-2-5 and story-2-7 hit the usage limit (reset 00:30) mid-merge. 2.5 had merged develop into its branch (`aa4286a`), and its worktree is clean. It was told to resume its merge. 2.7 asked whether to merge first and was told to keep waiting for 2.5, because merges stay serialized.
 - 2026-11-03: 2.5 merged into `develop` (`e6ed604`, `feat(audio): merge 2.5-device-dropout`) and marked done. `develop` (with 2.9) was merged into the branch first (`aa4286a`); the only conflict was two `Compile` links in `ReplayBuffer.Engine.Tests.csproj`, both kept. Release build 0 warnings, Platform.Audio 35/35, the 10 s dropout AC test passed (it failed once alongside the other dropout classes under load and passed alone). One Human Check row added (the BEACN restart). 2.7 can merge now.
 - 2026-11-03: 2.7 merged into `develop` (`295a5ec`, `feat(app): merge 2.7-track-layout-editor`) and marked done. `develop` (2.9 + 2.5) was merged into its branch first without conflicts (`f78b358`); Release build 0 warnings, `ReplayBuffer.App.Tests` 71 of 71. QA's two low notes were accepted, not fixed: edits made during an in-flight save are dropped (the page reloads with the 'changed elsewhere' note), and devices show as unavailable before the first device list arrives. Human Check row added.
+- 2026-11-03: 2.5 merged (`e6ed604`, done `98c8ab1`) and 2.7 merged (`295a5ec`). The story-2-5 session was archived. story-2-7 couldn't be archived (the app keeps it, as it's pinned or open), so the builder can archive it from the sidebar. The only ready story is 2.4. It went to pool worker slice-epic-5, which was cleared and set to Opus at high effort (risk high). 2.6, 2.11 and the rest of epic 2 wait on 2.4.
