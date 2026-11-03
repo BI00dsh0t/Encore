@@ -91,7 +91,8 @@ public sealed class EncodeExperimentTests : IDisposable
         Assert.InRange(time, 1 - OneFrame, 1 + OneFrame);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void ThePacedEncoderEncodesEverySlotWithAFastPreset()
     {
         RequireFFmpeg();

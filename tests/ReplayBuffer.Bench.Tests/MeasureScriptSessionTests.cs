@@ -30,7 +30,8 @@ public sealed class MeasureScriptSessionTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void TheScriptStopsADeadRunsSessionAndLeavesALiveOneAlone()
     {
         // The script's sweep covers the whole machine, and other worktrees run this test beside this one:

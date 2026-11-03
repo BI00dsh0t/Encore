@@ -127,6 +127,9 @@ public static class ErrorCodes
     /// <summary>A Hotkey action is not used in the current <c>recordHotkeyMode</c>, so it isn't registered.</summary>
     public const string HotkeyInactive = "hotkey-inactive";
 
+    /// <summary>A warning: an audio device in use dropped out; its Tracks record silence from it until it returns.</summary>
+    public const string DeviceDropout = "device-dropout";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -167,5 +170,6 @@ public static class ErrorCodes
         HotkeyFailed,
         HotkeyUnbound,
         HotkeyInactive,
+        DeviceDropout,
     ];
 }

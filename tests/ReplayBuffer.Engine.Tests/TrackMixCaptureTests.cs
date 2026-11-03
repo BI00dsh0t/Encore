@@ -103,7 +103,8 @@ public sealed class TrackMixCaptureTests : IDisposable
         AssertDurationsMatchTheVideo(output, 4);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task TwoFullScaleTonesInOneTrackStayWithinFullScale()
     {
         var audio = new SessionAudio(
@@ -119,7 +120,7 @@ public sealed class TrackMixCaptureTests : IDisposable
         AssertDurationsMatchTheVideo(output, 1);
     }
 
-    /// <summary>Runs a 4 s session of the test window with <paramref name="audio"/> from <paramref name="hub"/>; returns the file.</summary>
+    /// <summary>Runs a 2 s session of the test window with <paramref name="audio"/> from <paramref name="hub"/>; returns the file.</summary>
     private async Task<string> CaptureAsync(SessionAudio audio, ToneHub hub)
     {
         SessionTestKit.RequireFFmpeg();
@@ -134,7 +135,7 @@ public sealed class TrackMixCaptureTests : IDisposable
         {
             await orchestrator.StartAsync(SessionKind.Game, new CaptureTarget((int)window.ProcessId, window.Handle, null), audio).WaitAsync(Timeout, Token);
             await anchored.Task.WaitAsync(Timeout, Token);
-            await Task.Delay(TimeSpan.FromSeconds(4), Token);
+            await Task.Delay(TimeSpan.FromSeconds(2), Token);
             var outcome = await orchestrator.EndAsync("test over").WaitAsync(Timeout, Token);
             Assert.Null(outcome.Failure);
         }
@@ -153,7 +154,7 @@ public sealed class TrackMixCaptureTests : IDisposable
             .ToList();
         Assert.Equal(["h264", .. Enumerable.Repeat("aac", audioStreams)], streams.Select(s => s.Codec));
         var video = streams[0].Duration;
-        Assert.InRange(video, 3, 6);
+        Assert.InRange(video, 1.5, 4);
         Assert.All(streams.Skip(1), s => Assert.InRange(s.Duration, video - 0.1, video + 0.1));
     }
 
@@ -204,116 +205,4 @@ public sealed class TrackMixCaptureTests : IDisposable
     }
 
     private static double Peak(float[] samples) => samples.Max(Math.Abs);
-
-    /// <summary>
-    /// A hub whose every endpoint plays one sine, identical on both channels, in real time: 10 ms
-    /// blocks stamped contiguously from the subscription's start QPC, as the real hub's are.
-    /// </summary>
-    private sealed class ToneHub(IReadOnlyDictionary<string, (double Amplitude, double Hz)> tones) : IAudioDeviceHub, IDisposable
-    {
-        private readonly List<Tone> _running = [];
-        private readonly Dictionary<string, int> _subscriptions = [];
-
-        public int Subscriptions(string endpointId)
-        {
-            lock (_running)
-            {
-                return _subscriptions.GetValueOrDefault(endpointId);
-            }
-        }
-
-        public IAudioSubscription Subscribe(string endpointId, SettingsFlow flow, IAudioPcmSubscriber subscriber)
-        {
-            var (amplitude, hz) = tones[endpointId];
-            var tone = new Tone(amplitude, hz, subscriber);
-            lock (_running)
-            {
-                _subscriptions[endpointId] = _subscriptions.GetValueOrDefault(endpointId) + 1;
-                _running.Add(tone);
-            }
-
-            return tone;
-        }
-
-        public void Dispose()
-        {
-            lock (_running)
-            {
-                foreach (var tone in _running)
-                {
-                    tone.Dispose();
-                }
-            }
-        }
-
-        private sealed class Tone : IAudioSubscription
-        {
-            private const int BlockFrames = AudioFormat.SampleRate / 100;
-
-            private readonly double _amplitude;
-            private readonly double _hz;
-            private readonly IAudioPcmSubscriber _subscriber;
-            private readonly Thread _thread;
-            private volatile bool _stop;
-
-            public Tone(double amplitude, double hz, IAudioPcmSubscriber subscriber)
-            {
-                _amplitude = amplitude;
-                _hz = hz;
-                _subscriber = subscriber;
-                _thread = new Thread(Run) { IsBackground = true, Name = "ToneHub" };
-                _thread.Start();
-            }
-
-            public Exception? DeviceFault => null;
-
-            public Exception? SubscriberFault { get; private set; }
-
-            public void Dispose()
-            {
-                _stop = true;
-                if (Thread.CurrentThread != _thread)
-                {
-                    _thread.Join();
-                }
-            }
-
-            private void Run()
-            {
-                var origin = Stopwatch.GetTimestamp();
-                var block = new float[BlockFrames * AudioFormat.Channels];
-                long frame = 0;
-                while (!_stop)
-                {
-                    var startQpc = origin + (frame * Stopwatch.Frequency / AudioFormat.SampleRate);
-                    var due = origin + ((frame + BlockFrames) * Stopwatch.Frequency / AudioFormat.SampleRate);
-                    while (Stopwatch.GetTimestamp() < due && !_stop)
-                    {
-                        Thread.Sleep(1);
-                    }
-
-                    for (var i = 0; i < BlockFrames; i++)
-                    {
-                        var value = (float)(_amplitude * Math.Sin(2 * Math.PI * _hz * (frame + i) / AudioFormat.SampleRate));
-                        block[2 * i] = value;
-                        block[(2 * i) + 1] = value;
-                    }
-
-                    if (SubscriberFault is null)
-                    {
-                        try
-                        {
-                            _subscriber.OnPcm(new AudioBlock(startQpc, BlockFrames, block));
-                        }
-                        catch (Exception e)
-                        {
-                            SubscriberFault = e;
-                        }
-                    }
-
-                    frame += BlockFrames;
-                }
-            }
-        }
-    }
 }

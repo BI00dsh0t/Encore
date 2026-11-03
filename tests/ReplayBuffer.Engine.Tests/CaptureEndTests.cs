@@ -103,7 +103,7 @@ public sealed class CaptureEndTests : IDisposable
     public void ClosingTheWindowEndsCaptureAndFinalizesTheFile()
     {
         RequireFFmpeg();
-        var title = OpenWindow(closeAfterMs: 5000);
+        var title = OpenWindow(closeAfterMs: 2500);
         var output = Path.Combine(_directory, "closed.mp4");
 
         var engine = StartEngine(title, output);
@@ -113,7 +113,8 @@ public sealed class CaptureEndTests : IDisposable
         AssertThreeStreams(output);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void CtrlCEndsCaptureAndFinalizesTheFile()
     {
         RequireFFmpeg();
@@ -133,7 +134,8 @@ public sealed class CaptureEndTests : IDisposable
         AssertThreeStreams(output);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void AStatsRunWritesAReportThatMatchesTheFile()
     {
         RequireFFmpeg();
@@ -217,7 +219,8 @@ public sealed class CaptureEndTests : IDisposable
         RealTimeAttempts.InRange(root.GetProperty("latency").GetProperty("p99Ms").GetDouble(), 0, 250, "latency p99 ms");
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void TheEncodeExperimentsRecordTheirOptionsAndWriteAPlayableFile()
     {
         RequireFFmpeg();

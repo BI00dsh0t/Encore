@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Core.Audio;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Engine.Audio;
 using ReplayBuffer.Media;
 using ReplayBuffer.Platform.Audio;
 using ReplayBuffer.Platform.Capture;
@@ -99,7 +100,10 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// letterboxed (<see cref="FrameScaler"/>), and posts it; the encoder thread emits exactly one frame
 /// per slot of the fps, repeating the last one when nothing new arrived (story 1.11,
 /// <see cref="PacedVideoEncoder"/>). A retarget swaps only the WGC capture, so the file keeps one
-/// unbroken set of streams.
+/// unbroken set of streams. Mic mute (AD-13) is one <see cref="MicMuteSchedule"/>, set from the spec
+/// before anything opens and then by <see cref="SetMicMuted"/>; each Mic Device's input to each
+/// <c>muteAffected</c> Track passes through a <see cref="MicMuteGate"/>, so it is silenced there,
+/// before the mix, from the press's frame, and stays audible in every other Track.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -118,6 +122,7 @@ internal sealed class CaptureSession : ICaptureSession
     private readonly List<AacEncoder> _audioEncoders = []; // one per Track
     private readonly List<TrackMixer> _mixers = []; // one per Track
     private readonly List<AudioTimeline> _audioTimelines = [];
+    private readonly MicMuteSchedule _micMute;
     private readonly CaptureStatsCollector? _stats;
     private readonly Timer _firstFrameTimer;
     private readonly Lock _silenceGate = new();
@@ -155,6 +160,7 @@ internal sealed class CaptureSession : ICaptureSession
         _loggers = loggers;
         _log = loggers.CreateLogger<CaptureSession>();
         _stats = options.Stats;
+        _micMute = new MicMuteSchedule(spec.MicMuted);
         _firstFrameTimer = new Timer(_ => OnFirstFrameTimeout(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
@@ -180,6 +186,9 @@ internal sealed class CaptureSession : ICaptureSession
         {
             Subscribe(device);
         }
+
+        _log.LogInformation("Mic {State} at start; mic mute covers {Inputs} Mic Device input(s) in muteAffected Tracks",
+            _spec.MicMuted ? "muted" : "unmuted", _spec.Audio.GatedMicInputs().Count());
 
         var capture = NewCapture(target.Window);
         lock (_gate)
@@ -231,6 +240,15 @@ internal sealed class CaptureSession : ICaptureSession
 
         next.Start();
         _log.LogInformation("Retargeted to window 0x{Handle:X}", target.Window);
+    }
+
+    public void SetMicMuted(bool muted, long qpc)
+    {
+        _micMute.Set(muted, qpc);
+
+        // Read without the gate, which a first frame opening the encoders may hold: never block here.
+        var frame = Volatile.Read(ref _anchored) ? MicMuteGate.FrameFrom(qpc, Volatile.Read(ref _anchorQpc), _qpcFrequency) : 0;
+        _log.LogInformation("Mic {State} from frame {Frame}", muted ? "muted" : "unmuted", frame);
     }
 
     public SessionOutcome End(string reason)
@@ -455,19 +473,11 @@ internal sealed class CaptureSession : ICaptureSession
 
         // The hub's streams have run since Open; each device takes blocks from here, cut at the anchor
         // once, and fanned out to every Track that holds it.
+        var inputs = tracks.Select(t => t.DeviceIndexes).ToList();
         for (var d = 0; d < _audioTracks.Count; d++)
         {
-            var sinks = new List<IAudioSampleSink>();
-            for (var t = 0; t < tracks.Count; t++)
-            {
-                var input = IndexOf(tracks[t].DeviceIndexes, d);
-                if (input >= 0)
-                {
-                    sinks.Add(_mixers[t].Input(input));
-                }
-            }
-
-            var timeline = new AudioTimeline(_qpcFrequency, anchorQpc, sinks.Count == 1 ? sinks[0] : new AudioFanOut(sinks));
+            var sink = TrackWiring.DeviceSink(d, _audioTracks[d].Device.IsMic, tracks, inputs, _mixers, _micMute, _qpcFrequency, anchorQpc);
+            var timeline = new AudioTimeline(_qpcFrequency, anchorQpc, sink);
             _audioTimelines.Add(timeline);
             _audioTracks[d].Publish(timeline);
         }
@@ -483,7 +493,8 @@ internal sealed class CaptureSession : ICaptureSession
             }
         }
 
-        _anchored = true;
+        // A release write: SetMicMuted reads the anchor without the gate.
+        Volatile.Write(ref _anchored, true);
         _options.Anchored?.Invoke(anchorQpc);
     }
 
@@ -672,7 +683,7 @@ internal sealed class CaptureSession : ICaptureSession
             if (track.Subscription is AudioDeviceSubscription { Diagnostics: var diagnostics })
             {
                 var role = track.Device.Flow == SessionFlow.Output ? "output" : "input";
-                var first = FirstTrackOf(i);
+                var first = _spec.Audio.FirstTrackOf(i);
                 var samples = first >= 0 ? _audioEncoders[first].SamplesWritten : 0;
                 audio.Add(CaptureStatsCollector.Report(role, track.Device.FriendlyName, diagnostics.Stamps, diagnostics.Stream, _audioTimelines[i], samples));
             }
@@ -712,34 +723,6 @@ internal sealed class CaptureSession : ICaptureSession
 
         _log.LogInformation("Stats written to {Path}: {Encoded} frames encoded ({Fresh} new), latency p99 {P99:0.0} ms",
             path, video.FramesEncoded, video.FreshSlots, report.Latency.P99Ms);
-    }
-
-    /// <summary>The first Track that mixes device <paramref name="device"/>, or -1.</summary>
-    private int FirstTrackOf(int device)
-    {
-        var tracks = _spec.Audio.Tracks;
-        for (var t = 0; t < tracks.Count; t++)
-        {
-            if (IndexOf(tracks[t].DeviceIndexes, device) >= 0)
-            {
-                return t;
-            }
-        }
-
-        return -1;
-    }
-
-    private static int IndexOf(IReadOnlyList<int> indexes, int value)
-    {
-        for (var i = 0; i < indexes.Count; i++)
-        {
-            if (indexes[i] == value)
-            {
-                return i;
-            }
-        }
-
-        return -1;
     }
 
     private void ReportAudioFaults()

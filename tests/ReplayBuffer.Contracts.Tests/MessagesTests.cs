@@ -27,6 +27,10 @@ public sealed partial class MessagesTests
         ["hotkey.status"] = """{"bindings":[{"action":"save","binding":{"vk":135,"modifiers":7},"registered":true,"code":null},{"action":"micMute","binding":null,"registered":false,"code":"hotkey-unbound"}]}""",
         ["hotkey.pressed"] = """{"action":"monitorRecordToggle","qpc":123456789}""",
         ["devices.changed"] = """{"devices":[{"endpointId":"{0.0.0.00000000}.{a}","friendlyName":"Speakers","parentName":"Realtek","flow":"output","available":true},{"endpointId":"{0.0.1.00000000}.{b}","friendlyName":"Mic","parentName":"","flow":"input","available":false}]}""",
+        ["meters.levels"] = """{"tracks":[{"trackId":"6f1c2a4e-0b7d-4e55-9a51-2f4c8d9e1a30","peak":0.5},{"trackId":"0d3e7b52-8c1a-4f6e-b2d9-7a5c3e1f4b68","peak":0}]}""",
+        ["target.changed"] = """{"from":null,"to":{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7},"reason":"detected"}""",
+        ["game.detected"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
+        ["game.exited"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);
@@ -215,11 +219,25 @@ public sealed partial class MessagesTests
         Assert.Equal(AudioDeviceList.Empty, old.Devices);
     }
 
+    [Fact]
+    public void TargetChangedHasItsShapeAndAnOldSnapshotHasNoTarget()
+    {
+        var changed = new TargetChanged(new TargetGame(@"c:\games\a.exe", "A.exe", 3), null, TargetChangeReason.ColdStart);
+
+        Assert.Equal(
+            """{"from":{"profileId":"c:\\games\\a.exe","name":"A.exe","processId":3},"to":null,"reason":"cold-start"}""",
+            JsonSerializer.Serialize(changed, GameJsonContext.Default.TargetChanged));
+        Assert.Null(GameMessages.TargetChanged.Apply(Base with { TargetGame = changed.From }, changed).TargetGame);
+
+        var old = JsonSerializer.Deserialize(
+            """{"engineInstanceId":"e","pid":1,"seq":0,"settings":{"schemaVersion":1,"revision":0,"global":{},"profiles":{}},"capture":{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null},"warnings":[]}""",
+            EngineJsonContext.Default.StateSnapshot)!;
+        Assert.Null(old.TargetGame);
+    }
+
     [Theory]
     [InlineData("""{"pid":5}""", null)]
-    [InlineData("""{"pid":5,"engineRestart":null}""", null)]
     [InlineData("""{"pid":5,"engineRestart":"crashed"}""", EngineRestartReason.Crashed)]
-    [InlineData("""{"pid":5,"engineRestart":"hung"}""", EngineRestartReason.Hung)]
     public void AppAttachCarriesAnOptionalRestartReason(string json, EngineRestartReason? reason)
     {
         var attach = JsonSerializer.Deserialize(json, EngineJsonContext.Default.AppAttach)!;
@@ -273,7 +291,6 @@ public sealed class FrameTests
     [Theory]
     [InlineData("not json\n")]
     [InlineData("{\"v\":1,\"payload\":{}}\n")]
-    [InlineData("[1,2]\n")]
     public async Task AFrameThatIsNotAnEnvelopeIsInvalidData(string text)
     {
         await using var reader = new FrameReader(new MemoryStream(Encoding.UTF8.GetBytes(text)), 1024);

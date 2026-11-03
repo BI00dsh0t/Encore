@@ -41,6 +41,39 @@ public sealed record AudioDeviceList(IReadOnlyList<AudioDevice> Devices)
 }
 
 /// <summary>
+/// <c>meters.watch</c>'s arguments (R6): the Track Layout to meter, saved or an unsaved draft.
+/// </summary>
+public sealed record MetersWatch(TrackLayout Layout);
+
+/// <summary>One Track's level: its linear sample peak since the last <c>meters.levels</c>, 0..1, after its limiter.</summary>
+public sealed record TrackLevel(Guid TrackId, float Peak);
+
+/// <summary>
+/// <c>meters.levels</c> (R6): one level per Track of the watched layout, in layout order; no Tracks
+/// when nothing is watched.
+/// </summary>
+public sealed record MeterLevels(IReadOnlyList<TrackLevel> Tracks)
+{
+    /// <summary>No Tracks: nothing watched, or an engine from before story 2.6.</summary>
+    public static MeterLevels Empty { get; } = new([]);
+
+    /// <summary>Equal when the levels are, in order.</summary>
+    public bool Equals(MeterLevels? other) =>
+        other is not null && (ReferenceEquals(this, other) || Tracks.SequenceEqual(other.Tracks));
+
+    public override int GetHashCode()
+    {
+        var hash = default(HashCode);
+        foreach (var track in Tracks)
+        {
+            hash.Add(track);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
+/// <summary>
 /// Audio messages (epic-multi-track-audio): Track Layouts, devices and meters. Coalescing events such as <c>meters.levels</c> go here.
 /// The area's payloads, its own JSON context and its entries in these lists are added here only (AD-22).
 /// </summary>
@@ -57,9 +90,29 @@ public static class AudioMessages
         "devices",
         (snapshot, devices) => snapshot with { Devices = devices });
 
-    public static IReadOnlyList<CommandType> Commands { get; } = [List];
+    /// <summary>
+    /// Meters a Track Layout (R6) until <c>meters.unwatch</c> or the next watch, which replaces it;
+    /// one watch at a time, engine-wide. Replies <c>invalid-arguments</c> for a Track naming a device
+    /// key the layout lacks, keeping the previous watch.
+    /// </summary>
+    public static CommandType<MetersWatch, Empty> Watch { get; } =
+        new("meters.watch", AudioJsonContext.Default.MetersWatch, AudioJsonContext.Default.Empty);
 
-    public static IReadOnlyList<EventType> Events { get; } = [Changed];
+    /// <summary>Stops the watch, if any; then <c>meters.levels</c> carries no Tracks.</summary>
+    public static CommandType<Empty, Empty> Unwatch { get; } =
+        new("meters.unwatch", AudioJsonContext.Default.Empty, AudioJsonContext.Default.Empty);
+
+    /// <summary>The watched Tracks' peaks, at most 20 times a second. Coalescing: a connection's queue keeps only the latest.</summary>
+    public static EventType<MeterLevels> Levels { get; } = new(
+        "meters.levels",
+        AudioJsonContext.Default.MeterLevels,
+        "meters",
+        (snapshot, levels) => snapshot with { Meters = levels },
+        coalesces: true);
+
+    public static IReadOnlyList<CommandType> Commands { get; } = [List, Watch, Unwatch];
+
+    public static IReadOnlyList<EventType> Events { get; } = [Changed, Levels];
 }
 
 [JsonSourceGenerationOptions(
@@ -69,4 +122,6 @@ public static class AudioMessages
     RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(AudioDeviceList))]
 [JsonSerializable(typeof(Empty))]
+[JsonSerializable(typeof(MetersWatch))]
+[JsonSerializable(typeof(MeterLevels))]
 public sealed partial class AudioJsonContext : JsonSerializerContext;

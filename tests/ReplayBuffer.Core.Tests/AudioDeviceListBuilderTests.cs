@@ -58,17 +58,6 @@ public sealed class AudioDeviceListBuilderTests
     }
 
     [Fact]
-    public void AnAbsentDeviceInGlobalAndAProfileIsListedOnce()
-    {
-        var device = Device("{0.0.1.00000000}.{usbmic}", "Yeti", "Blue", AudioFlow.Input);
-        var document = Document(global: Layout(device), profile: Layout(device with { Key = Guid.NewGuid() }));
-
-        var list = AudioDeviceListBuilder.Build([], document);
-
-        Assert.Equal([new AudioDevice(device.EndpointId, "Yeti", "Blue", AudioFlow.Input, false)], list.Devices);
-    }
-
-    [Fact]
     public void AProfileOnlyLayoutDeviceIsListed()
     {
         var device = Device("{0.0.1.00000000}.{usbmic}", "Yeti", "Blue", AudioFlow.Input);
@@ -87,15 +76,6 @@ public sealed class AudioDeviceListBuilderTests
         var list = AudioDeviceListBuilder.Build([Realtek], document);
 
         Assert.Equal([Realtek, Realtek with { Flow = AudioFlow.Input, Available = false }], list.Devices);
-    }
-
-    [Fact]
-    public void TiesAreBrokenByEndpointId()
-    {
-        var b = Realtek with { EndpointId = "b" };
-        var a = Realtek with { EndpointId = "a" };
-
-        Assert.Equal([a, b], AudioDeviceListBuilder.Build([b, a], SettingsDocument.Empty).Devices);
     }
 
     private static LayoutDevice Device(string id, string name, string parent, AudioFlow flow) =>

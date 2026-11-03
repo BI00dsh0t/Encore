@@ -10,6 +10,13 @@ internal partial class MainWindow
     public MainWindow()
     {
         InitializeComponent();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (DataContext is MainViewModel model)
+            {
+                model.IsWindowShown = IsVisible;
+            }
+        };
     }
 
     /// <summary>Shows the window and brings it to the front.</summary>

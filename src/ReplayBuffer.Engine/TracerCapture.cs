@@ -26,7 +26,9 @@ public sealed class EngineFailure(string code, string message, IReadOnlyList<str
 /// <summary>
 /// The <c>debug-capture</c> driver: resolves the window and devices from the command line, then
 /// drives one session only through orchestrator messages: Start, wait (<c>--seconds</c> from the
-/// anchor, Ctrl+C, or the session ending itself), End.
+/// anchor, Ctrl+C, or the session ending itself), End. The session starts with the instance's saved
+/// mic mute (<c>runtime.json</c>, muted when there is none); with no Hotkeys it never changes, so a
+/// muted run silences each Mic Device in the Track Layout's <c>muteAffected</c> Tracks.
 /// </summary>
 public sealed class TracerCapture(DebugCaptureCommand command, Instance instance, ILoggerFactory loggers)
 {
@@ -105,9 +107,14 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
 
         // One hub for the run, disposed after the orchestrator has ended the session.
         using var hub = new AudioDeviceHub(loggers);
-        using var orchestrator = new SessionOrchestrator(new CaptureSessionFactory(options, loggers, hub), () => document, _ => { });
+        using var orchestrator = new SessionOrchestrator(
+            new CaptureSessionFactory(options, loggers, hub),
+            () => document,
+            _ => { },
+            micMute: new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Audio")));
         var target = new CaptureTarget((int)window.ProcessId, window.Handle, ProfileId: null);
         var session = orchestrator.StartAsync(SessionKind.Game, target, audio).GetAwaiter().GetResult();
+        LogMicMute(session.Spec);
         var outcome = Wait(orchestrator, session, anchored.Task, stats, cancellation);
         if (outcome.Failure is { } failure)
         {
@@ -161,6 +168,26 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         }
 
         return audio;
+    }
+
+    /// <summary>Says which Mic Device inputs the session's starting mic mute silences, if any.</summary>
+    private void LogMicMute(SessionSpec spec)
+    {
+        var silenced = spec.Audio.GatedMicInputs()
+            .Select(p => $"'{p.Device.FriendlyName}' in '{p.Track.Name}'")
+            .ToList();
+        if (!spec.MicMuted)
+        {
+            _log.LogInformation("Mic unmuted (runtime.json): every Mic Device is recorded");
+        }
+        else if (silenced.Count == 0)
+        {
+            _log.LogInformation("Mic muted, but no Mic Device is in a muteAffected Track: nothing is silenced");
+        }
+        else
+        {
+            _log.LogInformation("Mic muted (runtime.json missing or muted): silenced {Inputs}", string.Join(", ", silenced));
+        }
     }
 
     /// <summary>

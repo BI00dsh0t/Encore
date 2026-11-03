@@ -83,9 +83,11 @@ public sealed record DebugCaptureSize(int Width, int Height);
 
 /// <summary>
 /// <c>serve</c>: the engine proper, serving its pipe until <c>engine.shutdown</c> or Ctrl+C.
-/// <see cref="Instance"/> overrides the process's own instance, for tests only.
+/// <see cref="Instance"/> overrides the process's own instance, for tests only. <see cref="DebugCapture"/>
+/// (<c>--debug-capture</c>) runs a capture session on the Target Game's window, following it, until
+/// the Replay Buffer does (epic 4); it also turns Game Detection on for a test instance.
 /// </summary>
-public sealed record ServeCommand(string? Instance) : EngineCommand
+public sealed record ServeCommand(string? Instance, bool DebugCapture = false) : EngineCommand
 {
     /// <summary>The only instance names <c>--instance</c> accepts, so tests never touch a real instance.</summary>
     public const string TestInstancePrefix = Contracts.Instance.TestPrefix;
@@ -100,7 +102,7 @@ public static class CommandLine
     public const string Usage =
         """
         Usage:
-          ReplayBuffer.Engine serve [--instance ReplayBuffer-Test-<suffix>]
+          ReplayBuffer.Engine serve [--instance ReplayBuffer-Test-<suffix>] [--debug-capture]
           ReplayBuffer.Engine debug-list
           ReplayBuffer.Engine debug-capture (--window <title> | --hwnd <handle>) [--seconds 30]
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
@@ -374,23 +376,29 @@ public static class CommandLine
 
     private static ParseResult ParseServe(IReadOnlyList<string> args)
     {
-        if (args.Count == 1)
+        string? name = null;
+        var debugCapture = false;
+        for (var i = 1; i < args.Count; i++)
         {
-            return new ParseResult(new ServeCommand(null), null);
+            switch (args[i])
+            {
+                case "--debug-capture" when !debugCapture:
+                    debugCapture = true;
+                    break;
+                case "--instance" when name is null && i + 1 < args.Count:
+                    name = args[++i];
+                    if (!Contracts.Instance.IsTestName(name))
+                    {
+                        return Fail($"--instance must be {ServeCommand.TestInstancePrefix}<letters, digits or dashes>.");
+                    }
+
+                    break;
+                default:
+                    return Fail("serve takes only --instance <name> and --debug-capture.");
+            }
         }
 
-        if (args.Count != 3 || args[1] != "--instance")
-        {
-            return Fail("serve takes only --instance <name>.");
-        }
-
-        var name = args[2];
-        if (!Contracts.Instance.IsTestName(name))
-        {
-            return Fail($"--instance must be {ServeCommand.TestInstancePrefix}<letters, digits or dashes>.");
-        }
-
-        return new ParseResult(new ServeCommand(name), null);
+        return new ParseResult(new ServeCommand(name, debugCapture), null);
     }
 
     private static ParseResult Fail(string error) => new(null, error);

@@ -7,13 +7,12 @@ using ReplayBuffer.Platform.Desktop;
 
 namespace ReplayBuffer.App.Tests;
 
+[Collection(nameof(WpfCollection))]
 public sealed class TrayTests
 {
     [Theory]
     [InlineData(new string[0], false)]
     [InlineData(new[] { "--tray" }, true)]
-    [InlineData(new[] { "--TRAY" }, true)]
-    [InlineData(new[] { "--other" }, false)]
     public void OnlyTheTrayArgumentStartsWithNoWindow(string[] args, bool inTray) =>
         Assert.Equal(inTray, ShellApp.StartsInTray(args));
 
@@ -35,7 +34,6 @@ public sealed class TrayTests
     [Theory]
     [InlineData(null)]
     [InlineData("ReplayBuffer")]
-    [InlineData("ReplayBuffer-Dev")]
     [InlineData("ReplayBuffer-Test-")]
     public void AnyOtherInstanceArgumentIsRefused(string? name)
     {

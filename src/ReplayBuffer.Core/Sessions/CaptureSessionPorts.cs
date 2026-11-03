@@ -21,10 +21,31 @@ public interface ICaptureSession
     void Retarget(CaptureTarget target);
 
     /// <summary>
+    /// Sets mic mute from <paramref name="qpc"/> on: each Mic Device in each <c>muteAffected</c>
+    /// Track is silenced (or heard again) from the first audio frame at or after it, before the mix.
+    /// Frames already mixed are never changed. Called on the orchestrator thread; never blocks on
+    /// the audio threads.
+    /// </summary>
+    void SetMicMuted(bool muted, long qpc);
+
+    /// <summary>
     /// Stops capture, finishes the output and frees everything. <paramref name="reason"/> is why,
     /// unless the session had already stopped itself (closed or failed), whose reason wins.
     /// </summary>
     SessionOutcome End(string reason);
+}
+
+/// <summary>
+/// Where the orchestrator keeps mic mute between runs (AD-5: runtime state, never a setting).
+/// Neither call throws.
+/// </summary>
+public interface IMicMuteStore
+{
+    /// <summary>The saved mic mute; true (muted) when nothing is saved or the saved state can't be read.</summary>
+    bool Load();
+
+    /// <summary>Saves <paramref name="muted"/>; a failure is logged at Warning and the call returns.</summary>
+    void Save(bool muted);
 }
 
 /// <summary>

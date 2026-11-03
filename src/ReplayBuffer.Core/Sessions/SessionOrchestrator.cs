@@ -23,7 +23,8 @@ public sealed record EndSession(string Reason, TaskCompletionSource<SessionOutco
 
 /// <summary>
 /// A registered Hotkey was pressed (AD-11); <paramref name="Qpc"/> was read when <c>WM_HOTKEY</c>
-/// arrived (AD-6). The orchestrator hands it to its press callback; no action is bound to it yet.
+/// arrived (AD-6). <see cref="HotkeyAction.MicMute"/> toggles mic mute from that QPC; every press,
+/// whatever its action, is then handed to the press callback.
 /// </summary>
 public sealed record HotkeyPressed(HotkeyAction Action, long Qpc) : SessionMessage;
 
@@ -36,7 +37,11 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// <summary>
 /// The single-threaded SessionOrchestrator (AD-19): the only component that starts, retargets and
 /// ends sessions and publishes <see cref="CaptureState"/>. It runs on one dedicated thread reading a
-/// single-reader channel; callers and media threads only post to it.
+/// single-reader channel; callers and media threads only post to it. It owns mic mute (AD-19): loaded
+/// from its <see cref="IMicMuteStore"/> before any session can start (muted when nothing is saved),
+/// toggled by each <see cref="HotkeyAction.MicMute"/> press, saved, published as
+/// <see cref="CaptureState.MicMuted"/>, put in each session's spec at Start and handed to the running
+/// session with the press QPC.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -47,10 +52,16 @@ public sealed class SessionOrchestrator : IDisposable
     private readonly Func<SettingsDocument> _currentDocument;
     private readonly Action<CaptureState> _publish;
     private readonly Action<HotkeyPress>? _hotkeyPressed;
+    private readonly IMicMuteStore? _micMute;
+    private readonly Action<TargetChanged>? _targetChanged;
+    private readonly TargetCapture? _targetCapture;
     private readonly Thread _thread;
 
     // Orchestrator thread only.
     private Active? _active;
+    private TargetCandidate? _target;
+    private bool _recordingRunning;
+    private ProposeTarget? _pendingTarget;
     private CaptureState _state = CaptureState.Initial;
     private long _nextSessionId;
 
@@ -58,13 +69,25 @@ public sealed class SessionOrchestrator : IDisposable
 
     /// <param name="factory">Starts the capture sessions.</param>
     /// <param name="currentDocument">The current settings document, read once per Start for the snapshot (AD-5).</param>
-    /// <param name="publish">Receives each changed <see cref="CaptureState"/>, on the orchestrator thread, once per change.</param>
+    /// <param name="publish">
+    /// Receives each changed <see cref="CaptureState"/>, on the orchestrator thread, once per change; a
+    /// loaded mute that differs from <see cref="CaptureState.Initial"/> is published from here, before
+    /// the thread starts, so it is in place before anyone can connect.
+    /// </param>
     /// <param name="hotkeyPressed">Receives each <see cref="HotkeyPressed"/>, on the orchestrator thread, in arrival order.</param>
+    /// <param name="micMute">
+    /// Where mic mute is kept between runs, read once here; null keeps it in memory only, starting muted.
+    /// </param>
+    /// <param name="targetChanged">Receives each committed change of the Target Game, on the orchestrator thread.</param>
+    /// <param name="targetCapture">When given, each new Target Game ends the game session and starts one on its window.</param>
     public SessionOrchestrator(
         ICaptureSessionFactory factory,
         Func<SettingsDocument> currentDocument,
         Action<CaptureState> publish,
-        Action<HotkeyPress>? hotkeyPressed = null)
+        Action<HotkeyPress>? hotkeyPressed = null,
+        IMicMuteStore? micMute = null,
+        Action<TargetChanged>? targetChanged = null,
+        TargetCapture? targetCapture = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(currentDocument);
@@ -73,6 +96,18 @@ public sealed class SessionOrchestrator : IDisposable
         _currentDocument = currentDocument;
         _publish = publish;
         _hotkeyPressed = hotkeyPressed;
+        _micMute = micMute;
+        _targetChanged = targetChanged;
+        _targetCapture = targetCapture;
+
+        // Before the thread runs, so no session can start with any other mute.
+        _state = CaptureState.Initial with { MicMuted = LoadMicMuted(micMute) };
+        if (_state != CaptureState.Initial)
+        {
+            // The first publish, before the thread exists: nothing else can publish yet.
+            _publish(_state);
+        }
+
         _thread = new Thread(Run) { Name = "SessionOrchestrator", IsBackground = true };
         _thread.Start();
     }
@@ -176,7 +211,25 @@ public sealed class SessionOrchestrator : IDisposable
                 break;
 
             case HotkeyPressed pressed:
+                if (pressed.Action == HotkeyAction.MicMute)
+                {
+                    ToggleMicMute(pressed.Qpc);
+                }
+
                 _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
+                break;
+
+            case ProposeTarget propose:
+                CommitTarget(propose);
+                break;
+
+            case RecordingRunning recording:
+                _recordingRunning = recording.Running;
+                if (!_recordingRunning && _pendingTarget is { } pending)
+                {
+                    CommitTarget(pending);
+                }
+
                 break;
 
             case SessionClosed closed when _active?.Id == closed.SessionId:
@@ -214,7 +267,7 @@ public sealed class SessionOrchestrator : IDisposable
 
         // AD-5: resolved once, here; a retarget or a later settings change never touches it.
         var snapshot = SettingsResolver.Resolve(_currentDocument(), start.Target.ProfileId);
-        var spec = new SessionSpec(start.Kind, start.Target, snapshot, start.Audio);
+        var spec = new SessionSpec(start.Kind, start.Target, snapshot, start.Audio, _state.MicMuted);
         var id = ++_nextSessionId;
         var session = _factory.Start(spec, new Events(this, id));
         var active = new Active(id, session, spec);
@@ -294,6 +347,157 @@ public sealed class SessionOrchestrator : IDisposable
         SetState(_state with { Replay = ReplayState.Off });
         active.Ended.TrySetResult(outcome);
         return outcome;
+    }
+
+    /// <summary>The saved mic mute; muted when there is no store or it fails.</summary>
+    private static bool LoadMicMuted(IMicMuteStore? store)
+    {
+        if (store is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            return store.Load();
+        }
+        catch (Exception)
+        {
+            // The store reports its own failures; a faulty one can't leave the mic open.
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Flips mic mute: the running session first, so as few frames as possible pass unchanged after
+    /// <paramref name="qpc"/>, then the store, then the published state. A failure of the session or
+    /// the store is swallowed: the new state stands either way.
+    /// </summary>
+    private void ToggleMicMute(long qpc)
+    {
+        var muted = !_state.MicMuted;
+        if (_active is { } active)
+        {
+            try
+            {
+                active.Session.SetMicMuted(muted, qpc);
+            }
+            catch (Exception)
+            {
+                // The session's own failure path ends it if it is broken; mute is still committed.
+            }
+        }
+
+        try
+        {
+            _micMute?.Save(muted);
+        }
+        catch (Exception)
+        {
+            // The store logs its own failures; a faulty one must not stop the orchestrator.
+        }
+
+        SetState(_state with { MicMuted = muted });
+    }
+
+    /// <summary>
+    /// Commits a proposed Target Game (AD-19). Another process, or none, becomes the Target and is
+    /// published; a new window of the Target's own process only moves the debug capture to it. While
+    /// a Recording runs, a switch from the Target to another game is held as pending, each later one
+    /// replacing it; a proposal of the Target itself drops it. An exit handover is never held: the
+    /// Target is gone.
+    /// </summary>
+    private void CommitTarget(ProposeTarget propose)
+    {
+        var current = _target;
+        var to = propose.To;
+        if (to is not null && current is not null && to.ProcessId == current.ProcessId)
+        {
+            _pendingTarget = null;
+            if (to.Window != current.Window)
+            {
+                _target = current with { Window = to.Window };
+                FollowTargetWindow(_target);
+            }
+
+            return;
+        }
+
+        if (_recordingRunning && current is not null && to is not null && propose.Reason != TargetChangeReason.Exit)
+        {
+            _pendingTarget = propose;
+            return;
+        }
+
+        _pendingTarget = null;
+        if (to is null && current is null)
+        {
+            return;
+        }
+
+        _target = to;
+        _targetChanged?.Invoke(new TargetChanged(current?.ToTargetGame(), to?.ToTargetGame(), propose.Reason));
+        if (_targetCapture is null)
+        {
+            return;
+        }
+
+        if (_active is { Spec.Kind: SessionKind.Game })
+        {
+            EndActive("target changed", failure: null);
+        }
+
+        if (to is not null)
+        {
+            StartOnTarget(to);
+        }
+    }
+
+    /// <summary>Moves the debug capture to the Target's new window, or starts it there when none is running.</summary>
+    private void FollowTargetWindow(TargetCandidate target)
+    {
+        if (_targetCapture is null)
+        {
+            return;
+        }
+
+        if (_active is null)
+        {
+            StartOnTarget(target);
+            return;
+        }
+
+        if (_active.Spec.Kind != SessionKind.Game || _active.Spec.Target.ProcessId != target.ProcessId)
+        {
+            return;
+        }
+
+        try
+        {
+            Retarget(new CaptureTarget(target.ProcessId, target.Window, target.ProfileId));
+        }
+        catch (Exception e)
+        {
+            // A failed retarget has already ended the session where it couldn't go on.
+            _targetCapture.Failed(target, e);
+        }
+    }
+
+    private void StartOnTarget(TargetCandidate target)
+    {
+        try
+        {
+            Start(new StartSession(
+                SessionKind.Game,
+                new CaptureTarget(target.ProcessId, target.Window, target.ProfileId),
+                _targetCapture!.Audio(),
+                NewReply<RunningSession>()));
+        }
+        catch (Exception e)
+        {
+            // The Target stays committed; only its capture failed.
+            _targetCapture!.Failed(target, e);
+        }
     }
 
     private void SetState(CaptureState next)

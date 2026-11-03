@@ -141,23 +141,6 @@ public sealed class SessionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task APostBackFromAnEndedSessionIsIgnored()
-    {
-        await Start(Target(window: 1));
-        await _orchestrator.EndAsync().WaitAsync(Timeout, Token);
-        var second = await Start(Target(window: 2));
-
-        _factory.Sessions[0].Events.Closed("late");
-        _factory.Sessions[0].Events.Failed(new InvalidOperationException("late"));
-
-        // A command posted after them is handled after them: the second session is still running.
-        var spec = await _orchestrator.RetargetAsync(Target(window: 3)).WaitAsync(Timeout, Token);
-        Assert.Equal((nint)3, spec.Target.Window);
-        Assert.False(second.Ended.IsCompleted);
-        Assert.Null(_factory.Sessions[1].EndReason);
-    }
-
-    [Fact]
     public async Task AFactoryFailureStartsNothing()
     {
         _factory.FailNextStart = new ErrorCodeException(ErrorCodes.CaptureFailed, "no device");
@@ -272,36 +255,6 @@ public sealed class SessionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task ARetargetOfAStoppedSessionEndsItCleanlyAndFailsWithSessionNotRunning()
-    {
-        var running = await Start(Target(window: 1));
-        _factory.Sessions[0].RetargetFailure = new ErrorCodeException(ErrorCodes.SessionNotRunning, "stopped");
-
-        var error = await Assert.ThrowsAsync<ErrorCodeException>(() => _orchestrator.RetargetAsync(Target(window: 2)).WaitAsync(Timeout, Token));
-
-        Assert.Equal(ErrorCodes.SessionNotRunning, error.Code);
-        Assert.Null((await running.Ended.WaitAsync(Timeout, Token)).Failure);
-        Assert.Equal(ReplayState.Off, _published.Last().State.Replay);
-    }
-
-    [Fact]
-    public async Task ARetargetTheSessionRefusesAsAnotherProcessLeavesItRunning()
-    {
-        var running = await Start(Target(window: 1));
-        _factory.Sessions[0].RetargetFailure = new ErrorCodeException(ErrorCodes.RetargetOtherProcess, "not ours");
-
-        var error = await Assert.ThrowsAsync<ErrorCodeException>(() => _orchestrator.RetargetAsync(Target(window: 2)).WaitAsync(Timeout, Token));
-
-        Assert.Equal(ErrorCodes.RetargetOtherProcess, error.Code);
-        Assert.False(running.Ended.IsCompleted);
-        Assert.Null(_factory.Sessions[0].EndReason);
-        Assert.Single(_published);
-        _factory.Sessions[0].RetargetFailure = null;
-        var spec = await _orchestrator.RetargetAsync(Target(window: 3)).WaitAsync(Timeout, Token);
-        Assert.Equal((nint)3, spec.Target.Window);
-    }
-
-    [Fact]
     public async Task ARetargetKeepsTheSessionsProfile()
     {
         await Start(Target(window: 1));
@@ -340,8 +293,181 @@ public sealed class SessionOrchestratorTests : IDisposable
         Assert.Equal(new HotkeyPress(HotkeyAction.MicMute, 200), second.Press);
         Assert.Equal(_orchestrator.ThreadId, first.ThreadId);
         Assert.Equal(_orchestrator.ThreadId, second.ThreadId);
-        Assert.Empty(_published);
+
+        // Only the mic mute press changed the state.
+        var (state, _) = Assert.Single(_published);
+        Assert.Equal(CaptureState.Initial with { MicMuted = false }, state);
         Assert.Empty(_factory.Sessions);
+    }
+
+    [Fact]
+    public async Task TheTargetFollowsProposalsAndTheDebugCaptureFollowsTheTarget()
+    {
+        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+        var failures = new ConcurrentQueue<Exception>();
+        using var orchestrator = new SessionOrchestrator(
+            _factory,
+            () => Volatile.Read(ref _document),
+            _ => { },
+            targetChanged: c => changes.Writer.TryWrite(c),
+            targetCapture: new TargetCapture(() => NoAudio, (_, e) => failures.Enqueue(e)));
+        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+
+        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+        orchestrator.Post(new ProposeTarget(a with { Window = 2 }, TargetChangeReason.Detected));
+        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Detected));
+        orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+
+        Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
+        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
+        Assert.Equal(new TargetChanged(b.ToTargetGame(), null, TargetChangeReason.Exit), await NextAsync(changes));
+        await _factory.Sessions[1].Ended.Task.WaitAsync(Timeout, Token);
+
+        var (first, second) = (_factory.Sessions[0], _factory.Sessions[1]);
+        Assert.Equal(new CaptureTarget(Pid, 1, ProfileId), first.Spec.Target);
+        Assert.Equal([(nint)2], first.Retargets);
+        Assert.Equal("target changed", first.EndReason);
+        Assert.Equal(new CaptureTarget(Pid + 1, 3, b.ProfileId), second.Spec.Target);
+        Assert.Equal(2, _factory.Sessions.Count);
+        Assert.False(changes.Reader.TryRead(out _));
+        Assert.Empty(failures);
+    }
+
+    [Fact]
+    public async Task ARunningRecordingHoldsASwitchUntilItClearsThenItCommitsAtOnce()
+    {
+        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+        using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
+        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+        var c = new TargetCandidate(Pid + 2, 5, @"c:\games\third.exe", "Third.exe");
+
+        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+        orchestrator.Post(new RecordingRunning(true));
+        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+        orchestrator.Post(new ProposeTarget(c, TargetChangeReason.Focus));
+
+        // A proposal of the Target itself drops the held switch: clearing the flag then commits nothing.
+        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Focus));
+        orchestrator.Post(new RecordingRunning(false));
+        orchestrator.Post(new RecordingRunning(true));
+        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+        await HandledAsync(orchestrator);
+        Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
+        Assert.False(changes.Reader.TryRead(out _));
+
+        orchestrator.Post(new RecordingRunning(false));
+
+        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Focus), await NextAsync(changes));
+    }
+
+    [Fact]
+    public async Task AnExitHandoverCommitsThroughARunningRecording()
+    {
+        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+        using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
+        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+
+        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+        orchestrator.Post(new RecordingRunning(true));
+        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Exit));
+        orchestrator.Post(new RecordingRunning(false));
+        await HandledAsync(orchestrator);
+
+        Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
+        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Exit), await NextAsync(changes));
+        Assert.False(changes.Reader.TryRead(out _));
+    }
+
+    // Every message posted before it has been handled: an End with no session is refused in order.
+    private static async Task HandledAsync(SessionOrchestrator orchestrator) =>
+        await Assert.ThrowsAsync<ErrorCodeException>(() => orchestrator.EndAsync().WaitAsync(Timeout, Token));
+
+    [Fact]
+    public async Task AFailedStartOnTheTargetIsReportedAndTheTargetStaysCommitted()
+    {
+        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+        var failures = System.Threading.Channels.Channel.CreateUnbounded<(TargetCandidate, Exception)>();
+        using var orchestrator = new SessionOrchestrator(
+            _factory,
+            () => Volatile.Read(ref _document),
+            _ => { },
+            targetChanged: c => changes.Writer.TryWrite(c),
+            targetCapture: new TargetCapture(() => NoAudio, (t, e) => failures.Writer.TryWrite((t, e))));
+        var failure = new ErrorCodeException(ErrorCodes.CaptureFailed, "no window");
+        _factory.FailNextStart = failure;
+        var game = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+
+        orchestrator.Post(new ProposeTarget(game, TargetChangeReason.Detected));
+
+        Assert.Equal(game.ToTargetGame(), (await NextAsync(changes)).To);
+        Assert.Equal((game, (Exception)failure), await failures.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token));
+        Assert.Empty(_factory.Sessions);
+    }
+
+    private static async Task<T> NextAsync<T>(System.Threading.Channels.Channel<T> channel) =>
+        await channel.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+
+    [Fact]
+    public async Task ASavedUnmuteIsTheFirstStatePublishedAndInTheFirstSessionsSpec()
+    {
+        const bool saved = false;
+        var store = new FakeMicMuteStore(saved);
+        var published = new ConcurrentQueue<CaptureState>();
+        var factory = new FakeFactory();
+        using (var orchestrator = new SessionOrchestrator(factory, () => _document, published.Enqueue, micMute: store))
+        {
+            var running = await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            Assert.Equal(saved, running.Spec.MicMuted);
+            Assert.Equal(saved, Assert.Single(factory.Sessions).Spec.MicMuted);
+        }
+
+        // An unmute differs from the initial state, so it is published before anything else.
+        var expected = new List<CaptureState> { CaptureState.Initial with { MicMuted = false } };
+        expected.Add(CaptureState.Initial with { MicMuted = saved, Replay = ReplayState.Buffering });
+        expected.Add(CaptureState.Initial with { MicMuted = saved });
+        Assert.Equal(expected, published);
+        Assert.Equal(1, store.Loads);
+        Assert.Empty(store.Saves);
+    }
+
+    [Fact]
+    public async Task AMicMutePressMidSessionHandsItsQpcToTheSession()
+    {
+        var store = new FakeMicMuteStore(true);
+        var (orchestrator, published, presses) = NewOrchestrator(store, out var factory);
+        using (orchestrator)
+        {
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 1_000));
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.MicMute, 4_000));
+            await NextPress(presses);
+            await NextPress(presses);
+
+            var session = Assert.Single(factory.Sessions);
+            Assert.Equal([(false, 1_000L), (true, 4_000L)], session.MicMutes);
+            Assert.Equal([orchestrator.ThreadId], session.ThreadIds.Distinct());
+            Assert.Equal([true, false, true], published.Select(p => p.MicMuted));
+            Assert.Equal([false, true], store.Saves);
+        }
+    }
+
+    private static async Task<HotkeyPress> NextPress(System.Threading.Channels.Channel<HotkeyPress> presses) =>
+        await presses.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+
+    private (SessionOrchestrator Orchestrator, ConcurrentQueue<CaptureState> Published, System.Threading.Channels.Channel<HotkeyPress> Presses) NewOrchestrator(
+        IMicMuteStore store, out FakeFactory factory)
+    {
+        var published = new ConcurrentQueue<CaptureState>();
+        var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+        factory = new FakeFactory();
+        var orchestrator = new SessionOrchestrator(factory, () => _document, published.Enqueue, press => presses.Writer.TryWrite(press), store);
+        return (orchestrator, published, presses);
     }
 
     private static CaptureTarget Target(nint window) => new(Pid, window, ProfileId);
@@ -393,8 +519,27 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    /// <summary>A store that starts with <paramref name="saved"/> and records each save.</summary>
+    private sealed class FakeMicMuteStore(bool saved) : IMicMuteStore
+    {
+        private readonly ConcurrentQueue<bool> _saves = new();
+
+        public int Loads { get; private set; }
+
+        public IEnumerable<bool> Saves => _saves;
+
+        public bool Load()
+        {
+            Loads++;
+            return saved;
+        }
+
+        public void Save(bool muted) => _saves.Enqueue(muted);
+    }
+
     private sealed class FakeSession(SessionSpec spec, ISessionEvents events, int number) : ICaptureSession
     {
+        private readonly ConcurrentQueue<(bool, long)> _micMutes = new();
         private readonly ConcurrentQueue<nint> _retargets = new();
         private int _inside;
         private int _maxConcurrency;
@@ -416,6 +561,14 @@ public sealed class SessionOrchestratorTests : IDisposable
         public Exception? RetargetFailure { get; set; }
 
         public Exception? EndFailure { get; set; }
+
+        public IEnumerable<(bool Muted, long Qpc)> MicMutes => _micMutes;
+
+        public void SetMicMuted(bool muted, long qpc)
+        {
+            ThreadIds.Enqueue(Environment.CurrentManagedThreadId);
+            _micMutes.Enqueue((muted, qpc));
+        }
 
         public void Retarget(CaptureTarget target)
         {

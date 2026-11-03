@@ -51,8 +51,8 @@ try
 {
     switch (parsed.Command)
     {
-        case ServeCommand:
-            return await Serve(instance, loggers, log);
+        case ServeCommand serve:
+            return await Serve(instance, serve.DebugCapture, loggers, log);
 
         case DebugListCommand:
             DebugList();
@@ -107,7 +107,7 @@ catch (Exception e)
     return 1;
 }
 
-static async Task<int> Serve(Instance instance, ILoggerFactory loggers, ILogger log)
+static async Task<int> Serve(Instance instance, bool debugCapture, ILoggerFactory loggers, ILogger log)
 {
     using var cancel = new CancellationTokenSource();
     Console.CancelKeyPress += (_, e) =>
@@ -116,7 +116,7 @@ static async Task<int> Serve(Instance instance, ILoggerFactory loggers, ILogger 
         cancel.Cancel();
     };
 
-    await using var host = EngineHost.Start(instance, loggers);
+    await using var host = EngineHost.Start(instance, loggers, hostOptions: new EngineHostOptions { DebugCapture = debugCapture });
 
     // Tests wait for this line before connecting.
     Console.WriteLine("listening " + host.PipeName);

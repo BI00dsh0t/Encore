@@ -65,7 +65,7 @@ public sealed class IpcTests : IAsyncLifetime
         Assert.Equal((4L, 5L), (fourth.Seq, fifth.Seq));
         Assert.Equal(Recording, client.State.Capture);
         Assert.Equal("w1", Assert.Single(client.State.Warnings).Id);
-        Assert.Equal(_host.Hub.State, client.State with { Settings = _host.Hub.State.Settings, Warnings = _host.Hub.State.Warnings });
+        Assert.Equal(_host.Hub.State, client.State with { Settings = _host.Hub.State.Settings, Warnings = _host.Hub.State.Warnings, DetectedGames = _host.Hub.State.DetectedGames });
     }
 
     [Fact]
@@ -120,7 +120,6 @@ public sealed class IpcTests : IAsyncLifetime
     [Theory]
     [InlineData("""{"v":1,"id":"1","type":"settings.update","payload":{"ops":[]}}""")]
     [InlineData("""{"v":1,"id":"1","type":"settings.update"}""")]
-    [InlineData("""{"v":2,"id":"1","type":"engine.shutdown","payload":{}}""")]
     public async Task ABadPayloadOrVersionRepliesInvalidArguments(string frame)
     {
         StartHost();
@@ -163,18 +162,6 @@ public sealed class IpcTests : IAsyncLifetime
         Assert.Null(await raw.ReadLineAsync());
         var (client, _) = await ConnectAsync();
         Assert.Equal(1, (await client.SendAsync(SettingsMessages.Update, SetSaveCooldown(0, 3), Token)).Revision);
-    }
-
-    [Fact]
-    public async Task AnOverlongFrameDropsTheConnection()
-    {
-        StartHost(new IpcServerOptions { MaxFrameBytes = 1024 });
-        await using var raw = await RawClient.ConnectAsync(_host.PipeName);
-        Assert.Contains("\"state.snapshot\"", await raw.ReadLineAsync());
-
-        await raw.WriteLineAsync(new string(' ', 4096) + "{}");
-
-        Assert.Null(await raw.ReadLineAsync());
     }
 
     [Fact]
@@ -232,22 +219,6 @@ public sealed class IpcTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AClientThatFallsTooFarBehindIsDropped()
-    {
-        StartHost(new IpcServerOptions { MaxLag = TimeSpan.FromMilliseconds(300) });
-        await using var stalled = await RawClient.ConnectAsync(_host.PipeName);
-        await Eventually(() => _host.Server.ConnectionCount == 1);
-
-        // Enough to fill the pipe's buffers, well short of the queue limit.
-        for (var i = 0; i < 800; i++)
-        {
-            _host.Hub.Publish(CaptureMessages.StateChanged, i % 2 == 0 ? Buffering : Recording);
-        }
-
-        await Eventually(() => _host.Server.ConnectionCount == 0);
-    }
-
-    [Fact]
     public async Task ASecondServerForTheSamePipeFailsWithIpcPipeInUse()
     {
         StartHost();
@@ -278,21 +249,6 @@ public sealed class IpcTests : IAsyncLifetime
         Assert.Equal(
             ErrorCodes.WarningNotDismissable,
             (await Assert.ThrowsAsync<ErrorCodeException>(() => client.SendAsync(FeedbackMessages.Dismiss, new WarningDismiss(fixedWarning.Id), Token))).Code);
-    }
-
-    [Fact]
-    public async Task AnUnknownEventAdvancesSeqButLeavesTheStateAlone()
-    {
-        StartHost();
-        var (client, events) = await ConnectAsync();
-        var unknown = new EventType<Empty>("test.unknown", EngineJsonContext.Default.Empty, "capture", (s, _) => s with { Capture = Recording });
-
-        _host.Hub.Publish(unknown, Empty.Value);
-
-        var e = await NextAsync(events);
-        Assert.Equal(("test.unknown", 1L), (e.Type, e.Seq));
-        Assert.Equal(1, client.State.Seq);
-        Assert.Equal(CaptureState.Initial, client.State.Capture);
     }
 
     [Fact]

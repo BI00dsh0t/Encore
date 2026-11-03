@@ -1,4 +1,5 @@
 using System.Windows;
+using ReplayBuffer.App.Engine;
 using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Settings;
@@ -20,7 +21,7 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
     public string? Message
     {
         get => _message;
-        private set => Set(ref _message, value);
+        protected set => Set(ref _message, value);
     }
 
     public FrameworkElement View => _view ??= CreateView();
@@ -83,8 +84,9 @@ internal static class SettingsPages
     /// Every page. An epic adds its page here, one line each: epic 2 the Track Layout editor,
     /// epic 3 Game Profiles.
     /// </summary>
-    public static IReadOnlyList<SettingsPage> Create(SettingsSender sender) =>
+    public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine) =>
     [
         new GeneralSettingsPage(sender),
+        new TrackLayoutPage(sender, engine),
     ];
 }

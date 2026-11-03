@@ -83,3 +83,18 @@ public interface IAudioEndpointSource
     /// </summary>
     event Action? EndpointsChanged;
 }
+
+/// <summary>An open audio device the hub dropped or resumed: its endpoint, flow and names.</summary>
+public sealed record AudioDeviceDropout(string EndpointId, AudioFlow Flow, string FriendlyName, string ParentName);
+
+/// <summary>
+/// The hub's dropout signals (R5). <see cref="Dropped"/>: an open device vanished, and its stream
+/// is held silent. <see cref="Resumed"/>: it is bound again, carrying the endpoint it is now bound to.
+/// Raised on the hub's reconcile thread; handlers must not block long.
+/// </summary>
+public interface IAudioDropoutSource
+{
+    event Action<AudioDeviceDropout>? Dropped;
+
+    event Action<AudioDeviceDropout>? Resumed;
+}
