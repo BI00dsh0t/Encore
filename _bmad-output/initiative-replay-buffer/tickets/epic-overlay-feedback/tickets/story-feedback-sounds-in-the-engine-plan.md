@@ -3,14 +3,14 @@ title: 'Feedback Sounds in the engine'
 type: 'feature'
 ticket: '6'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '7a9506cdf07062318716ff265facbf119f70709a'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -88,6 +88,8 @@ deferred: []
 
 ## Implementation Notes
 
+- Review patches were applied in the main session, two one-line edits: the silent output's placeholder endpoint and the check's condition key.
+
 - `FeedbackNotice.Sound` is now `string?`, so the router can raise a switched-off notice with no sound. Existing router tests pass unchanged.
 - `IFeedbackSoundOutput` and `SilentFeedbackSoundOutput` live in `FeedbackSoundPlayer.cs`. The player also exposes `Endpoint()` (device, else default communications), which the engine check reuses.
 - `FeedbackCapture.CapturingTracks` returns each capturing Track with its matching device, so the warning can name the device.
@@ -97,6 +99,12 @@ deferred: []
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 2 findings — high 0, medium 0, low 2, false 0, maybe-false 0
+- findings:
+  - `[low]` `[patch]` On a test instance, the silent output had no default endpoint, so every sound logged a "didn't play" warning and its notice still named the sound — fixed: `SilentFeedbackSoundOutput.DefaultEndpointId()` returns the placeholder `silent`, so the play succeeds silently. A real instance with no communications endpoint still keeps `Sound` on its notice; the plan nulls it only for a switched-off sound.
+  - `[low]` `[patch]` The `feedback-device-captured` message kept old names after a Track or device rename, because the condition key held only Track ids — fixed: the key also holds each Track's name and device's friendly name, so a rename re-raises with the current names.
 
 ## Design Notes
 
@@ -111,3 +119,41 @@ deferred: []
 - `dotnet test --project tests/ReplayBuffer.Contracts.Tests -c Release --no-build`, and the same for `ReplayBuffer.Core.Tests`, `ReplayBuffer.Engine.Tests` and `ReplayBuffer.Platform.Audio.Tests` -- expected: all pass
 - `dotnet test --project tests/ReplayBuffer.Platform.Audio.Tests -c Release --no-build --explicit only --filter-method "*FeedbackSoundOutput*"` -- expected: plays the five sounds without error
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL warnings
+
+## Auto Run Result
+
+**Summary:** The engine plays five built-in synthesized Feedback Sounds (48 kHz stereo, peak -12 dBFS, under 600 ms) on a worker thread through a Core `IFeedbackSoundOutput` port. The port is backed by a WASAPI shared-mode client in Platform.Audio. Each plays on `feedbackSoundDevice` or the default communications endpoint, resolved at each play, and only when its `feedbackSounds` flag is on. A switched-off sound's notice carries no sound. `feedback.preview` plays a sound even when it is switched off. `FeedbackDeviceCheck` raises `feedback-device-captured` while a Track of the active layout loopback-captures the sound endpoint; it re-checks on settings, endpoint (including a default communications change) and target changes. Test instances use a silent output.
+
+**Files changed:**
+- `src/ReplayBuffer.Contracts/ErrorCodes.cs`: adds `feedback-device-captured`.
+- `src/ReplayBuffer.Contracts/Messages/Feedback.cs`: adds the `FeedbackSound` enum and `feedback.preview`.
+- `src/ReplayBuffer.Core/Feedback/FeedbackSoundSynth.cs`: new, the five sounds.
+- `src/ReplayBuffer.Core/Feedback/FeedbackSoundPlayer.cs`: new, the port, the silent output and the queued player.
+- `src/ReplayBuffer.Core/Feedback/FeedbackCapture.cs`: new, the Tracks that capture the sound endpoint.
+- `src/ReplayBuffer.Core/Feedback/FeedbackRouter.cs`: queues each notice's sound.
+- `src/ReplayBuffer.Core/Audio/AudioDeviceHub.cs`: the `EndpointsChanged` doc.
+- `src/ReplayBuffer.Platform.Audio/FeedbackSoundOutput.cs`: new, WASAPI render.
+- `src/ReplayBuffer.Platform.Audio/AudioEndpoints.cs`: adds `DefaultCommunications()`.
+- `src/ReplayBuffer.Platform.Audio/EndpointWatcher.cs`: signals on a default communications change.
+- `src/ReplayBuffer.Engine/Audio/FeedbackDeviceCheck.cs`: new, the warning.
+- `src/ReplayBuffer.Engine/EngineHost.cs`: wires these in.
+- Tests: `Core.Tests/FeedbackSoundsTests.cs`, `Engine.Tests/FeedbackSoundServeTests.cs`, and `Platform.Audio.Tests/FeedbackSoundOutputTests.cs` (Explicit, Heavy).
+
+**Review:** quick lens, 2 findings. Both were low and patched (see the triage log). None were deferred or rejected.
+
+**Follow-up review recommended:** false. Both patches were low, at 0 high and 0 medium.
+
+**Verification:**
+- Release build: 0 warnings.
+- Contracts: 99/99 passed.
+- Core: 79/79 passed.
+- Platform.Audio: 24 passed, 3 explicit skipped.
+- Engine: 154 passed, 18 explicit skipped. One run before the patches had a single failure that couldn't be identified; two reruns and the run after the patches were clean.
+- Heavy `FeedbackSoundOutput` test: passed on the default communications endpoint, run by the implementing subagent.
+- `tools/publish-engine.ps1`: no IL warnings.
+- Matrix: rows 1 to 4 and 6 are covered by `FeedbackSoundsTests`, and row 5 by `FeedbackSoundServeTests`.
+
+**Residual risks:**
+- On a target change, the capture check makes one COM call on the orchestrator thread to read the default endpoint.
+- Nobody has listened to the sounds yet (queued for the builder).
+- No test covers a default communications change re-running the check.

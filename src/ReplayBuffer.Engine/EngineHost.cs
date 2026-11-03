@@ -60,7 +60,7 @@ internal sealed record EngineHostOptions
 
     /// <summary>
     /// Where Feedback Sounds play; <c>null</c> for WASAPI on a non-test instance, and a silent
-    /// output, with no endpoint, on a test one.
+    /// output on a test one.
     /// </summary>
     public IFeedbackSoundOutput? FeedbackSounds { get; init; }
 

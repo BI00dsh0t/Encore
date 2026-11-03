@@ -71,7 +71,7 @@ internal sealed class FeedbackDeviceCheck : IDisposable
             IReadOnlyList<(Track Track, LayoutDevice Device)> captured = endpoint is null ? [] : FeedbackCapture.CapturingTracks(layout, endpoint);
             var condition = captured.Count == 0
                 ? null
-                : endpoint + "|" + string.Join(",", captured.Select(c => c.Track.Id.ToString("N")));
+                : endpoint + "|" + string.Join(",", captured.Select(c => $"{c.Track.Id:N}:{c.Track.Name}:{c.Device.FriendlyName}"));
             if (condition == _condition)
             {
                 return;
