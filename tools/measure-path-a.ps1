@@ -30,6 +30,12 @@
     as a member of "Performance Log Users" so PresentMon can trace without elevation. The
     script never starts the game and never downloads anything.
 
+    PresentMon traces in an ETW session named ReplayBuffer-PathA-<pid of this script>. Before
+    its setup checks the script stops any leftover ReplayBuffer-PathA-<pid> session whose pid
+    has no running process (a killed earlier run's, which would otherwise make PresentMon lose
+    events and write no CSV), and leaves a live run's session alone with a warning. It stops
+    its own session after a killed PresentMon, a failed run, and at the end.
+
 .EXAMPLE
     pwsh tools/measure-path-a.ps1 -PresentMon C:\tools\PresentMon-2.6.0-x64.exe -OutputDevice Game -InputDevice "BEACN Mic"
 
@@ -148,6 +154,68 @@ function Get-Percentile([double[]] $Sorted, [double] $P) {
     $rank = [math]::Max(1, [math]::Ceiling($P / 100 * $Sorted.Count))
     return $Sorted[[int] $rank - 1]
 }
+
+# --- ETW sessions --------------------------------------------------------------------------
+
+$SessionPrefix = 'ReplayBuffer-PathA-'
+$OwnSession = "$SessionPrefix$PID"
+
+# The running ReplayBuffer-PathA-<pid> sessions, from logman query -ets.
+function Get-PathASessions {
+    $lines = try { @(& logman query -ets 2>&1) } catch { @("$_") }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Could not list ETW sessions, so leftover $($SessionPrefix)<pid> sessions were not checked: $("$lines".Trim())"
+        return
+    }
+    foreach ($line in $lines) {
+        if ("$line" -match "^\s*($([regex]::Escape($SessionPrefix))(\d+))\s") {
+            [pscustomobject]@{ Name = $Matches[1]; Pid = [int] $Matches[2] }
+        }
+    }
+}
+
+function Stop-EtwSession([string] $Name) {
+    $stopped = $false
+    $out = try {
+        $lines = & logman stop $Name -ets 2>&1
+        $stopped = $LASTEXITCODE -eq 0
+        $lines
+    }
+    catch { "$_" }
+    return [pscustomobject]@{ Stopped = $stopped; Output = "$out".Trim() }
+}
+
+# A killed run leaves its session running, and PresentMon's --stop_existing_session only clears a
+# session of its own name: stop the ones whose script is gone, and leave a live run's alone.
+function Clear-StaleSessions {
+    foreach ($session in @(Get-PathASessions)) {
+        if ($session.Pid -ne $PID -and (Get-Process -Id $session.Pid -ErrorAction SilentlyContinue)) {
+            Write-Warning "ETW session $($session.Name) belongs to running process $($session.Pid); left alone. If that is another measurement, PresentMon runs may lose events."
+            continue
+        }
+
+        $result = Stop-EtwSession $session.Name
+        if ($result.Stopped) {
+            Write-Host "Stopped stale ETW session $($session.Name) (no process $($session.Pid))."
+        }
+        else {
+            Write-Warning "Could not stop stale ETW session $($session.Name): $($result.Output)"
+        }
+    }
+}
+
+# Best effort: this run's own session, if it is still running (a killed PresentMon leaves it).
+function Stop-OwnSession {
+    try {
+        if (@(Get-PathASessions | Where-Object { $_.Name -eq $OwnSession }).Count) {
+            $null = Stop-EtwSession $OwnSession
+        }
+    }
+    catch {
+    }
+}
+
+Clear-StaleSessions
 
 # --- Preconditions -----------------------------------------------------------------------
 
@@ -370,6 +438,7 @@ function Invoke-Run($Run, [int] $Index) {
         if (-not $pm.WaitForExit(($Run.Seconds + 60) * 1000)) {
             $pm.Kill()
             Write-Warning "[$tag] PresentMon did not stop on its own and was killed."
+            Stop-OwnSession
         }
 
         $gpu = [pscustomobject]@{ ByType = @{}; Error = $(if ($NoGpuSampler) { 'GPU sampler off' } else { 'baseline: no engine' }) }
@@ -400,6 +469,7 @@ function Invoke-Run($Run, [int] $Index) {
         if ($engineProcess -and -not $engineProcess.HasExited) { $engineProcess.Kill() }
         if ($pm -and -not $pm.HasExited) { $pm.Kill() }
         if ($sampler) { Remove-Job -Job $sampler -Force -ErrorAction SilentlyContinue }
+        Stop-OwnSession
         throw
     }
 }
@@ -450,6 +520,7 @@ try {
 }
 finally {
     [void] [ReplayBuffer.Power]::SetThreadExecutionState($EsContinuous)
+    Stop-OwnSession
 }
 
 # --- Summary ------------------------------------------------------------------------------
