@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 4.4 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 4.4 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
@@ -382,3 +382,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA on 4.3 (`8446562`): **QA PASS**, 0 blocking findings and two accepted low notes, logged in the plan at `f031d48`. 4.3 was told to merge. Once it lands, 4.4 is next.
 - 2026-11-03: 4.3 merged into `develop` (`e0c3931`, `feat(engine): merge 4.3-replay-buffer-lifecycle`) and marked done, after QA PASS at `8446562` with 0 blocking findings. `develop` (5.2, `.gitattributes`) was merged into the branch first without conflicts; it touched only bench and docs, so the Release build, Core, Engine and publish from `8446562` stand. QA's two low notes are accepted without change: (1) a window close starts the drain, so its 30 s runs from the window close, not the process exit, and a process that outlives its window gets a drain that ends sooner after the exit; (2) marking an exited game Ignored makes no proposal, so its drain runs to expiry, at most 30 s. Residual: a game that recreates its window drops the drained buffer; the `End` command with only a drain held is refused. The Human Check Queue gains: quit or crash a game, press Save within 30 s, and confirm the Clip holds its last moments. 4.4 is next.
 - 2026-11-03: 4.3 merged (`e0c3931`), and its card is in Done. 4.4 (Save Cooldown, save events and two concurrent writers, medium risk) went to pool worker slice-epic-8 (Opus, medium effort), and its card is In progress. Epic 4 runs one story at a time here (4.4 → 4.5 → 4.6 …), as each waits on the one before.
+- 2026-11-03: 4.4 is READY FOR QA at `0c18681` (save cooldown, `clip.saving`, two concurrent writers and save-busy; build, four scoped suites and publish pass; three review findings fixed). QA started on qa-1-14 (Sonnet), and its card is In QA.
