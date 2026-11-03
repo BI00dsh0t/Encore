@@ -15,6 +15,7 @@ public sealed record StateSnapshot
     private readonly HotkeyStatus _hotkeys = HotkeyStatus.Unbound;
     private readonly VideoOptions _videoOptions = VideoOptions.Unprobed;
     private readonly AudioDeviceList _devices = AudioDeviceList.Empty;
+    private readonly MeterLevels _meters = MeterLevels.Empty;
 
     /// <summary>Identifies one engine run; a new value means a restarted engine.</summary>
     public required string EngineInstanceId { get; init; }
@@ -70,6 +71,16 @@ public sealed record StateSnapshot
         init => _devices = value ?? AudioDeviceList.Empty;
     }
 
+    /// <summary>The watched Tracks' latest levels (R6); empty while nothing is watched.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 2.6) reads as no Tracks.</remarks>
+    public MeterLevels Meters
+    {
+        get => _meters;
+
+        // The generated deserializer passes null for a missing field.
+        init => _meters = value ?? MeterLevels.Empty;
+    }
+
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
 
@@ -85,6 +96,7 @@ public sealed record StateSnapshot
         Hotkeys = HotkeyStatus.Unbound,
         VideoOptions = VideoOptions.Unprobed,
         Devices = AudioDeviceList.Empty,
+        Meters = MeterLevels.Empty,
     };
 }
 

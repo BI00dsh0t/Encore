@@ -3,14 +3,14 @@ title: 'Track meters in the engine'
 type: 'feature'
 ticket: '6'
 created: '2026-11-03'
-status: 'ready-for-dev'
+status: 'built'
 baseline_revision: '63d104d521d9c3af51c62a4308707424294a47a5'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -61,11 +61,11 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/Messages/Audio.cs`, `Engine.cs` -- payloads, messages, snapshot field -- the wire shape
-- [ ] `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` -- samples -- registry coverage tests demand them
-- [ ] `src/ReplayBuffer.Engine/Audio/TrackMeters.cs` -- meter mixer, peak meter, publish thread -- the feature
-- [ ] `src/ReplayBuffer.Engine/EngineHost.cs` -- wiring, commands, mute feed -- serve it
-- [ ] `tests/ReplayBuffer.Engine.Tests/ToneHub.cs`, `MeterServeTests.cs` -- the AC below, plus a bad-layout reply -- proof
+- [x] `src/ReplayBuffer.Contracts/Messages/Audio.cs`, `Engine.cs` -- payloads, messages, snapshot field -- the wire shape
+- [x] `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` -- samples -- registry coverage tests demand them
+- [x] `src/ReplayBuffer.Engine/Audio/TrackMeters.cs` -- meter mixer, peak meter, publish thread -- the feature
+- [x] `src/ReplayBuffer.Engine/EngineHost.cs` -- wiring, commands, mute feed -- serve it
+- [x] `tests/ReplayBuffer.Engine.Tests/ToneHub.cs`, `MeterServeTests.cs` -- the AC below, plus a bad-layout reply -- proof
 
 **Acceptance Criteria:**
 - Given a test-instance engine with a `ToneHub` (device T: 0.5-amplitude tone; mic M: 0.5-amplitude tone), mic mute on (no `runtime.json`), and no capture, when a client sends `meters.watch` with a draft layout of Tracks `Game`={T}, `Chat`={M} `muteAffected` with M `isMic`, `MicRaw`={M} not affected, `Empty`={}, then within 2 s it receives `meters.levels` with four entries in layout order: `Game` and `MicRaw` ≈ 0.5, `Chat` and `Empty` 0; and over ~1 s the count of `meters.levels` events is at most 21.
@@ -76,9 +76,23 @@ deferred: []
 
 ## Implementation Notes
 
+- The private watch object is `TrackMeters.ActiveWatch` (the name `Watch` is the public method). Replacing a watch disposes the old one, which publishes `MeterLevels.Empty` before the new watch's first levels; coalescing usually hides it.
+- `EngineHost.DisposeAsync` disposes `Meters` after the pipe server (so no `meters.watch` can arrive after it), still after `Sessions` and before `Audio`.
+- Not covered by a test: a device whose `Subscribe` throws (`ToneHub` has no failing endpoint); the code path catches `ErrorCodeException`, logs a Warning and builds the Track mixers over the devices that opened.
+
+- Superseding the two notes above (the session's verify pass, before review): a re-watch now calls `ActiveWatch.Stop()`, which publishes nothing, so no empty levels come between two watches; `Unwatch`/`Dispose` still publish `MeterLevels.Empty`. `ToneHub.Subscribe` throws `ErrorCodeException(audio-device-failed)` for an endpoint it has no tone for, and `MeterServeTests.ALayoutNamingAMissingDeviceIsRefusedAndKeepsThePreviousWatchUntilTheNextOne` now covers the re-watch and device-can't-open matrix rows.
+- Lean tests (builder's standing decision): two host tests over a real pipe cover every matrix row and AC 1–4; no Heavy tests were needed (about 3 s of real-time tones).
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 3 findings — high 0, medium 0, low 2, false 0, maybe-false 1
+- findings:
+  - `[low]` `[patch]` `TrackMeters.Watch` stops the old watch before building the new one, so a constructor throw (a non-`ErrorCodeException` from `Subscribe`, an allocation failure) left the old levels frozen in `State.Meters` — fixed: a failed build publishes `MeterLevels.Empty` and rethrows.
+  - `[low]` `[reject]` The `MeterLevels.Empty` that `Unwatch` publishes can follow the last tick by under 50 ms — it is the terminal state, not a levels stream, and coalescing keeps only the latest; guarding it would delay the unwatch reply for no visible gain.
+  - `[maybe-false]` `[reject]` Two Implementation Notes contradict the code — the fix is editing this build's plan; a superseding note was appended instead (notes are append-only).
 
 ## Design Notes
 
@@ -95,3 +109,22 @@ Why linear peak, not dBFS: the App picks the scale (story 2.8); a float 0..1 is 
 - `dotnet test --project tests/ReplayBuffer.Contracts.Tests -c Release --no-build` -- expected: pass
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- expected: pass
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL/AOT warnings
+
+## Auto Run Result
+
+**Summary:** `meters.watch { layout }` meters a saved or draft Track Layout with a meter-only mixer on the hub (one subscription per distinct device → `AudioTimeline` → per-Track `TrackMixer`, mic-mute gated as in a capture → `PeakMeter`); a meter thread publishes coalesced `meters.levels` (one linear peak per Track id, layout order) never sooner than 50 ms apart. `meters.unwatch` closes the subscriptions and publishes no Tracks. Mic mute follows the orchestrator live.
+
+**Files:**
+- `src/ReplayBuffer.Contracts/Messages/Audio.cs` — `MetersWatch`, `TrackLevel`, `MeterLevels`; `meters.watch`, `meters.unwatch`, `meters.levels` (coalescing, field `meters`)
+- `src/ReplayBuffer.Contracts/Messages/Engine.cs` — `StateSnapshot.Meters` (default empty)
+- `src/ReplayBuffer.Engine/Audio/TrackMeters.cs` — the meter mixer, `PeakMeter`, publish thread
+- `src/ReplayBuffer.Engine/EngineHost.cs` — wiring, `MeterAudio` test override, mute feed, commands
+- `tests/ReplayBuffer.Contracts.Tests/MessagesTests.cs` — `meters.levels` sample
+- `tests/ReplayBuffer.Engine.Tests/ToneHub.cs` — active-subscription count; unknown endpoints fail to open
+- `tests/ReplayBuffer.Engine.Tests/MeterServeTests.cs` — the ACs and matrix rows over a real pipe
+
+**Review:** 1 patch (low), 0 deferred, 2 rejected (see the triage log). Follow-up review recommended: false (0 high, 0 medium patched).
+
+**Verification:** `dotnet build ReplayBuffer.slnx -c Release` 0 warnings; Contracts 86/86, Engine 140 passed (17 opt-in skipped), App 58 passed (5 opt-in skipped), Core 54/54; `publish-engine.ps1` published 10.1 MB with no IL/AOT warnings. Engine re-run and publish repeated after the review patch.
+
+**Residual risks:** the watch is engine-wide, not owned by a connection: an App that disconnects without `meters.unwatch` leaves the devices open until the next watch/unwatch or engine exit (story 2.8 unwatches on page close). Meter tests run on real time (about 3 s), so a heavily loaded PC could time out their 2 s windows.
