@@ -3,14 +3,14 @@ title: 'Feedback notices in the engine, with a dev simulator'
 type: 'feature'
 ticket: '4'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: 'd6b57b6ef463e170bf92f9b0f96ea25e148f419d'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -70,16 +70,16 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- add `ClipSaved`, `ClipFailed`, `RecordingStarted`, `RecordingStopped`, `NotDevInstance` and list them in `All` -- registry rule.
-- [ ] `src/ReplayBuffer.Contracts/Messages/Dev.cs` (new) -- `SimulatedEvent` enum, `DevSimulate(SimulatedEvent Event)`, `DevMessages.Simulate` (`dev.simulate`, result `Empty`), `Commands`/`Events`, `DevJsonContext` -- own area to avoid conflicts with parallel stories.
-- [ ] `src/ReplayBuffer.Contracts/Ipc/MessageTypes.cs` -- register `DevMessages` lists.
-- [ ] `src/ReplayBuffer.Core/Feedback/FeedbackRouter.cs` (new) -- `FeedbackNotice` record, `IFeedbackNotices` port (`string Raise(FeedbackNotice)`, `void Withdraw(string id)`), `FeedbackRouter(IFeedbackNotices, TimeProvider)` with `ClipSaved(ClipSaved)`, `ClipNotSaved(ClipFailed)`, `StateChanged(CaptureState)`, `DiskFull()`, `IDisposable` (disposes timers), `ShortReason(string)`; one lock; timers via `TimeProvider.CreateTimer`.
-- [ ] `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs`, `TargetGames.cs` -- `RecordingRunning` also publishes `CaptureState.Recording`.
-- [ ] `src/ReplayBuffer.Engine/Ipc/Warnings.cs` -- `Withdraw`, implement `IFeedbackNotices`.
-- [ ] `src/ReplayBuffer.Engine/Sessions/DevSimulator.cs` (new) -- `DevSimulator(Instance, Action<bool> recording, Action diskFull, Action<ClipFailed> saveFailed)` with `Empty Simulate(DevSimulate)`; throws `not-dev-instance` for `Instance.InstalledName`.
-- [ ] `src/ReplayBuffer.Engine/EngineHost.cs` -- create the router after `warnings`; feed it from the state publish and the `Saved`/`NotSaved` lambdas; register `dev.simulate` (recording → `sessions.Post(new RecordingRunning(..))`, disk full → `router.DiskFull()`, save failure → the same not-saved path as `NotSaved` with `save-failed`); dispose the router after `Sessions`; update the class summary.
-- [ ] `tests/ReplayBuffer.Core.Tests/FeedbackRouterTests.cs` (new) -- saved notice dismissed after 10 s by manual time; failed notice with reason, dismissed by the next save.
-- [ ] `tests/ReplayBuffer.Engine.Tests/DevSimulateServeTests.cs` (new) -- over a test instance's pipe, each event raises its notice or capture state; `DevSimulator` with the installed instance refuses with `not-dev-instance`.
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- add `ClipSaved`, `ClipFailed`, `RecordingStarted`, `RecordingStopped`, `NotDevInstance` and list them in `All` -- registry rule.
+- [x] `src/ReplayBuffer.Contracts/Messages/Dev.cs` (new) -- `SimulatedEvent` enum, `DevSimulate(SimulatedEvent Event)`, `DevMessages.Simulate` (`dev.simulate`, result `Empty`), `Commands`/`Events`, `DevJsonContext` -- own area to avoid conflicts with parallel stories.
+- [x] `src/ReplayBuffer.Contracts/Ipc/MessageTypes.cs` -- register `DevMessages` lists.
+- [x] `src/ReplayBuffer.Core/Feedback/FeedbackRouter.cs` (new) -- `FeedbackNotice` record, `IFeedbackNotices` port (`string Raise(FeedbackNotice)`, `void Withdraw(string id)`), `FeedbackRouter(IFeedbackNotices, TimeProvider)` with `ClipSaved(ClipSaved)`, `ClipNotSaved(ClipFailed)`, `StateChanged(CaptureState)`, `DiskFull()`, `IDisposable` (disposes timers), `ShortReason(string)`; one lock; timers via `TimeProvider.CreateTimer`.
+- [x] `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs`, `TargetGames.cs` -- `RecordingRunning` also publishes `CaptureState.Recording`.
+- [x] `src/ReplayBuffer.Engine/Ipc/Warnings.cs` -- `Withdraw`, implement `IFeedbackNotices`.
+- [x] `src/ReplayBuffer.Engine/Sessions/DevSimulator.cs` (new) -- `DevSimulator(Instance, Action<bool> recording, Action diskFull, Action<ClipFailed> saveFailed)` with `Empty Simulate(DevSimulate)`; throws `not-dev-instance` for `Instance.InstalledName`.
+- [x] `src/ReplayBuffer.Engine/EngineHost.cs` -- create the router after `warnings`; feed it from the state publish and the `Saved`/`NotSaved` lambdas; register `dev.simulate` (recording → `sessions.Post(new RecordingRunning(..))`, disk full → `router.DiskFull()`, save failure → the same not-saved path as `NotSaved` with `save-failed`); dispose the router after `Sessions`; update the class summary.
+- [x] `tests/ReplayBuffer.Core.Tests/FeedbackRouterTests.cs` (new) -- saved notice dismissed after 10 s by manual time; failed notice with reason, dismissed by the next save.
+- [x] `tests/ReplayBuffer.Engine.Tests/DevSimulateServeTests.cs` (new) -- over a test instance's pipe, each event raises its notice or capture state; `DevSimulator` with the installed instance refuses with `not-dev-instance`.
 
 **Acceptance Criteria:**
 - Given a saved Clip, when the router is told, then exactly one `clip-saved` notice (info, overlay, sound `clipSaved`) is active, and 10 s later it is dismissed.
@@ -89,6 +89,11 @@ deferred: []
 - Given the Contracts tests, when they run, then every new code is in `ErrorCodes.All` and every registered event maps to a snapshot field.
 
 ## Implementation Notes
+
+- Notice messages: "Clip saved", "Clip not saved: <short reason>", "Recording started", "Recording stopped", "The disk is full".
+- `Warnings` implements `IFeedbackNotices.Raise` explicitly (overlay, dismissable, with the sound); `Withdraw` is public.
+- The router calls `Warnings` while holding its own lock; `Warnings` never calls back, so the lock order is router then warnings.
+- The engine's not-saved path is one `notSaved` lambda in `EngineHost`, used by `ReplayClips.NotSaved` and by `dev.simulate saveFailed`, so it works in a test instance with no Replay Buffer.
 
 ## Plan Change Log
 
