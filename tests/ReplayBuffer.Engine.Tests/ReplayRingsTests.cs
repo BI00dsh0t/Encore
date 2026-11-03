@@ -12,7 +12,7 @@ public sealed class ReplayRingsTests
         var blocker = Path.GetTempFileName();
         try
         {
-            using var ring = ReplayRings.Create(30_000_000, 64, blocker, 16L * 1024 * 1024, NullLogger.Instance);
+            using var ring = ReplayRings.Create(30_000_000, 64, blocker, 16L * 1024 * 1024, margin: null, NullLogger.Instance);
 
             Assert.Null(ring.File);
         }

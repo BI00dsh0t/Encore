@@ -3,14 +3,14 @@ title: 'Memory-mode RAM margin'
 type: 'feature'
 ticket: '8'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '2b0eb895423eb38e8d4b60ec4945c12394cd0d57'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -91,12 +91,12 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Core/Replay/MemoryMargin.cs` -- the margin, the port and the events -- R3's margin
-- [ ] `src/ReplayBuffer.Core/Replay/PacketRing.cs` -- the margin check in `NewSlab`, `Reclaim`, the shared head drop, `Release` returns freed -- stop growing, oldest unpinned first
-- [ ] `src/ReplayBuffer.Platform.Windows/{SystemMemoryStatus.cs,NativeMethods.txt}` -- the real status -- Windows' available physical memory
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- `memory-margin` -- the warning code
-- [ ] `src/ReplayBuffer.Engine/...MemoryMarginReporter.cs`, `Sessions/{CaptureSession,ReplayRings}.cs`, `EngineHost.cs` -- the warning, and the margin wired into every session ring -- epic 5's status line
-- [ ] New `tests/ReplayBuffer.Core.Tests/MemoryMarginTests.cs` -- two tests, with a settable fake status (16 KiB slabs, so the slab counts are small):
+- [x] `src/ReplayBuffer.Core/Replay/MemoryMargin.cs` -- the margin, the port and the events -- R3's margin
+- [x] `src/ReplayBuffer.Core/Replay/PacketRing.cs` -- the margin check in `NewSlab`, `Reclaim`, the shared head drop, `Release` returns freed -- stop growing, oldest unpinned first
+- [x] `src/ReplayBuffer.Platform.Windows/{SystemMemoryStatus.cs,NativeMethods.txt}` -- the real status -- Windows' available physical memory
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- `memory-margin` -- the warning code
+- [x] `src/ReplayBuffer.Engine/...MemoryMarginReporter.cs`, `Sessions/{CaptureSession,ReplayRings}.cs`, `EngineHost.cs` -- the warning, and the margin wired into every session ring -- epic 5's status line
+- [x] New `tests/ReplayBuffer.Core.Tests/MemoryMarginTests.cs` -- two tests, with a settable fake status (16 KiB slabs, so the slab counts are small):
   - Feed a 60 s window for 20 s with plenty of RAM, then pin a cut of the last 10 s. Lower the available memory below the margin and feed 20 s more. Then:
     - `LiveSlabs` never exceeds its value at the drop, plus the slabs the cut pins.
     - The cut's packets still match `Pattern`.
@@ -104,7 +104,7 @@ deferred: []
     - A new cut over the full window ends at the newest content, and spans less than the window.
     - `Entered` was raised exactly once.
   - The events: raise the available memory past margin + slack, then lower it again, and a second `Entered` is raised. Lower it so far that the trim leaves under 1 s (a ring holding only small slabs), and one `ShortRing` is raised, not one per slab.
-- [ ] New `tests/ReplayBuffer.Engine.Tests/MemoryMarginReporterTests.cs` -- one test:
+- [x] New `tests/ReplayBuffer.Engine.Tests/MemoryMarginReporterTests.cs` -- one test:
   - Two entries into the margin and one short ring give three `memory-margin` warnings: severity Warning, source `replay`, no overlay, dismissable.
 
 **Acceptance Criteria:**
@@ -115,6 +115,10 @@ deferred: []
 - Given the default run, when the 0-warning Release build, the Core, Contracts and Engine suites and the NativeAOT publish run, then all pass.
 
 ## Implementation Notes
+
+- `Reclaim` on a Disk ring also stops once it has returned a file block the new slab fits, since `NewSlab` then retries a block and needs no new memory. Counting only freed memory slabs there would trim through the whole file to reach the newer spilled slabs. A block returned for an oversized packet doesn't stop it.
+- The reporter is `src/ReplayBuffer.Engine/Sessions/MemoryMarginReporter.cs`. `Raised` fires on the ring's appending thread, under that ring's lock but outside the margin's.
+- Test 1 asserts `LiveSlabs <= atDrop`: `atDrop` already counts the cut's pinned slabs, since the ring still holds them at the drop. The short-ring case uses one keyframe of 40 slabs, whose `Reclaim` empties every small slab but the current one.
 
 ## Plan Change Log
 

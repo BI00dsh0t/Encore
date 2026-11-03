@@ -15,7 +15,11 @@ namespace ReplayBuffer.Core.Replay;
 /// in Disk mode (R3) it is one block of a <see cref="RingFile"/> the ring owns, and only a packet
 /// bigger than a block, or a slab wanted with no block free, is native memory
 /// (<see cref="MemorySlabs"/>). The index, the pins and the trimming are the same in both. The file
-/// is closed, and so deleted, once the ring is disposed and its last slab freed.
+/// is closed, and so deleted, once the ring is disposed and its last slab freed. Before each new
+/// native-memory slab the ring asks its <see cref="MemoryMargin"/>, if it has one (R3); refused, it
+/// stops growing: it drops its oldest entries until slabs it alone held free the new slab's size
+/// (trimming past slabs a cut pins, whose bytes stay), never the current slab's, and then allocates.
+/// A Disk-mode ring tries a block again after that trim before it spills to memory.
 /// </summary>
 public sealed class PacketRing : IDisposable
 {
@@ -61,11 +65,13 @@ public sealed class PacketRing : IDisposable
     // Disk mode's file, and the bytes a copy out of it reads through, grown as needed.
     private readonly RingFile? _file;
     private byte[] _scratch = [];
+    private readonly MemoryMargin? _margin;
 
     /// <param name="windowUs">The Buffer Window, in µs.</param>
     /// <param name="capacity">The entries preallocated: the packets the window and its slack hold.</param>
     /// <param name="slabBytes">The shared slab size.</param>
-    public PacketRing(long windowUs, int capacity, int slabBytes = DefaultSlabBytes)
+    /// <param name="margin">The RAM margin each new native-memory slab is checked against; null for none.</param>
+    public PacketRing(long windowUs, int capacity, int slabBytes = DefaultSlabBytes, MemoryMargin? margin = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(windowUs, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
@@ -74,14 +80,16 @@ public sealed class PacketRing : IDisposable
         _slabBytes = slabBytes;
         _entries = new RingEntry[capacity];
         _keys = new long[capacity];
+        _margin = margin;
     }
 
     /// <summary>A Disk-mode ring: its slabs are <paramref name="file"/>'s blocks, and it owns the file.</summary>
     /// <param name="windowUs">The Buffer Window, in µs.</param>
     /// <param name="capacity">The entries preallocated: the packets the window and its slack hold.</param>
     /// <param name="file">The ring file; the slab size is its block size.</param>
-    public PacketRing(long windowUs, int capacity, RingFile file)
-        : this(windowUs, capacity, (file ?? throw new ArgumentNullException(nameof(file))).BlockBytes)
+    /// <param name="margin">The RAM margin each spilled native-memory slab is checked against; null for none.</param>
+    public PacketRing(long windowUs, int capacity, RingFile file, MemoryMargin? margin = null)
+        : this(windowUs, capacity, (file ?? throw new ArgumentNullException(nameof(file))).BlockBytes, margin)
     {
         _file = file;
     }
@@ -542,12 +550,14 @@ public sealed class PacketRing : IDisposable
 
     private Slab NewSlab(int capacity)
     {
-        Slab slab;
-        if (_file is { } file && capacity <= file.BlockBytes && file.TryRent(out var block))
+        var slab = TryBlockSlab(capacity);
+        if (slab is null && _margin?.Allows(capacity) == false)
         {
-            slab = new Slab(file.BlockBytes, this, file, block);
+            Reclaim(capacity);
+            slab = TryBlockSlab(capacity);
         }
-        else
+
+        if (slab is null)
         {
             slab = new Slab(capacity, this);
             if (_file is not null)
@@ -561,10 +571,50 @@ public sealed class PacketRing : IDisposable
         return slab;
     }
 
-    private void ReleaseHeld(Slab slab)
+    /// <summary>A Disk-mode ring's slab in a free block of its file; null in Memory mode, for a packet bigger than a block, or with none free.</summary>
+    private Slab? TryBlockSlab(int capacity) =>
+        _file is { } file && capacity <= file.BlockBytes && file.TryRent(out var block)
+            ? new Slab(file.BlockBytes, this, file, block)
+            : null;
+
+    /// <summary>
+    /// Inside the margin: drops the oldest entries until the memory slabs they free (those whose
+    /// last reference the ring held) reach <paramref name="bytes"/>, or a Disk-mode ring's block is
+    /// returned that the new slab fits (a block is then retried), never dropping the current slab's. Slabs a cut pins
+    /// leave the ring but free nothing, so the trim goes on past them. Then reports a ring left
+    /// holding under <see cref="RingGenerations.MinClipUs"/>. Under the lock.
+    /// </summary>
+    private void Reclaim(long bytes)
+    {
+        long freed = 0;
+        var blockFits = _file is { } file && bytes <= file.BlockBytes;
+        var blockReturned = false;
+        while (freed < bytes && !blockReturned && _count > 0 && !ReferenceEquals(_entries[_head].Slab, _current))
+        {
+            if (DropHead() is { } released)
+            {
+                if (released.File is null)
+                {
+                    freed += released.Capacity;
+                }
+                else
+                {
+                    blockReturned = blockFits;
+                }
+            }
+        }
+
+        if (_count == 0 || _newestUs - _entries[_head].TimeUs < RingGenerations.MinClipUs)
+        {
+            _margin!.ReportShortRing();
+        }
+    }
+
+    /// <summary>Releases the ring's reference on <paramref name="slab"/>; whether that freed it.</summary>
+    private bool ReleaseHeld(Slab slab)
     {
         _held.Remove(slab);
-        slab.Release();
+        return slab.Release();
     }
 
     private void Trim()
@@ -572,23 +622,30 @@ public sealed class PacketRing : IDisposable
         var oldest = _newestUs - _windowUs - SlackUs;
         while (_count > 0 && _entries[_head].TimeUs < oldest)
         {
-            var slab = _entries[_head].Slab;
-            _entries[_head] = default;
-            if (_keyCount > 0 && _keys[_keyHead] == _headSeq)
-            {
-                _keyHead = (_keyHead + 1) % _keys.Length;
-                _keyCount--;
-            }
-
-            _head = (_head + 1) % _entries.Length;
-            _headSeq++;
-            _count--;
-            slab.Live--;
-            if (slab.Live == 0 && !ReferenceEquals(slab, _current))
-            {
-                ReleaseHeld(slab);
-            }
+            DropHead();
         }
+    }
+
+    /// <summary>
+    /// Drops the oldest entry, and its keyframe index entry; when that was its slab's last live
+    /// entry and the slab isn't current, releases the ring's reference. Returns the slab if that
+    /// freed it, else null. Under the lock.
+    /// </summary>
+    private Slab? DropHead()
+    {
+        var slab = _entries[_head].Slab;
+        _entries[_head] = default;
+        if (_keyCount > 0 && _keys[_keyHead] == _headSeq)
+        {
+            _keyHead = (_keyHead + 1) % _keys.Length;
+            _keyCount--;
+        }
+
+        _head = (_head + 1) % _entries.Length;
+        _headSeq++;
+        _count--;
+        slab.Live--;
+        return slab.Live == 0 && !ReferenceEquals(slab, _current) && ReleaseHeld(slab) ? slab : null;
     }
 
     private void Grow()
@@ -709,22 +766,26 @@ public sealed class PacketRing : IDisposable
 
         public void AddRef() => Interlocked.Increment(ref _references);
 
-        public void Release()
+        /// <summary>Drops one reference; whether that was the last, so the slab was freed.</summary>
+        public bool Release()
         {
-            if (Interlocked.Decrement(ref _references) == 0)
+            if (Interlocked.Decrement(ref _references) != 0)
             {
-                if (File is { } file)
-                {
-                    file.Return(FileOffset);
-                }
-                else
-                {
-                    NativeMemory.Free(Data);
-                    Data = null;
-                }
-
-                _owner.OnFreed();
+                return false;
             }
+
+            if (File is { } file)
+            {
+                file.Return(FileOffset);
+            }
+            else
+            {
+                NativeMemory.Free(Data);
+                Data = null;
+            }
+
+            _owner.OnFreed();
+            return true;
         }
     }
 }

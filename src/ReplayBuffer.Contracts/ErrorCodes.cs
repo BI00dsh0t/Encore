@@ -181,6 +181,13 @@ public static class ErrorCodes
     /// </summary>
     public const string FeedbackDeviceCaptured = "feedback-device-captured";
 
+    /// <summary>
+    /// A warning (R3): the machine's available RAM reached the Replay Buffer's margin, so the ring
+    /// stops growing and Clips may be shorter than the Buffer Window; or, inside it, the ring holds
+    /// under 1 s, so a save makes no Clip until memory frees up. Raised once per entry into the margin.
+    /// </summary>
+    public const string MemoryMargin = "memory-margin";
+
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
 
@@ -235,6 +242,7 @@ public static class ErrorCodes
         RecordingStarted,
         RecordingStopped,
         FeedbackDeviceCaptured,
+        MemoryMargin,
         NotDevInstance,
     ];
 }
