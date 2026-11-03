@@ -272,6 +272,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 return ValueTask.FromResult(Empty.Value);
             });
             router.Register(FeedbackMessages.Dismiss, (dismiss, _) => ValueTask.FromResult(warnings.Dismiss(dismiss)));
+            router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
                 EngineMessages.Shutdown,

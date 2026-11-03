@@ -1,0 +1,56 @@
+<UserControl x:Class="ReplayBuffer.App.Settings.GameProfilesView"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+            <TextBlock FontWeight="SemiBold" Text="Games" />
+            <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding Profiles}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBox Text="{Binding Name}" />
+                                <TextBlock Margin="0,2,0,0"
+                                           Foreground="Gray"
+                                           Text="{Binding ProfileId}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding ProfileId}" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      Margin="12,0,0,0"
+                                      VerticalAlignment="Top"
+                                      Content="Ignored"
+                                      IsChecked="{Binding Ignored}" />
+                            <CheckBox Grid.Column="2"
+                                      Margin="12,0,0,0"
+                                      VerticalAlignment="Top"
+                                      Content="Recordings"
+                                      IsChecked="{Binding RecordingsEnabled}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Margin="0,18,0,0" FontWeight="SemiBold" Text="Add a game by hand" />
+            <DockPanel Margin="0,6,0,0">
+                <Button Command="{Binding AddCommand}"
+                        Content="Add"
+                        DockPanel.Dock="Right"
+                        Margin="6,0,0,0"
+                        Padding="8,2" />
+                <Button Click="Browse"
+                        Content="Browse..."
+                        DockPanel.Dock="Right"
+                        Margin="6,0,0,0"
+                        Padding="8,2" />
+                <TextBox Text="{Binding AddPath, UpdateSourceTrigger=PropertyChanged}" />
+            </DockPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

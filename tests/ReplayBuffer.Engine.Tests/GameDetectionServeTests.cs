@@ -103,6 +103,25 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GameAddWritesTheCanonicalPathOnceAndRefusesAMissingOne()
+    {
+        var raw = Path.Combine(_folder, "..", Path.GetFileName(_folder), "Game.EXE");
+        var expected = GamePaths.Canonicalize(GamePath);
+
+        var added = await _client.SendAsync(GameMessages.Add, new GameAdd(raw), Token);
+        var document = SettingsMessages.Changed.Read((await NextAsync("settings.changed")).Payload).Document;
+        Assert.Equal(new GameAdded(expected), added);
+        Assert.True(Keys.ManualGames.TryRead(document.Global[Keys.ManualGames.Name], out var listed));
+        Assert.Equal([expected], listed);
+
+        Assert.Equal(new GameAdded(expected), await _client.SendAsync(GameMessages.Add, new GameAdd(GamePath), Token));
+        Assert.Equal(document.Revision, _client.State!.Settings.Revision);
+
+        var refused = await Assert.ThrowsAsync<ErrorCodeException>(() => _client.SendAsync(GameMessages.Add, new GameAdd(Path.Combine(_folder, "Missing.exe")), Token));
+        Assert.Equal(ErrorCodes.InvalidArguments, refused.Code);
+    }
+
+    [Fact]
     public async Task TheTargetExitingHandsOverToABackgroundListedGame()
     {
         var update = new SettingsUpdate(0, [SettingsOp.SetGlobal("manualGames", JsonSerializer.SerializeToElement<IReadOnlyList<string>>([GamePath], SettingsJsonContext.Default.IReadOnlyListString))]);
