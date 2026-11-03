@@ -37,7 +37,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 3.4 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 2.10 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.1 |
@@ -83,8 +83,8 @@ The coordinator logs each QA round in the Log below.
 | 11 | 2.11 Mic Devices and double-count warning in the editor | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done |
 | 12 | 2.8 Live meters in the Track Layout editor | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged) |
 | 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | done |
-| 14 | 2.10 Refactor sweep | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
-| 15 | Release epic 2 (`v0.2.0`) | | pending |
+| 14 | 2.10 Refactor sweep | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged) |
+| 15 | Release epic 2 (`v0.2.0`) | coordinator | done |
 | 16 | 3.1 Tracer: detect a borderless game | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `a7de027`) |
 | 17 | 3.8 Spike: which Windows game list to read | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 18 | 3.2 Detection sources and exclusions | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `168704a`) |
@@ -341,3 +341,8 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 2.8 merged (`a223d8f`, done `edfca63`), and its card is in Done. QA on 3.3 (`4b3f7f5`): **QA PASS**, 0 findings, with one accepted note on a Recording-hold edge case. 3.3 was told to merge. 2.10 (epic 2 refactor sweep) went to pool worker slice-epic-8 (Opus, medium effort), and its card is In progress. After 2.10 merges: mark epic 2 `status: done` and release `v0.2.0`.
 - 2026-11-03: 3.3 merged (`22b214e`; develop merged into the branch first, no conflicts; build 0 warnings, Platform.Windows 25, Core 58 and Engine 143 passed), ticket marked done. QA's non-blocking note is accepted: if a Recording holds a switch to B, the user goes back to A, and the Recording stops before A has had 10 s of focus, B still becomes the Target. The real `RecordingRunning` is epic-recordings'.
 - 2026-11-03: 3.3 merged (`22b214e`, done `d70af41`), and its card is in Done. That unblocked 3.4 (Game Profiles, medium risk), which went to pool worker slice-epic-4 (Opus, medium effort), and 4.1 (replay buffer tracer, high risk, HITL), which went to pool worker 2-1-tracer (Opus, high effort). Both cards are In progress. 2.10 has its plan committed (`8857c3c`) and is implementing.
+- 2026-11-03: 2.10 is READY FOR QA at `3240a1f` (epic 2's duplicated audio wiring moved into shared helpers; build, Core, Engine and publish clean). QA started on qa-2-1 (Sonnet), checking for any behaviour change, and its card moved to In QA. 3.4 and 4.1 are being implemented.
+- 2026-11-03: QA on 2.10 (`3240a1f`): **QA PASS**, 0 findings, no behaviour change. 2.10 was switched to Sonnet and told to merge. Next, the coordinator marks epic 2 `status: done` and releases `v0.2.0`.
+- 2026-11-03: 2.10 merged into `develop` (`refactor(audio): merge 2.10-refactor-sweep`; develop, state files only, merged into the branch first, so nothing was rebuilt) and marked done. Verified before: Release build 0 warnings; Core 58, Engine 143 (18 explicit skipped), publish 0 IL warnings; Heavy mic-mute and Track-mix tests passed. Epic 2 is ready to be marked done and released as `v0.2.0` by the coordinator.
+- 2026-11-03: 2.10 merged (`0770b95`, done `e54dd81`). **Epic 2 is complete:** it was marked `status: done` (`e6216ae`) and **`v0.2.0` was released** by the coordinator (master `02bcd8e`, tag `v0.2.0`, back-merge `b44e0eb`). The 2.10 card is in Done with a release comment. 3.4 is READY FOR QA at `c456b1d`, and QA started on qa-1-14 (Sonnet); its card is In QA. 4.1 is being implemented.
+- 2026-11-03: QA on 3.4 (`c456b1d`): **QA PASS**, 0 findings. 3.4 was switched to Sonnet and told to merge. Once it lands, 3.6 (Game Profiles page) and 4.3 (once 4.2 is done) can follow.

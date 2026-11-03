@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Core.Audio;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Engine.Audio;
 using ReplayBuffer.Media;
 using ReplayBuffer.Platform.Audio;
 using ReplayBuffer.Platform.Capture;
@@ -187,7 +188,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         _log.LogInformation("Mic {State} at start; mic mute covers {Inputs} Mic Device input(s) in muteAffected Tracks",
-            _spec.MicMuted ? "muted" : "unmuted", GatedInputs());
+            _spec.MicMuted ? "muted" : "unmuted", _spec.Audio.GatedMicInputs().Count());
 
         var capture = NewCapture(target.Window);
         lock (_gate)
@@ -472,23 +473,11 @@ internal sealed class CaptureSession : ICaptureSession
 
         // The hub's streams have run since Open; each device takes blocks from here, cut at the anchor
         // once, and fanned out to every Track that holds it.
+        var inputs = tracks.Select(t => t.DeviceIndexes).ToList();
         for (var d = 0; d < _audioTracks.Count; d++)
         {
-            var sinks = new List<IAudioSampleSink>();
-            for (var t = 0; t < tracks.Count; t++)
-            {
-                var input = IndexOf(tracks[t].DeviceIndexes, d);
-                if (input >= 0)
-                {
-                    // Mic mute acts before the mix, and only on a Mic Device in a Track it affects.
-                    var sink = _mixers[t].Input(input);
-                    sinks.Add(_audioTracks[d].Device.IsMic && tracks[t].MuteAffected
-                        ? new MicMuteGate(sink, _micMute, _qpcFrequency, anchorQpc)
-                        : sink);
-                }
-            }
-
-            var timeline = new AudioTimeline(_qpcFrequency, anchorQpc, sinks.Count == 1 ? sinks[0] : new AudioFanOut(sinks));
+            var sink = TrackWiring.DeviceSink(d, _audioTracks[d].Device.IsMic, tracks, inputs, _mixers, _micMute, _qpcFrequency, anchorQpc);
+            var timeline = new AudioTimeline(_qpcFrequency, anchorQpc, sink);
             _audioTimelines.Add(timeline);
             _audioTracks[d].Publish(timeline);
         }
@@ -694,7 +683,7 @@ internal sealed class CaptureSession : ICaptureSession
             if (track.Subscription is AudioDeviceSubscription { Diagnostics: var diagnostics })
             {
                 var role = track.Device.Flow == SessionFlow.Output ? "output" : "input";
-                var first = FirstTrackOf(i);
+                var first = _spec.Audio.FirstTrackOf(i);
                 var samples = first >= 0 ? _audioEncoders[first].SamplesWritten : 0;
                 audio.Add(CaptureStatsCollector.Report(role, track.Device.FriendlyName, diagnostics.Stamps, diagnostics.Stream, _audioTimelines[i], samples));
             }
@@ -734,49 +723,6 @@ internal sealed class CaptureSession : ICaptureSession
 
         _log.LogInformation("Stats written to {Path}: {Encoded} frames encoded ({Fresh} new), latency p99 {P99:0.0} ms",
             path, video.FramesEncoded, video.FreshSlots, report.Latency.P99Ms);
-    }
-
-    /// <summary>The (Mic Device, <c>muteAffected</c> Track) pairs mic mute silences.</summary>
-    private int GatedInputs()
-    {
-        var count = 0;
-        foreach (var track in _spec.Audio.Tracks)
-        {
-            if (track.MuteAffected)
-            {
-                count += track.DeviceIndexes.Count(d => _spec.Audio.Devices[d].IsMic);
-            }
-        }
-
-        return count;
-    }
-
-    /// <summary>The first Track that mixes device <paramref name="device"/>, or -1.</summary>
-    private int FirstTrackOf(int device)
-    {
-        var tracks = _spec.Audio.Tracks;
-        for (var t = 0; t < tracks.Count; t++)
-        {
-            if (IndexOf(tracks[t].DeviceIndexes, device) >= 0)
-            {
-                return t;
-            }
-        }
-
-        return -1;
-    }
-
-    private static int IndexOf(IReadOnlyList<int> indexes, int value)
-    {
-        for (var i = 0; i < indexes.Count; i++)
-        {
-            if (indexes[i] == value)
-            {
-                return i;
-            }
-        }
-
-        return -1;
     }
 
     private void ReportAudioFaults()
