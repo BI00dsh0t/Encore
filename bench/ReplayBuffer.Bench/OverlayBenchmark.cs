@@ -76,7 +76,8 @@ internal static class OverlayBenchmark
             throw new BenchUsageException($"--modes '{unknown}' is not one of {string.Join(", ", Modes)}.");
         }
 
-        var seconds = options.Int("seconds", 20, 5, 600);
+        // Three phases of 5 s settling and 15 s of presents: a minute per mode.
+        var seconds = options.Int("seconds", 15, 5, 600);
         var settle = options.Int("settle", 5, 0, 120);
         var targetFps = options.Double("target-fps", GpuLoadProcess.DefaultTargetFps, 1, 1000);
         var loadSize = options.Text("load-size");
@@ -131,6 +132,8 @@ internal static class OverlayBenchmark
                 var modePhases = new List<OverlayPhase>();
                 foreach (var (phase, shown) in new[] { ("off", false), ("on", true), ("off-again", false) })
                 {
+                    // A game is in front while it is played: bring the load back if the desktop took the foreground.
+                    BringToFront(load.Hwnd);
                     if (shown)
                     {
                         overlay.ShowDot();
@@ -143,10 +146,13 @@ internal static class OverlayBenchmark
                     Console.WriteLine($"[{mode}/{phase}] settling {settle} s, then PresentMon {seconds} s ...");
                     Thread.Sleep(TimeSpan.FromSeconds(settle));
                     var state = NotificationState();
-                    var foreground = GetForegroundWindow() == load.Hwnd;
+                    var inFrontBefore = GetForegroundWindow() == load.Hwnd;
                     var visible = IsWindowVisible(overlay.Hwnd);
                     var csv = Path.Combine(folder, $"{mode}-{phase}-presentmon.csv");
                     var error = RecordPresents(presentMon, load.Info.Process + ".exe", csv, seconds, folder, $"{mode}-{phase}");
+
+                    // In front for the whole phase: before and after PresentMon's window.
+                    var foreground = inFrontBefore && GetForegroundWindow() == load.Hwnd;
                     if (load.HasExited)
                     {
                         error = $"the GPU load exited ({load.ExitDescription()})";
@@ -311,6 +317,35 @@ internal static class OverlayBenchmark
         return process.ExitCode == 0 ? null : $"PresentMon exited with {process.ExitCode}";
     }
 
+    /// <summary>
+    /// Brings <paramref name="hwnd"/> to the front. Bench runs from a background shell, which Windows refuses the
+    /// foreground, so it shares the foreground thread's input state for the call, as the load itself does.
+    /// </summary>
+    private static void BringToFront(nint hwnd)
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == hwnd)
+        {
+            return;
+        }
+
+        var foregroundThread = GetWindowThreadProcessId(foreground, 0);
+        var thread = GetCurrentThreadId();
+        var attached = foregroundThread != 0 && foregroundThread != thread && AttachThreadInput(thread, foregroundThread, true);
+        try
+        {
+            BringWindowToTop(hwnd);
+            SetForegroundWindow(hwnd);
+        }
+        finally
+        {
+            if (attached)
+            {
+                AttachThreadInput(thread, foregroundThread, false);
+            }
+        }
+    }
+
     private static int NotificationState() => SHQueryUserNotificationState(out var state) == 0 ? state : 0;
 
     internal static string NotificationStateName(int state) => state switch
@@ -348,6 +383,24 @@ internal static class OverlayBenchmark
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindowVisible(nint hwnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(nint hwnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BringWindowToTop(nint hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(nint hwnd, nint processId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AttachThreadInput(uint attach, uint attachTo, [MarshalAs(UnmanagedType.Bool)] bool doAttach);
 }
 
 /// <summary>What one PresentMon CSV says: frames, mean and 1 % low FPS, and each PresentMode's share.</summary>
