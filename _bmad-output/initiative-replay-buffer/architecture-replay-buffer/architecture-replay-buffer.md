@@ -94,7 +94,7 @@ graph LR
 - **Binds:** R2, R3, R15, R17, R18, R22, R25, R26, R29, R32, R35
 - **Prevents:** lost updates; overrides merged or allowed differently by different epics; device references going stale
 - **Rule:**
-  - **Owner and storage:** the engine alone reads and writes `%APPDATA%\ReplayBuffer[-<instance>]\settings.json`. The document is `{ schemaVersion: 1, revision, global, profiles: { <profileId>: { name, ignored, recordingsEnabled, overrides } } }`.
+  - **Owner and storage:** the engine alone reads and writes `%APPDATA%\ReplayBuffer[-<instance>]\settings.json`. The document is `{ schemaVersion: 1, revision, global, profiles: { <profileId>: { name, ignored, recordingsEnabled, folder, overrides } } }`.
   - **Key catalog:** `Contracts.Settings.Keys` is the closed catalog. Each key declares `{ type, default, overridable, appliesAt }`, and a key missing from the document takes its default.
     - **Overridable per Game Profile:** `trackLayout`, `video` (codec, resolution, fps, bitrate, rate control) and `bufferWindow`. Every other key is Global-only; an override of one is refused with `key-not-overridable`.
   - **Updates:** `settings.update { expectedRevision, ops: [ { scope, profileId?, key, op: set|remove, value } ] }`. A value replaces the key whole, and a revision mismatch returns `settings-conflict`.
@@ -299,6 +299,7 @@ graph LR
   - `OutputPathAllocator` in Core is the only producer of output paths. It allocates when a writer is created, from the profile's *current* name and the local time of the Hotkey QPC (Clip) or start QPC (Recording).
   - It reserves the path atomically with `CREATE_NEW`, adding `_2`, `_3`… on a collision.
   - `Monitor Recordings` is a reserved folder, and profile folder names are unique (` (2)` is appended).
+  - Each profile's `folder` is assigned once by the engine in a settings commit and persisted; renames never move it.
   - Characters Windows doesn't allow are replaced, and nobody caches a resolved path.
 
 ### AD-22 — Contracts evolve additively; epic 1 seeds them

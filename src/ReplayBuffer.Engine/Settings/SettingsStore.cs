@@ -143,6 +143,7 @@ public sealed class SettingsStore
     {
         var global = document.Global.ToBuilder();
         var profiles = document.Profiles.ToBuilder();
+        ProfileFolders.AssignMissing(profiles); // Legacy profiles first, as ProfileFolders.FolderOf sees them.
 
         for (var i = 0; i < ops.Count; i++)
         {
