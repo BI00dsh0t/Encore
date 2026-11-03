@@ -16,6 +16,7 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 - **Unsliced epics (4–8):** a slicing session runs Sofia (`bmad-agent-po`) to break the epic into stories, choosing defaults where the PRD and architecture leave a gap, and lists each such choice in the Decisions Awaiting Review below.
 - The PC is kept awake and unlocked while sessions work (the app's keep-awake hold plus a display-required holder). Never change Windows settings.
 - Commit at every checkpoint and keep each plan's log current; the usage limit can land at any time.
+- **Scoped tests (builder, 2026-11-02):** don't run the full graphics or audio pipeline suites unless the change needs them. Run the 0-warning Release build, then only the test projects the diff touches plus their direct dependents (e.g. a UI change runs `ReplayBuffer.App.Tests`, not `Engine`, `Platform.Capture`, `Media` or `Platform.Audio`). The full `dotnet test --solution`, GPU capture runs and `bench` captures happen only when the diff touches the capture, encode, mux or audio path, or an AC needs the measurement. The NativeAOT publish runs only when engine code changed. Say in the report which projects ran and why the rest were skipped.
 
 ## Worker pool (builder, 2026-11-02)
 
@@ -45,7 +46,7 @@ slice-epic-6, slice-epic-7 and story-1-14 still have Remote Control on (the auto
 1. Read this file, `CLAUDE.md`, the ticket via `tickets.py find <ref>`, and the epic file.
 2. `git flow feature start <ref>-<slug>` in the session's own worktree (cut from `develop`). For 1.14 only: switch to the existing `feature/1.14-benchmark`.
 3. Run `bmad-build-auto` with the ticket ref.
-4. Verify: `dotnet build ReplayBuffer.slnx -c Release` (0 warnings), `dotnet test --solution ReplayBuffer.slnx`, `pwsh tools/publish-engine.ps1` (0 IL warnings). Real-time timing tests that fail only under GPU load get one rerun.
+4. Verify, scoped per the standing decision: `dotnet build ReplayBuffer.slnx -c Release` (0 warnings), `dotnet test` on the affected test projects only, `pwsh tools/publish-engine.ps1` (0 IL warnings) only when engine code changed. Real-time timing tests that fail only under GPU load get one rerun.
 5. Commit, then end the turn with a report that begins `READY FOR QA`: the branch, its tip commit, the verification results, and anything queued for the builder. Don't merge yet.
 6. Fix each QA finding that arrives as a cross-session message, commit, and report `READY FOR QA` again.
 7. When the coordinator says QA passed: merge into `develop` from the main folder (`git -C %USERPROFILE%/Documents/repos/ReplayBuffer merge --no-ff ...`), mark the ticket done, commit, and update this file's Queue, Log and queues. Don't push.
@@ -56,7 +57,7 @@ The coordinator starts a fresh QA session in its own worktree, cut from the stor
 
 1. Reads this file, `CLAUDE.md`, the ticket (`tickets.py find <ref>`), the epic file, and the story's plan, its ACs above all.
 2. Reviews the diff against `develop` for unmet ACs, broken `CLAUDE.md` rules, bugs and gaps in the tests.
-3. Runs the full verification itself (0-warning Release build, `dotnet test --solution ReplayBuffer.slnx`, NativeAOT publish), plus each AC that can run without a person. For a HITL story it also runs the automated proxy the story describes.
+3. Runs the scoped verification itself (0-warning Release build, the affected test projects, the NativeAOT publish only when engine code changed), plus each AC that can run without a person. For a HITL story it also runs the automated proxy the story describes.
 4. Changes no code. It sends its findings as one cross-session message (`SendMessage`, `to` = the story session's id) listing each problem's location, what goes wrong, and the evidence, then ends with a report that begins `QA PASS` or `QA FAIL` and gives the count.
 5. On a re-check, verifies the fixes and anything they touched.
 
@@ -72,10 +73,10 @@ The coordinator logs each QA round in the Log below.
 | 4 | 2.1 Tracer: Global Track Layout to named Track streams | 2-1-tracer-track-layout | done |
 | 5 | 2.2 Track mixer | story-2-2 | done |
 | 6 | 2.3 Live device list over IPC | story-2-3 | done |
-| 7 | 2.5 Device dropout and rebind | | pending |
+| 7 | 2.5 Device dropout and rebind | story-2-5 (local_ea1ff557-3cb9-4fe2-9a70-3029632aee7c) | in progress |
 | 8 | 2.4 Mic Devices and mic mute | | pending |
 | 9 | 2.6 Track meters in the engine | | pending |
-| 10 | 2.7 Track Layout editor in the Main App | | pending |
+| 10 | 2.7 Track Layout editor in the Main App | story-2-7 (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 11 | 2.11 Mic Devices and double-count warning in the editor | | pending |
 | 12 | 2.8 Live meters in the Track Layout editor | | pending |
 | 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | in progress |
@@ -268,3 +269,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-02: 2.2 is merged (`e580e82`). 2.9 became ready and went to the pool worker slice-epic-4 (already cleared). QA round 1 on 1.15 (`ca0a873`): **QA FAIL** with 2 findings. One is medium: the retries hide intermittent correctness failures. One is low: the ETW session test collides when suites run at once. 1.15 is fixing them. 2.3 is syncing with develop before its merge.
 - 2026-11-02: 2.3 merged into `develop` (`169e6a5`, `feat(audio): merge 2.3-device-list`) and marked done (`9ee9e22`). Before the merge, `develop` (with 2.2) was merged into the branch with no conflicts: Release build 0 warnings, 737 of 740 tests passed and the three that failed (the GPU encoder flake, `CaptureEndTests.AStatsRunWritesAReportThatMatchesTheFile`, `EngineConnectionTests.AServerThatIsNotTheTrustedEngine...`) each passed on its one rerun, publish 0 IL warnings. One Human Check row added (a real device change). QA's two non-blocking notes not acted on: a watcher start that times out after 10 s logs an error but may still register later; a layout edit can publish `devices.changed` before `settings.changed`.
 - 2026-11-02 12:53: **STOP ALL TESTS by the builder.** The coordinator killed every running test host (from 2.9's worktree, plus an engine started by 1.15's App tests), and `.bench-running` says PAUSED. The 2.9 worker (slice-epic-4) was told to stop. qa-1-15 had hit the usage limit (it resets at 12:40) partway through QA round 2 at `58f18ea`. 2.3 is merged (`169e6a5`). 2.5 and 2.7 are ready but not yet assigned. **To resume:** the builder says so, the coordinator deletes `.bench-running`, tells qa-1-15 to redo round 2 and tells the 2.9 worker to continue, then hands 2.5 and 2.7 to pool workers.
+- 2026-11-02: **Resumed by the builder**, with a new standing rule: scoped tests. Full graphics and audio suites run only when the change needs them; see Standing decisions. The coordinator deleted `.bench-running`. qa-1-15 was told to redo QA round 2 on 1.15 at `58f18ea`, scoped to the round-1 fixes. The 2.9 worker (slice-epic-4) was told to continue its scoped verification from `2f8d212`. New sessions were started: story-2-5 (`local_ea1ff557-3cb9-4fe2-9a70-3029632aee7c`) and story-2-7 (`local_12351eee-812a-4dcb-8f13-6b288e96bce5`).
