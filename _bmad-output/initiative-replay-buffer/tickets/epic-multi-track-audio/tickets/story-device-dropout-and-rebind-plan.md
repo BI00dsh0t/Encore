@@ -3,7 +3,7 @@ title: 'Device dropout and rebind'
 type: 'feature'
 ticket: '5'
 created: '2026-11-02'
-status: 'built'
+status: done
 baseline_revision: '07b65d6104ff4507ba6d02f437f8d7074634842e'
 route: 'full'
 route_source: 'auto'
