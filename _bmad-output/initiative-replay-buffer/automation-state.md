@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.3 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with .gitattributes chore |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 5.2 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
@@ -369,3 +369,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA on 4.2 (`8dc18e5`): **QA PASS**, 0 blocking findings and two accepted optional notes. 4.2 was told to merge. QA round 1 on spike 5.2 (`8a561f7`): **QA FAIL**, 3 findings. One is CRLF line endings: commit 7b839dc turned 8 LF files to CRLF, and this is the third story to hit line-ending churn. The spike is fixing them and rerunning the measurement (about 8 min). qa-1-14 stays on 5.2 for round 2.
 - 2026-11-03: 4.2 merged (`02b0b95`, `feat(engine): merge 4.2-exact-save-cut`, after merging develop in cleanly: build 0 warnings, Core 65, Contracts 97, Engine 167, Platform.Windows 25, Platform.Desktop 11 and App 74 passed, publish clean), and marked done. QA's two optional notes are accepted: (1) `PacketRing.Cut` allocates its copy array (`new RingEntry[_count - first]`) inside the ring lock, a large allocation on a first save at a big Buffer Window that can briefly stall `Append`; not a defect at current window sizes, so it is for 4.6 (ring resizing) or the 4.13 sweep to pool or pre-size. (2) Overlapping presses stay the deferred 4.4 item: `TryGetForcedKey` keeps only the latest served key, so 4.4's Save Cooldown and `save-busy` must cover a press during an in-flight write. Also recorded in the plan's `deferred`. The Human Check Queue gains: press Save twice about 10 s apart in a game and play both Clips back to back in VLC.
 - 2026-11-03: 4.2 merged (`02b0b95`, done `645fccc`), and its card is in Done. That unblocked 4.3 (Replay Buffer lifecycle, medium risk), which went to pool worker slice-epic-4 (Opus, medium effort); its card is In progress. Spike 5.2 fixed QA round 1 at `1e6dbcb`, and QA round 2 is running on qa-1-14 at low effort.
+- 2026-11-03: The builder approved adding a `.gitattributes` that pins text files to LF, after CRLF churn was flagged in QA three times (2.5, 3.7, 5.2). It went to pool worker slice-epic-5 (Sonnet, low effort) on `feature/gitattributes-lf`, so the merge allow rule applies. The coordinator reviews the diff instead of running a QA session.
