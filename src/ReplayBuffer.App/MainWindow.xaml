@@ -30,7 +30,7 @@
                 </ItemsControl>
             </StackPanel>
         </TabItem>
-        <TabItem Header="Settings">
+        <TabItem Header="Settings" IsSelected="{Binding IsSettingsTabSelected, Mode=TwoWay}">
             <Grid Margin="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="160" />
