@@ -3,7 +3,7 @@ title: 'Memory-mode RAM margin'
 type: 'feature'
 ticket: '8'
 created: '2026-11-03'
-status: 'in-review'
+status: 'built'
 baseline_revision: '2b0eb895423eb38e8d4b60ec4945c12394cd0d57'
 route: 'full'
 route_source: 'auto'
@@ -12,7 +12,7 @@ review: 'quick'
 review_source: 'pinned'
 lenses_ran: ['quick']
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: ['{project-root}/CLAUDE.md']
 warnings: ['oversized']
 deferred: []
@@ -117,12 +117,21 @@ deferred: []
 ## Implementation Notes
 
 - `Reclaim` on a Disk ring also stops once it has returned a file block the new slab fits, since `NewSlab` then retries a block and needs no new memory. Counting only freed memory slabs there would trim through the whole file to reach the newer spilled slabs. A block returned for an oversized packet doesn't stop it.
+- After review: `Reclaim` first checks `AnyFreeable` (a ring-only, non-current slab before the current one, in memory or a fitting block) and returns at once when there is none. It reports a short ring only after dropping something.
 - The reporter is `src/ReplayBuffer.Engine/Sessions/MemoryMarginReporter.cs`. `Raised` fires on the ring's appending thread, under that ring's lock but outside the margin's.
 - Test 1 asserts `LiveSlabs <= atDrop`: `atDrop` already counts the cut's pinned slabs, since the ring still holds them at the drop. The short-ring case uses one keyframe of 40 slabs, whose `Reclaim` empties every small slab but the current one.
 
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 4 findings — high 0, medium 3, low 1, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `Reclaim` reported `ShortRing` on a brand-new ring (a session start, resize or restart while the shared margin is inside), though nothing was trimmed. Confirmed: the first `NewSlab` has `_count == 0`. Fixed: a short ring is reported only when this `Reclaim` dropped an entry, and the freeability check below returns first on a new ring.
+  - `[medium]` `[patch]` With a cut pinning the whole window, `Reclaim` emptied the ring back to the current slab and freed nothing (every `DropHead` returns null). Confirmed by tracing a full-window `Cut`. Fixed: the new `AnyFreeable` returns early unless a held, non-current slab is ring-only (`Slab.RingOnly`), a memory slab (or a block when one fits), and wholly before the current slab's entries. New test `InsideTheMarginAFullyPinnedRingTrimsNothing`.
+  - `[medium]` `[patch]` On a Disk ring of file blocks only, a packet bigger than a block wiped the disk buffer for no RAM. Same root cause as the row above, fixed by the same `AnyFreeable` check: with `blockFits` false, a file slab doesn't count. The "wholly before the current slab" condition, added on the main side, also covers an oversized packet's own slab that sits after the current slab's first entry.
+  - `[low]` `[patch]` Test 1's `span < 60 s` passed without the margin, since only 40 s were fed. Fixed: it now asserts `< 25 s`, which fails without the trim.
 
 ## Design Notes
 
@@ -138,3 +147,36 @@ deferred: []
 - `dotnet test --project tests/ReplayBuffer.Contracts.Tests -c Release --no-build` -- expected: all pass (ErrorCodes registry)
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- expected: all pass
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL/AOT warnings
+
+## Auto Run Result
+
+- **Summary:** R3's RAM margin.
+  - Before each native-memory slab, a ring asks the engine's shared `MemoryMargin` (Windows' available physical memory, via `GlobalMemoryStatusEx`).
+  - When the slab would leave less than `max(4 GiB, 15% of installed)`, the ring stops growing. It trims its oldest entries until slabs only it held free the new slab's size, going past slabs a cut pins (their bytes stay), then allocates.
+  - It trims nothing when nothing could be freed. Disk rings get the same margin for their spill slabs.
+  - Each entry into the margin, and a margin trim that leaves under 1 s, raises one `warning.raised { code: memory-margin }`.
+  - Leaving takes 256 MiB of hysteresis.
+- **Files:**
+  - Core: new `Replay/MemoryMargin.cs` (the port, the margin and its events). `Replay/PacketRing.cs` gains the margin check, `Reclaim`/`AnyFreeable`, a shared `DropHead`, and a `Slab.Release` that returns whether it freed.
+  - Contracts: `ErrorCodes.MemoryMargin`.
+  - Platform.Windows: new `SystemMemoryStatus.cs`, plus `NativeMethods.txt`.
+  - Engine:
+    - New `Sessions/MemoryMarginReporter.cs`.
+    - `CaptureSessionOptions.Margin`.
+    - `ReplayRings.Create` takes the margin.
+    - `EngineHost` makes one margin and one reporter.
+  - Tests:
+    - New `MemoryMarginTests` (3, Core) and `MemoryMarginReporterTests` (1, Engine).
+    - `ReplayRingsTests` updated for the new signature.
+- **Review:** quick lens, 4 findings. All 4 were patched: 3 medium (two from one root cause) and 1 low. Nothing was deferred or rejected.
+- **Follow-up review recommended:** true. Three medium findings were patched. The unverified risk: the margin trim (`Reclaim`) running alongside a Buffer Window resize's `CopyTailTo` and a writer's unpin is covered by no test. Coordinator QA serves as the follow-up.
+- **Verification (after the patches):**
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings.
+  - Core 93/93, Contracts 109/109, Engine 160 passed with 19 Explicit skipped.
+  - `tools/publish-engine.ps1`: clean, 11.0 MB.
+  - Heavy not run: capture, encode, mux and audio are unchanged, and the margin is off unless memory is low.
+- **Residual risks:**
+  - `MemoryMargin.Raised` runs `Warnings.Raise` on the encoder thread under the ring's lock, once per entry. It doesn't call back into the ring.
+  - `SystemMemoryStatus` is covered only by the build and the publish.
+  - No real Disk ring is tested under the margin.
+  - The warnings aren't withdrawn when the margin is left. They go only by `warning.dismiss`, like `device-dropout`.

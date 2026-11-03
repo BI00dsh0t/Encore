@@ -38,7 +38,7 @@ public sealed class MemoryMarginTests
         var newest = 40 * Second;
         using var clip = ring.Cut(newest - (60 * Second), newest)!;
         Assert.InRange(clip.Packets[^1].TimeUs, newest - (Second / 10), newest);
-        Assert.True(clip.EndUs - clip.StartUs < 60 * Second);
+        Assert.True(clip.EndUs - clip.StartUs < 25 * Second, $"the Clip spans {clip.EndUs - clip.StartUs} µs");
         Assert.Equal([MemoryMarginEvent.Entered], events);
     }
 
@@ -73,6 +73,31 @@ public sealed class MemoryMarginTests
         PacketRingTests.Feed(ring, video, audio, seconds: 3, VideoBytes, fromSecond: 11);
 
         Assert.Equal([MemoryMarginEvent.Entered, MemoryMarginEvent.Entered, MemoryMarginEvent.ShortRing], events);
+    }
+
+    [Fact]
+    public void InsideTheMarginAFullyPinnedRingTrimsNothing()
+    {
+        var status = new FakeMemoryStatus { Total = 32 * GiB, Available = 20 * GiB };
+        var margin = new MemoryMargin(status);
+        var events = new List<MemoryMarginEvent>();
+        margin.Raised += events.Add;
+        using var ring = new PacketRing(60 * Second, capacity: 64, SlabBytes, margin);
+        var (video, audio) = PacketRingTests.Streams(ring);
+        PacketRingTests.Feed(ring, video, audio, seconds: 5, VideoBytes);
+        using var cut = ring.Cut(0, 5 * Second)!;
+
+        // Every slab is pinned: the next new slab frees nothing, so nothing is dropped.
+        status.Available = (long)(4.5 * GiB);
+        var slabs = ring.LiveSlabs;
+        for (var frame = 150L; ring.LiveSlabs == slabs; frame++)
+        {
+            var pts = frame * 3000;
+            ring.Append(video, PacketRingTests.Pattern(video, pts, VideoBytes), pts, pts, 3000, isKey: false);
+        }
+
+        Assert.Equal(0, ring.OldestUs);
+        Assert.Equal([MemoryMarginEvent.Entered], events);
     }
 
     private sealed class FakeMemoryStatus : IMemoryStatus

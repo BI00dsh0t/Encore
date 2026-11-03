@@ -582,15 +582,23 @@ public sealed class PacketRing : IDisposable
     /// last reference the ring held) reach <paramref name="bytes"/>, or a Disk-mode ring's block is
     /// returned that the new slab fits (a block is then retried), never dropping the current slab's. Slabs a cut pins
     /// leave the ring but free nothing, so the trim goes on past them. Then reports a ring left
-    /// holding under <see cref="RingGenerations.MinClipUs"/>. Under the lock.
+    /// holding under <see cref="RingGenerations.MinClipUs"/>, if it dropped anything. When no trim
+    /// could free anything (every older slab pinned), it drops nothing. Under the lock.
     /// </summary>
     private void Reclaim(long bytes)
     {
-        long freed = 0;
         var blockFits = _file is { } file && bytes <= file.BlockBytes;
+        if (!AnyFreeable(blockFits))
+        {
+            return;
+        }
+
+        long freed = 0;
         var blockReturned = false;
+        var dropped = false;
         while (freed < bytes && !blockReturned && _count > 0 && !ReferenceEquals(_entries[_head].Slab, _current))
         {
+            dropped = true;
             if (DropHead() is { } released)
             {
                 if (released.File is null)
@@ -604,10 +612,30 @@ public sealed class PacketRing : IDisposable
             }
         }
 
-        if (_count == 0 || _newestUs - _entries[_head].TimeUs < RingGenerations.MinClipUs)
+        if (dropped && (_count == 0 || _newestUs - _entries[_head].TimeUs < RingGenerations.MinClipUs))
         {
             _margin!.ReportShortRing();
         }
+    }
+
+    /// <summary>
+    /// Whether a trim could free anything: a slab besides the current one that only the ring holds,
+    /// in memory, or a block when <paramref name="blockFits"/>, whose entries all come before the
+    /// current slab's first (the trim stops there). Cuts pin only under the lock, so none can be
+    /// pinned meanwhile. Under the lock.
+    /// </summary>
+    private bool AnyFreeable(bool blockFits)
+    {
+        var stop = _current is { FirstSeq: >= 0 } current ? current.FirstSeq : long.MaxValue;
+        foreach (var slab in _held)
+        {
+            if (!ReferenceEquals(slab, _current) && slab.LastSeq < stop && slab.RingOnly && (slab.File is null || blockFits))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Releases the ring's reference on <paramref name="slab"/>; whether that freed it.</summary>
@@ -763,6 +791,9 @@ public sealed class PacketRing : IDisposable
                 new ReadOnlySpan<byte>(Data + offset, destination.Length).CopyTo(destination);
             }
         }
+
+        /// <summary>Whether the ring's is its only reference: no cut pins it.</summary>
+        public bool RingOnly => Volatile.Read(ref _references) == 1;
 
         public void AddRef() => Interlocked.Increment(ref _references);
 
