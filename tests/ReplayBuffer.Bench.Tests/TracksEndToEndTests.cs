@@ -71,7 +71,8 @@ public sealed class TracksEndToEndTests : IDisposable
         Assert.All(report.Tracks, t => Assert.Null(t.Title));
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void VlcListsTheTitlesInOrder()
     {
         var tools = Tools();

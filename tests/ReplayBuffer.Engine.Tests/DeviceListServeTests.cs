@@ -102,23 +102,6 @@ public sealed class DeviceListServeTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AnIdenticalListPublishesNothing()
-    {
-        var source = new FakeEndpointSource(Realtek, Mic);
-        StartHost(source);
-        var (client, events) = await ConnectAsync();
-
-        source.Change(Mic, Realtek);
-        source.Raise();
-
-        Assert.Equal(3, source.Lists);
-        await Task.Delay(300, Token);
-        Assert.False(events.Reader.TryRead(out _));
-        Assert.Equal(0, _host.Hub.State.Seq);
-        Assert.Equal([Realtek, Mic], client.State.Devices.Devices);
-    }
-
-    [Fact]
     public async Task AFailedListingKeepsThePreviousListAndTheEngineServes()
     {
         var source = new FakeEndpointSource(Realtek, Mic);

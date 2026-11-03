@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 3.1 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 3.5 |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -89,7 +89,7 @@ The coordinator logs each QA round in the Log below.
 | 18 | 3.2 Detection sources and exclusions | | pending |
 | 19 | 3.3 Target Game rule | | pending |
 | 20 | 3.4 Game Profile auto-creation and Ignored | | pending |
-| 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `af89823`) |
 | 22 | 3.6 Game Profiles page in the Main App | | pending |
 | 23 | 3.7 Refactor sweep | | pending |
 | 24 | Release epic 3 (`v0.3.0`) | | pending |
@@ -296,3 +296,10 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: test-trim paused on `feature/test-suite-trim`, cut from `3411014`, with no edits and a clean worktree. Its Release build had 0 warnings. The baseline timing run stopped during App.Tests, so it has no timings yet.
 - 2026-11-03: **Resumed by the builder.** The coordinator deleted `.bench-running`. The 2.4 worker was told to trim its tests lean, check `OutputResolutionTests` against develop, then verify, review and report READY FOR QA. test-trim was told to continue its baseline, trim and verify, and to merge after 2.4.
 - 2026-11-03: Epic 1's own `status` was never set, which kept epic 3 waiting behind it. It's now marked `status: done` (`a27cd5c`), so mark each epic done at its release from now on. 3.1 (game-detection tracer, high risk, HITL) went to pool worker slice-epic-8 (Opus, high effort). 3.5 (OutputPathAllocator) went to pool worker 2-1-tracer (Opus, medium effort). Both were told to keep their tests lean.
+- 2026-11-03: 3.5 is READY FOR QA at `30d6c19`: Release build 0 warnings, Core and scoped Engine tests pass, publish clean. Pool worker qa-1-14 (Sonnet, medium effort) was given its QA. 2.4 is finishing its scoped tests, 3.1 is being implemented, and test-trim is on its after-run.
+- 2026-11-03: QA on 3.5 (`30d6c19`): **QA PASS**, 0 findings (Core 58/58, Contracts 109/109). 3.5 was switched to Sonnet and told to merge. qa-1-14 is back in the pool. test-trim committed its trim (`e0e828d`) and is running the opt-in heavy category before its docs commit.
+- 2026-11-03: 3.5 merged into develop (`af89823`, --no-ff) after QA PASS at `30d6c19`; ticket marked done. Deferred: pre-existing NullReferenceException in `SettingsStore.Open` for a profile with no `overrides` property (hand-edited files only). `SettingsStoreTests.cs` has a one-line change that may conflict with test-trim.
+- 2026-11-03: test-trim is READY FOR REVIEW at `68a6806`. The default suite went from about 400 s to about 83 s (829 → 584 cases, 40 moved to opt-in `Heavy` + `Explicit`, 205 removed), all pass, and the heavy run passes too. The coordinator reviewed the report instead of running QA, as the change is test-only and has no production code. The session is asked to restore the path and file-name safety rows that the mechanical 2-row cut dropped (they cost milliseconds), then sync and merge now, ahead of 2.4, so every later story gets the faster suite. 2.4 and 3.1 will sync after it.
+- 2026-11-03 05:31: 2.4, 3.1 and test-trim hit the usage limit (reset 05:30). Their work is intact: 2.4 has uncommitted lean-trim edits, 3.1 has an uncommitted implementation, and test-trim is at `68a6806`. All three were told to continue.
+- 2026-11-03: test-trim merged into develop (`bbfb0e6`, `test: merge test-suite-trim`, --no-ff). The default suite went from about 400 s to about 88 s (Engine 188 → 21 s, App 80 → 25 s, Platform.Audio 61 → 10 s, Bench 59 → 20 s; 829 → 620 cases, all pass). 36 slow, hardware-bound or flaky tests are opt-in (`Explicit` + `Heavy` trait; run with `--explicit only`, and they pass), and 183 redundant cases were removed (after restoring 26 path and file-name safety theory rows). `develop` (3.5) was merged in first without conflicts; 3.5's tests were already lean. `CLAUDE.md` has a new "Tests" section. 2.4 and 3.1 sync with develop next and slim their own new tests.
+- 2026-11-03: test-trim merged (`bbfb0e6`). The default suite takes about 88 s (was about 400 s), and all 620 cases pass, including 26 restored safety rows. Its session was archived because Remote Control was on. 2.4 and 3.1 were told to sync with develop and slim their new tests before READY FOR QA.

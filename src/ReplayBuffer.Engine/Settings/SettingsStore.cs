@@ -4,6 +4,7 @@ using System.Text.Json;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Hotkeys;
+using ReplayBuffer.Core.Output;
 
 namespace ReplayBuffer.Engine.Settings;
 
@@ -142,6 +143,7 @@ public sealed class SettingsStore
     {
         var global = document.Global.ToBuilder();
         var profiles = document.Profiles.ToBuilder();
+        ProfileFolders.AssignMissing(profiles); // Legacy profiles first, as ProfileFolders.FolderOf sees them.
 
         for (var i = 0; i < ops.Count; i++)
         {
@@ -162,6 +164,7 @@ public sealed class SettingsStore
         }
 
         RefuseDuplicateHotkeys(global, ops);
+        ProfileFolders.AssignMissing(profiles);
         return document with { Global = global.ToImmutable(), Profiles = profiles.ToImmutable() };
     }
 

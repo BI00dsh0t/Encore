@@ -13,6 +13,18 @@
 - Don't push unless asked; there is no remote yet.
 - The git-flow settings live in `.git/config`. On a fresh clone, run `git flow init -d` and `git config gitflow.prefix.versiontag v`.
 
+## Tests
+
+- **Lean tests.** This is a personal project with no end users. A suite only proves the feature works: one or two happy-path tests per feature or AC, plus a test for any bug that really bit. No exhaustive edge-case tables, no duplicate checks across layers, no long real-time waits, and no benchmark-style bounds in the default run.
+- **Heavy tests are opt-in.** Slow, hardware-bound or flaky tests (GPU capture and encode matrices, real-time latency, drift and allocation bounds, long captures, supervision timeouts, external players and the GPU load) are marked `[Fact(Explicit = true)]` (or `[Theory(Explicit = true)]`) with `[Trait("Category", "Heavy")]`. xUnit skips explicit tests unless asked.
+- **Default suite** (build first; it must have 0 warnings):
+
+  `dotnet build ReplayBuffer.slnx -c Release`
+
+  `dotnet test --solution ReplayBuffer.slnx -c Release --no-build`, or one project: `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build`
+
+- **Heavy category**, when a change touches the capture, encode, mux or audio path, or an AC needs the measurement: add `--explicit only` to either command (`--explicit on` runs both). Run one project at a time, and not while another session's tests are running.
+
 ## Commit messages: Conventional Commits 1.0.0
 
 - **Format:** `<type>(<scope>): <summary>`. The summary is imperative, lowercase, has no trailing period, and is 72 characters or fewer. A body (optional) explains why, wrapped at 72 characters.

@@ -86,14 +86,6 @@ public sealed class AudioTimelineTests
     }
 
     [Fact]
-    public void APacketEntirelyBeforeTheAnchorIsDropped()
-    {
-        Push(-1000, 480, 0);
-
-        Assert.Empty(_sink.Frames);
-    }
-
-    [Fact]
     public void AGapBeyondFiveMillisecondsIsFilledWithSilence()
     {
         Push(0, 480, 0);
@@ -152,18 +144,6 @@ public sealed class AudioTimelineTests
         Assert.Equal(960, _sink.Frames.Count);
         Assert.Equal(0, _sink.SilentFrames);
         Assert.Equal(480f, _sink.Frames[480]);
-    }
-
-    [Fact]
-    public void ABackwardsStampUsesThePreviousStampPlusItsFrames()
-    {
-        Push(0, 480, 0);
-        Push(480, 480, 480);
-        Push(-48_000, 480, 960); // behind both earlier packets
-
-        Assert.Equal(1440, _sink.Frames.Count);
-        Assert.Equal(0, _sink.SilentFrames);
-        Assert.Equal(960f, _sink.Frames[960]);
     }
 
     [Fact]
@@ -240,20 +220,4 @@ public sealed class AudioTimelineTests
 
 public sealed class QpcClockTests
 {
-    [Fact]
-    public void HundredNanosecondUnitsConvertBackToQpc()
-    {
-        Assert.Equal(10_000_000, QpcClock.From100ns(10_000_000, 10_000_000));
-        Assert.Equal(3_000_000, QpcClock.From100ns(10_000_000, 3_000_000));
-        Assert.Equal(24_000_000_000_000, QpcClock.From100ns(80_000_000_000_000, 3_000_000)); // no overflow
-    }
-
-    [Fact]
-    public void ToUnitsRoundsToNearestInBothDirections()
-    {
-        Assert.Equal(90_000, QpcClock.ToUnits(10_000_000, 10_000_000, 90_000));
-        Assert.Equal(1, QpcClock.ToUnits(70, 10_000_000, 90_000)); // 0.63
-        Assert.Equal(-1, QpcClock.ToUnits(-70, 10_000_000, 90_000));
-        Assert.Equal(0, QpcClock.ToUnits(40, 10_000_000, 90_000)); // 0.36
-    }
 }

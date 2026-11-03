@@ -49,15 +49,6 @@ public sealed class HotkeyPlanTests
     }
 
     [Fact]
-    public void AnUnboundActionIsUnboundWhateverTheMode()
-    {
-        var plan = HotkeyPlan.For(All with { RecordStart = null }, RecordHotkeyMode.Toggle);
-
-        Assert.Equal(ErrorCodes.HotkeyUnbound, plan[3].SkipCode);
-        Assert.Equal(ErrorCodes.HotkeyInactive, plan[4].SkipCode);
-    }
-
-    [Fact]
     public void ADuplicateRegistersTheFirstInActionOrderOnly()
     {
         // NoRepeat doesn't make a different combination.
@@ -80,14 +71,6 @@ public sealed class HotkeyPlanTests
 
         Assert.True(plan[5].Registers);
         Assert.Equal((HotkeyAction.RecordStart, HotkeyAction.MonitorRecordToggle), HotkeyPlan.FindDuplicate(hotkeys));
-    }
-
-    [Fact]
-    public void DistinctBindingsHaveNoDuplicate()
-    {
-        Assert.Null(HotkeyPlan.FindDuplicate(All));
-        Assert.Null(HotkeyPlan.FindDuplicate(Keys.Hotkeys.Default));
-        Assert.False(HotkeyPlan.SameCombination(A, A with { Modifiers = HotkeyModifiers.Control }));
     }
 
     [Fact]
