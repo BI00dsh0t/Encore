@@ -3,7 +3,7 @@ title: 'Detection sources and exclusions'
 type: 'feature'
 ticket: '2'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '80f43f68543ea69995a1a88968b991e9cebace9e'
 route: 'full'
 route_source: 'auto'
