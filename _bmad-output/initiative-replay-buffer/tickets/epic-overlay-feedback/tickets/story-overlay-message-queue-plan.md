@@ -3,14 +3,14 @@ title: 'Overlay message queue'
 type: 'feature'
 ticket: '5'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '36632897ef73704fcb2960ea4951928c35739f85'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -65,9 +65,9 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Overlay/OverlayViewModel.cs` -- the queue, repeat collapse, `Message` and its 4 s timer; update the class summary -- R3's queue.
-- [ ] `src/ReplayBuffer.App/Overlay/OverlayWindow.cs` -- draw the message below the dot in green or red, size and place the window for it; update the class summary.
-- [ ] `tests/ReplayBuffer.App.Tests/OverlayTests.cs` -- (1) three notices 100 ms apart each shown 4 s in order, colours by severity (assert `Message.Severity`/`Code`); (2) a queued notice dismissed never shows, and an `Overlay = false` warning never shows; (3) reconnect: shown notice not replayed, waiting one shows; (4) a repeat of a waiting `clip-failed` shows once; (5) extend the window test: a message with no dot shows the window, and none hides it.
+- [x] `src/ReplayBuffer.App/Overlay/OverlayViewModel.cs` -- the queue, repeat collapse, `Message` and its 4 s timer; update the class summary -- R3's queue.
+- [x] `src/ReplayBuffer.App/Overlay/OverlayWindow.cs` -- draw the message below the dot in green or red, size and place the window for it; update the class summary.
+- [x] `tests/ReplayBuffer.App.Tests/OverlayTests.cs` -- (1) three notices 100 ms apart each shown 4 s in order, colours by severity (assert `Message.Severity`/`Code`); (2) a queued notice dismissed never shows, and an `Overlay = false` warning never shows; (3) reconnect: shown notice not replayed, waiting one shows; (4) a repeat of a waiting `clip-failed` shows once; (5) extend the window test: a message with no dot shows the window, and none hides it.
 
 **Acceptance Criteria:**
 - Given three `overlay: true` notices raised 100 ms apart, when the Overlay view model reads them, then each is `Message` for 4 s in the order raised and then `Message` is null.
@@ -82,6 +82,12 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-03 — Review pass
+- verdicts: 2 findings — high 0, medium 0, low 2, false 0, maybe-false 0
+- findings:
+  - `[low]` `[patch]` At uncommon DPI scales (e.g. 137.5 %), `Place` rounds the window's width and height separately, so the uniform `Viewbox` shrinks the grid and centres it, moving the dot about 1.7 px left of `Monitors.TopRight` — fixed: the `Viewbox` is aligned top-right, so the dot keeps its corner (it can still be a fraction of a pixel smaller).
+  - `[low]` `[patch]` The window test built its view model on `TimeProvider.System`, so a failed assert before `Dismiss` would leave a real 4 s timer that later calls `Update` off the STA thread — fixed: the test passes a `ManualTime`.
+
 ## Design Notes
 
 The queue is client-side because the engine's notices are plain warnings that stay active (10 s for `clip-saved`, until dismissed for failures), so "shown" is the Overlay's own fact; GUID ids make it survive reconnects with no Contracts change. Collapsing only waiting repeats keeps a burst of failures to one message, while a fresh failure after the last one has left still announces itself. The window grows only while a message shows, so the always-on dot keeps the small window that spike 5.2 measured in independent flip.
@@ -94,3 +100,24 @@ The queue is client-side because the engine's notices are plain warnings that st
 
 **Manual checks (if no CLI):**
 - Builder (Human Check Queue): with the Dev engine and App, `dev.simulate saveFailed` and a Save over a borderless window show "Clip not saved: save failed" in red and "Clip saved" in green below the dot, one after the other.
+
+## Auto Run Result
+
+- **Summary:** The Overlay view model queues the snapshot's `overlay: true` warnings it hasn't seen, keyed by their GUID ids, and shows one at a time as `Message` for 4 s each, oldest first, on a `TimeProvider` timer. A warning dismissed while it waits is dropped. One dismissed while it shows ends at once and the next starts. While disconnected nothing shows, but the waiting list and seen set stay, so a reconnect never replays a message already shown. A new warning with the same code and text as one still waiting takes that one's place, which collapses the repeated `clip-failed` / `disk-full` notices QA noted on 5.4. The window draws the message below the dot on a dark shade, red for errors and green otherwise. It grows left and down only while a message shows, and the dot keeps its place.
+- **Files:**
+  - `src/ReplayBuffer.App/Overlay/OverlayViewModel.cs`: the queue, the repeat collapse, `Message` and its timer.
+  - `src/ReplayBuffer.App/Overlay/OverlayWindow.cs`: draws the message, sizes the window and keeps the `Viewbox` top-right.
+  - `tests/ReplayBuffer.App.Tests/OverlayTests.cs`: four queue tests and the extended window test.
+- **Review:** quick lens, 2 low findings, both patched by the parent session as direct one-line fixes. Nothing deferred or rejected.
+- **Follow-up review recommended:** false (0 high and 0 medium patched).
+- **Verification:**
+  - Release build: 0 warnings.
+  - App.Tests: 75 passed, 7 Heavy skipped, before and after the patches.
+  - The implementer also ran the two Heavy Overlay tests (screen copy, focus), which passed before the patches.
+  - No engine code changed, so there was no NativeAOT publish.
+  - Matrix audit: every row is covered by the queue tests, and colour is asserted through `Severity`.
+- **Residual risks:**
+  - The message's look (12 px text, the shade, the ellipsis at 260 DIP, mixed-DPI scaling) is checked only by eye, through the Human Check.
+  - Repeats collapse only while waiting, so a fresh failure after the last one has left still shows.
+  - The engine still keeps stacked repeats in the snapshot for the status line (5.10).
+

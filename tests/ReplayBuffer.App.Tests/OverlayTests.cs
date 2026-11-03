@@ -81,10 +81,97 @@ public sealed class OverlayTests
     }
 
     [Fact]
+    public void QueuedNoticesShowOneAtATimeInTheOrderRaised()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        var now = time.GetUtcNow();
+        Raise(engine, Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", now));
+        Raise(engine, Notice("b", "clip-failed", WarningSeverity.Error, "Clip not saved: save failed", now.AddMilliseconds(100)));
+        Raise(engine, Notice("c", "recording-started", WarningSeverity.Info, "Recording started", now.AddMilliseconds(200)));
+
+        foreach (var (id, severity) in new[] { ("a", WarningSeverity.Info), ("b", WarningSeverity.Error), ("c", WarningSeverity.Info) })
+        {
+            Assert.Equal(id, model.Message?.Id);
+            Assert.Equal(severity, model.Message!.Severity);
+            time.Advance(TimeSpan.FromSeconds(3.9));
+            Assert.Equal(id, model.Message?.Id);
+            time.Advance(TimeSpan.FromSeconds(0.1));
+        }
+
+        Assert.Null(model.Message);
+    }
+
+    [Fact]
+    public void ADismissedNoticeAndANonOverlayWarningNeverShow()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        var now = time.GetUtcNow();
+        Raise(
+            engine,
+            Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", now),
+            Notice("b", "recording-started", WarningSeverity.Info, "Recording started", now.AddMilliseconds(100)),
+            Notice("q", "feedback-device-captured", WarningSeverity.Warning, "The feedback device is captured", now.AddMilliseconds(150)) with { Overlay = false });
+        Assert.Equal("a", model.Message?.Id);
+
+        Dismiss(engine, "b");
+        Assert.Equal("a", model.Message?.Id);
+        time.Advance(OverlayViewModel.MessageDuration);
+        Assert.Null(model.Message);
+    }
+
+    [Fact]
+    public void AReconnectShowsTheWaitingNoticeButNeverReplaysAShownOne()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        var now = time.GetUtcNow();
+        Raise(
+            engine,
+            Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", now),
+            Notice("b", "recording-started", WarningSeverity.Info, "Recording started", now.AddMilliseconds(100)));
+        Assert.Equal("a", model.Message?.Id);
+
+        engine.Status = EngineStatus.Disconnected;
+        engine.RaiseChanged();
+        Assert.Null(model.Message);
+
+        time.Advance(TimeSpan.FromSeconds(10));
+        engine.Status = EngineStatus.Connected;
+        engine.RaiseChanged();
+        Assert.Equal("b", model.Message?.Id);
+        time.Advance(OverlayViewModel.MessageDuration);
+        Assert.Null(model.Message);
+    }
+
+    [Fact]
+    public void ARepeatOfAWaitingFailureShowsOnce()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        var now = time.GetUtcNow();
+        Raise(engine, Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", now));
+        Raise(engine, Notice("x", "clip-failed", WarningSeverity.Error, "Clip not saved: save failed", now.AddMilliseconds(100)));
+        Raise(engine, Notice("x2", "clip-failed", WarningSeverity.Error, "Clip not saved: save failed", now.AddMilliseconds(200)));
+
+        // The first failure's dismissal doesn't drop the repeat that took its place.
+        Dismiss(engine, "x");
+        time.Advance(OverlayViewModel.MessageDuration);
+        Assert.Equal("x2", model.Message?.Id);
+        time.Advance(OverlayViewModel.MessageDuration);
+        Assert.Null(model.Message);
+    }
+
+    [Fact]
     public void TheWindowIsTopmostClickThroughNeverActivatedAndExcludedFromCapture() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession();
-        var window = new OverlayWindow(new OverlayViewModel(engine, action => action()));
+        var window = new OverlayWindow(new OverlayViewModel(engine, action => action(), new ManualTime()));
         try
         {
             var hwnd = window.Handle;
@@ -104,6 +191,13 @@ public sealed class OverlayTests
             Assert.True(window.IsVisible);
 
             Shift(engine, CaptureState.Initial);
+            Assert.False(window.IsVisible);
+
+            // A message with no dot or icon shows the window too.
+            Raise(engine, Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", DateTimeOffset.UtcNow));
+            Assert.True(window.IsVisible);
+
+            Dismiss(engine, "a");
             Assert.False(window.IsVisible);
         }
         finally
@@ -208,6 +302,21 @@ public sealed class OverlayTests
     private static void Shift(FakeEngineSession engine, CaptureState capture)
     {
         engine.State = engine.State! with { Capture = capture };
+        engine.RaiseChanged();
+    }
+
+    private static Warning Notice(string id, string code, WarningSeverity severity, string message, DateTimeOffset at) =>
+        new(id, code, severity, "capture", message, at, Overlay: true, Sound: null, Dismissable: true);
+
+    private static void Raise(FakeEngineSession engine, params Warning[] warnings)
+    {
+        engine.State = engine.State! with { Warnings = [.. engine.State.Warnings, .. warnings] };
+        engine.RaiseChanged();
+    }
+
+    private static void Dismiss(FakeEngineSession engine, string id)
+    {
+        engine.State = engine.State! with { Warnings = [.. engine.State.Warnings.Where(w => w.Id != id)] };
         engine.RaiseChanged();
     }
 
