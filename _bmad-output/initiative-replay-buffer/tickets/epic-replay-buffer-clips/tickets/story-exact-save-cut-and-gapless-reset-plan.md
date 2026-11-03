@@ -3,7 +3,7 @@ title: 'Exact save cut and gapless Reset'
 type: 'feature'
 ticket: '2'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'cc6c2d180eb8ff3bac681ef97cf4626d70b9acf3'
 route: 'full'
 route_source: 'auto'
