@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
+using ReplayBuffer.App.Engine;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 
@@ -10,10 +12,13 @@ namespace ReplayBuffer.App.Settings;
 /// <summary>
 /// The Global <c>trackLayout</c> (R1, R2): an unsaved draft of its devices and Tracks, which Save sends as
 /// one <c>settings.update</c>. Devices come from the snapshot's <c>devices</c> list; a layout device that
-/// isn't present shows as unavailable and stays in the layout. Members run on the UI thread.
+/// isn't present shows as unavailable and stays in the layout. While the page is open it meters its draft
+/// (R6) through <c>meters.watch</c>, and each Track shows its level from the snapshot's <c>meters</c>.
+/// Members run on the UI thread.
 /// </summary>
 internal sealed class TrackLayoutPage : SettingsPage
 {
+    private readonly IEngineSession _engine;
     private AudioDeviceList _devices = AudioDeviceList.Empty;
     private TrackLayout _basis = Keys.TrackLayout.Default;
     private bool _isDirty;
@@ -21,10 +26,17 @@ internal sealed class TrackLayoutPage : SettingsPage
     private TrackLayoutDeviceItem? _selectedDevice;
     private TrackLayoutTrackItem? _selectedTrack;
     private TrackLayoutChoice? _selectedChoice;
+    private bool _isOpen;
+    private MeterLevels _levels = MeterLevels.Empty;
+    private string? _engineInstanceId;
+    private string? _watchedJson;
+    private string? _watchedInstanceId;
+    private bool _unwatchPending;
 
-    public TrackLayoutPage(SettingsSender sender)
+    public TrackLayoutPage(SettingsSender sender, IEngineSession engine)
         : base(sender)
     {
+        _engine = engine;
         AddDeviceCommand = new RelayCommand(AddDevice);
         RemoveDeviceCommand = new RelayCommand(RemoveDevice);
         AddTrackCommand = new RelayCommand(AddTrack);
@@ -72,6 +84,36 @@ internal sealed class TrackLayoutPage : SettingsPage
         private set => Set(ref _isDirty, value);
     }
 
+    /// <summary>
+    /// Whether the page is on screen: the window shown, the Settings tab and this page selected. Opening
+    /// watches the draft; closing sends <c>meters.unwatch</c> and zeroes every level.
+    /// </summary>
+    public bool IsOpen
+    {
+        get => _isOpen;
+        set
+        {
+            if (!Set(ref _isOpen, value))
+            {
+                return;
+            }
+
+            if (value)
+            {
+                _unwatchPending = false;
+                Watch();
+            }
+            else
+            {
+                _watchedJson = null;
+                _watchedInstanceId = null;
+                _ = UnwatchAsync();
+            }
+
+            ShowLevels();
+        }
+    }
+
     public ICommand AddDeviceCommand { get; }
 
     public ICommand RemoveDeviceCommand { get; }
@@ -99,6 +141,29 @@ internal sealed class TrackLayoutPage : SettingsPage
 
         _devices = devices;
         RefreshDevices();
+    }
+
+    /// <summary>
+    /// Takes the snapshot's meter levels and engine run: sets each Track's level, and watches the draft
+    /// again when the page is open and the engine is a new run.
+    /// </summary>
+    public void ShowMeters(MeterLevels levels, string engineInstanceId)
+    {
+        ArgumentNullException.ThrowIfNull(levels);
+        _levels = levels;
+        _engineInstanceId = engineInstanceId;
+        if (IsOpen && _watchedInstanceId != engineInstanceId)
+        {
+            Watch();
+        }
+        else if (!IsOpen && _unwatchPending)
+        {
+            // A reconnect to the same engine run: its watch outlived the link, so stop it now.
+            _unwatchPending = false;
+            _ = UnwatchAsync();
+        }
+
+        ShowLevels();
     }
 
     /// <summary>The draft as Contracts' <see cref="TrackLayout"/>.</summary>
@@ -153,6 +218,7 @@ internal sealed class TrackLayoutPage : SettingsPage
             Tracks.Add(new TrackLayoutTrackItem(track, DraftChanged));
         }
 
+        ShowLevels();
         SelectedTrack = Tracks.FirstOrDefault(t => t.Id == selectedTrackId) ?? Tracks.FirstOrDefault();
         DevicesChanged();
         DraftChanged();
@@ -176,6 +242,70 @@ internal sealed class TrackLayoutPage : SettingsPage
         }
 
         IsDirty = !Same(ToLayout(), _basis);
+        if (IsOpen && MeteredJson() != _watchedJson)
+        {
+            Watch();
+        }
+    }
+
+    // Names don't change what the engine meters, and the name box updates per keystroke.
+    private string MeteredJson()
+    {
+        var layout = ToLayout();
+        return Keys.TrackLayout.ToJson(layout with { Tracks = [.. layout.Tracks.Select(t => t with { Name = "" })] }).GetRawText();
+    }
+
+    private void Watch()
+    {
+        _watchedJson = MeteredJson();
+        _watchedInstanceId = _engineInstanceId;
+        _ = WatchAsync(_watchedJson, new MetersWatch(ToLayout()));
+    }
+
+    private async Task WatchAsync(string json, MetersWatch watch)
+    {
+        try
+        {
+            await _engine.SendAsync(AudioMessages.Watch, watch);
+        }
+        catch (ErrorCodeException e)
+        {
+            // Refused: the next draft change tries again. Disconnected: so does the next snapshot.
+            if (_watchedJson == json)
+            {
+                _watchedJson = null;
+                if (e.Code == ErrorCodes.EngineDisconnected)
+                {
+                    _watchedInstanceId = null;
+                }
+            }
+        }
+    }
+
+    private async Task UnwatchAsync()
+    {
+        try
+        {
+            await _engine.SendAsync(AudioMessages.Unwatch, Empty.Value);
+        }
+        catch (ErrorCodeException e) when (e.Code == ErrorCodes.EngineDisconnected)
+        {
+            // The engine may still be metering; the next snapshot sends this again while the page stays closed.
+            _unwatchPending = !IsOpen;
+        }
+        catch (ErrorCodeException)
+        {
+            // Refused: there is nothing to stop.
+        }
+    }
+
+    /// <summary>Each Track's level from the last levels; 0 when the page is closed or the levels don't list it.</summary>
+    private void ShowLevels()
+    {
+        foreach (var track in Tracks)
+        {
+            track.ShowPeak(IsOpen ? _levels.Tracks.FirstOrDefault(l => l.TrackId == track.Id)?.Peak ?? 0 : 0);
+        }
     }
 
     /// <summary>After the draft's devices change: the Tracks' checkboxes, the labels and the choices.</summary>
@@ -261,6 +391,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         var track = new TrackLayoutTrackItem(new Track(Guid.NewGuid(), $"Track {Tracks.Count + 1}", [], MuteAffected: false), DraftChanged);
         track.ShowDevices(Devices);
         Tracks.Add(track);
+        ShowLevels();
         SelectedTrack = track;
         DraftChanged();
     }
@@ -387,8 +518,20 @@ internal sealed class TrackLayoutTrackItem(Track track, Action changed) : Observ
     private string _name = track.Name;
     private bool _muteAffected = track.MuteAffected;
     private string _warning = "";
+    private double _level;
 
     public Guid Id { get; } = track.Id;
+
+    /// <summary>The Track's level bar, 0..1: its linear peak on a −60..0 dBFS scale.</summary>
+    public double Level
+    {
+        get => _level;
+        private set => Set(ref _level, value);
+    }
+
+    /// <summary>Sets <see cref="Level"/> from a linear sample peak.</summary>
+    public void ShowPeak(float peak) =>
+        Level = peak <= 0 ? 0 : Math.Clamp(((20 * Math.Log10(peak)) + 60) / 60, 0, 1);
 
     public string Name
     {
