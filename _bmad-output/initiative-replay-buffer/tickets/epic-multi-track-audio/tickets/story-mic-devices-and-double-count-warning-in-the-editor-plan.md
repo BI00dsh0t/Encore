@@ -3,14 +3,14 @@ title: 'Mic Devices and double-count warning in the editor'
 type: 'feature'
 ticket: '11'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '63d104d521d9c3af51c62a4308707424294a47a5'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -60,9 +60,9 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Settings/TrackLayoutPage.cs` -- `IsMic`/`CanBeMic`, settable `MuteAffected`, `Warning`, `DraftChanged` -- R4 marking, R2 warning
-- [ ] `src/ReplayBuffer.App/Settings/TrackLayoutView.xaml` -- the Mic checkbox, the mute checkbox, the warning text and its marker -- the editor UI
-- [ ] `tests/ReplayBuffer.App.Tests/TrackLayoutPageTests.cs` -- lean tests: the two ACs below, and the existing view test extended -- verification
+- [x] `src/ReplayBuffer.App/Settings/TrackLayoutPage.cs` -- `IsMic`/`CanBeMic`, settable `MuteAffected`, `Warning`, `DraftChanged` -- R4 marking, R2 warning
+- [x] `src/ReplayBuffer.App/Settings/TrackLayoutView.xaml` -- the Mic checkbox, the mute checkbox, the warning text and its marker -- the editor UI
+- [x] `tests/ReplayBuffer.App.Tests/TrackLayoutPageTests.cs` -- lean tests: the two ACs below, and the existing view test extended -- verification
 
 **Acceptance Criteria:**
 - Given the page over three present devices (two outputs, one input), when a test adds them, marks the input as Mic, adds a "Chat" Track holding the mic with mute-affected checked, and saves, then the sent `trackLayout` has `IsMic` true only on the input device and `MuteAffected` true only on Chat (Everything stays as loaded), and the keys and ids are unchanged.
@@ -70,9 +70,20 @@ deferred: []
 
 ## Implementation Notes
 
+- The view test adds a fourth listed device ("Line Out", Realtek). With Speakers, Headset and Mic all in the draft, the picker would otherwise be empty, and the selected-choice rendering would lose coverage.
+- `TrackLayoutTrackItem.HasWarning` drives the ⚠ marker in the Tracks list and the warning text's visibility. The marker's tooltip is the warning.
+- The "Same parent" matrix row is covered by `OutputsFromTwoParentsOnATrackWarnButStillSave`'s Game Track: a USB DAC output plus the Arctis mic, with no warning. "Uncheck" is covered by unchecking the Headset on Everything. Remove device runs the same `DraftChanged`.
+- Review patch: `CanBeMic` is also true for a device already marked as a Mic, so an Output Device marked by hand in `settings.json` can be unmarked.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 2 findings — high 0, medium 0, low 1, false 1, maybe-false 0
+- findings:
+  - `[low]` `[patch]` An Output Device saved with `IsMic: true` (hand-edited before this story) had no Mic checkbox, so it couldn't be unmarked, and every Save kept it — fixed: `CanBeMic => Flow == Input || IsMic`.
+  - `[false]` `[reject]` The first AC's "MuteAffected true only on Chat" contradicts "Everything stays as loaded", because the default Everything is mute-affected — the code and test follow "stays as loaded" (Everything keeps the default's value), so no bad outcome occurs. The only fix would be editing this build's plan.
 
 ## Design Notes
 
@@ -90,3 +101,23 @@ Mic marking is offered only on Input Devices: a Mic Device is a microphone endpo
 
 **Manual checks (if no CLI):**
 - The builder's hand check (Human Check Queue): mark the BEACN Mic as a Mic Device affecting only Chat, then press the Mic Mute Hotkey during a capture and check the mic is silent only in Chat. Then add a physical output to a Track that has a BEACN output: the warning shows, and Save still works.
+
+## Auto Run Result
+
+**Status:** built, 2026-11-03.
+
+**Summary:** The Track Layout page now marks Mic Devices with a "Mic" checkbox on each Input Device row, and each Track has a "Mic Mute affects this Track" checkbox. Both edit the draft, so Save, Revert and dirty work as before, and keys and ids are kept. A Track whose Output Devices come from two or more parent devices shows a non-blocking warning (⚠ in the list, plus text naming the parents in the Track's panel). The warning updates on every draft edit and on load, and Save still works.
+
+**Files:**
+- `src/ReplayBuffer.App/Settings/TrackLayoutPage.cs` — `IsMic`/`CanBeMic` on device rows, settable `MuteAffected`, `Warning`/`HasWarning` on Tracks, and `DraftChanged()` replacing `UpdateDirty()`.
+- `src/ReplayBuffer.App/Settings/TrackLayoutView.xaml` — the Mic checkbox, the mute-affected checkbox, the warning text and the ⚠ marker.
+- `tests/ReplayBuffer.App.Tests/TrackLayoutPageTests.cs` — 2 new AC tests; the view test now also renders the new bindings.
+
+**Review:** one quick pass, 2 findings. Patched: 1 low. Deferred: none. Rejected: 1 false (the AC wording; the code is correct).
+
+**Follow-up review recommended:** false (no high or medium patched).
+
+**Verification:** `dotnet build ReplayBuffer.slnx -c Release` gave 0 warnings and 0 errors. `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build`: 60 passed, 5 skipped (Heavy `SupervisionTests`), 0 failed. One run right after the review patch had 1 failure: its name wasn't captured, and the rerun passed. No other test projects or the NativeAOT publish were run (App-only change).
+
+**Residual risks:**
+- The builder's hand check (a real BEACN mic muted only in Chat, and the warning with a physical output plus a BEACN output) isn't automated.

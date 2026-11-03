@@ -339,16 +339,78 @@ public sealed class TrackLayoutPageTests
     }
 
     [Fact]
+    public void MarkingAMicAndAMuteAffectedTrackSavesThemWithTheSameKeysAndIds()
+    {
+        SetState(revision: 1, layout: null, Speakers, Headset, Mic);
+        _engine.Reply = (_, _) => new SettingsUpdateResult(2);
+        var page = Create().TrackLayout;
+        Add(page, Speakers);
+        Add(page, Headset);
+        Add(page, Mic);
+        var keys = page.Devices.Select(d => d.Device.Key).ToArray();
+        Assert.Equal([false, false, true], page.Devices.Select(d => d.CanBeMic));
+
+        page.Devices[2].IsMic = true;
+        page.AddTrackCommand.Execute(null);
+        var chat = page.SelectedTrack!;
+        chat.Name = "Chat";
+        chat.Checks[2].IsChecked = true;
+        chat.MuteAffected = true;
+        Assert.True(page.IsDirty);
+        page.SaveCommand.Execute(null);
+
+        var op = Assert.Single(Assert.IsType<SettingsUpdate>(Assert.Single(_engine.Sent)).Ops);
+        Assert.True(Keys.TrackLayout.TryRead(op.Value, out var saved));
+        Assert.Equal(keys, saved.Devices.Select(d => d.Key));
+        Assert.Equal([false, false, true], saved.Devices.Select(d => d.IsMic));
+        var everything = Keys.TrackLayout.Default.Tracks[0];
+        Assert.Equal([(everything.Id, everything.MuteAffected), (chat.Id, true)], saved.Tracks.Select(t => (t.Id, t.MuteAffected)));
+    }
+
+    [Fact]
+    public void OutputsFromTwoParentsOnATrackWarnButStillSave()
+    {
+        var speakers = new LayoutDevice(Guid.NewGuid(), "{out-1}", "Speakers", "USB DAC", AudioFlow.Output, IsMic: false);
+        var headset = new LayoutDevice(Guid.NewGuid(), "{out-2}", "Headset", "Arctis", AudioFlow.Output, IsMic: false);
+        var mic = new LayoutDevice(Guid.NewGuid(), "{in-1}", "Microphone", "Arctis", AudioFlow.Input, IsMic: true);
+        var rendered = new TrackLayout(
+            [speakers, headset, mic],
+            [
+                new Track(Keys.EverythingTrackId, "Everything", [speakers.Key, headset.Key, mic.Key], MuteAffected: true),
+                new Track(Guid.NewGuid(), "Chat", [mic.Key], MuteAffected: true),
+                new Track(Guid.NewGuid(), "Game", [speakers.Key, mic.Key], MuteAffected: false),
+            ]);
+        SetState(revision: 1, layout: rendered, Speakers, Headset, Mic);
+        _engine.Reply = (_, _) => new SettingsUpdateResult(2);
+        var page = Create().TrackLayout;
+
+        Assert.Equal("May count audio twice: mixes outputs from USB DAC, Arctis.", page.Tracks[0].Warning);
+        Assert.True(page.Tracks[0].HasWarning);
+        Assert.Equal(["", ""], page.Tracks.Skip(1).Select(t => t.Warning));
+
+        page.Tracks[0].Name = "All";
+        page.SaveCommand.Execute(null);
+        Assert.Single(_engine.Sent);
+
+        page.Tracks[0].Checks[1].IsChecked = false;
+        Assert.Equal("", page.Tracks[0].Warning);
+    }
+
+    [Fact]
     public void TheSettingsTabListsThePageAndItsViewRendersWithoutBindingErrors() => Sta.Run(() =>
     {
-        SetState(revision: 1, layout: null, Speakers, Headset with { Available = false }, Mic);
+        SetState(revision: 1, layout: null, Speakers, Headset with { Available = false }, Mic, new AudioDevice("{out-3}", "Line Out", "Realtek", AudioFlow.Output, true));
         var model = new MainViewModel(_engine, action => action());
         Assert.Equal(["General", "Track Layout"], model.Pages.Select(p => p.Title));
         model.SelectedPage = model.TrackLayout;
         var page = model.TrackLayout;
         Add(page, Speakers);
         Add(page, Headset with { Available = false });
+        Add(page, Mic);
+        page.Devices[2].IsMic = true;
         page.AddTrackCommand.Execute(null);
+        page.SelectedTrack!.MuteAffected = true;
+        Assert.True(page.Tracks[0].HasWarning);
         page.SelectedChoice = page.Choices[0];
 
         var errors = new BindingErrors();

@@ -120,7 +120,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         {
             // Another key changed, a save was refused, or this page's own save came back: keep the draft.
             _basis = layout;
-            UpdateDirty();
+            DraftChanged();
         }
         else
         {
@@ -144,21 +144,39 @@ internal sealed class TrackLayoutPage : SettingsPage
         Devices.Clear();
         foreach (var device in layout.Devices)
         {
-            Devices.Add(new TrackLayoutDeviceItem(device));
+            Devices.Add(new TrackLayoutDeviceItem(device, DraftChanged));
         }
 
         Tracks.Clear();
         foreach (var track in layout.Tracks)
         {
-            Tracks.Add(new TrackLayoutTrackItem(track, UpdateDirty));
+            Tracks.Add(new TrackLayoutTrackItem(track, DraftChanged));
         }
 
         SelectedTrack = Tracks.FirstOrDefault(t => t.Id == selectedTrackId) ?? Tracks.FirstOrDefault();
         DevicesChanged();
-        UpdateDirty();
+        DraftChanged();
     }
 
-    private void UpdateDirty() => IsDirty = !Same(ToLayout(), _basis);
+    /// <summary>After any draft edit: each Track's double-count warning, then whether the draft is dirty.</summary>
+    private void DraftChanged()
+    {
+        foreach (var track in Tracks)
+        {
+            // R2: outputs from two or more parent devices may carry the same audio twice. Inputs never count.
+            var parents = track.DeviceKeys
+                .Select(key => Devices.FirstOrDefault(d => d.Device.Key == key)?.Device)
+                .Where(d => d is { Flow: AudioFlow.Output })
+                .Select(d => d!.ParentName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            track.Warning = parents.Count >= 2
+                ? $"May count audio twice: mixes outputs from {string.Join(", ", parents)}."
+                : "";
+        }
+
+        IsDirty = !Same(ToLayout(), _basis);
+    }
 
     /// <summary>After the draft's devices change: the Tracks' checkboxes, the labels and the choices.</summary>
     private void DevicesChanged()
@@ -213,11 +231,11 @@ internal sealed class TrackLayoutPage : SettingsPage
 
         var source = choice.Device;
         var device = new LayoutDevice(Guid.NewGuid(), source.EndpointId, source.FriendlyName, source.ParentName, source.Flow, IsMic: false);
-        Devices.Add(new TrackLayoutDeviceItem(device));
+        Devices.Add(new TrackLayoutDeviceItem(device, DraftChanged));
         Tracks.FirstOrDefault(t => t.Id == Keys.EverythingTrackId)?.DeviceKeys.Add(device.Key);
         SelectedChoice = null;
         DevicesChanged();
-        UpdateDirty();
+        DraftChanged();
     }
 
     private void RemoveDevice()
@@ -235,16 +253,16 @@ internal sealed class TrackLayoutPage : SettingsPage
 
         SelectedDevice = null;
         DevicesChanged();
-        UpdateDirty();
+        DraftChanged();
     }
 
     private void AddTrack()
     {
-        var track = new TrackLayoutTrackItem(new Track(Guid.NewGuid(), $"Track {Tracks.Count + 1}", [], MuteAffected: false), UpdateDirty);
+        var track = new TrackLayoutTrackItem(new Track(Guid.NewGuid(), $"Track {Tracks.Count + 1}", [], MuteAffected: false), DraftChanged);
         track.ShowDevices(Devices);
         Tracks.Add(track);
         SelectedTrack = track;
-        UpdateDirty();
+        DraftChanged();
     }
 
     private void MoveTrack(int by)
@@ -263,7 +281,7 @@ internal sealed class TrackLayoutPage : SettingsPage
 
         Tracks.Move(from, to);
         SelectedTrack = track;
-        UpdateDirty();
+        DraftChanged();
     }
 
     private void DeleteTrack()
@@ -276,7 +294,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         var index = Tracks.IndexOf(track);
         Tracks.Remove(track);
         SelectedTrack = Tracks.Count == 0 ? null : Tracks[Math.Min(index, Tracks.Count - 1)];
-        UpdateDirty();
+        DraftChanged();
     }
 
     private async Task SaveAsync()
@@ -312,12 +330,33 @@ internal sealed class TrackLayoutPage : SettingsPage
 }
 
 /// <summary>A device of the draft layout.</summary>
-internal sealed class TrackLayoutDeviceItem(LayoutDevice device) : Observable
+internal sealed class TrackLayoutDeviceItem(LayoutDevice device, Action changed) : Observable
 {
     private string _label = device.FriendlyName;
     private bool _available;
 
-    public LayoutDevice Device { get; } = device;
+    /// <summary>The draft's device; marking it a Mic replaces it with the same key.</summary>
+    public LayoutDevice Device { get; private set; } = device;
+
+    /// <summary>Only an Input Device can be a Mic Device; an Output Device marked by hand can still be unmarked.</summary>
+    public bool CanBeMic => Device.Flow == AudioFlow.Input || Device.IsMic;
+
+    /// <summary>Whether the Mic Mute Hotkey mutes this device (R4).</summary>
+    public bool IsMic
+    {
+        get => Device.IsMic;
+        set
+        {
+            if (value == Device.IsMic)
+            {
+                return;
+            }
+
+            Device = Device with { IsMic = value };
+            OnPropertyChanged();
+            changed();
+        }
+    }
 
     public string Label
     {
@@ -346,6 +385,8 @@ internal sealed class TrackLayoutDeviceItem(LayoutDevice device) : Observable
 internal sealed class TrackLayoutTrackItem(Track track, Action changed) : Observable
 {
     private string _name = track.Name;
+    private bool _muteAffected = track.MuteAffected;
+    private string _warning = "";
 
     public Guid Id { get; } = track.Id;
 
@@ -361,7 +402,33 @@ internal sealed class TrackLayoutTrackItem(Track track, Action changed) : Observ
         }
     }
 
-    public bool MuteAffected { get; } = track.MuteAffected;
+    /// <summary>Whether the Mic Mute Hotkey mutes the Mic Devices in this Track.</summary>
+    public bool MuteAffected
+    {
+        get => _muteAffected;
+        set
+        {
+            if (Set(ref _muteAffected, value))
+            {
+                changed();
+            }
+        }
+    }
+
+    /// <summary>The double-count warning; empty when there is none. It never blocks Save.</summary>
+    public string Warning
+    {
+        get => _warning;
+        set
+        {
+            if (Set(ref _warning, value))
+            {
+                OnPropertyChanged(nameof(HasWarning));
+            }
+        }
+    }
+
+    public bool HasWarning => Warning.Length > 0;
 
     /// <summary>The Track's device keys, in order; a checked device is appended.</summary>
     public List<Guid> DeviceKeys { get; } = [.. track.DeviceKeys];
