@@ -3,7 +3,7 @@ title: 'Game Profile auto-creation and Ignored'
 type: 'feature'
 ticket: '4'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '60cb338ab39bd1a62e9f48a5b4b3d8fb2a1482e2'
 route: 'full'
 route_source: 'auto'

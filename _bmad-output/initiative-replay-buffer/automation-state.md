@@ -89,7 +89,7 @@ The coordinator logs each QA round in the Log below.
 | 17 | 3.8 Spike: which Windows game list to read | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 18 | 3.2 Detection sources and exclusions | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `168704a`) |
 | 19 | 3.3 Target Game rule | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `22b214e`) |
-| 20 | 3.4 Game Profile auto-creation and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 20 | 3.4 Game Profile auto-creation and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `31c2830`) |
 | 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `af89823`) |
 | 22 | 3.6 Game Profiles page in the Main App | | pending |
 | 23 | 3.7 Refactor sweep | | pending |
@@ -346,3 +346,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 2.10 merged into `develop` (`refactor(audio): merge 2.10-refactor-sweep`; develop, state files only, merged into the branch first, so nothing was rebuilt) and marked done. Verified before: Release build 0 warnings; Core 58, Engine 143 (18 explicit skipped), publish 0 IL warnings; Heavy mic-mute and Track-mix tests passed. Epic 2 is ready to be marked done and released as `v0.2.0` by the coordinator.
 - 2026-11-03: 2.10 merged (`0770b95`, done `e54dd81`). **Epic 2 is complete:** it was marked `status: done` (`e6216ae`) and **`v0.2.0` was released** by the coordinator (master `02bcd8e`, tag `v0.2.0`, back-merge `b44e0eb`). The 2.10 card is in Done with a release comment. 3.4 is READY FOR QA at `c456b1d`, and QA started on qa-1-14 (Sonnet); its card is In QA. 4.1 is being implemented.
 - 2026-11-03: QA on 3.4 (`c456b1d`): **QA PASS**, 0 findings. 3.4 was switched to Sonnet and told to merge. Once it lands, 3.6 (Game Profiles page) and 4.3 (once 4.2 is done) can follow.
+- 2026-11-03: 3.4 merged (`31c2830`, `feat(engine): merge 3.4-game-profiles`; develop merged into the branch first with no conflicts, then Release build 0 warnings, Platform.Windows 25, Core 59 and Engine 146 passed), ticket marked done. A profile deleted while its game is still detected isn't recreated until the next detection (QA note, out of scope). 3.6 (Game Profiles page) is unblocked.
