@@ -101,7 +101,7 @@ The coordinator logs each QA round in the Log below.
 | 25.3 | 4.3 Replay Buffer lifecycle: Target switch, exit drain and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e0c3931`) |
 | 25.4 | 4.4 Save Cooldown, save events and two concurrent writers | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8ce2703`) |
 | 25.5 | 4.5 Failed saves, retry and the file-being-written signal | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `9da03df`) |
-| 25.6 | 4.6 Ring generations and Buffer Window resizing | | pending |
+| 25.6 | 4.6 Ring generations and Buffer Window resizing | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e7058ea`) |
 | 25.7 | 4.7 Disk-mode ring | | pending |
 | 25.8 | 4.8 Memory-mode RAM margin | | pending |
 | 25.9 | 4.9 Per-Game-Profile settings at the next Reset | | pending |
@@ -411,3 +411,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - 5.3 went to a new session, story-5-3 (`local_0b276254-8120-4a11-915a-9ffea0eedcfb`, Opus, medium effort), since the builder's turn allowed a new session.
 - 2026-11-03: QA on 5.6 (`ea6ea9a`): **QA PASS**, 0 findings and 3 non-blocking notes. The verdict reached the coordinator by direct message, so the wake rule works. Merge order: 4.6 (merging), then 7.1, then 5.6. qa-1-14 is back in the pool.
 - 2026-11-03: QA on 6.1 (`a4f2814`): **QA PASS**, 0 findings, and Engine passed three times. Merge order is 4.6, 7.1, 5.6, then 6.1. 6.1 expects conflicts with 4.6 in the capture session and ring sink, and re-verifies after syncing. Both QA workers are back in the pool.
+- 2026-11-03: 4.6 merged into `develop` as `e7058ea` (QA PASS at `3ae6b4e`, docs-only `c9c7700` on top, develop merged in with no conflicts, rebuilt 0 warnings, Core 78/78, Engine 171 and publish clean). The Engine suite failed once on the first run after each fresh build, with no name captured, and then passed 7 times in a row; likely a cold-start timing test. 4.6 deferred two items for 4.9, recorded in the epic Notes: decide the cut's generation before the claim is published, and drain in-flight saves (or convert per generation) before `Restart`.
