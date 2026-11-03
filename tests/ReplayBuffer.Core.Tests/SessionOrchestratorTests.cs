@@ -362,8 +362,10 @@ public sealed class SessionOrchestratorTests : IDisposable
         Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Focus), await NextAsync(changes));
     }
 
-    [Fact]
-    public async Task AnExitHandoverCommitsThroughARunningRecording()
+    [Theory]
+    [InlineData(TargetChangeReason.Exit)]
+    [InlineData(TargetChangeReason.Ignored)]
+    public async Task AnExitOrIgnoredHandoverCommitsThroughARunningRecording(TargetChangeReason reason)
     {
         var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
         using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
@@ -373,12 +375,11 @@ public sealed class SessionOrchestratorTests : IDisposable
         orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
         orchestrator.Post(new RecordingRunning(true));
         orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
-        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Exit));
-        orchestrator.Post(new RecordingRunning(false));
+        orchestrator.Post(new ProposeTarget(b, reason));
         await HandledAsync(orchestrator);
 
         Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
-        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Exit), await NextAsync(changes));
+        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), reason), await NextAsync(changes));
         Assert.False(changes.Reader.TryRead(out _));
     }
 

@@ -243,10 +243,16 @@ internal sealed class EngineHost : IAsyncDisposable
                     gameLog,
                     listed,
                     InstallFolder(),
-                    game => hub.Publish(GameMessages.Detected, game),
+                    game =>
+                    {
+                        // The profile exists before anything names it (story 3.4).
+                        GameProfiles.EnsureProfile(load.Store, game.ProfileId, game.Name, gameLog);
+                        hub.Publish(GameMessages.Detected, game);
+                    },
                     game => hub.Publish(GameMessages.Exited, game),
                     () => hub.State.TargetGame?.ProcessId,
-                    hostOptions.Time);
+                    hostOptions.Time,
+                    id => load.Store.Current.Profiles.TryGetValue(id, out var profile) && profile.Ignored);
             }
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.

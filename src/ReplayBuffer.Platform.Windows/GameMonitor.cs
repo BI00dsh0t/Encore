@@ -259,7 +259,7 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
 }
 
 /// <summary>
-/// Game Detection (stories 3.1 to 3.3). Each poll it classifies each new process that owns a top-level
+/// Game Detection (stories 3.1 to 3.4). Each poll it classifies each new process that owns a top-level
 /// window once (limited open, image path, <c>Canonicalize</c>, AD-18) and detects it when its
 /// foreground window covers its monitor with no caption (the fullscreen rule) or its path is listed
 /// (Windows' game list or <c>manualGames</c>), even windowed. A detected game stays known, its limited
@@ -269,6 +269,9 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
 /// (reason cold-start on the first poll, detected after); another detected game once it has held the
 /// focus for <see cref="FocusToSwitch"/> (reason focus); and when the Target exits, the best of the
 /// others, or none (reason exit). The best is the most recently focused, then the most recently started.
+/// A game whose Game Profile is Ignored, read each poll (AD-5), is never detected; one that becomes
+/// Ignored while detected is forgotten as if it had exited (reason ignored), and clearing the flag lets
+/// the rules above detect it again.
 /// </summary>
 public sealed class GameMonitor : IDisposable
 {
@@ -288,6 +291,7 @@ public sealed class GameMonitor : IDisposable
     private readonly Action<DetectedGame>? _exited;
     private readonly Func<int?>? _target;
     private readonly TimeProvider _time;
+    private readonly Func<string, bool>? _isIgnored;
     private readonly ManualResetEventSlim _stop = new();
 
     // Poll's thread only: every process classified, until it exits; the detected ones have a Candidate.
@@ -310,12 +314,13 @@ public sealed class GameMonitor : IDisposable
     /// <param name="listed">The listed games' paths, each canonical or lowercase raw (AD-18); read each poll.</param>
     /// <param name="installFolder">The engine's install folder, canonical; nothing under it is detected.</param>
     /// <param name="detected">Receives each newly detected game, before any proposal of it.</param>
-    /// <param name="exited">Receives each detected game whose process exited, before the exit proposal.</param>
+    /// <param name="exited">Receives each detected game whose process exited or whose profile became Ignored, before the proposal that follows.</param>
     /// <param name="target">
     /// The committed Target's process, read each poll, so a Target whose switch is held (AD-19) is still
     /// handed over on its exit; null takes the last proposal as committed.
     /// </param>
     /// <param name="time">Times the focus streak; <see cref="TimeProvider.System"/> when null.</param>
+    /// <param name="isIgnored">Whether a profile id's Game Profile is Ignored, read each poll; null = never.</param>
     public GameMonitor(
         IGameWindowProbe probe,
         Func<int, bool> isExcluded,
@@ -327,7 +332,8 @@ public sealed class GameMonitor : IDisposable
         Action<DetectedGame>? detected = null,
         Action<DetectedGame>? exited = null,
         Func<int?>? target = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        Func<string, bool>? isIgnored = null)
     {
         ArgumentNullException.ThrowIfNull(probe);
         ArgumentNullException.ThrowIfNull(isExcluded);
@@ -346,6 +352,7 @@ public sealed class GameMonitor : IDisposable
         _exited = exited;
         _target = target;
         _time = time ?? TimeProvider.System;
+        _isIgnored = isIgnored;
     }
 
     /// <summary>Starts polling on a background thread, the first poll at once.</summary>
@@ -385,20 +392,24 @@ public sealed class GameMonitor : IDisposable
     }
 
     /// <summary>
-    /// One poll: forgets exited processes (handing the Target over), detects new games without proposing
-    /// them, follows the focus, then decides whether to propose a Target.
+    /// One poll: forgets exited processes and Ignored games (handing the Target over), detects new games
+    /// without proposing them, follows the focus, then decides whether to propose a Target.
     /// </summary>
     internal void Poll()
     {
         var now = _time.GetTimestamp();
         ForgetExited();
+        ForgetIgnored();
 
         var foreground = _probe.ForegroundWindow();
         if (_probe.ForegroundGameWindow() is { } fullscreen && Classify(fullscreen.ProcessId) is { Eligible: true } game)
         {
             if (game.Candidate is null)
             {
-                Detect(game, fullscreen.Handle);
+                if (!Ignored(game))
+                {
+                    Detect(game, fullscreen.Handle);
+                }
             }
             else
             {
@@ -431,7 +442,7 @@ public sealed class GameMonitor : IDisposable
             // A process's first window here is the foreground one when it is the process's, else its first in Z order.
             if (game.Candidate is null)
             {
-                if (listed.Contains(game.ProfileId!) || listed.Contains(game.RawPath))
+                if ((listed.Contains(game.ProfileId!) || listed.Contains(game.RawPath)) && !Ignored(game))
                 {
                     Detect(game, window.Handle);
                 }
@@ -614,6 +625,45 @@ public sealed class GameMonitor : IDisposable
         }
     }
 
+    // Un-detects each detected game whose profile is now Ignored, as ForgetExited does for an exit but
+    // keeping the process classified, so clearing the flag lets the normal rules detect it again.
+    private void ForgetIgnored()
+    {
+        if (_isIgnored is null)
+        {
+            return;
+        }
+
+        var committed = Committed();
+        var desired = _proposed;
+        var committedIgnored = false;
+        var desiredIgnored = false;
+        foreach (var seen in _seen.Values)
+        {
+            if (seen.Candidate is not { } game || !Ignored(seen))
+            {
+                continue;
+            }
+
+            seen.Candidate = null;
+            _log.LogInformation("{Name} (process {Pid}) is Ignored", game.Name, seen.Pid);
+            _exited?.Invoke(ToDetectedGame(game));
+            committedIgnored |= committed == seen.Pid;
+            desiredIgnored |= desired == seen.Pid;
+        }
+
+        if (committedIgnored)
+        {
+            Propose(Best(), TargetChangeReason.Ignored);
+        }
+        else if (desiredIgnored && desired != committed)
+        {
+            Propose(committed is null ? Best() : Detected(committed), TargetChangeReason.Ignored);
+        }
+    }
+
+    private bool Ignored(Seen game) => _isIgnored is not null && _isIgnored(game.ProfileId!);
+
     private void Propose(TargetCandidate? candidate, TargetChangeReason reason)
     {
         _proposed = candidate?.ProcessId;
@@ -655,7 +705,7 @@ public sealed class GameMonitor : IDisposable
     /// <param name="Eligible">Whether it may be detected: canonicalized and not under the install folder.</param>
     private sealed record Seen(int Pid, IGameProcess Process, string? ProfileId, string RawPath, bool Eligible)
     {
-        /// <summary>Set once the process is detected; it then stays detected until it exits.</summary>
+        /// <summary>Set once the process is detected; it then stays detected until it exits or its profile is Ignored.</summary>
         public TargetCandidate? Candidate { get; set; }
 
         /// <summary>The timestamp of the last poll that saw it in front; 0 = never.</summary>
