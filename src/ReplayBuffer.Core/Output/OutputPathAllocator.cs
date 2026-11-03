@@ -11,8 +11,6 @@ namespace ReplayBuffer.Core.Output;
 /// </summary>
 public sealed class OutputPathAllocator(TimeProvider time)
 {
-    private const string Fallback = "Game";
-
     /// <summary>The allocator on the system clock.</summary>
     public static OutputPathAllocator System { get; } = new(TimeProvider.System);
 
@@ -33,8 +31,7 @@ public sealed class OutputPathAllocator(TimeProvider time)
             throw new ErrorCodeException(ErrorCodes.ProfileNotFound, $"No Game Profile '{profileId}'.");
         }
 
-        var localTime = (time.GetLocalNow() - time.GetElapsedTime(qpc)).DateTime;
-        return Reserve(Path.Combine(outputFolder, folder), profile.Name, localTime);
+        return Reserve(Path.Combine(outputFolder, folder), profile.Name, LocalTimeOf(qpc));
     }
 
     /// <summary>
@@ -53,8 +50,7 @@ public sealed class OutputPathAllocator(TimeProvider time)
             return Allocate(document, profileId, outputFolder, qpc);
         }
 
-        var localTime = (time.GetLocalNow() - time.GetElapsedTime(qpc)).DateTime;
-        return Reserve(Path.Combine(outputFolder, PathNames.Sanitize(gameName, Fallback)), gameName, localTime);
+        return Reserve(Path.Combine(outputFolder, PathNames.Sanitize(gameName, PathNames.GameFallback)), gameName, LocalTimeOf(qpc));
     }
 
     /// <summary>
@@ -67,7 +63,7 @@ public sealed class OutputPathAllocator(TimeProvider time)
         ArgumentNullException.ThrowIfNull(name);
 
         Directory.CreateDirectory(folder);
-        var stem = $"{PathNames.Sanitize(name, Fallback)}_{localTime.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture)}";
+        var stem = $"{PathNames.Sanitize(name, PathNames.GameFallback)}_{localTime.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture)}";
         for (var n = 1; ; n++)
         {
             var path = Path.Combine(folder, n == 1 ? stem + ".mp4" : $"{stem}_{n}.mp4");
@@ -82,4 +78,7 @@ public sealed class OutputPathAllocator(TimeProvider time)
             }
         }
     }
+
+    // The local wall-clock time of the QPC timestamp qpc.
+    private DateTime LocalTimeOf(long qpc) => (time.GetLocalNow() - time.GetElapsedTime(qpc)).DateTime;
 }
