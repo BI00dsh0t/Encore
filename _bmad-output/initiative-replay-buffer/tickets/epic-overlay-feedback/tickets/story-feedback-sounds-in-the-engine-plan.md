@@ -3,7 +3,7 @@ title: 'Feedback Sounds in the engine'
 type: 'feature'
 ticket: '6'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '7a9506cdf07062318716ff265facbf119f70709a'
 route: 'full'
 route_source: 'auto'
