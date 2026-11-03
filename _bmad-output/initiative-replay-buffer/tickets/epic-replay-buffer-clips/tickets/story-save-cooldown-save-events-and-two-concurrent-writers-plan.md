@@ -3,7 +3,7 @@ title: 'Save Cooldown, save events and two concurrent writers'
 type: 'feature'
 ticket: '4'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'f7814bac1b9ea60bb84ca616e260316352559dc0'
 route: 'full'
 route_source: 'auto'

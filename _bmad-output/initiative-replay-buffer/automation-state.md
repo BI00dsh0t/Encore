@@ -98,7 +98,7 @@ The coordinator logs each QA round in the Log below.
 | 25.1 | 4.1 Tracer: Save Hotkey to a multi-Track Clip from a Memory ring | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `01f2795`) |
 | 25.2 | 4.2 Exact save cut and gapless Reset | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `02b0b95`) |
 | 25.3 | 4.3 Replay Buffer lifecycle: Target switch, exit drain and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e0c3931`) |
-| 25.4 | 4.4 Save Cooldown, save events and two concurrent writers | | pending |
+| 25.4 | 4.4 Save Cooldown, save events and two concurrent writers | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8ce2703`) |
 | 25.5 | 4.5 Failed saves, retry and the file-being-written signal | | pending |
 | 25.6 | 4.6 Ring generations and Buffer Window resizing | | pending |
 | 25.7 | 4.7 Disk-mode ring | | pending |
@@ -384,3 +384,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 4.3 merged (`e0c3931`), and its card is in Done. 4.4 (Save Cooldown, save events and two concurrent writers, medium risk) went to pool worker slice-epic-8 (Opus, medium effort), and its card is In progress. Epic 4 runs one story at a time here (4.4 → 4.5 → 4.6 …), as each waits on the one before.
 - 2026-11-03: 4.4 is READY FOR QA at `0c18681` (save cooldown, `clip.saving`, two concurrent writers and save-busy; build, four scoped suites and publish pass; three review findings fixed). QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-03: QA on 4.4 (`0c18681`): **QA PASS**, 0 blocking findings. Two notes were accepted and handed to 4.5: a writer failure after `clip.saving` is only logged until `clip.failed` exists, and a `saveCooldown` of 0 with a second press on the same keyframe makes an empty cut. 4.4 was told to merge.
+- 2026-11-03: 4.4 merged into `develop` (`8ce2703`, `feat(engine): merge 4.4-save-cooldown`) and marked done, after QA PASS at `0c18681` and a clean merge of `develop` (state-file lines only, so no re-verification). QA's two notes are accepted: a writer failure after `clip.saving` is only logged until 4.5's `clip.failed`, and a `saveCooldown` of 0 lets a second press on the same keyframe make an empty cut (handed to 4.5).
