@@ -15,15 +15,21 @@ namespace ReplayBuffer.Platform.Audio;
 /// an Output Device and capture for an Input Device, converted by the audio engine to 48 kHz float
 /// stereo. On a dedicated MMCSS "Pro Audio" thread, each packet's stamp goes to an
 /// <see cref="AudioStampStats"/> and the packet to a <see cref="DeviceStream"/>. An idle render
-/// endpoint, or a failed device, is filled with silence 50 ms behind now.
+/// endpoint, or a failed device, is filled with silence 50 ms behind now. A device invalidated under
+/// the client (<c>AUDCLNT_E_DEVICE_INVALIDATED</c>) is held silent the same way, but is not a
+/// <see cref="Fault"/>: the client calls its <c>invalidated</c> callback once, and the hub drops it.
 /// </summary>
-internal sealed unsafe class WasapiCapture : IDisposable
+internal sealed unsafe class WasapiCapture : IDeviceClient
 {
+    /// <summary><c>AUDCLNT_E_DEVICE_INVALIDATED</c>: the endpoint was removed, disabled or reconfigured.</summary>
+    internal const int DeviceInvalidated = unchecked((int)0x88890004);
+
     private const long BufferDuration100ns = 1_000_000; // 100 ms
     private const uint WaitTimeoutMs = 20;
     private const long IdleFillLagMs = 50;
 
     private readonly ILogger _logger;
+    private readonly Action? _invalidated;
     private readonly long _qpcFrequency = Stopwatch.Frequency;
     private IAudioClient* _client;
     private IAudioCaptureClient* _capture;
@@ -35,9 +41,10 @@ internal sealed unsafe class WasapiCapture : IDisposable
 
     /// <summary>Opens and initializes the client; capture starts with <see cref="Start"/>.</summary>
     /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.AudioDeviceFailed"/>: the endpoint can't be opened.</exception>
-    public WasapiCapture(string endpointId, AudioFlow flow, ILogger logger)
+    public WasapiCapture(string endpointId, AudioFlow flow, ILogger logger, Action? invalidated = null)
     {
         _logger = logger;
+        _invalidated = invalidated;
         Endpoint = new AudioEndpoint(endpointId, endpointId, flow);
         IMMDevice* device = null;
         try
@@ -163,6 +170,11 @@ internal sealed unsafe class WasapiCapture : IDisposable
         {
             _client->Start();
         }
+        catch (Exception e) when (IsInvalidated(e))
+        {
+            OnInvalidated(e);
+            failed = true;
+        }
         catch (Exception e)
         {
             _logger.LogError(e, "Could not start '{Name}'; holding it silent", Endpoint.FriendlyName);
@@ -194,6 +206,11 @@ internal sealed unsafe class WasapiCapture : IDisposable
                         stream.FillTo(Stopwatch.GetTimestamp() - (IdleFillLagMs * _qpcFrequency / 1000));
                     }
                 }
+                catch (Exception e) when (!failed && IsInvalidated(e))
+                {
+                    OnInvalidated(e);
+                    failed = true;
+                }
                 catch (Exception e) when (!failed)
                 {
                     _logger.LogError(e, "Capture from '{Name}' failed; holding it silent", Endpoint.FriendlyName);
@@ -219,6 +236,34 @@ internal sealed unsafe class WasapiCapture : IDisposable
             }
 
             mmcss.Dispose();
+        }
+    }
+
+    /// <summary>Whether <paramref name="e"/>, or an exception it wraps, carries <c>AUDCLNT_E_DEVICE_INVALIDATED</c>.</summary>
+    internal static bool IsInvalidated(Exception e)
+    {
+        for (var current = e; current is not null; current = current.InnerException)
+        {
+            if (current.HResult == DeviceInvalidated)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The device went away under the client: held silent, not a fault; the hub is told once.</summary>
+    private void OnInvalidated(Exception e)
+    {
+        _logger.LogDebug(e, "'{Name}' was invalidated; holding it silent", Endpoint.FriendlyName);
+        try
+        {
+            _invalidated?.Invoke();
+        }
+        catch (Exception callback)
+        {
+            _logger.LogError(callback, "The invalidated callback for '{Name}' failed", Endpoint.FriendlyName);
         }
     }
 

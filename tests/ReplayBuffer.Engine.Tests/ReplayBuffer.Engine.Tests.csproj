@@ -5,5 +5,7 @@
   <ItemGroup>
     <!-- The encoder probe's oracle, shared with the FFmpeg tests. -->
     <Compile Include="..\ReplayBuffer.Platform.FFmpeg.Tests\EncoderOracle.cs" Link="EncoderOracle.cs" />
+    <!-- The fake audio clients and endpoint list, shared with the audio tests. -->
+    <Compile Include="..\ReplayBuffer.Platform.Audio.Tests\FakeAudioDevices.cs" Link="FakeAudioDevices.cs" />
   </ItemGroup>
 </Project>

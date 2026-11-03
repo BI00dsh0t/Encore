@@ -3,16 +3,16 @@ title: 'Device dropout and rebind'
 type: 'feature'
 ticket: '5'
 created: '2026-11-02'
-status: 'ready-for-dev'
-baseline_revision: ''
+status: 'built'
+baseline_revision: '07b65d6104ff4507ba6d02f437f8d7074634842e'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: ['{project-root}/CLAUDE.md']
 warnings: ['oversized']
 deferred: []
@@ -73,14 +73,14 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- `DeviceDropout` -- the warning's code
-- [ ] `src/ReplayBuffer.Core/Audio/AudioDeviceHub.cs` -- `AudioDeviceDropout`, `IAudioDropoutSource` -- the port the engine listens on
-- [ ] `src/ReplayBuffer.Platform.Audio/DeviceClient.cs`, `WasapiCapture.cs`, `AudioDeviceHub.cs`, csproj -- client seam, silence hold, invalidation, reconcile and rebind
-- [ ] `tests/ReplayBuffer.Platform.Audio.Tests/DeviceDropoutTests.cs` (new) -- a hub over a fake factory (tone clients stamped from QPC, like `ToneHub`) and a fake endpoint source; every matrix row; and the stream stays continuous: across a 2 s dropout the subscriber's frame count tracks wall time within 0.1 s and the dropout span is silent
-- [ ] `src/ReplayBuffer.Engine/Audio/DeviceDropoutReporter.cs`, `EngineHost.cs` -- the warning
-- [ ] `tests/ReplayBuffer.Engine.Tests/DeviceDropoutReporterTests.cs` (new) -- a fake `IAudioDropoutSource` raising `Dropped` twice and `Resumed` once gives two `device-dropout` warnings in `EventHub.State.Warnings`, `overlay: false`, severity warning, source `audio`
-- [ ] `tests/ReplayBuffer.Engine.Tests/DeviceDropoutCaptureTests.cs` (new) -- the ticket's automated AC (below)
-- [ ] `tests/ReplayBuffer.Contracts.Tests` -- only if a registry test needs the new code listed
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- `DeviceDropout` -- the warning's code
+- [x] `src/ReplayBuffer.Core/Audio/AudioDeviceHub.cs` -- `AudioDeviceDropout`, `IAudioDropoutSource` -- the port the engine listens on
+- [x] `src/ReplayBuffer.Platform.Audio/DeviceClient.cs`, `WasapiCapture.cs`, `AudioDeviceHub.cs`, csproj -- client seam, silence hold, invalidation, reconcile and rebind
+- [x] `tests/ReplayBuffer.Platform.Audio.Tests/DeviceDropoutTests.cs` (new) -- a hub over a fake factory (tone clients stamped from QPC, like `ToneHub`) and a fake endpoint source; every matrix row; and the stream stays continuous: across a 2 s dropout the subscriber's frame count tracks wall time within 0.1 s and the dropout span is silent
+- [x] `src/ReplayBuffer.Engine/Audio/DeviceDropoutReporter.cs`, `EngineHost.cs` -- the warning
+- [x] `tests/ReplayBuffer.Engine.Tests/DeviceDropoutReporterTests.cs` (new) -- a fake `IAudioDropoutSource` raising `Dropped` twice and `Resumed` once gives two `device-dropout` warnings in `EventHub.State.Warnings`, `overlay: false`, severity warning, source `audio`
+- [x] `tests/ReplayBuffer.Engine.Tests/DeviceDropoutCaptureTests.cs` (new) -- the ticket's automated AC (below)
+- [x] `tests/ReplayBuffer.Contracts.Tests` -- (not needed: the registry tests read `All` by reflection) only if a registry test needs the new code listed
 
 **Acceptance Criteria:**
 - Given an in-process capture session of the animated test window over a real `AudioDeviceHub` built with fake tone clients A (440 Hz) and B (1 kHz) and Tracks `A`={A}, `B`={B}, `AB`={A, B}, when A is removed from the endpoint source (and its client stops delivering) for 10 s mid-capture and then listed again, then every AAC stream lasts as long as the video to within 0.1 s; Track `A` is silent (below −60 dBFS RMS) over the dropout, within 1 s at its start and within 2 s of the return at its end, and carries A's tone before and after; Track `B` carries B's tone throughout; Track `AB` carries B throughout and A outside the dropout; and the hub raised `Dropped` once and `Resumed` once, `Resumed` within 2 s of A being listed again.
@@ -89,9 +89,25 @@ deferred: []
 
 ## Implementation Notes
 
+- `WindowsEndpointSource` lives in its own file (`src/ReplayBuffer.Platform.Audio/WindowsEndpointSource.cs`); the public hub owns and disposes it, a hub built over a fake source does not.
+- A rebind to a new endpoint id re-keys the hub device, so a later `Subscribe` to the new id shares the rebound client (AD-20). The name-taken check looks at every other open device's current endpoint.
+- `SilenceHold` takes the device name and a logger besides the stream (for its one log line). `HubDevice.Rebind` sets the client before `Start`, so a subscriber's callback on the new thread is seen as on the capture thread; a failed start falls back to the hold.
+- A failed listing logs one Warning per run of failures (Debug after), and retries in 500 ms while any device is open.
+- `AudioDeviceHub.DroppedDeviceCount` was added for tests and diagnostics.
+- The fakes (`FakeEndpointList`, `FakeDeviceBank`, `ToneClient`) are in `tests/ReplayBuffer.Platform.Audio.Tests/FakeAudioDevices.cs` and linked into the engine tests; `FakeEndpointList` avoids a clash with the engine tests' existing `FakeEndpointSource`.
+- Verification: solution build 0 warnings; Platform.Audio 30/30, Media 127/127, Contracts 109/109, Core 52/52; Engine 211/212 on rerun, the one failure (`OutputResolutionTests.AStatsRunOnAFastWindowMeetsTheLatencyGcAndAllocationBounds`, latency p99) also fails on the baseline commit on this PC. `publish-engine.ps1` published with no IL/AOT warnings.
+- After review: `HubDevice` keeps its closing client's fault, so `DeviceFault` stays readable after the last subscriber leaves (the session reads it after disposing its subscriptions). A device dropped again within `SameDropoutWindow` (2 s) of a resume is the same dropout: no second `Dropped`, warning or Warning log, no `Resumed` for its re-resume, and no rebind in that pass (it waits for the 500 ms retry).
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-02 — Review pass
+- verdicts: 3 findings — high 0, medium 2, low 1, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `DeviceFault` read null after `Close` nulled the client, and `CaptureSession.StopAsync` disposes subscriptions before `ReportAudioFaults`, so a real device fault was no longer logged — fixed: `HubDevice` keeps the closing client's fault and `DeviceFault` falls back to it; test `AFaultStaysReadableAfterTheLastSubscriberLeaves`.
+  - `[medium]` `[patch]` A rebound WASAPI client invalidated again as it starts (BEACN still restarting) re-triggered an immediate reconcile, giving a second `Dropped`, warning and Warning log per restart with no throttle — fixed: a re-drop within 2 s of a resume is the same dropout (Debug only, no events, no rebind in that pass); test `ARedropJustAfterAResumeIsTheSameDropout`.
+  - `[low]` `[reject]` A real resume writes two Information lines: `WasapiCapture`'s existing "Opened … device" line and the hub's "returned; resumed" — the ticket asks for one log entry per dropout, not per resume; the "Opened" line is the client's pre-existing diagnostic on every open, and removing it only on rebind needs a new parameter for a cosmetic gain.
 
 ## Design Notes
 
@@ -114,3 +130,37 @@ Why a separate `SilenceHold` thread rather than keeping the dead client in its f
 
 **Manual checks (Human Check Queue):**
 - The builder restarts the BEACN app during a capture: its devices resume within 2 s, with one `device-dropout` warning and one log entry each.
+
+## Auto Run Result
+
+**Status:** built, verified 2026-11-02.
+
+**Summary:** AudioDeviceHub now survives a device dropout. It reconciles its open devices against the present endpoints on every endpoint change, on a client's `AUDCLNT_E_DEVICE_INVALIDATED`, and every 500 ms while one is out. A device that's gone has its client closed and a `SilenceHold` keeps its `DeviceStream` continuous, so its Tracks get silence from it only and keep their length. When it's back (the same id, or else one unique endpoint with the same flow, friendly name and parent name), a new client opens on the same stream. Subscribers resume on their old subscriptions within 2 s, with no capture restart and nothing written to settings. Each dropout logs one Warning and the engine raises `warning.raised { code: device-dropout, overlay: false }`.
+
+**Files:**
+- `src/ReplayBuffer.Contracts/ErrorCodes.cs`: `device-dropout` (additive).
+- `src/ReplayBuffer.Core/Audio/AudioDeviceHub.cs`: the `AudioDeviceDropout` record and the `IAudioDropoutSource` port.
+- `src/ReplayBuffer.Platform.Audio/DeviceClient.cs` (new): the `IDeviceClient` seam, its factory and `SilenceHold`.
+- `src/ReplayBuffer.Platform.Audio/WindowsEndpointSource.cs` (new): the endpoint listing and watcher, moved out of the hub.
+- `src/ReplayBuffer.Platform.Audio/WasapiCapture.cs`: invalidation is held silent without a `Fault`, and the hub is signalled.
+- `src/ReplayBuffer.Platform.Audio/AudioDeviceHub.cs`: reconcile, drop, rebind, re-keying, and the same-dropout window.
+- csproj: `InternalsVisibleTo` for the engine tests.
+- `src/ReplayBuffer.Engine/Audio/DeviceDropoutReporter.cs` (new) and `EngineHost.cs`: the warning.
+- Tests: `DeviceDropoutTests` (14), `FakeAudioDevices`, `DeviceDropoutReporterTests`, `DeviceDropoutCaptureTests` (the ticket's 10 s AC).
+
+**Review:** one quick pass, 3 findings. Two medium findings were patched, and one low finding was rejected (cosmetic second Information line on a resume). Nothing was deferred.
+
+**Follow-up review recommended:** true, because two medium findings were patched. The specific unverified risk is the real WASAPI path during a BEACN restart. It assumes CsWin32's exception carries HRESULT 0x88890004, and the 2 s same-dropout window has only been checked against fakes. The builder's BEACN restart check covers this.
+
+**Verification:**
+- Scoped per automation-state.md:
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+  - Platform.Audio 32/32, Media 127/127, Contracts 109/109, Core 52/52, Engine 212/212, including `DeviceDropoutCaptureTests`, which ran rather than skipped.
+  - `pwsh tools/publish-engine.ps1`: 0 IL/AOT warnings, 9.9 MB.
+- Earlier, before the patches, `OutputResolutionTests.AStatsRunOnAFastWindowMeetsTheLatencyGcAndAllocationBounds` failed twice on latency p99 (18.9 ms). It also fails on the baseline. It passed on the final run.
+- Matrix audit: every row has a passing test in `DeviceDropoutTests`. The two-device row is also covered by the capture AC test.
+
+**Residual risks:**
+- A BEACN restart on real hardware is the builder's check.
+- An invalidation from a format change, with the endpoint still listed, drops and reopens the device in one pass. That raises a `device-dropout` warning even though no audio was lost.
+- A layout device that is absent when the capture starts still fails the start, as before.

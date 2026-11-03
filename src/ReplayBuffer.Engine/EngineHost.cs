@@ -44,6 +44,7 @@ internal sealed record EngineHostOptions
 /// probes the video encoders off that path and publishes the result as <c>capture.videoOptions</c>.
 /// It lists the audio devices before the hub exists, so the first snapshot holds them, and then
 /// publishes <c>devices.changed</c> when the endpoints or the Track Layouts change them (R1).
+/// Each audio device dropout the hub reports raises a <c>device-dropout</c> warning (R5).
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
@@ -80,9 +81,11 @@ internal sealed class EngineHost : IAsyncDisposable
         SessionOrchestrator sessions,
         HotkeyService hotkeys,
         DeviceListPublisher devices,
+        DeviceDropoutReporter dropouts,
         AudioDeviceHub audio)
     {
         Devices = devices;
+        Dropouts = dropouts;
         Audio = audio;
         Server = server;
         Settings = settings;
@@ -113,6 +116,9 @@ internal sealed class EngineHost : IAsyncDisposable
     /// <summary>The device list (R1), served by <c>devices.list</c> and published as <c>devices.changed</c>.</summary>
     public DeviceListPublisher Devices { get; }
 
+    /// <summary>Raises <c>device-dropout</c> for each audio device dropout (R5).</summary>
+    public DeviceDropoutReporter Dropouts { get; }
+
     /// <summary>The engine's one audio hub (AD-20); disposed last, after every session has ended.</summary>
     public AudioDeviceHub Audio { get; }
 
@@ -133,6 +139,7 @@ internal sealed class EngineHost : IAsyncDisposable
         SessionOrchestrator? sessions = null;
         HotkeyService? hotkeys = null;
         DeviceListPublisher? devices = null;
+        DeviceDropoutReporter? dropouts = null;
         var audio = new AudioDeviceHub(loggers);
         try
         {
@@ -150,6 +157,7 @@ internal sealed class EngineHost : IAsyncDisposable
             load.Store.Changed += devices.OnSettingsChanged;
 
             var warnings = new Warnings(hub, hostOptions.Time);
+            dropouts = new DeviceDropoutReporter(audio, warnings);
             var router = new CommandRouter(log);
             var apps = new AppSupervisor(
                 hub,
@@ -174,7 +182,7 @@ internal sealed class EngineHost : IAsyncDisposable
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, audio);
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, audio);
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
             router.Register(AudioMessages.List, (_, _) => ValueTask.FromResult(devices.Current));
@@ -243,6 +251,7 @@ internal sealed class EngineHost : IAsyncDisposable
             hotkeys?.Dispose();
             sessions?.Dispose();
             devices?.Dispose();
+            dropouts?.Dispose();
             audio.Dispose();
             server.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
@@ -271,6 +280,7 @@ internal sealed class EngineHost : IAsyncDisposable
         Sessions.Dispose();
         await Server.DisposeAsync().ConfigureAwait(false);
         Devices.Dispose();
+        Dropouts.Dispose();
         Audio.Dispose();
         _stopHeartbeat.Dispose();
         _stopProbe.Dispose();
