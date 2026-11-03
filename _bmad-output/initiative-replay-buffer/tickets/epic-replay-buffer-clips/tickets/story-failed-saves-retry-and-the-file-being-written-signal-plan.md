@@ -3,7 +3,7 @@ title: 'Failed saves, retry and the file-being-written signal'
 type: 'feature'
 ticket: '5'
 created: '2026-11-03'
-status: 'in-review'
+status: 'built'
 baseline_revision: '2bb1f18a870fd555d146b76308c4c8ec278d35ea'
 route: 'full'
 route_source: 'auto'
@@ -15,7 +15,14 @@ review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      A Clip write still in flight when the orchestrator is disposed gets BeginWrite but never EndWrite.
+    evidence: |-
+      Dispose completes the channel, so the write's posted ClipWritten is never handled and OnClipWritten (which calls EndWrite) never runs. Shutdown only; AD-17 has .rbpart ignored and deleted at start, and the same shutdown gap was already deferred from 4.1 (a Clip still writing at shutdown isn't announced). For epic 7's LibraryActor or the 4.13 sweep: end in-flight writes as Failed on dispose, or rebuild being-written state at start.
+    location: >-
+      src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs Dispose / OnClipWritten
+    severity: medium
 ---
 
 <intent-contract>
@@ -120,10 +127,20 @@ deferred: []
 - The existing `APressUnderASecondAfterAResetIsRefusedAndAFailedWriteResetsNothing` asserted that a failed write reached no `NotSaved`; it now expects `clip.failed { save-failed }`, per this story.
 - `ReplayClipCaptureTests`' `Failed` callback no longer completes the `saved` channel (a disk-full write now calls it on purpose); outcomes are asserted through `NotSaved`.
 - Residual (Design Notes): the allocator's empty reserved `.mp4` exists before `BeginWrite`.
+- After review: `ReportAudioFaults` also fails the session for `disk-full` and `access-denied`, since `Check` now raises them for ENOSPC and EACCES. The session's 1 s refusal fires only for an empty cut, or when an in-flight claim lies strictly past the Reset and window start, so a press just over 1 s after a saved Clip is not refused keyframe-to-keyframe.
 
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 5 findings — high 0, medium 2, low 3, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `FFmpegLibrary.Check` now maps ENOSPC/EACCES to `disk-full`/`access-denied`, so `ReportAudioFaults` (matching only `encode-failed`) logged a full-disk audio encode or mux fault in a file-backed session as "tap stopped" instead of failing it. Fixed: the pattern accepts all three codes.
+  - `[medium]` `[patch]` The session's 1 s check fired for any span under 1 s, keyframe to keyframe, while the orchestrator gates press to press, so a press just over 1 s after a saved Clip could be refused with a wrong message. Fixed: refuse an empty cut always, and a sub-1 s span only when an in-flight claim lies strictly past the Reset and window start (`>`: a succeeded claim equals the Reset once it lands).
+  - `[medium]` `[defer]` A write in flight at orchestrator dispose gets `BeginWrite` but no `EndWrite`. Real, shutdown only, the same as the shutdown gap deferred from 4.1; the fix needs new dispose handling. Recorded in `deferred`.
+  - `[low]` `[reject]` In `ReplayClipCaptureTests` a save that unexpectedly fails surfaces as a timeout rather than its reason. Diagnostics only (the test still fails), and the fix adds branching to the test.
+  - `[low]` `[reject]` The matrix row "Reserve fails (disk full)" isn't tested as one case. It is covered by composition: `WriteFailuresTests` maps the disk-full HResult, and `AReserveThatFails…` proves the reserve path reports through `ReasonOf` with no Library call. The real allocator can't be made to hit a full disk in a test.
 
 ## Design Notes
 
@@ -142,3 +159,25 @@ deferred: []
 - `dotnet test --project tests/ReplayBuffer.Platform.FFmpeg.Tests -c Release --no-build` -- expected: all pass
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- expected: all pass
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL/AOT warnings
+
+## Auto Run Result
+
+- **Summary:** R6's failure and retry, and the "file being written" signal.
+  - Every accepted save that makes no Clip now emits `clip.failed { reason }`. The reason is one of `clip-too-short`, `save-busy`, the new `disk-full` and `access-denied`, or `save-failed` (`WriteFailures.ReasonOf`). This closes 4.4's QA note 1.
+  - A failed write removes the `.rbpart` and the reserved `.mp4`, drops its claim and Resets nothing, so the next press retries from the last saved Clip's end.
+  - `ILibraryWrites` (Core): `BeginWrite(path, profileId)` after the path is reserved and before the `.rbpart`, and `EndWrite(path, Written|Failed)` once the result is back, on the orchestrator thread. `NoLibraryWrites` stands in until epic 7.
+  - With `saveCooldown` 0, two presses on one keyframe save one Clip and refuse the other as `clip-too-short`, with no empty file. This closes 4.4's QA note 2.
+- **Files:**
+  - Contracts: `ErrorCodes.cs` (three codes).
+  - Platform.FFmpeg: `FFmpegLibrary.cs` (ENOSPC and EACCES mapping); the csproj (`InternalsVisibleTo` for tests).
+  - Core: new `Library/LibraryWrites.cs` and `Output/WriteFailures.cs`; `Sessions/TargetGames.cs` (`ReplayClips.Library`); `Sessions/SessionOrchestrator.cs` (Begin and End, `clip.failed` for every failure).
+  - Engine: `EngineHost.cs` (no-op port); `Sessions/CaptureSession.cs` (the claim-aware 1 s refusal, the `ClipWriteFault` test hook, and audio faults on a full disk).
+  - Tests: `SessionOrchestratorTests` (disk-full and retry with the Library order; a reserve failure); new `WriteFailuresTests`; `FFmpegLibraryTests` (`Check` codes); `ReplayClipCaptureTests` (a real disk-full fault leaving no files, the retry Clip, a same-QPC double press).
+- **Review:** quick lens, 5 findings. 2 medium patched, 1 medium deferred (EndWrite at dispose), 2 low rejected (reasons in the triage log).
+- **Follow-up review recommended:** false. Two mediums were patched, which would make it true, but both fixes are small and local, covered by the re-run suites, and no unverified risk can be named.
+- **Verification (after the patches):** `dotnet build ReplayBuffer.slnx -c Release` 0 warnings, 0 errors. Contracts 99/99, Core 72/72, Platform.FFmpeg 32 passed with 1 skipped, Engine 151 passed with 18 Explicit skipped. `tools/publish-engine.ps1` published `ReplayBuffer.Engine.exe` (10.5 MB) with no warnings. Heavy not run: the change touches failure handling and cut bounds, not capture, encode, mux or audio throughput.
+- **Residual risks:**
+  - The allocator's empty reserved `.mp4` exists before `BeginWrite`, so epic 7 must treat a zero-length `.mp4` without `EndWrite` as being written.
+  - No `EndWrite` for a write in flight at shutdown (deferred).
+  - A real full volume isn't tested: it would need an admin-mounted VHD. Disk-full is proven by the ENOSPC mapping, the HResult mapping and an injected `disk-full` fault in a real session.
+

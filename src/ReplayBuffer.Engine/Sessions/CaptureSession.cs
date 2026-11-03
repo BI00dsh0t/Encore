@@ -1087,8 +1087,9 @@ internal sealed class CaptureSession : ICaptureSession
                     throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The cut is empty: its start is at or after its end.");
                 }
 
-                // R4: an earlier write still in flight has claimed all but less than 1 s of the span.
-                if (previous >= ownFromUs && toUs - fromUs < 1_000_000)
+                // R4: an earlier write still in flight has claimed all but less than 1 s of the span. Strictly
+                // past the Reset: a succeeded claim equals the Reset once it lands, and the orchestrator gates that case.
+                if (previous > ownFromUs && toUs - fromUs < 1_000_000)
                 {
                     throw new ErrorCodeException(ErrorCodes.ClipTooShort, "An earlier Clip still being written leaves less than 1 s to save.");
                 }
