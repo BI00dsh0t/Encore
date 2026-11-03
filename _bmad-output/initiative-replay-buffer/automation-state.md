@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.2 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 4.10 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 6.2 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.3 |
 
@@ -445,3 +445,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA 4.8 at `40f2800`: **QA PASS**, 0 findings and 2 non-blocking notes. One App.Tests load-timeout flake (`AKilledAppIsRelaunchedByTheEngine`) passed on rerun; it's the second App flake today, so watch it. 4.8 has been told to merge (Sonnet), and qa-2-1 is back in the pool.
 - 2026-11-03: 4.8 merged into `develop` (`2b218ae`, `feat(engine): merge 4.8-memory-ram-margin`) and marked done, after QA PASS at `40f2800`. `develop` (7.2, 5.5) was merged into the branch first; the Release build (0 warnings), Core 99, Contracts 113, Engine 181 (19 Explicit skipped) and the publish passed again. QA's two notes are in the epic Notes: the warning is raised on the encoder thread under the ring's lock, and a fully pinned ring still allocates; also `memory-margin` warnings aren't withdrawn on leaving the margin (epic 5 may want that). Human checks: none.
 - 2026-11-03: 4.8 merged (`2b218ae`, marked done `12b9625`). Its card is Done with its label detached, and slice-epic-4 is back in the pool. 4.9 went to 2-1-tracer (Opus, high effort) and 4.10 to qa-1-14 (Opus, medium effort), both with cards In progress. Each knows the other is running and to keep any Contracts settings change additive.
+- 2026-11-03: 6.2 is READY FOR QA at `05a43dc` (develop with 7.2 and 4.8 merged in; build 0 warnings; Core, Contracts, FFmpeg and Engine pass; the Heavy ten-kill crash test passes; publish clean; one `Mp4File`). QA started on qa-2-1 (Sonnet), and its card is In QA.
