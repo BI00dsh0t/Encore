@@ -1,0 +1,1089 @@
+---
+title: 'Spike: which Windows game list to read'
+type: 'spike'
+ticket: '8'
+created: '2026-11-03'
+status: done
+baseline_revision: '16b8a933acee39e980ff43118075a119f13d72ce'
+route: 'spike'
+risk: 'medium'
+---
+
+# Spike 3.8: which Windows game list to read
+
+## Question
+
+Should GameMonitor read GameConfigStore (`MatchedExeFullPath`), `Windows.Gaming.Preview.GamesEnumeration.GameList`, or neither, as "apps Windows identifies as games" (R1)? The source must be readable unelevated and read-only, populated for the builder's games, and raise no anti-cheat concern.
+
+## Answer
+
+**GameConfigStore.** See the dated Decision in the epic's Notes. The evidence follows.
+
+## Method
+
+Throwaway PowerShell probes in the session scratchpad, run unelevated (`IsInRole(Administrator)` = False) on the builder's PC on 2026-11-03. They only read: `Get-ChildItem` and `Get-ItemProperty` on the registry, and `GameList.FindAllAsync()` through Windows PowerShell 5.1's WinRT projection. Nothing was written to the registry or any store.
+
+- GameConfigStore probe: enumerates `HKCU\System\GameConfigStore\Children\*` and reads `MatchedExeFullPath`, `Type`, `Flags` and `TitleId`, plus `Test-Path` on each path.
+- GameList probe: `GameList.FindAllAsync()`, and for each entry its `Category`, `DisplayInfo.DisplayName`, `TitleId`, `LauncherExecutable`, `LaunchableState` and its `Properties` map.
+
+## Results
+
+### GameConfigStore (`HKCU\System\GameConfigStore\Children`)
+
+- Readable unelevated, with plain registry reads. 381 child keys: 310 with `Type = 1`, 259 of which have `MatchedExeFullPath`; 71 with `Type = 2` and no path.
+- 259 distinct paths: 74 still exist on disk, 185 don't (uninstalled games, old drives). Detection matches running processes, so stale rows do no harm.
+- It lists the builder's games across Steam (two libraries), Battle.net, EA, Riot, RSI, Nexon, osu!lazer and loose builds, including anti-cheat titles: League of Legends (Vanguard), Overwatch, Battlefield 2042 (EA Javelin), Rocket League, Warframe, TEKKEN 8, Deadlock, Star Citizen (EAC) and Call of Duty.
+- It also lists some non-games that Game Bar matched: `LeagueClientUx.exe`, the RuneScape launcher `rs2client.exe`, the Oculus `Client.exe` and the `rpcs3.exe` emulator. Story 3.2's exclusions and the Ignored flag (R3) handle these, and a non-game only matters while it runs.
+
+### GameList (`GameList.FindAllAsync()`)
+
+- It worked unelevated from an unpackaged desktop process, returning 739 entries: 289 `ConfirmedBySystem`, 0 `ConfirmedByUser` and 450 `Candidate`.
+- The 450 `Candidate` entries are every Start-menu app (7-Zip, Calculator, Brave, Visual Studio, ChatGPT, Audacity…), so they are useless as a game signal.
+- `LauncherExecutable` is null for all 739. The only executable path is in the undocumented `Properties` bag (`ProcessExeFullPaths`, on 239 of the 289 `ConfirmedBySystem` entries). 47 `ConfirmedBySystem` entries have a blank display name.
+- Each `ConfirmedBySystem` entry carries `GameConfigIds`, which is its GameConfigStore child key, and all 232 of its TitleIds are among GameConfigStore's 272. **GameList's confirmed list is a WinRT view over GameConfigStore** and adds nothing to it.
+- Microsoft documents the class as needing the `gameList` capability and a developer account "specially provisioned by Microsoft", or calls fail at runtime. It is a Preview namespace with a prerelease warning. Working from this unpackaged process is not a supported contract.
+
+### Anti-cheat
+
+- Reading `HKCU\System\GameConfigStore\Children` is a read of the user's own registry hive. It never touches a game process, so it falls outside what anti-cheats watch (handles to the game process, injected modules, hooks, drivers). Windows' own Game Bar and Game Mode read and write this key for every game. The search found no community or vendor report of an anti-cheat reacting to another process reading it; the reports found are users editing the key by hand (`GameDVR_Enabled`).
+- GameList is the same data behind a WinRT broker, so it raises no anti-cheat concern either. It loses on the other criteria.
+- Architecture AD-12 is unaffected: matching a running process against the list still uses `PROCESS_QUERY_LIMITED_INFORMATION` only.
+
+## Consequences for story 3.2
+
+- Read `HKCU\System\GameConfigStore\Children\*\MatchedExeFullPath` with `RegOpenKeyEx(KEY_READ)` and `RegEnumKeyEx`/`RegQueryValueEx`. That is plain Win32 P/Invoke, NativeAOT-safe with no CsWinRT projection.
+- Canonicalize each path with the one `Canonicalize` and match it against a running process's canonical image path.
+- Refresh on a timer or with `RegNotifyChangeKeyValue`, because Game Bar adds a row the first time a new game runs.
+- The key is undocumented, so treat it as best effort. If it is missing, unreadable or changes shape, detection falls back to the fullscreen/borderless rule and hand-added games (R1 still holds), and the engine logs it once.
+
+## Human Check (for the Human Check Queue)
+
+| Ticket | Check | How | Automated proxy |
+|--------|-------|-----|-----------------|
+| 3.8 | GameConfigStore lists the games you play (GameList's confirmed list is the same set) | Skim the lists below in this file. Are any of your games missing, and are there non-games you'd want Ignored by default? | This spike's unelevated, read-only probes: GameConfigStore has 259 paths (74 on disk); GameList has 289 `ConfirmedBySystem` (all GameConfigStore-backed) and 450 `Candidate` (Start-menu apps) |
+
+## Lists returned on this PC (2026-11-03)
+
+### GameConfigStore `MatchedExeFullPath`, on disk (74)
+
+- `C:\Nexon\Library\maplestorycw\appdata\MapleStory.exe` (TitleId 2038117628)
+- `C:\Program Files (x86)\Riot Games\League of Legends\Game\League of Legends.exe` (TitleId 1811699532)
+- `C:\Program Files (x86)\Riot Games\League of Legends\LeagueClientUx.exe` (TitleId 1811699532)
+- `C:\Program Files (x86)\Steam\steamapps\common\A Game About Feeeding A Black Hole\A Game About Feeding A Black Hole.exe` (TitleId 1878049696)
+- `C:\Program Files (x86)\Steam\steamapps\common\ANLIFE\ANLIFE.exe` (TitleId 1997517976)
+- `C:\Program Files (x86)\Steam\steamapps\common\Becastled\Becastled.exe` (TitleId 1757070329)
+- `C:\Program Files (x86)\Steam\steamapps\common\Big Ambitions\Big Ambitions.exe` (TitleId 1785907683)
+- `C:\Program Files (x86)\Steam\steamapps\common\Blossom The Seed Of Life\Blossom The Seed Of Life.exe` (TitleId 1760572483)
+- `C:\Program Files (x86)\Steam\steamapps\common\Buckshot Roulette\Buckshot Roulette_windows\Buckshot Roulette.exe` (TitleId 2028509718)
+- `C:\Program Files (x86)\Steam\steamapps\common\Deadlock\game\bin\win64\deadlock.exe` (TitleId 1691223292)
+- `C:\Program Files (x86)\Steam\steamapps\common\Dungeon Tycoon\DungeonTycoon.exe` (TitleId 1898127850)
+- `C:\Program Files (x86)\Steam\steamapps\common\EmberKnights\EmberKnights_64.exe` (TitleId 2014691150)
+- `C:\Program Files (x86)\Steam\steamapps\common\Foundation\foundation.exe` (TitleId 1707478037)
+- `C:\Program Files (x86)\Steam\steamapps\common\Gamble With Your Friends\Gamble With Your Friends.exe` (TitleId 1626215053)
+- `C:\Program Files (x86)\Steam\steamapps\common\Goblin Cleanup\Goblin Cleanup.exe` (TitleId 2120680024)
+- `C:\Program Files (x86)\Steam\steamapps\common\ILL Space\ILLSpace\Binaries\Win64\ILLSpace-Win64-Shipping.exe` (TitleId 2104022060)
+- `C:\Program Files (x86)\Steam\steamapps\common\Lethal Company\Lethal Company.exe` (TitleId 1912251336)
+- `C:\Program Files (x86)\Steam\steamapps\common\Little Rocket Lab\LittleRocketLab.exe` (TitleId 1793099089)
+- `C:\Program Files (x86)\Steam\steamapps\common\Mage Arena\MageArena.exe` (TitleId 1817176572)
+- `C:\Program Files (x86)\Steam\steamapps\common\Mall Rivals\MallRivals.exe` (TitleId 2073649290)
+- `C:\Program Files (x86)\Steam\steamapps\common\MECCHA CHAMELEON\Chameleon\Binaries\Win64\PenguinHotel-Win64-Shipping.exe` (TitleId 2143308315)
+- `C:\Program Files (x86)\Steam\steamapps\common\Melvor Idle\Melvor Idle.exe` (TitleId 1909009324)
+- `C:\Program Files (x86)\Steam\steamapps\common\Microtopia\Microtopia.exe` (TitleId 1956529432)
+- `C:\Program Files (x86)\Steam\steamapps\common\Mini Motorways\Mini Motorways.exe` (TitleId 1908579094)
+- `C:\Program Files (x86)\Steam\steamapps\common\MiniMetro\MiniMetro.exe` (TitleId 1732876453)
+- `C:\Program Files (x86)\Steam\steamapps\common\REPO\REPO.exe` (TitleId 1743807994)
+- `C:\Program Files (x86)\Steam\steamapps\common\rocketleague\Binaries\Win64\RocketLeague.exe` (TitleId 2140933132)
+- `C:\Program Files (x86)\Steam\steamapps\common\RuneScape\bin\win64\RuneScape.exe` (TitleId 1865183543)
+- `C:\Program Files (x86)\Steam\steamapps\common\RuneScape\launcher\rs2client.exe` (TitleId —)
+- `C:\Program Files (x86)\Steam\steamapps\common\Sapiens\Sapiens.exe` (TitleId 2129295267)
+- `C:\Program Files (x86)\Steam\steamapps\common\Satisfactory\Engine\Binaries\Win64\FactoryGameSteam-Win64-Shipping.exe` (TitleId 1677994798)
+- `C:\Program Files (x86)\Steam\steamapps\common\Subnautica\Subnautica.exe` (TitleId 2074159196)
+- `C:\Program Files (x86)\Steam\steamapps\common\Super Battle Golf\Super Battle Golf.exe` (TitleId 1741954306)
+- `C:\Program Files (x86)\Steam\steamapps\common\TEKKEN 8\Polaris\Binaries\Win64\Polaris-Win64-Shipping.exe` (TitleId 1911500579)
+- `C:\Program Files (x86)\Steam\steamapps\common\The Planet Crafter\Planet Crafter.exe` (TitleId 1985825936)
+- `C:\Program Files (x86)\Steam\steamapps\common\Timberborn\Timberborn.exe` (TitleId 1711567021)
+- `C:\Program Files (x86)\Steam\steamapps\common\Turmoil\Turmoil.exe` (TitleId 1873195402)
+- `C:\Program Files (x86)\Steam\steamapps\common\Vampire Survivors\VampireSurvivors.exe` (TitleId 2129831902)
+- `C:\Program Files (x86)\Steam\steamapps\common\Warframe\Warframe.x64.exe` (TitleId 2119592325)
+- `C:\Program Files (x86)\Steam\steamapps\common\WaterPark Simulator\WaterparkSimulator.exe` (TitleId 1636719648)
+- `C:\Program Files (x86)\Steam\steamapps\common\Witchspire\Hercules\Binaries\Win64\Hercules-Win64-Shipping.exe` (TitleId 2077877963)
+- `C:\Program Files (x86)\Steam\steamapps\common\worldbox\worldbox.exe` (TitleId 2107888673)
+- `C:\Program Files\EA Games\Battlefield 2042\BF2042.exe` (TitleId 1740854689)
+- `C:\Program Files\EA Games\Battlefield 2042\BF2042Trial.exe` (TitleId 1740854689)
+- `C:\Program Files\Oculus\Support\oculus-client\Client.exe` (TitleId 1832731138)
+- `C:\Program Files\Roberts Space Industries\StarCitizen\LIVE\Bin64\StarCitizen.exe` (TitleId 1652439885)
+- `%USERPROFILE%\AppData\Local\osulazer\current\osu!.exe` (TitleId 2090060949)
+- `%USERPROFILE%\BSManager\BSInstances\1.29.1\Beat Saber.exe` (TitleId 1849473846)
+- `%USERPROFILE%\Downloads\Eternum-0.4-pc\Eternum.exe` (TitleId 1833515254)
+- `D:\rpcs3-v0.0.27-14803-c06b957a_win64\rpcs3.exe` (TitleId —)
+- `E:\Maxslife-Chapter1.1_bugs_fixed-pc\Maxslife-Chapter1-pc\lib\windows-i686\Maxslife.exe` (TitleId —)
+- `I:\DesertStalker-0.21.3-pc\DesertStalker.exe` (TitleId 2027496629)
+- `I:\SteamLibrary\steamapps\common\Alchemy Factory\AlchemyFactory\Binaries\Win64\AlchemyFactory-Win64-Shipping.exe` (TitleId 2139861345)
+- `I:\SteamLibrary\steamapps\common\Captain of Industry\Captain of Industry.exe` (TitleId 1908733819)
+- `I:\SteamLibrary\steamapps\common\Cloudheim\ProtoCat\Binaries\Win64\CloudheimSteam-Win64-Shipping.exe` (TitleId 2064700512)
+- `I:\SteamLibrary\steamapps\common\Cyberpunk 2077\bin\x64\Cyberpunk2077.exe` (TitleId 1820448821)
+- `I:\SteamLibrary\steamapps\common\Deep Rock Galactic\FSD\Binaries\Win64\FSD-Win64-Shipping.exe` (TitleId 1951205818)
+- `I:\SteamLibrary\steamapps\common\DuneAwakening\DuneSandbox\Binaries\Win64\DuneSandbox-Win64-Shipping.exe` (TitleId 2035381549)
+- `I:\SteamLibrary\steamapps\common\Dyson Sphere Program\DSPGAME.exe` (TitleId 1979421862)
+- `I:\SteamLibrary\steamapps\common\Expedition 33\Sandfall\Binaries\Win64\SandFall-Win64-Shipping.exe` (TitleId 1769971395)
+- `I:\SteamLibrary\steamapps\common\Jedi Survivor\SwGame\Binaries\Win64\JediSurvivor.exe` (TitleId 1771215349)
+- `I:\SteamLibrary\steamapps\common\Log Riders\Log Riders.exe` (TitleId 1671398962)
+- `I:\SteamLibrary\steamapps\common\MineMogul\MineMogul.exe` (TitleId 1976702034)
+- `I:\SteamLibrary\steamapps\common\Oddsparks\Loc\Binaries\Win64\Loc-Win64-Shipping.exe` (TitleId 1865159579)
+- `I:\SteamLibrary\steamapps\common\Overwatch\Overwatch.exe` (TitleId 1635723607)
+- `I:\SteamLibrary\steamapps\common\PowerWash Simulator 2\PowerWash Simulator 2.exe` (TitleId 1720348592)
+- `I:\SteamLibrary\steamapps\common\Ranch Simulator\Ranch_Simulator\Binaries\Win64\Ranch_Simulator-Win64-Shipping.exe` (TitleId 1747103234)
+- `I:\SteamLibrary\steamapps\common\RSDragonwilds\RSDragonwilds\Binaries\Win64\RSDragonwilds-Win64-Shipping.exe` (TitleId 2075310855)
+- `I:\SteamLibrary\steamapps\common\Solar Expanse\Solar Expanse.exe` (TitleId 2123353596)
+- `I:\SteamLibrary\steamapps\common\The Universim\The Universim.exe` (TitleId 1736896744)
+- `I:\SteamLibrary\steamapps\common\Universe Sandbox 2\Universe Sandbox x64.exe` (TitleId 1703235096)
+- `I:\SteamLibrary\steamapps\common\Valheim\valheim.exe` (TitleId 1770979388)
+- `I:\SteamLibrary\steamapps\common\X4 Foundations\X4.exe` (TitleId 2135206048)
+- `I:\TheAwakening-0.4.9-pc\TheAwakening.exe` (TitleId 2141200147)
+
+<details><summary>GameConfigStore paths no longer on disk (185)</summary>
+
+- `C:\Battle.Net\Call of Duty Modern Warfare\ModernWarfare.exe` (TitleId 1787008472)
+- `C:\Battle.Net\Diablo IV\Diablo IV.exe` (TitleId 1681574067)
+- `C:\Battle.Net\World of Warcraft\_retail_\Wow.exe` (TitleId 1664882211)
+- `C:\Program Files (x86)\Call of Duty Black Ops Cold War\BlackOpsColdWar.exe` (TitleId 1624636074)
+- `C:\Program Files (x86)\Call of Duty Vanguard\Vanguard.exe` (TitleId 1900407842)
+- `C:\Program Files (x86)\iRacing\iRacingSim64DX11.exe` (TitleId 2113732919)
+- `C:\Program Files (x86)\iRacing\ui\iRacingUI.exe` (TitleId 2113732919)
+- `C:\Program Files (x86)\Steam\steamapps\common\AbioticFactor\AbioticFactor\Binaries\Win64\AbioticFactor-Win64-Shipping.exe` (TitleId 1930130462)
+- `C:\Program Files (x86)\Steam\steamapps\common\Aim Lab\AimLab_tb.exe` (TitleId 1677929991)
+- `C:\Program Files (x86)\Steam\steamapps\common\Ale and Tale Tavern\Ale and Tale Tavern.exe` (TitleId 1714532575)
+- `C:\Program Files (x86)\Steam\steamapps\common\Apex Legends\r5apex.exe` (TitleId 1628516715)
+- `C:\Program Files (x86)\Steam\steamapps\common\ARK\ShooterGame\Binaries\Win64\ShooterGame.exe` (TitleId 1885819086)
+- `C:\Program Files (x86)\Steam\steamapps\common\ASKA\Aska.exe` (TitleId 1932496842)
+- `C:\Program Files (x86)\Steam\steamapps\common\Assassin's Creed Valhalla\ACValhalla.exe` (TitleId 1772443391)
+- `C:\Program Files (x86)\Steam\steamapps\common\Assetto Corsa Competizione\AC2\Binaries\Win64\AC2-Win64-Shipping.exe` (TitleId 1869805935)
+- `C:\Program Files (x86)\Steam\steamapps\common\ASTRONEER\Astro\Binaries\Win64\Astro-Win64-Shipping.exe` (TitleId 1735501645)
+- `C:\Program Files (x86)\Steam\steamapps\common\Battlefield 6\bf6.exe` (TitleId 1786930119)
+- `C:\Program Files (x86)\Steam\steamapps\common\BitCraft Online\BitCraft.exe` (TitleId 1989158365)
+- `C:\Program Files (x86)\Steam\steamapps\common\Bulwark\Bulwark.exe` (TitleId 1648491052)
+- `C:\Program Files (x86)\Steam\steamapps\common\CCFF7R\CCFF7R\Binaries\Win64\CCFF7R-Win64-Shipping.exe` (TitleId 1979440992)
+- `C:\Program Files (x86)\Steam\steamapps\common\Cell to Singularity\CellToSingularity.exe` (TitleId 1958043150)
+- `C:\Program Files (x86)\Steam\steamapps\common\Cities_Skylines\Cities.exe` (TitleId 1653768775)
+- `C:\Program Files (x86)\Steam\steamapps\common\Conan Exiles\ConanSandbox\Binaries\Win64\ConanSandbox.exe` (TitleId 2128673801)
+- `C:\Program Files (x86)\Steam\steamapps\common\Construction Simulator\ConSim.exe` (TitleId 2111394523)
+- `C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive\csgo.exe` (TitleId 1701961169)
+- `C:\Program Files (x86)\Steam\steamapps\common\Dale&Dawson\DDSS.exe` (TitleId 1950421522)
+- `C:\Program Files (x86)\Steam\steamapps\common\Dave the Diver\DaveTheDiver.exe` (TitleId 2006138442)
+- `C:\Program Files (x86)\Steam\steamapps\common\DB Xenoverse 2\bin\DBXV2.exe` (TitleId 1857082667)
+- `C:\Program Files (x86)\Steam\steamapps\common\Deceit 2\Deceit2\Binaries\Win64\Deceit2Game-Win64-Shipping.exe` (TitleId —)
+- `C:\Program Files (x86)\Steam\steamapps\common\Delta Force Hawk Ops Pre-Alpha Test\Game\DeltaForce\Binaries\Win64\DeltaForceClient-Win64-Shipping.exe` (TitleId 1739679113)
+- `C:\Program Files (x86)\Steam\steamapps\common\Demon Slayer\APK\Binaries\Win64\APK-Win64-Shipping.exe` (TitleId 1847544947)
+- `C:\Program Files (x86)\Steam\steamapps\common\DNFDUEL\RED\Binaries\Win64\DNFDUEL-Win64-Shipping.exe` (TitleId 1789248657)
+- `C:\Program Files (x86)\Steam\steamapps\common\DRAGON BALL GEKISHIN SQUADRA\game.exe` (TitleId 1804449817)
+- `C:\Program Files (x86)\Steam\steamapps\common\DRAGON BALL THE BREAKERS Playtest\bin\DRAGON BALL THE BREAKERS.exe` (TitleId 1633048236)
+- `C:\Program Files (x86)\Steam\steamapps\common\Dungeonborne\Dungeonborne\Binaries\Win64\Dungeonborne.exe` (TitleId 1868215250)
+- `C:\Program Files (x86)\Steam\steamapps\common\Ecosystem\Ecosystem.exe` (TitleId 1899955786)
+- `C:\Program Files (x86)\Steam\steamapps\common\Escape Simulator\Escape Simulator.exe` (TitleId 1875016968)
+- `C:\Program Files (x86)\Steam\steamapps\common\EvolveGame\bin64_SteamRetail\Evolve.exe` (TitleId 2010823567)
+- `C:\Program Files (x86)\Steam\steamapps\common\F13Game\SummerCamp\Binaries\Win64\SummerCamp.exe` (TitleId 1939052149)
+- `C:\Program Files (x86)\Steam\steamapps\common\Factorio\bin\x64\factorio.exe` (TitleId 1722959023)
+- `C:\Program Files (x86)\Steam\steamapps\common\Fall Guys\FallGuys_client_game.exe` (TitleId 1619218235)
+- `C:\Program Files (x86)\Steam\steamapps\common\Farthest Frontier\Farthest Frontier.exe` (TitleId 1827401614)
+- `C:\Program Files (x86)\Steam\steamapps\common\Fata Deum\Fata Deum.exe` (TitleId 1975657082)
+- `C:\Program Files (x86)\Steam\steamapps\common\FINAL FANTASY VII REMAKE\End\Binaries\Win64\ff7remake_.exe` (TitleId 1866656724)
+- `C:\Program Files (x86)\Steam\steamapps\common\Firefighting Simulator - The Squad\FG\Binaries\Win64\FG-Win64-Shipping.exe` (TitleId 1666417952)
+- `C:\Program Files (x86)\Steam\steamapps\common\FORSPOKEN\FORSPOKEN.exe` (TitleId 1798784304)
+- `C:\Program Files (x86)\Steam\steamapps\common\FOUNDRY\Foundry.exe` (TitleId 1790959167)
+- `C:\Program Files (x86)\Steam\steamapps\common\FPS Chess\FPSChess\Binaries\Win64\FPSChess-Win64-Shipping.exe` (TitleId 1904873345)
+- `C:\Program Files (x86)\Steam\steamapps\common\Frostpunk\Frostpunk.exe` (TitleId 1989947930)
+- `C:\Program Files (x86)\Steam\steamapps\common\Ghost of Tsushima DIRECTOR'S CUT\GhostOfTsushima.exe` (TitleId 1635061280)
+- `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\GTA5.exe` (TitleId 1862446374)
+- `C:\Program Files (x86)\Steam\steamapps\common\GTFO\GTFO.exe` (TitleId 2030620811)
+- `C:\Program Files (x86)\Steam\steamapps\common\GUNDAM EVOLUTION\EvoGame\Binaries\Win64\EvoGameSteam-Win64-Shipping.exe` (TitleId 1616760412)
+- `C:\Program Files (x86)\Steam\steamapps\common\Hades\x64\Hades.exe` (TitleId 1749180498)
+- `C:\Program Files (x86)\Steam\steamapps\common\HeartOfTheMachine\HeartOfTheMachine.exe` (TitleId 1667248539)
+- `C:\Program Files (x86)\Steam\steamapps\common\Hydroneer\Mining\Binaries\Win64\Mining-Win64-Shipping.exe` (TitleId 2116953929)
+- `C:\Program Files (x86)\Steam\steamapps\common\HYPERCHARGE Unboxed\Unboxed\Binaries\Win64\Unboxed-Win64-Shipping.exe` (TitleId 1938576612)
+- `C:\Program Files (x86)\Steam\steamapps\common\Icarus\Icarus\Binaries\Win64\Icarus-Win64-Shipping.exe` (TitleId 1668980366)
+- `C:\Program Files (x86)\Steam\steamapps\common\Industries of Titan\Titan\Binaries\Win64\Titan-Win64-Shipping.exe` (TitleId 1958629866)
+- `C:\Program Files (x86)\Steam\steamapps\common\IXION\Ixion.exe` (TitleId 2058459731)
+- `C:\Program Files (x86)\Steam\steamapps\common\Liar's Bar\Liar's Bar.exe` (TitleId 1969509107)
+- `C:\Program Files (x86)\Steam\steamapps\common\LOCKDOWN Protocol\LockdownProtocol\Binaries\Win64\LockdownProtocol-Win64-Shipping.exe` (TitleId 1742473665)
+- `C:\Program Files (x86)\Steam\steamapps\common\Lost Ark\Binaries\Win64\LOSTARK.exe` (TitleId 1806726294)
+- `C:\Program Files (x86)\Steam\steamapps\common\Madden NFL 23\Madden23.exe` (TitleId 2143611891)
+- `C:\Program Files (x86)\Steam\steamapps\common\Marvel's Spider-Man Miles Morales\MilesMorales.exe` (TitleId 2145969439)
+- `C:\Program Files (x86)\Steam\steamapps\common\Marvel's Spider-Man Remastered\Spider-Man.exe` (TitleId 1959324460)
+- `C:\Program Files (x86)\Steam\steamapps\common\Medieval Dynasty\Medieval_Dynasty\Binaries\Win64\Medieval_Dynasty-Win64-Shipping.exe` (TitleId 2011136108)
+- `C:\Program Files (x86)\Steam\steamapps\common\Metal Hellsinger\Metal.exe` (TitleId 1806787361)
+- `C:\Program Files (x86)\Steam\steamapps\common\MindOverMagic\mindovermagic.exe` (TitleId 1686150138)
+- `C:\Program Files (x86)\Steam\steamapps\common\MonsterHunterRise\MonsterHunterRise.exe` (TitleId 1661942705)
+- `C:\Program Files (x86)\Steam\steamapps\common\Move or Die\Love\win\love.exe` (TitleId 1613647362)
+- `C:\Program Files (x86)\Steam\steamapps\common\MultiVersus\MultiVersus\Binaries\Win64\MultiVersus-Win64-Shipping.exe` (TitleId 1647411258)
+- `C:\Program Files (x86)\Steam\steamapps\common\Murky Divers\MurkyDivers\Binaries\Win64\MurkyDiversGame-Win64-Shipping.exe` (TitleId 1664593520)
+- `C:\Program Files (x86)\Steam\steamapps\common\Myth of Empires\MOE\Binaries\Win64\MOE.exe` (TitleId 1750517634)
+- `C:\Program Files (x86)\Steam\steamapps\common\NARAKA BLADEPOINT\NarakaBladepoint.exe` (TitleId 2139664334)
+- `C:\Program Files (x86)\Steam\steamapps\common\NARUTO SHIPPUDEN Ultimate Ninja STORM 4\NSUNS4.exe` (TitleId 2126174118)
+- `C:\Program Files (x86)\Steam\steamapps\common\New Cycle\New Cycle.exe` (TitleId 2086049151)
+- `C:\Program Files (x86)\Steam\steamapps\common\New World\Bin64\NewWorld.exe` (TitleId 1995770653)
+- `C:\Program Files (x86)\Steam\steamapps\common\Once Human\ONCE_HUMAN.exe` (TitleId 1914825481)
+- `C:\Program Files (x86)\Steam\steamapps\common\Overcooked! All You Can Eat\Overcooked All You Can Eat.exe` (TitleId 1689384193)
+- `C:\Program Files (x86)\Steam\steamapps\common\Overprime\Overprime\Binaries\Win64\ParagonClient-Win64-Shipping.exe` (TitleId 1837411448)
+- `C:\Program Files (x86)\Steam\steamapps\common\Paladins\Binaries\Win64\Paladins.exe` (TitleId 1621625795)
+- `C:\Program Files (x86)\Steam\steamapps\common\Palworld\Pal\Binaries\Win64\Palworld-Win64-Shipping.exe` (TitleId 1797327516)
+- `C:\Program Files (x86)\Steam\steamapps\common\Party Animals\PartyAnimals.exe` (TitleId 1806115457)
+- `C:\Program Files (x86)\Steam\steamapps\common\Phasmophobia\Phasmophobia.exe` (TitleId 1839962134)
+- `C:\Program Files (x86)\Steam\steamapps\common\Planet Coaster\PlanetCoaster.exe` (TitleId 1782685193)
+- `C:\Program Files (x86)\Steam\steamapps\common\PlanetSide 2\PlanetSide2_x64.exe` (TitleId 1646519468)
+- `C:\Program Files (x86)\Steam\steamapps\common\Predecessor\Predecessor\Binaries\Win64\PredecessorClient-Win64-Shipping.exe` (TitleId 2033161797)
+- `C:\Program Files (x86)\Steam\steamapps\common\QuantumBreak\dx11\QuantumBreak.exe` (TitleId 1635397666)
+- `C:\Program Files (x86)\Steam\steamapps\common\Railroads Online\arr\Binaries\Win64\arr-Win64-Shipping.exe` (TitleId 2121186022)
+- `C:\Program Files (x86)\Steam\steamapps\common\Ravager\Ravager\Ravager.exe` (TitleId 2120567307)
+- `C:\Program Files (x86)\Steam\steamapps\common\Ready Or Not\ReadyOrNot\Binaries\Win64\ReadyOrNot-Win64-Shipping.exe` (TitleId 1992097586)
+- `C:\Program Files (x86)\Steam\steamapps\common\Red Dead Redemption 2\RDR2.exe` (TitleId 2110108557)
+- `C:\Program Files (x86)\Steam\steamapps\common\Risk of Rain 2\Risk of Rain 2.exe` (TitleId 1656566221)
+- `C:\Program Files (x86)\Steam\steamapps\common\sandstorm\Insurgency\Binaries\Win64\InsurgencyClient-Win64-Shipping.exe` (TitleId 2088598010)
+- `C:\Program Files (x86)\Steam\steamapps\common\Satisfactory\Engine\Binaries\Win64\FactoryGame-Win64-Shipping.exe` (TitleId 1677994798)
+- `C:\Program Files (x86)\Steam\steamapps\common\SCUM\SCUM\Binaries\Win64\SCUM.exe` (TitleId 1658988807)
+- `C:\Program Files (x86)\Steam\steamapps\common\Secret Neighbor\Secret Neighbour.exe` (TitleId 2045494005)
+- `C:\Program Files (x86)\Steam\steamapps\common\Sekiro\sekiro.exe` (TitleId 1872224406)
+- `C:\Program Files (x86)\Steam\steamapps\common\Shatterline\Bin\Shatterline.exe` (TitleId 1991854084)
+- `C:\Program Files (x86)\Steam\steamapps\common\Sifu\Sifu\Binaries\Win64\Sifu-Win64-Shipping.exe` (TitleId 1758202833)
+- `C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\SkyrimSE.exe` (TitleId 2013577527)
+- `C:\Program Files (x86)\Steam\steamapps\common\SMALLAND\SMALLAND\Binaries\Win64\SMALLAND-Win64-Shipping.exe` (TitleId 1945238797)
+- `C:\Program Files (x86)\Steam\steamapps\common\SMITE\Binaries\Win64\Smite.exe` (TitleId 2096906881)
+- `C:\Program Files (x86)\Steam\steamapps\common\SonicFrontiers\SonicFrontiers.exe` (TitleId 1950480930)
+- `C:\Program Files (x86)\Steam\steamapps\common\Sons Of The Forest\SonsOfTheForest.exe` (TitleId 1927824914)
+- `C:\Program Files (x86)\Steam\steamapps\common\SpellcastersChronicles\SpellcastersChronicles.exe` (TitleId 1633504212)
+- `C:\Program Files (x86)\Steam\steamapps\common\StarBirds\StarBirds.exe` (TitleId 1943436159)
+- `C:\Program Files (x86)\Steam\steamapps\common\Stardew Valley\Stardew Valley.exe` (TitleId 1757939507)
+- `C:\Program Files (x86)\Steam\steamapps\common\Steam Engine Simulator\bin\atg-steam-engine-demo.exe` (TitleId 1772067815)
+- `C:\Program Files (x86)\Steam\steamapps\common\Stranded Alien Dawn\StrandedSteam.exe` (TitleId 1678102872)
+- `C:\Program Files (x86)\Steam\steamapps\common\Street Fighter 6\StreetFighter6.exe` (TitleId 1886546637)
+- `C:\Program Files (x86)\Steam\steamapps\common\Sunkenland\Sunkenland.exe` (TitleId 1892358374)
+- `C:\Program Files (x86)\Steam\steamapps\common\Supermarket Simulator\Supermarket Simulator.exe` (TitleId 1620297175)
+- `C:\Program Files (x86)\Steam\steamapps\common\The Crust\TheCrust\Binaries\Win64\TheCrust-Win64-Shipping.exe` (TitleId 2119989577)
+- `C:\Program Files (x86)\Steam\steamapps\common\The Cycle\Prospect\Binaries\Win64\Prospect-Win64-Shipping.exe` (TitleId —)
+- `C:\Program Files (x86)\Steam\steamapps\common\The Finals\Discovery\Binaries\Win64\Discovery.exe` (TitleId 1815869144)
+- `C:\Program Files (x86)\Steam\steamapps\common\The Forever Winter\Windows\ForeverWinter\Binaries\Win64\ForeverWinter-Win64-Shipping.exe` (TitleId 1887112356)
+- `C:\Program Files (x86)\Steam\steamapps\common\The Front\ProjectWar\Binaries\Win64\TheFront.exe` (TitleId 2108214457)
+- `C:\Program Files (x86)\Steam\steamapps\common\The Wandering Village\Windows64\WanderingVillage.exe` (TitleId 1623966149)
+- `C:\Program Files (x86)\Steam\steamapps\common\TheLongDark\tld.exe` (TitleId 1827948906)
+- `C:\Program Files (x86)\Steam\steamapps\common\They Are Billions\TheyAreBillions.exe` (TitleId 1921269905)
+- `C:\Program Files (x86)\Steam\steamapps\common\Totally Reliable Delivery Service\Totally Reliable Delivery Service.exe` (TitleId 1662165624)
+- `C:\Program Files (x86)\Steam\steamapps\common\Tropico 6\Tropico6\Binaries\Win64\Tropico6-Win64-Shipping.exe` (TitleId 1913669713)
+- `C:\Program Files (x86)\Steam\steamapps\common\UEBS2\UEBS2.exe` (TitleId 1894100664)
+- `C:\Program Files (x86)\Steam\steamapps\common\VEILED EXPERTS\VeiledExperts\Binaries\Win64\VeiledExperts-Win64-Shipping.exe` (TitleId 1729914728)
+- `C:\Program Files (x86)\Steam\steamapps\common\VideoHorrorSociety\Game\Binaries\Win64\Game-Win64-Shipping.exe` (TitleId 1827595330)
+- `C:\Program Files (x86)\Steam\steamapps\common\Viscera\Binaries\Win64\UDK.exe` (TitleId 1867329201)
+- `C:\Program Files (x86)\Steam\steamapps\common\VRising\VRising.exe` (TitleId 2084359296)
+- `C:\Program Files (x86)\Steam\steamapps\common\Warhammer 40,000 DARKTIDE\binaries\Darktide.exe` (TitleId 1615896407)
+- `C:\Program Files (x86)\Steam\steamapps\common\West Hunt\West Hunt.exe` (TitleId 2032548685)
+- `C:\Program Files (x86)\Steam\steamapps\common\WoLongFallenDynasty\WoLong.exe` (TitleId 1669711584)
+- `C:\Program Files (x86)\Steam\steamapps\common\World of Warships\bin\6965290\bin64\WorldOfWarships64.exe` (TitleId 1923480706)
+- `C:\Program Files (x86)\Steam\steamapps\common\World of Warships\WorldOfWarships.exe` (TitleId 1923480706)
+- `C:\Program Files (x86)\Steam\steamapps\common\World War 3\13_2002999\WW3\Binaries\Win64\WW3-Win64-Shipping.exe` (TitleId 1704491362)
+- `C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games\The Crew 2\TheCrew2.exe` (TitleId 1757780616)
+- `C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games\XDefiant\XDefiant.exe` (TitleId 1686037619)
+- `C:\Program Files\EA Games\Battlefield 4\bf4.exe` (TitleId 1738186740)
+- `C:\Program Files\EA Games\Battlefield V\bfv.exe` (TitleId 1674291955)
+- `C:\Program Files\Epic Games\Arcadegeddon\Arcade\Binaries\Win64\Arcade-Win64-Shipping.exe` (TitleId 2108461548)
+- `C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe` (TitleId 1820250788)
+- `C:\Program Files\Epic Games\GhostwireTokyo\Snowfall\Binaries\Win64\GWT.exe` (TitleId 1718100792)
+- `C:\Program Files\Epic Games\TrackmaniaNext\Trackmania.exe` (TitleId 2084813623)
+- `C:\Program Files\IRONMACE\Dark and Darker\DungeonCrawler\Binaries\Win64\DungeonCrawler.exe` (TitleId 1717983300)
+- `%USERPROFILE%\AppData\Local\FiveM\FiveM.exe` (TitleId 1862446374)
+- `%USERPROFILE%\AppData\Local\Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime\java-runtime-delta\windows-x64\java-runtime-delta\bin\javaw.exe` (TitleId 1791712750)
+- `%USERPROFILE%\AppData\Local\Temp\{72985D40-095D-4D7B-A6F4-85F8E8C1F793}\{8CC5D3C1-411A-4C97-9635-69F826DB88CD}\scribble.exe` (TitleId 1614663587)
+- `D:\SteamLibrary\steamapps\common\PAYDAY 3 Playtest\PAYDAY3\Binaries\Win64\PAYDAY3-Win64-Shipping.exe` (TitleId 1616307670)
+- `D:\SteamLibrary\steamapps\common\Project Wingman\ProjectWingman\Binaries\Win64\ProjectWingman-Win64-Shipping.exe` (TitleId 1948090330)
+- `D:\SteamLibrary\steamapps\common\Redout2\redout2\Binaries\Win64\Redout2-Win64-Shipping.exe` (TitleId 1627887820)
+- `E:\Riot\Riot Games\VALORANT\live\ShooterGame\Binaries\Win64\VALORANT-Win64-Shipping.exe` (TitleId 1856764962)
+- `E:\ToF\Tower Of Fantasy\Hotta\Binaries\Win64\QRSL.exe` (TitleId 1636493129)
+- `F:\VH_210112_V1_ENG\RPG_RT.exe` (TitleId —)
+- `G:\EA\Anthem\Anthem.exe` (TitleId 1857101017)
+- `G:\SteamLibrary\steamapps\common\Raft\Raft.exe` (TitleId 1891778508)
+- `I:\SteamLibrary\steamapps\common\ACE COMBAT 7\Ace7Game.exe` (TitleId 1884657991)
+- `I:\SteamLibrary\steamapps\common\Black Desert Online\bin64\BlackDesert64.exe` (TitleId 1918679142)
+- `I:\SteamLibrary\steamapps\common\Borderlands 3\OakGame\Binaries\Win64\Borderlands3.exe` (TitleId 1815348552)
+- `I:\SteamLibrary\steamapps\common\Call of Duty HQ\cod.exe` (TitleId 1709058833)
+- `I:\SteamLibrary\steamapps\common\Cash Cleaner Simulator\CashCleanerSimulator\Binaries\Win64\CashCleanerSim-Win64-Shipping.exe` (TitleId 2113910627)
+- `I:\SteamLibrary\steamapps\common\Cities Skylines II\Cities2.exe` (TitleId 1668430766)
+- `I:\SteamLibrary\steamapps\common\DEATH STRANDING DIRECTORS CUT\ds.exe` (TitleId 1831239909)
+- `I:\SteamLibrary\steamapps\common\ELDEN RING NIGHTREIGN\Game\nightreign.exe` (TitleId 1937307366)
+- `I:\SteamLibrary\steamapps\common\ELDEN RING\Game\eldenring.exe` (TitleId 2147437805)
+- `I:\SteamLibrary\steamapps\common\Enshrouded\enshrouded.exe` (TitleId 1713067209)
+- `I:\SteamLibrary\steamapps\common\EverSiege\KingdomLegacy\Binaries\Win64\EversiegeSteam-Win64-Shipping.exe` (TitleId 1713919042)
+- `I:\SteamLibrary\steamapps\common\FANTASY LIFE i\Game\Binaries\Win64\NFL1-Win64-Shipping.exe` (TitleId 2010787830)
+- `I:\SteamLibrary\steamapps\common\Forever Skies\ProjectZeppelin\Binaries\Win64\ForeverSkies-Win64-Shipping.exe` (TitleId 1679588299)
+- `I:\SteamLibrary\steamapps\common\ForzaHorizon6\forzahorizon6.exe` (TitleId 1888125032)
+- `I:\SteamLibrary\steamapps\common\Grand Theft Auto V Enhanced\GTA5_Enhanced.exe` (TitleId 1815914144)
+- `I:\SteamLibrary\steamapps\common\Helldivers 2\bin\helldivers2.exe` (TitleId 1760704160)
+- `I:\SteamLibrary\steamapps\common\Hogwarts Legacy\Phoenix\Binaries\Win64\HogwartsLegacy.exe` (TitleId 2034320526)
+- `I:\SteamLibrary\steamapps\common\HyperLightDrifter\HyperLightDrifter.exe` (TitleId 1802086498)
+- `I:\SteamLibrary\steamapps\common\Marvel's Spider-Man 2\Spider-Man2.exe` (TitleId 1959705503)
+- `I:\SteamLibrary\steamapps\common\MarvelRivals\MarvelGame\Marvel\Binaries\Win64\Marvel-Win64-Shipping.exe` (TitleId 1711955914)
+- `I:\SteamLibrary\steamapps\common\MonsterHunterWilds\MonsterHunterWilds.exe` (TitleId 2047630837)
+- `I:\SteamLibrary\steamapps\common\No Man's Sky\Binaries\NMS.exe` (TitleId 1905450963)
+- `I:\SteamLibrary\steamapps\common\Planet Coaster 2\PlanetCoaster2.exe` (TitleId 1837599174)
+- `I:\SteamLibrary\steamapps\common\Seafarer\Windows\Orca\Binaries\Win64\Orca-Win64-Shipping.exe` (TitleId 2138151839)
+- `I:\SteamLibrary\steamapps\common\ShadowOfWar\x64\ShadowOfWar.exe` (TitleId 2080548081)
+- `I:\SteamLibrary\steamapps\common\STAR WARS Squadrons\starwarssquadrons_launcher.exe` (TitleId —)
+- `I:\SteamLibrary\steamapps\common\StarRupture\StarRupture\Binaries\Win64\StarRuptureGameSteam-Win64-Shipping.exe` (TitleId 2073885963)
+- `I:\SteamLibrary\steamapps\common\StellarBlade\SB\Binaries\Win64\SB-Win64-Shipping.exe` (TitleId 1906097969)
+- `I:\SteamLibrary\steamapps\common\Tom Clancy's Rainbow Six Siege\RainbowSix.exe` (TitleId 2081130223)
+- `I:\SteamLibrary\steamapps\common\Transport Fever 2\TransportFever2.exe` (TitleId 2044611924)
+
+</details>
+
+### GameList `ConfirmedBySystem` display names (289)
+
+<details><summary>Show</summary>
+
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- (TitleId )
+- A Game About Feeding A Black Hole (TitleId 1878049696)
+- abioticfactor-win64-shipping.exe (TitleId 1930130462)
+- ac2-win64-shipping.exe (TitleId 1869805935)
+- ace7game.exe (TitleId 1884657991)
+- acvalhalla.exe (TitleId 1772443391)
+- aimlab_tb.exe (TitleId 1677929991)
+- AlchemyFactory (TitleId 2139861345)
+- ale and tale tavern.exe (TitleId 1714532575)
+- ANLIFE (TitleId 1997517976)
+- anthem.exe (TitleId 1857101017)
+- apk-win64-shipping.exe (TitleId 1847544947)
+- arcade-win64-shipping.exe (TitleId 2108461548)
+- arr-win64-shipping.exe (TitleId 2121186022)
+- aska.exe (TitleId 1932496842)
+- astro-win64-shipping.exe (TitleId 1735501645)
+- atg-steam-engine-demo.exe (TitleId 1772067815)
+- Beat Saber (TitleId 1849473846)
+- Becastled (TitleId 1757070329)
+- bf4.exe (TitleId 1738186740)
+- bf6.exe (TitleId 1786930119)
+- bfv.exe (TitleId 1674291955)
+- Big Ambitions (TitleId 1785907683)
+- bitcraft.exe (TitleId 1989158365)
+- blackopscoldwar.exe (TitleId 1624636074)
+- Blossom The Seed Of Life (TitleId 1760572483)
+- borderlands3.exe (TitleId 1815348552)
+- bulwark.exe (TitleId 1648491052)
+- Captain of Industry (TitleId 1908733819)
+- cashcleanersim-win64-shipping.exe (TitleId 2113910627)
+- ccff7r-win64-shipping.exe (TitleId 1979440992)
+- celltosingularity.exe (TitleId 1958043150)
+- cities.exe (TitleId 1653768775)
+- cities2.exe (TitleId 1668430766)
+- Cloudheim (TitleId 2064700512)
+- cod.exe (TitleId 1709058833)
+- conansandbox.exe (TitleId 2128673801)
+- consim.exe (TitleId 2111394523)
+- csgo.exe (TitleId 1701961169)
+- Cyberpunk 2077 (TitleId 1820448821)
+- darktide.exe (TitleId 1615896407)
+- davethediver.exe (TitleId 2006138442)
+- dbxv2.exe (TitleId 1857082667)
+- ddss.exe (TitleId 1950421522)
+- deadlock (TitleId 1691223292)
+- deceit2game-win64-shipping.exe (TitleId )
+- Deep Rock Galactic (TitleId 1951205818)
+- deltaforceclient-win64-shipping.exe (TitleId 1739679113)
+- DesertStalker (TitleId 2027496629)
+- diablo iv.exe (TitleId 1681574067)
+- discovery.exe (TitleId 1815869144)
+- dnfduel-win64-shipping.exe (TitleId 1789248657)
+- dragon ball the breakers.exe (TitleId 1633048236)
+- ds.exe (TitleId 1831239909)
+- DSPGAME (TitleId 1979421862)
+- Dune: Awakening (TitleId 2035381549)
+- dungeonborne.exe (TitleId 1868215250)
+- dungeoncrawler.exe (TitleId 1717983300)
+- DungeonTycoon (TitleId 1898127850)
+- ecosystem.exe (TitleId 1899955786)
+- eldenring.exe (TitleId 2147437805)
+- EmberKnights_64 (TitleId 2014691150)
+- enshrouded.exe (TitleId 1713067209)
+- escape simulator.exe (TitleId 1875016968)
+- Eternum (TitleId 1833515254)
+- eversiegesteam-win64-shipping.exe (TitleId 1713919042)
+- evogamesteam-win64-shipping.exe (TitleId 1616760412)
+- evolve.exe (TitleId 2010823567)
+- Expedition 33 (TitleId 1769971395)
+- factorio.exe (TitleId 1722959023)
+- fallguys_client_game.exe (TitleId 1619218235)
+- farthest frontier.exe (TitleId 1827401614)
+- fata deum.exe (TitleId 1975657082)
+- ff7remake_.exe (TitleId 1866656724)
+- fg-win64-shipping.exe (TitleId 1666417952)
+- foreverskies-win64-shipping.exe (TitleId 1679588299)
+- foreverwinter-win64-shipping.exe (TitleId 1887112356)
+- forspoken.exe (TitleId 1798784304)
+- fortniteclient-win64-shipping.exe (TitleId 1820250788)
+- Forza Horizon 6 (TitleId )
+- Forza Motorsport (TitleId )
+- forzahorizon6.exe (TitleId 1888125032)
+- Foundation, a medieval city builder by Polymorph Games (TitleId 1707478037)
+- foundry.exe (TitleId 1790959167)
+- fpschess-win64-shipping.exe (TitleId 1904873345)
+- frostpunk.exe (TitleId 1989947930)
+- Gamble With Your Friends (TitleId 1626215053)
+- game.exe (TitleId 1804449817)
+- game-win64-shipping.exe (TitleId 1827595330)
+- ghostoftsushima.exe (TitleId 1635061280)
+- Goblin Cleanup (TitleId 2120680024)
+- gta5_enhanced.exe (TitleId 1815914144)
+- gtfo.exe (TitleId 2030620811)
+- gwt.exe (TitleId 1718100792)
+- hades.exe (TitleId 1749180498)
+- heartofthemachine.exe (TitleId 1667248539)
+- helldivers2.exe (TitleId 1760704160)
+- hogwartslegacy.exe (TitleId 2034320526)
+- hyperlightdrifter.exe (TitleId 1802086498)
+- icarus-win64-shipping.exe (TitleId 1668980366)
+- ixion.exe (TitleId 2058459731)
+- javaw.exe (TitleId 1791712750)
+- Lethal Company (TitleId 1912251336)
+- liar's bar.exe (TitleId 1969509107)
+- LittleRocketLab (TitleId 1793099089)
+- lockdownprotocol-win64-shipping.exe (TitleId 1742473665)
+- Log Riders (TitleId 1671398962)
+- lostark.exe (TitleId 1806726294)
+- love.exe (TitleId 1613647362)
+- madden23.exe (TitleId 2143611891)
+- MageArena (TitleId 1817176572)
+- MallRivals (TitleId 2073649290)
+- MapleStory (TitleId 2038117628)
+- marvel-win64-shipping.exe (TitleId 1711955914)
+- Maxslife (TitleId )
+- medieval_dynasty-win64-shipping.exe (TitleId 2011136108)
+- Melvor Idle (TitleId 1909009324)
+- Meta Horizon Link (TitleId 1832731138)
+- metal.exe (TitleId 1806787361)
+- Microtopia (TitleId 1956529432)
+- milesmorales.exe (TitleId 2145969439)
+- mindovermagic.exe (TitleId 1686150138)
+- MineMogul (TitleId 1976702034)
+- Mini Motorways (TitleId 1908579094)
+- MiniMetro (TitleId 1732876453)
+- mining-win64-shipping.exe (TitleId 2116953929)
+- modernwarfare.exe (TitleId 1787008472)
+- moe.exe (TitleId 1750517634)
+- monsterhunterrise.exe (TitleId 1661942705)
+- monsterhunterwilds.exe (TitleId 2047630837)
+- multiversus-win64-shipping.exe (TitleId 1647411258)
+- murkydiversgame-win64-shipping.exe (TitleId 1664593520)
+- narakabladepoint.exe (TitleId 2139664334)
+- new cycle.exe (TitleId 2086049151)
+- newworld.exe (TitleId 1995770653)
+- nfl1-win64-shipping.exe (TitleId 2010787830)
+- nightreign.exe (TitleId 1937307366)
+- nms.exe (TitleId 1905450963)
+- nsuns4.exe (TitleId 2126174118)
+- Oddsparks (TitleId 1865159579)
+- once_human.exe (TitleId 1914825481)
+- orca-win64-shipping.exe (TitleId 2138151839)
+- osu! (TitleId 2090060949)
+- overcooked all you can eat.exe (TitleId 1689384193)
+- Overthrown (TitleId )
+- palworld-win64-shipping.exe (TitleId 1797327516)
+- paragonclient-win64-shipping.exe (TitleId 1837411448)
+- partyanimals.exe (TitleId 1806115457)
+- payday3-win64-shipping.exe (TitleId 1616307670)
+- PenguinHotel (TitleId 2143308315)
+- phasmophobia.exe (TitleId 1839962134)
+- Planet Crafter (TitleId 1985825936)
+- planetcoaster.exe (TitleId 1782685193)
+- planetcoaster2.exe (TitleId 1837599174)
+- PowerWash Simulator 2 (TitleId 1720348592)
+- predecessorclient-win64-shipping.exe (TitleId 2033161797)
+- projectwingman-win64-shipping.exe (TitleId 1948090330)
+- prospect-win64-shipping.exe (TitleId )
+- qrsl.exe (TitleId 1636493129)
+- quantumbreak.exe (TitleId 1635397666)
+- r5apex.exe (TitleId 1628516715)
+- raft.exe (TitleId 1891778508)
+- rainbowsix.exe (TitleId 2081130223)
+- Ranch Simulator (TitleId 1747103234)
+- ravager.exe (TitleId 2120567307)
+- rdr2.exe (TitleId 2110108557)
+- readyornot-win64-shipping.exe (TitleId 1992097586)
+- redout2-win64-shipping.exe (TitleId 1627887820)
+- REPO (TitleId 1743807994)
+- risk of rain 2.exe (TitleId 1656566221)
+- Risk your life. (TitleId 2028509718)
+- Rocket League (TitleId 2140933132)
+- rpcs3 (TitleId )
+- rpg_rt.exe (TitleId )
+- RSDragonwilds (TitleId 2075310855)
+- RuneScape Client (TitleId )
+- RuneScape Launcher (TitleId 1865183543)
+- Sapiens (TitleId 2129295267)
+- sb-win64-shipping.exe (TitleId 1906097969)
+- scribble.exe (TitleId 1614663587)
+- scum.exe (TitleId 1658988807)
+- secret neighbour.exe (TitleId 2045494005)
+- sekiro.exe (TitleId 1872224406)
+- shadowofwar.exe (TitleId 2080548081)
+- shatterline.exe (TitleId 1991854084)
+- sifu-win64-shipping.exe (TitleId 1758202833)
+- smalland-win64-shipping.exe (TitleId 1945238797)
+- smite.exe (TitleId 2096906881)
+- Solar Expanse (TitleId 2123353596)
+- sonicfrontiers.exe (TitleId 1950480930)
+- sonsoftheforest.exe (TitleId 1927824914)
+- spellcasterschronicles.exe (TitleId 1633504212)
+- spider-man.exe (TitleId 1959324460)
+- spider-man2.exe (TitleId 1959705503)
+- STAR WARS Jedi: Survivor (TitleId 1771215349)
+- starbirds.exe (TitleId 1943436159)
+- StarCitizen (TitleId 1652439885)
+- stardew valley.exe (TitleId 1757939507)
+- Starminer (TitleId 2104022060)
+- starrupturegamesteam-win64-shipping.exe (TitleId 2073885963)
+- starwarssquadrons_launcher.exe (TitleId )
+- strandedsteam.exe (TitleId 1678102872)
+- streetfighter6.exe (TitleId 1886546637)
+- Subnautica (TitleId 2074159196)
+- summercamp.exe (TitleId 1939052149)
+- sunkenland.exe (TitleId 1892358374)
+- Super Battle Golf (TitleId 1741954306)
+- supermarket simulator.exe (TitleId 1620297175)
+- TEKKEN™8 (TitleId 1911500579)
+- The Universim (TitleId 1736896744)
+- TheAwakening (TitleId 2141200147)
+- thecrew2.exe (TitleId 1757780616)
+- thecrust-win64-shipping.exe (TitleId 2119989577)
+- thefront.exe (TitleId 2108214457)
+- theyarebillions.exe (TitleId 1921269905)
+- Timberborn (TitleId 1711567021)
+- titan-win64-shipping.exe (TitleId 1958629866)
+- tld.exe (TitleId 1827948906)
+- totally reliable delivery service.exe (TitleId 1662165624)
+- trackmania.exe (TitleId 2084813623)
+- transportfever2.exe (TitleId 2044611924)
+- tropico6-win64-shipping.exe (TitleId 1913669713)
+- Turmoil (TitleId 1873195402)
+- udk.exe (TitleId 1867329201)
+- uebs2.exe (TitleId 1894100664)
+- unboxed-win64-shipping.exe (TitleId 1938576612)
+- Universe Sandbox x64 (TitleId 1703235096)
+- valheim (TitleId 1770979388)
+- valorant-win64-shipping.exe (TitleId 1856764962)
+- VampireSurvivors (TitleId 2129831902)
+- vanguard.exe (TitleId 1900407842)
+- veiledexperts-win64-shipping.exe (TitleId 1729914728)
+- vrising.exe (TitleId 2084359296)
+- wanderingvillage.exe (TitleId 1623966149)
+- WaterparkSimulator (TitleId 1636719648)
+- west hunt.exe (TitleId 2032548685)
+- Witchspire (TitleId 2077877963)
+- wolong.exe (TitleId 1669711584)
+- worldbox (TitleId 2107888673)
+- wow.exe (TitleId 1664882211)
+- ww3-win64-shipping.exe (TitleId 1704491362)
+- X4: Foundations (TitleId 2135206048)
+- xdefiant.exe (TitleId 1686037619)
+
+</details>
+
+### GameList `Candidate` display names (450)
+
+<details><summary>Show</summary>
+
+- -  Play Games  -
+- 2XKO (x86)
+- 7-Zip File Manager
+- 7-Zip Help
+- 9 Kings
+- A Game About Digging A Hole
+- A Game About Feeding A Black Hole
+- A Hero's Rest
+- A Merchant's Promise
+- Access
+- ACE COMBAT 8 WINGS OF THEVE
+- ACRES
+- Advanced REST client
+- AION 2
+- Alchemy Factory
+- All Will Fall Demo
+- ANLIFE Motion-Learning Life Evolution
+- App Recovery
+- Application Verifier (WOW)
+- Application Verifier (X64)
+- Application Verifier Help
+- Armoury Crate
+- Ascent
+- Astronomics
+- ATI Online Shop
+- Atomcraft
+- Audacity
+- BakkesMod
+- Battle.net
+- BEACN
+- Beat Saber
+- Becastled
+- BepInEx_x64_5.4.22.0
+- Beyond These Stars
+- Big Ambitions
+- Black & White® 2
+- Black & White® 2 on the web
+- Black Hole Farmageddon
+- Blackjack 21 Blackjackist
+- Blacksmith Master
+- Blend for Visual Studio
+- Blitz
+- Blossom The Seed Of Life
+- Brave
+- Brave New Wonders
+- BSManager
+- Buckshot Roulette
+- Calculator
+- Calendar
+- Call of Duty Modern Warfare II Beta
+- Call of Duty® Modern Warfare® II
+- Camera
+- Captain of Industry
+- Celestial Routes Demo
+- Center Station Simulator
+- Character Map
+- ChatGPT
+- Chop Chop Inc.
+- City Tales - Medieval Era
+- Clair Obscur Expedition 33
+- Claude
+- Clock
+- Cloudheim
+- CMake (cmake-gui)
+- CMake Documentation
+- Command Palette
+- Command Prompt
+- Component Services
+- Computer Management
+- Control Panel
+- Copilot
+- Counter-Strike Global Offensive
+- CurseForge
+- Cyberpunk 2077
+- Deadlock
+- Debuggable Package Manager
+- Deep Rock Galactic
+- Defragment and Optimize Drives
+- Delta Force
+- Desktop Telly
+- Developer Command Prompt for VS
+- Developer PowerShell for VS
+- Discord
+- Disk Cleanup
+- Disney+
+- Docker Desktop
+- Documentation
+- Documentation for Desktop Apps
+- Documentation for UWP Apps
+- draw.io Desktop
+- DSX
+- DualSenseAT
+- DualSenseAT on the Web
+- Dune Awakening
+- Dungeon Tycoon
+- Dyson Sphere Program
+- EA
+- EA Error Reporter
+- EA Help
+- EA Updater
+- Eddie VPN - AirVPN
+- Eden Crafters
+- Elements Divided
+- Elgato Camera Hub
+- Ember Knights
+- Epic Games Launcher
+- Escape Simulator 2
+- Event Viewer
+- EVGA Precision X1
+- Excel
+- Feed The Forest
+- Feedback Hub
+- File Explorer
+- Filelight
+- Firefox
+- Firefox Private Browsing
+- Foundation
+- FreeCommander XE
+- FreeCommander XE on the Web
+- Funnel Runners
+- Galaxy Burger
+- Gamble With Your Friends
+- Game Bar
+- GeeGee
+- GeeGee Uninstall
+- Genesis of a Small God
+- Get Help
+- Get Started
+- Gif Your Game
+- GIMP 2.10.34
+- Git Bash
+- Git CMD
+- Git FAQs (Frequently Asked Questions)
+- Git GUI
+- Git Release Notes
+- GitHub Desktop
+- GitKraken
+- Goblin Cleanup
+- Google Chrome
+- GPUView
+- Gyazo
+- Gyazo Replay
+- Gyazo Settings
+- Gyazo Video
+- HandBrake
+- Haste
+- Haste Broken Worlds Demo
+- Help (ENG)
+- HidHide Configuration Client
+- HoYoPlay
+- HWMonitor
+- iCUE
+- IDLE (Python 3.10 64-bit)
+- IDLE (Python 3.14 64-bit)
+- IDLE (Python 3.15 64-bit)
+- Idle Colony
+- ILSpy
+- Industronaut Demo
+- InfraSpace
+- Install Additional Tools for Node.js
+- IntelliJ IDEA Community Edition 2022.1.3
+- IPTVnator
+- iRacing Member Website
+- iSCSI Initiator
+- League of Legends (x86)
+- League of Legends PBE (x86)
+- Legends of Runeterra (x86)
+- Lessaria
+- Lethal Company
+- Little Rocket Lab
+- Live captions
+- Loading Bay
+- Local Security Policy
+- Log Riders
+- Logitech G HUB
+- Lovense Remote
+- Mage Arena
+- Magnifier
+- Mail
+- Mall Rivals
+- Mansion_Days_v0.0.4-Win
+- MapleStory Classic World
+- Maps
+- MECCHA CHAMELEON
+- Media Player
+- Medieval Crafter Blacksmith
+- MEGA Website
+- MEGAsync
+- Meltopia
+- Melvor Idle
+- Messenger
+- Meta Horizon Link Support
+- Microsoft 365 Copilot
+- Microsoft Clipchamp
+- Microsoft Edge
+- Microsoft News
+- Microsoft Store
+- Microsoft Teams
+- Microsoft Teams (personal)
+- Microsoft To Do
+- Microtopia
+- MineMogul
+- Mini Metro
+- Mini Motorways
+- Mining Mechs
+- Moon Sweepers
+- MoteMancer
+- Movies & TV
+- mpv
+- MRA
+- My Thrustmaster Panel
+- Narrator
+- Nexon Launcher
+- Node.js
+- Node.js command prompt
+- Node.js documentation
+- Node.js website
+- Notepad
+- Notepad++
+- NVIDIA App
+- NVIDIA Control Panel
+- NZXT CAM
+- OBS Studio (64bit)
+- ODBC Data Sources (32-bit)
+- ODBC Data Sources (64-bit)
+- Oddsparks An Automation Adventure
+- Of Life and Land
+- Office Language Preferences
+- ONCE HUMAN
+- OneDrive
+- OneNote
+- On-Screen Keyboard
+- Open TV
+- Open TV
+- opentrack
+- Opera GX Browser
+- Orebound
+- osu!(lazer)
+- Outlook
+- Outlook (classic)
+- Outworld Station
+- Overwatch® 2
+- Overwolf
+- Paint
+- Paradox Launcher v2
+- PC Health Check
+- PEAK
+- Performance Monitor
+- Phone Link
+- Photos
+- Plan B Terraform
+- Planetary Life
+- PlayStation® Accessories
+- Plex
+- PolyPine
+- Postman
+- Postman
+- Power Automate
+- PowerPoint
+- PowerShell 7 (x64)
+- PowerToys (Preview)
+- PowerWash Simulator 2
+- Print Management
+- ProductFinder
+- ProductSkimmer
+- Project P.I.T.T.
+- PS Remote Play
+- Publisher
+- PyCharm Community Edition 2022.1.1
+- Python 3.10 (64-bit)
+- Python 3.10 Module Docs (64-bit)
+- Python 3.14 (64-bit)
+- Python 3.14 Manuals (64-bit)
+- Python 3.14 Module Docs (64-bit)
+- Python 3.15 (64-bit)
+- Python 3.15 Manuals (64-bit)
+- Python 3.15 Module Docs (64-bit)
+- qBittorrent
+- Quick Assist
+- R.E.P.O.
+- Ranch Simulator
+- Razer Synapse
+- Readme
+- Readme v1.1
+- Readme v1.2
+- Recovery Drive
+- Reference Documentation
+- Register with EA
+- Registry Editor
+- Release Notes
+- Remote Desktop Connection
+- Resource Monitor
+- RIG Riot
+- Riot Client (x86)
+- Rise of Industry 2
+- Rocket League
+- Rockstar Games Launcher
+- RSI Launcher
+- Run
+- RuneScape
+- RuneScape Dragonwilds
+- RuneScape Dragonwilds Early Adopter Soundtrack
+- Sample Desktop Apps
+- Sample UWP Apps
+- Samsung Magician
+- Sandustry
+- Sapiens
+- Satisfactory Mod Manager
+- Satisfactory Modeler
+- Schedule I
+- SCSKiller
+- Services
+- Settings
+- Settlements Rising
+- Skyformer
+- Slipways
+- Snipping Tool
+- Solar Expanse
+- Solarpunk
+- Soulframe
+- Sound Recorder
+- Sourcetree
+- Space Drilling Station
+- Split Fiction
+- Splitgate 2
+- Spotify
+- Spreadsheet Compare
+- Star Trucker
+- STAR WARS Galactic Racer™
+- STAR WARS Jedi Survivor™
+- Star Wrath Demo
+- Stardust Aces Demo
+- Starminer
+- Steam
+- Steam Support Center
+- SteamVR
+- Steps Recorder
+- Sticky Notes
+- Sticky Notes (new)
+- Streamlabs Desktop
+- Subnautica
+- Subnautica 2
+- Subnautica Below Zero
+- Sunset Motel
+- Super Battle Golf
+- Superhero Simulator
+- Sword of the Sea
+- System Configuration
+- System Information
+- Task Manager
+- Task Manager TMOG
+- Task Scheduler
+- TcNo Account Switcher
+- TeamViewer
+- TechPowerUp GPU-Z
+- TEKKEN 8
+- Telegram
+- Telemetry Log for Office
+- Terminal
+- The Blood of Dawnwalker
+- The Planet Crafter
+- The Universim
+- theBlu
+- Thunderstore Mod Manager
+- Timberborn
+- TMOG Screensaver Settings
+- To The Core
+- Tools for Desktop Apps
+- Tools for UWP Apps
+- Tornado Jockey
+- Tower Factory
+- TurboTax 2024
+- Turmoil
+- Ubisoft Connect
+- Ubisoft Connect
+- Ubuntu
+- Ultimechs
+- Uninstall
+- Uninstall
+- Uninstall
+- Uninstall
+- Uninstall
+- Uninstall
+- Uninstall CMake
+- Uninstall HWMonitor
+- Uninstall Node.js
+- Uninstall Samsung Magician
+- Unity Hub
+- Universe Sandbox
+- Unreal Engine - CSS
+- Valheim
+- VALORANT (x86)
+- Vampire Survivors
+- Venus The Last Ascent Demo
+- VideoLAN Website
+- Viscera Cleanup Detail Santa's Rampage
+- Viscera Cleanup Detail Shadow Warrior
+- Visual Studio
+- Visual Studio Code
+- Visual Studio Installer
+- VLC media player
+- VLC media player - reset preferences and cache files
+- VLC media player skinned
+- Voice access
+- Voidling Bound
+- Vortex
+- Warframe
+- Warlander Open Beta
+- Waterpark Simulator
+- Weather
+- Website
+- Website AirVPN
+- Webull Desktop
+- Wild West Miner Simulator Demo
+- WinDirStat
+- Windows App
+- Windows App Cert Kit
+- Windows Backup
+- Windows Defender Firewall with Advanced Security
+- Windows Fax and Scan
+- Windows Media Player Legacy
+- Windows Memory Diagnostic
+- Windows Performance Analyzer
+- Windows Performance Recorder
+- Windows PowerShell
+- Windows PowerShell (x86)
+- Windows PowerShell ISE
+- Windows PowerShell ISE (x86)
+- Windows Security
+- Windows Software Development Kit
+- Windows Tools
+- WinSCP
+- WireSock Secure Connect
+- Witchspire
+- Word
+- WorldBox - God Simulator
+- WSL
+- WSL Settings
+- Wwise Launcher
+- X4 Foundations
+- x64 Native Tools Command Prompt for VS
+- x64_x86 Cross Tools Command Prompt for VS
+- x86 Native Tools Command Prompt for VS
+- x86_x64 Cross Tools Command Prompt for VS
+- XBOX
+- Xbox Insider Hub
+- zBootloader2-v2_01
+- Zenless Zone Zero
+- ZeroTier
+- 星杰纪元原核  Nove Era Atom  Demo
+
+</details>
+
+## Auto Run Result
+
+Status: done. A spike with no production code, so no build or tests ran. The Decision is in the epic's Notes. The Human Check row above goes into `automation-state.md` at merge.
