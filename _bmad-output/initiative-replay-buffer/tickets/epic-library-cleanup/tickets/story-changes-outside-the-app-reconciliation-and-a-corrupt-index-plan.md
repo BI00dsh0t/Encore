@@ -3,7 +3,7 @@ title: 'Changes outside the app, reconciliation and a corrupt index'
 type: 'feature'
 ticket: '2'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '3bccd44d8bc1619317acefe54d09da97ed3144dd'
 route: 'full'
 route_source: 'auto'

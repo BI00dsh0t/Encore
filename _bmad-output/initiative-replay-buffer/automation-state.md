@@ -145,7 +145,7 @@ The coordinator logs each QA round in the Log below.
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
-| 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | | pending |
+| 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `a8f4c23`) |
 | 28.3 | 7.3 Length and thumbnails | | pending |
 | 28.4 | 7.4 Favourite | | pending |
 | 28.5 | 7.5 Group and filter by game, date and Favourite | | pending |
@@ -439,3 +439,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 7.2 is READY FOR QA at `5be972a` (build 0 warnings; Contracts, Core, Engine and App pass; publish clean). QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-03: QA 7.2 at `5be972a`: **QA PASS**, 0 findings (one App flake that didn't recur on two reruns). 7.2 has been told to merge (Sonnet), and qa-1-14 is back in the pool. `Mp4File.IsComplete` matches 6.2's plan, and 6.2 will take it from develop.
 - 2026-11-03: The builder turned off Remote Control on story-2-7, so it joins the pool as a seventh worker.
+- 2026-11-03: 7.2 merged into `develop` (`a8f4c23`, `feat(core): merge 7.2-library-reconciliation`) and marked done, after QA PASS at `5be972a` (0 findings). `develop` (4.7, 5.5) was merged into the branch first (`f93a821`) with conflicts in `ErrorCodes` and `EngineHost` (the `library-corrupt` code and dismiss hook sit beside the feedback-sound code); both sides were kept. The Release build (0 warnings), Contracts 113, Core 96, Engine 161, App 76 and the publish all passed again. **6.2 must take `Mp4File.IsComplete` from `develop` (`src/ReplayBuffer.Core/Library/Mp4File.cs`) instead of adding its own copy, and add its trim function to that file.** Residuals: a copy that sets the file's full size up front and doesn't lock it can be listed before its data is in; `ReplayClips` still writes to `MyVideos\<instance>`, not the `outputFolder` setting, so with a custom Output Folder the engine's own Clips land outside the Library; `cleanupBlocked` waits for 7.5's Cleanup to be used. Human checks: none beyond 7.1's.
