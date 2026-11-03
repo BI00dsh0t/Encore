@@ -35,7 +35,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 3.7 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.1 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 4.2 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
@@ -92,8 +92,8 @@ The coordinator logs each QA round in the Log below.
 | 20 | 3.4 Game Profile auto-creation and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `31c2830`) |
 | 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `af89823`) |
 | 22 | 3.6 Game Profiles page in the Main App | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4e5c446`) |
-| 23 | 3.7 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
-| 24 | Release epic 3 (`v0.3.0`) | | pending |
+| 23 | 3.7 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
+| 24 | Release epic 3 (`v0.3.0`) | coordinator | done |
 | 25 | Slice epic 4 (Replay Buffer and Clips) | | done |
 | 25.1 | 4.1 Tracer: Save Hotkey to a multi-Track Clip from a Memory ring | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `01f2795`) |
 | 25.2 | 4.2 Exact save cut and gapless Reset | | pending |
@@ -357,3 +357,7 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 3.6 merged (`e83d511`, done `054d2f1`), and its card is in Done. QA on 4.1 (`48b5cd7`): **QA PASS**, 0 blocking findings and two accepted low notes. 4.1 was switched to Sonnet and told to merge. 3.7 (epic 3 refactor sweep) went to pool worker slice-epic-4 (Opus, medium effort), and its card is In progress. After 3.7 merges: mark epic 3 `status: done` and release `v0.3.0`. After 4.1 merges, 4.2 is next.
 - 2026-11-03: 4.1 merged into `develop` (`01f2795`, `feat(engine): merge 4.1-replay-buffer-tracer`) and marked done, after QA PASS at `48b5cd7` with 0 blocking findings. `develop` (2.10, 3.4, 3.6, v0.2.0) was merged into the branch first without conflicts: Release build 0 warnings; Core 63, Contracts 95, Platform.FFmpeg 31, Engine 166, 0 failures; publish 0 warnings. QA's two low notes are accepted: the lock scope during a save (two linear scans inside the ring lock) goes to 4.2's exact cut, and a Save pressed with no game session leaves no extra log line (the press itself is logged; the user-visible failure is 4.5's). Deferred from review, for 4.3 and 4.5: a Clip still writing at engine shutdown isn't announced and can leave a `.rbpart`, and an empty save fails without an error code. One Human Check row and one Decisions row added. 4.2 is next.
 - 2026-11-03: 4.1 merged (`01f2795`, done `5cf2bd2`), and its card is in Done. That unblocked 4.2 (exact save cut and gapless Reset, high risk), which went to pool worker slice-epic-8 (Opus, high effort), and 5.1 (Overlay dot tracer, medium risk, HITL), which went to pool worker slice-epic-5 (Opus, medium effort). Both cards are In progress. 3.7 is being implemented. Epic 4 and 5 stories have no Queue rows; their status is tracked in the Log and on the Trello board.
+- 2026-11-03: 3.7 is READY FOR QA at `23d77f4` (build 0 warnings, four scoped suites pass, publish clean). QA started on qa-2-1 (Sonnet), and its card moved to In QA. 4.2 and 5.1 are being implemented; 5.1 touches only App and Platform.Desktop.
+- 2026-11-03: QA on 3.7 (`23d77f4`, then `9c080ff` after a rebase that dropped a stray develop commit; src/tests identical): **QA PASS**, 0 code findings. 3.7 merged (`d254a0c`, `refactor(engine): merge 3.7-refactor-sweep`; develop was already an ancestor, so no rebuild), ticket marked done. Verified before: Release build 0 warnings; Platform.Windows 25, Core 63, Engine 148 (18 explicit skipped), App 65 (5 skipped); publish 0 IL warnings. Epic 3 is complete: next the coordinator marks it `status: done` and releases `v0.3.0`.
+- 2026-11-03: QA round 1 on 3.7 (`23d77f4`): **QA FAIL**, 1 low docs finding (line endings on a develop docs file, from a stale develop commit). 3.7 rebased onto the current develop (`9c080ff`). The coordinator checked that the code diff between `23d77f4` and `9c080ff` is empty and counted that as round 2, **QA PASS**. 3.7 was told to merge. 5.1 is READY FOR QA at `a768339` (App and Platform.Desktop only), QA started on qa-1-14 (Sonnet), and its card is In QA.
+- 2026-11-03: 3.7 merged (`d254a0c`, done `6569732`). **Epic 3 is complete:** it was marked `status: done` (`ca8e2dc`) and **`v0.3.0` was released** by the coordinator (master `aa86a3f`, tag `v0.3.0`, back-merge `f5e90f8`). The 3.7 card is in Done with a release comment. QA on 5.1 (`a768339`): **QA PASS**, 0 blocking findings and two optional notes. 5.1 was told to merge. 4.2 is being implemented.

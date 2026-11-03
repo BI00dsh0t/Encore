@@ -9,6 +9,7 @@ companions: []
 after: []
 refined: true
 risk: medium
+status: done
 ---
 
 # Game Detection and Game Profiles
