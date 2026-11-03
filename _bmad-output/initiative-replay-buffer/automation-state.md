@@ -19,6 +19,7 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 - **Lean tests (builder, 2026-11-03):** this is a personal project with no end users or stakeholders. Stories write a simple suite that verifies the functionality: one or two happy-path tests per AC, plus a test for any bug that really bit. No exhaustive edge-case tables, no long real-time waits, no benchmark-style assertions in the default run. QA doesn't fail a story for thin tests unless a core function is untested. Slow, hardware-bound or flaky tests go in the opt-in category that the test-trim work sets up (see `CLAUDE.md` "Tests" once it merges).
 - **Model and effort per task (builder, 2026-11-02):** set them when starting a session (`start_session` `model`/`effort`) or, for a pool worker, before sending its brief (`set_session_model`/`set_session_effort`). Stories run on Opus (`claude-opus-5-5`), at high effort when the ticket's risk is high and at the default otherwise. QA rounds, merges, releases and syncs with develop run on Sonnet (`claude-sonnet-5-5`). A re-check after QA fixes (round 2 onward) runs at low effort. A story session that is told to merge may switch itself to Sonnet first.
 - **Trello board (builder, 2026-11-03):** the private board [ReplayBuffer](https://trello.com/b/Q3TeryFd/replaybuffer) has one card per ticket, in lists by status (Backlog, Ready, In progress, In QA, Done). Its ids are in `trello-board.md` beside this file. The coordinator moves a card at each step: a story handed to a session goes to In progress, READY FOR QA goes to In QA, and a merge marked done goes to Done. Cards whose prerequisites are newly met move from Backlog to Ready. When a card reaches Done, the coordinator detaches its labels. Only the coordinator updates the board; story and QA sessions don't.
+- **Wake the coordinator (2026-11-03):** the app wakes the coordinator only once *every* session it started is idle. So a QA pass or a READY FOR QA used to sit unseen while other sessions were still working, and the pipeline stalled. From now on, every story, QA, merge and chore session sends the coordinator a one-line cross-session message (SendMessage `to` = `local_0d27eb4a-e1f6-49b5-9d55-0b905e484b32`) at each hand-off point: READY FOR QA (branch and tip), the QA verdict (PASS or FAIL and count), and MERGED (commit). A cross-session message wakes the coordinator at once. Every brief includes this.
 - **Scoped tests (builder, 2026-11-02):** don't run the full graphics or audio pipeline suites unless the change needs them. Run the 0-warning Release build, then only the test projects the diff touches plus their direct dependents (e.g. a UI change runs `ReplayBuffer.App.Tests`, not `Engine`, `Platform.Capture`, `Media` or `Platform.Audio`). The full `dotnet test --solution`, GPU capture runs and `bench` captures happen only when the diff touches the capture, encode, mux or audio path, or an AC needs the measurement. The NativeAOT publish runs only when engine code changed. Say in the report which projects ran and why the rest were skipped.
 
 ## Worker pool (builder, 2026-11-02)
@@ -38,8 +39,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.6 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.6 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.1 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 7.1 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 4.6 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 5.6 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 6.1 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.1 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -50,7 +51,7 @@ When a session finishes its task (its story merged, its QA passed), it joins the
 2. `git flow feature start <ref>-<slug>` in the session's own worktree (cut from `develop`). For 1.14 only: switch to the existing `feature/1.14-benchmark`.
 3. Run `bmad-build-auto` with the ticket ref.
 4. Verify, scoped per the standing decision: `dotnet build ReplayBuffer.slnx -c Release` (0 warnings), `dotnet test` on the affected test projects only, `pwsh tools/publish-engine.ps1` (0 IL warnings) only when engine code changed. Real-time timing tests that fail only under GPU load get one rerun.
-5. Commit, then end the turn with a report that begins `READY FOR QA`: the branch, its tip commit, the verification results, and anything queued for the builder. Don't merge yet.
+5. Commit, send the coordinator a one-line `READY FOR QA` message (see "Wake the coordinator"), then end the turn with a report that begins `READY FOR QA`: the branch, its tip commit, the verification results, and anything queued for the builder. Don't merge yet.
 6. Fix each QA finding that arrives as a cross-session message, commit, and report `READY FOR QA` again.
 7. When the coordinator says QA passed: merge into `develop` from the main folder with exactly `git -C %USERPROFILE%/Documents/repos/ReplayBuffer merge --no-ff feature/<ref>-<slug> -m "..."` (the builder's user-settings allow rule covers only `git [-C <main>] merge --no-ff feature/*`; any other form is blocked by auto mode), mark the ticket done, commit, and update this file's Queue, Log and queues. Don't push.
 
@@ -403,3 +404,8 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - 7.1 is READY FOR QA at `ca49444`. QA started on qa-1-14.
   - 5.6 went to slice-epic-5 (Opus, medium effort).
   - 5.3 waits for the next free worker; its card is in Ready. The pool is fully used: four story workers and two QA workers. story-2-7 can't be cleared because the app keeps it.
+- 2026-11-03: The builder noticed the pipeline stalls after QA. The cause is that the app only wakes the coordinator when all of its sessions are idle. New standing rule: **Wake the coordinator**, where sessions message the coordinator at READY FOR QA, at the QA verdict and at MERGED.
+  - QA on 4.6 (`3ae6b4e`, docs tip `c9c7700`): **QA PASS**. Engine ran five times and passed each time, so the earlier one-off failure wasn't reproduced. 4.6 merges first.
+  - QA on 7.1 (`ca49444`): **QA PASS**, 0 findings. It merges after 4.6. QA's note for 7.2: a partial .mp4 from a mid-save crash shows as ready until 7.2 reconciles.
+  - 6.1 is READY FOR QA at `a4f2814`, QA on qa-2-1. 5.6 is READY FOR QA at `ea6ea9a`, QA on qa-1-14.
+  - 5.3 went to a new session, story-5-3 (`local_0b276254-8120-4a11-915a-9ffea0eedcfb`, Opus, medium effort), since the builder's turn allowed a new session.
