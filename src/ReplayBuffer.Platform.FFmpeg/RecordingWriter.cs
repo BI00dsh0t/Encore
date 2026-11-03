@@ -18,6 +18,10 @@ namespace ReplayBuffer.Platform.FFmpeg;
 /// packets are held, at most <see cref="HoldUs"/> of them. A stop at E keeps the packets before E,
 /// judged the same way, and the file is finished once every stream has passed E,
 /// <see cref="StopWait"/> after the stop at the latest, or as soon as the session's output ends.
+/// It cuts the fragments itself (R3, FR-12): one at each video keyframe and at least every
+/// <see cref="FragmentUs"/>. A cut at video time V writes every packet before V (audio by its
+/// centre) once every audio stream has reached V, or once the video is <see cref="AudioWaitUs"/>
+/// past V, so no Track's fragment runs ahead of the video; then the fragment goes to the disk.
 /// Every packet it was handed is freed on every path. It owns its streams' parameters, so the
 /// session can free the tap, the ring and the encoders while it still finishes.
 /// </summary>
@@ -32,7 +36,15 @@ public sealed unsafe class RecordingWriter
     /// <summary>The most held before K is known, in µs of the newest packet's time.</summary>
     public const long HoldUs = 2_000_000;
 
+    /// <summary>The longest fragment, in µs of video time: a kill loses at most about this much.</summary>
+    public const long FragmentUs = 500_000;
+
+    /// <summary>How far the video may run past a cut, in µs, before it is made without an audio stream that hasn't reached it.</summary>
+    public const long AudioWaitUs = 250_000;
+
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(50);
+
+    private static readonly Comparison<Held> ByTime = (a, b) => a.TimeUs != b.TimeUs ? a.TimeUs.CompareTo(b.TimeUs) : a.Stream.CompareTo(b.Stream);
 
     private readonly string _path;
     private readonly RecordingStreams _streams;
@@ -44,6 +56,8 @@ public sealed unsafe class RecordingWriter
     private readonly SemaphoreSlim _signal = new(0);
     private readonly Lock _queueLock = new();
     private readonly List<Held> _held = [];
+    private readonly List<Held> _pending = [];
+    private readonly List<Held> _batch = [];
     private bool _closed;
     private volatile bool _outputEnded;
     private volatile bool _cloneFailed;
@@ -58,6 +72,9 @@ public sealed unsafe class RecordingWriter
     private long? _keyUs;
     private long[] _origins = [];
     private bool[] _passed = [];
+    private long[] _reached = [];
+    private long _fragmentUs;
+    private long? _cutUs;
     private long _written;
 
     /// <param name="path">The reserved file, written in place.</param>
@@ -198,6 +215,7 @@ public sealed unsafe class RecordingWriter
         {
             muxer = Open();
             Loop(muxer);
+            WritePending(muxer, long.MaxValue);
             Release();
             if (_written == 0)
             {
@@ -248,7 +266,9 @@ public sealed unsafe class RecordingWriter
         var streams = _streams.Streams;
         _origins = new long[streams.Count];
         _passed = new bool[streams.Count];
-        var muxer = new FragmentedMp4Muxer(_path, _log);
+        _reached = new long[streams.Count];
+        Array.Fill(_reached, long.MinValue);
+        var muxer = new FragmentedMp4Muxer(_path, _log, durable: true);
         try
         {
             for (var i = 0; i < streams.Count; i++)
@@ -362,7 +382,7 @@ public sealed unsafe class RecordingWriter
             return;
         }
 
-        Emit(muxer, packet, stream, atUs);
+        Emit(muxer, packet, stream, timeUs, atUs);
     }
 
     private void FindKeyInHeld(FragmentedMp4Muxer muxer)
@@ -384,6 +404,7 @@ public sealed unsafe class RecordingWriter
         var keyPacket = _held[key];
         var keyUs = keyPacket.TimeUs;
         _keyUs = keyUs;
+        _fragmentUs = keyUs;
         var streams = _streams.Streams;
         for (var s = 0; s < streams.Count; s++)
         {
@@ -399,7 +420,7 @@ public sealed unsafe class RecordingWriter
             while (emitted < _held.Count)
             {
                 var held = _held[emitted++];
-                Emit(muxer, held.Packet, held.Stream, held.AtUs);
+                Emit(muxer, held.Packet, held.Stream, held.TimeUs, held.AtUs);
             }
         }
         finally
@@ -408,31 +429,132 @@ public sealed unsafe class RecordingWriter
         }
     }
 
-    /// <summary>Writes a packet from K and before the stop, rebased; frees any other. Takes the packet either way.</summary>
-    private void Emit(FragmentedMp4Muxer muxer, nint packet, int stream, long atUs)
+    /// <summary>
+    /// Keeps a packet from K and before the stop for the next cut, and frees any other; takes the
+    /// packet either way. Then makes every cut that is ready.
+    /// </summary>
+    private void Emit(FragmentedMp4Muxer muxer, nint packet, int stream, long timeUs, long atUs)
     {
-        var pointer = (AVPacket*)packet;
+        _reached[stream] = Math.Max(_reached[stream], atUs);
+        if (atUs < _keyUs || atUs >= Interlocked.Read(ref _stopUs))
+        {
+            Free(packet);
+        }
+        else
+        {
+            _pending.Add(new Held(packet, stream, timeUs, atUs));
+            if (_cutUs is null && stream == _videoStream && IsCut(packet, atUs))
+            {
+                _cutUs = atUs;
+            }
+        }
+
+        Cut(muxer);
+    }
+
+    /// <summary>A video packet at <paramref name="atUs"/> starts the next fragment: a keyframe, or <see cref="FragmentUs"/> into this one.</summary>
+    private bool IsCut(nint packet, long atUs) =>
+        atUs > _fragmentUs && (atUs >= _fragmentUs + FragmentUs || (((AVPacket*)packet)->flags & ffmpeg.AV_PKT_FLAG_KEY) != 0);
+
+    /// <summary>Makes each cut that is ready: the packets before it go out as one fragment, flushed to the disk.</summary>
+    private void Cut(FragmentedMp4Muxer muxer)
+    {
+        while (_cutUs is { } cut && Ready(cut))
+        {
+            WritePending(muxer, cut);
+            muxer.CutFragment();
+            _fragmentUs = cut;
+            _cutUs = null;
+            foreach (var pending in _pending)
+            {
+                if (pending.Stream == _videoStream && IsCut(pending.Packet, pending.AtUs))
+                {
+                    _cutUs = pending.AtUs;
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>Every audio stream has reached <paramref name="cut"/>, or the video is <see cref="AudioWaitUs"/> past it.</summary>
+    private bool Ready(long cut)
+    {
+        if (_reached[_videoStream] >= cut + AudioWaitUs)
+        {
+            return true;
+        }
+
+        for (var s = 0; s < _reached.Length; s++)
+        {
+            if (s != _videoStream && _reached[s] < cut)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Writes the pending packets before <paramref name="beforeUs"/> in time order across the streams,
+    /// as an interleaver would, rebased; the rest stay pending. Each one is freed on every path.
+    /// </summary>
+    private void WritePending(FragmentedMp4Muxer muxer, long beforeUs)
+    {
+        var kept = 0;
+        for (var i = 0; i < _pending.Count; i++)
+        {
+            var pending = _pending[i];
+            if (pending.AtUs < beforeUs)
+            {
+                _batch.Add(pending);
+            }
+            else
+            {
+                _pending[kept++] = pending;
+            }
+        }
+
+        _pending.RemoveRange(kept, _pending.Count - kept);
+
+        // Each stream's times only grow, so the sort keeps every stream's own order; the earliest
+        // packet goes first, so the muxer's shift for negative times (AAC's first frame) holds for all.
+        _batch.Sort(ByTime);
+        var next = 0;
         try
         {
-            if (atUs < _keyUs || atUs >= Interlocked.Read(ref _stopUs))
+            while (next < _batch.Count)
             {
-                return;
-            }
+                var item = _batch[next++];
+                var pointer = (AVPacket*)item.Packet;
+                try
+                {
+                    var origin = _origins[item.Stream];
+                    pointer->pts -= origin;
+                    if (pointer->dts != ffmpeg.AV_NOPTS_VALUE)
+                    {
+                        pointer->dts -= origin;
+                    }
 
-            var origin = _origins[stream];
-            pointer->pts -= origin;
-            if (pointer->dts != ffmpeg.AV_NOPTS_VALUE)
-            {
-                pointer->dts -= origin;
+                    // Takes the packet's reference whether it succeeds or not; the struct is freed below.
+                    muxer.Write(pointer, item.Stream, _streams.Streams[item.Stream].TimeBase);
+                    _written++;
+                }
+                finally
+                {
+                    ffmpeg.av_packet_free(&pointer);
+                }
             }
-
-            // Takes the packet's reference whether it succeeds or not; the struct is freed below.
-            muxer.Write(pointer, stream, _streams.Streams[stream].TimeBase);
-            _written++;
         }
         finally
         {
-            ffmpeg.av_packet_free(&pointer);
+            // On a throw, the rest of the batch is freed unwritten.
+            while (next < _batch.Count)
+            {
+                Free(_batch[next++].Packet);
+            }
+
+            _batch.Clear();
         }
     }
 
@@ -447,6 +569,12 @@ public sealed unsafe class RecordingWriter
         }
 
         _held.Clear();
+        foreach (var pending in _pending)
+        {
+            Free(pending.Packet);
+        }
+
+        _pending.Clear();
     }
 
     private void CloseQueue()
