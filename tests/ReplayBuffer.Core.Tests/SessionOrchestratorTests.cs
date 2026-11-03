@@ -583,7 +583,9 @@ public sealed class SessionOrchestratorTests : IDisposable
             orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
             await HandledAsync(orchestrator);
             Assert.Equal(1, Volatile.Read(ref saves));
-            Assert.Equal([ReplayState.Buffering, ReplayState.Draining, ReplayState.Off], published.Select(p => p.Replay));
+            // The write's own ClipsWriting publishes repeat Draining: collapse consecutive repeats only.
+            var replays = published.Select(p => p.Replay).ToList();
+            Assert.Equal([ReplayState.Buffering, ReplayState.Draining, ReplayState.Off], replays.Where((r, i) => i == 0 || r != replays[i - 1]));
         }
         finally
         {
@@ -721,6 +723,59 @@ public sealed class SessionOrchestratorTests : IDisposable
             Assert.Equal([1, 2], savingsAtSave);
             Assert.Equal(2, ignored.Count);
             Assert.False(events.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AnAcceptedPressPublishesTheCooldownAndTheWriteAtOnceAndTheWriteEnds()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            // The default saveCooldown: 5 s.
+            _document = Revision(3) with { Global = InFolder(folder) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var ignored = System.Threading.Channels.Channel.CreateUnbounded<TimeSpan>();
+            var published = new ConcurrentQueue<CaptureState>();
+            var gate = NewGate();
+            var writes = new ConcurrentQueue<string>();
+            var factory = new FakeFactory { Save = _ => new FakeWrite(writes, gate: gate.Task) };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                published.Enqueue,
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => events.Writer.TryWrite(s),
+                    e => events.Writer.TryWrite(e),
+                    f => events.Writer.TryWrite(f),
+                    Ignored: i => ignored.Writer.TryWrite(i)));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            var before = published.Count;
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
+
+            // 1 s later: inside the cooldown. Messages are handled in order, so once it is ignored the
+            // first press's turn is over, with the gate still closed.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + System.Diagnostics.Stopwatch.Frequency));
+            await NextAsync(ignored);
+
+            // Both states leave in the press's own orchestrator turn, which keeps them inside 250 ms;
+            // the ignored press adds none.
+            var states = published.Skip(before).ToList();
+            Assert.Equal(2, states.Count);
+            Assert.NotNull(states[1].CooldownUntil);
+            Assert.Equal(1, states[1].ClipsWriting);
+
+            gate.SetResult();
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.Equal(0, published.Last().ClipsWriting);
         }
         finally
         {

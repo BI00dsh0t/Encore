@@ -36,12 +36,13 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.7 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.8 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.2 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.2 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -102,8 +103,8 @@ The coordinator logs each QA round in the Log below.
 | 25.4 | 4.4 Save Cooldown, save events and two concurrent writers | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8ce2703`) |
 | 25.5 | 4.5 Failed saves, retry and the file-being-written signal | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `9da03df`) |
 | 25.6 | 4.6 Ring generations and Buffer Window resizing | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e7058ea`) |
-| 25.7 | 4.7 Disk-mode ring | | pending |
-| 25.8 | 4.8 Memory-mode RAM margin | | pending |
+| 25.7 | 4.7 Disk-mode ring | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c96ab9c`) |
+| 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 25.9 | 4.9 Per-Game-Profile settings at the next Reset | | pending |
 | 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | | pending |
 | 25.11 | 4.11 Game Profile overrides in the Main App | | pending |
@@ -114,11 +115,11 @@ The coordinator logs each QA round in the Log below.
 | 26 | Slice epic 5 (Overlay and Feedback Sounds) | slice-epic-5 | done |
 | 26.1 | 5.1 Tracer: capture state to the Overlay dot | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `c1afee0`) |
 | 26.2 | 5.2 Spike Q-4: the Overlay over exclusive fullscreen and its borderless FPS cost | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `5db7981`) |
-| 26.3 | 5.3 Saving icon through the Save Cooldown | | pending |
+| 26.3 | 5.3 Saving icon through the Save Cooldown | story-5-3 (local_0b276254-8120-4a11-915a-9ffea0eedcfb, archived) | done (merged `1441a92`) |
 | 26.4 | 5.4 Feedback notices in the engine, with a dev simulator | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `9c364fa`) |
-| 26.5 | 5.5 Overlay message queue | | pending |
+| 26.5 | 5.5 Overlay message queue | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `b0f684e`) |
 | 26.6 | 5.6 Feedback Sounds in the engine | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ac6a3a2`) |
-| 26.7 | 5.7 Mic-muted icon and the disk-full red X | | pending |
+| 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | | pending |
 | 26.9 | 5.9 Capture exclusion for every App window | | pending |
 | 26.10 | 5.10 Main App status line | | pending |
@@ -144,7 +145,7 @@ The coordinator logs each QA round in the Log below.
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
-| 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | | pending |
+| 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `a8f4c23`) |
 | 28.3 | 7.3 Length and thumbnails | | pending |
 | 28.4 | 7.4 Favourite | | pending |
 | 28.5 | 7.5 Group and filter by game, date and Favourite | | pending |
@@ -202,8 +203,10 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 4.3 | Quitting or crashing a game keeps its last moments for 30 s (R1) | In a game, play for a minute, close it (or kill it in Task Manager), then press the Save Hotkey within 30 s and open the Clip in VLC. It should hold the game's last moments. A press after 30 s should make no Clip | `ReplayClipCaptureTests` (a killed test window, a save during the drain and none after it). A real game is untested |
 | 5.2 | Which of your games run in exclusive fullscreen, and does the dot show over each? (Q-4) | With the Dev engine (`ReplayBuffer.Engine serve`) and the Main App running and the game detected, play each game you run in "exclusive fullscreen". The dot should show in games Windows runs with fullscreen optimizations and not at all in legacy exclusive ones, and no game should drop out of fullscreen or lose focus as it comes and goes. Tell the two kinds apart with `PresentMon-2.6.0-x64.exe --process_name <game>.exe --timed 20 --terminate_after_timed --output_file game.csv`: only legacy exclusive reads Hardware: Legacy Flip | `bench overlay` at the physical console, 15 s per phase with the load in front: borderless and DXGI fullscreen with fullscreen optimizations stay Hardware Composed: Independent Flip with the dot shown (cost −0.19 % and −0.17 %), legacy exclusive stays Hardware: Legacy Flip (cost 0.3 %), and none lost fullscreen. QA PASS at `1e6dbcb`. The dot in a real game, and on a PC with no free overlay plane, are untested |
 | 5.2 | See the dot by eye over the three loads | Run `ReplayBuffer.Bench overlay` (a minute per mode) and watch the top-right corner of the primary monitor. The red ring should appear in the middle phase over the borderless and fullscreen loads, and never over the exclusive one | `overlay.md`: the dot window is visible in each middle phase, and its frames go through DWM only in the borderless and fullscreen modes. "Dot on screen" is inferred from that, not seen |
+| 5.3 | The green saving icon beside the dot in a real borderless game (R2) | Start the Dev engine and App, play a borderless game with the Replay Buffer on, press Save. The green icon should appear left of the dot at once and stay for the whole Save Cooldown and while the Clip is written, then vanish; a second press inside the cooldown changes nothing. Optionally run the two Heavy Overlay tests (`dotnet test --project tests/ReplayBuffer.App.Tests -c Release --explicit only`) on the physical console | Default tests through the view model with a manual clock (icon until the later of cooldown and write, reconnect mid-cooldown), and the orchestrator test (`cooldownUntil` and `clipsWriting = 1` published in the press turn) |
 | 6.1 | A real game's Record Hotkey writes a Recording that plays with every Track in sync (R1, R2, R7) | Start the Dev engine with `ReplayBuffer.Engine serve` and the Main App, switch Recordings on for the game's Game Profile (Settings → Game Profiles), set a three-Track layout, play a detected game, press the Record Hotkey (Alt+F9), record about a minute, press it again, then play the file in `<Output Folder>\<game>` in VLC and run `ffprobe` on it. Every named Track should play in sync, the file should be one fragmented MP4 (moov, then moof fragments), and the Overlay's solid dot should show while it runs | `RecordingCaptureTests`: a 4 s in-process capture with a tone hub and three Tracks (Heavy 60 s variant passed): boxes, ffprobe streams and titles, length, a keyframe first, a clean decode; `SessionOrchestratorTests` for the gate, `BeginWrite`/`EndWrite` and the states. QA PASS at `a4f2814`. A real game and a real Hotkey press are untested; a Recording at engine shutdown gets no `EndWrite` yet (6.4) |
 | 7.1 | A Clip saved in a real game appears in the Library tab within 2 s (R1, R3) | Start the Dev engine with `ReplayBuffer.Engine serve` and the Main App, open the Library tab, play a detected game, press the Save Hotkey. The Clip should appear within 2 s, locked as "Saving…" until written, then with its size; its game column shows the profile's name. Restart the engine: the Clip is still listed | `LibraryServeTests` (a fake writer's BeginWrite and EndWrite over a real pipe: `library.itemAdded` within 2 s, the item in the snapshot with its profileId, a restart reloads it from `library.json`, a failed write leaves no item); `LibraryPageTests` (newest first, locked row, no binding errors); QA PASS at `ca49444`. A real game and Hotkey are untested |
+| 5.5 | The Overlay message queue over a real borderless game | Start the Dev engine and App over a borderless window, send `dev.simulate saveFailed` and press Save. "Clip not saved: save failed" should show in red, then "Clip saved" in green, below the dot, 4 s each, one after the other; check the text reads well (12 px, shade, ellipsis) and the dot doesn't move | Default tests through the view model with a manual clock (order, dismissal, `overlay: false`, reconnect, repeat collapse), and the two Heavy Overlay tests |
 
 ## Decisions Awaiting Review
 
@@ -421,3 +424,19 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 5.6 merged (`ac6a3a2`, done `5e8f14c`), re-verified after an `EngineHost` conflict, and its card is in Done. 6.1 merges next. Nothing new unblocked: 5.5 waits on 5.3. slice-epic-5 is back in the pool.
 - 2026-11-03: 6.1 merged into `develop` (`f9c5a66`, `feat(engine): merge 6.1-recordings-tracer`) and marked done, after QA PASS at `a4f2814` with 0 findings. `develop` (4.6, 7.1, 5.4, 5.6) was merged into the branch first with conflicts in `EngineHost`, `CaptureSession` and the orchestrator tests: the `RecordingTap` now wraps 4.6's generational ring sink and Recordings take the LibraryActor. Re-verified: Release build 0 warnings; Contracts 109, Core 86, Engine 158 passed; publish 0 IL warnings. Deferred to 6.4: a Recording running at engine shutdown gets no `EndWrite` or `recording.stopped`. One Human Check row added.
 - 2026-11-03: 6.1 merged (`f9c5a66`), with its conflicts against 4.6 resolved and re-verified. Its card is in Done. 6.2 (crash-safe Recordings, high risk) went to slice-epic-5 (Opus, high effort), and its card is In progress. Building now: 4.7, 5.3, 6.2 and 7.2. slice-epic-8 and both QA workers are free.
+- 2026-11-03: 5.3 is READY FOR QA at `6a0f705` (build 0 warnings; Contracts, Core, App and Engine pass; publish clean). QA started on qa-2-1 (Sonnet), and its card is In QA.
+- 2026-11-03: QA on 5.3 (`6a0f705`): **QA PASS**, 0 findings, and 5.3 was told to merge. Once it lands, 5.5 (Overlay message queue) is ready.
+- 2026-11-03: 5.3 merged (`1441a92`; develop was merged into its branch first with no conflicts, then the build, Contracts, Core, App and Engine and the publish re-ran green). Human Check row added. 5.5 (Overlay message queue) is ready.
+- 2026-11-03: 5.3 merged (`1441a92`), and its card is in Done. The story-5-3 session was archived because Remote Control was on. 5.5 (Overlay message queue, low risk) went to slice-epic-8 (Opus, medium effort), and its card is In progress. Building now: 4.7, 5.5, 6.2 and 7.2.
+- 2026-11-03: 4.7 is READY FOR QA at `f507443` (build 0 warnings; Core, FFmpeg and Engine pass; publish clean). QA started on qa-1-14 (Sonnet), and its card is In QA. 6.2 and 7.2 are sharing one `Mp4File.IsComplete` helper.
+- 2026-11-03: QA 4.7 at `f507443`: **QA PASS**, 0 blocking and 5 advisory notes. 4.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
+- 2026-11-03: 5.5 is READY FOR QA at `65e61c8` (build 0 warnings; App.Tests 75 pass). QA started on qa-2-1 (Sonnet), and its card is In QA.
+- 2026-11-03: 4.7 merged into `develop` (`c96ab9c`, `feat(engine): merge 4.7-disk-mode-ring`) and marked done, after QA PASS at `f507443` and a conflict-resolved merge of `develop` (EngineHost and CaptureSession, keeping both 6.1's recording tap and 4.7's disk ring; rebuilt 0 warnings, Core 90, FFmpeg 33, Engine 159 pass, publish clean). QA's five advisories are recorded in the epic Notes: spill to RAM while a long Clip pins blocks (for 4.8/4.10), up to 2x disk use across a resize, a mid-session write failure fails the session, `RemoveStale` should match `ring-<digits>.bin`, and `DiskRingClipTests` should be Explicit (the last two for the 4.13 sweep).
+- 2026-11-03: 4.7 merged (`c96ab9c`, marked done `458013c`), and its card is Done. 4.8 is now ready and was given to slice-epic-4 (Opus, high effort), with its card In progress. The rest of epic 4 waits on 4.8.
+- 2026-11-03: QA 5.5 at `65e61c8`: **QA PASS**, 0 findings. 5.5 has been told to merge (Sonnet), and qa-2-1 is back in the pool. 7.2 is running its review lens before reporting READY FOR QA.
+- 2026-11-03: 5.5 merged into `develop` (`b0f684e`, `feat(app): merge 5.5-overlay-message-queue`) and marked done, after QA PASS at `65e61c8` (0 findings). `develop` (4.7) was merged into the branch first with no conflicts; the Release build (0 warnings) and App.Tests (75 passed, 7 Heavy skipped) re-ran green. Engine code is unchanged, so there was no publish. QA's note: the view model has no `Dispose`, as with the cooldown timer. Repeated `clip-failed` and `disk-full` notices collapse in the Overlay only while the earlier one is still waiting; the engine still stacks them in the snapshot for the status line (5.10). Human check queued.
+- 2026-11-03: 5.5 merged (`b0f684e`), and its card is Done. 5.7 is now ready and was given to slice-epic-8 (Opus, medium effort), with its card In progress.
+- 2026-11-03: 7.2 is READY FOR QA at `5be972a` (build 0 warnings; Contracts, Core, Engine and App pass; publish clean). QA started on qa-1-14 (Sonnet), and its card is In QA.
+- 2026-11-03: QA 7.2 at `5be972a`: **QA PASS**, 0 findings (one App flake that didn't recur on two reruns). 7.2 has been told to merge (Sonnet), and qa-1-14 is back in the pool. `Mp4File.IsComplete` matches 6.2's plan, and 6.2 will take it from develop.
+- 2026-11-03: The builder turned off Remote Control on story-2-7, so it joins the pool as a seventh worker.
+- 2026-11-03: 7.2 merged into `develop` (`a8f4c23`, `feat(core): merge 7.2-library-reconciliation`) and marked done, after QA PASS at `5be972a` (0 findings). `develop` (4.7, 5.5) was merged into the branch first (`f93a821`) with conflicts in `ErrorCodes` and `EngineHost` (the `library-corrupt` code and dismiss hook sit beside the feedback-sound code); both sides were kept. The Release build (0 warnings), Contracts 113, Core 96, Engine 161, App 76 and the publish all passed again. **6.2 must take `Mp4File.IsComplete` from `develop` (`src/ReplayBuffer.Core/Library/Mp4File.cs`) instead of adding its own copy, and add its trim function to that file.** Residuals: a copy that sets the file's full size up front and doesn't lock it can be listed before its data is in; `ReplayClips` still writes to `MyVideos\<instance>`, not the `outputFolder` setting, so with a custom Output Folder the engine's own Clips land outside the Library; `cleanupBlocked` waits for 7.5's Cleanup to be used. Human checks: none beyond 7.1's.

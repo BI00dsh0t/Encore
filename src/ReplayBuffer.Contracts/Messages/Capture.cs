@@ -26,12 +26,14 @@ public enum RecordingState
 /// <c>capture.stateChanged</c>, one of the two shapes the Overlay and status line render (AD-3).
 /// The SessionOrchestrator is its only producer (AD-19).
 /// </summary>
+/// <param name="ClipsWriting">How many Clips are being written right now; JSON without it reads as 0 (AD-22, additive).</param>
 public sealed record CaptureState(
     ReplayState Replay,
     RecordingState Recording,
     RecordingState MonitorRecording,
     bool MicMuted,
-    DateTimeOffset? CooldownUntil)
+    DateTimeOffset? CooldownUntil,
+    int ClipsWriting = 0)
 {
     /// <summary>Nothing running, and the mic muted, as AD-5 restores it with no saved state.</summary>
     public static CaptureState Initial { get; } = new(ReplayState.Off, RecordingState.Off, RecordingState.Off, MicMuted: true, CooldownUntil: null);

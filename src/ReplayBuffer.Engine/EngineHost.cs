@@ -9,6 +9,7 @@ using ReplayBuffer.Core.Audio;
 using ReplayBuffer.Core.Feedback;
 using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
+using ReplayBuffer.Core.Replay;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Core.Settings;
 using ReplayBuffer.Engine.Audio;
@@ -230,9 +231,14 @@ internal sealed class EngineHost : IAsyncDisposable
             var interrupted = InterruptedRecordings.Recover(runtime.TakeInterrupted(), recordingLog);
 
             var libraryFile = Path.Combine(instance.RoamingDataFolder, "library.json");
-            var libraryItems = LibraryActor.Load(
+
+            // A top-level folder's Game Profile, for files found on disk (AD-21).
+            string? ProfileForFolder(string folder) =>
+                load.Store.Current.Profiles.FirstOrDefault(p => string.Equals(p.Value.Folder, folder, StringComparison.OrdinalIgnoreCase)).Key;
+            var libraryLoad = LibraryActor.Load(
                 OutputFolder(),
                 libraryFile,
+                ProfileForFolder,
                 e => libraryLog.LogWarning("The Library couldn't be read in full: {Message}", e.Message));
 
             // The device list seeds the hub's initial state; a change is published once the hub exists.
@@ -242,19 +248,28 @@ internal sealed class EngineHost : IAsyncDisposable
                 () => load.Store.Current,
                 list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
                 loggers.CreateLogger("Audio"));
-            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryItems));
+            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryLoad.Items, libraryLoad.Corrupt));
             load.Store.Changed += document => hub.Publish(SettingsMessages.Changed, new SettingsChanged(document.Revision, document));
             load.Store.Changed += devices.OnSettingsChanged;
 
             var libraryActor = library = new LibraryActor(
-                libraryItems,
+                libraryLoad.Items,
                 OutputFolder,
                 libraryFile,
+                ProfileForFolder,
+                libraryLoad.Corrupt,
                 item => hub.Publish(LibraryMessages.ItemAdded, item),
                 item => hub.Publish(LibraryMessages.ItemChanged, item),
                 removed => hub.Publish(LibraryMessages.ItemRemoved, removed),
+                reset => hub.Publish(LibraryMessages.Reset, reset),
+                blocked => hub.Publish(LibraryMessages.CleanupBlockedChanged, blocked),
                 hostOptions.Time,
-                e => libraryLog.LogWarning("library.json couldn't be written: {Message}", e.Message));
+                e => libraryLog.LogWarning("A Library disk operation failed: {Message}", e.Message),
+                createMissingFolder: !instance.IsTest);
+
+            // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.
+            load.Store.Changed += _ => libraryActor.OutputFolderChanged();
+            string? corruptWarning = null;
             var warnings = new Warnings(hub, hostOptions.Time);
             var feedbackLog = loggers.CreateLogger("Feedback");
             var player = sounds = new FeedbackSoundPlayer(
@@ -288,10 +303,23 @@ internal sealed class EngineHost : IAsyncDisposable
                 hostOptions.MeterAudio ?? audio,
                 levels => hub.Publish(AudioMessages.Levels, levels),
                 loggers.CreateLogger("Audio"));
+            // Ring files a killed engine left (DeleteOnClose covers a crash, not a power loss), before any session makes one.
+            var ringFolder = Path.Combine(instance.LocalDataFolder, "ring");
+            var stale = RingFile.RemoveStale(ringFolder);
+            if (SettingsResolver.Resolve(load.Store.Current, null).RingPath is { Length: > 0 } ringPath)
+            {
+                stale += RingFile.RemoveStale(ringPath);
+            }
+
+            if (stale > 0)
+            {
+                clipLog.LogInformation("Removed {Count} stale Replay Buffer ring files", stale);
+            }
+
             var defaultOutputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
-                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay },
+                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay, RingFolder = ringFolder },
                     loggers,
                     audio,
                     encoders),
@@ -404,7 +432,18 @@ internal sealed class EngineHost : IAsyncDisposable
                 trackMeters.Unwatch();
                 return ValueTask.FromResult(Empty.Value);
             });
-            router.Register(FeedbackMessages.Dismiss, (dismiss, _) => ValueTask.FromResult(warnings.Dismiss(dismiss)));
+            router.Register(FeedbackMessages.Dismiss, (dismiss, _) =>
+            {
+                var dismissed = warnings.Dismiss(dismiss);
+
+                // Dismissing library-corrupt acknowledges the rebuilt index, so Cleanup may run again.
+                if (dismiss.Id == corruptWarning)
+                {
+                    libraryActor.AcknowledgeCorrupt();
+                }
+
+                return ValueTask.FromResult(dismissed);
+            });
             router.Register(FeedbackMessages.Preview, (preview, _) =>
             {
                 player.Preview(preview.Sound);
@@ -465,6 +504,16 @@ internal sealed class EngineHost : IAsyncDisposable
             foreach (var message in interrupted)
             {
                 warnings.Raise(ErrorCodes.RecordingInterrupted, WarningSeverity.Warning, "recordings", message, overlay: true);
+            }
+
+            if (libraryLoad.Corrupt)
+            {
+                corruptWarning = warnings.Raise(
+                    ErrorCodes.LibraryCorrupt,
+                    WarningSeverity.Warning,
+                    "library",
+                    "The Library index was unreadable and was rebuilt from the Output Folder; Favourites may be lost. Cleanup stays off until this is acknowledged.",
+                    overlay: false).Id;
             }
 
             soundCheck.Check();

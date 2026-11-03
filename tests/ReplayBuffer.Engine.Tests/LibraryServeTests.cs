@@ -38,6 +38,7 @@ public sealed class LibraryServeTests : IAsyncLifetime
             [SettingsOp.SetGlobal(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(Output))]);
         await _client.SendAsync(SettingsMessages.Update, update, Token);
         await NextAsync("settings.changed");
+        await NextAsync("library.reset");
     }
 
     public async ValueTask DisposeAsync()
@@ -76,6 +77,45 @@ public sealed class LibraryServeTests : IAsyncLifetime
 
         Assert.Empty(_client.State.Library);
     }
+
+    [Fact]
+    public async Task AFileCopiedInIsAdded()
+    {
+        await File.WriteAllBytesAsync(Path.Combine(Output, "Game", "copied.mp4"), Mp4(), Token);
+
+        var added = LibraryMessages.ItemAdded.Read((await NextAsync("library.itemAdded")).Payload);
+        Assert.Equal((@"Game\copied.mp4", 48L, false), (added.Path, added.Size, added.BeingWritten));
+    }
+
+    [Fact]
+    public async Task ACorruptIndexIsRebuiltAndBlocksCleanupUntilDismissed()
+    {
+        await StopAsync();
+        await File.WriteAllBytesAsync(Path.Combine(Output, "Game", "clip.mp4"), Mp4(), Token);
+        var libraryFile = Path.Combine(_instance.RoamingDataFolder, "library.json");
+        await File.WriteAllTextAsync(libraryFile, "{ not json", Token);
+        await File.WriteAllTextAsync(libraryFile + ".bak", "{ not json either", Token);
+        await StartAsync();
+
+        var state = _client.State;
+        var warning = Assert.Single(state.Warnings, w => w.Code == ErrorCodes.LibraryCorrupt);
+        Assert.True(warning.Dismissable);
+        Assert.True(state.CleanupBlocked);
+        Assert.Equal(@"Game\clip.mp4", Assert.Single(state.Library).Path);
+
+        await _client.SendAsync(FeedbackMessages.Dismiss, new WarningDismiss(warning.Id), Token);
+        await NextAsync("warning.dismissed");
+        var unblocked = await NextAsync("library.cleanupBlockedChanged");
+        Assert.False(LibraryMessages.CleanupBlockedChanged.Read(unblocked.Payload).Blocked);
+    }
+
+    /// <summary>A minimal complete MP4 of 48 bytes: <c>ftyp</c>, an empty <c>moov</c> and an <c>mdat</c>.</summary>
+    private static byte[] Mp4() =>
+    [
+        0, 0, 0, 16, .. "ftypisom"u8, 0, 0, 0, 0,
+        0, 0, 0, 8, .. "moov"u8,
+        0, 0, 0, 24, .. "mdat"u8, .. new byte[16],
+    ];
 
     private async Task SaveAsync()
     {

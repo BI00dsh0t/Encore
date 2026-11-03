@@ -39,6 +39,8 @@ public sealed partial class MessagesTests
         ["library.itemAdded"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":"c:\\games\\game.exe","size":0,"date":"2026-11-03T10:00:00+00:00","beingWritten":true}""",
         ["library.itemChanged"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":null,"size":1024,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}""",
         ["library.itemRemoved"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4"}""",
+        ["library.reset"] = """{"items":[{"path":"clip.mp4","profileId":null,"size":48,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}]}""",
+        ["library.cleanupBlockedChanged"] = """{"blocked":true}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);
@@ -100,11 +102,17 @@ public sealed partial class MessagesTests
     [Fact]
     public void CaptureStateHasTheSharedShape()
     {
-        var state = new CaptureState(ReplayState.Draining, RecordingState.Off, RecordingState.Running, true, new DateTimeOffset(2026, 10, 25, 12, 0, 0, TimeSpan.Zero));
+        var state = new CaptureState(ReplayState.Draining, RecordingState.Off, RecordingState.Running, true, new DateTimeOffset(2026, 10, 25, 12, 0, 0, TimeSpan.Zero), ClipsWriting: 1);
 
         Assert.Equal(
-            """{"replay":"draining","recording":"off","monitorRecording":"running","micMuted":true,"cooldownUntil":"2026-10-25T12:00:00+00:00"}""",
+            """{"replay":"draining","recording":"off","monitorRecording":"running","micMuted":true,"cooldownUntil":"2026-10-25T12:00:00+00:00","clipsWriting":1}""",
             JsonSerializer.Serialize(state, CaptureJsonContext.Default.CaptureState));
+
+        // AD-22, additive: JSON from before clipsWriting reads as no Clip being written.
+        var old = JsonSerializer.Deserialize(
+            """{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null}""",
+            CaptureJsonContext.Default.CaptureState);
+        Assert.Equal(0, old!.ClipsWriting);
     }
 
     [Fact]

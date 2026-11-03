@@ -41,10 +41,137 @@ public sealed class OverlayTests
     }
 
     [Fact]
+    public void TheSavingIconLastsUntilTheLaterOfTheCooldownAndTheWrite()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        Assert.False(model.Saving);
+
+        // Writing, in the cooldown; the cooldown passes with the write still going.
+        Shift(engine, Buffering with { CooldownUntil = time.GetUtcNow().AddSeconds(5), ClipsWriting = 1 });
+        Assert.True(model.Saving);
+        time.Advance(TimeSpan.FromSeconds(6));
+        Assert.True(model.Saving);
+        Shift(engine, engine.State!.Capture with { ClipsWriting = 0 });
+        Assert.False(model.Saving);
+
+        // The write ended first: the timer reads the session again at the cooldown's end.
+        Shift(engine, Buffering with { CooldownUntil = time.GetUtcNow().AddSeconds(5) });
+        Assert.True(model.Saving);
+        time.Advance(TimeSpan.FromSeconds(4.9));
+        Assert.True(model.Saving);
+        time.Advance(TimeSpan.FromSeconds(0.1));
+        Assert.False(model.Saving);
+    }
+
+    [Fact]
+    public void AReconnectMidCooldownShowsTheSavingIconAndADisconnectHidesIt()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        engine.State = engine.State! with { Capture = CaptureState.Initial with { CooldownUntil = time.GetUtcNow().AddSeconds(3) } };
+
+        var model = new OverlayViewModel(engine, action => action(), time);
+        Assert.True(model.Saving);
+
+        engine.Status = EngineStatus.Disconnected;
+        engine.RaiseChanged();
+        Assert.False(model.Saving);
+    }
+
+    [Fact]
+    public void QueuedNoticesShowOneAtATimeInTheOrderRaised()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        var now = time.GetUtcNow();
+        Raise(engine, Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", now));
+        Raise(engine, Notice("b", "clip-failed", WarningSeverity.Error, "Clip not saved: save failed", now.AddMilliseconds(100)));
+        Raise(engine, Notice("c", "recording-started", WarningSeverity.Info, "Recording started", now.AddMilliseconds(200)));
+
+        foreach (var (id, severity) in new[] { ("a", WarningSeverity.Info), ("b", WarningSeverity.Error), ("c", WarningSeverity.Info) })
+        {
+            Assert.Equal(id, model.Message?.Id);
+            Assert.Equal(severity, model.Message!.Severity);
+            time.Advance(TimeSpan.FromSeconds(3.9));
+            Assert.Equal(id, model.Message?.Id);
+            time.Advance(TimeSpan.FromSeconds(0.1));
+        }
+
+        Assert.Null(model.Message);
+    }
+
+    [Fact]
+    public void ADismissedNoticeAndANonOverlayWarningNeverShow()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        var now = time.GetUtcNow();
+        Raise(
+            engine,
+            Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", now),
+            Notice("b", "recording-started", WarningSeverity.Info, "Recording started", now.AddMilliseconds(100)),
+            Notice("q", "feedback-device-captured", WarningSeverity.Warning, "The feedback device is captured", now.AddMilliseconds(150)) with { Overlay = false });
+        Assert.Equal("a", model.Message?.Id);
+
+        Dismiss(engine, "b");
+        Assert.Equal("a", model.Message?.Id);
+        time.Advance(OverlayViewModel.MessageDuration);
+        Assert.Null(model.Message);
+    }
+
+    [Fact]
+    public void AReconnectShowsTheWaitingNoticeButNeverReplaysAShownOne()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        var now = time.GetUtcNow();
+        Raise(
+            engine,
+            Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", now),
+            Notice("b", "recording-started", WarningSeverity.Info, "Recording started", now.AddMilliseconds(100)));
+        Assert.Equal("a", model.Message?.Id);
+
+        engine.Status = EngineStatus.Disconnected;
+        engine.RaiseChanged();
+        Assert.Null(model.Message);
+
+        time.Advance(TimeSpan.FromSeconds(10));
+        engine.Status = EngineStatus.Connected;
+        engine.RaiseChanged();
+        Assert.Equal("b", model.Message?.Id);
+        time.Advance(OverlayViewModel.MessageDuration);
+        Assert.Null(model.Message);
+    }
+
+    [Fact]
+    public void ARepeatOfAWaitingFailureShowsOnce()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time);
+        var now = time.GetUtcNow();
+        Raise(engine, Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", now));
+        Raise(engine, Notice("x", "clip-failed", WarningSeverity.Error, "Clip not saved: save failed", now.AddMilliseconds(100)));
+        Raise(engine, Notice("x2", "clip-failed", WarningSeverity.Error, "Clip not saved: save failed", now.AddMilliseconds(200)));
+
+        // The first failure's dismissal doesn't drop the repeat that took its place.
+        Dismiss(engine, "x");
+        time.Advance(OverlayViewModel.MessageDuration);
+        Assert.Equal("x2", model.Message?.Id);
+        time.Advance(OverlayViewModel.MessageDuration);
+        Assert.Null(model.Message);
+    }
+
+    [Fact]
     public void TheWindowIsTopmostClickThroughNeverActivatedAndExcludedFromCapture() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession();
-        var window = new OverlayWindow(new OverlayViewModel(engine, action => action()));
+        var window = new OverlayWindow(new OverlayViewModel(engine, action => action(), new ManualTime()));
         try
         {
             var hwnd = window.Handle;
@@ -57,6 +184,20 @@ public sealed class OverlayTests
             Assert.Equal(OverlayWindowStyle.Styles, OverlayWindowStyle.ExtendedStyle(hwnd) & OverlayWindowStyle.Styles);
 
             Shift(engine, CaptureState.Initial);
+            Assert.False(window.IsVisible);
+
+            // Saving with no dot still shows the window.
+            Shift(engine, CaptureState.Initial with { ClipsWriting = 1 });
+            Assert.True(window.IsVisible);
+
+            Shift(engine, CaptureState.Initial);
+            Assert.False(window.IsVisible);
+
+            // A message with no dot or icon shows the window too.
+            Raise(engine, Notice("a", "clip-saved", WarningSeverity.Info, "Clip saved", DateTimeOffset.UtcNow));
+            Assert.True(window.IsVisible);
+
+            Dismiss(engine, "a");
             Assert.False(window.IsVisible);
         }
         finally
@@ -162,6 +303,64 @@ public sealed class OverlayTests
     {
         engine.State = engine.State! with { Capture = capture };
         engine.RaiseChanged();
+    }
+
+    private static Warning Notice(string id, string code, WarningSeverity severity, string message, DateTimeOffset at) =>
+        new(id, code, severity, "capture", message, at, Overlay: true, Sound: null, Dismissable: true);
+
+    private static void Raise(FakeEngineSession engine, params Warning[] warnings)
+    {
+        engine.State = engine.State! with { Warnings = [.. engine.State.Warnings, .. warnings] };
+        engine.RaiseChanged();
+    }
+
+    private static void Dismiss(FakeEngineSession engine, string id)
+    {
+        engine.State = engine.State! with { Warnings = [.. engine.State.Warnings.Where(w => w.Id != id)] };
+        engine.RaiseChanged();
+    }
+
+    /// <summary>A clock that moves only when told, firing the one-shot timers that come due.</summary>
+    private sealed class ManualTime : TimeProvider
+    {
+        private readonly List<ManualTimer> _timers = [];
+        private DateTimeOffset _now = new(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new ManualTimer(this, callback, state, _now + dueTime);
+            _timers.Add(timer);
+            return timer;
+        }
+
+        public void Advance(TimeSpan by)
+        {
+            _now += by;
+            foreach (var due in _timers.Where(t => t.DueAt <= _now).ToList())
+            {
+                _timers.Remove(due);
+                due.Fire();
+            }
+        }
+
+        private sealed class ManualTimer(ManualTime owner, TimerCallback callback, object? state, DateTimeOffset dueAt) : ITimer
+        {
+            public DateTimeOffset DueAt { get; } = dueAt;
+
+            public void Fire() => callback(state);
+
+            public bool Change(TimeSpan dueTime, TimeSpan period) => throw new NotSupportedException();
+
+            public void Dispose() => owner._timers.Remove(this);
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 
     // Runs the dispatcher for a while, so windows show, render and settle.

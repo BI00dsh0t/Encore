@@ -32,7 +32,7 @@ internal sealed class MainViewModel : Observable
         TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
         GameProfiles = Pages.OfType<GameProfilesPage>().Single();
         _selectedPage = Pages[0];
-        Library = new LibraryPage();
+        Library = new LibraryPage(engine);
         engine.Changed += () => post(Refresh);
         Refresh();
     }
