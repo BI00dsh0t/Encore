@@ -80,6 +80,9 @@ public sealed record StateSnapshot
         // The generated deserializer passes null for a missing field.
         init => _meters = value ?? MeterLevels.Empty;
     }
+    /// <summary>The Target Game, or <c>null</c> when there is none.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 3.1) reads as none.</remarks>
+    public TargetGame? TargetGame { get; init; }
 
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
@@ -97,6 +100,7 @@ public sealed record StateSnapshot
         VideoOptions = VideoOptions.Unprobed,
         Devices = AudioDeviceList.Empty,
         Meters = MeterLevels.Empty,
+        TargetGame = null,
     };
 }
 

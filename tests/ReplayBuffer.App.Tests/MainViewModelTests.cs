@@ -17,11 +17,13 @@ public sealed class MainViewModelTests
     public void ARefreshRendersTheSnapshotAndTheSettingsPages()
     {
         var model = Create();
+        Assert.Equal("Target Game: none", model.TargetGame);
         _engine.State = _engine.State! with
         {
             Seq = 7,
             Settings = Document(revision: 3, startWithWindows: true),
             Capture = CaptureState.Initial with { Replay = ReplayState.Buffering },
+            TargetGame = new TargetGame(@"c:\games\game.exe", "Game.exe", 77),
             Warnings = [new Warning("w1", ErrorCodes.SettingsUnreadable, WarningSeverity.Error, "settings", "Defaults in use.", DateTimeOffset.UnixEpoch, false, null, true)],
         };
 
@@ -32,6 +34,7 @@ public sealed class MainViewModelTests
         Assert.Equal("Connected to the engine.", model.Status);
         Assert.Equal("Process 4242, run run-1, event 7", model.EngineDetails);
         Assert.Contains("Replay Buffer buffering", model.Capture);
+        Assert.Equal("Target Game: Game.exe (process 77)", model.TargetGame);
         Assert.Equal("3", model.SettingsRevision);
         Assert.Equal(["Error: Defaults in use. (settings-unreadable)"], model.Warnings);
         Assert.True(model.General.StartWithWindows);
