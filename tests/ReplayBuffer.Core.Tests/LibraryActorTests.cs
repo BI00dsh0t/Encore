@@ -233,6 +233,46 @@ public sealed class LibraryActorTests : IDisposable
         Assert.Equal(other, saved.RootElement.GetProperty("outputFolder").GetString());
     }
 
+    [Fact]
+    public void AWrittenClipsLengthIsPublishedSavedAndReusedUntilItsSizeChanges()
+    {
+        var clip = Path.Combine(Output, "Game", "clip.mp4");
+        var first = 0;
+        using (var library = new Harness(this, [], readLength: _ => { Interlocked.Increment(ref first); return 30; }))
+        {
+            library.Actor.Watching = true;
+            library.Actor.BeginWrite(clip, ProfileId);
+            File.WriteAllBytes(clip, Mp4());
+            library.Actor.EndWrite(clip, WriteOutcome.Written);
+
+            library.WaitForEvent(e => e is LibraryItem { LengthSeconds: 30 });
+            Assert.Collection(
+                library.Events.OfType<LibraryItem>(),
+                e => Assert.True(e.BeingWritten),
+                e => Assert.Equal((48L, (double?)null), (e.Size, e.LengthSeconds)),
+                e => Assert.Equal((48L, (double?)30), (e.Size, e.LengthSeconds)));
+        }
+
+        using (var saved = JsonDocument.Parse(File.ReadAllBytes(LibraryFile)))
+        {
+            Assert.Equal(30, saved.RootElement.GetProperty("items")[0].GetProperty("lengthSeconds").GetDouble());
+        }
+
+        // A restart with the file unchanged reuses the saved length without reading it.
+        var load = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { });
+        Assert.Equal(30, Assert.Single(load.Items).LengthSeconds);
+        var second = 0;
+        using var restarted = new Harness(this, load.Items, readLength: _ => { Interlocked.Increment(ref second); return 12; });
+        restarted.Actor.Watching = true;
+        Thread.Sleep(300);
+        Assert.Equal(0, Volatile.Read(ref second));
+
+        // Rewritten outside the app at a new size: the length is read again.
+        File.WriteAllBytes(clip, Mp4(64));
+        restarted.WaitFor(index => index[@"Game\clip.mp4"] is { Size: 96, LengthSeconds: 12 });
+        Assert.Equal(1, Volatile.Read(ref second));
+    }
+
     /// <summary>A live actor over the test's Output Folder, with the index its events build.</summary>
     private sealed class Harness : IDisposable
     {
@@ -241,7 +281,7 @@ public sealed class LibraryActorTests : IDisposable
         private readonly List<object> _events = [];
         private string _currentFolder = "";
 
-        public Harness(LibraryActorTests test, IReadOnlyList<LibraryItem> items, bool cleanupBlocked = false)
+        public Harness(LibraryActorTests test, IReadOnlyList<LibraryItem> items, bool cleanupBlocked = false, Func<string, double?>? readLength = null)
         {
             Folder = test.Output;
             foreach (var item in items)
@@ -269,7 +309,8 @@ public sealed class LibraryActorTests : IDisposable
                 blocked => Apply(blocked, () => { }),
                 TimeProvider.System,
                 _ => { },
-                createMissingFolder: true);
+                createMissingFolder: true,
+                readLength: readLength);
         }
 
         public LibraryActor Actor { get; }

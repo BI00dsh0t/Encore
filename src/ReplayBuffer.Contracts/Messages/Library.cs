@@ -12,13 +12,17 @@ namespace ReplayBuffer.Contracts.Messages;
 /// <param name="Size">The file's size in bytes; 0 while it is being written.</param>
 /// <param name="Date">When it was saved: the write's start, or the file's creation time for a scanned file.</param>
 /// <param name="BeingWritten">Whether a writer is still writing it; such an item is shown locked and never persisted.</param>
-public sealed record LibraryItem(string Path, string? ProfileId, long Size, DateTimeOffset Date, bool BeingWritten);
+/// <param name="LengthSeconds">Its length in seconds, read by FFmpeg's demuxer (story 7.3); <c>null</c> until read, or when it can't be read.</param>
+public sealed record LibraryItem(string Path, string? ProfileId, long Size, DateTimeOffset Date, bool BeingWritten, double? LengthSeconds = null);
 
 /// <summary><c>library.itemRemoved</c>: the item at <see cref="Path"/> (relative to the Output Folder) left the Library.</summary>
 public sealed record LibraryItemRemoved(string Path);
 
 /// <summary><c>library.reset</c>: the Library is now exactly <see cref="Items"/>, e.g. after the Output Folder changed.</summary>
 public sealed record LibraryReset(IReadOnlyList<LibraryItem> Items);
+
+/// <summary><c>library.folderChanged</c>: the Library now indexes <see cref="Folder"/>, the absolute Output Folder its paths are relative to.</summary>
+public sealed record LibraryFolderChanged(string Folder);
 
 /// <summary>
 /// <c>library.cleanupBlockedChanged</c>: whether Cleanup is held off because the index was rebuilt
@@ -68,9 +72,16 @@ public static class LibraryMessages
         "cleanupBlocked",
         (snapshot, blocked) => snapshot with { CleanupBlocked = blocked.Blocked });
 
+    /// <summary>The Output Folder the Library indexes changed; published just before the <c>library.reset</c> that rebuilds it.</summary>
+    public static EventType<LibraryFolderChanged> FolderChanged { get; } = new(
+        "library.folderChanged",
+        LibraryJsonContext.Default.LibraryFolderChanged,
+        "libraryFolder",
+        (snapshot, changed) => snapshot with { LibraryFolder = changed.Folder });
+
     public static IReadOnlyList<CommandType> Commands { get; } = [];
 
-    public static IReadOnlyList<EventType> Events { get; } = [ItemAdded, ItemChanged, ItemRemoved, Reset, CleanupBlockedChanged];
+    public static IReadOnlyList<EventType> Events { get; } = [ItemAdded, ItemChanged, ItemRemoved, Reset, CleanupBlockedChanged, FolderChanged];
 
     private static IEnumerable<LibraryItem> Without(IReadOnlyList<LibraryItem>? items, string path) =>
         (items ?? []).Where(i => !string.Equals(i.Path, path, StringComparison.OrdinalIgnoreCase));
@@ -101,4 +112,5 @@ public static class LibraryMessages
 [JsonSerializable(typeof(LibraryItemRemoved))]
 [JsonSerializable(typeof(LibraryReset))]
 [JsonSerializable(typeof(LibraryCleanupBlocked))]
+[JsonSerializable(typeof(LibraryFolderChanged))]
 public sealed partial class LibraryJsonContext : JsonSerializerContext;

@@ -18,7 +18,9 @@ public sealed record LibraryLoad(IReadOnlyList<LibraryItem> Items, bool Corrupt)
 /// publishes <c>library.itemAdded</c> (locked) at its start, then <c>library.itemChanged</c> with its
 /// size, or <c>library.itemRemoved</c> when it failed. Changes made outside the app are reconciled
 /// against disk (R2), so only what differs from the index is published. Items being written are never
-/// persisted.
+/// persisted. Each item's length (story 7.3) is read by a low-priority worker beside the actor, which
+/// only reads the file and posts the result back; the actor applies it, publishes it as
+/// <c>library.itemChanged</c> and caches it in <c>library.json</c> by size and modified time.
 /// </summary>
 public sealed class LibraryActor : ILibraryWrites, IDisposable
 {
@@ -61,7 +63,15 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private readonly TimeProvider _time;
     private readonly Action<Exception> _failed;
     private readonly bool _createMissingFolder;
+    private readonly Func<string, double?>? _readLength;
+    private readonly Action<LibraryFolderChanged>? _folderChanged;
     private readonly Thread _thread;
+
+    // The length worker's jobs; written by the actor thread only.
+    private readonly Channel<LengthJob> _lengthJobs = Channel.CreateUnbounded<LengthJob>(
+        new UnboundedChannelOptions { SingleReader = true, SingleWriter = true, AllowSynchronousContinuations = false });
+
+    private readonly Thread? _lengthThread;
 
     // Actor thread only.
     private readonly Dictionary<string, LibraryItem> _items = new(StringComparer.OrdinalIgnoreCase);
@@ -74,6 +84,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     // Actor thread only: the absolute paths watcher events named, reconciled once they settle.
     private readonly HashSet<string> _pending = new(StringComparer.OrdinalIgnoreCase);
+
+    // Actor thread only: the modified time (LastWriteTimeUtc) each item's length was read at, by key.
+    private readonly Dictionary<string, DateTime> _modified = new(StringComparer.OrdinalIgnoreCase);
+
+    // Actor thread only: the size each queued length job was queued at, by key, so a job isn't queued twice.
+    private readonly Dictionary<string, long> _queued = new(StringComparer.OrdinalIgnoreCase);
 
     private string _folder = "";
     private FileSystemWatcher? _watcher;
@@ -99,6 +115,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// <param name="time">The clock a write's date is read from, and the settle timers' source.</param>
     /// <param name="failed">Reports a disk operation that failed; the index is unaffected.</param>
     /// <param name="createMissingFolder">Whether a missing Output Folder is created so it can be watched.</param>
+    /// <param name="readLength">Reads a file's length in seconds by its absolute path, or null when it can't; called on a low-priority worker. Without it no length is read.</param>
+    /// <param name="folderChanged">Publishes <c>library.folderChanged</c>, just before the <c>library.reset</c> of a new Output Folder.</param>
     public LibraryActor(
         IReadOnlyList<LibraryItem> items,
         Func<string> outputFolder,
@@ -112,7 +130,9 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         Action<LibraryCleanupBlocked> cleanupBlockedChanged,
         TimeProvider time,
         Action<Exception> failed,
-        bool createMissingFolder)
+        bool createMissingFolder,
+        Func<string, double?>? readLength = null,
+        Action<LibraryFolderChanged>? folderChanged = null)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentException.ThrowIfNullOrEmpty(libraryFile);
@@ -127,6 +147,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _failed = failed ?? throw new ArgumentNullException(nameof(failed));
         _createMissingFolder = createMissingFolder;
+        _readLength = readLength;
+        _folderChanged = folderChanged;
         _cleanupBlocked = cleanupBlocked;
         foreach (var item in items)
         {
@@ -135,6 +157,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
         _channel.Writer.TryWrite(new Start());
         _thread = new Thread(Run) { Name = "LibraryActor", IsBackground = true };
+        if (readLength is not null)
+        {
+            _lengthThread = new Thread(RunLengths) { Name = "LibraryLength", IsBackground = true, Priority = ThreadPriority.Lowest };
+            _lengthThread.Start();
+        }
+
         _thread.Start();
     }
 
@@ -214,8 +242,13 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
                     continue;
                 }
 
+                // A cached length holds only while the file has the size and modified time it was read at.
+                var length = entry is { LengthSeconds: { } seconds, Size: { } size, Modified: { } modified }
+                    && size == file.Length && modified == file.LastWriteTimeUtc
+                        ? seconds
+                        : (double?)null;
                 items.Add(entry is not null
-                    ? new LibraryItem(key, entry.ProfileId, file.Length, entry.Date, false)
+                    ? new LibraryItem(key, entry.ProfileId, file.Length, entry.Date, false, length)
                     : Scanned(file, key, profileForFolder));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -270,7 +303,10 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>The watcher's <see cref="FileSystemWatcher.Error"/> handler: a buffer overflow, or the folder went away.</summary>
     internal void OnWatcherError(Exception error) => _channel.Writer.TryWrite(new WatchError(error));
 
-    /// <summary>Stops taking messages, handles those already posted, and joins the thread.</summary>
+    /// <summary>
+    /// Stops taking messages, handles those already posted, and joins the thread; then stops the length
+    /// worker, which skips the jobs still queued, and joins it.
+    /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -282,6 +318,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         if (Environment.CurrentManagedThreadId != _thread.ManagedThreadId)
         {
             _thread.Join();
+        }
+
+        _lengthJobs.Writer.TryComplete();
+        if (_lengthThread is not null && Environment.CurrentManagedThreadId != _lengthThread.ManagedThreadId)
+        {
+            _lengthThread.Join();
         }
     }
 
@@ -485,6 +527,39 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
+    // The length worker: it only reads a file and posts the result to the actor (AD-17).
+    private void RunLengths()
+    {
+        var reader = _lengthJobs.Reader;
+        while (reader.WaitToReadAsync().AsTask().GetAwaiter().GetResult())
+        {
+            while (reader.TryRead(out var job))
+            {
+                // Once disposed, the actor would drop the result.
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    continue;
+                }
+
+                double? length = null;
+                var modified = default(DateTime);
+                try
+                {
+                    modified = File.GetLastWriteTimeUtc(job.Path);
+                    length = _readLength!(job.Path);
+                }
+#pragma warning disable CA1031 // A reader that throws only costs the item its length.
+                catch (Exception e)
+#pragma warning restore CA1031
+                {
+                    _failed(e);
+                }
+
+                _channel.Writer.TryWrite(new LengthRead(job.Folder, job.Key, job.Size, modified, length));
+            }
+        }
+    }
+
     private void Handle(Message message)
     {
         switch (message)
@@ -533,6 +608,10 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
                 SetWatching(watch.On);
                 watch.Done.TrySetResult();
                 break;
+
+            case LengthRead read:
+                OnLengthRead(read);
+                break;
         }
     }
 
@@ -541,9 +620,28 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     {
         _settle = _time.CreateTimer(_ => _channel.Writer.TryWrite(new Settle()), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _folder = FullFolder(_outputFolder());
+
+        // A length loaded from library.json belongs to the file's current modified time (Load checked it).
+        foreach (var item in _items.Values.Where(i => i.LengthSeconds is not null))
+        {
+            try
+            {
+                _modified[item.Path] = File.GetLastWriteTimeUtc(Path.Combine(_folder, item.Path));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                _failed(e);
+            }
+        }
+
         CreateMissingFolder();
         StartWatcher();
         Rescan();
+        foreach (var item in _items.Values.Where(i => !i.BeingWritten && i.LengthSeconds is null).ToList())
+        {
+            QueueLength(item.Path);
+        }
+
         _dirty |= _cleanupBlocked;
     }
 
@@ -558,6 +656,10 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
 
         _beingWritten[path] = key;
+
+        // A write over an indexed file: a length read still queued for the old file is the old file's.
+        _modified.Remove(key);
+        _queued.Remove(key);
         var item = new LibraryItem(key, begin.ProfileId, 0, _time.GetUtcNow(), true);
         _items[key] = item;
         _added(item);
@@ -583,6 +685,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _items[key] = item;
         _changed(item);
         _dirty = true;
+        QueueLength(key);
     }
 
     private void OnWatched(Watched watched)
@@ -704,6 +807,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _items.Clear();
         _beingWritten.Clear();
         _pending.Clear();
+        _modified.Clear();
+        _queued.Clear();
         _rescanPending = false;
         foreach (var registration in _registered.Values)
         {
@@ -723,8 +828,13 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
             }
         }
 
+        _folderChanged?.Invoke(new LibraryFolderChanged(folder));
         _reset(new LibraryReset([.. _items.Values]));
         _dirty = true;
+        foreach (var key in _items.Keys.ToList())
+        {
+            QueueLength(key);
+        }
     }
 
     private void OnAcknowledge()
@@ -825,11 +935,62 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
         else
         {
-            item = item with { Size = file.Length };
+            // A file rewritten outside the app has a new length.
+            item = item with { Size = file.Length, LengthSeconds = null };
+            _modified.Remove(key);
             _items[key] = item;
             _changed(item);
         }
 
+        _dirty = true;
+        QueueLength(key);
+    }
+
+    /// <summary>Queues a read of the item's length at its current size, unless one is already queued at that size.</summary>
+    private void QueueLength(string key)
+    {
+        if (_readLength is null
+            || !_items.TryGetValue(key, out var item)
+            || item.BeingWritten
+            || (_queued.TryGetValue(key, out var size) && size == item.Size))
+        {
+            return;
+        }
+
+        if (_lengthJobs.Writer.TryWrite(new LengthJob(_folder, key, Path.Combine(_folder, key), item.Size)))
+        {
+            _queued[key] = item.Size;
+        }
+    }
+
+    /// <summary>
+    /// The worker read a length: applied only when the folder is the same, and the item still exists,
+    /// isn't being written and has the size the job was queued at.
+    /// </summary>
+    private void OnLengthRead(LengthRead read)
+    {
+        if (!string.Equals(read.Folder, _folder, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (_queued.TryGetValue(read.Key, out var queued) && queued == read.Size)
+        {
+            _queued.Remove(read.Key);
+        }
+
+        if (read.Length is not { } length
+            || !_items.TryGetValue(read.Key, out var item)
+            || item.BeingWritten
+            || item.Size != read.Size)
+        {
+            return;
+        }
+
+        item = item with { LengthSeconds = length };
+        _items[read.Key] = item;
+        _modified[read.Key] = read.Modified;
+        _changed(item);
         _dirty = true;
     }
 
@@ -913,10 +1074,24 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _items[newKey] = moved;
         _added(moved);
         _dirty = true;
+
+        // A move keeps the length; one not yet read is read under the new key.
+        _queued.Remove(item.Path);
+        if (_modified.Remove(item.Path, out var modified))
+        {
+            _modified[newKey] = modified;
+        }
+
+        if (moved.LengthSeconds is null)
+        {
+            QueueLength(newKey);
+        }
     }
 
     private void Remove(string key)
     {
+        _modified.Remove(key);
+        _queued.Remove(key);
         if (_items.Remove(key))
         {
             _removed(new LibraryItemRemoved(key));
@@ -1034,7 +1209,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         {
             var document = new LibraryFile(
                 1,
-                [.. _items.Values.Where(i => !i.BeingWritten).Select(i => new LibraryFileEntry(i.Path, i.ProfileId, i.Date, i.Size))],
+                [.. _items.Values.Where(i => !i.BeingWritten).Select(Entry)],
                 _folder,
                 _cleanupBlocked);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_libraryFile))!);
@@ -1072,6 +1247,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
+    // A length is saved with the modified time it was read at, so a restart can tell it still holds.
+    private LibraryFileEntry Entry(LibraryItem item) =>
+        item.LengthSeconds is { } length && _modified.TryGetValue(item.Path, out var modified)
+            ? new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, length, modified)
+            : new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size);
+
     private enum ReadResult
     {
         Missing,
@@ -1104,6 +1285,10 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private sealed record MoveFile(string From, string To) : Message;
 
     private sealed record Watch(bool On, TaskCompletionSource Done) : Message;
+
+    private sealed record LengthRead(string Folder, string Key, long Size, DateTime Modified, double? Length) : Message;
+
+    private sealed record LengthJob(string Folder, string Key, string Path, long Size);
 }
 
 /// <summary>
@@ -1114,9 +1299,11 @@ internal sealed record LibraryFile(int Version, IReadOnlyList<LibraryFileEntry> 
 
 /// <summary>
 /// One saved item: its path relative to the Output Folder, its Game Profile, its date, and its size
-/// when saved (null in a file from before story 7.2), which tells a file changed outside the app.
+/// when saved (null in a file from before story 7.2), which tells a file changed outside the app. Its
+/// length in seconds and the file's modified time (UTC) it was read at, both null when no length was
+/// read (or in a file from before story 7.3); the length is reused only while size and time match.
 /// </summary>
-internal sealed record LibraryFileEntry(string Path, string? ProfileId, DateTimeOffset Date, long? Size = null);
+internal sealed record LibraryFileEntry(string Path, string? ProfileId, DateTimeOffset Date, long? Size = null, double? LengthSeconds = null, DateTime? Modified = null);
 
 [JsonSourceGenerationOptions(
     JsonSerializerDefaults.General,
