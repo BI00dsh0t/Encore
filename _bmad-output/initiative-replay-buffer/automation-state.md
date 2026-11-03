@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.7 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.2 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.5 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 4.7 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.2 |
 
@@ -427,3 +427,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 5.3 merged (`1441a92`; develop was merged into its branch first with no conflicts, then the build, Contracts, Core, App and Engine and the publish re-ran green). Human Check row added. 5.5 (Overlay message queue) is ready.
 - 2026-11-03: 5.3 merged (`1441a92`), and its card is in Done. The story-5-3 session was archived because Remote Control was on. 5.5 (Overlay message queue, low risk) went to slice-epic-8 (Opus, medium effort), and its card is In progress. Building now: 4.7, 5.5, 6.2 and 7.2.
 - 2026-11-03: 4.7 is READY FOR QA at `f507443` (build 0 warnings; Core, FFmpeg and Engine pass; publish clean). QA started on qa-1-14 (Sonnet), and its card is In QA. 6.2 and 7.2 are sharing one `Mp4File.IsComplete` helper.
+- 2026-11-03: QA 4.7 at `f507443`: **QA PASS**, 0 blocking and 5 advisory notes. 4.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
