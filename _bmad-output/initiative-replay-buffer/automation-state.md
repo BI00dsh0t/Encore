@@ -37,7 +37,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with QA 4.10 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 7.3 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 4.10 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.4 |
@@ -456,3 +456,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 6.3 merged (`eee32cb`, marked done on develop). slice-epic-4 is back in the pool.
 - 2026-11-03: 6.3 merged (`eee32cb`, marked done `0095fcc`), and its card is Done. slice-epic-4 is back in the pool. 6.4 went to qa-2-1 (Opus, medium effort), with its card In progress.
 - 2026-11-03: 4.10 is READY FOR QA at `9cb23a0`. QA started on slice-epic-4 (Sonnet), and its card is In QA.
+- 2026-11-03: QA 7.3 at `a38a811`: **QA PASS**, 0 blocking and 2 non-blocking notes. 7.3 has been told to merge (Sonnet), and slice-epic-5 is back in the pool.
