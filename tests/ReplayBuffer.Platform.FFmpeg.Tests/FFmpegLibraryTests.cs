@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using ReplayBuffer.Contracts;
 
 namespace ReplayBuffer.Platform.FFmpeg.Tests;
@@ -29,5 +30,15 @@ public sealed class FFmpegLibraryTests
             "native/ffmpeg is not fetched");
 
         Assert.Empty(FFmpegLibrary.MissingLibraries(AppContext.BaseDirectory));
+    }
+
+    [Fact]
+    public void CheckMapsAFullDiskToDiskFullAndAnyOtherErrorToEncodeFailed()
+    {
+        Assert.SkipUnless(File.Exists(Path.Combine(AppContext.BaseDirectory, "ffprobe.exe")), "native/ffmpeg is not fetched");
+        FFmpegLibrary.Initialize(NullLogger.Instance);
+
+        Assert.Equal(ErrorCodes.DiskFull, Assert.Throws<ErrorCodeException>(() => FFmpegLibrary.Check(-28, "x")).Code);
+        Assert.Equal(ErrorCodes.EncodeFailed, Assert.Throws<ErrorCodeException>(() => FFmpegLibrary.Check(-1, "x")).Code);
     }
 }

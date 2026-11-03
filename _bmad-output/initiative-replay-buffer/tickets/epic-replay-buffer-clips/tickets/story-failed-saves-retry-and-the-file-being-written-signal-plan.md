@@ -85,27 +85,27 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- three codes, added to `All` -- the reasons that epic 5 shows (AD-22, additive)
-- [ ] `src/ReplayBuffer.Platform.FFmpeg/FFmpegLibrary.cs` -- `Check` maps ENOSPC and EACCES -- a real disk-full error from the muxer reaches `disk-full`
-- [ ] `src/ReplayBuffer.Core/Output/WriteFailures.cs`, `src/ReplayBuffer.Core/Library/LibraryWrites.cs` -- as in the Code Map -- the reason mapping and the "file being written" port (R6)
-- [ ] `src/ReplayBuffer.Core/Sessions/{TargetGames,SessionOrchestrator}.cs` -- `ReplayClips.Library`, Begin and End, and `clip.failed` for every failure -- 4.4 QA note 1 and R6
-- [ ] `src/ReplayBuffer.Engine/EngineHost.cs` -- wire `NoLibraryWrites.Instance`
-- [ ] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs` -- the 1 s span refusal and `ClipWriteFault` -- 4.4 QA note 2, and fault injection for the AC
-- [ ] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- one test, with `saveCooldown` 0:
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- three codes, added to `All` -- the reasons that epic 5 shows (AD-22, additive)
+- [x] `src/ReplayBuffer.Platform.FFmpeg/FFmpegLibrary.cs` -- `Check` maps ENOSPC and EACCES -- a real disk-full error from the muxer reaches `disk-full`
+- [x] `src/ReplayBuffer.Core/Output/WriteFailures.cs`, `src/ReplayBuffer.Core/Library/LibraryWrites.cs` -- as in the Code Map -- the reason mapping and the "file being written" port (R6)
+- [x] `src/ReplayBuffer.Core/Sessions/{TargetGames,SessionOrchestrator}.cs` -- `ReplayClips.Library`, Begin and End, and `clip.failed` for every failure -- 4.4 QA note 1 and R6
+- [x] `src/ReplayBuffer.Engine/EngineHost.cs` -- wire `NoLibraryWrites.Instance`
+- [x] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs` -- the 1 s span refusal and `ClipWriteFault` -- 4.4 QA note 2, and fault injection for the AC
+- [x] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- one test, with `saveCooldown` 0:
   - Press 1: its `FakeWrite` completes with `new IOException("disk full", unchecked((int)0x80070070))`. Expect `clip.saving`, then `clip.failed { disk-full }`; no Reset; Library calls `[Begin(path1, profile), End(path1, Failed)]`.
   - Press 2 succeeds. Expect `clip.saved`, one Reset, and `[Begin(path2), End(path2, Written)]` appended.
-- [ ] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- a second test, where the reserve fails: `DefaultOutputFolder` returns a path under an existing *file*, so `Directory.CreateDirectory` throws `IOException`. Expect `clip.saving`, then `clip.failed { save-failed }`, and no Library call.
-- [ ] New `tests/ReplayBuffer.Core.Tests/WriteFailuresTests.cs` -- one test over `ReasonOf`:
+- [x] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- a second test, where the reserve fails: `DefaultOutputFolder` returns a path under an existing *file*, so `Directory.CreateDirectory` throws `IOException`. Expect `clip.saving`, then `clip.failed { save-failed }`, and no Library call.
+- [x] New `tests/ReplayBuffer.Core.Tests/WriteFailuresTests.cs` -- one test over `ReasonOf`:
   - disk-full HResults `0x80070070` and `0x80070027` give `disk-full`;
   - `UnauthorizedAccessException` gives `access-denied`;
   - `ErrorCodeException(DiskFull)` and `ErrorCodeException(ClipTooShort)` keep their codes;
   - `ErrorCodeException(EncodeFailed)` and `InvalidOperationException` give `save-failed`.
-- [ ] `tests/ReplayBuffer.Engine.Tests/ReplayClipCaptureTests.cs` -- extend the first test:
+- [x] `tests/ReplayBuffer.Engine.Tests/ReplayClipCaptureTests.cs` -- extend the first test:
   - Between `clip` and `next`, wait about 1.5 s and arm a one-shot `ClipWriteFault`. The hook writes a few bytes to `path + ".rbpart"`, then returns `new ErrorCodeException(ErrorCodes.DiskFull, "test volume full")`. Expect `clip.failed { disk-full }`.
   - `next` follows about 1.5 s later. Its existing "covers the time between `press` and `nextPress`" assert now proves the retry.
   - Then wait 1.5 s, post two presses with the same QPC, and expect one `clip.saved` and one `clip.failed { clip-too-short }`, in either order.
   - At the end, the profile folder holds exactly three `.mp4` files (all non-empty) and no `.rbpart`.
-- [ ] `tests/ReplayBuffer.Platform.FFmpeg.Tests/FFmpegLibraryTests.cs` -- one test: `Check(-28, "x")` throws `DiskFull`, and `Check(-1, "x")` throws `EncodeFailed`. `ErrorText` needs FFmpeg loaded; if the test can't run without it, use the existing `SkipUnless` pattern.
+- [x] `tests/ReplayBuffer.Platform.FFmpeg.Tests/FFmpegLibraryTests.cs` -- one test: `Check(-28, "x")` throws `DiskFull`, and `Check(-1, "x")` throws `EncodeFailed`. `ErrorText` needs FFmpeg loaded; if the test can't run without it, use the existing `SkipUnless` pattern.
 
 **Acceptance Criteria:**
 - Given a running Replay Buffer, when a Clip's write fails with the disk full, then `clip.failed { reason: "disk-full" }` follows `clip.saving`, and neither a `.rbpart` nor the Clip's `.mp4` remains.
@@ -115,6 +115,11 @@ deferred: []
 - Given the default run, when the 0-warning Release build, the Contracts, Core, Platform.FFmpeg and Engine suites and the NativeAOT publish run, then all pass.
 
 ## Implementation Notes
+
+- `FFmpegLibraryTests` could not reach `FFmpegLibrary.Check` (the Code Map assumed it could): `ReplayBuffer.Platform.FFmpeg.csproj` now has `InternalsVisibleTo ReplayBuffer.Platform.FFmpeg.Tests`, like the other platform projects.
+- The existing `APressUnderASecondAfterAResetIsRefusedAndAFailedWriteResetsNothing` asserted that a failed write reached no `NotSaved`; it now expects `clip.failed { save-failed }`, per this story.
+- `ReplayClipCaptureTests`' `Failed` callback no longer completes the `saved` channel (a disk-full write now calls it on purpose); outcomes are asserted through `NotSaved`.
+- Residual (Design Notes): the allocator's empty reserved `.mp4` exists before `BeginWrite`.
 
 ## Plan Change Log
 

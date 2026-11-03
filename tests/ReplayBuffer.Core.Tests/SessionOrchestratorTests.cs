@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
 
@@ -495,7 +496,7 @@ public sealed class SessionOrchestratorTests : IDisposable
             orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 3)));
             Assert.IsType<IOException>(await NextAsync(failures));
             Assert.Equal([1, 1, 0], made.Select(w => w.Resets));
-            Assert.False(refused.Reader.TryRead(out _));
+            Assert.Equal(new ClipFailed(ErrorCodes.SaveFailed), await NextAsync(refused));
         }
         finally
         {
@@ -753,6 +754,100 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task AFailedWriteReportsItsReasonAndEndsItsLibraryWriteAndTheNextPressSaves()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var writes = new ConcurrentQueue<string>();
+            var made = new ConcurrentQueue<FakeWrite>();
+            var library = new FakeLibraryWrites();
+            var factory = new FakeFactory
+            {
+                Save = _ =>
+                {
+                    // The first write fails with the disk full.
+                    var write = new FakeWrite(writes, made.IsEmpty ? new IOException("disk full", unchecked((int)0x80070070)) : null);
+                    made.Enqueue(write);
+                    return write;
+                },
+            };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => events.Writer.TryWrite(s),
+                    _ => { },
+                    f => events.Writer.TryWrite(f),
+                    Saving: s => events.Writer.TryWrite(s),
+                    Library: library));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.Equal(new ClipFailed(ErrorCodes.DiskFull), await NextAsync(events));
+            Assert.Equal([0], made.Select(w => w.Resets));
+            var path1 = writes.Single();
+            Assert.Equal([$"begin {path1} {ProfileId}", $"end {path1} Failed"], library.Calls);
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + System.Diagnostics.Stopwatch.Frequency));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.Equal([0, 1], made.Select(w => w.Resets));
+            var path2 = writes.Last();
+            Assert.Equal([$"begin {path1} {ProfileId}", $"end {path1} Failed", $"begin {path2} {ProfileId}", $"end {path2} Written"], library.Calls);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AReserveThatFailsReportsSaveFailedAndTellsTheLibraryNothing()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            // The Output Folder lies under a file, so it can't be created.
+            var file = Path.Combine(folder, "a-file");
+            File.WriteAllText(file, "x");
+            _document = Revision(3) with { Global = SettingsDocument.Empty.Global.SetItem(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(0)) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var library = new FakeLibraryWrites();
+            var factory = new FakeFactory { Save = _ => new FakeWrite(new ConcurrentQueue<string>()) };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => Path.Combine(file, "clips"),
+                    s => events.Writer.TryWrite(s),
+                    _ => { },
+                    f => events.Writer.TryWrite(f),
+                    Saving: s => events.Writer.TryWrite(s),
+                    Library: library));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.Equal(new ClipFailed(ErrorCodes.SaveFailed), await NextAsync(events));
+            Assert.Empty(library.Calls);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     private static TaskCompletionSource NewGate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>The Global values with the Output Folder <paramref name="folder"/> and, when given, <paramref name="cooldown"/> as <c>saveCooldown</c>.</summary>
@@ -904,6 +999,18 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
 
         public void Reset() => Interlocked.Increment(ref _resets);
+    }
+
+    /// <summary>Records each Library call, in order.</summary>
+    private sealed class FakeLibraryWrites : ILibraryWrites
+    {
+        private readonly ConcurrentQueue<string> _calls = new();
+
+        public IEnumerable<string> Calls => _calls;
+
+        public void BeginWrite(string path, string? profileId) => _calls.Enqueue($"begin {path} {profileId}");
+
+        public void EndWrite(string path, WriteOutcome outcome) => _calls.Enqueue($"end {path} {outcome}");
     }
 
     /// <summary>A store that starts with <paramref name="saved"/> and records each save.</summary>

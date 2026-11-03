@@ -6,6 +6,7 @@ using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Audio;
+using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Core.Settings;
@@ -265,7 +266,10 @@ internal sealed class EngineHost : IAsyncDisposable
                             clipLog.LogDebug("Saving a Clip");
                         },
                         Ignored: since => clipLog.LogInformation(
-                            "The save press came {Seconds:0.0} s after the last accepted one, inside the Save Cooldown; it was ignored", since.TotalSeconds))
+                            "The save press came {Seconds:0.0} s after the last accepted one, inside the Save Cooldown; it was ignored", since.TotalSeconds),
+
+                        // The LibraryActor (epic-library-cleanup) takes this place.
+                        Library: NoLibraryWrites.Instance)
                     : null);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.

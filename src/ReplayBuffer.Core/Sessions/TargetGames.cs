@@ -1,5 +1,6 @@
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
 
 namespace ReplayBuffer.Core.Sessions;
@@ -41,10 +42,13 @@ public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, 
 /// <param name="Paths">Reserves each Clip's path.</param>
 /// <param name="DefaultOutputFolder">The Output Folder when the Global <c>outputFolder</c> is unset.</param>
 /// <param name="Saved">Called on the orchestrator thread once a Clip is written.</param>
-/// <param name="Failed">Called on the orchestrator thread when a save could not be written.</param>
+/// <param name="Failed">
+/// Called on the orchestrator thread with the exception when a save could not be written, for
+/// logging; <paramref name="NotSaved"/> then carries its outcome. Not called for a refusal.
+/// </param>
 /// <param name="NotSaved">
-/// Called on the orchestrator thread when a save was refused and made no Clip, e.g. with
-/// <see cref="Contracts.ErrorCodes.ClipTooShort"/>; null ignores it.
+/// Called on the orchestrator thread for every accepted save that made no Clip, refused or failed,
+/// with its reason (<see cref="Output.WriteFailures.ReasonOf"/>); null ignores it.
 /// </param>
 /// <param name="ExitDrain">
 /// How long a game session that lost its Target by exit keeps its Replay Buffer for a <c>save</c>
@@ -58,6 +62,10 @@ public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, 
 /// Called on the orchestrator thread for a <c>save</c> press inside the Save Cooldown (R5), with the
 /// time since the accepted press; it makes no Clip and no event. Null ignores it.
 /// </param>
+/// <param name="Library">
+/// Told when each Clip whose path was reserved starts and ends being written (R6), on the
+/// orchestrator thread; null is <see cref="NoLibraryWrites.Instance"/>.
+/// </param>
 public sealed record ReplayClips(
     OutputPathAllocator Paths,
     Func<string> DefaultOutputFolder,
@@ -66,7 +74,8 @@ public sealed record ReplayClips(
     Action<ClipFailed>? NotSaved = null,
     TimeSpan? ExitDrain = null,
     Action<ClipSaving>? Saving = null,
-    Action<TimeSpan>? Ignored = null)
+    Action<TimeSpan>? Ignored = null,
+    ILibraryWrites? Library = null)
 {
     /// <summary>R6: at most this many Clips are written at once, across sessions.</summary>
     public const int MaxWriters = 2;

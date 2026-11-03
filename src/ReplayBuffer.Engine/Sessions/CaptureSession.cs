@@ -64,6 +64,12 @@ internal sealed record CaptureSessionOptions
     /// <summary>Called once, on the capture thread, with the anchor QPC once the first frame has opened the output.</summary>
     public Action<long>? Anchored { get; init; }
 
+    /// <summary>
+    /// For tests: called on the writer thread with a Clip's final path just before it is written; a
+    /// non-null result is thrown as that write's failure.
+    /// </summary>
+    public Func<string, Exception?>? ClipWriteFault { get; init; }
+
     /// <summary>With no first frame by then, the session posts a <see cref="ErrorCodes.CaptureFailed"/> failure.</summary>
     public TimeSpan FirstFrameTimeout { get; init; } = DefaultFirstFrameTimeout;
 }
@@ -1073,12 +1079,24 @@ internal sealed class CaptureSession : ICaptureSession
 
                 var windowUs = session._spec.Snapshot.BufferWindow * 1_000_000L;
                 var fromUs = Math.Max(Math.Max(pressUs - windowUs, Volatile.Read(ref session._resetUs)), previous);
+
+                // R4: an earlier write still in flight has claimed all but less than 1 s of the span.
+                if (toUs - fromUs < 1_000_000)
+                {
+                    throw new ErrorCodeException(ErrorCodes.ClipTooShort, "An earlier Clip still being written leaves less than 1 s to save.");
+                }
+
                 using var source = ring.Cut(fromUs, toUs);
                 ring.Release();
                 leased = false;
                 if (source is null)
                 {
                     throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The Replay Buffer holds no keyframe before the cut yet; there is nothing to save.");
+                }
+
+                if (session._options.ClipWriteFault?.Invoke(path) is { } fault)
+                {
+                    throw fault;
                 }
 
                 ClipWriter.Write(source, path, log);
