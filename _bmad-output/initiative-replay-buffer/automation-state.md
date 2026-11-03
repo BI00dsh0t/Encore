@@ -35,10 +35,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 2.6 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 3.1 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 2.11 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 2.6 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 3.8 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 2.11 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -85,7 +85,7 @@ The coordinator logs each QA round in the Log below.
 | 14 | 2.10 Refactor sweep | | pending |
 | 15 | Release epic 2 (`v0.2.0`) | | pending |
 | 16 | 3.1 Tracer: detect a borderless game | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `a7de027`) |
-| 17 | 3.8 Spike: which Windows game list to read | | pending |
+| 17 | 3.8 Spike: which Windows game list to read | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 18 | 3.2 Detection sources and exclusions | | pending |
 | 19 | 3.3 Target Game rule | | pending |
 | 20 | 3.4 Game Profile auto-creation and Ignored | | pending |
@@ -314,4 +314,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 2.11 is READY FOR QA at `119063a` (App-only, Release build 0 warnings, App.Tests pass). QA started on qa-1-14 (Sonnet, medium effort). 3.1 is rerunning its scoped tests after syncing with develop (2.4), and 2.6 is in review.
 - 2026-11-03: 2.6 is READY FOR QA at `1410061` (build 0 warnings; Contracts, Engine, App and Core pass; publish clean). QA started on qa-2-1 (Sonnet, medium effort).
 
-- 2026-11-03: 3.1 merged into `develop` (`a7de027`, `feat(engine): merge 3.1-game-detection-tracer`) and marked done. QA passed at `28570b3` with 0 findings; `develop` (test-trim, 3.5, 2.4) was merged into the branch first, with conflicts in `SessionOrchestrator`, `EngineHost` and its test that kept both sides (constructor takes `micMute`, then `targetChanged`, `targetCapture`). Release build 0 warnings; Contracts 87, Core 56, Platform.Windows 14, App 63 (5 explicit), Engine 157 passed; publish 0 warnings. The first App.Tests run hung after 38 tests while other sessions ran, every class passed alone and the full project passed on its one rerun. Two Human Check rows and one Decisions row added. 3.8 (spike) is now ready.
+- 2026-11-03: 3.1 merged into `develop` (`a7de027`, `feat(engine): merge 3.1-game-detection-tracer`) and marked done. QA passed at `28570b3` with 0 findings; `develop` (test-trim, 3.5, 2.4) was merged into the branch first, with conflicts in `SessionOrchestrator`, `EngineHost` and its test that kept both sides (constructor takes `micMute`, then `targetChanged`, `targetCapture`). Release build 0 warnings; Contracts 87, Core 56, Platform.Windows 14, App 63 (5 explicit), Engine 157 passed; publish 0 warnings. The first App.Tests run hung after 38 tests while other sessions ran, every class passed alone and the full project passed on its one rerun. Two Human Check rows and one Decisions row added. 3.8 (spike) is now ready.- 2026-11-03: 3.1 merged (`a7de027`, done `953e08d`). The merge kept both sides of the conflicts in `SessionOrchestrator.cs`, `EngineHost.cs` and the tests. QA on 2.6 (`1410061`) and on 2.11 (`119063a`): **QA PASS**, 0 findings each. 2.6 merges first and 2.11 waits for it, both switched to Sonnet. Spike 3.8 (game list source) went to pool worker slice-epic-5 (Opus, medium effort). The 3.1 worker and both QA workers are back in the pool.
