@@ -41,6 +41,13 @@ public sealed record CaptureState(
 public sealed record ClipSaved(string Path);
 
 /// <summary>
+/// <c>clip.saving</c>: a <c>save</c> press was accepted at <see cref="At"/> and its Clip is on its
+/// way (R6); <c>clip.saved</c> or <c>clip.failed</c> follows. The SessionOrchestrator is its only
+/// producer (AD-19).
+/// </summary>
+public sealed record ClipSaving(DateTimeOffset At);
+
+/// <summary>
 /// <c>clip.failed</c>: a save made no Clip (R4); <see cref="Reason"/> is an error code, e.g.
 /// <see cref="ErrorCodes.ClipTooShort"/>. The SessionOrchestrator is its only producer (AD-19).
 /// </summary>
@@ -132,6 +139,13 @@ public static class CaptureMessages
         "lastClip",
         (snapshot, saved) => snapshot with { LastClip = saved });
 
+    /// <summary>A save press was accepted and its Clip is being made (R6); the snapshot keeps the last one.</summary>
+    public static EventType<ClipSaving> Saving { get; } = new(
+        "clip.saving",
+        CaptureJsonContext.Default.ClipSaving,
+        "lastClipSaving",
+        (snapshot, saving) => snapshot with { LastClipSaving = saving });
+
     /// <summary>A save made no Clip (R4); the snapshot keeps the last failure.</summary>
     public static EventType<ClipFailed> Failed { get; } = new(
         "clip.failed",
@@ -141,7 +155,7 @@ public static class CaptureMessages
 
     public static IReadOnlyList<CommandType> Commands { get; } = [];
 
-    public static IReadOnlyList<EventType> Events { get; } = [StateChanged, VideoOptionsChanged, Saved, Failed];
+    public static IReadOnlyList<EventType> Events { get; } = [StateChanged, VideoOptionsChanged, Saving, Saved, Failed];
 }
 
 [JsonSourceGenerationOptions(
@@ -151,6 +165,7 @@ public static class CaptureMessages
     RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(CaptureState))]
 [JsonSerializable(typeof(VideoOptions))]
+[JsonSerializable(typeof(ClipSaving))]
 [JsonSerializable(typeof(ClipSaved))]
 [JsonSerializable(typeof(ClipFailed))]
 public sealed partial class CaptureJsonContext : JsonSerializerContext;

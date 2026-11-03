@@ -50,14 +50,27 @@ public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, 
 /// How long a game session that lost its Target by exit keeps its Replay Buffer for a <c>save</c>
 /// (R1); null is <see cref="DefaultExitDrain"/>.
 /// </param>
+/// <param name="Saving">
+/// Called on the orchestrator thread the moment a <c>save</c> press is accepted (R6), before its
+/// Clip is cut; <c>clip.saved</c> or <c>clip.failed</c> follows. Null ignores it.
+/// </param>
+/// <param name="Ignored">
+/// Called on the orchestrator thread for a <c>save</c> press inside the Save Cooldown (R5), with the
+/// time since the accepted press; it makes no Clip and no event. Null ignores it.
+/// </param>
 public sealed record ReplayClips(
     OutputPathAllocator Paths,
     Func<string> DefaultOutputFolder,
     Action<ClipSaved> Saved,
     Action<Exception> Failed,
     Action<ClipFailed>? NotSaved = null,
-    TimeSpan? ExitDrain = null)
+    TimeSpan? ExitDrain = null,
+    Action<ClipSaving>? Saving = null,
+    Action<TimeSpan>? Ignored = null)
 {
+    /// <summary>R6: at most this many Clips are written at once, across sessions.</summary>
+    public const int MaxWriters = 2;
+
     /// <summary>R1's exit drain: 30 s.</summary>
     public static readonly TimeSpan DefaultExitDrain = TimeSpan.FromSeconds(30);
 }

@@ -167,6 +167,10 @@ internal sealed class CaptureSession : ICaptureSession
     // The Replay Buffer's last Reset in µs since the anchor (R5): the end of the last Clip the
     // orchestrator Reset at. It only moves forward.
     private long _resetUs = long.MinValue;
+
+    // How far this session's Clips have claimed the ring (R6): a write cuts from no earlier than the
+    // end of the newest write before it, so two concurrent Clips never overlap.
+    private readonly ClipClaim _claim = new();
     private VideoEncoder? _video;
     private readonly IVideoEncoderCatalog _encoders;
     private readonly VideoSize _outputSize;
@@ -397,8 +401,9 @@ internal sealed class CaptureSession : ICaptureSession
     /// starts; no keyframe is asked for unless the write starts. Its own thread waits up to
     /// <see cref="SaveWait"/> for that keyframe (else the Clip ends at the press), then up to as long
     /// again for every stream to pass it by an AAC frame (encoding and the AAC FIFO lag it), cuts
-    /// <c>[max(press - bufferWindow, last Reset), key)</c> from the first keyframe in it, and writes
-    /// the Clip. A press less than 1 s after the anchor is refused with
+    /// <c>[max(press - bufferWindow, last Reset, earlier write's claim), key)</c> from the first
+    /// keyframe in it, and writes the Clip; the claim (<see cref="ClipClaim"/>) keeps a Clip written
+    /// while an earlier one still writes from cutting back over it. A press less than 1 s after the anchor is refused with
     /// <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe is asked for. Once drained
     /// (<see cref="Drain"/>), the encoders are flushed and gone: the write asks for no keyframe, and
     /// the Clip runs to the end of the ring; after <see cref="Release"/> there is nothing to save.
@@ -1049,10 +1054,15 @@ internal sealed class CaptureSession : ICaptureSession
         {
             var log = session._log;
             var leased = true;
+            long? claimed = null;
             try
             {
                 var pressUs = session.MicrosAt(qpc);
                 var toUs = WaitForKey(pressUs);
+
+                // Claimed as soon as the end is known: a later write starts here, not back over this one.
+                var previous = session._claim.Claim(toUs);
+                claimed = toUs;
 
                 // Every packet whose centre is before the key has been appended once each stream is an AAC frame past it.
                 var deadline = Deadline();
@@ -1062,7 +1072,7 @@ internal sealed class CaptureSession : ICaptureSession
                 }
 
                 var windowUs = session._spec.Snapshot.BufferWindow * 1_000_000L;
-                var fromUs = Math.Max(pressUs - windowUs, Volatile.Read(ref session._resetUs));
+                var fromUs = Math.Max(Math.Max(pressUs - windowUs, Volatile.Read(ref session._resetUs)), previous);
                 using var source = ring.Cut(fromUs, toUs);
                 ring.Release();
                 leased = false;
@@ -1072,6 +1082,8 @@ internal sealed class CaptureSession : ICaptureSession
                 }
 
                 ClipWriter.Write(source, path, log);
+                session._claim.Succeeded(toUs);
+                claimed = null;
                 Volatile.Write(ref _endUs, toUs);
                 log.LogInformation(
                     "Clip of {Seconds:0.000} s, {Start:0.000} s to {End:0.000} s after the anchor ({Packets} packets), written to {Path}",
@@ -1080,6 +1092,12 @@ internal sealed class CaptureSession : ICaptureSession
             }
             catch (Exception e)
             {
+                // Give the span back: a later write starts at the last end still claimed.
+                if (claimed is { } toUs)
+                {
+                    session._claim.Failed(toUs);
+                }
+
                 // No file is left behind: neither the part nor the reserved one.
                 foreach (var file in new[] { path + ClipWriter.PartExtension, path })
                 {

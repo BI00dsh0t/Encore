@@ -452,7 +452,7 @@ public sealed class SessionOrchestratorTests : IDisposable
         var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
         try
         {
-            _document = Revision(3) with { Global = SettingsDocument.Empty.Global.SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(folder)) };
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
             var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
             var refused = System.Threading.Channels.Channel.CreateUnbounded<ClipFailed>();
             var failures = System.Threading.Channels.Channel.CreateUnbounded<Exception>();
@@ -509,7 +509,7 @@ public sealed class SessionOrchestratorTests : IDisposable
         var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
         try
         {
-            _document = Revision(3) with { Global = SettingsDocument.Empty.Global.SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(folder)) };
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
             var published = new ConcurrentQueue<CaptureState>();
             var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
             var writes = new ConcurrentQueue<string>();
@@ -619,6 +619,147 @@ public sealed class SessionOrchestratorTests : IDisposable
 
         Assert.Equal(1, _factory.Sessions[^1].Releases);
         Assert.Equal(ReplayState.Off, published.Last().Replay);
+    }
+
+    [Fact]
+    public async Task PressesInsideTheSaveCooldownAreIgnoredAndOneAfterItSaves()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            // The default saveCooldown: 5 s.
+            _document = Revision(3) with { Global = InFolder(folder) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var ignored = new ConcurrentQueue<TimeSpan>();
+            var published = new ConcurrentQueue<CaptureState>();
+            var savings = 0;
+
+            // How many clip.saving events had fired when each Save was called: synchronous means one per press, first.
+            var savingsAtSave = new ConcurrentQueue<int>();
+            var writes = new ConcurrentQueue<string>();
+            var factory = new FakeFactory { Save = _ => { savingsAtSave.Enqueue(Volatile.Read(ref savings)); return new FakeWrite(writes); } };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                published.Enqueue,
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => events.Writer.TryWrite(s),
+                    e => events.Writer.TryWrite(e),
+                    f => events.Writer.TryWrite(f),
+                    Saving: s =>
+                    {
+                        Interlocked.Increment(ref savings);
+                        events.Writer.TryWrite(s);
+                    },
+                    Ignored: ignored.Enqueue));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var t = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            void Press(long qpc) => orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, qpc));
+
+            Press(t);
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.NotNull(published.Last().CooldownUntil);
+
+            // 1 s and 4 s later: inside the cooldown, so no Save and no event.
+            Press(t + second);
+            Press(t + (second * 4));
+
+            // 5.1 s later: accepted, and saved.
+            Press(t + (second * 51 / 10));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+
+            // Two Saves, each after its own press's clip.saving: emitted synchronously on the orchestrator thread.
+            Assert.Equal([1, 2], savingsAtSave);
+            Assert.Equal(2, ignored.Count);
+            Assert.False(events.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task APressWhileTwoClipsAreWritingIsRefusedAsBusyAndOneAfterThemSaves()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var writes = new ConcurrentQueue<string>();
+            var made = new ConcurrentQueue<FakeWrite>();
+            var gates = new[] { NewGate(), NewGate() };
+            var factory = new FakeFactory
+            {
+                Save = _ =>
+                {
+                    // The first two writes wait on their gates; later ones complete at once.
+                    var write = new FakeWrite(writes, gate: made.Count < gates.Length ? gates[made.Count].Task : null);
+                    made.Enqueue(write);
+                    return write;
+                },
+            };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => events.Writer.TryWrite(s),
+                    e => events.Writer.TryWrite(e),
+                    f => events.Writer.TryWrite(f),
+                    Saving: s => events.Writer.TryWrite(s)));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 2)));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+
+            // Two writing: the third is accepted, then refused before the session is asked for anything.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 4)));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.Equal(new ClipFailed(ErrorCodes.SaveBusy), await NextAsync(events));
+            Assert.Equal(2, made.Count);
+            Assert.Equal(2, writes.Distinct().Count());
+            Assert.Equal([0, 0], made.Select(w => w.Resets));
+
+            // Both finish: saved, each Reset once.
+            Array.ForEach(gates, g => g.SetResult());
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.Equal([1, 1], made.Select(w => w.Resets));
+
+            // A next press saves.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 6)));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.Equal(3, made.Count);
+            Assert.False(events.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    private static TaskCompletionSource NewGate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>The Global values with the Output Folder <paramref name="folder"/> and, when given, <paramref name="cooldown"/> as <c>saveCooldown</c>.</summary>
+    private static System.Collections.Immutable.ImmutableSortedDictionary<string, System.Text.Json.JsonElement> InFolder(string folder, int? cooldown = null)
+    {
+        var global = SettingsDocument.Empty.Global.SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(folder));
+        return cooldown is { } seconds ? global.SetItem(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(seconds)) : global;
     }
 
     private static async Task WaitUntil(Func<bool> condition)
@@ -746,10 +887,11 @@ public sealed class SessionOrchestratorTests : IDisposable
     }
 
     /// <summary>
-    /// A write that records its path and completes at once, from another thread, leaving the reserved
-    /// file, or failing with <paramref name="failure"/>; it counts its Resets.
+    /// A write that records its path and completes from another thread, at once or once
+    /// <paramref name="gate"/> completes, leaving the reserved file, or failing with
+    /// <paramref name="failure"/>; it counts its Resets.
     /// </summary>
-    private sealed class FakeWrite(ConcurrentQueue<string> writes, Exception? failure = null) : IClipWrite
+    private sealed class FakeWrite(ConcurrentQueue<string> writes, Exception? failure = null, Task? gate = null) : IClipWrite
     {
         private int _resets;
 
@@ -758,7 +900,7 @@ public sealed class SessionOrchestratorTests : IDisposable
         public void Write(string path, Action<Exception?> done)
         {
             writes.Enqueue(path);
-            ThreadPool.QueueUserWorkItem(_ => done(failure));
+            (gate ?? Task.CompletedTask).ContinueWith(_ => done(failure), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
 
         public void Reset() => Interlocked.Increment(ref _resets);

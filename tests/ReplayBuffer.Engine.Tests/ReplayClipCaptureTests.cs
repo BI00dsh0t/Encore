@@ -111,7 +111,8 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
         {
             Global = SettingsDocument.Empty.Global
                 .SetItem(Keys.Video.Name, Keys.Video.ToJson(video))
-                .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory)),
+                .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory))
+                .SetItem(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(0)),
             Profiles = SettingsMaps.EmptyProfiles.Add(ProfileId, new GameProfile
             {
                 Name = "Test Game",
@@ -203,7 +204,8 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
         {
             Global = SettingsDocument.Empty.Global
                 .SetItem(Keys.Video.Name, Keys.Video.ToJson(new VideoSettings(VideoCodec.H264, 640, 480, 30, 4_000, RateControl.Cbr)))
-                .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory)),
+                .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory))
+                .SetItem(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(0)),
             Profiles = SettingsMaps.EmptyProfiles.Add(ProfileId, new GameProfile
             {
                 Name = "Test Game",
