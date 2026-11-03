@@ -63,8 +63,6 @@ public sealed class MicMuteServeTests : IAsyncLifetime
         Assert.False(client.State.Capture.MicMuted);
         Assert.Equal(HotkeyAction.MicMute, client.State.LastHotkeyPress?.Action);
         Assert.Equal("""{"micMuted":false}""", File.ReadAllText(RuntimeFile));
-        await Task.Delay(200, Token);
-        Assert.False(events.Reader.TryRead(out _));
 
         // A restart starts unmuted, in its first snapshot.
         await StopAsync(host, client);

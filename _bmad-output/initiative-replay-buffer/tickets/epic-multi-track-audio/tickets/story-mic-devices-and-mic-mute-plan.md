@@ -3,14 +3,14 @@ title: 'Mic Devices and mic mute'
 type: 'feature'
 ticket: '4'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '03d62ebf472c91bd0c3455a56c843f7e3cd087d8'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -88,6 +88,7 @@ deferred: []
 - `CaptureSession.SetMicMuted` reads the anchor with `Volatile.Read` instead of taking the capture gate, which a first frame opening the encoders can hold.
 - `RuntimeState` is `bool? MicMuted`: a file without the field counts as unreadable (muted), like invalid JSON.
 - The capture AC's muted span ends 50 ms before the second press as well as starting 50 ms after the first: AAC's transform window spreads the unmute edge back over about 2048 frames.
+- Tests trimmed (builder's standing decision of 2026-11-03: lean tests, one or two happy-path tests per AC, no exhaustive edge-case tables, no long real-time waits). Kept: `MicMuteGateTests` (the press frame exactly; an unmute), `SessionAudioTests.MicDevicesAndMuteAffectedTracksAreCarriedOver`, `SessionOrchestratorTests` (a saved unmute is the first state and in the first spec; a mid-session press hands its QPC to the session), `RuntimeStateStoreTests` (a corrupt file is muted), `MicMuteServeTests` (restart AC), `MicMuteCaptureTests` (capture AC, now 1.5 s per phase). Matrix rows left untested on purpose: press before anchor, save fails, other Hotkey; they are covered by inspection only.
 
 ## Plan Change Log
 

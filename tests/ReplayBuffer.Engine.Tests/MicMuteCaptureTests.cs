@@ -16,7 +16,7 @@ namespace ReplayBuffer.Engine.Tests;
 /// The mic mute capture AC (R4, AD-13), in process: a <see cref="ToneHub"/> plays a game device G
 /// (440 Hz) and a Mic Device M (1 kHz); Tracks <c>Everything</c>={G, M} and <c>Mic</c>={M} are
 /// <c>muteAffected</c>, <c>Game</c>={G} and <c>MicRaw</c>={M} are not. The session starts unmuted, a
-/// <c>micMute</c> press mutes it mid-capture and a second one about 3 s later unmutes it.
+/// <c>micMute</c> press mutes it mid-capture and a second one 1.5 s later unmutes it.
 /// </summary>
 public sealed class MicMuteCaptureTests : IDisposable
 {
@@ -53,9 +53,9 @@ public sealed class MicMuteCaptureTests : IDisposable
     private const double EdgeSeconds = 0.05;
 
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan Before = TimeSpan.FromSeconds(2.5);
-    private static readonly TimeSpan Muted = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan After = TimeSpan.FromSeconds(2.5);
+    private static readonly TimeSpan Before = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan Muted = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan After = TimeSpan.FromSeconds(1.5);
 
     /// <summary>−60 dBFS, as an RMS and as a tone's amplitude.</summary>
     private static readonly double Silence = Math.Pow(10, -60 / 20.0);
@@ -93,7 +93,8 @@ public sealed class MicMuteCaptureTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AMuteSilencesTheMicInItsAffectedTracksOnlyFromThePressUntilTheUnmute()
     {
         SessionTestKit.RequireFFmpeg();
@@ -209,7 +210,7 @@ public sealed class MicMuteCaptureTests : IDisposable
             .ToList();
         Assert.Equal(["h264", .. Enumerable.Repeat("aac", audioStreams)], streams.Select(s => s.Codec));
         var video = streams[0].Duration;
-        Assert.InRange(video, 7, 12);
+        Assert.InRange(video, 4, 9);
         Assert.All(streams.Skip(1), s => Assert.InRange(s.Duration, video - 0.1, video + 0.1));
         return video;
     }

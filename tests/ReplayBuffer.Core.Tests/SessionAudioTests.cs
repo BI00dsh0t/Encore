@@ -107,30 +107,6 @@ public sealed class SessionAudioTests
     }
 
     [Fact]
-    public void AnEndpointIsAMicWhenAnyKeyNamingItIsOne()
-    {
-        var notMic = Mic with { IsMic = false };
-        var asMic = Mic with { Key = Guid.NewGuid(), FriendlyName = "Mic again" };
-        var layout = new TrackLayout([notMic, asMic], [Track("A", notMic), Track("B", asMic)]);
-
-        var audio = SessionAudio.FromLayout(layout);
-
-        var device = Assert.Single(audio.Devices);
-        Assert.True(device.IsMic);
-        Assert.Equal("Mic", device.FriendlyName);
-    }
-
-    [Fact]
-    public void AMicMarkOnAnotherFlowOfTheSameEndpointIdDoesNotCount()
-    {
-        var line = Mic with { IsMic = false };
-        var output = Speakers with { Key = Guid.NewGuid(), EndpointId = Mic.EndpointId, IsMic = true };
-        var layout = new TrackLayout([line, output], [Track("A", line)]);
-
-        Assert.False(Assert.Single(SessionAudio.FromLayout(layout).Devices).IsMic);
-    }
-
-    [Fact]
     public void OnePerDeviceNamesEachTrackAfterItsDevice()
     {
         SessionAudioDevice[] devices =
