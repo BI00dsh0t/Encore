@@ -7,6 +7,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using H.NotifyIcon;
 using ReplayBuffer.App.Engine;
+using ReplayBuffer.App.Overlay;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Platform.Desktop;
 
@@ -29,6 +30,7 @@ internal sealed class ShellApp(Instance instance) : Application
     private EngineConnection? _engine;
     private StartupRegistration? _startup;
     private MainWindow? _window;
+    private OverlayWindow? _overlay;
     private TaskbarIcon? _tray;
     private bool _quitting;
 
@@ -59,6 +61,7 @@ internal sealed class ShellApp(Instance instance) : Application
         }
 
         _tray = CreateTray(model, _window.Title);
+        _overlay = new OverlayWindow(new OverlayViewModel(_engine, action => Dispatcher.BeginInvoke(action)));
         if (!StartsInTray(e.Args))
         {
             _window.Open();
@@ -163,6 +166,7 @@ internal sealed class ShellApp(Instance instance) : Application
         await _engine!.ShutdownAsync(QuitTimeout);
         await _engine.DisposeAsync();
         _tray!.Dispose();
+        _overlay!.Close();
         _window!.CloseForQuit();
         Shutdown();
     }

@@ -1,7 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <UseWPF>true</UseWPF>
+    <!-- For System.Drawing's screen copy in the Overlay's capture test; its namespaces aren't imported globally. -->
+    <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\ReplayBuffer.App\ReplayBuffer.App.csproj" />
     <!-- For its executable: the tests launch the built engine, as the App does. -->
