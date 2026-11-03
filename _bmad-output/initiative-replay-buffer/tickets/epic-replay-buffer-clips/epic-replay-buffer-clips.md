@@ -94,6 +94,12 @@ In any detected game, pressing the Save Hotkey produces a playable multi-Track C
   - Drain in-flight saves before `Restart`, or convert `VideoMicros`/`AllStreamsPast` per generation.
   - Decide a cut's generation (and so its end) before `ClipWrite.Run` publishes its claim. Otherwise a fallback Clip just after a boundary, with a second write in flight, leaves `[boundary, key)` in neither Clip.
   - Both are recorded as `deferred` in 4.6's plan.
+- Decision: 2026-11-03, from 4.7 (Disk mode; QA PASS with advisories, none fixed):
+  - Stories 4.8 and 4.10 take the RAM and disk limits. While a long Clip writes, its pinned blocks can't return to the ring file, so new slabs spill to native memory (`PacketRing.MemorySlabs`, silent). The disk stays within the estimate. 4.10's estimate or 4.8's margin should allow for it, and a one-time warning when `MemorySlabs` first rises would help.
+  - A Buffer Window change in Disk mode keeps the old and new ring files together until the old Clips finish writing, so disk use can briefly reach about twice the estimate. Accepted.
+  - A ring file write that fails mid-session (the drive is gone) fails the session; only file creation falls back to memory. Accepted.
+  - `RingFile.RemoveStale` deletes every `ring-*.bin` in the ring folder. It should match `ring-<digits>.bin` only (a foreign `ring-notes.bin` in a user-set `ringPath` would go). For the 4.13 sweep.
+  - `DiskRingClipTests` runs a real NVENC encode in the default suite. CLAUDE.md marks GPU encode tests Heavy/Explicit; the Core-level Memory-vs-Disk test already covers identity. For the 4.13 sweep.
 - Waits on epic-engine-baseline because: it needs the encoder and fragmented MP4 writer.
 - Waits on epic-multi-track-audio because: it needs the Track Layouts and the mixed Track audio.
 - Waits on epic-game-detection-profiles because: it needs the Target Game appeared and exited events, Game Profiles, and per-game folders and file names.

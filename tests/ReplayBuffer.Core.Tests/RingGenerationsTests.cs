@@ -96,7 +96,7 @@ public sealed class RingGenerationsTests
         Assert.Equal(2, generations.Resize(NewRing(30), a.EndUs));
         Feed(generations, 20 * Second, 25 * Second);
 
-        Assert.All(a.Packets, p => Assert.True(p.Bytes.SequenceEqual(Pattern(p.Stream, p.Pts, p.Length)), $"packet {p.Stream}@{p.Pts} changed"));
+        Assert.All(a.Packets, p => Assert.True(p.ToArray().AsSpan().SequenceEqual(Pattern(p.Stream, p.Pts, p.Length)), $"packet {p.Stream}@{p.Pts} changed"));
         Assert.True(old.LiveSlabs > 0);
         var end = a.EndUs;
         a.Dispose();

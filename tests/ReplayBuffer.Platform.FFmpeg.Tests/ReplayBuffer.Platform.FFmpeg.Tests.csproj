@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <CopyFFmpegNative>true</CopyFFmpegNative>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\ReplayBuffer.Platform.FFmpeg\ReplayBuffer.Platform.FFmpeg.csproj" />

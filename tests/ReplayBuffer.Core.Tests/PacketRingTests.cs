@@ -59,7 +59,7 @@ public sealed class PacketRingTests
         Assert.True(ring.LiveSlabs > 0);
 
         Assert.NotEmpty(cut.Packets);
-        Assert.All(cut.Packets, packet => Assert.True(packet.Bytes.SequenceEqual(Pattern(packet.Stream, packet.Pts, packet.Length)), $"packet {packet.Stream}@{packet.Pts} changed"));
+        Assert.All(cut.Packets, packet => Assert.True(packet.ToArray().AsSpan().SequenceEqual(Pattern(packet.Stream, packet.Pts, packet.Length)), $"packet {packet.Stream}@{packet.Pts} changed"));
 
         cut.Dispose();
         Assert.Equal(0, ring.LiveSlabs);
@@ -104,11 +104,11 @@ public sealed class PacketRingTests
         }
     }
 
-    private static (int Video, int Audio) Streams(PacketRing ring) =>
+    internal static (int Video, int Audio) Streams(PacketRing ring) =>
         (ring.AddStream(1, VideoTimeBase, isVideo: true), ring.AddStream(1, AudioTimeBase, isVideo: false));
 
     /// <summary>Video at 30 fps with a keyframe each second, and AAC-sized audio packets, interleaved in time.</summary>
-    private static void Feed(PacketRing ring, int video, int audio, int seconds, int videoBytes, int fromSecond = 0)
+    internal static void Feed(PacketRing ring, int video, int audio, int seconds, int videoBytes, int fromSecond = 0)
     {
         long frame = (long)fromSecond * Fps;
         long audioPts = (long)fromSecond * AudioTimeBase / AudioFrame * AudioFrame;
@@ -153,7 +153,7 @@ public sealed class PacketRingTests
         }
     }
 
-    private static byte[] Pattern(int stream, long pts, int length)
+    internal static byte[] Pattern(int stream, long pts, int length)
     {
         var bytes = new byte[length];
         for (var i = 0; i < length; i++)
