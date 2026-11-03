@@ -3,7 +3,7 @@ title: 'Target Game rule'
 type: 'feature'
 ticket: '3'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '5f54ad6afe33bca4d1bf017f2a4a080f6d33c1d1'
 route: 'full'
 route_source: 'auto'
