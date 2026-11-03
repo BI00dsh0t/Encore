@@ -160,6 +160,30 @@ public static class ErrorCodes
     /// </summary>
     public const string SaveFailed = "save-failed";
 
+    /// <summary>A notice: a Clip was saved. Info, with the <c>clipSaved</c> sound; the engine dismisses it after 10 s.</summary>
+    public const string ClipSaved = "clip-saved";
+
+    /// <summary>
+    /// A notice: a save made no Clip. Error, with the <c>saveFailed</c> sound; active until it is
+    /// dismissed or the next Clip is saved.
+    /// </summary>
+    public const string ClipFailed = "clip-failed";
+
+    /// <summary>A notice: a Recording started. Info, with the <c>recordingStarted</c> sound; the engine dismisses it after 10 s.</summary>
+    public const string RecordingStarted = "recording-started";
+
+    /// <summary>A notice: a Recording stopped. Info, with the <c>recordingStopped</c> sound; the engine dismisses it after 10 s.</summary>
+    public const string RecordingStopped = "recording-stopped";
+
+    /// <summary>
+    /// A warning: a Track of the active Track Layout mixes the Output Device that Feedback Sounds
+    /// play on, so its recordings would hold the sounds. Withdrawn when that is no longer so.
+    /// </summary>
+    public const string FeedbackDeviceCaptured = "feedback-device-captured";
+
+    /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
+    public const string NotDevInstance = "not-dev-instance";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -206,5 +230,11 @@ public static class ErrorCodes
         DiskFull,
         AccessDenied,
         SaveFailed,
+        ClipSaved,
+        ClipFailed,
+        RecordingStarted,
+        RecordingStopped,
+        FeedbackDeviceCaptured,
+        NotDevInstance,
     ];
 }

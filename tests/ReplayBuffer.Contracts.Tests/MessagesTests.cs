@@ -36,6 +36,9 @@ public sealed partial class MessagesTests
         ["target.changed"] = """{"from":null,"to":{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7},"reason":"detected"}""",
         ["game.detected"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
         ["game.exited"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
+        ["library.itemAdded"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":"c:\\games\\game.exe","size":0,"date":"2026-11-03T10:00:00+00:00","beingWritten":true}""",
+        ["library.itemChanged"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":null,"size":1024,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}""",
+        ["library.itemRemoved"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4"}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);

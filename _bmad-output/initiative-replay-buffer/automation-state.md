@@ -19,6 +19,7 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 - **Lean tests (builder, 2026-11-03):** this is a personal project with no end users or stakeholders. Stories write a simple suite that verifies the functionality: one or two happy-path tests per AC, plus a test for any bug that really bit. No exhaustive edge-case tables, no long real-time waits, no benchmark-style assertions in the default run. QA doesn't fail a story for thin tests unless a core function is untested. Slow, hardware-bound or flaky tests go in the opt-in category that the test-trim work sets up (see `CLAUDE.md` "Tests" once it merges).
 - **Model and effort per task (builder, 2026-11-02):** set them when starting a session (`start_session` `model`/`effort`) or, for a pool worker, before sending its brief (`set_session_model`/`set_session_effort`). Stories run on Opus (`claude-opus-5-5`), at high effort when the ticket's risk is high and at the default otherwise. QA rounds, merges, releases and syncs with develop run on Sonnet (`claude-sonnet-5-5`). A re-check after QA fixes (round 2 onward) runs at low effort. A story session that is told to merge may switch itself to Sonnet first.
 - **Trello board (builder, 2026-11-03):** the private board [ReplayBuffer](https://trello.com/b/Q3TeryFd/replaybuffer) has one card per ticket, in lists by status (Backlog, Ready, In progress, In QA, Done). Its ids are in `trello-board.md` beside this file. The coordinator moves a card at each step: a story handed to a session goes to In progress, READY FOR QA goes to In QA, and a merge marked done goes to Done. Cards whose prerequisites are newly met move from Backlog to Ready. When a card reaches Done, the coordinator detaches its labels. Only the coordinator updates the board; story and QA sessions don't.
+- **Wake the coordinator (2026-11-03):** the app wakes the coordinator only once *every* session it started is idle. So a QA pass or a READY FOR QA used to sit unseen while other sessions were still working, and the pipeline stalled. From now on, every story, QA, merge and chore session sends the coordinator a one-line cross-session message (SendMessage `to` = `local_0d27eb4a-e1f6-49b5-9d55-0b905e484b32`) at each hand-off point: READY FOR QA (branch and tip), the QA verdict (PASS or FAIL and count), and MERGED (commit). A cross-session message wakes the coordinator at once. Every brief includes this.
 - **Scoped tests (builder, 2026-11-02):** don't run the full graphics or audio pipeline suites unless the change needs them. Run the 0-warning Release build, then only the test projects the diff touches plus their direct dependents (e.g. a UI change runs `ReplayBuffer.App.Tests`, not `Engine`, `Platform.Capture`, `Media` or `Platform.Audio`). The full `dotnet test --solution`, GPU capture runs and `bench` captures happen only when the diff touches the capture, encode, mux or audio path, or an AC needs the measurement. The NativeAOT publish runs only when engine code changed. Say in the report which projects ran and why the rest were skipped.
 
 ## Worker pool (builder, 2026-11-02)
@@ -35,12 +36,12 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.6 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.4 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.7 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.6 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.1 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.1 |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 7.2 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -50,7 +51,7 @@ When a session finishes its task (its story merged, its QA passed), it joins the
 2. `git flow feature start <ref>-<slug>` in the session's own worktree (cut from `develop`). For 1.14 only: switch to the existing `feature/1.14-benchmark`.
 3. Run `bmad-build-auto` with the ticket ref.
 4. Verify, scoped per the standing decision: `dotnet build ReplayBuffer.slnx -c Release` (0 warnings), `dotnet test` on the affected test projects only, `pwsh tools/publish-engine.ps1` (0 IL warnings) only when engine code changed. Real-time timing tests that fail only under GPU load get one rerun.
-5. Commit, then end the turn with a report that begins `READY FOR QA`: the branch, its tip commit, the verification results, and anything queued for the builder. Don't merge yet.
+5. Commit, send the coordinator a one-line `READY FOR QA` message (see "Wake the coordinator"), then end the turn with a report that begins `READY FOR QA`: the branch, its tip commit, the verification results, and anything queued for the builder. Don't merge yet.
 6. Fix each QA finding that arrives as a cross-session message, commit, and report `READY FOR QA` again.
 7. When the coordinator says QA passed: merge into `develop` from the main folder with exactly `git -C %USERPROFILE%/Documents/repos/ReplayBuffer merge --no-ff feature/<ref>-<slug> -m "..."` (the builder's user-settings allow rule covers only `git [-C <main>] merge --no-ff feature/*`; any other form is blocked by auto mode), mark the ticket done, commit, and update this file's Queue, Log and queues. Don't push.
 
@@ -100,7 +101,7 @@ The coordinator logs each QA round in the Log below.
 | 25.3 | 4.3 Replay Buffer lifecycle: Target switch, exit drain and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e0c3931`) |
 | 25.4 | 4.4 Save Cooldown, save events and two concurrent writers | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8ce2703`) |
 | 25.5 | 4.5 Failed saves, retry and the file-being-written signal | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `9da03df`) |
-| 25.6 | 4.6 Ring generations and Buffer Window resizing | | pending |
+| 25.6 | 4.6 Ring generations and Buffer Window resizing | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e7058ea`) |
 | 25.7 | 4.7 Disk-mode ring | | pending |
 | 25.8 | 4.8 Memory-mode RAM margin | | pending |
 | 25.9 | 4.9 Per-Game-Profile settings at the next Reset | | pending |
@@ -114,9 +115,9 @@ The coordinator logs each QA round in the Log below.
 | 26.1 | 5.1 Tracer: capture state to the Overlay dot | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `c1afee0`) |
 | 26.2 | 5.2 Spike Q-4: the Overlay over exclusive fullscreen and its borderless FPS cost | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `5db7981`) |
 | 26.3 | 5.3 Saving icon through the Save Cooldown | | pending |
-| 26.4 | 5.4 Feedback notices in the engine, with a dev simulator | | pending |
+| 26.4 | 5.4 Feedback notices in the engine, with a dev simulator | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `9c364fa`) |
 | 26.5 | 5.5 Overlay message queue | | pending |
-| 26.6 | 5.6 Feedback Sounds in the engine | | pending |
+| 26.6 | 5.6 Feedback Sounds in the engine | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ac6a3a2`) |
 | 26.7 | 5.7 Mic-muted icon and the disk-full red X | | pending |
 | 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | | pending |
 | 26.9 | 5.9 Capture exclusion for every App window | | pending |
@@ -142,7 +143,7 @@ The coordinator logs each QA round in the Log below.
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
-| 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | | pending |
+| 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
 | 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | | pending |
 | 28.3 | 7.3 Length and thumbnails | | pending |
 | 28.4 | 7.4 Favourite | | pending |
@@ -201,6 +202,7 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 4.3 | Quitting or crashing a game keeps its last moments for 30 s (R1) | In a game, play for a minute, close it (or kill it in Task Manager), then press the Save Hotkey within 30 s and open the Clip in VLC. It should hold the game's last moments. A press after 30 s should make no Clip | `ReplayClipCaptureTests` (a killed test window, a save during the drain and none after it). A real game is untested |
 | 5.2 | Which of your games run in exclusive fullscreen, and does the dot show over each? (Q-4) | With the Dev engine (`ReplayBuffer.Engine serve`) and the Main App running and the game detected, play each game you run in "exclusive fullscreen". The dot should show in games Windows runs with fullscreen optimizations and not at all in legacy exclusive ones, and no game should drop out of fullscreen or lose focus as it comes and goes. Tell the two kinds apart with `PresentMon-2.6.0-x64.exe --process_name <game>.exe --timed 20 --terminate_after_timed --output_file game.csv`: only legacy exclusive reads Hardware: Legacy Flip | `bench overlay` at the physical console, 15 s per phase with the load in front: borderless and DXGI fullscreen with fullscreen optimizations stay Hardware Composed: Independent Flip with the dot shown (cost −0.19 % and −0.17 %), legacy exclusive stays Hardware: Legacy Flip (cost 0.3 %), and none lost fullscreen. QA PASS at `1e6dbcb`. The dot in a real game, and on a PC with no free overlay plane, are untested |
 | 5.2 | See the dot by eye over the three loads | Run `ReplayBuffer.Bench overlay` (a minute per mode) and watch the top-right corner of the primary monitor. The red ring should appear in the middle phase over the borderless and fullscreen loads, and never over the exclusive one | `overlay.md`: the dot window is visible in each middle phase, and its frames go through DWM only in the borderless and fullscreen modes. "Dot on screen" is inferred from that, not seen |
+| 7.1 | A Clip saved in a real game appears in the Library tab within 2 s (R1, R3) | Start the Dev engine with `ReplayBuffer.Engine serve` and the Main App, open the Library tab, play a detected game, press the Save Hotkey. The Clip should appear within 2 s, locked as "Saving…" until written, then with its size; its game column shows the profile's name. Restart the engine: the Clip is still listed | `LibraryServeTests` (a fake writer's BeginWrite and EndWrite over a real pipe: `library.itemAdded` within 2 s, the item in the snapshot with its profileId, a restart reloads it from `library.json`, a failed write leaves no item); `LibraryPageTests` (newest first, locked row, no binding errors); QA PASS at `ca49444`. A real game and Hotkey are untested |
 
 ## Decisions Awaiting Review
 
@@ -395,3 +397,23 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - 6.1 (Recordings tracer, high risk, HITL) on slice-epic-8, high effort;
   - 7.1 (Library tracer, HITL) on 2-1-tracer, medium effort.
   qa-1-14 and qa-2-1 are free for QA. 6.1 shares the encode chain with the Replay Buffer, so it expects to sync with 4.6 before merging.
+- 2026-11-03: 5.4 is READY FOR QA at `1809c60` (build 0 warnings; Contracts, Core and Engine pass; publish clean). QA started on qa-1-14 (Sonnet), and its card is In QA. 4.6, 6.1 and 7.1 are being implemented.
+- 2026-11-03: QA on 5.4 (`1809c60`): **QA PASS**, 0 blocking findings and two accepted notes (`dev.simulate` is refused at runtime in the installed instance; repeated failure notices stack). 5.4 was told to merge.
+- 2026-11-03: 5.4 merged into `develop` (`9c364fa`, `feat(engine): merge 5.4-feedback-notices`) and marked done, after QA PASS at `1809c60`; `develop` (state-file lines only) was merged into the branch first, so no re-verification. QA's two notes are accepted: `dev.simulate` is registered everywhere but refused at runtime in the installed instance, and repeated clip-failed and disk-full notices stack until the next save or Recording.
+- 2026-11-03: 5.4 merged (`9c364fa`, done `e60c0f8`), and its card is in Done. That unblocked 5.3 (Saving icon) and 5.6 (Feedback Sounds).
+  - 4.6 is READY FOR QA at `3ae6b4e`. QA started on qa-2-1, and is asked to name an Engine test that failed once.
+  - 7.1 is READY FOR QA at `ca49444`. QA started on qa-1-14.
+  - 5.6 went to slice-epic-5 (Opus, medium effort).
+  - 5.3 waits for the next free worker; its card is in Ready. The pool is fully used: four story workers and two QA workers. story-2-7 can't be cleared because the app keeps it.
+- 2026-11-03: The builder noticed the pipeline stalls after QA. The cause is that the app only wakes the coordinator when all of its sessions are idle. New standing rule: **Wake the coordinator**, where sessions message the coordinator at READY FOR QA, at the QA verdict and at MERGED.
+  - QA on 4.6 (`3ae6b4e`, docs tip `c9c7700`): **QA PASS**. Engine ran five times and passed each time, so the earlier one-off failure wasn't reproduced. 4.6 merges first.
+  - QA on 7.1 (`ca49444`): **QA PASS**, 0 findings. It merges after 4.6. QA's note for 7.2: a partial .mp4 from a mid-save crash shows as ready until 7.2 reconciles.
+  - 6.1 is READY FOR QA at `a4f2814`, QA on qa-2-1. 5.6 is READY FOR QA at `ea6ea9a`, QA on qa-1-14.
+  - 5.3 went to a new session, story-5-3 (`local_0b276254-8120-4a11-915a-9ffea0eedcfb`, Opus, medium effort), since the builder's turn allowed a new session.
+- 2026-11-03: QA on 5.6 (`ea6ea9a`): **QA PASS**, 0 findings and 3 non-blocking notes. The verdict reached the coordinator by direct message, so the wake rule works. Merge order: 4.6 (merging), then 7.1, then 5.6. qa-1-14 is back in the pool.
+- 2026-11-03: QA on 6.1 (`a4f2814`): **QA PASS**, 0 findings, and Engine passed three times. Merge order is 4.6, 7.1, 5.6, then 6.1. 6.1 expects conflicts with 4.6 in the capture session and ring sink, and re-verifies after syncing. Both QA workers are back in the pool.
+- 2026-11-03: 4.6 merged into `develop` as `e7058ea` (QA PASS at `3ae6b4e`, docs-only `c9c7700` on top, develop merged in with no conflicts, rebuilt 0 warnings, Core 78/78, Engine 171 and publish clean). The Engine suite failed once on the first run after each fresh build, with no name captured, and then passed 7 times in a row; likely a cold-start timing test. 4.6 deferred two items for 4.9, recorded in the epic Notes: decide the cut's generation before the claim is published, and drain in-flight saves (or convert per generation) before `Restart`.
+- 2026-11-03: 4.6 merged (`e7058ea`, done `0cf9c59`), and its card is in Done. 7.1 merges next. 4.7 (Disk-mode ring) went to slice-epic-4 (Opus, medium effort), and its card is In progress.
+- 2026-11-03: 7.1 merged into `develop` (`c6d9c39`, `feat(app): merge 7.1-library-tracer`) and marked done, after QA PASS at `ca49444` (0 findings). Develop (4.6, 5.4) was merged into the branch first with a code conflict in `EngineHost` (the LibraryActor and the FeedbackRouter are both wired and disposed); the Release build (0 warnings), Contracts 105, Core 80, Engine 156, App 69 and the publish all passed again. QA's note for 7.2: a partial `.mp4` left by an engine crash mid-save shows as ready on the next start until 7.2's reconciliation; the start scan skips only zero-byte reservations. Residuals: a Clip in flight at shutdown gets no `EndWrite`, so it comes back without its profile; `outputFolder` changes aren't followed until 7.2/7.9. Human check queued.
+- 2026-11-03: 7.1 merged (`c6d9c39`, done `b6e4670`). Its `EngineHost` conflict with 5.4 was resolved by keeping both sides, and everything was re-verified. Its card is in Done. 7.2 (Library reconciliation and corrupt index, high risk) went to 2-1-tracer (Opus, high effort), with 7.1's partial-.mp4 note in its brief; its card is In progress. 5.6 merges next, then 6.1.
+- 2026-11-03: 5.6 merged into `develop` (`ac6a3a2`, `feat(audio): merge 5.6-feedback-sounds`) and marked done, after QA PASS at `ea6ea9a` (0 findings). Develop (4.6, 7.1, 5.4) was merged into the branch first with a code conflict in `EngineHost` (kept both sides: `_library` and the sound check and player); the Release build (0 warnings), Contracts 105, Core 85, Platform.Audio 24, Engine 157 and the publish all passed again. QA's 3 non-blocking notes are accepted: (1) the sound queue has no bound or rate limit, (2) `FeedbackSoundPlayer.Dispose` joins the worker, so a hung WASAPI call could stall shutdown (each play is capped at length + 500 ms), (3) the sounds are synthesized at run time instead of embedded WAVs, which is deterministic and tested. Human check queued: listen to the five sounds.

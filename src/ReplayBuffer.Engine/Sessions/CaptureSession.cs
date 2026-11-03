@@ -120,9 +120,12 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// <c>muteAffected</c> Track passes through a <see cref="MicMuteGate"/>, so it is silenced there,
 /// before the mix, from the press's frame, and stays audible in every other Track. In Replay mode
 /// (<see cref="CaptureSessionOptions.Replay"/>) the streams go into a <see cref="ReplayRingSink"/>
-/// instead of a file, and <see cref="Save"/> writes a Clip from it on a thread of its own. The
-/// encoders write into the ring through a <see cref="RecordingTap"/>, and <see cref="Record"/>
-/// attaches a <see cref="RecordingWriter"/> to it: a Recording from the same encoder chain.
+/// instead of a file, and <see cref="Save"/> writes a Clip from it on a thread of its own. The ring
+/// is sized from the snapshot's Buffer Window at the anchor; a new window from
+/// <see cref="SetBufferWindow"/> resizes it at the next Reset (AD-8), into a new ring generation
+/// seeded from the Reset keyframe, so Clips stay gapless. The encoders write into the ring through a
+/// <see cref="RecordingTap"/>, and <see cref="Record"/> attaches a <see cref="RecordingWriter"/> to it:
+/// a Recording from the same encoder chain.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -180,6 +183,11 @@ internal sealed class CaptureSession : ICaptureSession
     // How far this session's Clips have claimed the ring (R6): a write cuts from no earlier than the
     // end of the newest write before it, so two concurrent Clips never overlap.
     private readonly ClipClaim _claim = new();
+
+    // The Buffer Window the ring holds, in seconds: set at the anchor, then by a resize at a Reset
+    // (orchestrator thread). The window SetBufferWindow asked for, applied at the next Reset; 0 for none.
+    private int _windowSeconds;
+    private volatile int _pendingWindow;
     private VideoEncoder? _video;
     private readonly IVideoEncoderCatalog _encoders;
     private readonly VideoSize _outputSize;
@@ -411,8 +419,11 @@ internal sealed class CaptureSession : ICaptureSession
     /// starts; no keyframe is asked for unless the write starts. Its own thread waits up to
     /// <see cref="SaveWait"/> for that keyframe (else the Clip ends at the press), then up to as long
     /// again for every stream to pass it by an AAC frame (encoding and the AAC FIFO lag it), cuts
-    /// <c>[max(press - bufferWindow, last Reset, earlier write's claim), key)</c> from the first
-    /// keyframe in it, and writes the Clip; the claim (<see cref="ClipClaim"/>) keeps a Clip written
+    /// <c>[max(key - bufferWindow, last Reset, earlier write's claim), key)</c> from the first
+    /// keyframe in it, and writes the Clip. The Buffer Window is the one in effect at the press (a
+    /// resize applies at a Reset), and the cut comes from one ring generation: less than 1 s past
+    /// a generation's boundary, the previous one up to the boundary, where the Clip then ends and
+    /// the next one starts (<see cref="RingGenerations.Cut"/>). The claim (<see cref="ClipClaim"/>) keeps a Clip written
     /// while an earlier one still writes from cutting back over it. A press less than 1 s after the anchor is refused with
     /// <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe is asked for. Once drained
     /// (<see cref="Drain"/>), the encoders are flushed and gone: the write asks for no keyframe, and
@@ -432,7 +443,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         // A drained session's encoder is already disposed: never ask it for a keyframe.
-        return new ClipWrite(this, ring, _outputFinished ? null : video, qpc);
+        return new ClipWrite(this, ring, _outputFinished ? null : video, qpc, _windowSeconds);
     }
 
     /// <summary>
@@ -593,12 +604,11 @@ internal sealed class CaptureSession : ICaptureSession
         if (_options.Replay)
         {
             var window = _spec.Snapshot.BufferWindow;
-            var perSecond = video.Fps + (_spec.Audio.Tracks.Count * AacPacketsPerSecond) + 1;
-            var capacity = (int)Math.Min((window + 3L) * perSecond, 1 << 24);
-            _ring = new ReplayRingSink(new PacketRing(window * 1_000_000L, capacity));
+            _windowSeconds = window;
+            _ring = new ReplayRingSink(NewRing(window));
             _tap = new RecordingTap(_ring);
             packets = _tap;
-            _log.LogInformation("Replay Buffer of {Window} s in memory, {Capacity} packets preallocated", window, capacity);
+            _log.LogInformation("Replay Buffer of {Window} s in memory, {Capacity} packets preallocated", window, RingCapacity(window));
         }
         else
         {
@@ -980,6 +990,39 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>Microseconds since the anchor at <paramref name="qpc"/>.</summary>
     private long MicrosAt(long qpc) => (long)((Int128)(qpc - _anchorQpc) * 1_000_000 / _qpcFrequency);
 
+    /// <summary>The packets a ring of <paramref name="seconds"/> preallocates: the window and its slack, capped at 2^24.</summary>
+    private int RingCapacity(int seconds)
+    {
+        var perSecond = _spec.Snapshot.Video.Fps + (_spec.Audio.Tracks.Count * AacPacketsPerSecond) + 1;
+        return (int)Math.Min((seconds + 3L) * perSecond, 1 << 24);
+    }
+
+    /// <summary>An empty Replay Buffer ring of a <paramref name="seconds"/> s Buffer Window.</summary>
+    private PacketRing NewRing(int seconds) => new(seconds * 1_000_000L, RingCapacity(seconds));
+
+    /// <summary>The Buffer Window from the next Reset on (AD-8); the orchestrator calls it just before a Reset.</summary>
+    public void SetBufferWindow(int seconds) => _pendingWindow = seconds;
+
+    /// <summary>
+    /// At the Reset <paramref name="us"/> (orchestrator thread): moves the Replay Buffer to a ring of
+    /// the Buffer Window <see cref="SetBufferWindow"/> asked for, seeded from the Reset keyframe on,
+    /// when that differs from the ring's. Nothing on a drained session, or one without a ring.
+    /// </summary>
+    private void ResizeAt(long us)
+    {
+        var pending = _pendingWindow;
+        if (_keepRing || _outputFinished || _ring is not { } ring || pending < 1 || pending == _windowSeconds)
+        {
+            return;
+        }
+
+        var generation = ring.Resize(NewRing(pending), us);
+        _log.LogInformation(
+            "Buffer Window {Old} s -> {New} s at the Reset {Reset:0.000} s after the anchor: ring generation {Generation}, {Capacity} packets preallocated",
+            _windowSeconds, pending, us / 1e6, generation, RingCapacity(pending));
+        _windowSeconds = pending;
+    }
+
     /// <summary>Moves the Reset forward to <paramref name="us"/> (µs since the anchor); an earlier one is ignored.</summary>
     private void ResetTo(long us)
     {
@@ -1037,7 +1080,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// keyframe after the press before that thread starts; with no <paramref name="video"/> (a
     /// drained session) it asks for none, and the Clip ends at the press.
     /// </summary>
-    private sealed class ClipWrite(CaptureSession session, ReplayRingSink ring, VideoEncoder? video, long qpc) : IClipWrite
+    private sealed class ClipWrite(CaptureSession session, ReplayRingSink ring, VideoEncoder? video, long qpc, int windowSeconds) : IClipWrite
     {
         // Where the written Clip ends, in µs since the anchor; set before done is called.
         private long _endUs = long.MinValue;
@@ -1052,6 +1095,7 @@ internal sealed class CaptureSession : ICaptureSession
             if (end != long.MinValue)
             {
                 session.ResetTo(end);
+                session.ResizeAt(end);
             }
         }
 
@@ -1102,8 +1146,9 @@ internal sealed class CaptureSession : ICaptureSession
                     Thread.Sleep(10);
                 }
 
-                var windowUs = session._spec.Snapshot.BufferWindow * 1_000_000L;
-                var ownFromUs = Math.Max(pressUs - windowUs, Volatile.Read(ref session._resetUs));
+                var windowUs = windowSeconds * 1_000_000L;
+                // The window back from the Clip's end, the key after the press, so the Clip never exceeds it.
+                var ownFromUs = Math.Max(toUs - windowUs, Volatile.Read(ref session._resetUs));
                 var fromUs = Math.Max(ownFromUs, previous);
 
                 // R4: an empty cut, whatever set its start, makes no Clip.
@@ -1124,7 +1169,9 @@ internal sealed class CaptureSession : ICaptureSession
                 leased = false;
                 if (source is null)
                 {
-                    throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The Replay Buffer holds no keyframe before the cut yet; there is nothing to save.");
+                    throw new ErrorCodeException(
+                        ErrorCodes.ClipTooShort,
+                        "The Replay Buffer holds no keyframe before the cut yet, or less than 1 s since a ring generation began; there is nothing to save.");
                 }
 
                 if (session._options.ClipWriteFault?.Invoke(path) is { } fault)
@@ -1133,9 +1180,12 @@ internal sealed class CaptureSession : ICaptureSession
                 }
 
                 ClipWriter.Write(source, path, log);
-                session._claim.Succeeded(toUs);
+
+                // The cut's end: the press's keyframe, or a ring generation's boundary when the cut came from the one before it.
+                var endUs = source.Cut.EndUs;
+                session._claim.Succeeded(toUs, endUs);
                 claimed = null;
-                Volatile.Write(ref _endUs, toUs);
+                Volatile.Write(ref _endUs, endUs);
                 log.LogInformation(
                     "Clip of {Seconds:0.000} s, {Start:0.000} s to {End:0.000} s after the anchor ({Packets} packets), written to {Path}",
                     (source.Cut.EndUs - source.Cut.StartUs) / 1e6, source.Cut.StartUs / 1e6, source.Cut.EndUs / 1e6, source.Cut.Packets.Count, path);

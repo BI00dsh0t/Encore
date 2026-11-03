@@ -277,6 +277,7 @@ public sealed class SessionOrchestrator : IDisposable
 
             case RecordingRunning recording:
                 _recordingRunning = recording.Running;
+                SetState(_state with { Recording = recording.Running ? RecordingState.Running : RecordingState.Off });
                 if (!_recordingRunning && _pendingTarget is { } pending)
                 {
                     CommitTarget(pending);
@@ -808,6 +809,12 @@ public sealed class SessionOrchestrator : IDisposable
         var active = _active?.Id == written.SessionId ? _active : _drain?.Id == written.SessionId ? _drain : null;
         if (active is not null)
         {
+            // The running session takes the Effective Buffer Window at each Reset; a drained one keeps its ring as is.
+            if (ReferenceEquals(active, _active))
+            {
+                active.Session.SetBufferWindow(SettingsResolver.Resolve(_currentDocument(), active.Spec.Target.ProfileId).BufferWindow);
+            }
+
             written.Write.Reset();
             active.ResetQpc = active.ResetQpc is { } reset ? Math.Max(reset, written.Qpc) : written.Qpc;
         }

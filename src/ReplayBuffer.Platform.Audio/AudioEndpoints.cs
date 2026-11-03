@@ -37,6 +37,9 @@ public sealed record EndpointMatch(EndpointMatchOutcome Outcome, AudioEndpoint? 
 /// <summary>Lists and resolves audio endpoints.</summary>
 public static unsafe class AudioEndpoints
 {
+    /// <summary><c>E_NOTFOUND</c>, <c>HRESULT_FROM_WIN32(ERROR_NOT_FOUND)</c>: no endpoint has that role.</summary>
+    private const int ENotFound = unchecked((int)0x80070490);
+
     /// <summary>The active endpoints of one flow.</summary>
     public static IReadOnlyList<AudioEndpoint> List(AudioFlow flow)
     {
@@ -79,6 +82,30 @@ public static unsafe class AudioEndpoints
         try
         {
             return Describe(device, flow);
+        }
+        finally
+        {
+            device->Release();
+        }
+    }
+
+    /// <summary>The default communications (eCommunications) render endpoint, or <c>null</c> when there is none.</summary>
+    public static AudioEndpoint? DefaultCommunications()
+    {
+        using var enumerator = Enumerator.Create();
+        IMMDevice* device = null;
+        try
+        {
+            enumerator.Value->GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eCommunications, &device);
+        }
+        catch (Exception e) when (e.HResult == ENotFound)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Describe(device, AudioFlow.Output);
         }
         finally
         {

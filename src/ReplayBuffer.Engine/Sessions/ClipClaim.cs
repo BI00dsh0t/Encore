@@ -37,13 +37,17 @@ internal sealed class ClipClaim
         }
     }
 
-    /// <summary>The write ending at <paramref name="toUs"/> was written: its end stays claimed.</summary>
-    public void Succeeded(long toUs)
+    /// <summary>
+    /// The write that claimed <paramref name="claimedUs"/> was written, ending at
+    /// <paramref name="endUs"/> (earlier when its cut ended at a ring generation's boundary): that
+    /// end stays claimed.
+    /// </summary>
+    public void Succeeded(long claimedUs, long endUs)
     {
         lock (_gate)
         {
-            _inFlight.Remove(toUs);
-            _succeededUs = Math.Max(_succeededUs, toUs);
+            _inFlight.Remove(claimedUs);
+            _succeededUs = Math.Max(_succeededUs, endUs);
         }
     }
 

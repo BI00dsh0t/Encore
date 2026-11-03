@@ -23,7 +23,8 @@ public sealed record ProposeTarget(TargetCandidate? To, TargetChangeReason Reaso
 
 /// <summary>
 /// Whether a Recording is running (AD-19): while one is, a switch away from the Target is held, and
-/// it is committed the moment the flag clears. A stub until epic-recordings; only tests set it.
+/// it is committed the moment the flag clears. It also sets <c>CaptureState.Recording</c>, so it is
+/// the stub Recording state until epic-recordings: only <c>dev.simulate</c> and tests set it.
 /// </summary>
 public sealed record RecordingRunning(bool Running) : SessionMessage;
 

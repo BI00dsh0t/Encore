@@ -50,6 +50,15 @@ public interface ICaptureSession
     }
 
     /// <summary>
+    /// The Buffer Window, in seconds, from the next Reset on: a session holding a Replay Buffer
+    /// resizes it there when the value changed (AD-8). Called on the orchestrator thread just
+    /// before a Reset; never blocks.
+    /// </summary>
+    void SetBufferWindow(int seconds)
+    {
+    }
+
+    /// <summary>
     /// A Clip of the Replay Buffer up to <paramref name="qpc"/> (the press, AD-6), not yet written;
     /// null when this session holds no Replay Buffer, or nothing yet. The session asks its encoder for
     /// a keyframe on the next frame (AD-10), where the Clip ends. Throws an
