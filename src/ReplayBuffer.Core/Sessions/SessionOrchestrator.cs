@@ -64,7 +64,11 @@ public sealed class SessionOrchestrator : IDisposable
 
     /// <param name="factory">Starts the capture sessions.</param>
     /// <param name="currentDocument">The current settings document, read once per Start for the snapshot (AD-5).</param>
-    /// <param name="publish">Receives each changed <see cref="CaptureState"/>, on the orchestrator thread, once per change.</param>
+    /// <param name="publish">
+    /// Receives each changed <see cref="CaptureState"/>, on the orchestrator thread, once per change; a
+    /// loaded mute that differs from <see cref="CaptureState.Initial"/> is published from here, before
+    /// the thread starts, so it is in place before anyone can connect.
+    /// </param>
     /// <param name="hotkeyPressed">Receives each <see cref="HotkeyPressed"/>, on the orchestrator thread, in arrival order.</param>
     /// <param name="micMute">
     /// Where mic mute is kept between runs, read once here; null keeps it in memory only, starting muted.
@@ -89,8 +93,8 @@ public sealed class SessionOrchestrator : IDisposable
         _state = CaptureState.Initial with { MicMuted = LoadMicMuted(micMute) };
         if (_state != CaptureState.Initial)
         {
-            // Queued ahead of any message a caller can post: it is the thread's first publish.
-            _channel.Writer.TryWrite(new PublishLoadedState());
+            // The first publish, before the thread exists: nothing else can publish yet.
+            _publish(_state);
         }
 
         _thread = new Thread(Run) { Name = "SessionOrchestrator", IsBackground = true };
@@ -202,10 +206,6 @@ public sealed class SessionOrchestrator : IDisposable
                 }
 
                 _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
-                break;
-
-            case PublishLoadedState:
-                _publish(_state);
                 break;
 
             case SessionClosed closed when _active?.Id == closed.SessionId:
@@ -399,9 +399,6 @@ public sealed class SessionOrchestrator : IDisposable
     }
 
     private sealed record SessionClosed(long SessionId, string Reason) : SessionMessage;
-
-    /// <summary>Publishes the state loaded at construction, when it differs from <see cref="CaptureState.Initial"/>.</summary>
-    private sealed record PublishLoadedState : SessionMessage;
 
     private sealed record SessionFailed(long SessionId, Exception Failure) : SessionMessage;
 

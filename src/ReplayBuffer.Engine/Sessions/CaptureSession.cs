@@ -504,7 +504,8 @@ internal sealed class CaptureSession : ICaptureSession
             }
         }
 
-        _anchored = true;
+        // A release write: SetMicMuted reads the anchor without the gate.
+        Volatile.Write(ref _anchored, true);
         _options.Anchored?.Invoke(anchorQpc);
     }
 

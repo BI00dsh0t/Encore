@@ -3,7 +3,7 @@ title: 'Mic Devices and mic mute'
 type: 'feature'
 ticket: '4'
 created: '2026-11-03'
-status: 'in-review'
+status: 'built'
 baseline_revision: '03d62ebf472c91bd0c3455a56c843f7e3cd087d8'
 route: 'full'
 route_source: 'auto'
@@ -12,7 +12,7 @@ review: 'quick'
 review_source: 'pinned'
 lenses_ran: ['quick']
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: ['{project-root}/CLAUDE.md']
 warnings: ['oversized']
 deferred: []
@@ -96,6 +96,15 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-03 — Review pass
+- verdicts: 5 findings — high 0, medium 2, low 1, false 2, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` A saved unmute reached the hub only when the orchestrator thread handled a queued `PublishLoadedState`, so a client attaching first could see `micMuted: true` in its snapshot and the restart test's snapshot read was timing-dependent — fixed: the constructor publishes a loaded state that differs from `Initial` itself, before the thread starts (single-threaded there; the message type is gone), so `EngineHost` has it in the hub before the pipe serves.
+  - `[false]` `[reject]` The capture AC test is `[Fact(Explicit = true)] [Trait("Category","Heavy")]`, so the default `dotnet test` skips it — that is the builder's standing decision, now in CLAUDE.md's Tests section (merged from develop, `bbfb0e6`): capture and real-time tests are Heavy and run with `--explicit only` when a change touches the audio path; it was run that way (see Auto Run Result).
+  - `[medium]` `[patch]` The trim commit (`f841560`) rewrote five 2.4 test files from LF to CRLF (Python text-mode writes on Windows), turning ~20-line changes into whole-file rewrites — fixed in the develop merge (`04a7907`): `SessionAudioTests`, `MicMuteCaptureTests`, `RuntimeStateStoreTests`, `MicMuteGateTests` are LF again, and `SessionOrchestratorTests` was rebuilt from develop's LF file.
+  - `[false]` `[reject]` The task list still names tests the trim deleted — the fix is editing this build's plan, which triage rejects; Implementation Notes record the trim, what was kept, and which matrix rows are covered by inspection only.
+  - `[low]` `[patch]` `SetMicMuted` reads `_anchored`/`_anchorQpc` with `Volatile.Read` but `StartOutput` wrote `_anchored` plainly, so on a weakly ordered CPU the "Mic muted from frame N" log line could use a stale anchor (the gates themselves take the anchor in their constructor) — fixed: `Volatile.Write(ref _anchored, true)`.
+
 ## Design Notes
 
 Why a gate per (device, Track) input and not on the device stream: one device feeds several Tracks through `AudioFanOut`, and only `muteAffected` ones may lose it (AD-13 "before the mix, only in Tracks marked"). Turning muted runs into `WriteSilence` reuses the mixer's own silence path, so nothing is copied or allocated.
@@ -119,3 +128,35 @@ Why `MicMuted` rides on `SessionSpec`: the session's taps start before `Start` r
 
 **Manual checks (Human Check Queue):**
 - With a game focused and the engine serving, press the Mic Mute Hotkey mid-capture, speak, and check the file: the mic is gone from the `muteAffected` Tracks only, and `micMuted` flips in the App.
+
+## Auto Run Result
+
+**Status:** built, verified 2026-11-03.
+
+**Summary:** The engine now owns mic mute. The SessionOrchestrator loads it from `runtime.json` in the instance's local data folder before any session can start; a missing or corrupt file means muted. Each `micMute` Hotkey press toggles it, hands the press QPC to the running session, saves it atomically and publishes `capture.stateChanged.micMuted`; `hotkey.pressed` is still published. In the session, each Mic Device's input to each `muteAffected` Track goes through a `MicMuteGate`, which silences it before the mix from the first frame at or after the press QPC. The same device stays audible in Tracks mute doesn't affect, and a session starts with the current mute already in place.
+
+**Files:**
+- `src/ReplayBuffer.Core/Sessions/SessionSpec.cs`: `IsMic` on devices, `MuteAffected` on Tracks, `MicMuted` at Start.
+- `src/ReplayBuffer.Core/Sessions/CaptureSessionPorts.cs`: `ICaptureSession.SetMicMuted` and the `IMicMuteStore` port.
+- `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs`: load, toggle, save, publish and forward.
+- `src/ReplayBuffer.Media/MicMuteGate.cs` (new): `MicMuteSchedule` and `MicMuteGate`.
+- `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs`: gate wiring and mute log lines.
+- `src/ReplayBuffer.Engine/Settings/RuntimeStateStore.cs` (new): `runtime.json`.
+- `src/ReplayBuffer.Engine/EngineHost.cs`, `TracerCapture.cs`: pass the store; `debug-capture` logs what a muted start silences.
+- Tests (lean): `MicMuteGateTests` (2), `SessionAudioTests` (1 new), `SessionOrchestratorTests` (2 new), `RuntimeStateStoreTests` (1), `MicMuteServeTests` (restart AC), `MicMuteCaptureTests` (capture AC, Heavy). `ToneHub` moved to its own file.
+
+**Review:** one quick pass, 5 findings. Patched: 2 medium (the loaded unmute is now published from the constructor, so the first snapshot has it; CRLF the trim commit introduced, back to LF) and 1 low (a release write for `_anchored`). Rejected: 2 false (the Heavy opt-in follows CLAUDE.md; the task-list wording would need a plan edit). Nothing deferred. The patches were small enough to apply in the main session.
+
+**Follow-up review recommended:** true, because two medium findings were patched. The unverified risk is the real path end to end: a real Hotkey press with a real microphone, and the App seeing `micMuted` right after an engine restart. Both are only proven with fakes and in-process sessions.
+
+**Verification (after merging develop with test-trim, `04a7907`, and the patches):**
+- `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+- Default suites: Media 98/98, Core 54/54, Platform.Audio 24/24, App 58/58, Engine 138/138; the skipped tests are the opt-in Heavy ones.
+- Heavy `MicMuteCaptureTests` (`--explicit only`): passed; it also passed 2/2 alone before the merge. It failed once in the pre-trim full Engine run under GPU load and has passed every time since.
+- `pwsh tools/publish-engine.ps1`: published with 0 IL/AOT warnings, 10.0 MB.
+- `OutputResolutionTests` (two timing tests that failed before the merge) also fail on the baseline `03d62eb`, so they aren't 2.4's; test-trim has since made them Heavy.
+- Matrix audit: cold start, saved unmute, toggle idle, toggle and unmute mid-capture, a device in two Tracks, a non-mic in an affected Track and a corrupt file each have a passing test. Press before anchor, save fails and another Hotkey are covered by inspection only, under the builder's lean-tests decision.
+
+**Residual risks:**
+- A press handled late by the orchestrator can let through the frames that passed the gate in between, bounded by the post latency.
+- `debug-capture` and `bench tracks` run with no `runtime.json`, so they start muted. Mic Devices in `muteAffected` Tracks record silence there, including the BEACN Mic in 2.1's Human Check, unless `runtime.json` says `{"micMuted": false}`. A dev instance has no Hotkeys bound, so the builder must bind `micMute` or write that file.
