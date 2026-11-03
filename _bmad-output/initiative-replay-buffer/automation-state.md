@@ -38,8 +38,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 3.7 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.1 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 4.2 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 3.7 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 5.1 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -359,3 +359,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 4.1 merged (`01f2795`, done `5cf2bd2`), and its card is in Done. That unblocked 4.2 (exact save cut and gapless Reset, high risk), which went to pool worker slice-epic-8 (Opus, high effort), and 5.1 (Overlay dot tracer, medium risk, HITL), which went to pool worker slice-epic-5 (Opus, medium effort). Both cards are In progress. 3.7 is being implemented. Epic 4 and 5 stories have no Queue rows; their status is tracked in the Log and on the Trello board.
 - 2026-11-03: 3.7 is READY FOR QA at `23d77f4` (build 0 warnings, four scoped suites pass, publish clean). QA started on qa-2-1 (Sonnet), and its card moved to In QA. 4.2 and 5.1 are being implemented; 5.1 touches only App and Platform.Desktop.
 - 2026-11-03: QA on 3.7 (`23d77f4`, then `9c080ff` after a rebase that dropped a stray develop commit; src/tests identical): **QA PASS**, 0 code findings. 3.7 merged (`d254a0c`, `refactor(engine): merge 3.7-refactor-sweep`; develop was already an ancestor, so no rebuild), ticket marked done. Verified before: Release build 0 warnings; Platform.Windows 25, Core 63, Engine 148 (18 explicit skipped), App 65 (5 skipped); publish 0 IL warnings. Epic 3 is complete: next the coordinator marks it `status: done` and releases `v0.3.0`.
+- 2026-11-03: QA round 1 on 3.7 (`23d77f4`): **QA FAIL**, 1 low docs finding (line endings on a develop docs file, from a stale develop commit). 3.7 rebased onto the current develop (`9c080ff`). The coordinator checked that the code diff between `23d77f4` and `9c080ff` is empty and counted that as round 2, **QA PASS**. 3.7 was told to merge. 5.1 is READY FOR QA at `a768339` (App and Platform.Desktop only), QA started on qa-1-14 (Sonnet), and its card is In QA.
