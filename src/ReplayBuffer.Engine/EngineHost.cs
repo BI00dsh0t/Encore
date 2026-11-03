@@ -6,6 +6,7 @@ using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Audio;
+using ReplayBuffer.Core.Feedback;
 using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
@@ -81,6 +82,9 @@ internal sealed record EngineHostOptions
 /// <c>save</c> press writes a Clip, published as <c>clip.saved</c>, or one too soon after the last
 /// Reset or the session's start is refused as <c>clip.failed</c>. With <c>--debug-capture</c> a
 /// capture session writing one file follows the Target instead.
+/// The FeedbackRouter turns Clips saved and not saved, Recording state changes and a disk full into
+/// <c>warning.raised</c> notices, and dismisses the info ones after 10 s. <c>dev.simulate</c> injects a
+/// stub Recording state, a disk full or a save failure; the installed instance refuses it.
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
@@ -107,6 +111,7 @@ internal sealed class EngineHost : IAsyncDisposable
     private Task _probe = Task.CompletedTask;
     private GameMonitor? _games;
     private LibraryActor _library = null!;
+    private FeedbackRouter? _feedback;
     private int _disposed;
 
     private EngineHost(
@@ -193,6 +198,7 @@ internal sealed class EngineHost : IAsyncDisposable
         TrackMeters? meters = null;
         GameMonitor? games = null;
         LibraryActor? library = null;
+        FeedbackRouter? feedback = null;
         var audio = new AudioDeviceHub(loggers);
         try
         {
@@ -229,6 +235,13 @@ internal sealed class EngineHost : IAsyncDisposable
                 hostOptions.Time,
                 e => libraryLog.LogWarning("library.json couldn't be written: {Message}", e.Message));
             var warnings = new Warnings(hub, hostOptions.Time);
+            var notices = feedback = new FeedbackRouter(warnings, hostOptions.Time);
+            Action<ClipFailed> notSaved = failed =>
+            {
+                hub.Publish(CaptureMessages.Failed, failed);
+                clipLog.LogInformation("The save made no Clip: {Reason}", failed.Reason);
+                notices.ClipNotSaved(failed);
+            };
             dropouts = new DeviceDropoutReporter(audio, warnings);
             var router = new CommandRouter(log);
             var apps = new AppSupervisor(
@@ -253,6 +266,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 {
                     hub.Publish(CaptureMessages.StateChanged, state);
                     trackMeters.SetMicMuted(state.MicMuted);
+                    notices.StateChanged(state);
                 },
                 press =>
                 {
@@ -278,13 +292,10 @@ internal sealed class EngineHost : IAsyncDisposable
                         {
                             hub.Publish(CaptureMessages.Saved, saved);
                             clipLog.LogInformation("Clip saved to {Path}", saved.Path);
+                            notices.ClipSaved(saved);
                         },
                         e => clipLog.LogWarning("The save failed: {Message}", e.Message),
-                        failed =>
-                        {
-                            hub.Publish(CaptureMessages.Failed, failed);
-                            clipLog.LogInformation("The save made no Clip: {Reason}", failed.Reason);
-                        },
+                        notSaved,
                         Saving: saving =>
                         {
                             hub.Publish(CaptureMessages.Saving, saving);
@@ -322,7 +333,7 @@ internal sealed class EngineHost : IAsyncDisposable
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor };
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor, _feedback = notices };
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
             router.Register(AudioMessages.List, (_, _) => ValueTask.FromResult(devices.Current));
@@ -338,6 +349,9 @@ internal sealed class EngineHost : IAsyncDisposable
             });
             router.Register(FeedbackMessages.Dismiss, (dismiss, _) => ValueTask.FromResult(warnings.Dismiss(dismiss)));
             router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
+            SessionOrchestrator simulateTo = sessions;
+            var simulator = new DevSimulator(instance, running => simulateTo.Post(new RecordingRunning(running)), notices.DiskFull, notSaved);
+            router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
                 EngineMessages.Shutdown,
@@ -404,6 +418,7 @@ internal sealed class EngineHost : IAsyncDisposable
             hotkeys?.Dispose();
             sessions?.Dispose();
             library?.Dispose();
+            feedback?.Dispose();
             meters?.Dispose();
             devices?.Dispose();
             dropouts?.Dispose();
@@ -437,6 +452,9 @@ internal sealed class EngineHost : IAsyncDisposable
 
         // After the orchestrator, so every write it ended has been saved. A write still in flight here gets no EndWrite (4.5 deferred) and is found by the next start scan without its profile.
         _library.Dispose();
+
+        // No more outcomes reach the router once the orchestrator has stopped.
+        _feedback?.Dispose();
         await Server.DisposeAsync().ConfigureAwait(false);
 
         // Closes the watch's subscriptions before the hub goes.

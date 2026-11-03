@@ -1,10 +1,14 @@
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Core.Feedback;
 
 namespace ReplayBuffer.Engine.Ipc;
 
-/// <summary>The engine's active warnings (AD-3): raised as <c>warning.raised</c>, removed only by <c>warning.dismiss</c>.</summary>
-internal sealed class Warnings(EventHub hub, TimeProvider time)
+/// <summary>
+/// The engine's active warnings (AD-3): raised as <c>warning.raised</c>, removed by
+/// <c>warning.dismiss</c> or, for the feedback notices it raises, withdrawn by the engine itself.
+/// </summary>
+internal sealed class Warnings(EventHub hub, TimeProvider time) : IFeedbackNotices
 {
     private readonly Lock _lock = new();
 
@@ -17,6 +21,25 @@ internal sealed class Warnings(EventHub hub, TimeProvider time)
         }
 
         return warning;
+    }
+
+    /// <summary>A feedback notice: on the Overlay, with its sound, dismissable.</summary>
+    string IFeedbackNotices.Raise(FeedbackNotice notice) =>
+        Raise(notice.Code, notice.Severity, notice.Source, notice.Message, overlay: true, notice.Sound).Id;
+
+    /// <summary>
+    /// The engine's own dismissal: publishes <c>warning.dismissed</c> if <paramref name="id"/> is
+    /// active, dismissable or not; nothing happens if the user already dismissed it.
+    /// </summary>
+    public void Withdraw(string id)
+    {
+        lock (_lock)
+        {
+            if (hub.State.Warnings.Any(w => w.Id == id))
+            {
+                hub.Publish(FeedbackMessages.Dismissed, new WarningDismissed(id));
+            }
+        }
     }
 
     /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.WarningNotFound"/> or <see cref="ErrorCodes.WarningNotDismissable"/>.</exception>
