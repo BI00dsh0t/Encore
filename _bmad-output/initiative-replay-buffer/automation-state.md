@@ -34,12 +34,12 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 2.4 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 2.6 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 3.1 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 2.11 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -77,9 +77,9 @@ The coordinator logs each QA round in the Log below.
 | 6 | 2.3 Live device list over IPC | story-2-3 | done |
 | 7 | 2.5 Device dropout and rebind | story-2-5 (local_ea1ff557-3cb9-4fe2-9a70-3029632aee7c) | done |
 | 8 | 2.4 Mic Devices and mic mute | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged) |
-| 9 | 2.6 Track meters in the engine | | pending |
+| 9 | 2.6 Track meters in the engine | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 10 | 2.7 Track Layout editor in the Main App | story-2-7 (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
-| 11 | 2.11 Mic Devices and double-count warning in the editor | | pending |
+| 11 | 2.11 Mic Devices and double-count warning in the editor | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
 | 12 | 2.8 Live meters in the Track Layout editor | | pending |
 | 13 | 2.9 Named Tracks in players and editors | worker slice-epic-4 | done |
 | 14 | 2.10 Refactor sweep | | pending |
@@ -307,3 +307,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: 2.4 is READY FOR QA at `1d33ac5` (develop with test-trim merged in, scoped tests and both ACs pass, publish clean). 3.1 is READY FOR QA at `28570b3` (develop merged in, scoped tests and publish pass, the GPU-load proxy detected the window in under 1 s). QA started on qa-1-14 for 2.4 and qa-2-1 for 3.1, both Sonnet at medium effort.
 - 2026-11-03: QA on 2.4 (`1d33ac5`): **QA PASS**, 0 findings. QA on 3.1 (`28570b3`): **QA PASS**, 0 findings. QA notes: `HotkeyServeTests` flakes when sessions use global hotkeys at once, and the tracer still takes any full-screen window, which 3.2 and 3.3 own. 2.4 merges first and 3.1 waits for it, both switched to Sonnet. Both QA workers are back in the pool.
 - 2026-11-03: 2.4 merged into `develop` (`a9e3f5c`, `feat(engine): merge 2.4-mic-devices`) and marked done. `develop` had only state-file commits since the last sync, so no rebuild. Verified before the merge: Release build 0 warnings, default Media, Core, Platform.Audio, App and Engine suites pass, the Heavy capture AC passes, publish 0 IL/AOT warnings. One Human Check row added (a real mic and the Hotkey). 3.1 can merge now.
+- 2026-11-03: 2.4 merged (`a9e3f5c`, done `5386af0`), and its worker is back in the pool. That unblocked 2.6 (track meters, medium risk), which went to pool worker slice-epic-4, and 2.11 (mic double-count warning, low risk), which went to pool worker 2-1-tracer. Both run on Opus at medium effort. 3.1 is merging after 2.4.
