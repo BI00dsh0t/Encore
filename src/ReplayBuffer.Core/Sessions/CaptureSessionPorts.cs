@@ -36,7 +36,10 @@ public interface ICaptureSession
 
     /// <summary>
     /// A Clip of the Replay Buffer up to <paramref name="qpc"/> (the press, AD-6), not yet written;
-    /// null when this session holds no Replay Buffer, or nothing yet. Called on the orchestrator thread.
+    /// null when this session holds no Replay Buffer, or nothing yet. The session asks its encoder for
+    /// a keyframe on the next frame (AD-10), where the Clip ends. Throws an
+    /// <see cref="Contracts.ErrorCodeException"/> with <see cref="Contracts.ErrorCodes.ClipTooShort"/>
+    /// when the press is less than 1 s after the session's start. Called on the orchestrator thread.
     /// </summary>
     IClipWrite? Save(long qpc) => null;
 }
@@ -47,10 +50,21 @@ public interface IClipWrite
     /// <summary>
     /// Writes the Clip to <paramref name="path"/>, which the allocator reserved (AD-21), off the
     /// calling thread; then calls <paramref name="done"/> once, from the writer's thread, with null or
-    /// the failure. A failed write leaves no file behind, the reserved one included. Called on the
-    /// orchestrator thread; never blocks.
+    /// the failure (an <see cref="Contracts.ErrorCodeException"/> with
+    /// <see cref="Contracts.ErrorCodes.ClipTooShort"/> when the buffer held nothing to cut). A failed
+    /// write leaves no file behind, the reserved one included. Called on the orchestrator thread;
+    /// never blocks.
     /// </summary>
     void Write(string path, Action<Exception?> done);
+
+    /// <summary>
+    /// Makes this Clip's end the Replay Buffer's Reset (R5): the session's next Clip starts at the
+    /// keyframe this one ended on, so the two meet with no gap. The orchestrator calls it, on its
+    /// thread, only once this write has succeeded (AD-19).
+    /// </summary>
+    void Reset()
+    {
+    }
 }
 
 /// <summary>

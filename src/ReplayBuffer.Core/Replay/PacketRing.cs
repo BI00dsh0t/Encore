@@ -6,7 +6,9 @@ namespace ReplayBuffer.Core.Replay;
 /// The Memory-mode Replay Buffer (AD-8): encoded packets of every stream, newest last, their bytes
 /// in reference-counted native slabs, trimmed to the Buffer Window plus <see cref="SlackUs"/> of GOP
 /// slack. The entry array is preallocated and circular (it doubles only when full), and the bytes go
-/// into the current slab, so an append allocates nothing managed. A slab is freed once the ring no
+/// into the current slab, so an append allocates nothing managed. A keyframe index beside it (the
+/// sequence numbers of the video keyframe entries, as long as the entry array and grown with it)
+/// lets a cut find its keyframe without scanning every entry. A slab is freed once the ring no
 /// longer needs it and no <see cref="RingCut"/> pins it, so trimming or disposing the ring never frees
 /// bytes a writer is reading. <see cref="Append"/> and <see cref="Cut"/> take one short lock; a cut's
 /// bytes are read with none, since they are never rewritten.
@@ -21,6 +23,9 @@ public sealed class PacketRing : IDisposable
 
     private const long MicrosPerSecond = 1_000_000;
 
+    /// <summary>How far before a cut's keyframe its copy reaches back, for audio that leads the video and was appended before it.</summary>
+    private const long LookBackUs = MicrosPerSecond;
+
     private readonly Lock _lock = new();
     private readonly long _windowUs;
     private readonly int _slabBytes;
@@ -31,6 +36,15 @@ public sealed class PacketRing : IDisposable
     private RingEntry[] _entries;
     private int _head;
     private int _count;
+
+    // The absolute sequence number of the entry at _head; entry i (from the head) is _headSeq + i.
+    private long _headSeq;
+
+    // The video keyframe entries' sequence numbers, oldest first: circular, as long as _entries.
+    private long[] _keys;
+    private int _keyHead;
+    private int _keyCount;
+    private int _videoStream = -1;
     private Slab? _current;
     private long _newestUs = long.MinValue;
     private int _liveSlabs;
@@ -47,6 +61,7 @@ public sealed class PacketRing : IDisposable
         _windowUs = windowUs;
         _slabBytes = slabBytes;
         _entries = new RingEntry[capacity];
+        _keys = new long[capacity];
     }
 
     /// <summary>The packets held.</summary>
@@ -87,7 +102,38 @@ public sealed class PacketRing : IDisposable
         lock (_lock)
         {
             _streams.Add(new StreamInfo(timeBaseNum, timeBaseDen, isVideo));
-            return _streams.Count - 1;
+            var index = _streams.Count - 1;
+            if (isVideo && _videoStream < 0)
+            {
+                _videoStream = index;
+            }
+
+            return index;
+        }
+    }
+
+    /// <summary>The first video stream's index; -1 when there is none.</summary>
+    public int VideoStream
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _videoStream;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="ticks"/> in stream <paramref name="stream"/>'s time base as µs since the
+    /// anchor, by the formula that sets each entry's start, so a packet's PTS converts to exactly its
+    /// <see cref="RingPacket.TimeUs"/>.
+    /// </summary>
+    public long ToMicros(int stream, long ticks)
+    {
+        lock (_lock)
+        {
+            return ToMicros(ticks, _streams[stream]);
         }
     }
 
@@ -117,8 +163,22 @@ public sealed class PacketRing : IDisposable
                 Grow();
             }
 
+            var sequence = _headSeq + _count;
+            if (slab.FirstSeq < 0)
+            {
+                slab.FirstSeq = sequence;
+            }
+
+            slab.LastSeq = sequence;
             _entries[(_head + _count) % _entries.Length] = new RingEntry(slab, offset, data.Length, stream, pts, dts, duration, isKey, timeUs);
             _count++;
+            if (isKey && info.IsVideo)
+            {
+                // Never full: it holds at most one sequence per entry, and grows with the entries.
+                _keys[(_keyHead + _keyCount) % _keys.Length] = sequence;
+                _keyCount++;
+            }
+
             Trim();
         }
     }
@@ -144,28 +204,33 @@ public sealed class PacketRing : IDisposable
     }
 
     /// <summary>
-    /// Pins what a Clip of <c>[startUs, endUs]</c> (µs since the anchor) holds: from K, the first
-    /// video keyframe at or after <paramref name="startUs"/> and not after <paramref name="endUs"/>,
-    /// every video packet up to <paramref name="endUs"/>, and every other packet that overlaps
-    /// <c>[K, endUs]</c>, in time order. Null when there is no such keyframe.
+    /// Pins what a Clip of <c>[fromUs, toUs)</c> (µs since the anchor) holds: from K, the first video
+    /// keyframe at or after <paramref name="fromUs"/>, every video packet that starts before
+    /// <paramref name="toUs"/>, and every other packet whose centre lies in <c>[K, toUs)</c>, in time
+    /// order. Two cuts that share a boundary so split the packets exactly, none in both and none
+    /// missing, and each audio end is the AAC boundary nearest the video's. Null when there is no
+    /// such keyframe, or it is not before <paramref name="toUs"/>.
     /// </summary>
-    public RingCut? Cut(long startUs, long endUs)
+    public RingCut? Cut(long fromUs, long toUs)
     {
-        // Under the lock only what pins: the sort and the projection run after it, on pinned bytes.
-        List<RingEntry> picked;
+        // Under the lock only what pins: K from the keyframe index, one contiguous copy of the
+        // entries from just before K to the newest, and the slabs that range touches. The filter,
+        // the sort and the projection run after it, on pinned bytes.
+        RingEntry[] copied;
+        StreamInfo[] streams;
         List<Slab> slabs;
         long[] origins;
-        long keyUs;
+        RingEntry keyEntry;
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             var key = -1;
-            for (var i = 0; i < _count; i++)
+            for (var k = 0; k < _keyCount; k++)
             {
-                ref var entry = ref _entries[(_head + i) % _entries.Length];
-                if (entry.IsKey && _streams[entry.Stream].IsVideo && entry.TimeUs >= startUs && entry.TimeUs <= endUs)
+                var position = (int)(_keys[(_keyHead + k) % _keys.Length] - _headSeq);
+                if (_entries[(_head + position) % _entries.Length].TimeUs >= fromUs)
                 {
-                    key = i;
+                    key = position;
                     break;
                 }
             }
@@ -175,39 +240,58 @@ public sealed class PacketRing : IDisposable
                 return null;
             }
 
-            var keyEntry = _entries[(_head + key) % _entries.Length];
-            keyUs = keyEntry.TimeUs;
-            picked = new List<RingEntry>();
-            for (var i = 0; i < _count; i++)
+            keyEntry = _entries[(_head + key) % _entries.Length];
+            if (keyEntry.TimeUs >= toUs)
             {
-                var entry = _entries[(_head + i) % _entries.Length];
-                var info = _streams[entry.Stream];
-                var keep = info.IsVideo
-                    ? entry.TimeUs >= keyUs && entry.TimeUs <= endUs
-                    : entry.TimeUs < endUs && entry.TimeUs + ToMicros(entry.Duration, info) > keyUs;
-                if (keep)
+                return null;
+            }
+
+            // Lagging audio is appended after K and is caught by the copy to the tail; the look-back
+            // catches audio that leads the video, appended before K though it overlaps it.
+            var first = key;
+            while (first > 0 && _entries[(_head + first - 1) % _entries.Length].TimeUs > keyEntry.TimeUs - LookBackUs)
+            {
+                first--;
+            }
+
+            copied = new RingEntry[_count - first];
+            var start = (_head + first) % _entries.Length;
+            var head = Math.Min(copied.Length, _entries.Length - start);
+            Array.Copy(_entries, start, copied, 0, head);
+            Array.Copy(_entries, 0, copied, head, copied.Length - head);
+
+            // One pin per slab whose entries meet the copied range.
+            var firstSeq = _headSeq + first;
+            var lastSeq = _headSeq + _count - 1;
+            slabs = [];
+            foreach (var slab in _held)
+            {
+                if (slab.FirstSeq >= 0 && slab.FirstSeq <= lastSeq && slab.LastSeq >= firstSeq)
                 {
-                    picked.Add(entry);
+                    slab.AddRef();
+                    slabs.Add(slab);
                 }
             }
 
-            // One pin per slab the cut reads.
-            var pinned = new HashSet<Slab>(ReferenceEqualityComparer.Instance);
-            slabs = new List<Slab>();
-            foreach (var entry in picked)
-            {
-                if (pinned.Add(entry.Slab))
-                {
-                    slabs.Add(entry.Slab);
-                    entry.Slab.AddRef();
-                }
-            }
+            streams = [.. _streams];
 
             // Each stream is rebased to K in its own time base; the video exactly to K's PTS.
-            origins = new long[_streams.Count];
+            origins = new long[streams.Length];
             for (var s = 0; s < origins.Length; s++)
             {
-                origins[s] = s == keyEntry.Stream ? keyEntry.Pts : FromMicros(keyUs, _streams[s]);
+                origins[s] = s == keyEntry.Stream ? keyEntry.Pts : FromMicros(keyEntry.TimeUs, streams[s]);
+            }
+        }
+
+        var keyUs = keyEntry.TimeUs;
+        var picked = new List<RingEntry>(copied.Length);
+        foreach (var entry in copied)
+        {
+            var info = streams[entry.Stream];
+            var at = info.IsVideo ? entry.TimeUs : entry.TimeUs + (ToMicros(entry.Duration, info) / 2);
+            if (at >= keyUs && at < toUs)
+            {
+                picked.Add(entry);
             }
         }
 
@@ -215,7 +299,7 @@ public sealed class PacketRing : IDisposable
             .OrderBy(e => e.TimeUs)
             .Select(e => new RingPacket(e.Slab, e.Offset, e.Length, e.Stream, e.Pts, e.Dts, e.Duration, e.IsKey, e.TimeUs))
             .ToArray();
-        return new RingCut(packets, slabs, origins, keyUs, endUs);
+        return new RingCut(packets, slabs, origins, keyUs, toUs);
     }
 
     /// <summary>Drops every packet and the ring's own references; slabs a cut pins live until it is disposed.</summary>
@@ -238,6 +322,8 @@ public sealed class PacketRing : IDisposable
 
             _held.Clear();
             _entries = [];
+            _keys = [];
+            _keyCount = 0;
         }
     }
 
@@ -293,7 +379,14 @@ public sealed class PacketRing : IDisposable
         {
             var slab = _entries[_head].Slab;
             _entries[_head] = default;
+            if (_keyCount > 0 && _keys[_keyHead] == _headSeq)
+            {
+                _keyHead = (_keyHead + 1) % _keys.Length;
+                _keyCount--;
+            }
+
             _head = (_head + 1) % _entries.Length;
+            _headSeq++;
             _count--;
             slab.Live--;
             if (slab.Live == 0 && !ReferenceEquals(slab, _current))
@@ -311,8 +404,16 @@ public sealed class PacketRing : IDisposable
             grown[i] = _entries[(_head + i) % _entries.Length];
         }
 
+        var keys = new long[grown.Length];
+        for (var k = 0; k < _keyCount; k++)
+        {
+            keys[k] = _keys[(_keyHead + k) % _keys.Length];
+        }
+
         _entries = grown;
         _head = 0;
+        _keys = keys;
+        _keyHead = 0;
     }
 
     private void OnFreed() => Interlocked.Decrement(ref _liveSlabs);
@@ -355,6 +456,12 @@ public sealed class PacketRing : IDisposable
 
         /// <summary>Ring entries in it; the ring's lock guards it.</summary>
         public int Live { get; set; }
+
+        /// <summary>The sequence number of the first entry appended into it; -1 before one. The ring's lock guards it.</summary>
+        public long FirstSeq { get; set; } = -1;
+
+        /// <summary>The sequence number of the last entry appended into it. The ring's lock guards it.</summary>
+        public long LastSeq { get; set; } = -1;
 
         public void AddRef() => Interlocked.Increment(ref _references);
 
@@ -434,7 +541,7 @@ public sealed class RingCut : IDisposable
     /// <summary>The keyframe the Clip starts at, in µs since the anchor.</summary>
     public long StartUs { get; }
 
-    /// <summary>Where it was cut, in µs since the anchor.</summary>
+    /// <summary>Where it was cut, in µs since the anchor: the first instant it does not hold.</summary>
     public long EndUs { get; }
 
     /// <summary>Stream <paramref name="stream"/>'s time 0 in the Clip, in its own time base.</summary>

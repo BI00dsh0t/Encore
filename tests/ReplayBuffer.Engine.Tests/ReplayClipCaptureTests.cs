@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Output;
@@ -17,8 +18,9 @@ namespace ReplayBuffer.Engine.Tests;
 /// <summary>
 /// The Replay Buffer tracer (story 4.1), in process: a <see cref="ToneHub"/> plays three devices,
 /// the Game Profile "Test Game" overrides the Track Layout with three Tracks, and its game is
-/// proposed as the Target on a pwsh window. About 4 s after the anchor a <c>save</c> press saves
-/// a Clip, read back with ffprobe and as MP4 boxes.
+/// proposed as the Target on a pwsh window. A <c>save</c> press right after the anchor is refused
+/// as too short (story 4.2); about 4 s after the anchor one saves a Clip, read back with ffprobe and
+/// as MP4 boxes, and about 2 s later another saves the time between the two presses.
 /// </summary>
 public sealed partial class ReplayClipCaptureTests : IDisposable
 {
@@ -118,27 +120,38 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
 
         var window = SessionTestKit.OpenWindow(_directory, _processes, WindowScript);
         var anchored = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var saved = new TaskCompletionSource<ClipSaved>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+        var refused = new TaskCompletionSource<ClipFailed>(TaskCreationOptions.RunContinuationsAsynchronously);
         var options = new CaptureSessionOptions { OutputFolder = _directory, Replay = true, Anchored = qpc => anchored.TrySetResult(qpc) };
         var published = new ConcurrentQueue<CaptureState>();
 
-        long anchor, press;
-        ClipSaved clip;
+        long anchor, press, nextPress;
+        ClipSaved clip, next;
         using (var orchestrator = new SessionOrchestrator(
             new CaptureSessionFactory(options, NullLoggerFactory.Instance, hub),
             () => document,
             published.Enqueue,
-            targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, e) => saved.TrySetException(e)),
-            clips: new ReplayClips(OutputPathAllocator.System, () => _directory, c => saved.TrySetResult(c), e => saved.TrySetException(e))))
+            targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, e) => saved.Writer.TryComplete(e)),
+            clips: new ReplayClips(OutputPathAllocator.System, () => _directory, c => saved.Writer.TryWrite(c), e => saved.Writer.TryComplete(e), f => refused.TrySetResult(f))))
         {
             orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
             anchor = await anchored.Task.WaitAsync(Timeout, Token);
             Assert.Equal(ReplayState.Buffering, published.Last().Replay);
 
+            // Right after the anchor there is too little to save.
+            Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+            Assert.Equal(new ClipFailed(ErrorCodes.ClipTooShort), await refused.Task.WaitAsync(Timeout, Token));
+
             await Task.Delay(Buffered, Token);
             press = Stopwatch.GetTimestamp();
             Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press)));
-            clip = await saved.Task.WaitAsync(Timeout, Token);
+            clip = await saved.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+
+            // A second save, about 2 s later, runs from the first one's end while capture goes on.
+            await Task.Delay(TimeSpan.FromSeconds(2), Token);
+            nextPress = Stopwatch.GetTimestamp();
+            Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, nextPress)));
+            next = await saved.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
         }
 
         // <outputFolder>\<profile folder>\<Name>_<time>.mp4, and nothing else beside it.
@@ -170,6 +183,12 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
         Assert.Contains("moov", boxes);
         Assert.Contains("mdat", boxes);
         Assert.True(boxes.IndexOf("moov") < boxes.IndexOf("mdat"), $"boxes: {string.Join(", ", boxes)}");
+
+        // The second Clip covers the time between the presses.
+        var between = (double)(nextPress - press) / Stopwatch.Frequency;
+        var nextVideo = SessionTestKit.Probe(next.Path, "-show_streams").GetProperty("streams").EnumerateArray()
+            .First(s => s.GetProperty("codec_type").GetString() == "video");
+        Assert.InRange(double.Parse(nextVideo.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture), between - 0.1, between + 0.1);
     }
 
     /// <summary>The types of the file's top-level MP4 boxes, in order.</summary>

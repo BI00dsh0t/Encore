@@ -20,6 +20,7 @@ public sealed partial class MessagesTests
         ["settings.changed"] = """{"revision":1,"document":{"schemaVersion":1,"revision":1,"global":{"saveCooldown":7},"profiles":{}}}""",
         ["capture.stateChanged"] = """{"replay":"buffering","recording":"running","monitorRecording":"off","micMuted":false,"cooldownUntil":null}""",
         ["clip.saved"] = """{"path":"C:\\Videos\\Game\\Game_2026-11-03_10-00-00.mp4"}""",
+        ["clip.failed"] = """{"reason":"clip-too-short"}""",
         ["capture.videoOptions"] = """{"probed":true,"codecs":[{"codec":"h264","encoder":"h264_nvenc","mayNotPlayEverywhere":false},{"codec":"av1","encoder":"av1_nvenc","mayNotPlayEverywhere":true}],"resolutions":[{"width":1920,"height":1080}],"maxFps":120}""",
         ["warning.raised"] = """{"id":"w2","code":"settings-unreadable","severity":"warning","source":"settings","message":"m","at":"2026-10-25T12:00:00+00:00","overlay":true,"sound":null,"dismissable":true}""",
         ["warning.dismissed"] = """{"id":"w1"}""",

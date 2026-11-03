@@ -121,6 +121,9 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>AAC packets a second (48 kHz in 1024-sample frames), rounded up, for sizing the ring.</summary>
     private const int AacPacketsPerSecond = 47;
 
+    /// <summary>One AAC frame (1024 samples at 48 kHz) in µs, rounded up.</summary>
+    private const long AacFrameUs = ((1024 * 1_000_000L) + AudioTimeline.SampleRate - 1) / AudioTimeline.SampleRate;
+
     /// <summary>How often a Track with no devices is advanced to the current QPC.</summary>
     private static readonly TimeSpan SilenceInterval = TimeSpan.FromMilliseconds(100);
 
@@ -156,6 +159,10 @@ internal sealed class CaptureSession : ICaptureSession
     private FragmentedMp4Muxer? _muxer;
     private ReplayRingSink? _ring;
     private volatile bool _outputFinished;
+
+    // The Replay Buffer's last Reset in µs since the anchor (R5): the end of the last Clip the
+    // orchestrator Reset at. It only moves forward.
+    private long _resetUs = long.MinValue;
     private VideoEncoder? _video;
     private readonly IVideoEncoderCatalog _encoders;
     private readonly VideoSize _outputSize;
@@ -350,20 +357,30 @@ internal sealed class CaptureSession : ICaptureSession
     }
 
     /// <summary>
-    /// In Replay mode, once the output is open: a write of the Clip up to <paramref name="qpc"/>.
-    /// It runs on a thread of its own, which waits up to <see cref="SaveWait"/> for every stream to
-    /// pass the press (encoding and the AAC FIFO lag it), cuts
-    /// <c>[press - bufferWindow, press]</c> from the first keyframe in it, and writes the Clip.
+    /// In Replay mode, once the output is open: a write of the Clip up to <paramref name="qpc"/>
+    /// (AD-10). Its write asks the encoder for a keyframe on the first frame captured after the
+    /// press, which is where the Clip ends and, once the orchestrator Resets, where the next one
+    /// starts; no keyframe is asked for unless the write starts. Its own thread waits up to
+    /// <see cref="SaveWait"/> for that keyframe (else the Clip ends at the press), then up to as long
+    /// again for every stream to pass it by an AAC frame (encoding and the AAC FIFO lag it), cuts
+    /// <c>[max(press - bufferWindow, last Reset), key)</c> from the first keyframe in it, and writes
+    /// the Clip. A press less than 1 s after the anchor is refused with
+    /// <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe is asked for.
     /// </summary>
     public IClipWrite? Save(long qpc)
     {
-        // The anchor's release write publishes the ring.
-        if (!_options.Replay || !Volatile.Read(ref _anchored) || _ring is not { } ring)
+        // The anchor's release write publishes the ring and the encoder.
+        if (!_options.Replay || !Volatile.Read(ref _anchored) || _ring is not { } ring || _video is not { } video)
         {
             return null;
         }
 
-        return new ClipWrite(this, ring, qpc);
+        if (qpc - _anchorQpc < _qpcFrequency)
+        {
+            throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The Replay Buffer holds less than 1 s; there is nothing to save yet.");
+        }
+
+        return new ClipWrite(this, ring, video, qpc);
     }
 
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>
@@ -542,8 +559,8 @@ internal sealed class CaptureSession : ICaptureSession
 
         _muxer?.Start();
 
-        // The hub's streams have run since Open; each device takes blocks from here, cut at the anchor
-        // once, and fanned out to every Track that holds it.
+        // The hub's streams have run since Open; each device takes blocks from here, its held ones
+        // replayed first, cut at the anchor once, and fanned out to every Track that holds it.
         var inputs = tracks.Select(t => t.DeviceIndexes).ToList();
         for (var d = 0; d < _audioTracks.Count; d++)
         {
@@ -874,7 +891,7 @@ internal sealed class CaptureSession : ICaptureSession
         _stopped = true;
     }
 
-    /// <summary>Subscribes a tap to its device; it drops blocks until the anchor publishes its timeline.</summary>
+    /// <summary>Subscribes a tap to its device; it holds its last second of blocks until the anchor publishes its timeline.</summary>
     private void Subscribe(SessionAudioDevice device)
     {
         var track = new SessionAudioTrack(device);
@@ -892,6 +909,22 @@ internal sealed class CaptureSession : ICaptureSession
 
     /// <summary>Microseconds since the anchor at <paramref name="qpc"/>.</summary>
     private long MicrosAt(long qpc) => (long)((Int128)(qpc - _anchorQpc) * 1_000_000 / _qpcFrequency);
+
+    /// <summary>Moves the Reset forward to <paramref name="us"/> (µs since the anchor); an earlier one is ignored.</summary>
+    private void ResetTo(long us)
+    {
+        var current = Volatile.Read(ref _resetUs);
+        while (us > current)
+        {
+            var seen = Interlocked.CompareExchange(ref _resetUs, us, current);
+            if (seen == current)
+            {
+                return;
+            }
+
+            current = seen;
+        }
+    }
 
     private void DisposeAll()
     {
@@ -922,10 +955,27 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>
     /// One save's write (AD-8): it leases the ring on the orchestrator thread, so ending the session
     /// can't free it, then waits, cuts (pinning the slabs and releasing the lease) and writes on a
-    /// background thread of its own, which never blocks the ring.
+    /// background thread of its own, which never blocks the ring. <see cref="Write"/> requests the
+    /// keyframe after the press before that thread starts.
     /// </summary>
-    private sealed class ClipWrite(CaptureSession session, ReplayRingSink ring, long qpc) : IClipWrite
+    private sealed class ClipWrite(CaptureSession session, ReplayRingSink ring, VideoEncoder video, long qpc) : IClipWrite
     {
+        // Where the written Clip ends, in µs since the anchor; set before done is called.
+        private long _endUs = long.MinValue;
+
+        // The keyframe request's ticket, taken in Write before the writer thread starts.
+        private long _ticket;
+
+        /// <summary>The session's next Clip starts at this one's end: the keyframe it stopped before.</summary>
+        public void Reset()
+        {
+            var end = Volatile.Read(ref _endUs);
+            if (end != long.MinValue)
+            {
+                session.ResetTo(end);
+            }
+        }
+
         public void Write(string path, Action<Exception?> done)
         {
             ArgumentNullException.ThrowIfNull(path);
@@ -937,6 +987,8 @@ internal sealed class CaptureSession : ICaptureSession
 
             try
             {
+                // Only a write that starts asks for its keyframe; starting the thread publishes the ticket to it.
+                _ticket = video.RequestKeyframe(qpc);
                 new Thread(() => done(Run(path))) { Name = "ClipWriter", IsBackground = true }.Start();
             }
             catch
@@ -953,25 +1005,30 @@ internal sealed class CaptureSession : ICaptureSession
             try
             {
                 var pressUs = session.MicrosAt(qpc);
-                var deadline = Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * session._qpcFrequency);
-                while (!ring.AllStreamsPast(pressUs) && !session._outputFinished && Stopwatch.GetTimestamp() < deadline)
+                var toUs = WaitForKey(pressUs);
+
+                // Every packet whose centre is before the key has been appended once each stream is an AAC frame past it.
+                var deadline = Deadline();
+                while (!ring.AllStreamsPast(toUs + AacFrameUs) && !session._outputFinished && Stopwatch.GetTimestamp() < deadline)
                 {
                     Thread.Sleep(10);
                 }
 
                 var windowUs = session._spec.Snapshot.BufferWindow * 1_000_000L;
-                using var source = ring.Cut(pressUs - windowUs, pressUs);
+                var fromUs = Math.Max(pressUs - windowUs, Volatile.Read(ref session._resetUs));
+                using var source = ring.Cut(fromUs, toUs);
                 ring.Release();
                 leased = false;
                 if (source is null)
                 {
-                    throw new InvalidOperationException("The Replay Buffer holds no keyframe before the press yet; there is nothing to save.");
+                    throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The Replay Buffer holds no keyframe before the cut yet; there is nothing to save.");
                 }
 
                 ClipWriter.Write(source, path, log);
+                Volatile.Write(ref _endUs, toUs);
                 log.LogInformation(
-                    "Clip of {Seconds:0.00} s ({Packets} packets) written to {Path}",
-                    (source.Cut.EndUs - source.Cut.StartUs) / 1e6, source.Cut.Packets.Count, path);
+                    "Clip of {Seconds:0.000} s, {Start:0.000} s to {End:0.000} s after the anchor ({Packets} packets), written to {Path}",
+                    (source.Cut.EndUs - source.Cut.StartUs) / 1e6, source.Cut.StartUs / 1e6, source.Cut.EndUs / 1e6, source.Cut.Packets.Count, path);
                 return null;
             }
             catch (Exception e)
@@ -999,5 +1056,32 @@ internal sealed class CaptureSession : ICaptureSession
                 }
             }
         }
+
+        /// <summary>
+        /// The forced keyframe's start in µs since the anchor, once the encoder has taken a frame
+        /// after the request; the press itself when that takes longer than <see cref="SaveWait"/> or
+        /// the output has finished first.
+        /// </summary>
+        private long WaitForKey(long pressUs)
+        {
+            var deadline = Deadline();
+            while (true)
+            {
+                if (video.TryGetForcedKey(_ticket, out var pts))
+                {
+                    return ring.VideoMicros(pts);
+                }
+
+                if (session._outputFinished || Stopwatch.GetTimestamp() >= deadline)
+                {
+                    session._log.LogInformation("No keyframe was encoded after the press within {Seconds:0.0} s; the Clip ends at the press", SaveWait.TotalSeconds);
+                    return pressUs;
+                }
+
+                Thread.Sleep(5);
+            }
+        }
+
+        private long Deadline() => Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * session._qpcFrequency);
     }
 }

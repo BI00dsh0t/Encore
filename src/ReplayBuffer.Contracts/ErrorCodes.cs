@@ -130,6 +130,12 @@ public static class ErrorCodes
     /// <summary>A warning: an audio device in use dropped out; its Tracks record silence from it until it returns.</summary>
     public const string DeviceDropout = "device-dropout";
 
+    /// <summary>
+    /// A save was refused (R4): it came less than 1 s after the session's start or the last Reset,
+    /// or the Replay Buffer held no keyframe before its cut. No Clip is made and nothing is Reset.
+    /// </summary>
+    public const string ClipTooShort = "clip-too-short";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -171,5 +177,6 @@ public static class ErrorCodes
         HotkeyUnbound,
         HotkeyInactive,
         DeviceDropout,
+        ClipTooShort,
     ];
 }

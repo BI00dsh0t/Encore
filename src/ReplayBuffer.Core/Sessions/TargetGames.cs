@@ -42,4 +42,13 @@ public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, 
 /// <param name="DefaultOutputFolder">The Output Folder when the Global <c>outputFolder</c> is unset.</param>
 /// <param name="Saved">Called on the orchestrator thread once a Clip is written.</param>
 /// <param name="Failed">Called on the orchestrator thread when a save could not be written.</param>
-public sealed record ReplayClips(OutputPathAllocator Paths, Func<string> DefaultOutputFolder, Action<ClipSaved> Saved, Action<Exception> Failed);
+/// <param name="NotSaved">
+/// Called on the orchestrator thread when a save was refused and made no Clip, e.g. with
+/// <see cref="Contracts.ErrorCodes.ClipTooShort"/>; null ignores it.
+/// </param>
+public sealed record ReplayClips(
+    OutputPathAllocator Paths,
+    Func<string> DefaultOutputFolder,
+    Action<ClipSaved> Saved,
+    Action<Exception> Failed,
+    Action<ClipFailed>? NotSaved = null);
