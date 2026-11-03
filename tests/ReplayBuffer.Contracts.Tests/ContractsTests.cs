@@ -67,6 +67,8 @@ public sealed class InstanceTests
     [Theory]
     [InlineData(@"C:\src\ReplayBuffer\src\ReplayBuffer.Engine\bin\Debug\ReplayBuffer.Engine.exe")]
     [InlineData(@"C:\Users\u\AppData\Local\Programs\ReplayBuffer2\ReplayBuffer.Engine.exe")]
+    [InlineData(@"C:\Users\u\AppData\Local\Programs\ReplayBuffer")]
+    [InlineData(@"C:\Users\u\AppData\Local\ReplayBuffer\ReplayBuffer.Engine.exe")]
     public void EverythingElseIsTheDevInstance(string image)
     {
         var instance = Instance.Resolve(image, Roaming, Local);
@@ -78,7 +80,13 @@ public sealed class InstanceTests
 
     [Theory]
     [InlineData("ReplayBuffer-Test-abc123", true)]
+    [InlineData("ReplayBuffer-Test-a-b-C", true)]
+    [InlineData("ReplayBuffer-Test-", false)]
+    [InlineData("ReplayBuffer-Test-a_b", false)]
+    [InlineData("ReplayBuffer-Test-a.b", false)]
     [InlineData("ReplayBuffer-Dev", false)]
+    [InlineData("ReplayBuffer", false)]
+    [InlineData("replaybuffer-test-abc", false)]
     public void OnlyTestPrefixedNamesAreTestInstances(string name, bool isTest)
     {
         Assert.Equal(isTest, Instance.IsTestName(name));

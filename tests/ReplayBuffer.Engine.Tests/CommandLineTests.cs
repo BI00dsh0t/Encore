@@ -21,6 +21,9 @@ public sealed class CommandLineTests
     [Theory]
     [InlineData("serve", "--instance", "ReplayBuffer")]
     [InlineData("serve", "--instance", "ReplayBuffer-Dev")]
+    [InlineData("serve", "--instance", "ReplayBuffer-Test-")]
+    [InlineData("serve", "--instance", "ReplayBuffer-Test-a.b")]
+    [InlineData("serve", "--instance", "ReplayBuffer-Test-..\\x")]
     public void ServeRefusesAnythingElse(params string[] args)
     {
         Assert.NotNull(CommandLine.Parse(args).Error);
@@ -44,6 +47,9 @@ public sealed class CommandLineTests
     [Theory]
     [InlineData("--track-layout", "--output-device", "Speakers")]
     [InlineData("--input-device", "Mic", "--track-layout")]
+    [InlineData("--instance", "ReplayBuffer")]
+    [InlineData("--instance", "ReplayBuffer-Test-")]
+    [InlineData("--instance", "ReplayBuffer-Test-..\\x")]
     public void DebugCaptureRefusesMixedDeviceFlagsAndNonTestInstances(params string[] extra)
     {
         Assert.NotNull(CommandLine.Parse(["debug-capture", "--window", "League", .. extra]).Error);
@@ -171,6 +177,7 @@ public sealed class CommandLineTests
     [InlineData]
     [InlineData("debug-capture", "--window", "a", "--nvenc-preset", "p8")]
     [InlineData("debug-capture", "--window", "a", "--nvenc-preset", "slow")]
+    [InlineData("debug-capture", "--window", "a", "--stats", "")]
     public void MalformedCommandLinesAreRefused(params string[] args)
     {
         var result = CommandLine.Parse(args);
@@ -194,6 +201,13 @@ public sealed class OutputNamingTests
     [Theory]
     [InlineData("League of Legends", "League of Legends")]
     [InlineData("Discord | #general: chat", "Discord _ #general_ chat")]
+    [InlineData("a/b\\c*d?e\"f<g>h", "a_b_c_d_e_f_g_h")]
+    [InlineData("  trailing dots... ", "trailing dots")]
+    [InlineData("tab\there", "tab_here")]
+    [InlineData("???", "capture")]
+    [InlineData("", "capture")]
+    [InlineData("CON", "_CON")]
+    [InlineData("nul", "_nul")]
     public void TitlesAreMadeSafeAsFileNames(string title, string expected)
     {
         Assert.Equal(expected, OutputNaming.Sanitize(title));

@@ -33,6 +33,7 @@ public sealed class TrayTests
     [Theory]
     [InlineData(null)]
     [InlineData("ReplayBuffer")]
+    [InlineData("ReplayBuffer-Test-")]
     public void AnyOtherInstanceArgumentIsRefused(string? name)
     {
         string[] args = name is null ? ["--tray", "--instance"] : ["--instance", name];

@@ -170,6 +170,7 @@ public sealed class DriftMathTests
     [Theory]
     [InlineData("\"errorMaxSamples\": 3, \"settledPackets\": 0", "no settled packets")]
     [InlineData("\"errorMaxSamples\": \"NaN\", \"settledPackets\": 10", "no numeric errorMaxSamples")]
+    [InlineData("\"settledPackets\": 10", "no numeric errorMaxSamples")]
     public void AnUnmeasuredDeviceIsInconclusiveNotAZeroError(string inputResampler, string why)
     {
         using var stats = JsonDocument.Parse(

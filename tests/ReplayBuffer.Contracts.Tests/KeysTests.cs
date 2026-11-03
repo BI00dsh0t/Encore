@@ -89,6 +89,8 @@ public sealed partial class KeysTests
     [Theory]
     [InlineData("video", """{"codec":"h264","width":1920,"height":1080,"fps":121,"bitrateKbps":40000,"rateControl":"cbr"}""")]
     [InlineData("video", """{"codec":"h264","width":1921,"height":1080,"fps":60,"bitrateKbps":40000,"rateControl":"cbr"}""")]
+    [InlineData("ringPath", "\"relative\\\\ring\"")]
+    [InlineData("manualGames", """["c:\\games\\a.exe","C:\\Games\\A.exe"]""")]
     public void BadValuesAreRefused(string name, string json)
     {
         Assert.True(Keys.TryGet(name, out var key));
