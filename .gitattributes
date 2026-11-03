@@ -1,0 +1,9 @@
+# Pin text files to LF so sessions on Windows stop introducing CRLF churn.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.dll binary
+*.exe binary
+*.wav binary
+*.mp4 binary
+*.zip binary
