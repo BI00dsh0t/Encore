@@ -87,7 +87,7 @@ The coordinator logs each QA round in the Log below.
 | 15 | Release epic 2 (`v0.2.0`) | | pending |
 | 16 | 3.1 Tracer: detect a borderless game | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `a7de027`) |
 | 17 | 3.8 Spike: which Windows game list to read | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
-| 18 | 3.2 Detection sources and exclusions | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `MERGE`) |
+| 18 | 3.2 Detection sources and exclusions | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `168704a`) |
 | 19 | 3.3 Target Game rule | | pending |
 | 20 | 3.4 Game Profile auto-creation and Ignored | | pending |
 | 21 | 3.5 OutputPathAllocator | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `af89823`) |
