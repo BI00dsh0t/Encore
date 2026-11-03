@@ -94,15 +94,22 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
     public bool AllStreamsPast(long us) => _ring.AllStreamsPast(us);
 
     /// <summary>
-    /// Pins <c>[startUs, endUs]</c> (µs since the anchor) from the first video keyframe in it, with
-    /// its own copies of the streams' parameters, so it outlives the sink; null with no keyframe there.
+    /// The video stream's <paramref name="pts"/> as µs since the anchor, exactly as the ring times
+    /// that packet, so a cut can end at it.
     /// </summary>
-    public ClipSource? Cut(long startUs, long endUs)
+    public long VideoMicros(long pts) => _ring.ToMicros(_ring.VideoStream, pts);
+
+    /// <summary>
+    /// Pins <c>[fromUs, toUs)</c> (µs since the anchor) from the first video keyframe at or after
+    /// <paramref name="fromUs"/>, as <see cref="PacketRing.Cut"/> splits it, with its own copies of
+    /// the streams' parameters, so it outlives the sink; null with no keyframe before <paramref name="toUs"/>.
+    /// </summary>
+    public ClipSource? Cut(long fromUs, long toUs)
     {
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _references) == 0, this);
-            var cut = _ring.Cut(startUs, endUs);
+            var cut = _ring.Cut(fromUs, toUs);
             if (cut is null)
             {
                 return null;

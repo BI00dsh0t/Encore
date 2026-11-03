@@ -78,7 +78,8 @@ internal sealed record EngineHostOptions
 /// mic mute reaches the meters as it does a session (R6).
 /// Game Detection proposes the Target Game to the orchestrator, which publishes <c>target.changed</c>;
 /// a Replay Buffer session follows the Target, its audio from the snapshot's Track Layout, and a
-/// <c>save</c> press writes a Clip, published as <c>clip.saved</c>. With <c>--debug-capture</c> a
+/// <c>save</c> press writes a Clip, published as <c>clip.saved</c>, or one too soon after the last
+/// Reset or the session's start is refused as <c>clip.failed</c>. With <c>--debug-capture</c> a
 /// capture session writing one file follows the Target instead.
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
@@ -253,7 +254,12 @@ internal sealed class EngineHost : IAsyncDisposable
                             hub.Publish(CaptureMessages.Saved, saved);
                             clipLog.LogInformation("Clip saved to {Path}", saved.Path);
                         },
-                        e => clipLog.LogWarning("The save failed: {Message}", e.Message))
+                        e => clipLog.LogWarning("The save failed: {Message}", e.Message),
+                        failed =>
+                        {
+                            hub.Publish(CaptureMessages.Failed, failed);
+                            clipLog.LogInformation("The save made no Clip: {Reason}", failed.Reason);
+                        })
                     : null);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
