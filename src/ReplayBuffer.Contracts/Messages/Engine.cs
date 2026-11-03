@@ -84,6 +84,10 @@ public sealed record StateSnapshot
     /// <remarks>A snapshot without the field (an engine from before story 3.1) reads as none.</remarks>
     public TargetGame? TargetGame { get; init; }
 
+    /// <summary>The running games Game Detection knows, in detection order (informational, AD-19).</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 3.2) reads as <c>null</c>.</remarks>
+    public IReadOnlyList<DetectedGame>? DetectedGames { get; init; }
+
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
 
@@ -101,6 +105,7 @@ public sealed record StateSnapshot
         Devices = AudioDeviceList.Empty,
         Meters = MeterLevels.Empty,
         TargetGame = null,
+        DetectedGames = [],
     };
 }
 

@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Core.Sessions;
@@ -30,13 +32,22 @@ public interface IGameWindowProbe
     /// <summary>The foreground window when it covers its monitor with no caption and isn't the shell's; otherwise <c>null</c>.</summary>
     GameWindow? ForegroundGameWindow();
 
+    /// <summary>The foreground window, whatever its shape, or <c>null</c> when there is none or it is the shell's.</summary>
+    GameWindow? ForegroundWindow();
+
+    /// <summary>
+    /// The visible, unowned, uncloaked top-level windows that aren't tool windows or the shell's,
+    /// minimized ones included, in Z order.
+    /// </summary>
+    IReadOnlyList<GameWindow> Windows();
+
     /// <summary>Opens <paramref name="processId"/> with limited access, or returns <c>null</c> when it can't be opened or its image read.</summary>
     IGameProcess? Open(int processId);
 }
 
 /// <summary>
-/// The real probe (AD-12): reads only the foreground window's geometry and style, and opens its
-/// process with <c>PROCESS_QUERY_LIMITED_INFORMATION</c>; no memory reads, module lists, hooks or WinEvents.
+/// The real probe (AD-12): reads only top-level windows' geometry, style and owner, and opens their
+/// processes with <c>PROCESS_QUERY_LIMITED_INFORMATION</c>; no memory reads, module lists, hooks or WinEvents.
 /// </summary>
 public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
 {
@@ -50,18 +61,53 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
             return null;
         }
 
-        uint pid;
-        PInvoke.GetWindowThreadProcessId(hwnd, &pid);
-
         // Explorer's full-screen surfaces (Task View, the Alt+Tab host) are caption-less and cover the monitor.
-        uint shellPid = 0;
-        var shell = PInvoke.GetShellWindow();
-        if (!shell.IsNull)
+        return NotTheShells(hwnd, ShellProcessId());
+    }
+
+    public GameWindow? ForegroundWindow()
+    {
+        var hwnd = PInvoke.GetForegroundWindow();
+        return hwnd.IsNull ? null : NotTheShells(hwnd, ShellProcessId());
+    }
+
+    public IReadOnlyList<GameWindow> Windows()
+    {
+        var handles = new List<HWND>();
+        var gc = GCHandle.Alloc(handles);
+        try
         {
-            PInvoke.GetWindowThreadProcessId(shell, &shellPid);
+            PInvoke.EnumWindows(&Collect, new LPARAM(GCHandle.ToIntPtr(gc)));
+        }
+        finally
+        {
+            gc.Free();
         }
 
-        return pid == 0 || pid == shellPid ? null : new GameWindow((nint)hwnd.Value, (int)pid);
+        var shellPid = ShellProcessId();
+        var windows = new List<GameWindow>();
+        foreach (var hwnd in handles)
+        {
+            if (!PInvoke.IsWindowVisible(hwnd)
+                || IsCloaked(hwnd)
+                || !PInvoke.GetWindow(hwnd, GET_WINDOW_CMD.GW_OWNER).IsNull)
+            {
+                continue;
+            }
+
+            var exStyle = (WINDOW_EX_STYLE)(uint)PInvoke.GetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+            if ((exStyle & WINDOW_EX_STYLE.WS_EX_TOOLWINDOW) != 0)
+            {
+                continue;
+            }
+
+            if (NotTheShells(hwnd, shellPid) is { } window)
+            {
+                windows.Add(window);
+            }
+        }
+
+        return windows;
     }
 
     public IGameProcess? Open(int processId)
@@ -125,6 +171,33 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
         return rect.left <= bounds.left && rect.top <= bounds.top && rect.right >= bounds.right && rect.bottom >= bounds.bottom;
     }
 
+    private static uint ShellProcessId()
+    {
+        uint shellPid = 0;
+        var shell = PInvoke.GetShellWindow();
+        if (!shell.IsNull)
+        {
+            PInvoke.GetWindowThreadProcessId(shell, &shellPid);
+        }
+
+        return shellPid;
+    }
+
+    private static GameWindow? NotTheShells(HWND hwnd, uint shellPid)
+    {
+        uint pid;
+        PInvoke.GetWindowThreadProcessId(hwnd, &pid);
+        return pid == 0 || pid == shellPid ? null : new GameWindow((nint)hwnd.Value, (int)pid);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static BOOL Collect(HWND hwnd, LPARAM lParam)
+    {
+        var handles = (List<HWND>)GCHandle.FromIntPtr(lParam.Value).Target!;
+        handles.Add(hwnd);
+        return true;
+    }
+
     private static bool IsCloaked(HWND hwnd)
     {
         uint cloaked = 0;
@@ -168,37 +241,54 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
 }
 
 /// <summary>
-/// Game Detection (story 3.1 tracer): polls the foreground window; when it covers its monitor with
-/// no caption and its process isn't excluded, canonicalizes the executable (AD-18) and proposes it
-/// as the Target Game. It only proposes (AD-19). A detected process stays known, its limited handle
-/// held, until it exits; the last one proposed exiting proposes no Target, reason exit.
+/// Game Detection (stories 3.1, 3.2). Each poll it classifies each new process that owns a top-level
+/// window once (limited open, image path, <c>Canonicalize</c>, AD-18) and detects it when its
+/// foreground window covers its monitor with no caption (the fullscreen rule) or its path is listed
+/// (Windows' game list or <c>manualGames</c>), even windowed. A detected game stays known, its limited
+/// handle held, until its process exits; minimizing it or closing its window doesn't end it.
+/// Excluded processes and those under the install folder are never detected. It only proposes
+/// (AD-19); the Target exiting proposes no Target, reason exit.
 /// </summary>
 public sealed class GameMonitor : IDisposable
 {
+    private static readonly IReadOnlySet<string> NothingListed = new HashSet<string>();
+
     private readonly IGameWindowProbe _probe;
     private readonly Func<int, bool> _isExcluded;
     private readonly Action<TargetCandidate?, TargetChangeReason> _propose;
     private readonly TimeSpan _interval;
     private readonly ILogger _log;
+    private readonly Func<IReadOnlySet<string>>? _listed;
+    private readonly string? _installFolder;
+    private readonly Action<DetectedGame>? _detected;
+    private readonly Action<DetectedGame>? _exited;
     private readonly ManualResetEventSlim _stop = new();
 
-    // Poll's thread only.
-    private readonly Dictionary<int, Known> _known = [];
+    // Poll's thread only: every process classified, until it exits; the detected ones have a Candidate.
+    private readonly Dictionary<int, Seen> _seen = [];
     private int? _proposed;
 
     private Thread? _thread;
     private int _disposed;
 
-    /// <param name="probe">Reads the foreground window and opens processes.</param>
+    /// <param name="probe">Reads the windows and opens processes.</param>
     /// <param name="isExcluded">True for a process that is never a game: the engine's and the attached App's.</param>
     /// <param name="propose">Receives each proposal, on the monitor's thread.</param>
     /// <param name="interval">The time between polls.</param>
+    /// <param name="listed">The listed games' paths, each canonical or lowercase raw (AD-18); read each poll.</param>
+    /// <param name="installFolder">The engine's install folder, canonical; nothing under it is detected.</param>
+    /// <param name="detected">Receives each newly detected game, before any proposal of it.</param>
+    /// <param name="exited">Receives each detected game whose process exited, before the exit proposal.</param>
     public GameMonitor(
         IGameWindowProbe probe,
         Func<int, bool> isExcluded,
         Action<TargetCandidate?, TargetChangeReason> propose,
         TimeSpan interval,
-        ILogger log)
+        ILogger log,
+        Func<IReadOnlySet<string>>? listed = null,
+        string? installFolder = null,
+        Action<DetectedGame>? detected = null,
+        Action<DetectedGame>? exited = null)
     {
         ArgumentNullException.ThrowIfNull(probe);
         ArgumentNullException.ThrowIfNull(isExcluded);
@@ -209,6 +299,12 @@ public sealed class GameMonitor : IDisposable
         _propose = propose;
         _interval = interval;
         _log = log;
+        _listed = listed;
+        _installFolder = string.IsNullOrEmpty(installFolder) || installFolder.EndsWith('\\')
+            ? installFolder
+            : installFolder + '\\';
+        _detected = detected;
+        _exited = exited;
     }
 
     /// <summary>Starts polling on a background thread, the first poll at once.</summary>
@@ -238,79 +334,149 @@ public sealed class GameMonitor : IDisposable
             _thread.Join();
         }
 
-        foreach (var known in _known.Values)
+        foreach (var seen in _seen.Values)
         {
-            known.Process.Dispose();
+            seen.Process.Dispose();
         }
 
-        _known.Clear();
+        _seen.Clear();
         _stop.Dispose();
     }
 
-    /// <summary>One poll: forgets exited processes, then looks at the foreground window.</summary>
+    /// <summary>One poll: forgets exited processes, then applies the fullscreen rule, then the listed source.</summary>
     internal void Poll()
     {
         ForgetExited();
 
-        if (_probe.ForegroundGameWindow() is not { } window || _isExcluded(window.ProcessId))
+        // The fullscreen rule: a newly detected game in front is always proposed (the tracer rule).
+        if (_probe.ForegroundGameWindow() is { } fullscreen && Classify(fullscreen.ProcessId) is { Eligible: true } game)
         {
-            return;
+            if (game.Candidate is null)
+            {
+                Propose(Detect(game, fullscreen.Handle));
+            }
+            else
+            {
+                Follow(game, fullscreen.Handle);
+            }
         }
 
-        if (_known.TryGetValue(window.ProcessId, out var known))
+        ScanListed();
+    }
+
+    // The listed source over every top-level window and the foreground one: a listed game is detected
+    // even windowed, and proposed only with no Target or when it owns the foreground window, so a game
+    // starting in the background never takes over the Target (focus is story 3.3's rule).
+    private void ScanListed()
+    {
+        var listed = _listed?.Invoke() ?? NothingListed;
+        var foreground = _probe.ForegroundWindow();
+        var windows = _probe.Windows();
+
+        var done = new HashSet<int>();
+        // The foreground window counts only when it is one of the listed top-level windows, never an owned dialog or tool window.
+        foreach (var window in foreground is { } inFront && windows.Contains(inFront) ? windows.Prepend(inFront) : windows)
         {
-            // The Target with a new window: proposed again, so the capture can follow it. With no
-            // Target (the last one exited), a known game in front is proposed. Another known game
-            // never takes over an existing Target here; switching on focus is story 3.3's rule.
-            var moved = known.Candidate.Window != window.Handle;
-            known.Candidate = known.Candidate with { Window = window.Handle };
-            if (_proposed is null || (moved && _proposed == window.ProcessId))
+            if (!done.Add(window.ProcessId) || Classify(window.ProcessId) is not { Eligible: true } game)
             {
-                Propose(known.Candidate);
+                continue;
             }
 
-            return;
+            // A process's first window here is the foreground one when it is the process's, else its first in Z order.
+            var owns = foreground?.ProcessId == window.ProcessId;
+            if (game.Candidate is null)
+            {
+                if (listed.Contains(game.ProfileId!) || listed.Contains(game.RawPath))
+                {
+                    var candidate = Detect(game, window.Handle);
+                    if (_proposed is null || owns)
+                    {
+                        Propose(candidate);
+                    }
+                }
+            }
+            else if (owns)
+            {
+                Follow(game, window.Handle);
+            }
+        }
+    }
+
+    // A known game in front: the Target with a new window is proposed again, so the capture can follow
+    // it; with no Target (the last one exited), it is proposed. Another known game never takes over an
+    // existing Target here; switching on focus is story 3.3's rule.
+    private void Follow(Seen game, nint window)
+    {
+        var moved = game.Candidate!.Window != window;
+        game.Candidate = game.Candidate with { Window = window };
+        if (_proposed is null || (moved && _proposed == game.Pid))
+        {
+            Propose(game.Candidate);
+        }
+    }
+
+    // The process's classification, cached with its limited handle until it exits; null when it is
+    // excluded (never opened), can't be opened (retried next poll) or has already exited.
+    private Seen? Classify(int pid)
+    {
+        // Checked every time: the App may attach after its window was first classified.
+        if (_isExcluded(pid))
+        {
+            return null;
         }
 
-        var process = _probe.Open(window.ProcessId);
+        if (_seen.TryGetValue(pid, out var seen))
+        {
+            return seen;
+        }
+
+        var process = _probe.Open(pid);
         if (process is null)
         {
-            _log.LogDebug("Process {Pid} of a fullscreen window couldn't be opened; retrying next poll", window.ProcessId);
-            return;
+            _log.LogDebug("Process {Pid} of a window couldn't be opened; retrying next poll", pid);
+            return null;
         }
 
         if (process.HasExited)
         {
             // Its window outlived it for a moment.
             process.Dispose();
-            return;
+            return null;
         }
 
-        string profileId;
+        string? profileId;
         try
         {
             profileId = GamePaths.Canonicalize(process.ImagePath);
         }
         catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException)
         {
-            process.Dispose();
-            _log.LogDebug(e, "The executable of process {Pid} couldn't be canonicalized; retrying next poll", window.ProcessId);
-            return;
+            _log.LogDebug(e, "The executable of process {Pid} couldn't be canonicalized; it is never detected", pid);
+            profileId = null;
         }
 
-        var candidate = new TargetCandidate(window.ProcessId, window.Handle, profileId, Path.GetFileName(process.ImagePath));
-        _known.Add(window.ProcessId, new Known(process, candidate));
-        Propose(candidate);
+        var underInstall = profileId is not null && _installFolder is not null && profileId.StartsWith(_installFolder, StringComparison.Ordinal);
+        seen = new Seen(pid, process, profileId, process.ImagePath.ToLowerInvariant(), profileId is not null && !underInstall);
+        _seen.Add(pid, seen);
+        return seen;
+    }
+
+    private TargetCandidate Detect(Seen game, nint window)
+    {
+        var candidate = game.Candidate = new TargetCandidate(game.Pid, window, game.ProfileId!, Path.GetFileName(game.Process.ImagePath));
+        _log.LogInformation("Detected {Name} (process {Pid}, window 0x{Window:X}) at {ProfileId}", candidate.Name, game.Pid, window, candidate.ProfileId);
+        _detected?.Invoke(ToDetectedGame(candidate));
+        return candidate;
     }
 
     private void ForgetExited()
     {
-        List<int>? exited = null;
-        foreach (var (pid, known) in _known)
+        List<Seen>? exited = null;
+        foreach (var seen in _seen.Values)
         {
-            if (known.Process.HasExited)
+            if (seen.Process.HasExited)
             {
-                (exited ??= []).Add(pid);
+                (exited ??= []).Add(seen);
             }
         }
 
@@ -319,14 +485,20 @@ public sealed class GameMonitor : IDisposable
             return;
         }
 
-        foreach (var pid in exited)
+        foreach (var seen in exited)
         {
-            _known.Remove(pid, out var known);
-            known!.Process.Dispose();
-            if (_proposed == pid)
+            _seen.Remove(seen.Pid);
+            seen.Process.Dispose();
+            if (seen.Candidate is not { } game)
+            {
+                continue;
+            }
+
+            _log.LogInformation("{Name} (process {Pid}) exited", game.Name, seen.Pid);
+            _exited?.Invoke(ToDetectedGame(game));
+            if (_proposed == seen.Pid)
             {
                 _proposed = null;
-                _log.LogInformation("The Target Game's process {Pid} exited", pid);
                 _propose(null, TargetChangeReason.Exit);
             }
         }
@@ -335,9 +507,11 @@ public sealed class GameMonitor : IDisposable
     private void Propose(TargetCandidate candidate)
     {
         _proposed = candidate.ProcessId;
-        _log.LogInformation("Detected {Name} (process {Pid}, window 0x{Window:X}) at {ProfileId}", candidate.Name, candidate.ProcessId, candidate.Window, candidate.ProfileId);
+        _log.LogInformation("Proposing {Name} (process {Pid}, window 0x{Window:X}) as the Target Game", candidate.Name, candidate.ProcessId, candidate.Window);
         _propose(candidate, TargetChangeReason.Detected);
     }
+
+    private static DetectedGame ToDetectedGame(TargetCandidate candidate) => new(candidate.ProfileId, candidate.Name, candidate.ProcessId);
 
     private void Run()
     {
@@ -355,10 +529,14 @@ public sealed class GameMonitor : IDisposable
         while (!_stop.Wait(_interval));
     }
 
-    private sealed class Known(IGameProcess process, TargetCandidate candidate)
+    /// <param name="Pid">The process.</param>
+    /// <param name="Process">Its limited handle, held until it exits.</param>
+    /// <param name="ProfileId">The canonical executable, or null when it couldn't be canonicalized (never detected).</param>
+    /// <param name="RawPath">The executable as the system reports it, lowercase (AD-18).</param>
+    /// <param name="Eligible">Whether it may be detected: canonicalized and not under the install folder.</param>
+    private sealed record Seen(int Pid, IGameProcess Process, string? ProfileId, string RawPath, bool Eligible)
     {
-        public IGameProcess Process { get; } = process;
-
-        public TargetCandidate Candidate { get; set; } = candidate;
+        /// <summary>Set once the process is detected; it then stays detected until it exits.</summary>
+        public TargetCandidate? Candidate { get; set; }
     }
 }

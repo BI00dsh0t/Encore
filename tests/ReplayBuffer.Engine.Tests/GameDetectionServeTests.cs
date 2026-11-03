@@ -1,8 +1,10 @@
+using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Engine.Supervision;
 using ReplayBuffer.Platform.Windows;
 
@@ -58,6 +60,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         var game = _probe.Add(GamePid, GamePath);
         _probe.Foreground = new GameWindow(0x10, GamePid);
 
+        await NextAsync("game.detected");
         var detected = await NextAsync("target.changed");
         var expected = new TargetGame(GamePaths.Canonicalize(GamePath), "Game.EXE", GamePid);
         Assert.Equal(new TargetChanged(null, expected, TargetChangeReason.Detected), GameMessages.TargetChanged.Read(detected.Payload));
@@ -65,9 +68,29 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         Assert.Equal(expected, _client.State!.TargetGame);
 
         game.HasExited = true;
+        await NextAsync("game.exited");
+        Assert.Empty(_client.State!.DetectedGames!);
         var exited = await NextAsync("target.changed");
         Assert.Equal(new TargetChanged(expected, null, TargetChangeReason.Exit), GameMessages.TargetChanged.Read(exited.Payload));
         Assert.Null(_client.State!.TargetGame);
+    }
+
+    [Fact]
+    public async Task AHandAddedGameWithACaptionedWindowIsDetected()
+    {
+        var update = new SettingsUpdate(0, [SettingsOp.SetGlobal("manualGames", JsonSerializer.SerializeToElement<IReadOnlyList<string>>([GamePath], SettingsJsonContext.Default.IReadOnlyListString))]);
+        await _client.SendAsync(SettingsMessages.Update, update, Token);
+        await NextAsync("settings.changed");
+
+        _probe.Add(GamePid, GamePath);
+        _probe.AddWindow(new GameWindow(0x40, GamePid));
+
+        var detected = GameMessages.Detected.Read((await NextAsync("game.detected")).Payload);
+        var changed = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload);
+        var expected = new DetectedGame(GamePaths.Canonicalize(GamePath), "Game.EXE", GamePid);
+        Assert.Equal(expected, detected);
+        Assert.Equal(new TargetChanged(null, new TargetGame(expected.ProfileId, expected.Name, GamePid), TargetChangeReason.Detected), changed);
+        Assert.Equal([expected], _client.State!.DetectedGames!);
     }
 
     [Fact]
@@ -99,6 +122,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
     {
         private readonly Lock _lock = new();
         private readonly Dictionary<int, FakeProcess> _processes = [];
+        private readonly List<GameWindow> _windows = [];
         private GameWindow? _foreground;
         private int _polls;
 
@@ -129,10 +153,28 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
             }
         }
 
+        public void AddWindow(GameWindow window)
+        {
+            lock (_lock)
+            {
+                _windows.Add(window);
+            }
+        }
+
         public GameWindow? ForegroundGameWindow()
         {
             Interlocked.Increment(ref _polls);
             return Foreground;
+        }
+
+        public GameWindow? ForegroundWindow() => Foreground;
+
+        public IReadOnlyList<GameWindow> Windows()
+        {
+            lock (_lock)
+            {
+                return [.. _windows];
+            }
         }
 
         public IGameProcess? Open(int processId)
