@@ -78,6 +78,14 @@ public sealed class SoakTests
     }
 
     [Fact]
+    public void ATrackOnePacketShortOfTheVideoPassesAndTwoFail()
+    {
+        // 1747 frames at 60 fps against 1364 AAC packets: 18 ms, more than a frame but less than a packet (story 8.2's soak).
+        Assert.True(SoakClipCheck.Evaluate(new ClipProbe([Video(29.117), Audio("Everything", 29.099)], null), ["Everything"], 30, 60).Pass);
+        Assert.False(SoakClipCheck.Evaluate(new ClipProbe([Video(29.117), Audio("Everything", 29.077)], null), ["Everything"], 30, 60).Pass);
+    }
+
+    [Fact]
     public void AClipCutShortFails()
     {
         var result = SoakClipCheck.Evaluate(new ClipProbe([Video(3), Audio("Everything", 3)], null), ["Everything"], 30, 60);
@@ -105,6 +113,24 @@ public sealed class SoakTests
         Assert.Equal([20, 40], pressed);
         Assert.Equal(7, schedule.Samples);
         Assert.Equal(2, schedule.Presses);
+    }
+
+    [Fact]
+    public void AOneShotEventFiresOnceWhenDue()
+    {
+        var time = new ManualTime(T0);
+        var fired = new List<double>();
+        var schedule = new SoakSchedule(
+            TimeSpan.FromMinutes(1),
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(20),
+            time,
+            (span, _) => time.Advance(span),
+            [(TimeSpan.FromSeconds(25), () => fired.Add((time.GetUtcNow() - T0).TotalSeconds))]);
+
+        Assert.Null(schedule.Run(() => { }, () => { }, () => null, CancellationToken.None));
+
+        Assert.Equal([25], fired);
     }
 
     /// <summary>Samples every 10 s for <paramref name="length"/> (20 minutes by default), for one process.</summary>

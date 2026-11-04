@@ -23,12 +23,16 @@ internal sealed record SoakClipResult(
 /// <summary>
 /// <c>bench soak</c>'s check of each Clip. Every expected Track is present by name, in order; the video is
 /// [window − one GOP (1 s) − one frame, window + one frame] long, since a Clip starts at the first keyframe
-/// inside the window (AD-8); each audio Track is within one frame of the video; and the whole file decodes
+/// inside the window (AD-8); each audio Track is within one frame of the video, or one AAC packet
+/// (<see cref="AudioPacketSeconds"/>) when that is longer, as the audio ends on a whole packet; and the whole file decodes
 /// (<c>ffmpeg -v error -i clip -map 0 -f null -</c> exits 0 with nothing on stderr).
 /// </summary>
 internal static class SoakClipCheck
 {
     public const double GopSeconds = 1;
+
+    /// <summary>One AAC packet, 1024 samples at 48 kHz: a Track's length steps by this, so it trails the video by up to one.</summary>
+    public const double AudioPacketSeconds = 1024.0 / 48_000;
 
     public static SoakClipResult Check(FfmpegTools tools, string path, IReadOnlyList<string> expectedTitles, int bufferSeconds, double fps) =>
         Evaluate(Probe(tools, path), expectedTitles, bufferSeconds, fps);
@@ -57,6 +61,7 @@ internal static class SoakClipCheck
     {
         var failures = new List<string>();
         var frame = 1 / fps;
+        var audioSlack = Math.Max(frame, AudioPacketSeconds);
         var video = probe.Streams.FirstOrDefault(s => s.CodecType == "video");
         var audio = probe.Streams.Where(s => s.CodecType == "audio").ToList();
         var tracks = audio.Select(a => a.Name ?? "(unnamed)").ToList();
@@ -95,9 +100,9 @@ internal static class SoakClipCheck
                 {
                     failures.Add($"Track {tracks[i]} has no duration");
                 }
-                else if (Math.Abs(audioLength - length) > frame)
+                else if (Math.Abs(audioLength - length) > audioSlack)
                 {
-                    failures.Add(Text($"Track {tracks[i]} {audioLength:0.###} s is {Math.Abs(audioLength - length) * 1000:0.#} ms off the video (> one frame)"));
+                    failures.Add(Text($"Track {tracks[i]} {audioLength:0.###} s is {Math.Abs(audioLength - length) * 1000:0.#} ms off the video (> {audioSlack * 1000:0.#} ms)"));
                 }
             }
         }

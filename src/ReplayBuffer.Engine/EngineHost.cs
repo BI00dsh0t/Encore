@@ -57,6 +57,12 @@ internal sealed record EngineHostOptions
     /// </summary>
     public bool? ReplayBuffer { get; init; }
 
+    /// <summary>
+    /// <c>serve --restarted</c>: why the App relaunched this engine, if it did. The engine raises
+    /// <c>engine-restarted</c> before its pipe serves, so the first snapshot carries it (AD-16).
+    /// </summary>
+    public EngineRestartReason? Restarted { get; init; }
+
     /// <summary>The time between Game Detection polls.</summary>
     public TimeSpan GameScanInterval { get; init; } = TimeSpan.FromSeconds(1);
 
@@ -94,7 +100,8 @@ internal sealed record EngineHostOptions
 /// capture session writing one file follows the Target instead.
 /// The FeedbackRouter turns Clips saved and not saved, Recording state changes and a disk full into
 /// <c>warning.raised</c> notices, and dismisses the info ones after 10 s. <c>dev.simulate</c> injects a
-/// stub Recording state, a disk full, a save failure or a saved notice; the installed instance refuses it.
+/// stub Recording state, a disk full, a save failure, a saved notice or an engine hang; the installed instance refuses it.
+/// Started with <c>--restarted</c>, it raises <c>engine-restarted</c> before its pipe serves.
 /// Each notice's Feedback Sound, if switched on, plays on a worker on <c>feedbackSoundDevice</c> or
 /// the default communications endpoint; <c>feedback.preview</c> plays one even when it is off. While
 /// a Track of the active Track Layout mixes that endpoint, a <c>feedback-device-captured</c> warning
@@ -273,6 +280,9 @@ internal sealed class EngineHost : IAsyncDisposable
             SessionOrchestrator? settingsTo = null;
             load.Store.Changed += _ => Volatile.Read(ref settingsTo)?.Post(new SettingsUpdated());
 
+            // cleanup-limit-unreachable is raised once the warnings exist; Cleanup never runs before 60 s.
+            Warnings? warnTo = null;
+            string? unreachableWarning = null;
             var libraryActor = library = new LibraryActor(
                 libraryLoad.Items,
                 OutputFolder,
@@ -289,12 +299,32 @@ internal sealed class EngineHost : IAsyncDisposable
                 createMissingFolder: !instance.IsTest,
                 readLength: path => MediaLength.Read(path, ffmpegLog),
                 folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed),
-                recycle: RecycleBin.Recycle);
+                recycle: RecycleBin.Recycle,
+                cleanup: () => SettingsResolver.Resolve(load.Store.Current, null).Cleanup,
+                limitUnreachable: message =>
+                {
+                    // A new crossing replaces the last one's warning rather than stacking beside it.
+                    if (Volatile.Read(ref warnTo) is not { } to)
+                    {
+                        return;
+                    }
+
+                    if (unreachableWarning is { } last)
+                    {
+                        to.Withdraw(last);
+                    }
+
+                    unreachableWarning = to.Raise(ErrorCodes.CleanupLimitUnreachable, WarningSeverity.Warning, "library", message, overlay: false).Id;
+                },
+                log: message => libraryLog.LogInformation("{Message}", message),
+                finalPath: GamePaths.Canonicalize);
 
             // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.
             load.Store.Changed += _ => libraryActor.OutputFolderChanged();
+            load.Store.Changed += _ => libraryActor.CleanupChanged();
             string? corruptWarning = null;
             var warnings = new Warnings(hub, hostOptions.Time);
+            Volatile.Write(ref warnTo, warnings);
             var feedbackLog = loggers.CreateLogger("Feedback");
             var player = sounds = new FeedbackSoundPlayer(
                 hostOptions.FeedbackSounds ?? (instance.IsTest ? SilentFeedbackSoundOutput.Instance : new FeedbackSoundOutput()),
@@ -323,7 +353,7 @@ internal sealed class EngineHost : IAsyncDisposable
             var apps = new AppSupervisor(
                 hub,
                 warnings,
-                hostOptions.AppLauncher ?? AppLauncher.Beside(instance),
+                hostOptions.AppLauncher ?? AppLauncher.Beside(instance, instance.IsTest && replay ? ["--replay-buffer"] : null),
                 hostOptions.Time,
                 loggers.CreateLogger("Supervision"));
             var encoders = new VideoEncoderCatalog(loggers);
@@ -542,6 +572,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 await libraryActor.Delete(delete).ConfigureAwait(false);
                 return Empty.Value;
             });
+            router.Register(LibraryMessages.CleanupPreview, async (preview, _) => await libraryActor.PreviewCleanup(preview).ConfigureAwait(false));
             router.Register(FeedbackMessages.Preview, (preview, _) =>
             {
                 player.Preview(preview.Sound);
@@ -556,7 +587,13 @@ internal sealed class EngineHost : IAsyncDisposable
                 notices.RecordingStopped,
                 notices.DiskFull,
                 notSaved,
-                () => notices.ClipSaved(new ClipSaved("dev.simulate")));
+                () => notices.ClipSaved(new ClipSaved("dev.simulate")),
+                () =>
+                {
+                    // A real hang: no heartbeat, and every publish, snapshot and attach blocks on the hub.
+                    host._stopHeartbeat.Cancel();
+                    hub.Freeze();
+                });
             router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
@@ -593,6 +630,11 @@ internal sealed class EngineHost : IAsyncDisposable
                     await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
                     return Empty.Value;
                 });
+            }
+
+            if (hostOptions.Restarted is { } restarted)
+            {
+                AppSupervisor.RaiseEngineRestarted(hub, warnings, restarted);
             }
 
             if (load.LoadCode == ErrorCodes.SettingsUnreadable)

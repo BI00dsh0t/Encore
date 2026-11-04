@@ -30,6 +30,7 @@ internal sealed class MainViewModel : Observable
         TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
         GameProfiles = Pages.OfType<GameProfilesPage>().Single();
         FeedbackSounds = Pages.OfType<FeedbackSoundsPage>().Single();
+        LibrarySettings = Pages.OfType<LibrarySettingsPage>().Single();
         _selectedPage = Pages[0];
         Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile);
         engine.Changed += () => post(Refresh);
@@ -58,6 +59,9 @@ internal sealed class MainViewModel : Observable
 
     /// <summary>The Feedback Sounds page, which takes the snapshot's device list and warnings as well as its settings.</summary>
     public FeedbackSoundsPage FeedbackSounds { get; }
+
+    /// <summary>The Library and Cleanup page, which takes the snapshot's Library folder, items and Cleanup block as well as its settings.</summary>
+    public LibrarySettingsPage LibrarySettings { get; }
 
     /// <summary>The Library tab.</summary>
     public LibraryPage Library { get; }
@@ -115,6 +119,7 @@ internal sealed class MainViewModel : Observable
         GameProfiles.ShowState(state);
         Hotkeys.ShowStatus(state.Hotkeys);
         FeedbackSounds.ShowState(state);
+        LibrarySettings.ShowState(state);
         Library.Render(state);
 
         // Before rendering, so a draft the render watches is recorded against this engine run.

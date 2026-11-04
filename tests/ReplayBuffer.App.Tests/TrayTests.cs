@@ -43,6 +43,33 @@ public sealed class TrayTests
     }
 
     [Fact]
+    public void TheRestartItemIsHiddenUntilACrashLoopAndRestartsTheEngine() => Sta.Run(() =>
+    {
+        var model = new MainViewModel(new FakeEngineSession(), action => action());
+        var restarts = 0;
+        var menu = ShellApp.CreateTrayMenu(model, () => { }, () => { }, () => restarts++);
+
+        var restart = menu.Items.OfType<MenuItem>().Single(i => i.Name == ShellApp.RestartItemName);
+        Assert.Equal(Visibility.Collapsed, restart.Visibility);
+        restart.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(1, restarts);
+
+        ShellApp.ShowCrashLoop(restart, crashLoop: true);
+        Assert.Equal(Visibility.Visible, restart.Visibility);
+        Assert.Equal("!", TrayCapture.CrashLoopIcon().Text);
+        ShellApp.ShowCrashLoop(restart, crashLoop: false);
+        Assert.Equal(Visibility.Collapsed, restart.Visibility);
+    });
+
+    [Fact]
+    public void ReplayBufferIsAcceptedOnATestInstanceOnly()
+    {
+        Assert.True(ShellApp.TryParseArguments(["--tray", "--instance", "ReplayBuffer-Test-x1", "--replay-buffer"], out var instance));
+        Assert.True(instance.IsTest);
+        Assert.False(ShellApp.TryParseArguments(["--tray", "--replay-buffer"], out _));
+    }
+
+    [Fact]
     public void TheMenuOffersOpenStartWithWindowsAndQuitAndItsPopupIsExcludedFromCapture() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession { Reply = (_, _) => new Contracts.Messages.SettingsUpdateResult(1) };
@@ -50,7 +77,7 @@ public sealed class TrayTests
         var opened = 0;
         var quit = 0;
         var menu = ShellApp.CreateTrayMenu(model, () => opened++, () => quit++);
-        var items = menu.Items.OfType<MenuItem>().ToList();
+        var items = menu.Items.OfType<MenuItem>().Where(i => i.Visibility == Visibility.Visible).ToList();
         Assert.Equal(["Open", "Start with Windows", "Quit"], items.Select(i => (string)i.Header));
 
         menu.Placement = PlacementMode.AbsolutePoint;

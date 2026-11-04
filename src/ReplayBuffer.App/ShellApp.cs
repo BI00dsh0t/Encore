@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,12 +18,19 @@ namespace ReplayBuffer.App;
 /// The App: a tray icon, the Main App window and the engine connection, which supervises the
 /// engine. It starts in the tray and runs until Quit, or until the engine ends cleanly on its own
 /// (AD-16). <c>--tray</c> starts it with no window, as Start with Windows and the engine's relaunch
-/// do; <c>--instance ReplayBuffer-Test-*</c> runs it on a test instance.
+/// do; <c>--instance ReplayBuffer-Test-*</c> runs it on a test instance, and <c>--replay-buffer</c> (test
+/// instances only) passes the engine's own switch on, so a test instance's engine buffers and saves.
+/// An engine crash loop puts the tray in its error state, with a Restart item, and goes to
+/// <c>logs\app.log</c> in the instance's local data folder.
 /// </summary>
 internal sealed class ShellApp(Instance instance) : Application
 {
     public const string TrayArgument = "--tray";
     public const string InstanceArgument = "--instance";
+    public const string ReplayBufferArgument = "--replay-buffer";
+
+    /// <summary>The tray menu's Restart item, shown only in <see cref="EngineStatus.CrashLoop"/>.</summary>
+    public const string RestartItemName = "RestartItem";
 
     /// <summary>How long Quit waits for the engine to exit, so a pending save can finish (AD-16).</summary>
     private static readonly TimeSpan QuitTimeout = TimeSpan.FromSeconds(5);
@@ -32,9 +40,12 @@ internal sealed class ShellApp(Instance instance) : Application
     private MainWindow? _window;
     private OverlayWindow? _overlay;
     private TaskbarIcon? _tray;
+    private MenuItem? _restartItem;
     private IDisposable? _captureExclusion;
     private OverlayDot _trayDot;
+    private bool _trayCrashLoop;
     private bool _quitting;
+    private readonly Lock _logLock = new();
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -48,7 +59,12 @@ internal sealed class ShellApp(Instance instance) : Application
         {
             InstanceName = instance.Name,
             EnginePath = Path.Combine(AppContext.BaseDirectory, EngineConnectionOptions.EngineFileName),
-            EngineArguments = instance.IsTest ? ["serve", InstanceArgument, instance.Name] : ["serve"],
+            EngineArguments = !instance.IsTest
+                ? ["serve"]
+                : WantsReplayBuffer(e.Args)
+                    ? ["serve", InstanceArgument, instance.Name, ReplayBufferArgument]
+                    : ["serve", InstanceArgument, instance.Name],
+            Log = Log,
         });
         _engine.EngineEnded += () => Dispatcher.BeginInvoke(async () => await QuitAsync());
 
@@ -84,6 +100,24 @@ internal sealed class ShellApp(Instance instance) : Application
     /// <summary>Whether the command line asks for no window at start.</summary>
     internal static bool StartsInTray(IEnumerable<string> args) => args.Contains(TrayArgument, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Whether the command line passes <c>--replay-buffer</c> on to the engine; valid on a test instance only.</summary>
+    internal static bool WantsReplayBuffer(IEnumerable<string> args) => args.Contains(ReplayBufferArgument, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The App's command line: <see cref="TryParseInstance"/>, and <c>--replay-buffer</c>, which, like the
+    /// engine's, is for test instances only. False means exit 2.
+    /// </summary>
+    internal static bool TryParseArguments(IReadOnlyList<string> args, [NotNullWhen(true)] out Instance? instance)
+    {
+        if (TryParseInstance(args, out instance) && (instance.IsTest || !WantsReplayBuffer(args)))
+        {
+            return true;
+        }
+
+        instance = null;
+        return false;
+    }
+
     /// <summary>
     /// The instance the command line names with <c>--instance</c>, which must be a test instance (the
     /// engine's rule), or the process's own. False when <c>--instance</c> is malformed.
@@ -110,9 +144,15 @@ internal sealed class ShellApp(Instance instance) : Application
         return true;
     }
 
-    /// <summary>The tray's menu: Open, Start with Windows and Quit (epic Decision, 2026-10-25).</summary>
-    internal static ContextMenu CreateTrayMenu(MainViewModel model, Action open, Action quit)
+    /// <summary>
+    /// The tray's menu: Open, Start with Windows and Quit (epic Decision, 2026-10-25), and a hidden
+    /// Restart item, named <see cref="RestartItemName"/>, shown only while the engine is in a crash loop.
+    /// </summary>
+    internal static ContextMenu CreateTrayMenu(MainViewModel model, Action open, Action quit, Action? restart = null)
     {
+        var restartItem = new MenuItem { Header = "Restart", Name = RestartItemName, Visibility = Visibility.Collapsed };
+        restartItem.Click += (_, _) => restart?.Invoke();
+
         var openItem = new MenuItem { Header = "Open" };
         openItem.Click += (_, _) => open();
 
@@ -124,7 +164,7 @@ internal sealed class ShellApp(Instance instance) : Application
         var quitItem = new MenuItem { Header = "Quit" };
         quitItem.Click += (_, _) => quit();
 
-        var menu = new ContextMenu { Items = { openItem, startWithWindows, new Separator(), quitItem } };
+        var menu = new ContextMenu { Items = { restartItem, openItem, startWithWindows, new Separator(), quitItem } };
 
         // The menu is a popup with a window of its own; exclude it as soon as it has one (AD-15).
         PresentationSource.AddSourceChangedHandler(menu, (_, e) =>
@@ -137,6 +177,10 @@ internal sealed class ShellApp(Instance instance) : Application
         return menu;
     }
 
+    /// <summary>Shows the tray menu's Restart item only while the engine is in a crash loop.</summary>
+    internal static void ShowCrashLoop(MenuItem restartItem, bool crashLoop) =>
+        restartItem.Visibility = crashLoop ? Visibility.Visible : Visibility.Collapsed;
+
     private void SyncStartup()
     {
         if (_engine?.State?.Settings is { } settings)
@@ -147,7 +191,8 @@ internal sealed class ShellApp(Instance instance) : Application
 
     private TaskbarIcon CreateTray(MainViewModel model, string title)
     {
-        var menu = CreateTrayMenu(model, () => _window!.Open(), async () => await QuitAsync());
+        var menu = CreateTrayMenu(model, () => _window!.Open(), async () => await QuitAsync(), () => _engine!.RestartAfterCrashLoop());
+        _restartItem = menu.Items.OfType<MenuItem>().Single(i => i.Name == RestartItemName);
         var tray = new TaskbarIcon
         {
             ToolTipText = $"{title}: {TrayCapture.Describe(OverlayDot.None)}",
@@ -160,18 +205,40 @@ internal sealed class ShellApp(Instance instance) : Application
         return tray;
     }
 
-    // The tray carries the capture state in every overlayDot mode (story 5.15).
+    // The tray carries the capture state in every overlayDot mode (story 5.15), and the engine's crash loop.
     private void SyncTray()
     {
         var dot = TrayCapture.For(_engine!);
-        if (_tray is null || dot == _trayDot)
+        var crashLoop = _engine!.Status == EngineStatus.CrashLoop;
+        if (_tray is null || (dot == _trayDot && crashLoop == _trayCrashLoop))
         {
             return;
         }
 
         _trayDot = dot;
-        _tray.IconSource = TrayCapture.Icon(dot);
-        _tray.ToolTipText = $"{_window!.Title}: {TrayCapture.Describe(dot)}";
+        _trayCrashLoop = crashLoop;
+        ShowCrashLoop(_restartItem!, crashLoop);
+        _tray.IconSource = crashLoop ? TrayCapture.CrashLoopIcon() : TrayCapture.Icon(dot);
+        _tray.ToolTipText = $"{_window!.Title}: {(crashLoop ? TrayCapture.CrashLoopText : TrayCapture.Describe(dot))}";
+    }
+
+    /// <summary>Writes a timestamped line to <c>logs\app.log</c> in the instance's local data folder. Any thread.</summary>
+    private void Log(string message)
+    {
+        var line = $"{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff zzz", CultureInfo.InvariantCulture)} {message}{Environment.NewLine}";
+        try
+        {
+            var folder = Path.Combine(instance.LocalDataFolder, "logs");
+            Directory.CreateDirectory(folder);
+            lock (_logLock)
+            {
+                File.AppendAllText(Path.Combine(folder, "app.log"), line);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // The log is best effort; the status line carries the same text.
+        }
     }
 
     private async Task QuitAsync()
