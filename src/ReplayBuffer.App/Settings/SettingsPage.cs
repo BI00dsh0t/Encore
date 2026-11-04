@@ -88,6 +88,7 @@ internal static class SettingsPages
     [
         new GeneralSettingsPage(sender),
         new ReplayBufferSettingsPage(sender),
+        new HotkeysPage(sender),
         new TrackLayoutPage(sender, engine),
         new GameProfilesPage(sender, engine),
     ];

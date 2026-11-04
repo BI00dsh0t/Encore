@@ -36,6 +36,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Border Width="96"
                                     Height="54"
@@ -78,6 +79,18 @@
                                        TextAlignment="Right">
                                 <Run Text="{Binding Size, Mode=OneWay}" /><Run FontStyle="Italic" Text="{Binding Lock, Mode=OneWay}" />
                             </TextBlock>
+                            <!-- The star follows the snapshot: a click only sends library.setFavourite. -->
+                            <Button Grid.Column="5"
+                                    Margin="12,0,0,0"
+                                    Padding="4,0"
+                                    VerticalAlignment="Top"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Command="{Binding FavouriteCommand}"
+                                    Content="{Binding Star}"
+                                    FontSize="16"
+                                    Foreground="#D4A017"
+                                    ToolTip="Favourite" />
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

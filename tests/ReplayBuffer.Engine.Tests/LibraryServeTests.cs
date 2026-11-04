@@ -55,7 +55,20 @@ public sealed class LibraryServeTests : IAsyncLifetime
         await SaveAsync();
 
         var item = Assert.Single(_client.State.Library);
-        Assert.Equal(new LibraryItem(@"Game\Game_2026-11-03_10-00-00.mp4", ProfileId, 64, item.Date, false), item);
+        Assert.Equal(new LibraryItem(@"Game\Game_2026-11-03_10-00-00.mp4", ProfileId, 64, item.Date, false, Modified: item.Modified), item);
+        Assert.NotNull(item.Modified);
+    }
+
+    [Fact]
+    public async Task SetFavouriteOverIpcShowsInTheSnapshot()
+    {
+        await SaveAsync();
+        var item = Assert.Single(_client.State.Library);
+
+        await _client.SendAsync(LibraryMessages.SetFavourite, new LibrarySetFavourite(item.Path, item.Size, item.Modified, true), Token);
+        await NextAsync("library.itemChanged");
+
+        Assert.True(Assert.Single(_client.State.Library).Favourite);
     }
 
     [Fact]

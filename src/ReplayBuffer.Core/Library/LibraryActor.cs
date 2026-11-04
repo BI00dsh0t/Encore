@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 
 namespace ReplayBuffer.Core.Library;
@@ -248,7 +249,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
                         ? seconds
                         : (double?)null;
                 items.Add(entry is not null
-                    ? new LibraryItem(key, entry.ProfileId, file.Length, entry.Date, false, length)
+                    ? new LibraryItem(key, entry.ProfileId, file.Length, entry.Date, false, length, entry.Favourite, Utc(file.LastWriteTimeUtc))
                     : Scanned(file, key, profileForFolder));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -276,6 +277,25 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         {
             _channel.Writer.TryWrite(new End(path, outcome));
         }
+    }
+
+    /// <summary>
+    /// <c>library.setFavourite</c> (story 7.4): sets the item's Favourite when the identity (AD-3) in
+    /// <paramref name="args"/> matches the item and, unless it is being written, the file on disk;
+    /// publishes <c>library.itemChanged</c> and saves it. Faults with <see cref="ErrorCodes.LibraryItemChanged"/>
+    /// when the identity is stale (a file that changed on disk is refreshed and published first), and
+    /// with <see cref="ErrorCodes.EngineDisconnected"/> once the actor is disposed.
+    /// </summary>
+    public Task SetFavourite(LibrarySetFavourite args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_channel.Writer.TryWrite(new SetFavouriteRequest(args, done)))
+        {
+            done.TrySetException(new ErrorCodeException(ErrorCodes.EngineDisconnected, "The Library has shut down."));
+        }
+
+        return done.Task;
     }
 
     /// <summary>
@@ -346,8 +366,11 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     {
         var separator = key.IndexOf(Path.DirectorySeparatorChar, StringComparison.Ordinal);
         var profileId = separator > 0 ? profileForFolder(key[..separator]) : null;
-        return new LibraryItem(key, profileId, file.Length, new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero), false);
+        return new LibraryItem(key, profileId, file.Length, new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero), false, Modified: Utc(file.LastWriteTimeUtc));
     }
+
+    /// <summary>A file's <see cref="FileSystemInfo.LastWriteTimeUtc"/> as an item's <see cref="LibraryItem.Modified"/>.</summary>
+    private static DateTimeOffset Utc(DateTime lastWriteUtc) => new(lastWriteUtc, TimeSpan.Zero);
 
     /// <summary>Whether the file is a complete MP4 now; a busy or unreadable file isn't.</summary>
     private static bool CompleteNow(string path)
@@ -612,6 +635,19 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
             case LengthRead read:
                 OnLengthRead(read);
                 break;
+
+            case SetFavouriteRequest request:
+                try
+                {
+                    OnSetFavourite(request);
+                }
+                finally
+                {
+                    // A no-op once answered; an unexpected failure (reported by Run) mustn't leave the router waiting.
+                    request.Done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, "The Favourite couldn't be set."));
+                }
+
+                break;
         }
     }
 
@@ -681,7 +717,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
 
         var file = new FileInfo(path);
-        item = item with { Size = file.Exists ? file.Length : 0, BeingWritten = false };
+        item = item with
+        {
+            Size = file.Exists ? file.Length : 0,
+            Modified = file.Exists ? Utc(file.LastWriteTimeUtc) : null,
+            BeingWritten = false,
+        };
         _items[key] = item;
         _changed(item);
         _dirty = true;
@@ -936,7 +977,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         else
         {
             // A file rewritten outside the app has a new length.
-            item = item with { Size = file.Length, LengthSeconds = null };
+            item = item with { Size = file.Length, Modified = Utc(file.LastWriteTimeUtc), LengthSeconds = null };
             _modified.Remove(key);
             _items[key] = item;
             _changed(item);
@@ -945,6 +986,75 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _dirty = true;
         QueueLength(key);
     }
+
+    /// <summary>
+    /// Sets the Favourite when the command's identity matches the item and, for a written item, the file
+    /// on disk; else refuses it. A file missing on disk is reconciled once it settles; one whose size or
+    /// modified time differs is refreshed and published, so the App's next command matches.
+    /// </summary>
+    private void OnSetFavourite(SetFavouriteRequest request)
+    {
+        var args = request.Args;
+        if (string.IsNullOrEmpty(args.Path)
+            || !TryKey(_folder, Path.GetFullPath(Path.Combine(_folder, args.Path)), out var key)
+            || !_items.TryGetValue(key, out var item)
+            || item.Size != args.Size
+            || item.Modified != args.Modified)
+        {
+            Refuse(request.Done, args.Path);
+            return;
+        }
+
+        // Being written: the writer owns the file, so only the index is compared.
+        if (!item.BeingWritten)
+        {
+            var path = Path.Combine(_folder, key);
+            var file = new FileInfo(path);
+            if (!file.Exists)
+            {
+                Pend(path);
+                Refuse(request.Done, args.Path);
+                return;
+            }
+
+            var modified = Utc(file.LastWriteTimeUtc);
+            if (file.Length != item.Size || modified != item.Modified)
+            {
+                var resized = file.Length != item.Size;
+                item = item with { Size = file.Length, Modified = modified, LengthSeconds = resized ? null : item.LengthSeconds };
+                if (resized)
+                {
+                    _modified.Remove(key);
+                }
+
+                _items[key] = item;
+                _changed(item);
+                _dirty = true;
+                if (resized)
+                {
+                    QueueLength(key);
+                }
+
+                Refuse(request.Done, args.Path);
+                return;
+            }
+        }
+
+        if (item.Favourite != args.Favourite)
+        {
+            item = item with { Favourite = args.Favourite };
+            _items[key] = item;
+            _changed(item);
+            _dirty = true;
+        }
+
+        request.Done.TrySetResult();
+    }
+
+    private static void Refuse(TaskCompletionSource done, string? path) =>
+        done.TrySetException(new ErrorCodeException(
+            ErrorCodes.LibraryItemChanged,
+            $"The Library item '{path}' changed since it was shown; act on it again."));
 
     /// <summary>Queues a read of the item's length at its current size, unless one is already queued at that size.</summary>
     private void QueueLength(string key)
@@ -1250,8 +1360,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     // A length is saved with the modified time it was read at, so a restart can tell it still holds.
     private LibraryFileEntry Entry(LibraryItem item) =>
         item.LengthSeconds is { } length && _modified.TryGetValue(item.Path, out var modified)
-            ? new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, length, modified)
-            : new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size);
+            ? new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, length, modified, item.Favourite)
+            : new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, Favourite: item.Favourite);
 
     private enum ReadResult
     {
@@ -1288,6 +1398,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     private sealed record LengthRead(string Folder, string Key, long Size, DateTime Modified, double? Length) : Message;
 
+    private sealed record SetFavouriteRequest(LibrarySetFavourite Args, TaskCompletionSource Done) : Message;
+
     private sealed record LengthJob(string Folder, string Key, string Path, long Size);
 }
 
@@ -1302,8 +1414,9 @@ internal sealed record LibraryFile(int Version, IReadOnlyList<LibraryFileEntry> 
 /// when saved (null in a file from before story 7.2), which tells a file changed outside the app. Its
 /// length in seconds and the file's modified time (UTC) it was read at, both null when no length was
 /// read (or in a file from before story 7.3); the length is reused only while size and time match.
+/// Whether it is a Favourite (story 7.4); kept through a size change while the engine was off.
 /// </summary>
-internal sealed record LibraryFileEntry(string Path, string? ProfileId, DateTimeOffset Date, long? Size = null, double? LengthSeconds = null, DateTime? Modified = null);
+internal sealed record LibraryFileEntry(string Path, string? ProfileId, DateTimeOffset Date, long? Size = null, double? LengthSeconds = null, DateTime? Modified = null, bool Favourite = false);
 
 [JsonSourceGenerationOptions(
     JsonSerializerDefaults.General,
