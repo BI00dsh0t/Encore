@@ -58,12 +58,12 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Engine/CommandLine.cs`, `Program.cs` -- `serve --replay-buffer` for test instances -- lets a separate engine process buffer and save on a throwaway instance.
-- [ ] `bench/ReplayBuffer.Bench/SoakSampler.cs` -- `ProcessCounters` record (time, pid, name, private bytes, working set, handles, GDI, USER) and `Sample(Process)` via `GetProcessMemoryInfo` (PROCESS_MEMORY_COUNTERS_EX.PrivateUsage), `GetProcessHandleCount`, `GetGuiResources(GR_GDIOBJECTS=0, GR_USEROBJECTS=1)`.
-- [ ] `bench/ReplayBuffer.Bench/SoakBounds.cs` -- pure `Evaluate(samples per process, warmup)`: warm-up value = first sample at or after warm-up; private bytes end within max(5 %, 20 MB) of it and least-squares slope over post-warm-up samples < 2 MB/h; handles, GDI, USER end within 50. Returns per-process, per-counter rows with value, limit and pass.
-- [ ] `bench/ReplayBuffer.Bench/SoakClipCheck.cs` -- `Check(tools, path, expectedTitles, bufferSeconds, fps)`: ffprobe streams; every expected Track present by `tags.name`, in order; video length in [window − GOP(1 s) − 1 frame, window + 1 frame]; each audio stream within 1 frame of the video; `ffmpeg -v error -i <clip> -map 0 -f null -` exits 0 with no error output (decodes to the end). Pure evaluation split from probing so tests feed a probe result.
-- [ ] `bench/ReplayBuffer.Bench/SoakRun.cs` -- the command: resolve App/engine/load/ffmpeg; create instance; start engine with `--replay-buffer`, connect, apply settings; start App `--tray --instance`; start load; `game.add` the load exe; wait for Buffering on the load's profile; wait one Buffer Window; then loop until the duration ends: every `sample-seconds` sample both processes (append CSV row), every `press-seconds` inject the Save combo and wait ≤ 30 s for `clip.saved`/`clip.failed`, then check the Clip. A process exiting stops the loop. Write `soak-samples.csv`, `soak-clips.csv`, `soak.json`, `soak.md`; exit 0 only when every Clip passes, ≥ 1 Clip was made, and all bounds pass. Cleanup on every path (shutdown engine, App quits, kill leftovers, delete instance folders). Uses an injectable clock/delay (`TimeProvider`) for the schedule.
-- [ ] `tests/ReplayBuffer.Bench.Tests/SoakTests.cs` -- default run, fast: sampler reads the test process's own counters (all > 0); bounds pass a flat series and fail 3 MB/h growth and +60 handles (fake timestamps); Clip check fails a probe missing a Track and one cut short; the schedule with a fake `TimeProvider` produces the expected sample and press counts for a short duration.
+- [x] `src/ReplayBuffer.Engine/CommandLine.cs`, `Program.cs` -- `serve --replay-buffer` for test instances -- lets a separate engine process buffer and save on a throwaway instance.
+- [x] `bench/ReplayBuffer.Bench/SoakSampler.cs` -- `ProcessCounters` record (time, pid, name, private bytes, working set, handles, GDI, USER) and `Sample(Process)` via `GetProcessMemoryInfo` (PROCESS_MEMORY_COUNTERS_EX.PrivateUsage), `GetProcessHandleCount`, `GetGuiResources(GR_GDIOBJECTS=0, GR_USEROBJECTS=1)`.
+- [x] `bench/ReplayBuffer.Bench/SoakBounds.cs` -- pure `Evaluate(samples per process, warmup)`: warm-up value = first sample at or after warm-up; private bytes end within max(5 %, 20 MB) of it and least-squares slope over post-warm-up samples < 2 MB/h; handles, GDI, USER end within 50. Returns per-process, per-counter rows with value, limit and pass.
+- [x] `bench/ReplayBuffer.Bench/SoakClipCheck.cs` -- `Check(tools, path, expectedTitles, bufferSeconds, fps)`: ffprobe streams; every expected Track present by `tags.name`, in order; video length in [window − GOP(1 s) − 1 frame, window + 1 frame]; each audio stream within 1 frame of the video; `ffmpeg -v error -i <clip> -map 0 -f null -` exits 0 with no error output (decodes to the end). Pure evaluation split from probing so tests feed a probe result.
+- [x] `bench/ReplayBuffer.Bench/SoakRun.cs` -- the command: resolve App/engine/load/ffmpeg; create instance; start engine with `--replay-buffer`, connect, apply settings; start App `--tray --instance`; start load; `game.add` the load exe; wait for Buffering on the load's profile; wait one Buffer Window; then loop until the duration ends: every `sample-seconds` sample both processes (append CSV row), every `press-seconds` inject the Save combo and wait ≤ 30 s for `clip.saved`/`clip.failed`, then check the Clip. A process exiting stops the loop. Write `soak-samples.csv`, `soak-clips.csv`, `soak.json`, `soak.md`; exit 0 only when every Clip passes, ≥ 1 Clip was made, and all bounds pass. Cleanup on every path (shutdown engine, App quits, kill leftovers, delete instance folders). Uses an injectable clock/delay (`TimeProvider`) for the schedule.
+- [x] `tests/ReplayBuffer.Bench.Tests/SoakTests.cs` -- default run, fast: sampler reads the test process's own counters (all > 0); bounds pass a flat series and fail 3 MB/h growth and +60 handles (fake timestamps); Clip check fails a probe missing a Track and one cut short; the schedule with a fake `TimeProvider` produces the expected sample and press counts for a short duration.
 - [ ] Run the 20-minute Memory-mode soak holding `.bench-running`; commit `soak.md` and the CSVs to `measurements/` (or link in this plan).
 
 **Acceptance Criteria:**
@@ -72,6 +72,20 @@ deferred: []
 - Given `serve --replay-buffer` without `--instance`, then the engine refuses it with `invalid-arguments` and exit 2.
 
 ## Implementation Notes
+
+- Code: `4b112aa` on `feature/8.1-soak-harness`. The schedule lives in its own `SoakSchedule.cs` (clock and wait injected); `BenchLock` (the `.bench-running` lock) is in `SoakRun.cs`. Reused `HotkeyBenchmark.StartServe` (now internal, with extra arguments), `AppOverlayHost.Cleanup`/`DeleteQuietly`/`Canonicalize`, and a new `KeyInjector.PressOnce`.
+- Interpretation: "end within" a bound is growth since warm-up; a counter that falls meets it.
+- The soak sets only the Save Hotkey on its instance (the other defaults would take Alt+F8/F9/F10 from the builder's instance), Save Cooldown 0, and keeps the default video (1080p60, 40 Mbps).
+- Passing Clips are deleted after their check, so a long run's disk use stays flat; a failing Clip stays in `clips/`.
+- `soak` does not regenerate `report.md`; it writes its own `soak.md`.
+- Pre-existing, not changed: a `serve` that fails to parse still opens the process's own instance's log folder (`ReplayBuffer-Dev` for a dev build) before it exits 2.
+
+### 20-minute Memory soak, 2026-11-04 (`measurements/bench-20261104-011956/`, force-added)
+
+- 121 samples per process, 19 presses, **19 of 19 Clips pass** (video 29.02–30.00 s for a 30 s window; audio within one frame; frames = length × 60). Cleanup left no process, instance folder or ring. Bench exited **1**: 8 of 10 bounds met.
+- **Engine private-bytes slope 4.28 MB/h (≥ 2)**, but the engine is flat: 530.8 MB at warm-up, 530.3 MB at the end, ±3 MB noise. A least-squares slope over 15 minutes can't resolve 2 MB/h against that noise. The bound only means something over long runs (8.8). Its end-growth bound passes.
+- **App private-bytes slope 59 MB/h (≥ 2)**: a real, steady climb, 82.3 → 94.2 MB over 15 min (+11.9 MB, inside the 20 MB end bound). It may be lazy GC or a per-Clip leak in the App (notices or Library). It needs a longer run, or a forced GC, to tell which. Handles, GDI and USER are flat for both processes.
+- AC 1 is therefore **not met**. AC 2 (nothing left behind) and AC 3 (`serve --replay-buffer` without `--instance` → `invalid-arguments`, exit 2) are met.
 
 ## Plan Change Log
 
