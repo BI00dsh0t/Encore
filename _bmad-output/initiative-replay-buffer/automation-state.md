@@ -45,7 +45,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.3 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with QA 9.3 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -174,11 +174,11 @@ The coordinator logs each QA round in the Log below.
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
 | 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `247284c`, builder approved) |
 | 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `166e1f3`) |
-| 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in QA (story-2-7) |
 | 30.4 | 9.4 Library restyled | | pending |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
-| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | ready for QA, waiting for a QA worker |
 | 30.8 | 9.8 Refactor sweep | | pending |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
@@ -712,3 +712,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - **Suspected:** the Desktop Duplication path may not fill its gaps with repeated frames at 30 fps. Bugfix `dd-frame-gaps` went to qa-1-14 (Opus, medium effort).
   - **Filter gotcha:** `--filter-class "*RecordingCaptureTests"` also matches `MonitorRecordingCaptureTests`, so use `*.RecordingCaptureTests` or full method names.
   - The GPU runner is now on 8.5's 2 Heavy tests.
+- 2026-11-04: 9.3 READY FOR QA at `44ce0b0` and 9.7 at `176a820` (App 139 passed, no new Heavy tests); both cards are In QA. QA 9.3 went to story-2-7 (Sonnet, medium effort; not cleared, because the builder has it open, but it built 9.2 so its context helps). QA 9.7 waits for slice-epic-5 to finish the PTS merge. The GPU runner reports 8.5's display-change Heavy test likely has a test bug: it asserts at least 3.5 s of video, but the test records only about 3 s.
