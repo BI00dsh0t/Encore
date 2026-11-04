@@ -469,7 +469,7 @@ public sealed class TrackLayoutPageTests
     {
         SetState(revision: 1, layout: null, Speakers, Headset with { Available = false }, Mic, new AudioDevice("{out-3}", "Line Out", "Realtek", AudioFlow.Output, true));
         var model = new MainViewModel(_engine, action => action());
-        Assert.Equal(["General", "Replay Buffer", "Hotkeys", "Track Layout", "Game Profiles", "Feedback Sounds", "Library and Cleanup"], model.Pages.Select(p => p.Title));
+        Assert.Equal(["General", "Replay Buffer", "Hotkeys", "Track Layout", "Game Profiles", "Feedback Sounds", "Recordings", "Library and Cleanup"], model.Pages.Select(p => p.Title));
         model.SelectedPage = model.TrackLayout;
         var page = model.TrackLayout;
         Add(page, Speakers);

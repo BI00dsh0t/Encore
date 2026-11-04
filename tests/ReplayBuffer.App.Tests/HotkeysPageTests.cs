@@ -102,6 +102,23 @@ public sealed class HotkeysPageTests
     }
 
     [Fact]
+    public void EachRecordModeShowsOnlyTheRowsItUses()
+    {
+        _engine.Reply = (_, _) => new SettingsUpdateResult(1);
+        var page = Create().Hotkeys;
+        string[] Shown() => [.. page.Rows.Where(r => r.IsShown).Select(r => r.Label)];
+
+        Assert.Equal(["Save Clip", "Mic mute", "Record (toggle)", "Monitor Recording (toggle)"], Shown());
+        page.StartCapture(HotkeyAction.RecordToggle);
+
+        page.IsSeparateMode = true;
+
+        Assert.Null(page.CapturingRow);
+
+        Assert.Equal(["Save Clip", "Mic mute", "Record start", "Record stop", "Monitor Recording (start)", "Monitor Recording (stop)"], Shown());
+    }
+
+    [Fact]
     public void TheViewRendersWithoutBindingErrors() => Sta.Run(() =>
     {
         _engine.State = _engine.State! with { Hotkeys = Status() };

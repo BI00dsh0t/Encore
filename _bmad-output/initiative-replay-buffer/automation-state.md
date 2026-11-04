@@ -39,10 +39,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 6.12 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix e2e-test-instance-names |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 6.11 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.11 |
@@ -143,8 +143,8 @@ The coordinator logs each QA round in the Log below.
 | 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ede89f7`) |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
-| 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
-| 27.12 | 6.12 Refactor sweep | | pending |
+| 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
+| 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
@@ -158,7 +158,7 @@ The coordinator logs each QA round in the Log below.
 | 28.8 | 7.8 Cleanup | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `4b6b22f`) |
 | 28.9 | 7.9 Library and Cleanup settings page | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `63ba0b9`) |
 | 28.10 | 7.10 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `5fa03c4`) |
-| 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
+| 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
@@ -224,6 +224,7 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 7.9 | Settings > Library and Cleanup by hand (R8, R7), and how the page and prompts read | Do it as steps 1 and 7 of the ordered epic-7 checklist in 7.11's plan (`tickets/epic-library-cleanup/tickets/story-library-and-cleanup-end-to-end-on-the-builder-s-pc-plan.md`), which runs all of epic 7 in one sitting on a scratch Output Folder. Run the App with the engine serving, open Settings > Library and Cleanup. Browse to a folder and confirm (the Library lists only it, existing files aren't moved). Set a size limit just under the folder's size, read the prompt's count and size, confirm, and see the oldest non-Favourite Clip go; try Cancel, lowering and raising a limit. | `LibrarySettingsPageTests` through the view model with a fake engine (preview, prompt, send only on Yes, Cancel, lowering, validation, folder), and the rendered `library-cleanup-settings.png`; the real folder picker and message boxes weren't driven |
 | 6.8 | Hearing the Recording started and stopped sounds, and how the stop notice reads with its reason | In a game with Recordings on, press the Record Hotkey to start, then again to stop; then start one and exit the game. Expect the start chime and "Recording started", then the stop sound and "Recording stopped" / "Recording stopped: the game exited", and the solid dot for the whole Recording | Core tests with a fake render port: each start plays `recordingStarted` once, each stop reason names itself and plays `recordingStopped`, a disk-full stop plays only `diskFull`, an encoder restart only `recording-restarted`'s sound |
 | NFR-1 (capture cost) | Confirm what raised capture's FPS cost from 1.47 % (2026-11-02) to about 7 %. v0.1.0 and develop cost the same, so it's the PC, not code | Follow `research/capture-cost-regression.md` §6: one `bench fps` (1.14 defaults, about 33 min) per step, stopping at the first step that brings it back to about 1.5 %: (1) as is; (2) quit NVIDIA App and Overlay (and the FrameView service), Discord and Steam; (3) disconnect the second monitor; (4) turn off RTX HDR, VSR and NIS; (5) uninstall KB5127936 and reboot. Note `SupportsOverlays` (E1) at each step | v0.1.0 6.96 % against develop 6.59 % like for like; the stage split shows WGC alone at 4.3 %; no code regression (`b9b58e2`) |
+| 6.11 | Picking the second monitor records it, the Monitor Record keys work in each mode, and the Recordings and Hotkeys pages read well | On Settings → Recordings pick the second monitor; on Hotkeys bind Monitor Recording (toggle), switch to Separate and bind (start)/(stop); record the second monitor in each mode and play the files in `Monitor Recordings` | `RecordingsSettingsPageTests` (the pick sends `monitorRecordingMonitor`), the Core fact that the Monitor session opens on the set monitor, `MonitorListServeTests` on this PC's monitors, `HotkeysPageTests` (rows per mode), `recordings-settings.png` and `hotkeys-settings.png` beside the App test binary; no real capture run (GPU tests paused) |
 
 ## Decisions Awaiting Review
 
@@ -631,4 +632,10 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: **Builder: a modern UI epic.** They chose a new epic (a `bmad-ux` design pass, then stories per area), run after epics 6 and 7 and before epic 8's final conformance. Mockups of the two looks (Windows 11 Fluent and gaming dark) were shown; the builder's pick of look is pending.
 - 2026-11-04: 7.10 merged (`5fa03c4`, marked done). Develop was merged into the branch first (6.10 and 8.2 included): 0-warning build, Core 145, App 122, Engine 175, Contracts 121 and the engine publish all passed; no GPU tests. Its open items are in deferred-work.md. 7.11 (the epic 7 end-to-end check) is unblocked; the epic is not marked done.
 - 2026-11-04: 7.10 merged (`5fa03c4`, marked done `7e10cd6`), and its card is Done. 7.11 (the epic 7 end-to-end check) went to story-2-7 (Opus, medium effort), with its card In progress. With GPU tests paused, it drives the real App and engine on a throwaway instance against pre-made MP4s, with no capture. After it, the v0.7.0 release. Epic 6 still has 6.11, then 6.12 (the sweep) and 6.13 (end to end), before v0.6.0.
+- 2026-11-04: 6.11 READY FOR QA at `7f2e041`, and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; GPU tests paused).
+- 2026-11-04: QA 6.11 passed at `7f2e041` with 0 findings: 0-warning build; App 126, Engine 176, Platform.Capture 3 and Core 146 passed; publish clean; Contracts change additive (`monitors.list`, `DisplayMonitor`, `MonitorList`). Not run: the manual second-monitor check (HITL) and GPU tests (paused). qa-2-1 is back in the pool, and qa-1-14 is merging.
+- 2026-11-04: 6.11 merged into develop (`093df7b`, after syncing develop's 7.10 merge: 0-warning build, App 126, Core 146, Contracts 121 passed) and marked done. Contracts change additive only: the `monitors.list` command in `Recording.cs`. Its Human Check row is queued. No GPU runs skipped: the story wrote no Heavy tests.
+- 2026-11-04: 6.11 merged (`093df7b`, marked done `7218e06`), and its card is Done with labels detached. qa-1-14 is back in the pool. 6.12 (refactor sweep) went to slice-epic-4 (Opus, medium effort; GPU tests paused), with its card In progress. 6.13 waits on 6.12.
+- 2026-11-04: 7.11 READY FOR QA at `53427e7` (131 passed, 9 for the builder, 2 not run because GPU tests are paused), and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort). **Incident:** the GPU pause was broken twice, briefly. 7.11's first two runs copied 5.14's instance naming. The random suffix had a dot, so `Instance.IsTest` was false, and the engine started a real Replay Buffer for about 5 s on the foreground window (`msrdc.exe`, NVENC, in memory only, no Clip written). It's fixed in 7.11 (a Guid-named instance, Replay Buffer explicitly off, `IsTest` and no-capture asserts). The same bug sits in `ClipsEndToEndTests` (4.14) and `OverlayEndToEndTests` (5.14). Bugfix `e2e-test-instance-names` went to slice-epic-5 (Sonnet, medium effort): Guid names, plus an `Instance` guard that refuses test-prefixed names that aren't test names. Those two tests can't be rerun until the GPU pause lifts.
+- 2026-11-04: QA 7.11 passed at `53427e7` with 0 findings. Guards confirmed in code before the one run (a Guid instance with `IsTest` asserted, Replay Buffer off, temp paths only, a recording shell). `LibraryEndToEndTests` passed in 7 s with no capture; 0-warning build; App.Tests 122 passed. qa-2-1 is back in the pool, and story-2-7 is merging.
 - 2026-11-04: 7.11 (story-2-7): `LibraryEndToEndTests` (Heavy, CPU only) passes against the in-process engine and the App's Library and settings pages; the five epic-7 Human Check rows point at 7.11's ordered checklist. **GPU pause breached twice, briefly:** the test's first two runs named the instance from a dotted temp folder, so `IsTest` was false and the engine ran a real Replay Buffer for about 5 s each on `msrdc.exe` (NVENC, in memory, no Clip written). Fixed in the test. `ClipsEndToEndTests` (4.14) and `OverlayEndToEndTests` (5.14) have the same dotted-name pattern: a one-line fix each, to rerun under Heavy when GPU tests resume. Skipped GPU runs from 7.11: a Hotkey-saved Clip on a real capture, a live Recording locked in the Library.
