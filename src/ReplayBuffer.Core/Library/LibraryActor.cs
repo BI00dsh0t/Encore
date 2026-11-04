@@ -26,7 +26,8 @@ public sealed record LibraryLoad(IReadOnlyList<LibraryItem> Items, bool Corrupt)
 /// <c>library.itemChanged</c> and caches it in <c>library.json</c> by size and modified time. The App's
 /// rename and delete (story 7.7) run here too, by the item's identity (AD-3): never on a file being
 /// written, and each path they touch is registered first, so the watcher's echo isn't an outside change.
-/// The App's delete only ever moves the file to the Recycle Bin, through the injected port.
+/// The App's delete only ever moves the file to the Recycle Bin, through the injected port. The App's
+/// <c>library.setFavourite</c> (story 7.4) runs here too, by the same identity.
 /// <para>
 /// Cleanup (story 7.8, R7) runs here too, and is the only permanent delete: a pass starts on a written
 /// Clip or Recording, a change of the <c>cleanup</c> limits, the end of a rescan, an acknowledged
@@ -35,7 +36,8 @@ public sealed record LibraryLoad(IReadOnlyList<LibraryItem> Items, bool Corrupt)
 /// deletes one item per message, planning again and re-checking the item against the index and the
 /// disk right before each delete, so a command queued meanwhile (a Favourite) is honoured. A file that
 /// can't be deleted is skipped for the rest of the pass. Never a Favourite, a file being written, a
-/// path outside the Output Folder or a file that isn't an <c>.mp4</c>.
+/// path outside the Output Folder or a file that isn't an <c>.mp4</c>. <c>cleanup.preview</c> runs the
+/// same planner over the index without deleting anything.
 /// </para>
 /// </summary>
 public sealed class LibraryActor : ILibraryWrites, IDisposable
@@ -239,9 +241,6 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _thread.Start();
     }
 
-    /// <summary>The actor thread's managed id.</summary>
-    internal int ThreadId => _thread.ManagedThreadId;
-
     /// <summary>
     /// A test seam: whether the watcher raises events. Setting it waits until the actor has applied it,
     /// so changes made afterwards aren't seen until it is set again; a watcher restart keeps the setting.
@@ -409,26 +408,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     public Task<LibraryCleanupPlan> PreviewCleanup(LibraryCleanupPreview args)
     {
         ArgumentNullException.ThrowIfNull(args);
-        var done = new TaskCompletionSource<LibraryCleanupPlan>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_channel.Writer.TryWrite(new PreviewRequest(args, done)))
-        {
-            done.TrySetException(new ErrorCodeException(ErrorCodes.EngineDisconnected, "The Library has shut down."));
-        }
-
-        return done.Task;
-    }
-
-    /// <summary>
-    /// The actor's own rename of <paramref name="from"/> to <paramref name="to"/>, both under the Output
-    /// Folder: publishes exactly <c>library.itemRemoved</c> and <c>library.itemAdded</c>, keeping the
-    /// item's profile and date; the watcher's echo is ignored. A move that fails is reported to the
-    /// failure callback and leaves the index unchanged.
-    /// </summary>
-    internal void Move(string from, string to)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(from);
-        ArgumentException.ThrowIfNullOrEmpty(to);
-        _channel.Writer.TryWrite(new MoveFile(from, to));
+        return Post<LibraryCleanupPlan>(done => new PreviewRequest(args, done));
     }
 
     /// <summary>The watcher's <see cref="FileSystemWatcher.Error"/> handler: a buffer overflow, or the folder went away.</summary>
@@ -462,7 +442,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// Whether <paramref name="name"/> can be a file's base name: not empty, no character Windows forbids,
     /// not ending with a dot or a space, and not a reserved device name before its first dot.
     /// </summary>
-    internal static bool ValidName(string? name)
+    private static bool ValidName(string? name)
     {
         if (string.IsNullOrEmpty(name)
             || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
@@ -679,11 +659,25 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_channel.Writer.TryWrite(request(done)))
         {
-            done.TrySetException(new ErrorCodeException(ErrorCodes.EngineDisconnected, "The Library has shut down."));
+            done.TrySetException(ShutDown());
         }
 
         return done.Task;
     }
+
+    // A query's request, answered by the actor with its result; faulted at once once the actor is disposed.
+    private Task<T> Post<T>(Func<TaskCompletionSource<T>, Message> request)
+    {
+        var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_channel.Writer.TryWrite(request(done)))
+        {
+            done.TrySetException(ShutDown());
+        }
+
+        return done.Task;
+    }
+
+    private static ErrorCodeException ShutDown() => new(ErrorCodes.EngineDisconnected, "The Library has shut down.");
 
     private void Run()
     {
@@ -714,10 +708,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _settle?.Dispose();
         _cleanupFirst?.Dispose();
         _cleanupPeriodic?.Dispose();
-        foreach (var registration in _registered.Values)
-        {
-            registration.Timer.Dispose();
-        }
+        DisposeRegistrations();
     }
 
     // The length worker: it only reads a file and posts the result to the actor (AD-17).
@@ -791,10 +782,6 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
             case Acknowledge:
                 OnAcknowledge();
-                break;
-
-            case MoveFile move:
-                OnMove(move);
                 break;
 
             case Watch watch:
@@ -908,9 +895,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _started = true;
         _startedAt = _time.GetUtcNow();
         _lastCleanup = CleanupLimits();
-        _cleanupFirst = _time.CreateTimer(_ => _channel.Writer.TryWrite(new CleanupTick(Changed: false)), null, CleanupStartDelay, Timeout.InfiniteTimeSpan);
-        _cleanupPeriodic = _time.CreateTimer(_ => _channel.Writer.TryWrite(new CleanupTick(Changed: false)), null, CleanupInterval, CleanupInterval);
+        _cleanupFirst = _time.CreateTimer(OnCleanupTimer, null, CleanupStartDelay, Timeout.InfiniteTimeSpan);
+        _cleanupPeriodic = _time.CreateTimer(OnCleanupTimer, null, CleanupInterval, CleanupInterval);
     }
+
+    // Both Cleanup timers only post (AD-17).
+    private void OnCleanupTimer(object? state) => _channel.Writer.TryWrite(new CleanupTick(Changed: false));
 
     private void OnBegin(Begin begin)
     {
@@ -1034,10 +1024,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _settleArmed = false;
         if (_rescanPending)
         {
-            _rescanPending = false;
-            _pending.Clear();
-            Rescan();
-            StartCleanup();
+            RescanNow();
             return;
         }
 
@@ -1054,6 +1041,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _failed(error.Error);
         CreateMissingFolder();
         StartWatcher();
+        RescanNow();
+    }
+
+    // A pending rescan, or a watcher restart, rescans the whole folder; its end may start a Cleanup pass.
+    private void RescanNow()
+    {
         _rescanPending = false;
         _pending.Clear();
         Rescan();
@@ -1086,11 +1079,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _queued.Clear();
         _cleanupSkip.Clear();
         _rescanPending = false;
-        foreach (var registration in _registered.Values)
-        {
-            registration.Timer.Dispose();
-        }
-
+        DisposeRegistrations();
         _registered.Clear();
         CreateMissingFolder();
 
@@ -1125,34 +1114,6 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         StartCleanup();
     }
 
-    private void OnMove(MoveFile move)
-    {
-        var from = Path.GetFullPath(move.From);
-        var to = Path.GetFullPath(move.To);
-        if (!TryKey(_folder, from, out var fromKey) || !TryKey(_folder, to, out var toKey))
-        {
-            _failed(new ArgumentException($"A Library move must stay under the Output Folder: '{move.From}' to '{move.To}'."));
-            return;
-        }
-
-        Register(from);
-        Register(to);
-        try
-        {
-            File.Move(from, to);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            _failed(e);
-            return;
-        }
-
-        if (_items.TryGetValue(fromKey, out var item))
-        {
-            MoveItem(item, toKey);
-        }
-    }
-
     private void SetWatching(bool on)
     {
         _watching = on;
@@ -1172,8 +1133,9 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>
     /// Reconciles one path against disk (see the story's Design Notes): a file that is gone, isn't an
     /// <c>.mp4</c> or is empty is removed; one indexed at the same size is left alone; any other is
-    /// listed only when it is a complete MP4. A busy file, or an incomplete one written in the last
-    /// 2 s, is checked again once the next settle is due.
+    /// listed only when it is a complete MP4. A path reached through a reparse point (a junction or
+    /// symbolic link) is removed too. A busy file, or an incomplete one written in the last 2 s, is
+    /// checked again once the next settle is due.
     /// </summary>
     private void Reconcile(string path)
     {
@@ -1602,7 +1564,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         {
             _unreachableRaised = true;
             _limitUnreachable?.Invoke(
-                $"Cleanup can't keep the Output Folder within its size limit of {CleanupLimits().MaxBytes} bytes: the {plan.Remaining} bytes left are Favourites or files being written.");
+                $"Cleanup can't keep the Output Folder within its size limit of {maxBytes} bytes: the {plan.Remaining} bytes left are Favourites or files being written.");
         }
 
         Log($"Cleanup finished: {_passDeleted} files deleted ({_passBytes} bytes), {_passSkipped} skipped; the Library holds {plan.Remaining} bytes.");
@@ -1642,7 +1604,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         if (!file.Exists || file.Length != item.Size)
         {
             Pend(full);
-            Log($"Cleanup skipped {key}: the file changed on disk.");
+            LogChangedOnDisk(key);
             return false;
         }
 
@@ -1659,7 +1621,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
             _items[key] = item with { Modified = onDisk };
             _changed(_items[key]);
             _dirty = true;
-            Log($"Cleanup skipped {key}: the file changed on disk.");
+            LogChangedOnDisk(key);
             return false;
         }
 
@@ -1680,6 +1642,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     }
 
     private void Log(string message) => _log?.Invoke(message);
+
+    private void LogChangedOnDisk(string key) => Log($"Cleanup skipped {key}: the file changed on disk.");
 
     /// <summary>
     /// Whether the actor may delete, rename or clean up the file at <paramref name="full"/>: no reparse
@@ -1910,6 +1874,15 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _registered[path] = new Registration(id, timer);
     }
 
+    // Disposes each registration's expiry timer; the caller clears the map when it is still used.
+    private void DisposeRegistrations()
+    {
+        foreach (var registration in _registered.Values)
+        {
+            registration.Timer.Dispose();
+        }
+    }
+
     private void CreateMissingFolder()
     {
         if (_createMissingFolder && !Directory.Exists(_folder))
@@ -2058,8 +2031,6 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private sealed record FolderChanged : Message;
 
     private sealed record Acknowledge : Message;
-
-    private sealed record MoveFile(string From, string To) : Message;
 
     private sealed record Watch(bool On, TaskCompletionSource Done) : Message;
 

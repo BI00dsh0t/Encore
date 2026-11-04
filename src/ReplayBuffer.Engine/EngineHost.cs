@@ -385,6 +385,7 @@ internal sealed class EngineHost : IAsyncDisposable
                         RingFolder = ringFolder,
                         Margin = margin,
                         ResetGap = message => warnings.Raise(ErrorCodes.ResetGap, WarningSeverity.Warning, "replay", message, overlay: false),
+                        CaptureFallback = message => warnings.Raise(ErrorCodes.MonitorCaptureFallback, WarningSeverity.Warning, "recordings", message, overlay: false),
                     },
                     loggers,
                     audio,
@@ -579,6 +580,10 @@ internal sealed class EngineHost : IAsyncDisposable
                 player.Preview(preview.Sound);
                 return ValueTask.FromResult(Empty.Value);
             });
+            router.Register(RecordingMessages.MonitorsList, (_, _) => ValueTask.FromResult(new MonitorList(
+            [
+                .. MonitorFinder.Describe().Select(m => new DisplayMonitor(m.DeviceName, m.FriendlyName, m.Width, m.Height, m.IsPrimary)),
+            ])));
             router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
             SessionOrchestrator simulateTo = sessions;
             var simulator = new DevSimulator(

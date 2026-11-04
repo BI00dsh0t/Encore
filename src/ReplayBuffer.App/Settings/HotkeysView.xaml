@@ -6,6 +6,7 @@
              PreviewKeyDown="OnPreviewKeyDown"
              Unloaded="OnUnloaded">
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
         <Style x:Key="Label" TargetType="TextBlock">
             <Setter Property="Margin" Value="0,0,12,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -27,7 +28,7 @@
                 <ItemsControl ItemsSource="{Binding Rows}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid>
+                            <Grid Visibility="{Binding IsShown, Converter={StaticResource Visible}}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
                                     <ColumnDefinition Width="*" />

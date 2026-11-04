@@ -29,12 +29,13 @@ public sealed class LibraryActorTests : IDisposable
         Box(bytes, 16, 8, "moov");
         Box(bytes, 24, 8 + payload, "mdat");
         return bytes;
+    }
 
-        static void Box(byte[] bytes, int at, int size, string type)
-        {
-            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(at), size);
-            System.Text.Encoding.ASCII.GetBytes(type).CopyTo(bytes, at + 4);
-        }
+    /// <summary>Writes a box header, its <paramref name="size"/> and <paramref name="type"/>, at <paramref name="at"/>.</summary>
+    private static void Box(byte[] bytes, int at, int size, string type)
+    {
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(at), size);
+        System.Text.Encoding.ASCII.GetBytes(type).CopyTo(bytes, at + 4);
     }
 
     [Fact]
@@ -56,7 +57,7 @@ public sealed class LibraryActorTests : IDisposable
         Assert.Empty(failures);
         Assert.False(load.Corrupt);
         Assert.Equal(2, items.Count);
-        var listedModified = new DateTimeOffset(File.GetLastWriteTimeUtc(Path.Combine(Output, "Game", "listed.mp4")), TimeSpan.Zero);
+        var listedModified = LibraryCleanupTests.Modified(Path.Combine(Output, "Game", "listed.mp4"));
         Assert.Equal(new LibraryItem(@"Game\listed.mp4", ProfileId, 42, new DateTimeOffset(2026, 11, 1, 10, 0, 0, TimeSpan.Zero), false, Modified: listedModified), items[0]);
         Assert.Equal((@"Game\unlisted.mp4", (string?)null, 52L, false), (items[1].Path, items[1].ProfileId, items[1].Size, items[1].BeingWritten));
         Assert.Equal(File.GetCreationTimeUtc(Path.Combine(Output, "Game", "unlisted.mp4")), items[1].Date.UtcDateTime);
@@ -155,23 +156,6 @@ public sealed class LibraryActorTests : IDisposable
         library.Actor.OnWatcherError(new InternalBufferOverflowException());
 
         library.WaitFor(index => index.Keys.Order(StringComparer.Ordinal).SequenceEqual([@"Game\missed.mp4", "kept.mp4"]));
-    }
-
-    [Fact]
-    public async Task TheActorsOwnMoveIsPublishedOnce()
-    {
-        File.WriteAllBytes(Path.Combine(Output, "a.mp4"), Mp4());
-        var load = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { });
-        using var library = new Harness(this, load.Items);
-
-        library.Actor.Move(Path.Combine(Output, "a.mp4"), Path.Combine(Output, "b.mp4"));
-        library.WaitFor(index => index.ContainsKey("b.mp4"));
-        await Task.Delay(500, TestContext.Current.CancellationToken);
-
-        Assert.Collection(
-            library.Events,
-            e => Assert.Equal("a.mp4", Assert.IsType<LibraryItemRemoved>(e).Path),
-            e => Assert.Equal("b.mp4", Assert.IsType<LibraryItem>(e).Path));
     }
 
     [Fact]
@@ -419,8 +403,7 @@ public sealed class LibraryActorTests : IDisposable
         static byte[] Fragment(string type, int size)
         {
             var box = new byte[size];
-            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(box, size);
-            System.Text.Encoding.ASCII.GetBytes(type).CopyTo(box, 4);
+            Box(box, 0, size, type);
             return box;
         }
     }

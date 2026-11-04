@@ -31,7 +31,7 @@ internal sealed record LibraryViewState(
     LibraryDateFilter Date = LibraryDateFilter.All,
     bool FavouritesOnly = false)
 {
-    public static LibraryViewState Default { get; } = new();
+    private static LibraryViewState Default { get; } = new();
 
     public static LibraryViewState Load(string? path)
     {

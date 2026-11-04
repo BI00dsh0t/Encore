@@ -41,6 +41,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
 
     private const string Clips = "clips";
     private const string Recordings = "recordings";
+    private const string Replay = "replay";
 
     private readonly Lock _lock = new();
     private readonly Dictionary<string, ITimer> _timers = new(StringComparer.Ordinal);
@@ -55,32 +56,22 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     public void ClipSaved(ClipSaved saved)
     {
         ArgumentNullException.ThrowIfNull(saved);
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             WithdrawAll(_clipFailures);
-            RaiseInfo(new FeedbackNotice(ErrorCodes.ClipSaved, WarningSeverity.Info, Clips, "Clip saved", "clipSaved"));
-        }
+            RaiseInfo(new FeedbackNotice(ErrorCodes.ClipSaved, WarningSeverity.Info, Clips, "Clip saved", FeedbackSoundNames.ClipSaved));
+        });
     }
 
     /// <summary>A save made no Clip: a <c>clip-failed</c> notice with its short reason.</summary>
     public void ClipNotSaved(ClipFailed failed)
     {
         ArgumentNullException.ThrowIfNull(failed);
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             _clipFailures.Add(Raise(new FeedbackNotice(
-                ErrorCodes.ClipFailed, WarningSeverity.Error, Clips, $"Clip not saved: {ShortReason(failed.Reason)}", "saveFailed")));
-        }
+                ErrorCodes.ClipFailed, WarningSeverity.Error, Clips, $"Clip not saved: {ShortReason(failed.Reason)}", FeedbackSoundNames.SaveFailed)));
+        });
     }
 
     /// <summary>
@@ -90,19 +81,14 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     public void StateChanged(CaptureState state)
     {
         ArgumentNullException.ThrowIfNull(state);
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             _recording = state.Recording;
             if (_recording != RecordingState.Running)
             {
                 _replacing = false;
             }
-        }
+        });
     }
 
     /// <summary>
@@ -114,13 +100,8 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     public void RecordingStarted(RecordingStarted started)
     {
         ArgumentNullException.ThrowIfNull(started);
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             if (_replacing)
             {
                 _replacing = false;
@@ -128,8 +109,8 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
             }
 
             WithdrawAll(_diskFulls);
-            RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Recording started", "recordingStarted"));
-        }
+            RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Recording started", FeedbackSoundNames.RecordingStarted));
+        });
     }
 
     /// <summary>
@@ -141,13 +122,8 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     public void RecordingStopped(RecordingStopped stopped)
     {
         ArgumentNullException.ThrowIfNull(stopped);
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             // The orchestrator turns the state Off before a stop unless an encoder restart's replacement
             // follows, whatever the stop's reason (the old writer may still fail or fill the disk).
             var silent = stopped.Reason is RecordingStopReasons.DiskFull or RecordingStopReasons.EncoderRestart;
@@ -157,8 +133,8 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
                 IsKnownReason(stopped.Reason) ? WarningSeverity.Info : WarningSeverity.Warning,
                 Recordings,
                 StopMessage(stopped.Reason),
-                silent ? null : "recordingStopped"));
-        }
+                silent ? null : FeedbackSoundNames.RecordingStopped));
+        });
     }
 
     /// <summary>
@@ -169,16 +145,11 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     public void MonitorRecordingStarted(RecordingStarted started)
     {
         ArgumentNullException.ThrowIfNull(started);
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             WithdrawAll(_diskFulls);
-            RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Monitor Recording started", "recordingStarted"));
-        }
+            RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Monitor Recording started", FeedbackSoundNames.RecordingStarted));
+        });
     }
 
     /// <summary>
@@ -189,20 +160,15 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     public void MonitorRecordingStopped(RecordingStopped stopped)
     {
         ArgumentNullException.ThrowIfNull(stopped);
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             RaiseInfo(new FeedbackNotice(
                 ErrorCodes.RecordingStopped,
                 IsKnownReason(stopped.Reason) ? WarningSeverity.Info : WarningSeverity.Warning,
                 Recordings,
                 MonitorStopMessage(stopped.Reason),
-                stopped.Reason == RecordingStopReasons.DiskFull ? null : "recordingStopped"));
-        }
+                stopped.Reason == RecordingStopReasons.DiskFull ? null : FeedbackSoundNames.RecordingStopped));
+        });
     }
 
     /// <summary>The message a Monitor Recording's <c>recording-stopped</c> notice uses for <paramref name="reason"/>.</summary>
@@ -246,69 +212,49 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     public void RecordingRestarted(RecordingRestart restart)
     {
         ArgumentNullException.ThrowIfNull(restart);
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             RaiseInfo(new FeedbackNotice(
                 ErrorCodes.RecordingRestarted,
                 WarningSeverity.Warning,
                 Recordings,
                 $"Recording restarted after an encoder restart: {Path.GetFileName(restart.StoppedPath)} → {Path.GetFileName(restart.StartedPath)}",
-                "recordingStarted"));
-        }
+                FeedbackSoundNames.RecordingStarted));
+        });
     }
 
     /// <summary>The volume is full: a <c>disk-full</c> notice.</summary>
     public void DiskFull()
     {
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             _diskFulls.Add(Raise(new FeedbackNotice(
-                ErrorCodes.DiskFull, WarningSeverity.Error, Recordings, "The disk is full", "diskFull")));
-        }
+                ErrorCodes.DiskFull, WarningSeverity.Error, Recordings, "The disk is full", FeedbackSoundNames.DiskFull)));
+        });
     }
 
     /// <summary>A full disk stopped a Disk-mode Replay Buffer (R5): a <c>replay-stopped-disk-full</c> warning, with no sound.</summary>
     public void ReplayStoppedDiskFull()
     {
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             // The disk-full notice already played its sound.
             _replayStops.Add(notices.Raise(new FeedbackNotice(
                 ErrorCodes.ReplayStoppedDiskFull,
                 WarningSeverity.Warning,
-                "replay",
+                Replay,
                 "The Replay Buffer stopped: its disk is full. It restarts once there is room.",
                 null)));
-        }
+        });
     }
 
     /// <summary>The wait after a full disk ended: every <c>replay-stopped-disk-full</c> notice is withdrawn.</summary>
     public void ReplayResumed()
     {
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             WithdrawAll(_replayStops);
-        }
+        });
     }
 
     /// <summary>The words a notice uses for a <c>clip.failed</c> reason.</summary>
@@ -324,13 +270,8 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     /// <summary>Stops every pending dismissal; later outcomes raise nothing.</summary>
     public void Dispose()
     {
-        lock (_lock)
+        UnlessDisposed(() =>
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             _disposed = true;
             foreach (var timer in _timers.Values)
             {
@@ -338,6 +279,18 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
             }
 
             _timers.Clear();
+        });
+    }
+
+    /// <summary>Runs <paramref name="action"/> under the lock, unless the router is disposed.</summary>
+    private void UnlessDisposed(Action action)
+    {
+        lock (_lock)
+        {
+            if (!_disposed)
+            {
+                action();
+            }
         }
     }
 

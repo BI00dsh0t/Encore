@@ -17,7 +17,7 @@ public sealed class FeedbackSoundsTests
     public void EachOutcomePlaysItsSoundOnceOnTheDefaultCommunicationsEndpoint()
     {
         var output = new FakeOutput();
-        var notices = new Notices();
+        var notices = new FakeFeedbackNotices();
         var player = new FeedbackSoundPlayer(output, () => SettingsDocument.Empty, (_, _) => { });
         using (var router = new FeedbackRouter(notices, TimeProvider.System, player))
         {
@@ -40,7 +40,7 @@ public sealed class FeedbackSoundsTests
     {
         const string File = @"c:\clips\Game\a.mp4";
         var output = new FakeOutput();
-        var notices = new Notices();
+        var notices = new FakeFeedbackNotices();
         var player = new FeedbackSoundPlayer(output, () => SettingsDocument.Empty, (_, _) => { });
         string[] plain = [RecordingStopReasons.Stopped, RecordingStopReasons.GameExit, RecordingStopReasons.Ignored, RecordingStopReasons.SessionEnded, RecordingStopReasons.Shutdown, ErrorCodes.EncodeFailed];
         using (var router = new FeedbackRouter(notices, TimeProvider.System, player))
@@ -83,7 +83,7 @@ public sealed class FeedbackSoundsTests
     public void ASwitchedOffSoundDoesNotPlayAndItsNoticeHasNoSoundButAPreviewPlaysIt()
     {
         var output = new FakeOutput();
-        var notices = new Notices();
+        var notices = new FakeFeedbackNotices();
         var off = Keys.FeedbackSounds.Default with { ClipSaved = false };
         var document = SettingsDocument.Empty with { Global = SettingsMaps.EmptyValues.Add(Keys.FeedbackSounds.Name, Keys.FeedbackSounds.ToJson(off)) };
         var player = new FeedbackSoundPlayer(output, () => document, (_, _) => { });
@@ -227,21 +227,6 @@ public sealed class FeedbackSoundsTests
             }
 
             return null;
-        }
-    }
-
-    private sealed class Notices : IFeedbackNotices
-    {
-        public List<FeedbackNotice> Raised { get; } = [];
-
-        public string Raise(FeedbackNotice notice)
-        {
-            Raised.Add(notice);
-            return Guid.NewGuid().ToString("N");
-        }
-
-        public void Withdraw(string id)
-        {
         }
     }
 }

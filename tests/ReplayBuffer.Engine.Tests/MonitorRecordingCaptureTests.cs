@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
@@ -14,7 +15,9 @@ namespace ReplayBuffer.Engine.Tests;
 /// Monitor Recording (story 6.9), in process on the real primary monitor: a <c>monitorRecordToggle</c>
 /// pair with no game writes one file in <c>Monitor Recordings</c> with every Global Track; a window
 /// marked <c>WDA_EXCLUDEFROMCAPTURE</c> never shows in it; and beside a game Recording on a synthetic
-/// window, the two sessions run two encoder chains between them. On-screen, so each takes the bench lock.
+/// window, the two sessions run two encoder chains between them. With WGC forced to fail (6.10), the
+/// Monitor session records through Desktop Duplication instead, across a lost duplication, while a
+/// game session fails. On-screen, so each takes the bench lock.
 /// </summary>
 public sealed class MonitorRecordingCaptureTests : IDisposable
 {
@@ -217,6 +220,111 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         SessionTestKit.AssertDecodesCleanly(monitor.Path);
     }
 
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task WithWgcFailingAMonitorRecordingFallsBackToDesktopDuplication()
+    {
+        using var bench = BenchLock.Take();
+        var fallbacks = new ConcurrentQueue<string>();
+        using var rig = NewRig(wgcFault: WgcOff, fallback: fallbacks.Enqueue);
+
+        var file = await RecordMonitorAsync(rig, TimeSpan.FromSeconds(3));
+
+        Assert.Equal("desktop-duplication", MonitorSession(rig).CaptureApi);
+        Assert.Single(fallbacks);
+        Assert.Equal(Path.Combine(_directory, ProfileFolders.MonitorRecordings), Path.GetDirectoryName(file));
+        Assert.Equal(["Game", "Mic"], AudioTitles(file));
+        AssertInStepAt30Fps(file, atLeast: 2.5);
+        SessionTestKit.AssertDecodesCleanly(file);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task ALostDuplicationIsRecreatedIntoTheSameRecording()
+    {
+        using var bench = BenchLock.Take();
+        var fallbacks = new ConcurrentQueue<string>();
+        using var rig = NewRig(wgcFault: WgcOff, fallback: fallbacks.Enqueue);
+
+        var file = await RecordMonitorAsync(rig, TimeSpan.FromSeconds(4), async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1), Token);
+            MonitorSession(rig).SimulateCaptureAccessLost();
+            await Task.Delay(TimeSpan.FromSeconds(1), Token);
+            MonitorSession(rig).SimulateCaptureAccessLost();
+        });
+
+        Assert.Single(fallbacks);
+        Assert.Single(Directory.GetFiles(Path.Combine(_directory, ProfileFolders.MonitorRecordings)));
+        AssertInStepAt30Fps(file, atLeast: 3.5);
+        SessionTestKit.AssertDecodesCleanly(file);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AWindowExcludedFromCaptureNeverShowsInADesktopDuplicationRecording()
+    {
+        using var bench = BenchLock.Take();
+        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.OpenWindow(_directory, _processes, ExcludedWindowScript);
+        await Task.Delay(TimeSpan.FromSeconds(1), Token);
+        using var rig = NewRig(wgcFault: WgcOff);
+
+        var file = await RecordMonitorAsync(rig, TimeSpan.FromSeconds(2));
+
+        Assert.Equal("desktop-duplication", MonitorSession(rig).CaptureApi);
+        var frames = SessionTestKit.FrameStats(file, "crop=iw/2:ih/2:iw/4:ih/4");
+        Assert.NotEmpty(frames);
+        Assert.All(frames, f => Assert.False(f.U > 170 && f.V > 170, $"magenta at {f.Time:0.000} s (U {f.U:0}, V {f.V:0})"));
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AGameSessionWhoseWgcFailsNeverFallsBack()
+    {
+        using var bench = BenchLock.Take();
+        var fallbacks = new ConcurrentQueue<string>();
+        using var rig = NewRig(wgcFault: WgcOff, fallback: fallbacks.Enqueue);
+        var window = SessionTestKit.OpenWindow(_directory, _processes, GameWindowScript);
+
+        rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => !rig.Factory.Failures.IsEmpty);
+
+        Assert.Contains(rig.Factory.Failures, e => e.Message == WgcOffMessage);
+        Assert.Empty(rig.Factory.Sessions);
+        Assert.Empty(fallbacks);
+    }
+
+    private const string WgcOffMessage = "WGC is off (test)";
+
+    private static Exception? WgcOff() => new InvalidOperationException(WgcOffMessage);
+
+    private static CaptureSession MonitorSession(Rig rig) => Assert.Single(rig.Factory.Sessions.OfType<CaptureSession>());
+
+    /// <summary>
+    /// The file's video runs at least <paramref name="atLeast"/> seconds at one 30 fps step
+    /// throughout, and both Global Tracks' durations are within 0.2 s of the video's.
+    /// </summary>
+    private static void AssertInStepAt30Fps(string file, double atLeast)
+    {
+        var (pts, num, den) = SessionTestKit.VideoPtsTicks(file);
+        Assert.Equal(0, den % (30 * num));
+        var step = den / (30 * num);
+        for (var i = 1; i < pts.Count; i++)
+        {
+            Assert.True(pts[i] - pts[i - 1] == step, $"video PTS step {pts[i] - pts[i - 1]} at packet {i}, not {step}");
+        }
+
+        var durations = SessionTestKit.Probe(file, "-show_streams").GetProperty("streams").EnumerateArray()
+            .Select(s => (Type: s.GetProperty("codec_type").GetString(), Duration: double.Parse(s.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture)))
+            .ToList();
+        var video = Assert.Single(durations, d => d.Type == "video").Duration;
+        Assert.True(video >= atLeast, $"video runs {video:0.000} s, under {atLeast} s");
+        var audio = durations.Where(d => d.Type == "audio").ToList();
+        Assert.Equal(2, audio.Count);
+        Assert.All(audio, a => Assert.InRange(a.Duration, video - 0.2, video + 0.2));
+    }
+
     private static List<string?> AudioTitles(string file) =>
         [.. SessionTestKit.Probe(file, "-select_streams", "a", "-show_streams").GetProperty("streams").EnumerateArray()
             .Select(s => s.TryGetProperty("tags", out var tags) && tags.TryGetProperty("name", out var title) ? title.GetString() : null)];
@@ -231,12 +339,26 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         }
     }
 
-    /// <summary>Two Monitor Record toggles <paramref name="length"/> apart; returns the file once its writer has finished.</summary>
-    private static async Task<string> RecordMonitorAsync(Rig rig, TimeSpan length)
+    /// <summary>
+    /// Two Monitor Record toggles <paramref name="length"/> apart, <paramref name="during"/> run
+    /// meanwhile; returns the file once its writer has finished.
+    /// </summary>
+    private static async Task<string> RecordMonitorAsync(Rig rig, TimeSpan length, Func<Task>? during = null)
     {
         Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
         var started = Assert.IsType<RecordingStarted>(await rig.NextAsync());
-        await Task.Delay(length, Token);
+        var elapsed = Stopwatch.StartNew();
+        if (during is not null)
+        {
+            await during();
+        }
+
+        var rest = length - elapsed.Elapsed;
+        if (rest > TimeSpan.Zero)
+        {
+            await Task.Delay(rest, Token);
+        }
+
         Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
         Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
         rig.Orchestrator.Dispose();
@@ -250,7 +372,14 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     /// </summary>
     /// <param name="clips">Whether the orchestrator has Replay Clips, whose saves land in the events.</param>
     /// <param name="resetGap">Receives each <c>reset-gap</c> message.</param>
-    private Rig NewRig(bool recordingsEnabled = false, bool clips = false, Action<string>? resetGap = null)
+    /// <param name="wgcFault">Thrown before any WGC capture is created, when it returns non-null.</param>
+    /// <param name="fallback">Receives each <c>monitor-capture-fallback</c> message.</param>
+    private Rig NewRig(
+        bool recordingsEnabled = false,
+        bool clips = false,
+        Action<string>? resetGap = null,
+        Func<Exception?>? wgcFault = null,
+        Action<string>? fallback = null)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)> { ["game"] = (0.1, 440), ["mic"] = (0.2, 1000) });
@@ -277,7 +406,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var published = new ConcurrentQueue<CaptureState>();
         var factory = new KeepingFactory(new CaptureSessionFactory(
-            new CaptureSessionOptions { OutputFolder = _directory, Replay = true, ResetGap = resetGap },
+            new CaptureSessionOptions { OutputFolder = _directory, Replay = true, ResetGap = resetGap, WgcFault = wgcFault, CaptureFallback = fallback },
             NullLoggerFactory.Instance,
             hub));
         var orchestrator = new SessionOrchestrator(
@@ -319,16 +448,28 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         }
     }
 
-    /// <summary>Starts sessions with <paramref name="inner"/> and keeps every one it started.</summary>
+    /// <summary>Starts sessions with <paramref name="inner"/>, keeping every one it started and every start's failure.</summary>
     private sealed class KeepingFactory(ICaptureSessionFactory inner) : ICaptureSessionFactory
     {
         private readonly ConcurrentQueue<ICaptureSession> _sessions = new();
 
         public IReadOnlyList<ICaptureSession> Sessions => [.. _sessions];
 
+        public ConcurrentQueue<Exception> Failures { get; } = new();
+
         public ICaptureSession Start(SessionSpec spec, ISessionEvents events)
         {
-            var session = inner.Start(spec, events);
+            ICaptureSession session;
+            try
+            {
+                session = inner.Start(spec, events);
+            }
+            catch (Exception e)
+            {
+                Failures.Enqueue(e);
+                throw;
+            }
+
             _sessions.Enqueue(session);
             return session;
         }
