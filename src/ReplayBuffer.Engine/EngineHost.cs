@@ -94,7 +94,7 @@ internal sealed record EngineHostOptions
 /// capture session writing one file follows the Target instead.
 /// The FeedbackRouter turns Clips saved and not saved, Recording state changes and a disk full into
 /// <c>warning.raised</c> notices, and dismisses the info ones after 10 s. <c>dev.simulate</c> injects a
-/// stub Recording state, a disk full or a save failure; the installed instance refuses it.
+/// stub Recording state, a disk full, a save failure or a saved notice; the installed instance refuses it.
 /// Each notice's Feedback Sound, if switched on, plays on a worker on <c>feedbackSoundDevice</c> or
 /// the default communications endpoint; <c>feedback.preview</c> plays one even when it is off. While
 /// a Track of the active Track Layout mixes that endpoint, a <c>feedback-device-captured</c> warning
@@ -474,7 +474,7 @@ internal sealed class EngineHost : IAsyncDisposable
             });
             router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
             SessionOrchestrator simulateTo = sessions;
-            var simulator = new DevSimulator(instance, running => simulateTo.Post(new RecordingRunning(running)), notices.DiskFull, notSaved);
+            var simulator = new DevSimulator(instance, running => simulateTo.Post(new RecordingRunning(running)), notices.DiskFull, notSaved, () => notices.ClipSaved(new ClipSaved("dev.simulate")));
             router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(

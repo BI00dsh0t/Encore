@@ -65,6 +65,11 @@ public sealed class DevSimulateServeTests : IAsyncLifetime
         await SimulateAsync(client, SimulatedEvent.SaveFailed);
         await UntilAsync(client, events, s => s.LastClipFailure?.Reason == ErrorCodes.SaveFailed && Has(s, ErrorCodes.ClipFailed));
         Assert.Equal("Clip not saved: save failed", client.State.Warnings.Single(w => w.Code == ErrorCodes.ClipFailed).Message);
+
+        await SimulateAsync(client, SimulatedEvent.ClipSaved);
+        await UntilAsync(client, events, s => Has(s, ErrorCodes.ClipSaved) && !Has(s, ErrorCodes.ClipFailed));
+        var saved = client.State.Warnings.Single(w => w.Code == ErrorCodes.ClipSaved);
+        Assert.Equal(("Clip saved", true, WarningSeverity.Info), (saved.Message, saved.Overlay, saved.Severity));
     }
 
     [Fact]
@@ -75,7 +80,8 @@ public sealed class DevSimulateServeTests : IAsyncLifetime
             new Instance(Instance.InstalledName, _folder, _folder),
             _ => calls++,
             () => calls++,
-            _ => calls++);
+            _ => calls++,
+            () => calls++);
 
         var refused = Assert.Throws<ErrorCodeException>(() => simulator.Simulate(new DevSimulate(SimulatedEvent.DiskFull)));
 
