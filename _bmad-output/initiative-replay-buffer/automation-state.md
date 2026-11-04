@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.6 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.6 |
@@ -763,3 +763,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.6 fix at `871e96a` (test-side): it waits for `library.json` to hold the Favourite, reads with shared access and a retry, and compares `library.json` by parsed items. The pair test passed once (10 s). Not accepted yet: the coordinator's queued message asks for the run-3 Favourite loss across the engine kill to be diagnosed as a possible product bug, and for 3 passes in a row.
 - 2026-11-04: **8.6 found a real product bug.** `LibraryActor.Save` swaps `library.json` in with File.Replace, which throws while anything holds the file open without FILE_SHARE_DELETE (on a real PC, a backup or a virus scanner). The catch only logged, and `_dirty` was already cleared, so the Favourite lived only in memory and an engine kill lost it. Fix (`0ba1e53`): a failed save stays dirty and retries every 1 s, with one warning per run of failures. New Core test `ASaveBlockedByAReaderIsRetriedSoAFavouriteReachesTheDisk`. The test side waits for the save and compares by items. The pair test passed 3 times in a row; Core 160, Engine 182 and App 141 passed; publish clean. The coordinator approved it; slice-epic-8 is merging.
 - 2026-11-04: **8.6 merged** into `develop` (`041a8b6`) after a sync with develop (Core 160/160, Engine 182 + 42 explicit skipped, App 150 + 19 explicit skipped, 0 warnings, NativeAOT publish clean). QA passed; Heavy: cold start passed on `f34fa7d`, the pair test 3 in a row on `0ba1e53`. Product fixes: sessions open a renumbered mixer endpoint by its saved names, and a failed `library.json` save is retried. Three hand checks added to the Human Check Queue.
+- 2026-11-04: 8.6 merged (`041a8b6`; marked done with 3 Human Check rows in `ff8c66f`: a real reboot, a BEACN restart during a game, and a BEACN restart with no game). Core 160, Engine 182 and App 150 passed; publish clean. Its card is Done. Epic 8 now waits on epic 9 (8.7 needs 9.9); epic 9 has 9.6 in progress, then 9.8 and 9.9.
