@@ -3,7 +3,7 @@ title: 'Favourite'
 type: 'feature'
 ticket: '4'
 created: '2026-11-03'
-status: 'in-review'
+status: done
 baseline_revision: '1a88a421fae56ada800d72e6f68c7d7e8709268b'
 route: 'full'
 route_source: 'auto'
