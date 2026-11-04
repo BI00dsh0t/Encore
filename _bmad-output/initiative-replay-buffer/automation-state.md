@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix recording-first-frame-pts |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 9.2 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 9.2 |
@@ -173,7 +173,7 @@ The coordinator logs each QA round in the Log below.
 | 29.10 | 8.10 Refactor sweep | | pending |
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
 | 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `247284c`, builder approved) |
-| 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
+| 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (qa-1-14) |
 | 30.3 | 9.3 Shell, navigation and status line | | pending |
 | 30.4 | 9.4 Library restyled | | pending |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
@@ -699,3 +699,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.4 merged into develop (`8a434c6`) after a docs-only develop sync (0-warning build). Marked done; the plan records both Heavy tests as passed on the GPU runner at `7629641`; three Human Check rows added (real sleep and resume with a Recording, lock and unlock, UAC and Ctrl+Alt+Del).
 - 2026-11-04: 8.4 merged (`8a434c6`, marked done with 3 Human Check rows in `c9afe03`), and its card is Done. 8.5 (monitor changes) went to slice-epic-8 (Opus, medium effort; no display-configuration changes, simulated through a seam; Heavy tests to the GPU runner), with its card In progress.
 - 2026-11-04: Bugfix `recording-first-frame-pts` READY at `1f1f9a5`. The product bug is in `RecordingWriter`: fMP4 has no edit list, so an AAC packet that started before the keyframe K, but whose centre fell after it, became the earliest packet and stretched the first video frame by up to about 10.7 ms. The fix keeps non-video packets by their start. The new default test `RecordingStartTests` reproduces it. FFmpeg 38 and Engine 179 passed; publish clean. The coordinator asked whether Clips (`PacketRing.Cut`, same centre rule) have the same bug. The GPU runner is running the Recording and Monitor Recording Heavy classes on `1f1f9a5`, plus 3 load repeats of the flaky test.
+- 2026-11-04: 9.2 READY FOR QA at `ad57d54` (26 files, about 2,300 lines), and its card is In QA. QA went to qa-1-14 (Sonnet, high effort because the ticket is high risk; focus on AD-23 tokens, live switching, `appTheme` and control coverage).
