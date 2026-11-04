@@ -15,7 +15,8 @@ namespace ReplayBuffer.App.Library;
 /// date and size, and an item still being written shown locked. It only reads the snapshot (AD-1).
 /// While Cleanup is blocked by a rebuilt index (story 7.2) a banner says so, and Acknowledge dismisses
 /// the <c>library-corrupt</c> warning. Each row shows its length and the shell's thumbnail (story 7.3),
-/// asked by absolute path once the item is written, never while it is. Members run on the UI thread.
+/// asked by absolute path once the item is written, never while it is. Each row's star (story 7.4)
+/// sends <c>library.setFavourite</c> and changes only when the snapshot does. Members run on the UI thread.
 /// </summary>
 internal sealed class LibraryPage : Observable
 {
@@ -71,7 +72,7 @@ internal sealed class LibraryPage : Observable
             var item = ordered[index];
             if (!existing.TryGetValue(item.Path, out var row))
             {
-                row = new LibraryRow(item.Path);
+                row = new LibraryRow(item.Path, r => _ = SetFavouriteAsync(r));
                 Rows.Insert(index, row);
             }
             else if (Rows.IndexOf(row) != index)
@@ -103,6 +104,24 @@ internal sealed class LibraryPage : Observable
         if (row.ThumbnailRequest != (path, item.Size))
         {
             _thumbnails.Request(row, path, item.Size);
+        }
+    }
+
+    // The row's identity as last shown (AD-3); the star follows the snapshot, never this send.
+    private async Task SetFavouriteAsync(LibraryRow row)
+    {
+        if (row.Item is not { } item)
+        {
+            return;
+        }
+
+        try
+        {
+            await _engine.SendAsync(LibraryMessages.SetFavourite, new LibrarySetFavourite(item.Path, item.Size, item.Modified, !item.Favourite));
+        }
+        catch (ErrorCodeException)
+        {
+            // A stale identity or a lost engine; the snapshot carries the truth.
         }
     }
 
@@ -163,7 +182,8 @@ internal sealed class LibraryPage : Observable
 }
 
 /// <summary>One Library item as the page shows it.</summary>
-internal sealed class LibraryRow(string path) : Observable
+/// <param name="setFavourite">Sends the row's Favourite toggle; the star command's action.</param>
+internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite = null) : Observable
 {
     private string _game = "";
     private string _date = "";
@@ -171,6 +191,8 @@ internal sealed class LibraryRow(string path) : Observable
     private string _length = "";
     private ImageSource? _thumbnail;
     private bool _isLocked;
+    private bool _isFavourite;
+    private RelayCommand? _favouriteCommand;
 
     /// <summary>The item's key: its path relative to the Output Folder.</summary>
     public string Path { get; } = path;
@@ -238,8 +260,32 @@ internal sealed class LibraryRow(string path) : Observable
     /// <summary>The lock marker, empty once written.</summary>
     public string Lock => IsLocked ? "Saving…" : "";
 
+    /// <summary>Whether the item is a Favourite, as the last snapshot said.</summary>
+    public bool IsFavourite
+    {
+        get => _isFavourite;
+        private set
+        {
+            if (Set(ref _isFavourite, value))
+            {
+                OnPropertyChanged(nameof(Star));
+            }
+        }
+    }
+
+    /// <summary>The star: filled for a Favourite.</summary>
+    public string Star => IsFavourite ? "★" : "☆";
+
+    /// <summary>Toggles the Favourite through the engine.</summary>
+    public ICommand FavouriteCommand => _favouriteCommand ??= new RelayCommand(() => setFavourite?.Invoke(this));
+
+    /// <summary>The item last shown, whose identity (path, size, modified time) a command sends.</summary>
+    internal LibraryItem? Item { get; private set; }
+
     public void Show(LibraryItem item, string game)
     {
+        Item = item;
+        IsFavourite = item.Favourite;
         Game = game;
         Date = item.Date.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
         Size = item.BeingWritten ? "" : LibraryPage.SizeText(item.Size);

@@ -13,7 +13,27 @@ namespace ReplayBuffer.Contracts.Messages;
 /// <param name="Date">When it was saved: the write's start, or the file's creation time for a scanned file.</param>
 /// <param name="BeingWritten">Whether a writer is still writing it; such an item is shown locked and never persisted.</param>
 /// <param name="LengthSeconds">Its length in seconds, read by FFmpeg's demuxer (story 7.3); <c>null</c> until read, or when it can't be read.</param>
-public sealed record LibraryItem(string Path, string? ProfileId, long Size, DateTimeOffset Date, bool BeingWritten, double? LengthSeconds = null);
+/// <param name="Favourite">Whether it is a Favourite (story 7.4), set by <c>library.setFavourite</c>.</param>
+/// <param name="Modified">The file's last write time (UTC) at <see cref="Size"/>; with the path and size it is the item's identity (AD-3). <c>null</c> while being written.</param>
+public sealed record LibraryItem(
+    string Path,
+    string? ProfileId,
+    long Size,
+    DateTimeOffset Date,
+    bool BeingWritten,
+    double? LengthSeconds = null,
+    bool Favourite = false,
+    DateTimeOffset? Modified = null);
+
+/// <summary>
+/// <c>library.setFavourite</c>'s arguments: the item's identity as the App saw it (AD-3) and the
+/// wanted flag. Refused with <c>library-item-changed</c> when the identity no longer matches.
+/// </summary>
+/// <param name="Path">The item's path relative to the Output Folder.</param>
+/// <param name="Size">The item's <see cref="LibraryItem.Size"/>.</param>
+/// <param name="Modified">The item's <see cref="LibraryItem.Modified"/>.</param>
+/// <param name="Favourite">Whether it should be a Favourite.</param>
+public sealed record LibrarySetFavourite(string Path, long Size, DateTimeOffset? Modified, bool Favourite);
 
 /// <summary><c>library.itemRemoved</c>: the item at <see cref="Path"/> (relative to the Output Folder) left the Library.</summary>
 public sealed record LibraryItemRemoved(string Path);
@@ -79,7 +99,11 @@ public static class LibraryMessages
         "libraryFolder",
         (snapshot, changed) => snapshot with { LibraryFolder = changed.Folder });
 
-    public static IReadOnlyList<CommandType> Commands { get; } = [];
+    /// <summary>Sets or clears an item's Favourite; it is published as <c>library.itemChanged</c>, never applied by the App first.</summary>
+    public static CommandType<LibrarySetFavourite, Empty> SetFavourite { get; } =
+        new("library.setFavourite", LibraryJsonContext.Default.LibrarySetFavourite, LibraryJsonContext.Default.Empty);
+
+    public static IReadOnlyList<CommandType> Commands { get; } = [SetFavourite];
 
     public static IReadOnlyList<EventType> Events { get; } = [ItemAdded, ItemChanged, ItemRemoved, Reset, CleanupBlockedChanged, FolderChanged];
 
@@ -113,4 +137,6 @@ public static class LibraryMessages
 [JsonSerializable(typeof(LibraryReset))]
 [JsonSerializable(typeof(LibraryCleanupBlocked))]
 [JsonSerializable(typeof(LibraryFolderChanged))]
+[JsonSerializable(typeof(LibrarySetFavourite))]
+[JsonSerializable(typeof(Empty))]
 public sealed partial class LibraryJsonContext : JsonSerializerContext;
