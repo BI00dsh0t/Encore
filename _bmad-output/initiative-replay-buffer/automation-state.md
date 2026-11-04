@@ -45,7 +45,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 6.13 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -145,7 +145,7 @@ The coordinator logs each QA round in the Log below.
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
 | 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
 | 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c4a69ca`) |
-| 27.13 | 6.13 Recordings end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
+| 27.13 | 6.13 Recordings end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `9815d81`) |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
@@ -682,3 +682,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Epic 9 planning reviewed by the coordinator and merged (`68dca7a`). It adds R37, architecture AD-23 (theming: one token set, an `appTheme` Global key with values `fluent` or `gamingDark`, live dictionary swap, dialogs as App windows) and 9 stories, 9.1 to 9.9. 9.1 waits on 6.13 and 7.11, and 8.7 now waits on 9.9. Its 9 Trello cards were created in Backlog with labels (purple on every story except 9.8; red on 9.2), and Queue rows 30.1 to 30.9 added. slice-epic-5 is back in the pool.
 - 2026-11-04: QA 6.13 passed at `4c6e5ea` with 0 findings. No-capture guards confirmed in code before the one run. `RecordingsEndToEndTests` passed in 2 s with no capture lines in the log; App.Tests 126 passed. The story saw 1 unexplained failure in 20 runs of that Explicit test (noted in its plan; not a blocker). story-2-7 is merging. qa-2-1 is back in the pool.
 - 2026-11-04: 8.3 merged (`f91c32d`, marked done and its Human Check rows added in `5eaa5ec`), and its card is Done with labels detached. The develop sync resolved conflicts with 6.10's `ICaptureSource` and 6.12's `OpenWrite` and `CloseWrite` helpers; the coordinator read the merge's resolution. Recovery now rebuilds a Monitor capture through the Desktop Duplication fallback. Contracts 122, Core 152, Engine 179, Platform.Capture 3 and Platform.FFmpeg 37 passed on the synced tree; publish clean. 8.4 went to slice-epic-8 (Opus, medium effort; no real sleep, lock or UAC, simulated through an injectable seam; GPU tests paused), with its card In progress.
+- 2026-11-04: 6.13 merged (`9815d81`; the note on the unexplained failure is in `4a1dc54`). **Epic 6 marked done** (`42c41ca`) and **released as v0.6.0** (master `5f694d4`, back into develop as `c9a7261`, with git flow's merge messages reworded). v0.7.0 (epic 7, held until now) is cut next. story-2-7 is back in the pool.
