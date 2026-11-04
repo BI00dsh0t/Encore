@@ -61,6 +61,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
 
     private readonly string _directory = Directory.CreateTempSubdirectory("rb-monitor-").FullName;
     private readonly List<Process> _processes = [];
+    private SettingsDocument _document = SettingsDocument.Empty;
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -158,6 +159,64 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         SessionTestKit.AssertDecodesCleanly(monitor.Path);
     }
 
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AChainChangeDuringAMonitorRecordingSwitchesAtTheResetTearingDownFirst()
+    {
+        using var bench = BenchLock.Take();
+        var gaps = new ConcurrentQueue<string>();
+        using var rig = NewRig(clips: true, resetGap: gaps.Enqueue);
+        var window = SessionTestKit.OpenWindow(_directory, _processes, GameWindowScript);
+        rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => rig.Factory.Sessions.Count == 1);
+        await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
+        var monitor = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+
+        // AD-7's budget, sampled from here to the end: the switch never runs a third chain.
+        var most = 0;
+        using var sampling = new CancellationTokenSource();
+        var sampler = Task.Run(
+            async () =>
+            {
+                while (!sampling.IsCancellationRequested)
+                {
+                    most = Math.Max(most, rig.Factory.Sessions.Sum(s => s.Chains));
+                    await Task.Delay(5, CancellationToken.None);
+                }
+            },
+            CancellationToken.None);
+
+        // A profile video change that needs another chain, then the save whose Reset switches to it.
+        var changed = new VideoSettings(VideoCodec.H264, 1280, 720, 30, 4_000, RateControl.Cbr);
+        var document = Volatile.Read(ref _document);
+        var profile = document.Profiles[ProfileId];
+        Volatile.Write(ref _document, document with { Profiles = document.Profiles.SetItem(ProfileId, profile with { Overrides = profile.Overrides.SetItem(Keys.Video.Name, Keys.Video.ToJson(changed)) }) });
+        Assert.True(rig.Orchestrator.Post(new SettingsUpdated()));
+        await Task.Delay(TimeSpan.FromSeconds(1), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var before = Assert.IsType<ClipSaved>(await rig.NextAsync());
+        await WaitUntil(() => !gaps.IsEmpty);
+
+        // The next save comes from the new chain.
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var after = Assert.IsType<ClipSaved>(await rig.NextAsync());
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(monitor.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+        await sampling.CancelAsync();
+        await sampler;
+        rig.Orchestrator.Dispose();
+
+        Assert.InRange(most, 1, 2);
+        Assert.Single(gaps);
+        Assert.Equal((640, 480), (SessionTestKit.VideoStream(before.Path).Width, SessionTestKit.VideoStream(before.Path).Height));
+        Assert.Equal((1280, 720), (SessionTestKit.VideoStream(after.Path).Width, SessionTestKit.VideoStream(after.Path).Height));
+        SessionTestKit.AssertDecodesCleanly(before.Path);
+        SessionTestKit.AssertDecodesCleanly(after.Path);
+        SessionTestKit.AssertDecodesCleanly(monitor.Path);
+    }
+
     private static List<string?> AudioTitles(string file) =>
         [.. SessionTestKit.Probe(file, "-select_streams", "a", "-show_streams").GetProperty("streams").EnumerateArray()
             .Select(s => s.TryGetProperty("tags", out var tags) && tags.TryGetProperty("name", out var title) ? title.GetString() : null)];
@@ -189,7 +248,9 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     /// video is 640x360 at 30 fps and the Global Track Layout two Tracks a <see cref="ToneHub"/>
     /// plays. The profile, 640x480, has <c>recordingsEnabled</c> as given.
     /// </summary>
-    private Rig NewRig(bool recordingsEnabled = false)
+    /// <param name="clips">Whether the orchestrator has Replay Clips, whose saves land in the events.</param>
+    /// <param name="resetGap">Receives each <c>reset-gap</c> message.</param>
+    private Rig NewRig(bool recordingsEnabled = false, bool clips = false, Action<string>? resetGap = null)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)> { ["game"] = (0.1, 440), ["mic"] = (0.2, 1000) });
@@ -198,12 +259,13 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         var layout = new TrackLayout(
             [game, mic],
             [new Track(Guid.NewGuid(), "Game", [game.Key], MuteAffected: false), new Track(Guid.NewGuid(), "Mic", [mic.Key], MuteAffected: true)]);
-        var document = SettingsDocument.Empty with
+        _document = SettingsDocument.Empty with
         {
             Global = SettingsDocument.Empty.Global
                 .SetItem(Keys.Video.Name, Keys.Video.ToJson(new VideoSettings(VideoCodec.H264, 640, 360, 30, 4_000, RateControl.Cbr)))
                 .SetItem(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(layout))
-                .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory)),
+                .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory))
+                .SetItem(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(0)),
             Profiles = SettingsMaps.EmptyProfiles.Add(ProfileId, new GameProfile
             {
                 Name = "Test Game",
@@ -214,12 +276,18 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
 
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var published = new ConcurrentQueue<CaptureState>();
-        var factory = new KeepingFactory(new CaptureSessionFactory(new CaptureSessionOptions { OutputFolder = _directory, Replay = true }, NullLoggerFactory.Instance, hub));
+        var factory = new KeepingFactory(new CaptureSessionFactory(
+            new CaptureSessionOptions { OutputFolder = _directory, Replay = true, ResetGap = resetGap },
+            NullLoggerFactory.Instance,
+            hub));
         var orchestrator = new SessionOrchestrator(
             factory,
-            () => document,
+            () => Volatile.Read(ref _document),
             published.Enqueue,
             targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, e) => events.Writer.TryWrite(e)),
+            clips: clips
+                ? new ReplayClips(OutputPathAllocator.System, () => _directory, c => events.Writer.TryWrite(c), e => events.Writer.TryWrite(e), NotSaved: f => events.Writer.TryWrite(f))
+                : null,
             recordings: new Recordings(
                 OutputPathAllocator.System,
                 () => _directory,

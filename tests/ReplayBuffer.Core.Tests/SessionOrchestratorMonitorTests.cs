@@ -167,7 +167,9 @@ public sealed partial class SessionOrchestratorTests
             game.ChainCount = 2;
             await Press(orchestrator, presses, HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp());
 
-            Assert.Null(game.Prepares.Last());
+            // Dropped for the check, then asked for again once the press is refused.
+            var changed = new VideoSettings(VideoCodec.H264, 1280, 720, 60, 20_000, RateControl.Vbr);
+            Assert.Equal([changed, null, changed], game.Prepares.Select(p => p?.Snapshot.Video));
             Assert.Equal([ErrorCodes.EncoderBudget], warnings);
             Assert.Single(factory.Sessions);
             Assert.All(published, p => Assert.Equal(RecordingState.Off, p.MonitorRecording));

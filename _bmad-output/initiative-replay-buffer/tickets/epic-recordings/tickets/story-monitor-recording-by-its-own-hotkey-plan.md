@@ -3,20 +3,27 @@ title: 'Monitor Recording by its own Hotkey'
 type: 'feature'
 ticket: '9'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '4390a0e6adab46146917f7229c6a8af52b186a87'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
   - '{project-root}/CLAUDE.md'
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      The Monitor session opens its own D3D11 device on its monitor's adapter, where AD-7 says the engine uses one device.
+    evidence: |-
+      CaptureSession.Open calls D3D11Device.CreateForMonitor for a Monitor session; sharing the game session's device across sessions is a larger change. The plan's Design Notes chose it, pending the builder's review.
+    location: >-
+      src/ReplayBuffer.Engine/Sessions/CaptureSession.cs (Open)
+    severity: medium
 ---
 
 <intent-contract>
@@ -99,6 +106,18 @@ deferred: []
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 8 findings — high 0, medium 4, low 3, false 0, maybe-false 0 (plus 1 already patched)
+- findings:
+  - `[medium]` `[patch]` `CaptureSession.Chains` counts an in-advance build PrepareChain(null) just superseded, so a Monitor press right after dropping a building chain is refused with encoder-budget — confirmed: `_building` stays true until the build thread ends. Fixed: a build counts only while still wanted.
+  - `[medium]` `[patch]` `StartMonitor` drops the game session's prepared chain before the budget check, so a refused press delays the profile change a Clip — confirmed. Fixed: a refused press re-runs `ApplySettings`.
+  - `[medium]` `[patch]` `ReportSwitchGap` keeps waiting after `End` set `_stopped`, so End blocks up to 1 s and raises a false reset-gap — confirmed: the loop only watches flags set after the join. Fixed: the loop also exits, and reports nothing, once stopped. The sub-claim that a second switch in the report window overwrites `_restartThread` is `[low]` `[reject]`: the older thread only logs by then, and the window needs two switches within a second.
+  - `[medium]` `[defer]` the Monitor session creates its own D3D11 device, against AD-7's "one D3D11 device" — real; the plan chose it deliberately because sharing one device across sessions is a larger change. Deferred to the builder as a decision awaiting review.
+  - `[medium]` `[patch]` AC 4 (teardown before build, reset-gap) is verified only against a Core fake — confirmed. Fixed: a Heavy engine test drives a real switch at a Reset during a Monitor Recording.
+  - `[low]` `[reject]` AC 2's Heavy test samples Chains once and doesn't switch the Target — the Target switch is covered in Core; lean tests (builder decision 2026-11-03).
+  - `[low]` `[reject]` AC 5 kill/restart isn't tested for a Monitor path — the crash recovery is path-agnostic (`IOpenRecordings`, covered by 6.2), and the Core test checks Opened/Closed; nothing starts a Monitor Recording without a press. Lean tests.
+  - `[medium]` `[patch]` a press after the Monitor session closed but before its writer posted back started a second session that never recorded — found while reading the diff and fixed in the orchestrator before the review; the reviewer saw it uncommitted. Committed with the patches.
 
 ## Design Notes
 

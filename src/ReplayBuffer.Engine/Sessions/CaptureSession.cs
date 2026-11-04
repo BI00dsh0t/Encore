@@ -689,7 +689,11 @@ internal sealed class CaptureSession : ICaptureSession
                     }
                 }
 
-                return chains + (_building || _restarting ? 1 : 0);
+                // A build no longer wanted is torn down as soon as it ends; a rebuild counts once the
+                // chain it replaces is gone, which counts until then.
+                var building = _building && _wanted is not null;
+                var rebuilding = _restarting && _current is not { IsDisposed: false };
+                return chains + (building ? 1 : 0) + (rebuilding ? 1 : 0);
             }
         }
     }
@@ -1201,12 +1205,13 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         var deadline = Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * _qpcFrequency);
-        while (ring.FirstKeyUs == long.MaxValue && !_chainsClosed && !_outputFinished && Stopwatch.GetTimestamp() < deadline)
+        // End stops the session, then joins this thread: it must not wait out the deadline.
+        while (ring.FirstKeyUs == long.MaxValue && !_chainsClosed && !_outputFinished && !Volatile.Read(ref _stopped) && Stopwatch.GetTimestamp() < deadline)
         {
             Thread.Sleep(10);
         }
 
-        if (_chainsClosed || _outputFinished)
+        if (_chainsClosed || _outputFinished || Volatile.Read(ref _stopped))
         {
             return;
         }

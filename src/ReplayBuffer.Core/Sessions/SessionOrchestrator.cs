@@ -1469,6 +1469,13 @@ public sealed class SessionOrchestrator : IDisposable
                 return;
             }
 
+            if (_monitorRecording is not null)
+            {
+                // Its session ended (closed or failed) and its writer hasn't posted back yet.
+                recordings.Info?.Invoke("The Monitor Record press came while the last Monitor Recording was still finishing; it was ignored");
+                return;
+            }
+
             StartMonitor(document);
             return;
         }
@@ -1538,6 +1545,9 @@ public sealed class SessionOrchestrator : IDisposable
                 recordings.Warn?.Invoke(
                     ErrorCodes.EncoderBudget,
                     $"The Monitor Recording didn't start: the game session already runs {chains} encoder chains, and another would exceed the encoder budget.");
+
+                // The chain dropped above is asked for again: nothing runs beside the game session.
+                ApplySettings(game);
                 return;
             }
         }
