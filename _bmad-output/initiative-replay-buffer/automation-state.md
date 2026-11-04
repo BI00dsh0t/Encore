@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.7 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.7 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
@@ -782,3 +782,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: **Builder (leaving for a while): "start the run when it's ready to run."** 8.7 was told to go straight from phase 1 (build and smoke runs) to phase 2 (the 1-hour run) without waiting for a go-ahead, unless a smoke run fails or something looks unsafe. Other sessions stay off Heavy runs while it holds the PC.
 - 2026-11-04: 8.7 is ready for its run at `7f46995`: `drift --app` (a published App and engine on a test instance, everything on, a 30-minute Recording), `fps --overlay --recording` (3 × 150 s) and `playback --codecs h264,hevc,av1`. Smokes: drift 2 min passed (A/V 0.51 ms, Track-to-Track 0.005 ms); playback encodes all 3 codecs (WMP lacks AV1, a Human Check). **The fps smoke was invalid**: the builder's Visual Studio debug Dev App (PID 59732) captures the GPU load through Game Detection. It's the builder's process, so it isn't stopped. Drift and playback run now; fps waits until the builder closes the Dev App. **Human Check:** close the Dev App so the 8.7 fps run (about 18 min) can go.
 - 2026-11-04: 8.7 drift and playback done at `159922a`. **Drift passed over 30 minutes**: A/V 0.83 ms, Track-to-Track 0.88 ms, Track lengths within 21 ms (all against 16.7 ms); every flash and burst matched on all 4 Tracks; 5/5 Saves made Clips. **Playback**: H.264, HEVC and AV1 all encode; Chrome plays all 4 files, including the 4-Track Recording; WMP plays everything but AV1. fps is pending: the builder must close the VS Dev App (PID 59732), then it's about 18 min. Human Checks are in the plan: real-game fps; Discord, VLC and Resolve sync by eye; WMP AV1; whether NFR-1's 3 % stands.
+- 2026-11-04: QA 8.7 (the code and the drift and playback results) went to qa-1-14 (Sonnet, medium effort; no bench runs), so only the fps run is left when the builder is back. The card is In QA.
