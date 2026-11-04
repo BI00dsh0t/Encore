@@ -61,6 +61,10 @@
                       ItemsSource="{Binding Profiles}"
                       SelectedItem="{Binding SelectedProfile}" />
             <StackPanel Visibility="{Binding HasSelectedProfile, Converter={StaticResource Visible}}">
+                <TextBlock Margin="0,6,0,0"
+                           Foreground="Gray"
+                           Text="Changes to a game's settings apply at the next Reset of its Replay Buffer."
+                           TextWrapping="Wrap" />
                 <ContentControl Margin="0,12,0,0" Content="{Binding OverrideOutput.View}" />
                 <TextBlock Margin="0,18,0,0" FontWeight="SemiBold" Text="Track Layout" />
                 <ContentControl Margin="0,6,0,0" Content="{Binding OverrideTrackLayout.View}" />
