@@ -12,7 +12,18 @@
                        TextTrimming="CharacterEllipsis" />
         </DataTemplate>
         <DataTemplate DataType="{x:Type local:LibraryRow}">
-            <Grid Margin="0,4">
+            <!-- Transparent so the whole row takes the double-click and the right-click. -->
+            <Grid Margin="0,4" Background="Transparent">
+                <Grid.InputBindings>
+                    <MouseBinding Command="{Binding OpenCommand}" Gesture="LeftDoubleClick" />
+                </Grid.InputBindings>
+                <Grid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Command="{Binding OpenCommand}" Header="Open" />
+                        <MenuItem Command="{Binding ShowInExplorerCommand}" Header="Show in Explorer" />
+                        <MenuItem Command="{Binding CopyCommand}" Header="Copy" />
+                    </ContextMenu>
+                </Grid.ContextMenu>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -124,6 +135,12 @@
                       Content="Favourites only"
                       IsChecked="{Binding FavouritesOnly}" />
         </WrapPanel>
+        <TextBlock DockPanel.Dock="Top"
+                   Margin="0,4,0,0"
+                   Foreground="#C42B1C"
+                   Text="{Binding ActionError}"
+                   TextWrapping="Wrap"
+                   Visibility="{Binding HasActionError, Converter={StaticResource Visible}}" />
         <!-- One virtualized list of headers and rows; it scrolls itself, so nothing wraps it in a ScrollViewer. -->
         <ItemsControl Margin="0,6,0,0"
                       ItemsSource="{Binding Entries}"

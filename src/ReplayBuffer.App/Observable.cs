@@ -26,16 +26,24 @@ internal abstract class Observable : INotifyPropertyChanged
     }
 }
 
-/// <summary>A command that always runs <paramref name="execute"/>.</summary>
-internal sealed class RelayCommand(Action execute) : ICommand
+/// <summary>
+/// A command that runs <paramref name="execute"/>, always or while <paramref name="canExecute"/> is
+/// true; <see cref="RaiseCanExecuteChanged"/> tells the bound controls to ask again.
+/// </summary>
+internal sealed class RelayCommand(Action execute, Func<bool>? canExecute = null) : ICommand
 {
-    public event EventHandler? CanExecuteChanged
+    public event EventHandler? CanExecuteChanged;
+
+    public bool CanExecute(object? parameter) => canExecute?.Invoke() ?? true;
+
+    /// <summary>Runs the action; a no-op while the command can't execute.</summary>
+    public void Execute(object? parameter)
     {
-        add { }
-        remove { }
+        if (CanExecute(parameter))
+        {
+            execute();
+        }
     }
 
-    public bool CanExecute(object? parameter) => true;
-
-    public void Execute(object? parameter) => execute();
+    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 }
