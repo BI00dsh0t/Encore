@@ -204,7 +204,10 @@ internal sealed class ShellApp(Instance instance) : Application
     internal static void ShowCrashLoop(MenuItem restartItem, bool crashLoop) =>
         restartItem.Visibility = crashLoop ? Visibility.Visible : Visibility.Collapsed;
 
-    private string ThemeFile => Path.Combine(instance.LocalDataFolder, "app-theme.json");
+    /// <summary>Where <paramref name="instance"/>'s App keeps the theme it last applied, for its next start.</summary>
+    internal static string ThemeFileFor(Instance instance) => Path.Combine(instance.LocalDataFolder, "app-theme.json");
+
+    private string ThemeFile => ThemeFileFor(instance);
 
     private void OpenGallery()
     {
