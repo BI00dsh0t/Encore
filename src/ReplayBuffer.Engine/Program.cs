@@ -120,6 +120,7 @@ static async Task<int> Serve(Instance instance, ServeCommand serve, ILoggerFacto
     {
         DebugCapture = serve.DebugCapture,
         ReplayBuffer = serve.ReplayBuffer ? true : null,
+        Restarted = serve.Restarted,
     });
 
     // Tests wait for this line before connecting.

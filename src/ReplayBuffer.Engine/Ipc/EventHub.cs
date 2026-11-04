@@ -88,4 +88,28 @@ internal sealed class EventHub
             _sinks.Remove(sink);
         }
     }
+
+    /// <summary>
+    /// <c>dev.simulate engineHang</c> only: a background thread takes the hub's lock and never lets it go,
+    /// so every publish, snapshot and attach after this blocks, as in a real hang. Returns once it holds it.
+    /// </summary>
+    public void Freeze()
+    {
+        using var held = new ManualResetEventSlim();
+        var thread = new Thread(() =>
+        {
+            lock (_lock)
+            {
+                // Set inside the lock; the caller waits for it, so it is never disposed before this runs.
+                held.Set();
+                Thread.Sleep(Timeout.Infinite);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "EventHub freeze",
+        };
+        thread.Start();
+        held.Wait();
+    }
 }
