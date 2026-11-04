@@ -47,8 +47,15 @@ try
         "hotkey" => HotkeyBenchmark.Run(context),
         "tracks" => TracksCheck.Run(context),
         "overlay" => OverlayBenchmark.Run(context),
+        "soak" => SoakRun.Run(context),
         _ => 0,
     };
+
+    // The soak writes its own soak.md; report.md merges the other measurements only.
+    if (options.Command == "soak")
+    {
+        return code;
+    }
 
     Report.Generate(context.RunFolder);
     Console.WriteLine($"Report: {Path.Combine(context.RunFolder, Report.MarkdownName)}");

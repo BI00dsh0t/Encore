@@ -86,8 +86,10 @@ public sealed record DebugCaptureSize(int Width, int Height);
 /// <see cref="Instance"/> overrides the process's own instance, for tests only. <see cref="DebugCapture"/>
 /// (<c>--debug-capture</c>) runs a capture session on the Target Game's window, following it, until
 /// the Replay Buffer does (epic 4); it also turns Game Detection on for a test instance.
+/// <see cref="ReplayBuffer"/> (<c>--replay-buffer</c>, test instances only) turns the Replay Buffer,
+/// and with it Game Detection, on for the test instance, so a separate engine process can save Clips.
 /// </summary>
-public sealed record ServeCommand(string? Instance, bool DebugCapture = false) : EngineCommand
+public sealed record ServeCommand(string? Instance, bool DebugCapture = false, bool ReplayBuffer = false) : EngineCommand
 {
     /// <summary>The only instance names <c>--instance</c> accepts, so tests never touch a real instance.</summary>
     public const string TestInstancePrefix = Contracts.Instance.TestPrefix;
@@ -102,7 +104,7 @@ public static class CommandLine
     public const string Usage =
         """
         Usage:
-          ReplayBuffer.Engine serve [--instance ReplayBuffer-Test-<suffix>] [--debug-capture]
+          ReplayBuffer.Engine serve [--instance ReplayBuffer-Test-<suffix>] [--debug-capture | --replay-buffer (needs --instance)]
           ReplayBuffer.Engine debug-list
           ReplayBuffer.Engine debug-capture (--window <title> | --hwnd <handle>) [--seconds 30]
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
@@ -378,12 +380,16 @@ public static class CommandLine
     {
         string? name = null;
         var debugCapture = false;
+        var replayBuffer = false;
         for (var i = 1; i < args.Count; i++)
         {
             switch (args[i])
             {
                 case "--debug-capture" when !debugCapture:
                     debugCapture = true;
+                    break;
+                case "--replay-buffer" when !replayBuffer:
+                    replayBuffer = true;
                     break;
                 case "--instance" when name is null && i + 1 < args.Count:
                     name = args[++i];
@@ -394,11 +400,21 @@ public static class CommandLine
 
                     break;
                 default:
-                    return Fail("serve takes only --instance <name> and --debug-capture.");
+                    return Fail("serve takes only --instance <name>, --replay-buffer and --debug-capture.");
             }
         }
 
-        return new ParseResult(new ServeCommand(name, debugCapture), null);
+        if (replayBuffer && name is null)
+        {
+            return Fail("--replay-buffer is for test instances only; give --instance ReplayBuffer-Test-<suffix>.");
+        }
+
+        if (replayBuffer && debugCapture)
+        {
+            return Fail("--replay-buffer and --debug-capture can't be combined: a debug capture turns the Replay Buffer off.");
+        }
+
+        return new ParseResult(new ServeCommand(name, debugCapture, replayBuffer), null);
     }
 
     private static ParseResult Fail(string error) => new(null, error);

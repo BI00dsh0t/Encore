@@ -69,6 +69,27 @@ internal sealed class KeyInjector : IDisposable
         return [.. batch];
     }
 
+    /// <summary>One press of <paramref name="combo"/> now, on this thread; null when it went in, else why it didn't.</summary>
+    public static string? PressOnce(KeyCombo combo)
+    {
+        var batch = Batch(combo);
+        var sent = SendInput((uint)batch.Length, batch, Marshal.SizeOf<Input>());
+        if (sent == batch.Length)
+        {
+            return null;
+        }
+
+        var error = Marshal.GetLastPInvokeError();
+        if (sent > 0)
+        {
+            var lift = batch.Where(i => (i.Keyboard.Flags & KeyEventKeyUp) != 0).ToArray();
+            _ = SendInput((uint)lift.Length, lift, Marshal.SizeOf<Input>());
+        }
+
+        return $"SendInput inserted {sent} of {batch.Length} key events (error {error}): input is blocked, "
+            + "usually by UIPI (a window of higher integrity has the focus) or a locked or secure desktop";
+    }
+
     public void Dispose()
     {
         _stop.Cancel();
