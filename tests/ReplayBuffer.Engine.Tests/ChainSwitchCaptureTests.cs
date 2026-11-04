@@ -18,7 +18,7 @@ namespace ReplayBuffer.Engine.Tests;
 /// Profile settings at the next Reset (story 4.9, R7, R8), in process: the Global layout has Tracks
 /// Game and Mic (the Mic Device <c>mic</c>, <c>muteAffected</c>) at 640×480. About 3 s after the
 /// anchor the game's profile overrides the video to 1280×720 and the layout to three Tracks: Game;
-/// Voice (<c>mic</c>, no Mic Device here) and Mic2 (its own mic <c>mic2</c>, <c>muteAffected</c>).
+/// Voice (<c>mic</c>, no Mic Device here, both <c>muteAffected</c>) and Mic2 (its own mic <c>mic2</c>).
 /// The mic is muted throughout. The save 1.5 s later still has the old Tracks and size; the save
 /// after it has the new ones, from where the first ended.
 /// </summary>
@@ -109,7 +109,8 @@ public sealed partial class ChainSwitchCaptureTests : IDisposable
             [game, voice, mic2],
             [
                 new Track(Guid.NewGuid(), "Game", [game.Key], MuteAffected: false),
-                new Track(Guid.NewGuid(), "Voice", [voice.Key], MuteAffected: false),
+                // muteAffected, so only the profile's own isMic decides: the Global mic is no Mic Device here and stays audible.
+                new Track(Guid.NewGuid(), "Voice", [voice.Key], MuteAffected: true),
                 new Track(Guid.NewGuid(), "Mic2", [mic2.Key], MuteAffected: true),
             ]);
         var start = SettingsDocument.Empty with

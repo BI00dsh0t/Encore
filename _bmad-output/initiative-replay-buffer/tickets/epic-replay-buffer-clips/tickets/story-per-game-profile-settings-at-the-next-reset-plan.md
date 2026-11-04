@@ -3,7 +3,7 @@ title: 'Per-Game-Profile settings at the next Reset'
 type: 'feature'
 ticket: '9'
 created: '2026-11-03'
-status: 'in-review'
+status: 'built'
 baseline_revision: 'e83a7f8fe440e8f4274d1c7a960dcacd269e6bbe'
 route: 'full'
 route_source: 'auto'
@@ -12,7 +12,7 @@ review: 'quick'
 review_source: 'pinned'
 lenses_ran: ['quick']
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: ['{project-root}/CLAUDE.md']
 warnings: ['oversized']
 deferred: []
@@ -181,6 +181,17 @@ Untested by design (lean tests; engine-internal timing), but required behaviour:
 
 ## Review Triage Log
 
+### 2026-11-04 — Review pass
+- The Quick lens was interrupted by an app restart, then resumed from its transcript, and it reported in full. Develop (4.10, 5.7, 6.4) was merged in before the review. The diff reviewed was 4.9's own changes against the merged develop tip.
+- verdicts: 6 findings — high 0, medium 3, low 2, false 1, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` A newer spec replacing a prepared chain started its build while the old chain's teardown ran on another thread, so three chains were briefly live (AD-7). Confirmed: `PrepareChain` called `StartBuildLocked` before handing the drop to a worker, and `Build` disposed a superseded chain after starting the next build. Fixed: a `_tearingDown` count, raised by the new `TearDownLocked`, which `StartBuildLocked` waits for. The teardown worker lowers it in `finally` and then starts the waiting build.
+  - `[medium]` `[patch]` The old chain's forced key was asked for after the press, but the new chain took frames only after the arm. A frame captured in between went only to the old chain and could take the key, so more than one such frame left a real gap and a spurious `reset-gap`. Confirmed in `ClipWrite.Write`, where `RequestKeyframe` ran before `TryArm`. Fixed: `TryArm` first reads the arm QPC under the gate, which is now `OnFrame`'s switch threshold. The switching write asks for its key after that QPC, so the old key and the new chain's first frame are one captured frame. The old Clip keeps the frames between the press and the arm (a few ms on the orchestrator thread).
+  - `[low]` `[reject]` A same-chain but newer spec keeps the older `_wanted`, so `SwitchesTo` carries a stale snapshot. Real, but only fields outside the chain go stale. The switching save's Reset resizes the new chain to the resolved `bufferWindow`, and `replayStorage`/`ringPath` are Global keys that apply to the next session. Nothing a user would meet; the fix adds spec merging.
+  - `[low]` `[patch]` With a switch armed but no frame yet (a static window), the switching save's Reset resized the outgoing chain, and the new chain picked up the window one Reset later. Fixed: `ResizeAt` does nothing while a chain is armed, and the incoming chain takes the window at the next Reset.
+  - `[medium]` `[patch]` The Heavy test's Voice Track (the Global mic, not `isMic` in the profile layout) wasn't `muteAffected`, so it stayed audible whichever layout's `isMic` the gate used, and didn't prove AC3. Fixed: Voice is `MuteAffected: true`, so it stays audible only because the profile's own `isMic` decides.
+  - `[false]` `[reject]` A save bound to the old chain just before the switch frame cuts the old Tracks. `Save` and `Write` run back to back in one orchestrator handler. A press before the switch frame belongs to the old chain: its key is the switch frame or earlier, so its Clip is the old chain's (or empty and refused).
+
 ## Design Notes
 
 **Why a sink per chain, not `RingGenerations.Restart`.** During the switch both chains append at once: the old one until its Clip's key and audio are in, the new one from the press. `RingGenerations` routes every append to one current ring. 4.6 deferred two hazards to here: a waiting save converting PTS with the wrong generation, and a fallback cut that its claim doesn't match. Both come from sharing one sink across encoders. A save bound to its chain's sink at the press has neither.
@@ -201,3 +212,37 @@ Untested by design (lean tests; engine-internal timing), but required behaviour:
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- expected: all pass
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only` -- expected: all pass, `ChainSwitchCaptureTests` included (the capture and encode path changed); a real-time test failing only under GPU load gets one rerun
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL/AOT warnings
+
+## Auto Run Result
+
+- **Summary:** R7 and R8.
+  - The orchestrator re-resolves the game session's settings on every settings commit (`SettingsUpdated`, posted by the engine) and after each Reset.
+  - When the profile's Tracks, video or Mic Devices and mute Tracks need another encoder chain (`ChainKey.SameChain`), the session builds that chain in advance on a background thread: its own taps, encoders, frame pool and scaler, and its own ring sink.
+  - The next save whose write starts arms it. The new chain takes audio from the press and video from the first frame captured after the arm. The old chain's forced key lands on that same frame, and it is torn down once every save bound to it has cut. At most two chains are live.
+  - A new chain starting more than one frame after the switching Clip's end raises `warning.raised { code: reset-gap }`.
+  - A profile's own layout gates only its own Mic Devices, at start and after a switch.
+- **Files:**
+  - Contracts: `ErrorCodes.ResetGap`.
+  - Core: `ChainKey.SameChain`, `ICaptureSession.PrepareChain`, `IClipWrite.SwitchesTo`, `SettingsUpdated`, and the orchestrator's `ApplySettings`.
+  - Media: `FramePacer(firstFrameTakesNearestSlot)`.
+  - Platform.FFmpeg: `AacEncoder` start sample and `StartAt`; `ReplayRingSink.FirstKeyUs`.
+  - Platform.Capture: `WindowCapture.SetFps`.
+  - Engine: new `Sessions/EncoderChain.cs`; `CaptureSession` reworked around chains; `EngineHost` wiring for `SettingsUpdated` and `reset-gap`.
+  - Tests: two orchestrator tests, one pacer test, and the Heavy `ChainSwitchCaptureTests`.
+- **Contracts shape for 4.10 and others:** no settings-shape change. The only Contracts addition is the error code `reset-gap` (a `warning.raised` code, source `replay`, no overlay).
+- **Review:** the Quick lens reported 6 findings.
+  - Patched 4: 3 medium (the two-chain budget during a replace; the key requested after the arm; the Heavy test's mute-affected Voice) and 1 low (no resize while armed).
+  - Rejected 2: 1 low (a stale non-chain snapshot, which corrects itself at the next Reset) and 1 false (a press before the switch frame).
+  - Nothing deferred. 4.6's two deferred restart hazards are settled by design: a sink per chain, and each save bound to its chain before its claim. `RingGenerations.Restart` stays unused, a 4.13 sweep item.
+- **Follow-up review recommended:** true. Three medium findings were patched. The unverified risk is the switch timing now taken from the arm QPC, under real game load and with a static window. It is covered by one in-process Heavy run; coordinator QA serves as the follow-up.
+- **Verification** (after merging develop with 4.10, 5.7 and 6.4, and after the patches):
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+  - Contracts 118/118, Core 106/106, Media 99 passed with 4 skipped, Platform.FFmpeg 36 passed with 1 skipped, Platform.Capture 3/3 (these before the patches, which touch only `CaptureSession` and the Heavy test).
+  - Engine 166 passed with 23 Explicit not run, after the patches. One earlier Engine run failed under machine-wide memory exhaustion (commit at 88 of 95 GB, with OOM in `Process.GetProcesses` and in the build's source generator); the rerun was clean.
+  - Heavy: the implementer ran all 20 of Engine's Heavy tests before the merge; after the patches, `ChainSwitchCaptureTests` passed.
+  - `tools/publish-engine.ps1`: 11.3 MB, no IL or AOT warnings.
+- **Residual risks:**
+  - No automated coverage for a press while the build runs, a failed build and its retry, the static-window `reset-gap`, or an fps change through `SetFps`.
+  - A pending chain holds an idle NVENC session and, in Disk mode, a second preallocated ring file until the next save.
+  - A failed switching write can't retry the old chain's span: a Clip holds one chain.
+  - The switching Clip runs to the arm QPC rather than the press, a few ms on the orchestrator thread.

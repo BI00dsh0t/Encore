@@ -199,11 +199,14 @@ internal sealed class CaptureSession : ICaptureSession
     private readonly List<Thread> _workers = [];
     private EncoderChain? _current;
     private EncoderChain? _armed;
-    private long _armedPressQpc;
+    private long _armedQpc;
     private EncoderChain? _retiring;
     private EncoderChain? _prepared;
     private SessionSpec? _wanted;
     private bool _building;
+
+    // Chains being torn down after a newer spec replaced them: a build waits for them (AD-7's two chains).
+    private int _tearingDown;
     private volatile bool _chainsClosed;
 
     private readonly IVideoEncoderCatalog _encoders;
@@ -556,14 +559,15 @@ internal sealed class CaptureSession : ICaptureSession
                 _wanted = next;
                 drop = _prepared;
                 _prepared = null;
-                StartBuildLocked();
             }
 
             if (drop is not null)
             {
                 _log.LogInformation("The prepared encoder chain is no longer needed; it is torn down");
-                StartWorkerLocked("Encoder chain teardown", drop.Dispose);
+                TearDownLocked(drop);
             }
+
+            StartBuildLocked();
         }
     }
 
@@ -627,7 +631,7 @@ internal sealed class CaptureSession : ICaptureSession
 
             // The first frame captured after an armed press: the new chain's first, and the one the
             // old chain's forced keyframe lands on, so the next Clip starts where this one ends.
-            if (_armed is { } armed && qpc > _armedPressQpc)
+            if (_armed is { } armed && qpc > _armedQpc)
             {
                 SwitchTo(armed, qpc);
             }
@@ -731,17 +735,24 @@ internal sealed class CaptureSession : ICaptureSession
     /// Arms the prepared chain at the press <paramref name="qpc"/>, for a write bound to the
     /// current <paramref name="chain"/> that has just asked for its keyframe: when one is ready,
     /// nothing is armed or retiring, no Recording is attached and the session is live. Its audio
-    /// starts at the press. Returns it, or null. Orchestrator thread.
+    /// starts at the press; its video at the first frame captured after <paramref name="armQpc"/>,
+    /// read under the gate, which is where the old chain's keyframe must then be asked for. Returns
+    /// it, or null. Orchestrator thread.
     /// </summary>
-    private EncoderChain? TryArm(EncoderChain chain, long qpc)
+    private EncoderChain? TryArm(EncoderChain chain, long qpc, out long armQpc)
     {
         EncoderChain? armed = null;
+        armQpc = qpc;
         lock (_gate)
         {
             if (_stopped)
             {
                 return null;
             }
+
+            // Under the gate: no frame is being handed to the chains, so every frame captured after
+            // this instant reaches the new chain, and none at or before it does.
+            armQpc = Math.Max(qpc, Stopwatch.GetTimestamp());
 
             lock (_chainLock)
             {
@@ -751,7 +762,7 @@ internal sealed class CaptureSession : ICaptureSession
                     _prepared = null;
                     _wanted = null;
                     _armed = prepared;
-                    _armedPressQpc = qpc;
+                    _armedQpc = armQpc;
                     armed = prepared;
                 }
             }
@@ -878,7 +889,7 @@ internal sealed class CaptureSession : ICaptureSession
     private void StartBuildLocked()
     {
         if (_wanted is not { } spec || _chainsClosed || !Volatile.Read(ref _anchored) || _building
-            || _prepared is not null || _armed is not null || _retiring is not null)
+            || _prepared is not null || _armed is not null || _retiring is not null || _tearingDown > 0)
         {
             return;
         }
@@ -911,7 +922,6 @@ internal sealed class CaptureSession : ICaptureSession
             chain = null;
         }
 
-        var unused = chain;
         lock (_chainLock)
         {
             _building = false;
@@ -919,9 +929,13 @@ internal sealed class CaptureSession : ICaptureSession
                 && _wanted is { } wanted && ChainKey.SameChain(wanted, spec))
             {
                 _prepared = chain;
-                unused = null;
             }
-            else if (chain is null && ReferenceEquals(_wanted, spec))
+            else if (chain is not null)
+            {
+                // Superseded meanwhile: torn down before the newer spec's build starts.
+                TearDownLocked(chain);
+            }
+            else if (ReferenceEquals(_wanted, spec))
             {
                 _wanted = null;
             }
@@ -929,8 +943,27 @@ internal sealed class CaptureSession : ICaptureSession
             // A newer spec asked for while this one built.
             StartBuildLocked();
         }
+    }
 
-        unused?.Dispose();
+    /// <summary>Tears <paramref name="chain"/> down on a background thread; no build starts until it is gone. Under the chain lock.</summary>
+    private void TearDownLocked(EncoderChain chain)
+    {
+        _tearingDown++;
+        StartWorkerLocked("Encoder chain teardown", () =>
+        {
+            try
+            {
+                chain.Dispose();
+            }
+            finally
+            {
+                lock (_chainLock)
+                {
+                    _tearingDown--;
+                    StartBuildLocked();
+                }
+            }
+        });
     }
 
     /// <summary>Starts a background thread the session's End waits for. Under the chain lock.</summary>
@@ -1184,7 +1217,9 @@ internal sealed class CaptureSession : ICaptureSession
         EncoderChain? chain;
         lock (_chainLock)
         {
-            chain = _current;
+            // An armed chain takes over at the next frame: resizing the outgoing one would be lost,
+            // so the incoming one takes the window at the next Reset instead.
+            chain = _armed is null ? _current : null;
         }
 
         if (_keepRing || _outputFinished || chain?.Ring is not { } ring || pending < 1 || pending == chain.WindowSeconds)
@@ -1307,13 +1342,18 @@ internal sealed class CaptureSession : ICaptureSession
 
             try
             {
+                // A switch is armed first: then its keyframe is asked for after the arm, the instant the
+                // new chain takes frames from, so the old Clip ends on the new chain's first frame. Frames
+                // captured between the press and the arm reach only the old chain, and stay in its Clip.
+                var armed = session.TryArm(bound, qpc, out var armQpc);
+                SwitchesTo = armed?.Spec;
+
                 // Only a write that starts asks for its keyframe; starting the thread publishes the ticket to it.
                 if (_video is not null)
                 {
-                    _ticket = _video.RequestKeyframe(qpc);
+                    _ticket = _video.RequestKeyframe(armed is null ? qpc : armQpc);
                 }
 
-                SwitchesTo = session.TryArm(bound, qpc)?.Spec;
                 new Thread(() => done(Run(path))) { Name = "ClipWriter", IsBackground = true }.Start();
             }
             catch
