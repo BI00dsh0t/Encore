@@ -3,7 +3,7 @@ title: 'Feedback Sounds settings page'
 type: 'feature'
 ticket: '11'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'f2ff2fe2a20af05401b41727ae43dc7c37a58249'
 route: 'full'
 route_source: 'auto'
