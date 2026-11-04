@@ -198,6 +198,26 @@ public sealed class DeviceDropoutTests : IDisposable
     }
 
     [Fact]
+    public void ASessionDeviceWhoseSavedIdIsGoneOpensTheEndpointWithItsNamesUnlessTwoShareThem()
+    {
+        // Story 8.6: the mixer restarted with new ids while nothing had A open.
+        _source.Remove(A, raise: false);
+        _source.Add(ANew, "Game", "BEACN", SettingsFlow.Output, raise: false);
+        var saved = new Core.Sessions.SessionAudioDevice(A, SettingsFlow.Output, "Game", ParentName: "BEACN");
+        var recorder = new EnergySubscriber();
+        using (((IAudioDeviceHub)_hub).Subscribe(saved, recorder))
+        {
+            Assert.True(recorder.WaitFor(20, Timeout), "no blocks from A's new endpoint");
+            Assert.Equal(1, _bank.Opens(ANew));
+            Assert.Equal(0, _bank.Attempts(A));
+        }
+
+        // Two endpoints with its names: the saved id is opened, and fails as before.
+        _source.Add(AOther, "Game", "BEACN", SettingsFlow.Output, raise: false);
+        Assert.Equal(A, _hub.Resolve(saved));
+    }
+
+    [Fact]
     public void ADropoutSilencesOnlyItsOwnDevice()
     {
         var a = new EnergySubscriber();

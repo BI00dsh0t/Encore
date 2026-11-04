@@ -20,8 +20,10 @@ public sealed record CaptureTarget(int ProcessId, nint Window, string? ProfileId
 /// <summary>
 /// One audio device a session captures: loopback for an Output Device, capture for an Input Device
 /// (AD-13). <paramref name="IsMic"/> marks a Mic Device, which mic mute silences in the Tracks it affects.
+/// <paramref name="ParentName"/> is the saved parent device's name: with <paramref name="FriendlyName"/>, it
+/// finds the endpoint again when a mixer restart gives it a new id (story 8.6).
 /// </summary>
-public sealed record SessionAudioDevice(string EndpointId, AudioFlow Flow, string FriendlyName, bool IsMic = false);
+public sealed record SessionAudioDevice(string EndpointId, AudioFlow Flow, string FriendlyName, bool IsMic = false, string ParentName = "");
 
 /// <summary>
 /// One Track of a session: its stream title, and the devices it mixes, as indexes into
@@ -87,7 +89,7 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
                 {
                     index = devices.Count;
                     var name = string.IsNullOrWhiteSpace(device.FriendlyName) ? device.EndpointId : device.FriendlyName;
-                    devices.Add(new SessionAudioDevice(device.EndpointId, device.Flow, name, IsMic(device)));
+                    devices.Add(new SessionAudioDevice(device.EndpointId, device.Flow, name, IsMic(device), device.ParentName ?? ""));
                 }
 
                 if (!indexes.Contains(index))

@@ -115,6 +115,50 @@ public sealed class ClipsEndToEndTests : IDisposable
         await client.SendAsync(EngineMessages.Shutdown, Empty.Value, Token);
     }
 
+    /// <summary>
+    /// Story 8.6: a reboot, as two cold engine starts on the same data folders with nothing sent between
+    /// them. After each, the Replay Buffer starts on the running game by itself, with the Save Hotkey
+    /// registered from disk, and a press saves a Clip with every Track.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task TheReplayBufferStartsOnTheGameByItselfAfterEachColdStart()
+    {
+        SessionTestKit.RequireFFmpeg();
+        var loadExe = GpuLoadExe();
+        Assert.SkipUnless(loadExe is not null, "the GPU load is not built (dotnet build ReplayBuffer.slnx -c Release)");
+        var clips = Directory.CreateDirectory(Path.Combine(_folder, "clips")).FullName;
+        var instance = new Instance(Instance.TestPrefix + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
+        var options = new EngineHostOptions { Heartbeat = null, AppLauncher = new StayingLauncher(), ReplayBuffer = true };
+
+        await using (var host = EngineHost.Start(instance, NullLoggerFactory.Instance, hostOptions: options))
+        await using (var client = await EngineClient.ConnectAsync(host.PipeName, cancellationToken: Token))
+        {
+            await UpdateAsync(client,
+                SettingsOp.SetGlobal(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(clips)),
+                SettingsOp.SetGlobal(Keys.Video.Name, Keys.Video.ToJson(GlobalVideo)),
+                SettingsOp.SetGlobal(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(NextWindow)),
+                SettingsOp.SetGlobal(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(1)),
+                SettingsOp.SetGlobal(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(new HotkeySettings(new HotkeyBinding(VkF22, Combo), null, null, null, null, null))));
+            await client.SendAsync(EngineMessages.Shutdown, Empty.Value, Token);
+        }
+
+        using var load = StartLoad(loadExe!);
+        for (var start = 1; start <= 2; start++)
+        {
+            await using var host = EngineHost.Start(instance, NullLoggerFactory.Instance, hostOptions: options);
+            await using var client = await EngineClient.ConnectAsync(host.PipeName, cancellationToken: Token);
+            await UntilAsync(() => client.State.Capture.Replay == ReplayState.Buffering, $"buffering after cold start {start}");
+            Assert.Equal(GamePaths.Canonicalize(loadExe!), client.State.TargetGame?.ProfileId);
+            await UntilAsync(() => client.State.Hotkeys.Bindings.FirstOrDefault(b => b.Action == HotkeyAction.Save)?.Registered == true, "the Save Hotkey registered");
+            await Task.Delay(TimeSpan.FromSeconds(NextWindow + 2), Token);
+            Check(await SaveAsync(client), GlobalVideo, NextWindow - 1.5, NextWindow + 0.1);
+            await client.SendAsync(EngineMessages.Shutdown, Empty.Value, Token);
+        }
+
+        Assert.Equal(2, Directory.GetFiles(clips, "*.mp4", SearchOption.AllDirectories).Length);
+    }
+
     /// <summary>Presses Save and returns the new Clip's path.</summary>
     private static async Task<string> SaveAsync(EngineClient client)
     {

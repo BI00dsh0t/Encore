@@ -279,7 +279,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         return next;
     }
 
-    private sealed class FakeProbe : IGameWindowProbe
+    internal sealed class FakeProbe : IGameWindowProbe
     {
         private readonly Lock _lock = new();
         private readonly Dictionary<int, FakeProcess> _processes = [];
@@ -363,7 +363,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         }
     }
 
-    private sealed class FakeProcess(string imagePath) : IGameProcess
+    internal sealed class FakeProcess(string imagePath) : IGameProcess
     {
         public int Opens;
         private volatile bool _hasExited;
@@ -384,7 +384,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
     }
 
     /// <summary>An App launcher whose Apps never exit.</summary>
-    private sealed class StayingLauncher : IAppLauncher
+    internal sealed class StayingLauncher : IAppLauncher
     {
         public IWatchedProcess? Open(int pid) => new Staying(pid);
 

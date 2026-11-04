@@ -22,6 +22,10 @@ namespace ReplayBuffer.Platform.Audio;
 /// every subscriber resumes on its old subscription. The rebinding lives only here, never in
 /// settings (AD-4).
 /// </para>
+/// <para>
+/// A session's device whose saved id is gone opens by name the same way (story 8.6): a mixer that
+/// restarted with new ids, while nothing had the device open, needs nothing re-selected.
+/// </para>
 /// It is also the engine's <see cref="IAudioEndpointSource"/>, over the PC's endpoints: the first
 /// <see cref="EndpointsChanged"/> handler, or the first subscription, starts an <see cref="EndpointWatcher"/>,
 /// which runs until the hub is disposed.
@@ -121,7 +125,67 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
     /// <exception cref="Contracts.ErrorCodeException"><see cref="Contracts.ErrorCodes.AudioDeviceFailed"/>: the device can't be opened.</exception>
     public IAudioSubscription Subscribe(string endpointId, SettingsFlow flow, IAudioPcmSubscriber subscriber) => SubscribeDevice(endpointId, flow, subscriber);
 
-    /// <summary><see cref="Subscribe"/>, returning the concrete subscription with its device's diagnostics.</summary>
+    /// <inheritdoc/>
+    /// <exception cref="Contracts.ErrorCodeException"><see cref="Contracts.ErrorCodes.AudioDeviceFailed"/>: the device can't be opened.</exception>
+    public IAudioSubscription Subscribe(Core.Sessions.SessionAudioDevice device, IAudioPcmSubscriber subscriber)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        return SubscribeDevice(Resolve(device), device.Flow, subscriber);
+    }
+
+    /// <summary>
+    /// The endpoint a session's device opens: its saved id when that is open or present, else the one
+    /// present endpoint of its flow with its friendly and parent name, else its saved id (which then
+    /// fails to open as before). Settings are never touched (AD-4).
+    /// </summary>
+    internal string Resolve(Core.Sessions.SessionAudioDevice device)
+    {
+        var id = device.EndpointId;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_devices.ContainsKey(KeyOf(id, ToPlatform(device.Flow))))
+            {
+                return id;
+            }
+        }
+
+        IReadOnlyList<AudioDevice> present;
+        try
+        {
+            present = _source.ListPresent();
+        }
+        catch (Exception e)
+        {
+            _log.LogDebug(e, "Couldn't list the audio endpoints; opening '{Name}' by its saved id", device.FriendlyName);
+            return id;
+        }
+
+        if (present.Any(p => p.Flow == device.Flow && string.Equals(p.EndpointId, id, StringComparison.OrdinalIgnoreCase)))
+        {
+            return id;
+        }
+
+        var byName = present
+            .Where(p => p.Flow == device.Flow
+                && string.Equals(p.FriendlyName, device.FriendlyName, StringComparison.Ordinal)
+                && string.Equals(p.ParentName, device.ParentName, StringComparison.Ordinal))
+            .ToList();
+        if (byName.Count != 1)
+        {
+            return id;
+        }
+
+        _log.LogInformation(
+            "'{Name}' ({Parent}) isn't present as {FormerId}; opening {Id}, the endpoint with its name",
+            device.FriendlyName,
+            device.ParentName,
+            id,
+            byName[0].EndpointId);
+        return byName[0].EndpointId;
+    }
+
+    /// <summary><see cref="Subscribe(string, SettingsFlow, IAudioPcmSubscriber)"/>, returning the concrete subscription with its device's diagnostics.</summary>
     public AudioDeviceSubscription SubscribeDevice(string endpointId, SettingsFlow flow, IAudioPcmSubscriber subscriber)
     {
         ArgumentNullException.ThrowIfNull(endpointId);

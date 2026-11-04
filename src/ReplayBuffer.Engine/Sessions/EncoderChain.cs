@@ -168,7 +168,7 @@ internal sealed class EncoderChain : IDisposable
             var track = new SessionAudioTrack(device);
             try
             {
-                track.Subscription = _audio.Subscribe(device.EndpointId, device.Flow, track);
+                track.Subscription = _audio.Subscribe(device, track);
             }
             catch (ErrorCodeException e)
             {
