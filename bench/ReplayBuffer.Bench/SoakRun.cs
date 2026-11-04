@@ -146,6 +146,7 @@ internal static class SoakRun
         GpuLoadProcess? load = null;
         GpuLoadInfo? loadInfo = null;
         var events = Channel.CreateUnbounded<IpcEvent>();
+        List<string> leftovers;
         try
         {
             engine = HotkeyBenchmark.StartServe(engineExe, instance.Name, Path.Combine(run, "soak"), cancel.Token, "--replay-buffer");
@@ -302,16 +303,18 @@ internal static class SoakRun
         finally
         {
             Console.CancelKeyPress -= onCancel;
+
+            // On every path, even an exception the catch above lets through.
+            leftovers = Cleanup(engine, app, client, load, instance, ring);
         }
 
-        var leftovers = Cleanup(engine, app, client, load, instance, ring);
         var warmup = TimeSpan.FromMinutes(warmupMinutes);
         var bounds = schedule.Samples > 0
             ? SoakBounds.Evaluate(samples.ToDictionary(p => p.Key, p => (IReadOnlyList<ProcessCounters>)p.Value), warmup)
             : [];
         var ordered = rows.OrderBy(r => r.Press).ToList();
         var pass = stopped is null && errors.Count == 0 && leftovers.Count == 0
-            && ordered.Count > 0 && ordered.All(r => r.Pass) && bounds.Count > 0 && bounds.All(b => b.Pass);
+            && ordered.Count > 0 && ordered.Count == schedule.Presses && ordered.All(r => r.Pass) && bounds.Count > 0 && bounds.All(b => b.Pass);
         var report = new SoakReport(
             DateTimeOffset.Now, run, instance.Name, modeText, minutes, warmupMinutes, bufferSeconds, pressSeconds, sampleSeconds, combo.Text,
             appExe, engineExe, loadInfo, titles, fps, schedule.Samples, schedule.Presses, ordered, bounds, stopped, errors, leftovers,
@@ -346,19 +349,30 @@ internal static class SoakRun
     private static void CheckClip(
         FfmpegTools tools, int press, DateTimeOffset at, double elapsed, string path, IReadOnlyList<string> titles, int bufferSeconds, double fps, Action<SoakClipRow> add)
     {
+        SoakClipResult check;
         try
         {
-            var check = SoakClipCheck.Check(tools, path, titles, bufferSeconds, fps);
-            add(new SoakClipRow(press, at, elapsed, "saved", path, check, check.Pass, check.Pass ? null : string.Join("; ", check.Failures)));
-            if (check.Pass)
+            check = SoakClipCheck.Check(tools, path, titles, bufferSeconds, fps);
+        }
+        catch (Exception e)
+        {
+            // Any failure to check is a failed row: a press never goes without one.
+            add(new SoakClipRow(press, at, elapsed, "saved", path, null, false, "check: " + e.Message));
+            return;
+        }
+
+        add(new SoakClipRow(press, at, elapsed, "saved", path, check, check.Pass, check.Pass ? null : string.Join("; ", check.Failures)));
+        if (check.Pass)
+        {
+            // A passing Clip has told what it can; deleting it keeps a long run's disk use flat.
+            try
             {
-                // A passing Clip has told what it can; deleting it keeps a long run's disk use flat.
                 File.Delete(path);
             }
-        }
-        catch (Exception e) when (e is BenchFailure or IOException or JsonException or UnauthorizedAccessException)
-        {
-            add(new SoakClipRow(press, at, elapsed, "saved", path, null, false, "check: " + e.Message));
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"Could not delete {path}: {e.Message}");
+            }
         }
     }
 
@@ -377,6 +391,7 @@ internal static class SoakRun
     private static List<string> Cleanup(Process? engine, Process? app, EngineClient? client, GpuLoadProcess? load, Instance instance, string ring)
     {
         var leftovers = new List<string>();
+        var appPid = app?.Id;
         try
         {
             if (app is not null)
@@ -423,6 +438,23 @@ internal static class SoakRun
             }
 
             engine.Dispose();
+        }
+
+        // AppOverlayHost.Cleanup disposed the App's Process: look it up again by its id.
+        if (appPid is { } pid)
+        {
+            try
+            {
+                using var survivor = Process.GetProcessById(pid);
+                if (survivor.ProcessName == Path.GetFileNameWithoutExtension(AppOverlayHost.ExeName) && !survivor.HasExited)
+                {
+                    leftovers.Add($"App process {pid}");
+                }
+            }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException or Win32Exception)
+            {
+                // Gone.
+            }
         }
 
         if (load is not null)
@@ -537,7 +569,7 @@ internal static class SoakRun
         md.AppendLine("|---|---|---|---|---|");
         foreach (var bound in report.Bounds)
         {
-            Line($"| {bound.Process} | {bound.Counter} | {bound.Detail} | {bound.Limit:0.##} | {(bound.Pass ? "pass" : "**fail**")} |");
+            Line($"| {bound.Process} | {bound.Counter} | {bound.Detail} | {bound.Limit:0.##} | {(!bound.Judged ? "info" : bound.Pass ? "pass" : "**fail**")} |");
         }
 
         md.AppendLine();

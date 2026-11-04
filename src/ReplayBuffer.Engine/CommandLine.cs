@@ -104,7 +104,7 @@ public static class CommandLine
     public const string Usage =
         """
         Usage:
-          ReplayBuffer.Engine serve [--instance ReplayBuffer-Test-<suffix> [--replay-buffer]] [--debug-capture]
+          ReplayBuffer.Engine serve [--instance ReplayBuffer-Test-<suffix>] [--debug-capture | --replay-buffer (needs --instance)]
           ReplayBuffer.Engine debug-list
           ReplayBuffer.Engine debug-capture (--window <title> | --hwnd <handle>) [--seconds 30]
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
@@ -407,6 +407,11 @@ public static class CommandLine
         if (replayBuffer && name is null)
         {
             return Fail("--replay-buffer is for test instances only; give --instance ReplayBuffer-Test-<suffix>.");
+        }
+
+        if (replayBuffer && debugCapture)
+        {
+            return Fail("--replay-buffer and --debug-capture can't be combined: a debug capture turns the Replay Buffer off.");
         }
 
         return new ParseResult(new ServeCommand(name, debugCapture, replayBuffer), null);

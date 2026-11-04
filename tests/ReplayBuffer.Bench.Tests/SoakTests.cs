@@ -34,13 +34,24 @@ public sealed class SoakTests
     [Fact]
     public void MemoryGrowthOfThreeMbAnHourFailsTheSlope()
     {
-        // An hour at 10 s: +3 MB/h after the warm-up, well inside the 20 MB end bound.
-        var bounds = SoakBounds.Evaluate(Series(t => 200 * Mb + (long)(3 * Mb * t.TotalHours), _ => 400, TimeSpan.FromHours(1)), TimeSpan.FromMinutes(5));
+        // Two hours at 10 s: +3 MB/h after the warm-up, well inside the 20 MB end bound.
+        var bounds = SoakBounds.Evaluate(Series(t => 200 * Mb + (long)(3 * Mb * t.TotalHours), _ => 400, TimeSpan.FromHours(2)), TimeSpan.FromMinutes(5));
 
         var slope = Assert.Single(bounds, b => b.Counter == "privateBytesSlope");
         Assert.False(slope.Pass);
         Assert.Contains("≥ 2 MB/h", slope.Detail, StringComparison.Ordinal);
         Assert.True(bounds.Single(b => b.Counter == "privateBytes").Pass);
+    }
+
+    [Fact]
+    public void AShortRunReportsTheSlopeWithoutJudgingIt()
+    {
+        var bounds = SoakBounds.Evaluate(Series(t => 200 * Mb + (long)(30 * Mb * t.TotalHours), _ => 400, TimeSpan.FromMinutes(20)), TimeSpan.FromMinutes(5));
+
+        var slope = Assert.Single(bounds, b => b.Counter == "privateBytesSlope");
+        Assert.False(slope.Judged);
+        Assert.True(slope.Pass);
+        Assert.True(slope.Value > 20);
     }
 
     [Fact]

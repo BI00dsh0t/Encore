@@ -28,6 +28,7 @@ public sealed class CommandLineTests
             new ServeCommand("ReplayBuffer-Test-soak1", ReplayBuffer: true),
             CommandLine.Parse(["serve", "--instance", "ReplayBuffer-Test-soak1", "--replay-buffer"]).Command);
         Assert.Contains("--instance", CommandLine.Parse(["serve", "--replay-buffer"]).Error);
+        Assert.NotNull(CommandLine.Parse(["serve", "--instance", "ReplayBuffer-Test-soak1", "--replay-buffer", "--debug-capture"]).Error);
     }
 
     [Theory]
