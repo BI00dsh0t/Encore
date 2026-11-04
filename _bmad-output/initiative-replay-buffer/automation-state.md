@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.5 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix flaky-engine-serve-capture-end |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.6 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.4 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with bugfix app-theme-test-order |
@@ -733,3 +733,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 9.3 merged (`d3dcad3`; marked done, renders and its Human Check row in `7b4ad47`), and its card is Done. **App test-order bug** from 9.7: `ThemeTests.MicaIsBehindTheMainAppUnderFluentOnly...` fails after `SurfacesThemeTests.TheDialogAnswersYesNo...` (3 of 3; passes alone). Bugfix `app-theme-test-order` went to story-2-7 (Opus; not cleared, because the builder has it open, but it built the Mica test). 9.4 (Library) went to 2-1-tracer and 9.5 (settings group 1) to slice-epic-4, both Opus at medium effort, running in parallel on separate files.
 - 2026-11-04: Bugfix `dd-frame-gaps` Heavy on `dc882f8` passed on a busy desktop: the 3 Desktop Duplication tests and all 8 `MonitorRecordingCaptureTests`. The coordinator approved it; qa-1-14 is merging. Bugfix `flaky-recording-crash-test` READY at `8c37dd4` (test-only): the kill now waits for the next fragment to land after 3 s instead of exactly 3.000 s, which sat on a 0.5 s fragment boundary; lag went from 0.50 s to 0.13-0.17 s over 3 cold runs. The coordinator approved it; slice-epic-5 is merging. The GPU runner is idle.
 - 2026-11-04: Bugfix `flaky-recording-crash-test` merged (`0cc1fd2`). The post-sync Engine run showed 2 more load-induced default-suite flakes (the rerun passed 180/180): `EngineServeTests.TheEngineServesItsSnapshotAndCommandsAndAKillFailsThePendingCommand` (TimeoutException at :81) and `CaptureEndTests.ClosingTheWindowEndsCaptureAndFinalizesTheFile` (expected 0, actual 1 at :112). Bugfix `flaky-engine-serve-capture-end` went to slice-epic-5 (Opus, medium effort). Up to 6 sessions build and test on the PC at once, so wall-clock bounds in default tests are a recurring risk.
+- 2026-11-04: Bugfix `dd-frame-gaps` merged (`9e0df3f`). Platform.Capture 5 and Engine 180 passed; publish OK. qa-1-14 is back in the pool.
