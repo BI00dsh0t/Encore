@@ -39,12 +39,12 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.5 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.6 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -177,7 +177,7 @@ The coordinator logs each QA round in the Log below.
 | 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `d3dcad3`) |
 | 30.4 | 9.4 Library restyled | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `894974a`) |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `80f3933`) |
-| 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
+| 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | | pending |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
@@ -754,3 +754,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.6 fix at `ef0d77f` (tests not run because of the pause). It's a test bug: the pair test planted 64 zero bytes, which `Mp4File.IsComplete` correctly rejects (it needs ftyp, then moov, ending at the file length). The test now plants a minimal ftyp plus moov. The pair test is rerun on the GPU runner when tests resume, then 8.6 merges. 9.5's session is waiting for the builder to end orphan PID 66604.
 - 2026-11-04: **Builder: "resume".** The test pause is lifted, and the "GPU tests resumed" rule applies again (only the GPU runner runs Heavy GPU tests). The 3 held items restart: the 8.6 pair-test rerun on the GPU runner, the trackmix bugfix verify-and-merge, and the 9.5 verify-and-merge.
 - 2026-11-04: Bugfix `flaky-engine-replay-trackmix` merged (`1a75675`). The fixed classes passed 3/3, and the Engine default suite passed 180/180 on the first run with no reruns. slice-epic-5 is back in the pool.
+- 2026-11-04: 9.5 merged (`80f3933`; verified in a fresh worktree to avoid the orphan's lock; App 150 passed; marked done, PNGs and its Human Check row in `9cee82c`), and its card is Done. 9.6 (settings group 2) went to 2-1-tracer (Opus, medium effort), with its card In progress. The GPU runner was nudged to rerun 8.6's pair test now.
