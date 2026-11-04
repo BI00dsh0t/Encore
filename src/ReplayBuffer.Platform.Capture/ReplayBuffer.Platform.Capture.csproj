@@ -9,6 +9,8 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ReplayBuffer.Platform.FFmpeg.Tests" />
+    <!-- DesktopDuplicationCapture's IOutputDuplication seam, faked to stall (dd-frame-gaps). -->
+    <InternalsVisibleTo Include="ReplayBuffer.Platform.Capture.Tests" />
     <!-- DesktopDuplicationCapture.SimulateAccessLost, the session's ACCESS_LOST test hook (6.10). -->
     <InternalsVisibleTo Include="ReplayBuffer.Engine" />
   </ItemGroup>
