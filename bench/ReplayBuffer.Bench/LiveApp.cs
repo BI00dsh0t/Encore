@@ -64,7 +64,7 @@ internal sealed class LiveApp : IDisposable
             return AppOverlayHost.Resolve(context);
         }
 
-        var published = Path.Combine(context.RepoRoot, PublishedFolder, AppOverlayHost.ExeName);
+        var published = Path.Combine(context.RepoRoot, "publish", "ReplayBuffer", AppOverlayHost.ExeName);
         return File.Exists(published) && File.Exists(Path.Combine(Path.GetDirectoryName(published)!, "ReplayBuffer.Engine.exe"))
             ? published
             : AppOverlayHost.Resolve(context);
@@ -153,12 +153,25 @@ internal sealed class LiveApp : IDisposable
     /// <summary>Presses Record and waits for the Recording to run; returns the QPC just before the press and the file.</summary>
     public (long PressQpc, string Path) StartRecording(TimeSpan timeout)
     {
+        // A session that has just started can't record until its first frames are in ("can't record yet"):
+        // the press is repeated every 2 s until the Recording runs.
         var before = _client.State.LastRecordingStarted;
-        var qpc = Stopwatch.GetTimestamp();
-        Press(RecordKey);
-        Until(c => c.State.Capture.Recording == RecordingState.Running && !ReferenceEquals(c.State.LastRecordingStarted, before) && c.State.LastRecordingStarted is not null,
-            timeout, "the Recording to start");
-        return (qpc, _client.State.LastRecordingStarted!.Path);
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            var qpc = Stopwatch.GetTimestamp();
+            Press(RecordKey);
+            try
+            {
+                Until(c => c.State.Capture.Recording == RecordingState.Running && !ReferenceEquals(c.State.LastRecordingStarted, before) && c.State.LastRecordingStarted is not null,
+                    TimeSpan.FromSeconds(2), "the Recording to start");
+                return (qpc, _client.State.LastRecordingStarted!.Path);
+            }
+            catch (BenchFailure) when (clock.Elapsed < timeout && _client.State.Capture.Recording != RecordingState.Running)
+            {
+                // Not started: press again.
+            }
+        }
     }
 
     /// <summary>Presses Record again and waits for the Recording to stop; returns its stop.</summary>
@@ -197,10 +210,22 @@ internal sealed class LiveApp : IDisposable
     /// <summary>One Overlay message (a saved notice through <c>dev.simulate</c>), as <c>bench fps --overlay</c> sends.</summary>
     public void Message() => Send(() => Wait(_client.SendAsync(DevMessages.Simulate, new DevSimulate(SimulatedEvent.ClipSaved))));
 
+    /// <summary>Applies <paramref name="ops"/>; a conflict (the App changed a setting meanwhile, as it does as it starts) is retried on the newer revision.</summary>
     public void Update(params SettingsOp[] ops) => Send(() =>
     {
-        var result = Wait(_client.SendAsync(SettingsMessages.Update, new SettingsUpdate(_client.State.Settings.Revision, ops)));
-        Until(c => c.State.Settings.Revision >= result.Revision, ReplyTimeout, "settings.changed");
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                var result = Wait(_client.SendAsync(SettingsMessages.Update, new SettingsUpdate(_client.State.Settings.Revision, ops)));
+                Until(c => c.State.Settings.Revision >= result.Revision, ReplyTimeout, "settings.changed");
+                return;
+            }
+            catch (ErrorCodeException e) when (e.Code == ErrorCodes.SettingsConflict && attempt < 10)
+            {
+                Thread.Sleep(200);
+            }
+        }
     });
 
     public void Until(Func<EngineClient, bool> condition, TimeSpan timeout, string what, Func<string?>? abort = null)
@@ -388,8 +413,16 @@ internal sealed class LiveCapture : IDisposable
 
     public void Message() => _app.Message();
 
+    /// <summary>Where the instance's logs are copied before it is deleted; null keeps none.</summary>
+    public string? LogsTo { get; set; }
+
     public void Dispose()
     {
+        if (LogsTo is not null)
+        {
+            _app.CopyLogs(LogsTo);
+        }
+
         _app.Dispose();
         AppOverlayHost.DeleteQuietly(Clips);
     }

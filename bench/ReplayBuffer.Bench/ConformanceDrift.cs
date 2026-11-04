@@ -150,7 +150,7 @@ internal static class ConformanceDrift
         var options = context.Options;
         var (layout, a, b) = ResolveLayout(options, settings);
         var appExe = LiveApp.Resolve(context);
-        if (!appExe.Contains(Path.Combine("publish", "ReplayBuffer"), StringComparison.OrdinalIgnoreCase))
+        if (!Path.GetFullPath(appExe).Contains(Path.Combine("publish", "ReplayBuffer") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
             warnings.Add($"The App is not the local publish ({LiveApp.PublishedFolder}): {appExe}. Run pwsh tools/publish.ps1 first for the final run.");
         }

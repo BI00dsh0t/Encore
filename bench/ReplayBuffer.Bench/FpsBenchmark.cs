@@ -226,6 +226,7 @@ internal static class FpsBenchmark
                     if (withRecording)
                     {
                         live = LiveCapture.Start(appExe, ignoredExe, settings, dot);
+                        live.LogsTo = Path.Combine(folder, "app-logs");
                     }
                     else
                     {
