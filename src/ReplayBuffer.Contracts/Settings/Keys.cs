@@ -199,6 +199,10 @@ public static class Keys
     public static SettingKey<bool> StartWithWindows { get; } = new(
         "startWithWindows", Json.Boolean, false, overridable: false, AppliesAt.Immediate);
 
+    /// <summary>When the Overlay's dot shows (research for story 5.8, the builder's decision of 2026-11-03).</summary>
+    public static SettingKey<OverlayDotMode> OverlayDot { get; } = new(
+        "overlayDot", Json.OverlayDotMode, OverlayDotMode.Auto, overridable: false, AppliesAt.Immediate, Enum.IsDefined);
+
     /// <summary>Every key, in catalog order.</summary>
     public static IReadOnlyList<SettingKey> All { get; } =
     [
@@ -217,6 +221,7 @@ public static class Keys
         Cleanup,
         ManualGames,
         StartWithWindows,
+        OverlayDot,
     ];
 
     private static readonly Dictionary<string, SettingKey> ByName = All.ToDictionary(k => k.Name, StringComparer.Ordinal);
