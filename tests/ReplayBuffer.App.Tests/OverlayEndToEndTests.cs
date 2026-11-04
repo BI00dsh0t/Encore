@@ -60,7 +60,7 @@ public sealed class OverlayEndToEndTests : IDisposable
         var loadExe = GpuLoadExe();
         Assert.SkipUnless(loadExe is not null, "the GPU load is not built (dotnet build ReplayBuffer.slnx -c Release)");
         var clips = Directory.CreateDirectory(Path.Combine(_folder, "clips")).FullName;
-        var instance = new Instance(Instance.TestPrefix + Path.GetFileName(_folder), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
+        var instance = new Instance(Instance.TestPrefix + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
         var sounds = new RecordingSoundOutput();
         var dispatcher = Dispatcher.CurrentDispatcher;
 
