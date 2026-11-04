@@ -3,7 +3,7 @@ title: 'Library and Cleanup settings page'
 type: 'feature'
 ticket: '9'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: 'e4c8eab65bd50cb3afbec44e79fea6af1276d8af'
 route: 'full'
 route_source: 'auto'
