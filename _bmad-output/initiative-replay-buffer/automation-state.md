@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 9.9 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
@@ -325,6 +325,7 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-03 | 5.8 | **Decided 2026-11-04 by the builder: the adaptive dot** (see the epic Note and the research doc); a new epic-5 story builds it. Original question: FR-6's 3 s mitigation (show the dot only for 3 s after each state change) is not built. Spike 5.2's "no mitigation needed" doesn't hold on this PC as it is now: the dot takes a borderless game out of independent flip (−7.4 to −7.9 % FPS), and the App and the spike's stand-in cost the same | Spike 5.2 measured independent flip with no cost at 13:12. After the 20:01 reboot (NVIDIA Overlay, Discord and Steam running, 2 monitors), every borderless run with a dot falls to Composed: Flip, so the free overlay plane is gone, not something the App adds. The mitigation departs from FR-6, so it is the builder's to choose; the Human Check above re-measures with the other overlays off |
 | 2026-11-04 | NFR-1 | **Pending your call after the Human Check:** capture costs about 7 % FPS on the PC as it is (NFR-1's provisional bound is under 3 %). It's not a code regression (v0.1.0 = develop). The likeliest cause is Windows update KB5127936 (26300.9818) at the 2026-11-03 20:00 reboot. Options: restore the PC setting that the check finds, accept about 7 % and re-baseline NFR-1, or (if the OS update stays) run a small spike on WGC `MinUpdateInterval` and `--gpu-priority` | `research/capture-cost-regression.md` (`b9b58e2`); only the builder can change Windows, driver or NVIDIA settings |
 | 2026-11-04 | v0.7.0 | (Resolved 2026-11-04: v0.6.0 and v0.7.0 cut in order once 6.13 merged.) Epic 7 is done, but its release waits for epic 6 (6.12, 6.13). When 6.13 merges: mark epic 6 done, cut v0.6.0, then v0.7.0 straight after | develop already holds 6.1 to 6.11, so a v0.7.0 cut now would ship a half-done epic 6 on master and number it above the later v0.6.0 |
+| 2026-11-04 | v0.9.0 | Epic 9 is done, but its release waits for epic 8: develop already holds 8.1 to 8.6, so a v0.9.0 cut now would ship a half-done epic 8 on master. When epic 8 finishes, cut v0.8.0, then v0.9.0 (or the builder may prefer one v1.0.0 for the finished initiative) | Same reasoning as the v0.6.0 and v0.7.0 hold |
 
 ## Log
 
@@ -776,3 +777,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 9.9 READY FOR QA at `030bb9c` (152 passed, 8 for the builder), and its card is In QA. QA went to qa-1-14 (Sonnet, medium effort; safety guards confirmed before its one run).
 - 2026-11-04: QA 9.9 passed at `030bb9c`. slice-epic-5 is merging. Next: mark epic 9 done, release v0.9.0, then epic 8's 8.7 (final conformance) unblocks.
 - 2026-11-04: 9.9 merged (`8efdf67`, `test(app): merge 9.9-modern-ui-end-to-end`), after syncing develop: 0-warning build, App 151 passed, 0 failed. Marked done. The builder's ordered epic-9 checklist is in its plan, and the six epic-9 Human Check rows point at it. slice-epic-5 is back in the pool.
+- 2026-11-04: 9.9 merged (`8efdf67`, marked done `c8f9ffa`). **Epic 9 (Modern UI) is marked done.** Its v0.9.0 release is held until epic 8 finishes (see Decisions). Only 8.7 (final conformance run) is ready; it needs long GPU runs (a 60-minute real Recording, `bench fps --overlay` on the synthetic GPU load, and player checks), so the builder is asked when it may run.
