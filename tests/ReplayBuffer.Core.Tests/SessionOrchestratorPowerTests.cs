@@ -140,9 +140,11 @@ public sealed partial class SessionOrchestratorTests
     public async Task ASuspendDuringAGpuResetOutageStopsItsRetriesAndTheResumeRecovers()
     {
         var failures = new ConcurrentQueue<string>();
+        var resets = new ConcurrentQueue<string>();
+        var recovered = new ConcurrentQueue<TimeSpan>();
         var power = new FakePower();
         var (orchestrator, _, presses, _, _, factory) = NewRecordingOrchestrator(
-            deviceRecovery: new DeviceRecovery(Failed: failures.Enqueue, RetryEvery: TimeSpan.FromMilliseconds(50), GiveUpAfter: TimeSpan.FromMilliseconds(300)),
+            deviceRecovery: new DeviceRecovery(Reset: resets.Enqueue, Failed: failures.Enqueue, Recovered: recovered.Enqueue, RetryEvery: TimeSpan.FromMilliseconds(50), GiveUpAfter: TimeSpan.FromMilliseconds(300)),
             power: power);
         using var owned = orchestrator;
         await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
@@ -166,6 +168,10 @@ public sealed partial class SessionOrchestratorTests
         await Press(orchestrator, presses, HotkeyAction.MicMute, Stopwatch.GetTimestamp());
         Assert.Empty(failures);
         Assert.Null(session.EndReason);
+
+        // The resume's rebuild answers the reset raised before the sleep, so its warning is withdrawn.
+        Assert.Single(resets);
+        Assert.Single(recovered);
     }
 
     /// <summary>A power source a test raises changes on, from another thread, as the system's callback would.</summary>

@@ -130,6 +130,7 @@ deferred: []
 
 - Parent, after the matrix audit: two Core tests for rows with none, `ASessionThatCantSuspendIsLeftAsItIsAndTheResumeAsksNothing` and `ASuspendDuringAGpuResetOutageStopsItsRetriesAndTheResumeRecovers` (`FakeSession.CanSuspend`).
 - Parent, after review: superseded the `OnRecovered` rule above. `CaptureSession` gains a private `_suspended` flag, set by `Suspend()` (also when already lost) and cleared by `RecoverDevice()`. An attempt still running at a sleep installs nothing and posts nothing. `Suspend()` on a lost session still tears down once that attempt ends. `OnRecovered` leaves `Suspended` set (a `ChainRestarted` that raced the sleep is torn down by the suspend; the resume rebuilds). `OnSuspend` drops the retry timer only when the suspend succeeded. `FeedbackRouter` knows `suspend` (an Info notice, "the PC went to sleep").
+- After QA (1 finding): a `gpu-reset` raised before a sleep stayed shown, because the resume's rebuild skipped `Recovered`, and the warning queue drifted. `Active.ResetRaised` is set when `Reset` fires and answered by the next successful rebuild, the resume's included. A pure sleep still raises neither. Test: `ASuspendDuringAGpuResetOutageStopsItsRetriesAndTheResumeRecovers` asserts one `Reset` and one `Recovered`. Verified: build 0 warnings, Core 157/157.
 
 ## Plan Change Log
 

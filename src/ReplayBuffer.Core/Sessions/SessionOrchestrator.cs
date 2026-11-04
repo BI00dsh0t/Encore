@@ -1742,6 +1742,7 @@ public sealed class SessionOrchestrator : IDisposable
         if (session.LostAt is null)
         {
             session.LostAt = Stopwatch.GetTimestamp();
+            session.ResetRaised = true;
             _deviceRecovery.Reset?.Invoke(monitor
                 ? $"The GPU driver reset; the Monitor Recording is rebuilding its capture and encoder ({failure.Message})"
                 : $"The GPU driver reset; the Replay Buffer is rebuilding its capture and encoders ({failure.Message})");
@@ -1844,19 +1845,20 @@ public sealed class SessionOrchestrator : IDisposable
 
         StopRecovery(session);
 
-        // A resume's rebuild isn't a GPU reset's recovery. One that installed just as the PC went to
-        // sleep is torn down by the suspend: the session stays suspended, and the resume rebuilds.
+        // One that installed just as the PC went to sleep is torn down by the suspend: the session stays suspended, and the resume rebuilds.
         if (session.Suspended)
         {
             return;
         }
 
-        if (session.Resuming)
+        // A resume's rebuild ends a GPU reset's outage too when one ran into the sleep: its Reset is answered.
+        session.Resuming = false;
+        if (!session.ResetRaised)
         {
-            session.Resuming = false;
             return;
         }
 
+        session.ResetRaised = false;
         _deviceRecovery.Recovered?.Invoke(Stopwatch.GetElapsedTime(lostAt));
     }
 
@@ -2202,6 +2204,9 @@ public sealed class SessionOrchestrator : IDisposable
 
         /// <summary>Whether its recovery is a resume's, not a GPU reset's, until it recovers or gives up.</summary>
         public bool Resuming { get; set; }
+
+        /// <summary>Whether <see cref="DeviceRecovery.Reset"/> was raised for its current outage and not yet answered by <see cref="DeviceRecovery.Recovered"/>.</summary>
+        public bool ResetRaised { get; set; }
 
         public TaskCompletionSource<SessionOutcome> Ended { get; } = NewReply<SessionOutcome>();
     }
