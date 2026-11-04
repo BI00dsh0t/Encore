@@ -1,0 +1,101 @@
+# Stories of epic-modern-ui, in build order. `id` is permanent, never reused.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Design pass: DESIGN.md and EXPERIENCE.md for both themes"
+description = "A bmad-ux run on this epic writes ux-modern-ui/DESIGN.md and ux-modern-ui/EXPERIENCE.md beside the epic file, from the mockups, the two renders and the ui-look-render prototype, and from the App as it is (MainWindow, the Library, the eight settings pages, the tray menu, Prompts and the Overlay). DESIGN.md defines one set of semantic theme tokens (backgrounds, surfaces, strokes, text, muted text, accent, danger and record, success, focus, corner radii, spacing and type ramp) with their Fluent source (the built-in ThemeMode brush keys) and their Gaming dark value (the epic's palette, 4 px corners, uppercase navigation and buttons), and how each control the App uses looks in every state in each theme. EXPERIENCE.md sets the shell's layout and navigation (which pages it lists and how the Library and the settings pages are reached, every existing page kept reachable), the status line's place, the Library's layout (grid or list, the card, group headers and filters), the settings pages' shared layout, the tray menu, the dialog, the Overlay's message card, and where the theme picker sits, with keyboard and focus behaviour. Both documents name what stories 2 to 7 build. The builder reviews and approves them. R1 to R5: the design."
+verify = "DESIGN.md and EXPERIENCE.md exist in ux-modern-ui/, every token has a Fluent source and a Gaming dark value, every control and surface in R4 and R5 is covered in both themes, every existing page is reachable in the navigation, and the builder has approved both (a Decision line in the epic's Notes)."
+covers = ["R1", "R2", "R3", "R4", "R5"]
+after = ["6.13", "7.11"]
+hitl = true
+risk = "medium"
+plan_checkpoint = true
+
+[[entry]]
+id = 2
+type = "story"
+title = "Theme infrastructure, live switching and a control gallery"
+description = "Everything the area stories build on (AD-23): a Global-only appTheme key (fluent | gamingDark, default fluent, Immediate) added to Contracts.Settings.Keys (AD-22). An App ThemeService applies it: Fluent sets Application.ThemeMode to System, so the Windows mode and accent are followed live; Gaming dark sets ThemeMode Dark and merges the Gaming dictionary after Fluent's, overriding Fluent's brush keys and adding control styles, ported from the prototype's gaming-theme.xml. Both dictionaries define DESIGN.md's tokens. A settings.changed with a new appTheme swaps them on the UI thread, with no restart; at start the theme is applied before the first window shows. Mica (WindowBackdropType) is set on the Main App window under Fluent where Windows supports it. Control coverage in both themes, in normal, hover, pressed, selected, focused and disabled states: Button (and an accent button), ToggleButton, TextBox, ComboBox, CheckBox, RadioButton, Slider, ListBox and ListBoxItem, ListView, ContextMenu and MenuItem, ToolTip, ScrollBar, TabControl, ProgressBar and the level meter, plus a focus visual. A theme picker on the General settings page sends settings.update. A control gallery window, opened from a dev-instance-only tray item, shows every control in every state for the builder to check. The WPF0001 experimental warning is suppressed only where ThemeMode is used, with the reason. This story owns the two token dictionaries and the generic control styles; stories 3 to 7 add their area styles in their own dictionaries (shell, Library, settings, tray and dialog, Overlay) that reference the tokens only, so they share no file but the merge list. Story 7 restyles the tray menu, including the gallery item added here. R1, R2, R3, R4."
+verify = "Automated tests: appTheme round-trips through settings.update and is read back after an engine restart; a settings.changed switching appTheme swaps the merged dictionary with no window recreated; the Gaming dictionary defines every token key the Fluent mapping does; the gallery loads in both themes with no missing-resource binding error. The builder switches themes from the General page with the gallery open and sees every control restyle live, checks hover, focus and disabled states in both, changes Windows to light mode and a new accent under Fluent and sees it follow, and sees Mica on the Main App window."
+covers = ["R1", "R2", "R3", "R4"]
+after = [1]
+hitl = true
+risk = "high"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Shell, navigation and status line"
+description = "The Main App window restyled to EXPERIENCE.md: the TabControl and the settings ListBox are replaced by the designed navigation (every existing page kept reachable, its items uppercase under Gaming dark), the title bar follows the theme (Mica under Fluent, the Gaming background otherwise), and the status line becomes the designed header showing the capture state with the record dot, the Target Game and the buffer, and recent warnings as before. The selected page, the window's size and IsSettingsTabSelected's behaviour (the tray's open-Settings path) are kept. Every colour comes from the theme tokens (AD-23). R5 part: the shell. R6."
+verify = "Automated tests: every existing page is reachable through the new navigation view model and opens its view; the status line's view model shows the same states and warnings as before; the shell loads in both themes with no missing resource; every existing App test passes. The builder walks every page in both themes, switches theme with the window open, and sees the status line report a Clip saving and a warning."
+covers = ["R5", "R6"]
+after = [2]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Library restyled"
+description = "The Library page restyled to EXPERIENCE.md in both themes: the item layout (the designed card or row, with the thumbnail, a length badge, name, game, date, size and the Favourite star), group headers, the grouping and filter controls, the being-written lock, the row context menu (Open, Show in Explorer, Copy, Rename, Delete), inline rename, the library-corrupt banner with its Acknowledge button, and the empty state. LibraryViewState's grouping, filters, virtualization and every action keep their behaviour; only the views and styles change. R5 part: the Library. R6."
+verify = "Automated tests: the existing Library view-model tests pass unchanged; the Library view loads in both themes with fabricated items (a Favourite, a being-written item, a missing thumbnail and the corrupt banner) with no missing resource, and stays virtualized. The builder browses their real Clips in both themes, uses each filter and grouping and every context-menu action, and renames one inline."
+covers = ["R5", "R6"]
+after = [3]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds"
+description = "The shared settings layout from EXPERIENCE.md (page header, sections or cards, labels, help text, the page's error message) as styles every page uses, then the General (with story 2's theme picker), Replay Buffer (with its live RAM or disk estimate and warnings), Recordings, Hotkeys (key capture and the failed-registration and duplicate messages) and Feedback Sounds (switches, the device picker and test buttons) pages restyled to it in both themes. Bindings, validation and the settings.update sender keep their behaviour. Story 6 builds on the shared settings layout added here. R5 part: these settings pages. R6."
+verify = "Automated tests: the existing settings view-model tests pass unchanged; each of the five views loads in both themes with no missing resource. The builder changes a setting on each page in both themes, sees the Replay Buffer estimate and a Hotkey duplicate message, and checks keyboard focus moves visibly through each page."
+covers = ["R5", "R6"]
+after = [3]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Settings pages: Track Layout, Game Profiles, and Library and Cleanup"
+description = "The three richest settings pages restyled to story 5's shared layout in both themes: Track Layout (the device list with unavailable devices, the Tracks with their devices, Mic Devices and mute marks, the double-counting warning, and the live level meters as themed meters), Game Profiles (the list, rename, Ignored, Recordings switch and per-profile overrides), and Library and Cleanup (the Output Folder picker and size, the limits and the permanent-deletion confirmation). Bindings, validation and the senders keep their behaviour. R5 part: these settings pages. R6."
+verify = "Automated tests: the existing view-model tests for the three pages pass unchanged; each view loads in both themes with no missing resource, the Track Layout page with fabricated devices, Tracks and meter levels. The builder edits a Track Layout with meters moving, renames and Ignores a profile, and sets a Cleanup limit through its confirmation, in both themes."
+covers = ["R5", "R6"]
+after = [5]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Tray menu, dialogs and Overlay messages"
+description = "The surfaces outside the Main App window follow the theme (AD-23, AD-15): the tray context menu (H.NotifyIcon's WPF ContextMenu: Restart, Open, Start with Windows, Quit) takes the App's theme resources and restyles live; Prompts' MessageBox calls (Library delete, the Cleanup confirmation and every other Yes/No or error prompt) are replaced, behind Prompts' unchanged API so stories 4 to 6's callers don't change, by one themed, owned dialog window keeping each prompt's wording, buttons, default and Esc behaviour, with WDA_EXCLUDEFROMCAPTURE like every App window; the Overlay's message cards take the theme's surface, text, corners and type. The Overlay's dot, saving icon, mic-muted icon and red X keep their fixed colours, the Overlay stays transparent, click-through and never activated, and never gets Mica. R5 part: tray, dialogs and Overlay. R6."
+verify = "Automated tests: the tray menu built by CreateTrayMenu resolves its styles from the current theme and follows a switch; the themed dialog returns Yes, No and Cancel (Esc) as the MessageBox did, and each former caller still gets its answer; the Overlay's message card brushes come from the theme while the glyph brushes are unchanged; the dialog window sets WDA_EXCLUDEFROMCAPTURE. The builder opens the tray menu, deletes a Clip through the new dialog and sees an Overlay message during a game, in both themes."
+covers = ["R5", "R6"]
+after = [2]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 8
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup only, scoped at its start from plans and review findings the epic deferred, including any colour still hard-coded in the App outside the Overlay's glyphs and any style left unused after stories 3 to 7."
+verify = "All tests pass, and switching theme still restyles every window live, every page still loads in both themes, and a Clip still saves with its Overlay message after the sweep; every deferred cleanup item is closed or recorded."
+covers = []
+after = [1, 2, 3, 4, 5, 6, 7]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 9
+type = "story"
+title = "Modern UI end to end on the builder's PC"
+description = "The closing end-to-end check of the epic's Done when, integrated: an automated suite against the installed build opens the App on a dev instance in each theme, switches theme through settings.update with every page, the tray menu and a dialog open and checks each restyles with no restart and no missing resource, restarts the App and checks the theme is kept, and runs every existing App test. The builder then uses the installed App for a session in each theme: walks every page, saves a Clip in a game and sees the Overlay's message, uses the tray menu and a delete confirmation, changes the Windows mode and accent under Fluent, and picks the theme they keep."
+verify = "The automated suite passes against the installed build, and the builder's session confirms each Done-when line."
+covers = ["R1", "R2", "R3", "R4", "R5", "R6"]
+after = [8]
+hitl = true
+risk = "low"
