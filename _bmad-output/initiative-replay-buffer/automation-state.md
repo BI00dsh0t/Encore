@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with QA 8.5 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix recording-first-frame-pts |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 9.2 |
@@ -165,7 +165,7 @@ The coordinator logs each QA round in the Log below.
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
 | 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8a434c6`) |
-| 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
+| 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in QA (slice-epic-4) |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
 | 29.7 | 8.7 Final conformance run | | pending |
 | 29.8 | 8.8 8-hour soaks in Memory and Disk mode | | pending |
@@ -702,3 +702,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 9.2 READY FOR QA at `ad57d54` (26 files, about 2,300 lines), and its card is In QA. QA went to qa-1-14 (Sonnet, high effort because the ticket is high risk; focus on AD-23 tokens, live switching, `appTheme` and control coverage).
 - 2026-11-04: Bugfix `recording-first-frame-pts` at `9c94233` (tests and docs only since `1f1f9a5`). Clips aren't affected: `ClipWriter` writes plain mp4 with +faststart, which has an edit list; the new default test `ClipStartTests` proves it. Synthetic AAC payloads are now zeroed, which fixes a latent "aac bitstream error" flake in `LongRecordingTests` and `DiskFullRecordingTests`. FFmpeg 39 passed; 8 clean loops. The coordinator checked it; the merge waits for the GPU runner's Heavy runs on `1f1f9a5`.
 - 2026-11-04: QA 9.2 round 1 found 2 issues (low to medium) at `ad57d54`, sent to story-2-7: (1) under Fluent, disabled TextBox, ListBox and ListBoxItem render at full contrast (R4); (2) `WindowFrame.CaptionColor` is dead (E_INVALIDARG), `HasMica` is unused, and the Mica and caption path has no test. Everything else passed: Contracts 123, Core 152, App 133. A real-App probe ran 40 live switches with the same HWND, Mica under Fluent only, and no handle or dictionary growth. Gallery PNGs are in qa-1-14's worktree test bin.
+- 2026-11-04: 8.5 READY FOR QA at `49130c4`: Contracts 124, Core 159, Platform.Capture 4, Platform.Desktop 13, Engine 180 and App 128 passed; publish clean. Its card is In QA. QA went to slice-epic-4 (Sonnet, medium effort; no Heavy runs, no display changes). Its 2 Heavy `MonitorRecordingCaptureTests` (they take BenchLock themselves) are queued on the GPU runner after the PTS fix runs. 4 Human Checks are in its plan: unplug and replug a monitor, change the primary, and change the resolution or refresh rate.
