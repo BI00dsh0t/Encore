@@ -3,7 +3,7 @@ title: 'Recording lifecycle: game exit, Target hold, Ignored and Quit'
 type: 'feature'
 ticket: '4'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '4d66ab597c7648dd8ff3747bfa3c9287a6b46ab3'
 route: 'full'
 route_source: 'auto'
