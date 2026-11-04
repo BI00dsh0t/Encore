@@ -45,7 +45,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 9.1 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -172,7 +172,7 @@ The coordinator logs each QA round in the Log below.
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
 | 29.10 | 8.10 Refactor sweep | | pending |
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
-| 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | | pending |
+| 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | | pending |
 | 30.3 | 9.3 Shell, navigation and status line | | pending |
 | 30.4 | 9.4 Library restyled | | pending |
@@ -307,7 +307,7 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-03 | 4.1 | With no `outputFolder` set, Clips go to `<Videos>\<instance name>`; a game with no Game Profile yet saves to a folder named after its executable (until 3.4 profiles reach it); Disk mode buffers in memory with a log line until 4.7 | The PRD has no default Output Folder, and 4.1 is a tracer |
 | 2026-11-03 | 5.8 | **Decided 2026-11-04 by the builder: the adaptive dot** (see the epic Note and the research doc); a new epic-5 story builds it. Original question: FR-6's 3 s mitigation (show the dot only for 3 s after each state change) is not built. Spike 5.2's "no mitigation needed" doesn't hold on this PC as it is now: the dot takes a borderless game out of independent flip (−7.4 to −7.9 % FPS), and the App and the spike's stand-in cost the same | Spike 5.2 measured independent flip with no cost at 13:12. After the 20:01 reboot (NVIDIA Overlay, Discord and Steam running, 2 monitors), every borderless run with a dot falls to Composed: Flip, so the free overlay plane is gone, not something the App adds. The mitigation departs from FR-6, so it is the builder's to choose; the Human Check above re-measures with the other overlays off |
 | 2026-11-04 | NFR-1 | **Pending your call after the Human Check:** capture costs about 7 % FPS on the PC as it is (NFR-1's provisional bound is under 3 %). It's not a code regression (v0.1.0 = develop). The likeliest cause is Windows update KB5127936 (26300.9818) at the 2026-11-03 20:00 reboot. Options: restore the PC setting that the check finds, accept about 7 % and re-baseline NFR-1, or (if the OS update stays) run a small spike on WGC `MinUpdateInterval` and `--gpu-priority` | `research/capture-cost-regression.md` (`b9b58e2`); only the builder can change Windows, driver or NVIDIA settings |
-| 2026-11-04 | v0.7.0 | Epic 7 is done, but its release waits for epic 6 (6.12, 6.13). When 6.13 merges: mark epic 6 done, cut v0.6.0, then v0.7.0 straight after | develop already holds 6.1 to 6.11, so a v0.7.0 cut now would ship a half-done epic 6 on master and number it above the later v0.6.0 |
+| 2026-11-04 | v0.7.0 | (Resolved 2026-11-04: v0.6.0 and v0.7.0 cut in order once 6.13 merged.) Epic 7 is done, but its release waits for epic 6 (6.12, 6.13). When 6.13 merges: mark epic 6 done, cut v0.6.0, then v0.7.0 straight after | develop already holds 6.1 to 6.11, so a v0.7.0 cut now would ship a half-done epic 6 on master and number it above the later v0.6.0 |
 
 ## Log
 
@@ -683,3 +683,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 6.13 passed at `4c6e5ea` with 0 findings. No-capture guards confirmed in code before the one run. `RecordingsEndToEndTests` passed in 2 s with no capture lines in the log; App.Tests 126 passed. The story saw 1 unexplained failure in 20 runs of that Explicit test (noted in its plan; not a blocker). story-2-7 is merging. qa-2-1 is back in the pool.
 - 2026-11-04: 8.3 merged (`f91c32d`, marked done and its Human Check rows added in `5eaa5ec`), and its card is Done with labels detached. The develop sync resolved conflicts with 6.10's `ICaptureSource` and 6.12's `OpenWrite` and `CloseWrite` helpers; the coordinator read the merge's resolution. Recovery now rebuilds a Monitor capture through the Desktop Duplication fallback. Contracts 122, Core 152, Engine 179, Platform.Capture 3 and Platform.FFmpeg 37 passed on the synced tree; publish clean. 8.4 went to slice-epic-8 (Opus, medium effort; no real sleep, lock or UAC, simulated through an injectable seam; GPU tests paused), with its card In progress.
 - 2026-11-04: 6.13 merged (`9815d81`; the note on the unexplained failure is in `4a1dc54`). **Epic 6 marked done** (`42c41ca`) and **released as v0.6.0** (master `5f694d4`, back into develop as `c9a7261`, with git flow's merge messages reworded). v0.7.0 (epic 7, held until now) is cut next. story-2-7 is back in the pool.
+- 2026-11-04: **Epic 7 released as v0.7.0** (master `a2683b7`, back into develop as `81d6f6e`, with merge messages reworded); tags now run v0.1.0 to v0.7.0. The 6.13 card is Done. 9.1 (the design pass) went to story-2-7 (Opus, medium effort; `bmad-ux` headless; documents plus optional PNG renders), with its card In progress. The builder is asked to approve before 9.2 starts.
