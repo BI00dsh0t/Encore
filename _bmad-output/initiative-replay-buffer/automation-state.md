@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.7 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix recording-first-frame-pts |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 9.7 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
@@ -178,7 +178,7 @@ The coordinator logs each QA round in the Log below.
 | 30.4 | 9.4 Library restyled | | pending |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
-| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | ready for QA, waiting for a QA worker |
+| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in QA (slice-epic-5) |
 | 30.8 | 9.8 Refactor sweep | | pending |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
@@ -713,3 +713,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - **Filter gotcha:** `--filter-class "*RecordingCaptureTests"` also matches `MonitorRecordingCaptureTests`, so use `*.RecordingCaptureTests` or full method names.
   - The GPU runner is now on 8.5's 2 Heavy tests.
 - 2026-11-04: 9.3 READY FOR QA at `44ce0b0` and 9.7 at `176a820` (App 139 passed, no new Heavy tests); both cards are In QA. QA 9.3 went to story-2-7 (Sonnet, medium effort; not cleared, because the builder has it open, but it built 9.2 so its context helps). QA 9.7 waits for slice-epic-5 to finish the PTS merge. The GPU runner reports 8.5's display-change Heavy test likely has a test bug: it asserts at least 3.5 s of video, but the test records only about 3 s.
+- 2026-11-04: Bugfix `recording-first-frame-pts` merged (`0b53953`). **Flaky default test:** `RecordingCrashTests.ARecordingKilledThreeSecondsInPlaysToItsLastFragmentAndIsReportedAtTheNextStart` failed once on the first Engine run after a fresh build, passed alone, then passed 4 full runs. It's likely the "cold-start Engine flake" (8.4's unnamed failure too). To fix or move to Heavy, like `AKilledAppIsRelaunchedByTheEngine` before; queued as a follow-up. QA 9.7 went to slice-epic-5 (Sonnet, medium effort).
