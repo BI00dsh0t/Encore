@@ -41,9 +41,9 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.10 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.2 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.9 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.10 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -155,7 +155,7 @@ The coordinator logs each QA round in the Log below.
 | 28.7 | 7.7 Rename and delete, locked while being written | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `7a4d786`) |
 | 28.8 | 7.8 Cleanup | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `4b6b22f`) |
 | 28.9 | 7.9 Library and Cleanup settings page | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `63ba0b9`) |
-| 28.10 | 7.10 Refactor sweep | | pending |
+| 28.10 | 7.10 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
@@ -615,3 +615,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.9 is READY FOR QA at `493d23e` after resuming. QA started on 2-1-tracer (Sonnet), and its card is In QA.
 - 2026-11-04: QA 7.9 at `493d23e`: **QA PASS**, 0 findings and 2 notes. 7.9 has been told to merge (Sonnet) and to add its Human Check row. 2-1-tracer is back in the pool. 7.9's merge unblocks 7.10 (the epic 7 refactor sweep).
 - 2026-11-04: 7.9 merged (`63ba0b9`, `feat(app): merge 7.9-library-cleanup-settings`) and marked done. It adds a Library and Cleanup Settings page (App-only, no Contracts change). Its Human Check row is queued. QA's 2 notes are in the epic Notes.
+- 2026-11-04: 7.9 merged (`63ba0b9`, marked done with its Human Check row at `5602f52`). Its card is Done with its label detached, and qa-2-1 is back in the pool. QA's note that the page doesn't refuse a junction as the Output Folder is covered by 7.8's engine checks against the resolved root. The epic 7 refactor sweep 7.10 went to story-2-7 (Opus, medium effort), with its card In progress. Its brief keeps every Cleanup and delete safety guard and its test.
