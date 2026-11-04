@@ -69,6 +69,7 @@ internal sealed class OverlayWindow : ShellWindow
     private static readonly Geometry CrossGlyph = Freeze(Geometry.Parse("M3,3 L13,13 M13,3 L3,13"));
 
     private readonly OverlayViewModel _model;
+    private readonly Func<int?, MonitorArea> _locate;
     private readonly Ellipse _dot = new() { Width = DotSizeDip, Height = DotSizeDip, IsHitTestVisible = false };
     private readonly System.Windows.Shapes.Path _icon = new() { Data = SaveGlyph, Fill = Green, Width = IconSizeDip, Height = IconSizeDip, IsHitTestVisible = false };
     private readonly Grid _mic = new() { Width = IconSizeDip, Height = IconSizeDip, IsHitTestVisible = false };
@@ -88,9 +89,15 @@ internal sealed class OverlayWindow : ShellWindow
     private readonly Border _message;
     private readonly Grid _root;
 
-    public OverlayWindow(OverlayViewModel model)
+    /// <param name="model">What the Overlay shows.</param>
+    /// <param name="locate">
+    /// The monitor of a process (null: the primary), which the dot sits on (5.1's rule); <c>Monitors.ForProcess</c>
+    /// when null. Read again at each placement, so a display change moves the window (T-03).
+    /// </param>
+    public OverlayWindow(OverlayViewModel model, Func<int?, MonitorArea>? locate = null)
     {
         _model = model;
+        _locate = locate ?? Monitors.ForProcess;
         Title = "Replay Buffer Overlay";
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
@@ -231,7 +238,7 @@ internal sealed class OverlayWindow : ShellWindow
             return;
         }
 
-        var (x, y, size) = Monitors.TopRight(Monitors.ForProcess(_model.TargetProcessId), DotSizeDip, InsetDip);
+        var (x, y, size) = Monitors.TopRight(_locate(_model.TargetProcessId), DotSizeDip, InsetDip);
         var scale = size / DotSizeDip;
         var (width, height) = ExtentDip;
         var left = (int)Math.Round((width - DotSizeDip) * scale);

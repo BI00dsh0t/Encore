@@ -295,6 +295,12 @@ public static class ErrorCodes
     /// </summary>
     public const string MonitorCaptureFallback = "monitor-capture-fallback";
 
+    /// <summary>
+    /// The monitor a Monitor Recording captured was removed (T-03). The Recording ended at its last
+    /// frame with reason <c>monitor-removed</c> and its file is kept; it isn't restarted on another monitor.
+    /// </summary>
+    public const string MonitorRemoved = "monitor-removed";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -365,5 +371,6 @@ public static class ErrorCodes
         GpuResetFailed,
         NotDevInstance,
         MonitorCaptureFallback,
+        MonitorRemoved,
     ];
 }
