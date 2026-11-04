@@ -86,7 +86,7 @@ public sealed class FeedbackRouterTests
         router.ReplayResumed();
         Assert.Equal(ErrorCodes.DiskFull, Assert.Single(notices.Active).Value.Code);
 
-        router.StateChanged(CaptureState.Initial with { Recording = RecordingState.Running });
+        router.RecordingStarted(new RecordingStarted(@"c:\clips\Game\a.mp4"));
         Assert.Equal(ErrorCodes.RecordingStarted, Assert.Single(notices.Active).Value.Code);
     }
 

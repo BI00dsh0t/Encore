@@ -79,6 +79,8 @@ public sealed class DevSimulateServeTests : IAsyncLifetime
         var simulator = new DevSimulator(
             new Instance(Instance.InstalledName, _folder, _folder),
             _ => calls++,
+            _ => calls++,
+            _ => calls++,
             () => calls++,
             _ => calls++,
             () => calls++);

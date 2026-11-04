@@ -4,16 +4,21 @@ using ReplayBuffer.Contracts.Messages;
 namespace ReplayBuffer.Engine.Sessions;
 
 /// <summary>
-/// Serves <c>dev.simulate</c>: injects a stub Recording state, a disk full, a save failure or a saved notice, so the
+/// Serves <c>dev.simulate</c>: injects a stub Recording (its state, and its started and stopped
+/// notices with reason <c>stopped</c>), a disk full, a save failure or a saved notice, so the
 /// feedback notices can be exercised before the features behind them exist. Dev and test instances
 /// only; the installed instance refuses it.
 /// </summary>
-/// <param name="recording">Sets the stub Recording state, through the SessionOrchestrator.</param>
+/// <param name="recording">Sets the stub Recording state, through the SessionOrchestrator; it drives the solid dot only.</param>
+/// <param name="started">Raises the Recording started notice, as a real <c>recording.started</c> would.</param>
+/// <param name="stopped">Raises the Recording stopped notice, as a real <c>recording.stopped</c> would.</param>
 /// <param name="diskFull">Reports a full volume.</param>
 /// <param name="saveFailed">The engine's not-saved path: publishes <c>clip.failed</c> and its notice.</param>
 /// <param name="saved">Raises the saved notice only; no <c>clip.saved</c> is published, as no file exists.</param>
-internal sealed class DevSimulator(Instance instance, Action<bool> recording, Action diskFull, Action<ClipFailed> saveFailed, Action saved)
+internal sealed class DevSimulator(Instance instance, Action<bool> recording, Action<RecordingStarted> started, Action<RecordingStopped> stopped, Action diskFull, Action<ClipFailed> saveFailed, Action saved)
 {
+    private const string SimulatedPath = "dev.simulate";
+
     /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.NotDevInstance"/> in the installed instance.</exception>
     public Empty Simulate(DevSimulate simulate)
     {
@@ -27,9 +32,11 @@ internal sealed class DevSimulator(Instance instance, Action<bool> recording, Ac
         {
             case SimulatedEvent.RecordingStarted:
                 recording(true);
+                started(new RecordingStarted(SimulatedPath));
                 break;
             case SimulatedEvent.RecordingStopped:
                 recording(false);
+                stopped(new RecordingStopped(SimulatedPath, RecordingStopReasons.Stopped));
                 break;
             case SimulatedEvent.DiskFull:
                 diskFull();
