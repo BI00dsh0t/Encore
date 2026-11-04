@@ -467,6 +467,12 @@ internal sealed class EngineHost : IAsyncDisposable
 
                 return ValueTask.FromResult(dismissed);
             });
+            router.Register(LibraryMessages.SetFavourite, async (favourite, _) =>
+            {
+                // Never retried: a stale identity comes back as library-item-changed (AD-3).
+                await libraryActor.SetFavourite(favourite).ConfigureAwait(false);
+                return Empty.Value;
+            });
             router.Register(FeedbackMessages.Preview, (preview, _) =>
             {
                 player.Preview(preview.Sound);

@@ -111,6 +111,25 @@ public sealed class LibraryPageTests
         Assert.Equal(("1:02:03", "2.0 GB"), (page.Rows[0].Length, page.Rows[0].Size));
     }
 
+    [Fact]
+    public void TheStarSendsTheIdentityAndChangesOnlyWithTheSnapshot()
+    {
+        _engine.Reply = (_, _) => Empty.Value;
+        var page = new LibraryPage(_engine);
+        var modified = new DateTimeOffset(2026, 11, 3, 10, 0, 0, TimeSpan.Zero);
+        var item = new LibraryItem(@"Game\clip.mp4", null, 48, DateTimeOffset.UnixEpoch, false, Modified: modified);
+        var state = _engine.State! with { Library = [item] };
+        page.Render(state);
+
+        page.Rows[0].FavouriteCommand.Execute(null);
+
+        Assert.Equal(new LibrarySetFavourite(item.Path, 48, modified, true), Assert.Single(_engine.Sent));
+        Assert.Equal((false, "☆"), (page.Rows[0].IsFavourite, page.Rows[0].Star));
+
+        page.Render(state with { Library = [item with { Favourite = true }] });
+        Assert.Equal((true, "★"), (page.Rows[0].IsFavourite, page.Rows[0].Star));
+    }
+
     private void SetLibrary()
     {
         var day = new DateTimeOffset(2026, 11, 3, 10, 0, 0, TimeSpan.Zero);
