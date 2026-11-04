@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.1 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.7 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with the capture-cost investigation |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; idle (was 7.7, merged) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.12 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with QA 5.12 |
@@ -153,7 +153,7 @@ The coordinator logs each QA round in the Log below.
 | 28.5 | 7.5 Group and filter by game, date and Favourite | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ca3aa83`) |
 | 28.6 | 7.6 Open, show in Explorer and copy for Discord | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done |
 | 28.7 | 7.7 Rename and delete, locked while being written | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `7a4d786`) |
-| 28.8 | 7.8 Cleanup | | pending |
+| 28.8 | 7.8 Cleanup | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
 | 28.9 | 7.9 Library and Cleanup settings page | | pending |
 | 28.10 | 7.10 Refactor sweep | | pending |
 | 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
@@ -570,3 +570,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.12 is READY FOR QA at `f146e8a`. The Overlay costs nothing measurable in any dot or presentation mode (no MPO; `SupportsOverlays` false), and auto matches onChange in borderless. **But capture alone now costs ~6.7 % FPS, against 1.14's 1.47 %, so NFR-1 misses.** QA 5.12 started on story-2-7 (Sonnet), with no GPU reruns. An **investigation** started on slice-epic-8 (Opus, high effort): benchmark `v0.1.0` against develop back to back under today's PC conditions, to tell a code regression from PC changes (overlay apps, a second monitor, MPO gone), then bisect by release tags if it's code. No fixes yet; the write-up goes to `research/capture-cost-regression.md`.
 - 2026-11-04: 7.7 merged (`7a4d786`, marked done). Branch synced with develop first (6.6, v0.4.0): build 0 warnings; Contracts 118, Core 120, Platform.Windows 26, Engine 197 (one load flake in `TheEngineServesItsSnapshotAndCommandsAndAKillFailsThePendingCommand` passed on rerun), App 126 pass; publish clean. Contracts: additive `library.rename`/`library.delete` and `file-being-written`, `invalid-file-name`, `file-name-taken`, `recycle-bin-unavailable`. Review swapped `FOF_WANTNUKEWARNING` for a native progress sink that aborts any delete the shell won't recycle (no UI, never permanent). Human Check row added.
 - 2026-11-04: QA 6.7 at `7c2e3b8`: **QA PASS**, 0 findings. 6.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool. 7.7 is merging now. 8.1 is triaging its review before rerunning the soak with a corrected slope rule.
+- 2026-11-04: 7.7 merged (`7a4d786`, marked done `707c37b`, with its Human Check row). Its card is Done with its label detached, and qa-2-1 is back in the pool. 7.8 Cleanup (high risk) went to qa-1-14 (Opus, high effort), with its card In progress. Its brief puts the deletion guards first: Favourites, files being written, outside the Library, a corrupt or reconciling index, and a dry-run log.
