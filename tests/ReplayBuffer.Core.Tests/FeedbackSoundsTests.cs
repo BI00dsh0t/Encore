@@ -3,6 +3,7 @@ using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Feedback;
+using ReplayBuffer.Core.Sessions;
 
 namespace ReplayBuffer.Core.Tests;
 
@@ -22,8 +23,8 @@ public sealed class FeedbackSoundsTests
         {
             router.ClipSaved(new ClipSaved(@"c:\clips\a.mp4"));
             router.ClipNotSaved(new ClipFailed(ErrorCodes.SaveFailed));
-            router.StateChanged(Running);
-            router.StateChanged(CaptureState.Initial);
+            router.RecordingStarted(new RecordingStarted(@"c:\clips\a-rec.mp4"));
+            router.RecordingStopped(new RecordingStopped(@"c:\clips\a-rec.mp4", RecordingStopReasons.Stopped));
             router.DiskFull();
         }
 
@@ -32,6 +33,50 @@ public sealed class FeedbackSoundsTests
         FeedbackSound[] all = [FeedbackSound.ClipSaved, FeedbackSound.SaveFailed, FeedbackSound.RecordingStarted, FeedbackSound.RecordingStopped, FeedbackSound.DiskFull];
         Assert.Equal(all.Select(s => (DefaultEndpoint, (FeedbackSound?)s)), output.Played);
         Assert.Equal(["clipSaved", "saveFailed", "recordingStarted", "recordingStopped", "diskFull"], notices.Raised.Select(n => n.Sound));
+    }
+
+    [Fact]
+    public void EachRecordingStopNamesItsReasonAndADiskFullOrRestartPlaysOneSound()
+    {
+        const string File = @"c:\clips\Game\a.mp4";
+        var output = new FakeOutput();
+        var notices = new Notices();
+        var player = new FeedbackSoundPlayer(output, () => SettingsDocument.Empty, (_, _) => { });
+        string[] plain = [RecordingStopReasons.Stopped, RecordingStopReasons.GameExit, RecordingStopReasons.Ignored, RecordingStopReasons.SessionEnded, RecordingStopReasons.Shutdown, ErrorCodes.EncodeFailed];
+        using (var router = new FeedbackRouter(notices, TimeProvider.System, player))
+        {
+            router.RecordingStarted(new RecordingStarted(File));
+            foreach (var reason in plain)
+            {
+                router.RecordingStopped(new RecordingStopped(File, reason));
+            }
+
+            // A disk-full stop, then its own notice.
+            router.StateChanged(CaptureState.Initial);
+            router.RecordingStopped(new RecordingStopped(File, RecordingStopReasons.DiskFull));
+            router.DiskFull();
+
+            // An encoder restart with a replacement: the state stays Running throughout.
+            router.StateChanged(Running);
+            router.RecordingStopped(new RecordingStopped(File, RecordingStopReasons.EncoderRestart));
+            router.RecordingStarted(new RecordingStarted(@"c:\clips\Game\b.mp4"));
+            router.RecordingRestarted(new RecordingRestart(File, @"c:\clips\Game\b.mp4"));
+        }
+
+        player.Dispose();
+
+        FeedbackSound[] expected = [FeedbackSound.RecordingStarted, .. plain.Select(_ => FeedbackSound.RecordingStopped), FeedbackSound.DiskFull, FeedbackSound.RecordingStarted];
+        Assert.Equal(expected.Select(s => (DefaultEndpoint, (FeedbackSound?)s)), output.Played);
+        Assert.Equal(
+            [ErrorCodes.RecordingStarted, .. plain.Select(_ => ErrorCodes.RecordingStopped), ErrorCodes.RecordingStopped, ErrorCodes.DiskFull, ErrorCodes.RecordingStopped, ErrorCodes.RecordingRestarted],
+            notices.Raised.Select(n => n.Code));
+        var stops = notices.Raised.Where(n => n.Code == ErrorCodes.RecordingStopped).ToList();
+        Assert.Equal(
+            ["Recording stopped", "Recording stopped: the game exited", "Recording stopped: the game was set Ignored", "Recording stopped: the game session ended", "Recording stopped: ReplayBuffer shut down", $"Recording stopped: the write failed ({ErrorCodes.EncodeFailed})", "Recording stopped: the disk is full", "Recording stopped: encoder restart"],
+            stops.Select(n => n.Message));
+        Assert.Equal(WarningSeverity.Warning, stops[5].Severity);
+        Assert.Null(stops[6].Sound);
+        Assert.Null(stops[7].Sound);
     }
 
     [Fact]

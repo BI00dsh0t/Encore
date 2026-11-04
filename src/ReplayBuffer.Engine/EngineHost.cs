@@ -414,11 +414,13 @@ internal sealed class EngineHost : IAsyncDisposable
                         {
                             hub.Publish(RecordingMessages.Started, started);
                             recordingLog.LogInformation("Recording to {Path}", started.Path);
+                            notices.RecordingStarted(started);
                         },
                         stopped =>
                         {
                             hub.Publish(RecordingMessages.Stopped, stopped);
                             recordingLog.LogInformation("Recording stopped ({Reason}): {Path}", stopped.Reason, stopped.Path);
+                            notices.RecordingStopped(stopped);
                         },
                         e => recordingLog.LogWarning("The Recording failed: {Message}", e.Message),
                         libraryActor,
@@ -529,7 +531,14 @@ internal sealed class EngineHost : IAsyncDisposable
             });
             router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
             SessionOrchestrator simulateTo = sessions;
-            var simulator = new DevSimulator(instance, running => simulateTo.Post(new RecordingRunning(running)), notices.DiskFull, notSaved, () => notices.ClipSaved(new ClipSaved("dev.simulate")));
+            var simulator = new DevSimulator(
+                instance,
+                running => simulateTo.Post(new RecordingRunning(running)),
+                notices.RecordingStarted,
+                notices.RecordingStopped,
+                notices.DiskFull,
+                notSaved,
+                () => notices.ClipSaved(new ClipSaved("dev.simulate")));
             router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
