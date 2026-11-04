@@ -3,7 +3,7 @@ title: 'Tracer: a soak harness and a 20-minute soak report'
 type: 'feature'
 ticket: '1'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '080f9147e7fe5f05913ebb6cec5cfaabd711a51c'
 route: 'full'
 route_source: 'auto'
