@@ -43,7 +43,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with epic 9 planning |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 6.13 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 6.13 |
 
@@ -145,7 +145,7 @@ The coordinator logs each QA round in the Log below.
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
 | 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
 | 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c4a69ca`) |
-| 27.13 | 6.13 Recordings end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
+| 27.13 | 6.13 Recordings end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (qa-2-1) |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
@@ -664,3 +664,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - **Back in the pool:** qa-1-14.
 - 2026-11-04: **Builder: both looks become selectable themes.** Fluent (WPF `ThemeMode`, which follows Windows light or dark and the accent colour) and gaming dark (a custom dictionary, palette as in `research/ui-gaming-dark-render.png`) switch live and are saved in settings, with Fluent as the default. Real WPF renders of both, and their source, are in `research/` (`71cfc23`, `b2aaae6`). Epic 9 "Modern UI" planning went to slice-epic-5 (Opus, medium effort; `bmad-agent-po`, headless) on `feature/9.0-modern-ui-planning`. Its stories are: a `bmad-ux` design pass, theme infrastructure, one story per UI area, a refactor sweep, and an end-to-end check. It runs after epics 6 and 7, and 8.7 waits on it.
 - 2026-11-04: 8.3 fixes at `bf38783`, checked by the coordinator and approved. `GpuResetWarnings` withdraws `gpu-reset` on Recovered, and on give-up replaces it with `gpu-reset-failed` (with a default test). `TearDownLost` disposes each step under its own guard. `Retarget` builds the capture under the gate. Core 151 and Engine 178 passed; publish clean. slice-epic-8 is merging.
+- 2026-11-04: 6.13 READY FOR QA at `4c6e5ea` (127 passed, 11 for the builder, 11 not run because GPU tests are paused), and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; it confirms the no-capture guards in the code before its single run).
