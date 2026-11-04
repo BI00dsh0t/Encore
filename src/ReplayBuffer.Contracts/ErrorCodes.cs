@@ -184,6 +184,13 @@ public static class ErrorCodes
     public const string LibraryCorrupt = "library-corrupt";
 
     /// <summary>
+    /// A Library command named an item by an identity (path, size and modified time, AD-3) that no
+    /// longer matches the index or the file on disk. Nothing changed; the App acts again on the
+    /// item the snapshot now shows. Never retried automatically.
+    /// </summary>
+    public const string LibraryItemChanged = "library-item-changed";
+
+    /// <summary>
     /// A warning: a Track of the active Track Layout mixes the Output Device that Feedback Sounds
     /// play on, so its recordings would hold the sounds. Withdrawn when that is no longer so.
     /// </summary>
@@ -195,6 +202,14 @@ public static class ErrorCodes
     /// under 1 s, so a save makes no Clip until memory frees up. Raised once per entry into the margin.
     /// </summary>
     public const string MemoryMargin = "memory-margin";
+
+    /// <summary>
+    /// A warning (AD-7): the Replay Buffer switched to a profile's new encoder chain at a save, and
+    /// the new chain's first keyframe came more than one frame after the old Clip's end, so the
+    /// next Clip starts that much later (no frame arrived after the press, a static window, say).
+    /// Raised once per such switch, with the gap's length.
+    /// </summary>
+    public const string ResetGap = "reset-gap";
 
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
@@ -250,8 +265,10 @@ public static class ErrorCodes
         RecordingStarted,
         RecordingStopped,
         LibraryCorrupt,
+        LibraryItemChanged,
         FeedbackDeviceCaptured,
         MemoryMargin,
+        ResetGap,
         NotDevInstance,
     ];
 }

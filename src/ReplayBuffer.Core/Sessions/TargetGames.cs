@@ -22,9 +22,8 @@ public sealed record TargetCandidate(int ProcessId, nint Window, string ProfileI
 public sealed record ProposeTarget(TargetCandidate? To, TargetChangeReason Reason) : SessionMessage;
 
 /// <summary>
-/// Whether a Recording is running (AD-19): while one is, a switch away from the Target is held, and
-/// it is committed the moment the flag clears. It also sets <c>CaptureState.Recording</c>, so it is
-/// the stub Recording state until epic-recordings: only <c>dev.simulate</c> and tests set it.
+/// <c>dev.simulate</c>'s Recording display state: sets <c>CaptureState.Recording</c> while no real
+/// Recording runs, and is ignored while one does. It never holds the Target; only a real Recording does.
 /// </summary>
 public sealed record RecordingRunning(bool Running) : SessionMessage;
 
@@ -189,6 +188,19 @@ public sealed record ChainKey(SessionKind Kind, int ProcessId, VideoSettings Vid
         return Of(kind, target, snapshot.Video, audio);
     }
 
+    /// <summary>
+    /// Whether <paramref name="a"/> and <paramref name="b"/> encode on one chain (4.9): equal
+    /// <see cref="ChainKey"/>s and the same mic mute inputs (<see cref="SessionAudio.GatedMicInputs"/>,
+    /// each a Track name and a device endpoint, ignoring case, and flow, in order). A change of
+    /// <c>isMic</c> or <c>muteAffected</c> alone so needs another chain too.
+    /// </summary>
+    public static bool SameChain(SessionSpec a, SessionSpec b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        return Of(a) == Of(b) && GatedInputs(a.Audio).SequenceEqual(GatedInputs(b.Audio));
+    }
+
     public bool Equals(ChainKey? other) =>
         other is not null
         && Kind == other.Kind
@@ -209,6 +221,9 @@ public sealed record ChainKey(SessionKind Kind, int ProcessId, VideoSettings Vid
 
         return hash.ToHashCode();
     }
+
+    private static IEnumerable<(string Track, ChainDevice Device)> GatedInputs(SessionAudio audio) =>
+        audio.GatedMicInputs().Select(input => (input.Track.Name, new ChainDevice(input.Device.EndpointId, input.Device.Flow)));
 
     private static ChainKey Of(SessionKind kind, CaptureTarget target, VideoSettings video, SessionAudio audio) => new(
         kind,

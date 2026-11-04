@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Core.Library;
 
@@ -55,7 +56,8 @@ public sealed class LibraryActorTests : IDisposable
         Assert.Empty(failures);
         Assert.False(load.Corrupt);
         Assert.Equal(2, items.Count);
-        Assert.Equal(new LibraryItem(@"Game\listed.mp4", ProfileId, 42, new DateTimeOffset(2026, 11, 1, 10, 0, 0, TimeSpan.Zero), false), items[0]);
+        var listedModified = new DateTimeOffset(File.GetLastWriteTimeUtc(Path.Combine(Output, "Game", "listed.mp4")), TimeSpan.Zero);
+        Assert.Equal(new LibraryItem(@"Game\listed.mp4", ProfileId, 42, new DateTimeOffset(2026, 11, 1, 10, 0, 0, TimeSpan.Zero), false, Modified: listedModified), items[0]);
         Assert.Equal((@"Game\unlisted.mp4", (string?)null, 52L, false), (items[1].Path, items[1].ProfileId, items[1].Size, items[1].BeingWritten));
         Assert.Equal(File.GetCreationTimeUtc(Path.Combine(Output, "Game", "unlisted.mp4")), items[1].Date.UtcDateTime);
     }
@@ -178,13 +180,13 @@ public sealed class LibraryActorTests : IDisposable
         File.WriteAllBytes(Path.Combine(Output, "clip.mp4"), Mp4());
         File.WriteAllText(LibraryFile, "{ not json");
         File.WriteAllText(LibraryFile + ".bak", """
-            {"version":1,"items":[{"path":"clip.mp4","profileId":"c:\\games\\a.exe","date":"2026-11-01T10:00:00+00:00","size":48}]}
+            {"version":1,"items":[{"path":"clip.mp4","profileId":"c:\\games\\a.exe","date":"2026-11-01T10:00:00+00:00","size":48,"favourite":true}]}
             """);
 
         var fromBak = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { });
 
         Assert.False(fromBak.Corrupt);
-        Assert.Equal(ProfileId, Assert.Single(fromBak.Items).ProfileId);
+        Assert.Equal((ProfileId, true), (Assert.Single(fromBak.Items).ProfileId, fromBak.Items[0].Favourite));
         Assert.True(File.Exists(LibraryFile + ".corrupt"));
 
         File.WriteAllText(LibraryFile, "{ not json");
@@ -271,6 +273,64 @@ public sealed class LibraryActorTests : IDisposable
         File.WriteAllBytes(clip, Mp4(64));
         restarted.WaitFor(index => index[@"Game\clip.mp4"] is { Size: 96, LengthSeconds: 12 });
         Assert.Equal(1, Volatile.Read(ref second));
+    }
+
+    [Fact]
+    public async Task AFavouriteIsSavedAndMovesWithAnOutsideRename()
+    {
+        File.WriteAllBytes(Path.Combine(Output, "Game", "clip.mp4"), Mp4());
+        var item = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items);
+        using (var library = new Harness(this, [item]))
+        {
+            await library.Actor.SetFavourite(new LibrarySetFavourite(item.Path, item.Size, item.Modified, true));
+            library.WaitForEvent(e => e is LibraryItem { Favourite: true });
+        }
+
+        // A restart keeps it, and a rename in Explorer moves it with the item.
+        var loaded = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items);
+        Assert.True(loaded.Favourite);
+        using var restarted = new Harness(this, [loaded]);
+        restarted.Actor.Watching = true;
+        File.Move(Path.Combine(Output, "Game", "clip.mp4"), Path.Combine(Output, "Game", "renamed.mp4"));
+        restarted.WaitFor(index => index.Count == 1 && index.TryGetValue(@"Game\renamed.mp4", out var moved) && moved.Favourite);
+    }
+
+    [Fact]
+    public async Task AStaleIdentityIsRefusedAndAFileChangedOnDiskIsRefreshed()
+    {
+        var clip = Path.Combine(Output, "clip.mp4");
+        File.WriteAllBytes(clip, Mp4());
+        var item = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items);
+        using var library = new Harness(this, [item]);
+
+        var older = await Assert.ThrowsAsync<ErrorCodeException>(() =>
+            library.Actor.SetFavourite(new LibrarySetFavourite(item.Path, item.Size, item.Modified!.Value.AddMinutes(-1), true)));
+        Assert.Equal(ErrorCodes.LibraryItemChanged, older.Code);
+        Assert.Empty(library.Events);
+
+        // Touched on disk at the same size: refused, and the item now carries the file's modified time.
+        var touched = item.Modified!.Value.AddHours(1);
+        File.SetLastWriteTimeUtc(clip, touched.UtcDateTime);
+        var changed = await Assert.ThrowsAsync<ErrorCodeException>(() =>
+            library.Actor.SetFavourite(new LibrarySetFavourite(item.Path, item.Size, item.Modified, true)));
+        Assert.Equal(ErrorCodes.LibraryItemChanged, changed.Code);
+        var refreshed = Assert.IsType<LibraryItem>(library.WaitForEvent(e => e is LibraryItem));
+        Assert.Equal((touched, false), (refreshed.Modified, refreshed.Favourite));
+    }
+
+    [Fact]
+    public async Task AFavouriteSetWhileBeingWrittenSurvivesItsEnd()
+    {
+        var clip = Path.Combine(Output, "Game", "clip.mp4");
+        using var library = new Harness(this, []);
+        library.Actor.BeginWrite(clip, ProfileId);
+        library.WaitFor(index => index.ContainsKey(@"Game\clip.mp4"));
+
+        await library.Actor.SetFavourite(new LibrarySetFavourite(@"Game\clip.mp4", 0, null, true));
+        File.WriteAllBytes(clip, Mp4());
+        library.Actor.EndWrite(clip, WriteOutcome.Written);
+
+        library.WaitFor(index => index[@"Game\clip.mp4"] is { BeingWritten: false, Favourite: true, Size: 48, Modified: not null });
     }
 
     /// <summary>A live actor over the test's Output Folder, with the index its events build.</summary>
