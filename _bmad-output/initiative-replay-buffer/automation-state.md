@@ -89,7 +89,7 @@ The coordinator logs each QA round in the Log below.
 | 14 | 2.10 Refactor sweep | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged) |
 | 15 | Release epic 2 (`v0.2.0`) | coordinator | done |
 | 16 | 3.1 Tracer: detect a borderless game | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `a7de027`) |
-| 17 | 3.8 Spike: which Windows game list to read | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
+| 17 | 3.8 Spike: which Windows game list to read | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `61949fa`) |
 | 18 | 3.2 Detection sources and exclusions | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `168704a`) |
 | 19 | 3.3 Target Game rule | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `22b214e`) |
 | 20 | 3.4 Game Profile auto-creation and Ignored | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `31c2830`) |
@@ -128,7 +128,7 @@ The coordinator logs each QA round in the Log below.
 | 26.11a | 5.15 Adaptive Overlay dot (added 2026-11-04; 5.12 and 5.13 wait on it) | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `582d863`) |
 | 26.12 | 5.12 Benchmark with the Overlay on | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `dc1f9b7`) |
 | 26.13 | 5.13 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `5cfddb6`) |
-| 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
+| 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `61949fa`) |
 | 26.15 | Release epic 5 (`v0.5.0`) | | pending |
 | 27 | Slice epic 6 (Recordings) | slice-epic-6 | done |
 | 27.1 | 6.1 Tracer: Record Hotkey to a fragmented MP4 Recording beside the Replay Buffer | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f9c5a66`) |
@@ -600,3 +600,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 7.8 at `812c685`: **QA FAIL**, 1 high finding, reproduced: a directory junction inside the Output Folder is scanned and indexed, so Cleanup could permanently delete files outside the Library through it. All the other guards are covered. The coordinator asked for a layered fix: skip reparse points in the scan and reconciliation, resolve the final path and require it under a resolved Library root before deleting, a junction "victim survives" test, and the same check on 7.7's manual delete. 2-1-tracer keeps its context for the round-2 re-check.
 - 2026-11-04: 5.14 is READY FOR QA at `300c8d9`: 122 checks passed unattended, and 9 items are on the builder's checklist. QA started on story-2-7 (Sonnet), with no GPU reruns, and its card is In QA.
 - 2026-11-04: QA 5.14 at `300c8d9`: **QA PASS**, 0 blocking and 3 low notes. 5.14 has been told to merge (Sonnet) without marking the epic done or releasing. story-2-7 is back in the pool. After the merge, the coordinator marks epic 5 done and releases v0.5.0.
+- 2026-11-04: 5.14 merged into develop (`61949fa`) after QA PASS at `300c8d9`. develop was merged into the branch first (docs only, so no rebuild); QA's step-3 note went into the plan (`bcc508a`). The ticket is marked done. The epic is not marked done and not released; the coordinator does that.
