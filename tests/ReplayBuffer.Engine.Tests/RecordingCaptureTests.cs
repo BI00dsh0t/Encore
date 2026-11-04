@@ -128,6 +128,137 @@ public sealed class RecordingCaptureTests : IDisposable
         AssertFinished(file, atLeast: 1.5);
     }
 
+    /// <summary>
+    /// Story 6.5: a 1280×720 profile video committed before the Record press waits for the
+    /// Recording's stop; ten saves at seeded random times during a 2-minute Recording leave it
+    /// unbroken, and the save after the switching one has the new size.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task ClipsDuringARecordingLeaveItUnbrokenAndAChainChangeWaitsForItsStop()
+    {
+        const int Saves = 10;
+        var length = TimeSpan.FromMinutes(2);
+        var changed = new VideoSettings(VideoCodec.H264, 1280, 720, 30, 6_000, RateControl.Cbr);
+        using var rig = await StartRecordingAsync(
+            clips: true,
+            pending: document => document with
+            {
+                Profiles = document.Profiles.SetItem(ProfileId, document.Profiles[ProfileId] with
+                {
+                    Overrides = document.Profiles[ProfileId].Overrides.SetItem(Keys.Video.Name, Keys.Video.ToJson(changed)),
+                }),
+            });
+
+        // One save in each 12 s slot, 1.5 s to 10.5 s into it: at least 3 s apart, past the 1 s after each Reset.
+        var random = new Random(65);
+        var slot = length / Saves;
+        var at = Enumerable.Range(0, Saves).Select(i => (slot * i) + TimeSpan.FromSeconds(1.5 + (random.NextDouble() * 9))).ToList();
+        var clips = new List<string>();
+        var outstanding = 0;
+        var clock = Stopwatch.StartNew();
+
+        async Task NextClipAsync()
+        {
+            switch (await rig.NextAsync())
+            {
+                case ClipSaved saved:
+                    clips.Add(saved.Path);
+                    outstanding--;
+                    break;
+                case var other:
+                    Assert.Fail($"Expected a saved Clip, got {other}");
+                    break;
+            }
+        }
+
+        foreach (var time in at)
+        {
+            if (time > clock.Elapsed)
+            {
+                await Task.Delay(time - clock.Elapsed, Token);
+            }
+
+            // R6: never a third writer.
+            while (outstanding >= ReplayClips.MaxWriters)
+            {
+                await NextClipAsync();
+            }
+
+            Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+            outstanding++;
+        }
+
+        while (outstanding > 0)
+        {
+            await NextClipAsync();
+        }
+
+        if (length > clock.Elapsed)
+        {
+            await Task.Delay(length - clock.Elapsed, Token);
+        }
+
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        var stopped = Assert.IsType<RecordingStopped>(await rig.NextAsync());
+        Assert.Equal(new RecordingStopped(rig.Started.Path, RecordingStopReasons.Stopped), stopped);
+
+        // The stop prepares the profile's chain; the first save switches to it, the second has it.
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var switching = Assert.IsType<ClipSaved>(await rig.NextAsync());
+        await Task.Delay(TimeSpan.FromSeconds(3), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var after = Assert.IsType<ClipSaved>(await rig.NextAsync());
+        rig.Orchestrator.Dispose();
+
+        // Ten Clips during it, each whole at the session's size with all its Tracks.
+        Assert.Equal(Saves, clips.Count);
+        foreach (var clip in clips.Append(switching.Path))
+        {
+            var (_, width, height, _) = SessionTestKit.VideoStream(clip);
+            Assert.Equal((640, 480), (width, height));
+            Assert.Equal(["Game", "Voice", "Mic"], AudioTitles(clip));
+            SessionTestKit.AssertDecodesCleanly(clip);
+        }
+
+        var (_, afterWidth, afterHeight, _) = SessionTestKit.VideoStream(after.Path);
+        Assert.Equal((1280, 720), (afterWidth, afterHeight));
+
+        // The Recording: one size, one frame step throughout, every Track's audio contiguous.
+        var file = rig.Started.Path;
+        var (_, recordingWidth, recordingHeight, _) = SessionTestKit.VideoStream(file);
+        Assert.Equal((640, 480), (recordingWidth, recordingHeight));
+        var (pts, num, den) = SessionTestKit.VideoPtsTicks(file);
+        Assert.Equal(0, den % (30 * num));
+        var step = den / (30 * num);
+        for (var i = 1; i < pts.Count; i++)
+        {
+            Assert.True(pts[i] - pts[i - 1] == step, $"video PTS step {pts[i] - pts[i - 1]} at packet {i}, not {step}");
+        }
+
+        for (var track = 0; track < 3; track++)
+        {
+            var packets = SessionTestKit.Probe(file, "-select_streams", $"a:{track}", "-show_entries", "packet=pts,duration", "-show_packets")
+                .GetProperty("packets").EnumerateArray()
+                .Select(p => (Pts: p.GetProperty("pts").GetInt64(), Duration: p.GetProperty("duration").GetInt64()))
+                .OrderBy(p => p.Pts)
+                .ToList();
+            for (var i = 1; i < packets.Count; i++)
+            {
+                Assert.True(
+                    packets[i].Pts == packets[i - 1].Pts + packets[i - 1].Duration,
+                    $"audio Track {track}: packet {i} at {packets[i].Pts}, expected {packets[i - 1].Pts + packets[i - 1].Duration}");
+            }
+        }
+
+        SessionTestKit.AssertDecodesCleanly(file);
+    }
+
+    private static List<string?> AudioTitles(string file) =>
+        [.. SessionTestKit.Probe(file, "-select_streams", "a", "-show_streams").GetProperty("streams").EnumerateArray()
+            .Select(s => s.TryGetProperty("tags", out var tags) && tags.TryGetProperty("name", out var title) ? title.GetString() : null)];
+
     private async Task RecordAsync(TimeSpan seconds)
     {
         using var rig = await StartRecordingAsync();
@@ -196,9 +327,12 @@ public sealed class RecordingCaptureTests : IDisposable
     /// <summary>
     /// Proposes "Test Game" as the Target on a pwsh window, with a <see cref="ToneHub"/> playing
     /// three devices into its three Tracks, and once the session anchors, presses
-    /// <c>recordToggle</c>: returns with the Recording running.
+    /// <c>recordToggle</c>: returns with the Recording running. With <paramref name="clips"/>, the
+    /// orchestrator has Replay Clips (Save Cooldown 0) whose saves and refusals land in the events;
+    /// with <paramref name="pending"/>, that document is committed and <see cref="SettingsUpdated"/>
+    /// posted before the press.
     /// </summary>
-    private async Task<Rig> StartRecordingAsync()
+    private async Task<Rig> StartRecordingAsync(bool clips = false, Func<SettingsDocument, SettingsDocument>? pending = null)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)>
@@ -221,7 +355,8 @@ public sealed class RecordingCaptureTests : IDisposable
         {
             Global = SettingsDocument.Empty.Global
                 .SetItem(Keys.Video.Name, Keys.Video.ToJson(new VideoSettings(VideoCodec.H264, 640, 480, 30, 4_000, RateControl.Cbr)))
-                .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory)),
+                .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory))
+                .SetItem(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(0)),
             Profiles = SettingsMaps.EmptyProfiles.Add(ProfileId, new GameProfile
             {
                 Name = "Test Game",
@@ -241,9 +376,12 @@ public sealed class RecordingCaptureTests : IDisposable
             var library = new LibraryCalls();
             orchestrator = new SessionOrchestrator(
                 new CaptureSessionFactory(options, NullLoggerFactory.Instance, hub),
-                () => document,
+                () => Volatile.Read(ref document),
                 published.Enqueue,
                 targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, e) => events.Writer.TryComplete(e)),
+                clips: clips
+                    ? new ReplayClips(OutputPathAllocator.System, () => _directory, c => events.Writer.TryWrite(c), e => events.Writer.TryWrite(e), NotSaved: f => events.Writer.TryWrite(f))
+                    : null,
                 recordings: new Recordings(
                     OutputPathAllocator.System,
                     () => _directory,
@@ -255,6 +393,13 @@ public sealed class RecordingCaptureTests : IDisposable
             orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
             await anchored.Task.WaitAsync(Timeout, Token);
             await Task.Delay(TimeSpan.FromSeconds(1), Token);
+            if (pending is not null)
+            {
+                // Long enough for the session to build the chain it is asked to prepare.
+                Volatile.Write(ref document, pending(document));
+                Assert.True(orchestrator.Post(new SettingsUpdated()));
+                await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+            }
 
             var start = Stopwatch.GetTimestamp();
             Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, start)));

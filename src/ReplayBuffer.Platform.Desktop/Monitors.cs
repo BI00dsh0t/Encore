@@ -1,7 +1,10 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using Windows.Win32;
 using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Dxgi;
 using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.System.Com;
 using Windows.Win32.UI.HiDpi;
 
 namespace ReplayBuffer.Platform.Desktop;
@@ -43,6 +46,100 @@ public static unsafe class Monitors
         var size = (int)Math.Round(sizeDip * scale);
         var inset = (int)Math.Round(insetDip * scale);
         return (monitor.Right - inset - size, monitor.Top + inset, size);
+    }
+
+    /// <summary>
+    /// Whether the monitor holding the process's largest visible window (else the primary monitor) has
+    /// hardware overlay planes (<c>IDXGIOutput2::SupportsOverlays</c>), or <c>null</c> when DXGI can't say.
+    /// A topmost window over a borderless flip-model game keeps the game in independent flip only with a
+    /// free plane; without one, DWM composes the game, which cost 5.8's load about 7.5 % FPS.
+    /// </summary>
+    public static bool? OverlayPlanes(int? processId)
+    {
+        var monitor = processId is { } pid && LargestWindow(pid) is { } window
+            ? PInvoke.MonitorFromWindow(window, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST)
+            : PInvoke.MonitorFromPoint(default, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);
+        if (monitor.IsNull)
+        {
+            return null;
+        }
+
+        IDXGIFactory1* factory = null;
+        try
+        {
+            var factoryIid = IDXGIFactory1.IID_Guid;
+            if (PInvoke.CreateDXGIFactory1(&factoryIid, (void**)&factory).Failed)
+            {
+                return null;
+            }
+
+            for (uint a = 0; ; a++)
+            {
+                IDXGIAdapter1* adapter = null;
+                if (factory->EnumAdapters1(a, &adapter).Failed)
+                {
+                    return null;
+                }
+
+                try
+                {
+                    for (uint o = 0; ; o++)
+                    {
+                        IDXGIOutput* output = null;
+                        if (adapter->EnumOutputs(o, &output).Failed)
+                        {
+                            break;
+                        }
+
+                        try
+                        {
+                            if (output->GetDesc().Monitor == monitor)
+                            {
+                                return Supports(output);
+                            }
+                        }
+                        finally
+                        {
+                            output->Release();
+                        }
+                    }
+                }
+                finally
+                {
+                    adapter->Release();
+                }
+            }
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        finally
+        {
+            if (factory is not null)
+            {
+                factory->Release();
+            }
+        }
+    }
+
+    private static bool? Supports(IDXGIOutput* output)
+    {
+        IDXGIOutput2* output2 = null;
+        var iid = IDXGIOutput2.IID_Guid;
+        if (((IUnknown*)output)->QueryInterface(&iid, (void**)&output2).Failed)
+        {
+            return null;
+        }
+
+        try
+        {
+            return output2->SupportsOverlays();
+        }
+        finally
+        {
+            output2->Release();
+        }
     }
 
     // Top-level windows in Z order, without a callback (no EnumWindows).

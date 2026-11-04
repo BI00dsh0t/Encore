@@ -50,6 +50,7 @@ public static class SettingsResolver
             Cleanup = Get(Keys.Cleanup),
             ManualGames = Get(Keys.ManualGames),
             StartWithWindows = Get(Keys.StartWithWindows),
+            OverlayDot = Get(Keys.OverlayDot),
         };
     }
 
