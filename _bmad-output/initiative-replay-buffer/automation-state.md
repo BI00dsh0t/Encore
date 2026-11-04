@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.7 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix flaky-recording-crash-test |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
@@ -178,7 +178,7 @@ The coordinator logs each QA round in the Log below.
 | 30.4 | 9.4 Library restyled | | pending |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
-| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | QA passed, merging |
+| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | | pending |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
@@ -720,3 +720,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 9.7 passed at `176a820` with 0 findings. No `MessageBox` is left; callers go through `Prompts.YesNo` unchanged. The Overlay glyphs keep fixed brushes, and the cards use theme keys with no Mica. The tray menu follows a switch without code changes. App 139 passed. Note: plain Esc on the old YesNo did nothing; the new dialog answers No, as the ticket asks. slice-epic-4 is merging. slice-epic-5 is back in the pool.
 - 2026-11-04: Bugfix `flaky-recording-crash-test` went to slice-epic-5 (Opus, medium effort). It makes `RecordingCrashTests.ARecordingKilledThreeSecondsIn...` wait on a real condition instead of wall-clock time across a cold start, or moves it to Heavy as CLAUDE.md says.
 - 2026-11-04: 8.5 Heavy rerun on `0249eaa`: `AGameRecordingRunsOnThroughEachDisplayChange` passed (12 s). Both 8.5 Heavy tests now pass, and slice-epic-8 is merging. The GPU runner is idle.
+- 2026-11-04: 9.7 merged (`8dbac3d`; marked done, renders and its Human Check row added in `bae77ea`), and its card is Done. slice-epic-4 is back in the pool. 9.4 and 9.5 wait on 9.3, which is in QA round 2.
