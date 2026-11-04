@@ -180,6 +180,31 @@ public sealed class ReportTests : IDisposable
     }
 
     [Fact]
+    public void EachRunsPresentModeAndTheOverlayReachTheReport()
+    {
+        File.WriteAllLines(Path.Combine(_folder, "02-capture-1-presentmon.csv"),
+        [
+            "Application,ProcessID,PresentMode,MsBetweenPresents",
+            "load.exe,1,Composed: Flip,12.5",
+            "load.exe,1,Composed: Flip,12.5",
+            "load.exe,1,Hardware Composed: Independent Flip,12.5",
+        ]);
+        var summary = """{ "runs": [ { "run": "01-baseline-1", "condition": "baseline", "pass": 1, "avgFps": 80.0 }, { "run": "02-capture-1", "condition": "capture", "pass": 1, "avgFps": 74.0, "fpsLossPercent": 7.5 } ] }""";
+        var overlay = new FpsOverlay("auto", false, FpsBenchmark.MessageSeconds);
+
+        var report = FpsBenchmark.Map(summary, "summary.json", _folder, "Game", new CaptureSettings(1920, 1080, 60, 20_000, null, null), 30, 1, overlay: overlay);
+        BenchJson.Write(Path.Combine(_folder, FpsBenchmark.FileName), report);
+        var saved = Report.Generate(_folder);
+
+        Assert.Null(saved.Fps!.Runs[0].PresentMode);
+        Assert.Equal("Composed: Flip", saved.Fps.Runs[1].PresentMode);
+        Assert.Equal(overlay, saved.Fps.Overlay);
+        var md = Report.Markdown(saved);
+        Assert.Contains("overlayDot `auto`) and a message every 10 s; overlay planes on the load's monitor (SupportsOverlays): no.", md, StringComparison.Ordinal);
+        Assert.Contains("|  | Composed: Flip |", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NoGcFiguresAreNotZeroGen2()
     {
         var summary = """{ "runs": [ { "run": "01-capture-1", "condition": "capture", "pass": 1, "avgFps": 98.0, "fpsLossPercent": 2.0 } ] }""";

@@ -39,7 +39,8 @@ internal sealed class ClipClaim
 
     /// <summary>
     /// The write that claimed <paramref name="claimedUs"/> was written, ending at
-    /// <paramref name="endUs"/>: that end stays claimed.
+    /// <paramref name="endUs"/> (earlier when its cut ended at a ring generation's boundary): that
+    /// end stays claimed.
     /// </summary>
     public void Succeeded(long claimedUs, long endUs)
     {

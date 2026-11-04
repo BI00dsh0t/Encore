@@ -10,6 +10,8 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ReplayBuffer.Engine.Tests" />
+    <!-- Story 5.14's Overlay end-to-end test hosts the engine in-process beside the App's Overlay. -->
+    <InternalsVisibleTo Include="ReplayBuffer.App.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj" />

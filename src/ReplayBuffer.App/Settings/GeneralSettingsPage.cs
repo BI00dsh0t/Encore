@@ -1,4 +1,5 @@
 using System.Windows;
+using ReplayBuffer.App.Overlay;
 using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Settings;
@@ -13,7 +14,7 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
     [
         new(OverlayDotMode.Auto, "Automatic: always, unless it would cost a borderless game FPS"),
         new(OverlayDotMode.Always, "Always, while capture runs"),
-        new(OverlayDotMode.OnChange, "For 3 seconds after each change"),
+        new(OverlayDotMode.OnChange, $"For {(int)OverlayViewModel.DotOnChangeDuration.TotalSeconds} seconds after each change"),
     ];
 
     public override string Title => "General";

@@ -20,6 +20,8 @@ namespace ReplayBuffer.App.Library;
 /// game or by day and filtered by game, date and Favourite (story 7.5), a choice remembered per
 /// instance. Each row opens in the default player, shows in Explorer and copies as a file drop
 /// (story 7.6) through the shell, by absolute path, after checking only that the file still exists.
+/// Each row renames inline and deletes after a confirmation (story 7.7), both through the engine by
+/// the row's identity and both disabled while it is locked; a refusal shows its short message.
 /// Members run on the UI thread.
 /// </summary>
 internal sealed class LibraryPage : Observable
@@ -35,6 +37,7 @@ internal sealed class LibraryPage : Observable
     private readonly string? _viewStateFile;
     private readonly TimeProvider _time;
     private readonly ILibraryShell _shell;
+    private readonly Func<string, bool> _confirmDelete;
     private readonly Dictionary<string, LibraryRow> _rows = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, LibraryGroupHeader> _headers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, LibraryGameOption> _gameOptions = new(StringComparer.Ordinal);
@@ -56,18 +59,21 @@ internal sealed class LibraryPage : Observable
     /// <param name="viewStateFile">Where the view choices are remembered; without it, they last only this run.</param>
     /// <param name="time">The clock the date filter and day headers read "today" from.</param>
     /// <param name="shell">The row actions' shell; the Windows shell without it.</param>
+    /// <param name="confirmDelete">Asks whether to move the named file to the Recycle Bin; a Yes/No message box over the view's window without it.</param>
     public LibraryPage(
         IEngineSession engine,
         LibraryThumbnails? thumbnails = null,
         string? viewStateFile = null,
         TimeProvider? time = null,
-        ILibraryShell? shell = null)
+        ILibraryShell? shell = null,
+        Func<string, bool>? confirmDelete = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _thumbnails = thumbnails;
         _viewStateFile = viewStateFile;
         _time = time ?? TimeProvider.System;
         _shell = shell ?? new WindowsLibraryShell();
+        _confirmDelete = confirmDelete ?? ConfirmDelete;
         AcknowledgeCommand = new RelayCommand(() => _ = AcknowledgeAsync());
         Games.Add(_allGames);
 
@@ -187,7 +193,7 @@ internal sealed class LibraryPage : Observable
         {
             if (!_rows.TryGetValue(item.Path, out var row))
             {
-                row = new LibraryRow(item.Path, r => _ = SetFavouriteAsync(r), Act);
+                row = new LibraryRow(item.Path, r => _ = SetFavouriteAsync(r), Act, (r, name) => _ = RenameAsync(r, name), r => _ = DeleteAsync(r));
                 _rows.Add(item.Path, row);
             }
 
@@ -522,6 +528,71 @@ internal sealed class LibraryPage : Observable
         }
     }
 
+    /// <summary>The base name a rename sends: trimmed, without one trailing <c>.mp4</c>.</summary>
+    internal static string BaseName(string text)
+    {
+        var name = text.Trim();
+        return name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+    }
+
+    // The engine renames by the identity last shown (AD-3); the row follows the snapshot.
+    private async Task RenameAsync(LibraryRow row, string text)
+    {
+        if (row.Item is not { } item)
+        {
+            return;
+        }
+
+        try
+        {
+            await _engine.SendAsync(LibraryMessages.Rename, new LibraryRename(item.Path, item.Size, item.Modified, BaseName(text)));
+            ClearActionError();
+        }
+        catch (ErrorCodeException e)
+        {
+            Fail(row, RefusalText(e.Code, "Couldn't rename the file."));
+        }
+    }
+
+    // Nothing is sent unless the confirmation says yes.
+    private async Task DeleteAsync(LibraryRow row)
+    {
+        if (row.Item is not { } item || !_confirmDelete(row.Name))
+        {
+            return;
+        }
+
+        try
+        {
+            await _engine.SendAsync(LibraryMessages.Delete, new LibraryDelete(item.Path, item.Size, item.Modified));
+            ClearActionError();
+        }
+        catch (ErrorCodeException e)
+        {
+            Fail(row, RefusalText(e.Code, "Couldn't delete the file."));
+        }
+    }
+
+    private static string RefusalText(string code, string otherwise) => code switch
+    {
+        ErrorCodes.FileBeingWritten => "That file is still being written.",
+        ErrorCodes.InvalidFileName => "That name can't be used for a file.",
+        ErrorCodes.FileNameTaken => "A file with that name already exists.",
+        ErrorCodes.RecycleBinUnavailable => "That drive has no Recycle Bin, so the file wasn't deleted.",
+        ErrorCodes.LibraryItemChanged => "That file changed; try again.",
+        _ => otherwise,
+    };
+
+    private bool ConfirmDelete(string name)
+    {
+        var message = $"Move “{name}” to the Recycle Bin?";
+        var owner = _view is null ? null : Window.GetWindow(_view);
+        var answer = owner is null
+            ? MessageBox.Show(message, "Delete", MessageBoxButton.YesNo, MessageBoxImage.Question)
+            : MessageBox.Show(owner, message, "Delete", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        return answer == MessageBoxResult.Yes;
+    }
+
     private async Task AcknowledgeAsync()
     {
         if (_corruptWarningId is not { } id)
@@ -569,7 +640,14 @@ internal sealed class LibraryPage : Observable
 /// <summary>One Library item as the page shows it.</summary>
 /// <param name="setFavourite">Sends the row's Favourite toggle; the star command's action.</param>
 /// <param name="act">Runs a shell action on the row's file; the Open, Show in Explorer and Copy commands' action.</param>
-internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite = null, Action<LibraryRow, LibraryAction>? act = null) : Observable
+/// <param name="rename">Sends the row's rename with the edited text; the commit's action.</param>
+/// <param name="delete">Confirms and sends the row's delete; the Delete command's action.</param>
+internal sealed class LibraryRow(
+    string path,
+    Action<LibraryRow>? setFavourite = null,
+    Action<LibraryRow, LibraryAction>? act = null,
+    Action<LibraryRow, string>? rename = null,
+    Action<LibraryRow>? delete = null) : Observable
 {
     private string _game = "";
     private string _date = "";
@@ -582,6 +660,12 @@ internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite =
     private RelayCommand? _openCommand;
     private RelayCommand? _showInExplorerCommand;
     private RelayCommand? _copyCommand;
+    private RelayCommand? _renameCommand;
+    private RelayCommand? _commitRenameCommand;
+    private RelayCommand? _cancelRenameCommand;
+    private RelayCommand? _deleteCommand;
+    private bool _isRenaming;
+    private string _renameText = "";
 
     /// <summary>The item's key: its path relative to the Output Folder.</summary>
     public string Path { get; } = path;
@@ -643,6 +727,12 @@ internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite =
             {
                 OnPropertyChanged(nameof(Lock));
                 _copyCommand?.RaiseCanExecuteChanged();
+                _renameCommand?.RaiseCanExecuteChanged();
+                _deleteCommand?.RaiseCanExecuteChanged();
+                if (value)
+                {
+                    IsRenaming = false;
+                }
             }
         }
     }
@@ -678,6 +768,45 @@ internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite =
 
     /// <summary>Copies the file as a file drop; disabled until it is written.</summary>
     public ICommand CopyCommand => _copyCommand ??= new RelayCommand(() => act?.Invoke(this, LibraryAction.Copy), () => !IsLocked);
+
+    /// <summary>Whether the name is being edited inline.</summary>
+    public bool IsRenaming
+    {
+        get => _isRenaming;
+        private set => Set(ref _isRenaming, value);
+    }
+
+    /// <summary>The inline editor's text.</summary>
+    public string RenameText
+    {
+        get => _renameText;
+        set => Set(ref _renameText, value);
+    }
+
+    /// <summary>Starts editing the name inline, from its base name; disabled until the file is written.</summary>
+    public ICommand RenameCommand => _renameCommand ??= new RelayCommand(
+        () =>
+        {
+            RenameText = System.IO.Path.GetFileNameWithoutExtension(Name);
+            IsRenaming = true;
+        },
+        () => !IsLocked);
+
+    /// <summary>Ends the edit and sends the rename; a no-op once the edit has ended.</summary>
+    public ICommand CommitRenameCommand => _commitRenameCommand ??= new RelayCommand(() =>
+    {
+        if (IsRenaming)
+        {
+            IsRenaming = false;
+            rename?.Invoke(this, RenameText);
+        }
+    });
+
+    /// <summary>Ends the edit, sending nothing.</summary>
+    public ICommand CancelRenameCommand => _cancelRenameCommand ??= new RelayCommand(() => IsRenaming = false);
+
+    /// <summary>Moves the file to the Recycle Bin after a confirmation; disabled until it is written.</summary>
+    public ICommand DeleteCommand => _deleteCommand ??= new RelayCommand(() => delete?.Invoke(this), () => !IsLocked);
 
     /// <summary>The item last shown, whose identity (path, size, modified time) a command sends.</summary>
     internal LibraryItem? Item { get; private set; }

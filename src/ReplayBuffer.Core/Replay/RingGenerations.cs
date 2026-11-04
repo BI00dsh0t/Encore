@@ -1,21 +1,38 @@
 namespace ReplayBuffer.Core.Replay;
 
 /// <summary>
-/// The Replay Buffer as numbered generations (R5, AD-8), each a <see cref="PacketRing"/>; one is
-/// live, the current one, and packets go into it. A <see cref="Resize"/> (a Buffer Window change at
-/// a Reset) opens a generation with the same streams, seeded with the old ring's packets from the
-/// Reset keyframe on, and retires the old one at once, so the timeline stays continuous; a Clip is
-/// cut from one generation. A retired ring is disposed once no cut is reading it; slabs a cut pins
-/// outlive it. Routing a packet is a field read under one short lock, so <see cref="Append"/>
-/// allocates nothing managed; a cut's filter and sort run outside that lock.
+/// The Replay Buffer as numbered generations (R5, AD-8), oldest first, each a <see cref="PacketRing"/>
+/// with its own streams; packets go into the newest, the current one.
+/// <list type="bullet">
+/// <item>A <see cref="Restart"/> (a forced encoder restart) opens an empty generation whose first
+/// video keyframe is its start, a boundary that counts as a Reset. A Clip holds one generation: a
+/// cut ending less than <see cref="MinClipUs"/> past a boundary comes from the previous generation,
+/// ending at the boundary, if that holds at least <see cref="MinClipUs"/>.</item>
+/// <item>A <see cref="Resize"/> (a Buffer Window change at a Reset) opens a generation with the same
+/// streams, seeded with the old ring's packets from the Reset keyframe on, and retires the old one
+/// at once, so the timeline stays continuous.</item>
+/// </list>
+/// A retired ring is disposed once no cut is reading it; slabs a cut pins outlive it. Routing a
+/// packet is a field read under one short lock, so <see cref="Append"/> allocates nothing managed;
+/// a cut's filter and sort run outside that lock.
 /// </summary>
 public sealed class RingGenerations : IDisposable
 {
-    /// <summary>The shortest Clip (R4).</summary>
+    /// <summary>The shortest Clip (R4), and how far past a boundary a cut must end to come from the new generation.</summary>
     public const long MinClipUs = 1_000_000;
 
+    /// <summary>
+    /// How long a restart's predecessor is kept past <see cref="MinClipUs"/> after the boundary:
+    /// twice a waiting writer's save wait, so a press just after the boundary can still cut it.
+    /// </summary>
+    public const long RetireSlackUs = 5_000_000;
+
     private readonly Lock _lock = new();
+    private readonly List<Generation> _generations = [];
     private Generation _current;
+
+    // A restart's predecessor, kept for the previous-generation fallback until the retire check.
+    private Generation? _predecessor;
     private bool _disposed;
 
     /// <param name="first">Generation 1's ring; this owns it.</param>
@@ -23,6 +40,7 @@ public sealed class RingGenerations : IDisposable
     {
         ArgumentNullException.ThrowIfNull(first);
         _current = new Generation(1, first, long.MinValue);
+        _generations.Add(_current);
     }
 
     /// <summary>The current generation's number, counting from 1.</summary>
@@ -58,12 +76,24 @@ public sealed class RingGenerations : IDisposable
         }
     }
 
-    /// <summary>Appends one packet to the current generation.</summary>
+    /// <summary>Appends one packet to the current generation, then retires a restart's predecessor once it is past need.</summary>
     public void Append(int stream, ReadOnlySpan<byte> data, long pts, long dts, long duration, bool isKey)
     {
         lock (_lock)
         {
-            _current.Ring.Append(stream, data, pts, dts, duration, isKey);
+            var current = _current;
+            current.Ring.Append(stream, data, pts, dts, duration, isKey);
+            if (current.StartUs == long.MaxValue && isKey)
+            {
+                current.StartUs = current.Ring.FirstKeyUs;
+            }
+
+            if (_predecessor is { } predecessor
+                && current.StartUs != long.MaxValue
+                && current.Ring.ToMicros(stream, pts) >= current.StartUs + MinClipUs + RetireSlackUs)
+            {
+                Retire(predecessor);
+            }
         }
     }
 
@@ -86,12 +116,33 @@ public sealed class RingGenerations : IDisposable
     }
 
     /// <summary>
+    /// Opens an empty generation on <paramref name="next"/> (an encoder restart); its streams are
+    /// added next, and its first video keyframe is its start. The current one becomes its
+    /// predecessor, and any older is retired. Returns the new generation's number.
+    /// Precondition: no save is waiting for its keyframe or its streams (the caller drains or waits
+    /// for in-flight saves first), since <see cref="ToMicros"/> and <see cref="AllStreamsPast"/>
+    /// read the new generation from here on, which has no streams until the new chain adds them.
+    /// </summary>
+    public int Restart(PacketRing next)
+    {
+        ArgumentNullException.ThrowIfNull(next);
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var previous = _current;
+            Open(new Generation(previous.Number + 1, next, long.MaxValue));
+            _predecessor = previous;
+            return _current.Number;
+        }
+    }
+
+    /// <summary>
     /// Opens a generation on <paramref name="next"/> (a Buffer Window resize at a Reset), seeded
     /// with the current ring's packets from the keyframe at or after <paramref name="fromUs"/> on,
     /// and retires the old one at once. Returns the new generation's number. Most of the tail is
     /// copied in batches without this lock (<see cref="PacketRing.CopyTailTo"/>), so the encoders
     /// keep appending; only the remainder appended meanwhile is copied under it, then the switch.
-    /// Called from one thread, never alongside another resize.
+    /// Called from one thread, never alongside <see cref="Restart"/> or another resize.
     /// </summary>
     public int Resize(PacketRing next, long fromUs)
     {
@@ -114,36 +165,70 @@ public sealed class RingGenerations : IDisposable
             }
 
             ring.CopyFrom(next, sequence);
-            _current = new Generation(previous.Number + 1, next, next.FirstKeyUs);
+            Open(new Generation(previous.Number + 1, next, next.FirstKeyUs));
             Retire(previous);
             return _current.Number;
         }
     }
 
     /// <summary>
-    /// Pins <c>[fromUs, toUs)</c> from the current generation, from its start on; null when it
-    /// starts at or after <paramref name="toUs"/>, or when there is nothing to cut. The cut itself
-    /// runs outside the lock.
+    /// Pins <c>[fromUs, toUs)</c> from one generation: the newest that starts before
+    /// <paramref name="toUs"/>. Less than <see cref="MinClipUs"/> past its boundary, the previous
+    /// generation up to the boundary instead, when that holds at least <see cref="MinClipUs"/>;
+    /// otherwise nothing. Null when there is nothing to cut. The cut itself runs outside the lock.
     /// </summary>
     public (RingCut Cut, int Generation)? Cut(long fromUs, long toUs)
     {
         Generation chosen;
+        long cutFrom;
+        long cutTo;
+        bool fallback;
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            chosen = _current;
-            if (chosen.StartUs >= toUs)
+            Generation? current = null;
+            Generation? previous = null;
+            for (var i = _generations.Count - 1; i >= 0; i--)
+            {
+                if (_generations[i].StartUs < toUs)
+                {
+                    current = _generations[i];
+                    previous = i > 0 ? _generations[i - 1] : null;
+                    break;
+                }
+            }
+
+            if (current is null)
             {
                 return null;
+            }
+
+            fallback = previous is not null && toUs - current.StartUs < MinClipUs;
+            if (fallback)
+            {
+                chosen = previous!;
+                cutFrom = fromUs;
+                cutTo = current.StartUs;
+            }
+            else
+            {
+                chosen = current;
+                cutFrom = Math.Max(fromUs, current.StartUs);
+                cutTo = toUs;
             }
 
             chosen.Users++;
         }
 
-        RingCut? cut;
+        RingCut? cut = null;
         try
         {
-            cut = chosen.Ring.Cut(Math.Max(fromUs, chosen.StartUs), toUs);
+            cut = chosen.Ring.Cut(cutFrom, cutTo);
+            if (fallback && cut is not null && cut.EndUs - cut.StartUs < MinClipUs)
+            {
+                cut.Dispose();
+                cut = null;
+            }
         }
         finally
         {
@@ -160,7 +245,7 @@ public sealed class RingGenerations : IDisposable
         return cut is null ? null : (cut, chosen.Number);
     }
 
-    /// <summary>Disposes the ring; one a cut is still reading goes when that cut has pinned its slabs.</summary>
+    /// <summary>Disposes every ring; one a cut is still reading goes when that cut has pinned its slabs.</summary>
     public void Dispose()
     {
         lock (_lock)
@@ -171,8 +256,24 @@ public sealed class RingGenerations : IDisposable
             }
 
             _disposed = true;
-            Retire(_current);
+            for (var i = _generations.Count - 1; i >= 0; i--)
+            {
+                Retire(_generations[i]);
+            }
         }
+    }
+
+    /// <summary>Makes <paramref name="next"/> current and retires every generation before its predecessor. Under the lock.</summary>
+    private void Open(Generation next)
+    {
+        while (_generations.Count > 1)
+        {
+            Retire(_generations[0]);
+        }
+
+        _predecessor = null;
+        _generations.Add(next);
+        _current = next;
     }
 
     /// <summary>Drops a generation: it is never cut again, and its ring is disposed once no cut reads it. Under the lock.</summary>
@@ -184,6 +285,12 @@ public sealed class RingGenerations : IDisposable
         }
 
         generation.Retired = true;
+        _generations.Remove(generation);
+        if (ReferenceEquals(generation, _predecessor))
+        {
+            _predecessor = null;
+        }
+
         if (generation.Users == 0)
         {
             generation.Ring.Dispose();
@@ -198,9 +305,9 @@ public sealed class RingGenerations : IDisposable
 
         /// <summary>
         /// Its boundary in µs since the anchor: <see cref="long.MinValue"/> for generation 1, else
-        /// the first keyframe its resize seeded its ring with.
+        /// its ring's first keyframe, <see cref="long.MaxValue"/> until there is one. The lock guards it.
         /// </summary>
-        public long StartUs { get; } = startUs;
+        public long StartUs { get; set; } = startUs;
 
         /// <summary>Cuts reading its ring outside the lock. The lock guards it.</summary>
         public int Users { get; set; }

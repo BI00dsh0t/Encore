@@ -22,6 +22,7 @@ internal sealed class BenchOptions
                                       [--target-fps 80] [--load-size WxH] [--load-timeout 60] [--load-warmup 10]
                                       [--load-exe <ReplayBuffer.Bench.GpuLoad.exe>]
                                       [--presentmon <exe>] [--pwsh <exe>] [--no-gpu-sampler] <capture options>
+                                      [--overlay [--overlay-dot auto|always|onChange] [--app-exe <ReplayBuffer.App.exe>]]
           ReplayBuffer.Bench drift    [--minutes 60] [--tone-dbfs -30] [--bucket-seconds 60] [--burst-track 0]
                                       [--reanalyze] <capture options>
           ReplayBuffer.Bench playback [--seconds 30] [--players "Discord,Chrome,VLC,Windows Media Player,DaVinci Resolve"]
@@ -35,6 +36,11 @@ internal sealed class BenchOptions
                                       [--target-fps 80] [--load-size WxH] [--load-timeout 60] [--load-warmup 10]
                                       [--load-exe <exe>] [--overlay-exe <ReplayBuffer.Bench.Overlay.exe>] [--presentmon <exe>]
                                       [--host stand-in|app] [--app-exe <ReplayBuffer.App.exe>] [--dot-only]
+                                      [--overlay-dot auto|always|onChange]
+          ReplayBuffer.Bench soak     [--minutes 20] [--mode memory|disk] [--press-seconds 60] [--buffer-seconds 30]
+                                      [--sample-seconds 10] [--warmup-minutes min(30, minutes/4)] [--key ctrl+alt+shift+f16]
+                                      [--target-fps 80] [--load-size WxH] [--load-exe <exe>] [--app-exe <ReplayBuffer.App.exe>]
+                                      [--lock <.bench-running>]
           ReplayBuffer.Bench report
 
         Capture options: [--size 1920x1080] [--fps 60] [--bitrate 20000] [--output-device <name or id>]
@@ -61,7 +67,18 @@ internal sealed class BenchOptions
         hidden, shown and hidden again (a minute per mode by default), and writes each phase's PresentMode, FPS and SHQueryUserNotificationState
         to overlay.json and overlay.md. --host app (story 5.8) runs the real App on a throwaway test instance instead
         of the stand-in, and shows its solid dot plus a saved and a failed message through dev.simulate (the dot
-        alone with --dot-only).
+        alone with --dot-only). --overlay-dot sets the App's overlayDot (default auto), and the report gives
+        whether each load's monitor has overlay planes.
+
+        fps --overlay (story 5.12) runs the real App on a throwaway test instance beside the script: its dot and
+        a message every 10 s are on during the capture runs only, off during the baseline runs.
+
+        soak (story 8.1) runs the real engine (serve --replay-buffer) and App (--tray) from the App's Release folder
+        on a throwaway test instance, with the GPU load as the Target Game; presses the Save Hotkey every
+        --press-seconds, samples both processes' private bytes, working set, handles and GDI and USER objects every
+        --sample-seconds, and checks every Clip with ffprobe and ffmpeg. Writes soak-samples.csv, soak-clips.csv,
+        soak.json and soak.md; exit 0 only when every Clip passes and every bound is met. Holds the lock file
+        (default .bench-running in the main checkout) for the whole run, and refuses to start while it exists.
         """;
 
     private static readonly string[] Common = ["out", "repo", "engine", "ffmpeg"];
@@ -70,18 +87,20 @@ internal sealed class BenchOptions
     private static readonly Dictionary<string, string[]> Allowed = new(StringComparer.Ordinal)
     {
         ["fps"] = [.. Common, .. Capture, "game", "seconds", "passes", "settle", "presentmon", "pwsh", "no-gpu-sampler",
-            "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe"],
+            "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe", "overlay", "overlay-dot", "app-exe"],
         ["drift"] = [.. Common, .. Capture, "minutes", "tone-dbfs", "bucket-seconds", "burst-track", "reanalyze"],
         ["playback"] = [.. Common, .. Capture, "seconds", "players", "tone-dbfs", "auto", "chrome", "play-seconds", "player-timeout"],
         ["hotkey"] = [.. Common, "presses", "key", "timeout", "inject"],
 
         // Its Output Devices are --device-a and --device-b: --output-device doesn't apply.
         ["tracks"] = [.. Common, "size", "fps", "bitrate", "input-device", "minutes", "device-a", "device-b", "tone-dbfs", "vlc", "reanalyze"],
-        ["overlay"] = [.. Common, "modes", "seconds", "settle", "presentmon", "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe", "overlay-exe", "host", "app-exe", "dot-only"],
+        ["overlay"] = [.. Common, "modes", "seconds", "settle", "presentmon", "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe", "overlay-exe", "host", "app-exe", "dot-only", "overlay-dot"],
+        ["soak"] = [.. Common, "minutes", "mode", "press-seconds", "buffer-seconds", "sample-seconds", "warmup-minutes", "key",
+            "target-fps", "load-size", "load-exe", "app-exe", "lock"],
         ["report"] = [.. Common],
     };
 
-    private static readonly HashSet<string> FlagNames = new(StringComparer.Ordinal) { "no-gpu-sampler", "reanalyze", "inject", "auto", "dot-only" };
+    private static readonly HashSet<string> FlagNames = new(StringComparer.Ordinal) { "no-gpu-sampler", "reanalyze", "inject", "auto", "dot-only", "overlay" };
 
     private readonly Dictionary<string, string> _values;
     private readonly HashSet<string> _flags;

@@ -276,8 +276,11 @@ internal static class HotkeyBenchmark
         File.WriteAllText(Path.Combine(folder, "settings.json"), JsonSerializer.Serialize(document, SettingsJsonContext.Default.SettingsDocument));
     }
 
-    /// <summary>Starts <c>serve</c> on the test instance and waits for its <c>listening</c> line; its output goes to log files.</summary>
-    private static Process StartServe(string engine, string instance, string logPrefix, CancellationToken cancellation)
+    /// <summary>
+    /// Starts <c>serve</c> on the test instance, with <paramref name="extra"/> arguments, and waits for its
+    /// <c>listening</c> line; its output goes to log files.
+    /// </summary>
+    internal static Process StartServe(string engine, string instance, string logPrefix, CancellationToken cancellation, params string[] extra)
     {
         var start = new ProcessStartInfo(engine)
         {
@@ -288,6 +291,11 @@ internal static class HotkeyBenchmark
         start.ArgumentList.Add("serve");
         start.ArgumentList.Add("--instance");
         start.ArgumentList.Add(instance);
+        foreach (var arg in extra)
+        {
+            start.ArgumentList.Add(arg);
+        }
+
         var stdout = new StreamWriter(logPrefix + "-engine.out.log") { AutoFlush = true };
         Process process;
         try

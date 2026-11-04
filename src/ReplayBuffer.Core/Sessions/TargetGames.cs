@@ -109,6 +109,26 @@ public sealed record ReplayClips(
 /// told how it ended (FR-12), so a restart can find the Recordings a dead engine left open; null
 /// keeps nothing.
 /// </param>
+/// <param name="Restarted">
+/// Called on the orchestrator thread when a forced encoder restart (R4) ended a Recording and a new
+/// one took over, just after the new one's <paramref name="Started"/>; null ignores it.
+/// </param>
+/// <param name="DiskFull">
+/// Called on the orchestrator thread when a Recording stopped because its disk filled (R5), just
+/// after its <paramref name="Stopped"/>; null ignores it.
+/// </param>
+/// <param name="RingFits">
+/// Whether a Disk-mode ring of the given snapshot fits its drive now, asked on the orchestrator
+/// thread at each recheck after a full disk stopped the Replay Buffer; null counts as fits.
+/// </param>
+/// <param name="ReplayDiskFull">
+/// Called on the orchestrator thread with true when a full disk stopped a Disk-mode Replay Buffer
+/// (R5), and with false when that wait ends, whether it restarted or not; null ignores it.
+/// </param>
+/// <param name="RingRecheck">
+/// How often a Replay Buffer a full disk stopped checks whether its ring fits again; null is
+/// <see cref="DefaultRingRecheck"/>.
+/// </param>
 public sealed record Recordings(
     OutputPathAllocator Paths,
     Func<string> DefaultOutputFolder,
@@ -117,7 +137,19 @@ public sealed record Recordings(
     Action<Exception> Failed,
     ILibraryWrites? Library = null,
     Action<string>? Info = null,
-    IOpenRecordings? Open = null);
+    IOpenRecordings? Open = null,
+    Action<RecordingRestart>? Restarted = null,
+    Action? DiskFull = null,
+    Func<EffectiveSettings, bool>? RingFits = null,
+    Action<bool>? ReplayDiskFull = null,
+    TimeSpan? RingRecheck = null)
+{
+    /// <summary>How often a Replay Buffer a full disk stopped checks for room for its ring by default.</summary>
+    public static readonly TimeSpan DefaultRingRecheck = TimeSpan.FromSeconds(30);
+}
+
+/// <summary>A forced encoder restart's handover (R4): the Recording it stopped and the one that took over, by path.</summary>
+public sealed record RecordingRestart(string StoppedPath, string StartedPath);
 
 /// <summary>One audio device of a <see cref="ChainKey"/>: its endpoint, compared ignoring case, and flow.</summary>
 public readonly record struct ChainDevice

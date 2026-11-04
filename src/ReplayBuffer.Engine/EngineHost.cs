@@ -288,7 +288,8 @@ internal sealed class EngineHost : IAsyncDisposable
                 e => libraryLog.LogWarning("A Library disk operation failed: {Message}", e.Message),
                 createMissingFolder: !instance.IsTest,
                 readLength: path => MediaLength.Read(path, ffmpegLog),
-                folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed));
+                folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed),
+                recycle: RecycleBin.Recycle);
 
             // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.
             load.Store.Changed += _ => libraryActor.OutputFolderChanged();
@@ -413,16 +414,42 @@ internal sealed class EngineHost : IAsyncDisposable
                         {
                             hub.Publish(RecordingMessages.Started, started);
                             recordingLog.LogInformation("Recording to {Path}", started.Path);
+                            notices.RecordingStarted(started);
                         },
                         stopped =>
                         {
                             hub.Publish(RecordingMessages.Stopped, stopped);
                             recordingLog.LogInformation("Recording stopped ({Reason}): {Path}", stopped.Reason, stopped.Path);
+                            notices.RecordingStopped(stopped);
                         },
                         e => recordingLog.LogWarning("The Recording failed: {Message}", e.Message),
                         libraryActor,
                         message => recordingLog.LogInformation("{Message}", message),
-                        runtime)
+                        runtime,
+                        Restarted: restart =>
+                        {
+                            recordingLog.LogWarning("An encoder restart ended the Recording {Stopped}; it continues in {Started}", restart.StoppedPath, restart.StartedPath);
+                            notices.RecordingRestarted(restart);
+                        },
+                        DiskFull: () =>
+                        {
+                            recordingLog.LogWarning("The Recording's disk is full; the Recording stopped");
+                            notices.DiskFull();
+                        },
+                        RingFits: snapshot => ReplayRings.Fits(snapshot, ringFolder, EstimatePublisher.FreeDiskBytes),
+                        ReplayDiskFull: stopped =>
+                        {
+                            if (stopped)
+                            {
+                                recordingLog.LogWarning("The disk is full: the Disk-mode Replay Buffer stopped until its ring fits again");
+                                notices.ReplayStoppedDiskFull();
+                            }
+                            else
+                            {
+                                recordingLog.LogInformation("The wait for room for the Replay Buffer's ring ended");
+                                notices.ReplayResumed();
+                            }
+                        })
                     : null);
 
             Volatile.Write(ref settingsTo, sessions);
@@ -486,6 +513,17 @@ internal sealed class EngineHost : IAsyncDisposable
                 await libraryActor.SetFavourite(favourite).ConfigureAwait(false);
                 return Empty.Value;
             });
+            router.Register(LibraryMessages.Rename, async (rename, _) =>
+            {
+                // Never retried: a refusal comes back with its code for the App to show.
+                await libraryActor.Rename(rename).ConfigureAwait(false);
+                return Empty.Value;
+            });
+            router.Register(LibraryMessages.Delete, async (delete, _) =>
+            {
+                await libraryActor.Delete(delete).ConfigureAwait(false);
+                return Empty.Value;
+            });
             router.Register(FeedbackMessages.Preview, (preview, _) =>
             {
                 player.Preview(preview.Sound);
@@ -493,7 +531,14 @@ internal sealed class EngineHost : IAsyncDisposable
             });
             router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
             SessionOrchestrator simulateTo = sessions;
-            var simulator = new DevSimulator(instance, running => simulateTo.Post(new RecordingRunning(running)), notices.DiskFull, notSaved, () => notices.ClipSaved(new ClipSaved("dev.simulate")));
+            var simulator = new DevSimulator(
+                instance,
+                running => simulateTo.Post(new RecordingRunning(running)),
+                notices.RecordingStarted,
+                notices.RecordingStopped,
+                notices.DiskFull,
+                notSaved,
+                () => notices.ClipSaved(new ClipSaved("dev.simulate")));
             router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
