@@ -24,7 +24,9 @@ namespace ReplayBuffer.Engine.Tests;
 /// one fragmented MP4 of the time between them beside the Replay Buffer, which keeps buffering.
 /// Killing the game, or disposing the orchestrator, mid-Recording still finishes it (story 6.4).
 /// A window resize keeps it one file, and a forced encoder restart splits it in two (story 6.6), as
-/// does a simulated GPU driver reset, which the session recovers from (story 8.3).
+/// does a simulated GPU driver reset, which the session recovers from (story 8.3). A sleep ends
+/// the Recording and the resume rebuilds the Replay Buffer alone; a frame-starved source (the
+/// secure desktop) keeps its frame rate (story 8.4).
 /// </summary>
 public sealed class RecordingCaptureTests : IDisposable
 {
@@ -411,6 +413,89 @@ public sealed class RecordingCaptureTests : IDisposable
         AssertFinished(b, atLeast: 1);
     }
 
+    /// <summary>
+    /// Story 8.4: a sleep, through the orchestrator's power port, ends the Recording as
+    /// <c>suspend</c>; a save while asleep cuts the old generation; the resume buffers again in a
+    /// new generation within 5 s, and a later save plays with monotonic, non-negative PTS.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task ASuspendAndResumeOpenANewGenerationAndEndTheRecordingPlayable()
+    {
+        var power = new TestPower();
+        using var rig = await StartRecordingAsync(clips: true, recovery: true, power: power);
+        await Task.Delay(TimeSpan.FromSeconds(3), Token);
+
+        var a = rig.Started.Path;
+        power.Raise(PowerChange.Suspending);
+        Assert.Equal(new RecordingStopped(a, RecordingStopReasons.Suspend), await rig.NextAsync());
+
+        // While asleep: the old generation, cut to its last packet.
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var asleep = Assert.IsType<ClipSaved>(await rig.NextAsync()).Path;
+
+        power.Raise(PowerChange.Resumed);
+        await rig.Factory.Restarted.WaitAsync(TimeSpan.FromSeconds(5), Token);
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var after = Assert.IsType<ClipSaved>(await rig.NextAsync()).Path;
+        rig.Orchestrator.Dispose();
+
+        // No Recording started after the resume.
+        Assert.Equal([a], Directory.GetFiles(Path.Combine(_directory, "Test Game"), "*.mp4").Where(f => f != asleep && f != after));
+        AssertFinished(a, atLeast: 2);
+        AssertFinished(asleep, atLeast: 2);
+        AssertFinished(after, atLeast: 1);
+        var frames = SessionTestKit.Probe(after, "-show_entries", "frame=stream_index,pts,best_effort_timestamp", "-show_frames")
+            .GetProperty("frames").EnumerateArray()
+            .Select(f => (
+                Stream: f.GetProperty("stream_index").GetInt32(),
+                Pts: f.TryGetProperty("pts", out var pts) ? pts.GetInt64() : f.GetProperty("best_effort_timestamp").GetInt64()))
+            .ToList();
+        foreach (var stream in frames.GroupBy(f => f.Stream))
+        {
+            var pts = stream.Select(f => f.Pts).ToList();
+            Assert.All(pts, p => Assert.True(p >= 0, $"stream {stream.Key}: PTS {p}"));
+            for (var i = 1; i < pts.Count; i++)
+            {
+                Assert.True(pts[i] > pts[i - 1], $"stream {stream.Key}: PTS {pts[i]} after {pts[i - 1]} at frame {i}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Story 8.4 (T-04): a source delivering no frames for 60 s, as the secure desktop does, still
+    /// gets every slot: the Clip saved after it has fps x its duration frames, its audio in step,
+    /// and no encoder restart was posted.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AFrameStarvedSourceKeepsTheFrameRateWithAudioInSync()
+    {
+        const int Fps = 30;
+        var starve = false;
+        using var rig = await StartRecordingAsync(clips: true, starveFrames: () => Volatile.Read(ref starve));
+
+        Volatile.Write(ref starve, true);
+        await Task.Delay(TimeSpan.FromSeconds(60), Token);
+        Volatile.Write(ref starve, false);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var clip = Assert.IsType<ClipSaved>(await rig.NextAsync()).Path;
+        rig.Orchestrator.Dispose();
+
+        Assert.Equal(0, rig.Factory.ChainRestarts);
+        var streams = SessionTestKit.Probe(clip, "-count_packets", "-show_streams").GetProperty("streams").EnumerateArray()
+            .Select(s => (
+                Type: s.GetProperty("codec_type").GetString(),
+                Packets: long.Parse(s.GetProperty("nb_read_packets").GetString()!, CultureInfo.InvariantCulture),
+                Duration: double.Parse(s.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture)))
+            .ToList();
+        var video = Assert.Single(streams, s => s.Type == "video");
+        Assert.InRange(video.Packets, (Fps * video.Duration) - 1, (Fps * video.Duration) + 1);
+        Assert.All(streams.Where(s => s.Type == "audio"), s => Assert.InRange(s.Duration, video.Duration - (1.0 / Fps), video.Duration + (1.0 / Fps)));
+        SessionTestKit.AssertDecodesCleanly(clip);
+    }
+
     /// <summary>Resizes the game's window from outside its process, keeping its place.</summary>
     private static void Resize(nint window, int width, int height) =>
         Assert.True(Native.SetWindowPos(window, 0, 0, 0, width, height, Native.NoMoveNoZOrderNoActivate), $"SetWindowPos failed: {Marshal.GetLastPInvokeError()}");
@@ -515,7 +600,9 @@ public sealed class RecordingCaptureTests : IDisposable
         Func<Exception?>? restartFault = null,
         ILoggerFactory? loggers = null,
         Func<Exception?>? recoveryFault = null,
-        bool recovery = false)
+        bool recovery = false,
+        IPowerNotifications? power = null,
+        Func<bool>? starveFrames = null)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)>
@@ -561,6 +648,7 @@ public sealed class RecordingCaptureTests : IDisposable
                 Anchored = qpc => anchored.TrySetResult(qpc),
                 RestartFault = restartFault,
                 RecoveryFault = recoveryFault,
+                StarveFrames = starveFrames,
             };
             var published = new ConcurrentQueue<CaptureState>();
             var library = new LibraryCalls();
@@ -587,7 +675,8 @@ public sealed class RecordingCaptureTests : IDisposable
                         Failed: m => events.Writer.TryWrite(new GpuResetFailed(m)),
                         Recovered: t => events.Writer.TryWrite(new DeviceRecovered(t)),
                         RetryEvery: TimeSpan.FromSeconds(1))
-                    : null);
+                    : null,
+                power: power);
 
             orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
             await anchored.Task.WaitAsync(Timeout, Token);
@@ -656,34 +745,66 @@ public sealed class RecordingCaptureTests : IDisposable
     private sealed class CapturingFactory(ICaptureSessionFactory inner) : ICaptureSessionFactory
     {
         private readonly TaskCompletionSource<Exception> _failed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _restarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private CaptureSession? _session;
+        private int _chainRestarts;
 
         public CaptureSession? Session => Volatile.Read(ref _session);
 
         public Task<Exception> Failed => _failed.Task;
 
+        /// <summary>Completes at the first <c>ChainRestarted</c> any session posted.</summary>
+        public Task Restarted => _restarted.Task;
+
+        /// <summary>How many <c>ChainRestarted</c> the sessions posted.</summary>
+        public int ChainRestarts => Volatile.Read(ref _chainRestarts);
+
         public ICaptureSession Start(SessionSpec spec, ISessionEvents events)
         {
-            var session = inner.Start(spec, new Events(events, _failed));
+            var session = inner.Start(spec, new Events(this, events));
             Volatile.Write(ref _session, (CaptureSession)session);
             return session;
         }
 
-        private sealed class Events(ISessionEvents inner, TaskCompletionSource<Exception> failed) : ISessionEvents
+        private sealed class Events(CapturingFactory owner, ISessionEvents inner) : ISessionEvents
         {
             public void Closed(string reason) => inner.Closed(reason);
 
             public void Failed(Exception failure)
             {
-                failed.TrySetResult(failure);
+                owner._failed.TrySetResult(failure);
                 inner.Failed(failure);
             }
 
-            public void ChainRestarted(long qpc) => inner.ChainRestarted(qpc);
+            public void ChainRestarted(long qpc)
+            {
+                Interlocked.Increment(ref owner._chainRestarts);
+                owner._restarted.TrySetResult();
+                inner.ChainRestarted(qpc);
+            }
 
             public void Anchored(long qpc) => inner.Anchored(qpc);
 
             public void DeviceLost(Exception failure) => inner.DeviceLost(failure);
+        }
+    }
+
+    /// <summary>A power port a test raises sleep and resume on, from another thread, as the system's callback would.</summary>
+    private sealed class TestPower : IPowerNotifications
+    {
+        private Action<PowerChange>? _changed;
+
+        public IDisposable Subscribe(Action<PowerChange> changed)
+        {
+            _changed = changed;
+            return new Unsubscribe(this);
+        }
+
+        public void Raise(PowerChange change) => Task.Run(() => _changed?.Invoke(change)).Wait(Token);
+
+        private sealed class Unsubscribe(TestPower owner) : IDisposable
+        {
+            public void Dispose() => owner._changed = null;
         }
     }
 

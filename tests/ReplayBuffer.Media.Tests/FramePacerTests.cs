@@ -46,6 +46,21 @@ public sealed class FramePacerTests
         Assert.Equal((5 * fps) - 1, pacer.RepeatedSlots);
     }
 
+    [Fact]
+    public void AFrameStarvedSourceGetsEverySlotForAMinuteWithNoPtsBreak()
+    {
+        // The secure desktop (T-04): one frame, then none for 60 s.
+        const int fps = 60;
+        var pacer = new FramePacer(Qpf, fps, Anchor);
+        var run = Simulate(pacer, [Anchor], Anchor + (60 * Qpf) + (Qpf / fps));
+
+        Assert.Equal(PacerAction.Emit, run[0].Action);
+        var after = run.Skip(1).ToList();
+        Assert.Equal(60 * fps, after.Count);
+        Assert.All(after, d => Assert.Equal(PacerAction.Repeat, d.Action));
+        AssertUniform(pacer, run);
+    }
+
     [Theory]
     [MemberData(nameof(FrameRates))]
     public void AWindowRepaintingAtTwiceTheRateFillsEverySlotWithANewFrame(int fps)

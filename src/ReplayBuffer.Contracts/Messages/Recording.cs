@@ -41,6 +41,9 @@ public static class RecordingStopReasons
 
     /// <summary>Its disk filled (R5); the file ends at its last complete fragment. Equal to <see cref="ErrorCodes.DiskFull"/>.</summary>
     public const string DiskFull = "disk-full";
+
+    /// <summary>The PC went to sleep; the file ends at its last fragment and the Recording isn't restarted.</summary>
+    public const string Suspend = "suspend";
 }
 
 /// <summary>
