@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.9 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; holds QA 7.8 context for the re-check |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 7.8 round 2 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -604,3 +604,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.14 merged (`61949fa`, marked done `78663a8`), and its card is Done with a release comment. **Epic 5 is complete:** it was marked `status: done` (`23a77c4`) and **`v0.5.0` was released** by the coordinator (master `4a0e27f`, tag `v0.5.0`, back-merge `9069eb0`; the merge messages were reworded to Conventional Commits before anything built on them). The builder's epic-5 hand checks are in the 5.14 plan's checklist. Nothing new is ready: 6.9, 7.8 and 8.2 are in flight, and epics 6 to 8 wait on them. slice-epic-5 is back in the pool.
 - 2026-11-04: 6.9 is READY FOR QA at `2e97ee9`. QA started on slice-epic-5 (Sonnet), and its card is In QA. A `bench soak` (from 8.2) holds the lock from 04:53 local.
 - 2026-11-04: QA 6.9 at `2e97ee9`: **QA PASS**, 0 findings. 6.9 has been told to merge (Sonnet), and slice-epic-5 is back in the pool. 6.9's merge unblocks 6.10 (the Desktop Duplication fallback for Monitor Recording).
+- 2026-11-04: 7.8 fixed the junction finding at `899dd2d`: the scan skips reparse points, reconciliation drops them, and a final-path check runs before Cleanup, rename and delete. 7.7's manual delete had the same hole and is fixed too. The round-2 re-check is on 2-1-tracer (same QA context, Sonnet, high effort): it reruns its own repro, checks the root-prefix comparison, and covers 7.7's guard.
