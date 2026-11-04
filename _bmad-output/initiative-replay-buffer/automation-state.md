@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 9.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 9.9 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
@@ -180,7 +180,7 @@ The coordinator logs each QA round in the Log below.
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `78d1c6a`) |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `5d43a43`) |
-| 30.9 | 9.9 Modern UI end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in QA (qa-1-14) |
+| 30.9 | 9.9 Modern UI end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | QA passed, merging |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -774,3 +774,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 9.8 merged (`5d43a43`), after syncing develop: 0-warning build, App 170 passed. Marked done; the two stale shell renders were replaced with the current test output, which closes that deferred-work item. The "Library tab" wording item stays open for the builder.
 - 2026-11-04: 9.8 merged (`5d43a43`; marked done and shell renders refreshed in `e5fd82e`), and its card is Done. 9.9 (the epic 9 end-to-end check) went to slice-epic-5 (Opus, medium effort; 2-1-tracer couldn't be cleared because the builder has it open). The ticket's "against the installed build" is run against a local publish on a test instance: the installed app is never touched, and installing is the builder's checklist step.
 - 2026-11-04: 9.9 READY FOR QA at `030bb9c` (152 passed, 8 for the builder), and its card is In QA. QA went to qa-1-14 (Sonnet, medium effort; safety guards confirmed before its one run).
+- 2026-11-04: QA 9.9 passed at `030bb9c`. slice-epic-5 is merging. Next: mark epic 9 done, release v0.9.0, then epic 8's 8.7 (final conformance) unblocks.
