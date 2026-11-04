@@ -67,12 +67,12 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs`, `Messages/Library.cs` -- codes, payloads, commands -- AD-22 additive
-- [ ] `src/ReplayBuffer.Core/Library/LibraryActor.cs` -- Rename/Delete handlers, recycle port, retry -- R6, AD-17
-- [ ] `src/ReplayBuffer.Platform.Windows/RecycleBin.cs`, `NativeMethods.txt` -- shell recycle -- R6
-- [ ] `src/ReplayBuffer.Engine/EngineHost.cs` -- wire port and router -- R6
-- [ ] `src/ReplayBuffer.App/Library/LibraryPage.cs`, `LibraryView.xaml(.cs)` -- inline rename, confirmed delete, errors, lock -- R6 UI
-- [ ] Tests -- Core: (1) rename moves the file, keeps the Favourite, events exactly removed+added (500 ms quiet, as `TheActorsOwnMoveIsPublishedOnce`); (2) delete with a fake port that moves the file into the test's own bin folder: item removed; port returning false: `recycle-bin-unavailable`, file kept; (3) a Clip reservation and a fake Recording writer growing a fragmented MP4 (`ftyp`, `moov`, then `moof`+`mdat` appended through a `FileShare.Read | FileShare.Delete` stream) between BeginWrite and EndWrite: rename and delete refused `file-being-written`, bytes unchanged; (4) `a:b`, an existing name and a stale modified time refused with their codes. App: rename sends `LibraryRename` with the identity and stripped base name and shows a refusal's message; Delete calls the confirmation and sends nothing on Cancel, `LibraryDelete` on OK; both disabled while locked; `TheViewRendersWithoutBindingErrors` still passes. Engine: rename over IPC updates the snapshot. Platform.Windows: `RecycleBin.Recycle` of a temp file returns true, the file is gone and its `$I`/`$R` pair is found in the user's `$Recycle.Bin` by original path; the test restores the `$R` to the temp folder and deletes the `$I`.
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs`, `Messages/Library.cs` -- codes, payloads, commands -- AD-22 additive
+- [x] `src/ReplayBuffer.Core/Library/LibraryActor.cs` -- Rename/Delete handlers, recycle port, retry -- R6, AD-17
+- [x] `src/ReplayBuffer.Platform.Windows/RecycleBin.cs`, `NativeMethods.txt` -- shell recycle -- R6
+- [x] `src/ReplayBuffer.Engine/EngineHost.cs` -- wire port and router -- R6
+- [x] `src/ReplayBuffer.App/Library/LibraryPage.cs`, `LibraryView.xaml(.cs)` -- inline rename, confirmed delete, errors, lock -- R6 UI
+- [x] Tests -- Core: (1) rename moves the file, keeps the Favourite, events exactly removed+added (500 ms quiet, as `TheActorsOwnMoveIsPublishedOnce`); (2) delete with a fake port that moves the file into the test's own bin folder: item removed; port returning false: `recycle-bin-unavailable`, file kept; (3) a Clip reservation and a fake Recording writer growing a fragmented MP4 (`ftyp`, `moov`, then `moof`+`mdat` appended through a `FileShare.Read | FileShare.Delete` stream) between BeginWrite and EndWrite: rename and delete refused `file-being-written`, bytes unchanged; (4) `a:b`, an existing name and a stale modified time refused with their codes. App: rename sends `LibraryRename` with the identity and stripped base name and shows a refusal's message; Delete calls the confirmation and sends nothing on Cancel, `LibraryDelete` on OK; both disabled while locked; `TheViewRendersWithoutBindingErrors` still passes. Engine: rename over IPC updates the snapshot. Platform.Windows: `RecycleBin.Recycle` of a temp file returns true, the file is gone and its `$I`/`$R` pair is found in the user's `$Recycle.Bin` by original path; the test restores the `$R` to the temp folder and deletes the `$I`.
 
 **Acceptance Criteria:**
 - Given a written item, when `library.rename` is sent with its identity and a valid free name, then the file has the new name in the same folder, and the snapshot shows the item under the new path with its Favourite, and no other `library.*` event follows.
@@ -81,6 +81,11 @@ deferred: []
 - Given the Library row's Delete, when the confirmation is cancelled, then nothing is sent.
 
 ## Implementation Notes
+
+- `OnSetFavourite`'s identity and disk check is now `TryMatch`, shared by rename and delete; the three public commands post through one `Post` helper. Rename and delete check `BeingWritten` first (`RefuseBeingWritten`), then `TryMatch`.
+- The sharing-violation retry (`Retried`) wraps both `File.Move` and the recycle port; it sleeps on the actor thread (at most ~500 ms).
+- `RecycleBin.Recycle` runs on a new thread marked STA and also calls `CoInitializeEx(COINIT_APARTMENTTHREADED)` (S_FALSE is fine); any COM failure is rethrown as an `IOException` carrying its HRESULT.
+- `RecycleBinTests` runs in the default suite (it is fast); it restores its `$R` and deletes its `$I`.
 
 ## Plan Change Log
 
