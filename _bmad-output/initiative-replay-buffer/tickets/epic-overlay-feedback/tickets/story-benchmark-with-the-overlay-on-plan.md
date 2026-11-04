@@ -144,3 +144,9 @@ deferred: []
 - **Residual risks:**
   - The `always`/borderless figure (3.63 %) came from a noisy run: the load lost the foreground during the shown phase, and the second hidden phase was slow too. It is re-run below when the lock frees.
   - NFR-1 misses for capture itself (6.66 % without the Overlay, against 1.14's 1.47 %). That is outside this story, which changes no capture code, and needs its own ticket.
+
+### 2026-11-04 01:40–01:44 — Re-runs after review (under `.bench-running`)
+- **`always`, borderless, re-run** (`measurements/bench-5.12/overlay-always-borderless-rerun`): Hardware Composed: Independent Flip in all three phases. Cost −3.03 % (hidden 88.4, shown 91.08 fps). The load again lost the foreground in one phase, this time the first hidden one.
+  - Together with the first run's +3.63 %, the `always` borderless figure is run-to-run noise around zero, not a cost.
+  - In both 5.12 runs the dot kept the load in independent flip. That differs from 5.8's Composed: Flip at 20:12 on 2026-11-03, with the same "no planes" answer. So `SupportsOverlays` false doesn't always mean DWM composes the load; the Human Check row covers the cause.
+- **Patched `fps --overlay`, 30 s, 1 pass** (`measurements/bench-5.12/fps-overlay-patched`): exit 0. The `overlay` record is `{dot: auto, overlayPlanes: false, messageSeconds: 10}`. PresentMode was Hardware Composed: Independent Flip in both runs (baseline 79.65, capture 74.34 fps). FPS loss 6.67 % (miss), the same as capture alone. No on, off or message failure was reported.
