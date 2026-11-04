@@ -1,6 +1,41 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using ReplayBuffer.Contracts.Ipc;
 
 namespace ReplayBuffer.Contracts.Messages;
+
+/// <summary>
+/// <c>recording.started</c>: a Recording is being written to <see cref="Path"/> (R7). The
+/// SessionOrchestrator is its only producer (AD-19); <c>recording.stopped</c> follows.
+/// </summary>
+public sealed record RecordingStarted(string Path);
+
+/// <summary>
+/// <c>recording.stopped</c>: the Recording at <see cref="Path"/> has ended (R7), and its file is
+/// complete or, when nothing was written, gone. <see cref="Reason"/> is one of
+/// <see cref="RecordingStopReasons"/>, or an error code when its writer failed. The
+/// SessionOrchestrator is its only producer (AD-19).
+/// </summary>
+public sealed record RecordingStopped(string Path, string Reason);
+
+/// <summary>Why a Recording stopped, as <see cref="RecordingStopped.Reason"/> carries it.</summary>
+public static class RecordingStopReasons
+{
+    /// <summary>A Record Hotkey press stopped it.</summary>
+    public const string Stopped = "stopped";
+
+    /// <summary>The session it was recorded from ended.</summary>
+    public const string SessionEnded = "session-ended";
+
+    /// <summary>The Target Game it was recorded from exited, or its window closed.</summary>
+    public const string GameExit = "game-exit";
+
+    /// <summary>The Target Game it was recorded from was set Ignored.</summary>
+    public const string Ignored = "ignored";
+
+    /// <summary>The engine shut down (Quit).</summary>
+    public const string Shutdown = "shutdown";
+}
 
 /// <summary>
 /// Recording messages (epic-recordings): Recordings and Monitor Recording.
@@ -14,7 +49,30 @@ namespace ReplayBuffer.Contracts.Messages;
 /// </remarks>
 public static class RecordingMessages
 {
+    /// <summary>A Recording started (R7); the snapshot keeps the last one.</summary>
+    public static EventType<RecordingStarted> Started { get; } = new(
+        "recording.started",
+        RecordingJsonContext.Default.RecordingStarted,
+        "lastRecordingStarted",
+        (snapshot, started) => snapshot with { LastRecordingStarted = started });
+
+    /// <summary>A Recording stopped (R7); the snapshot keeps the last one.</summary>
+    public static EventType<RecordingStopped> Stopped { get; } = new(
+        "recording.stopped",
+        RecordingJsonContext.Default.RecordingStopped,
+        "lastRecordingStopped",
+        (snapshot, stopped) => snapshot with { LastRecordingStopped = stopped });
+
     public static IReadOnlyList<CommandType> Commands { get; } = [];
 
-    public static IReadOnlyList<EventType> Events { get; } = [];
+    public static IReadOnlyList<EventType> Events { get; } = [Started, Stopped];
 }
+
+[JsonSourceGenerationOptions(
+    JsonSerializerDefaults.General,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    RespectNullableAnnotations = true,
+    RespectRequiredConstructorParameters = true)]
+[JsonSerializable(typeof(RecordingStarted))]
+[JsonSerializable(typeof(RecordingStopped))]
+public sealed partial class RecordingJsonContext : JsonSerializerContext;

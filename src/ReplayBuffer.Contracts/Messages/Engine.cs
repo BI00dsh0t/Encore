@@ -16,6 +16,7 @@ public sealed record StateSnapshot
     private readonly VideoOptions _videoOptions = VideoOptions.Unprobed;
     private readonly AudioDeviceList _devices = AudioDeviceList.Empty;
     private readonly MeterLevels _meters = MeterLevels.Empty;
+    private readonly IReadOnlyList<LibraryItem> _library = [];
 
     /// <summary>Identifies one engine run; a new value means a restarted engine.</summary>
     public required string EngineInstanceId { get; init; }
@@ -55,6 +56,22 @@ public sealed record StateSnapshot
     /// <remarks>A snapshot without the field (an engine from before story 4.1) reads as none.</remarks>
     public ClipSaved? LastClip { get; init; }
 
+    /// <summary>The last accepted save press, or <c>null</c> before one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 4.4) reads as none.</remarks>
+    public ClipSaving? LastClipSaving { get; init; }
+
+    /// <summary>The last save that made no Clip, or <c>null</c> before one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 4.2) reads as none.</remarks>
+    public ClipFailed? LastClipFailure { get; init; }
+
+    /// <summary>The last Recording started, or <c>null</c> before one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 6.1) reads as none.</remarks>
+    public RecordingStarted? LastRecordingStarted { get; init; }
+
+    /// <summary>The last Recording stopped, or <c>null</c> before one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 6.1) reads as none.</remarks>
+    public RecordingStopped? LastRecordingStopped { get; init; }
+
     /// <summary>What the <c>video</c> key can be set to on this PC (R2); unprobed until <c>capture.videoOptions</c>.</summary>
     /// <remarks>A snapshot without the field (an engine from before story 10) reads as unprobed.</remarks>
     public VideoOptions VideoOptions
@@ -64,6 +81,10 @@ public sealed record StateSnapshot
         // The generated deserializer passes null for a missing field.
         init => _videoOptions = value ?? VideoOptions.Unprobed;
     }
+
+    /// <summary>The Global settings' storage estimate (R2), or <c>null</c> before the engine has made one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 4.10) reads as none.</remarks>
+    public StorageEstimate? Estimate { get; init; }
 
     /// <summary>The audio devices the App can offer (R1); empty until the engine lists them.</summary>
     /// <remarks>A snapshot without the field (an engine from before story 2.3) reads as the empty list.</remarks>
@@ -92,6 +113,30 @@ public sealed record StateSnapshot
     /// <remarks>A snapshot without the field (an engine from before story 3.2) reads as <c>null</c>.</remarks>
     public IReadOnlyList<DetectedGame>? DetectedGames { get; init; }
 
+    /// <summary>The Library's items (R1), in no particular order; the App sorts them.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 7.1) reads as the empty list.</remarks>
+    public IReadOnlyList<LibraryItem> Library
+    {
+        get => _library;
+
+        // The generated deserializer passes null for a missing field.
+        init => _library = value ?? [];
+    }
+
+    /// <summary>
+    /// Whether Cleanup is held off (R2): the index was rebuilt from the Output Folder because
+    /// <c>library.json</c> was corrupt, and the <c>library-corrupt</c> warning hasn't been dismissed.
+    /// </summary>
+    /// <remarks>A snapshot without the field (an engine from before story 7.2) reads as false.</remarks>
+    public bool CleanupBlocked { get; init; }
+
+    /// <summary>
+    /// The absolute Output Folder the Library indexes (story 7.3), which each item's path is relative
+    /// to; <c>null</c> when unknown.
+    /// </summary>
+    /// <remarks>A snapshot without the field (an engine from before story 7.3) reads as <c>null</c>.</remarks>
+    public string? LibraryFolder { get; init; }
+
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
 
@@ -110,6 +155,7 @@ public sealed record StateSnapshot
         Meters = MeterLevels.Empty,
         TargetGame = null,
         DetectedGames = [],
+        Library = [],
     };
 }
 

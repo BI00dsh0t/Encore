@@ -1,7 +1,11 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Hotkeys;
+using ReplayBuffer.Core.Library;
+using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Settings;
 
 namespace ReplayBuffer.Core.Sessions;
@@ -29,6 +33,12 @@ public sealed record EndSession(string Reason, TaskCompletionSource<SessionOutco
 public sealed record HotkeyPressed(HotkeyAction Action, long Qpc) : SessionMessage;
 
 /// <summary>
+/// The settings document was committed; any thread. The game session's settings are resolved again,
+/// and a profile's new Tracks or video apply from its next Clip (R7, R8).
+/// </summary>
+public sealed record SettingsUpdated : SessionMessage;
+
+/// <summary>
 /// A started session: its spec as of Start, and a task that completes with its outcome however it
 /// ends (an <c>End</c>, its window closing, a failure, or the orchestrator stopping).
 /// </summary>
@@ -43,10 +53,46 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// <see cref="CaptureState.MicMuted"/>, put in each session's spec at Start and handed to the running
 /// session with the press QPC. With <see cref="ReplayClips"/>, a <see cref="HotkeyAction.Save"/> press
 /// on the game session reserves a path and has the session write its Clip there; the writer posts
-/// its result back, and only then is the Clip published as saved.
+/// its result back, and only then is the Clip published as saved and the session's Replay Buffer
+/// Reset at its end (R5); a press less than 1 s after that Reset is refused as too short. A press
+/// within the Global <c>saveCooldown</c> of the last accepted one is ignored (R5); an accepted one
+/// publishes <see cref="CaptureState.CooldownUntil"/> and <c>clip.saving</c> at once, and
+/// <see cref="CaptureState.ClipsWriting"/> follows each write as it starts and ends; it is refused
+/// with <see cref="ErrorCodes.SaveBusy"/> while <see cref="ReplayClips.MaxWriters"/> Clips are being
+/// written (R6). A game
+/// session whose Target exits, or whose window closes, is drained rather than ended (R1): it keeps
+/// its Replay Buffer, <see cref="ReplayState.Draining"/> is published, and <c>save</c> presses still
+/// cut from it until <see cref="ReplayClips.ExitDrain"/> passes, a new session starts, or the
+/// orchestrator stops. A switch to another game, or Ignored, ends it at once (FR-38). With
+/// <see cref="Recordings"/>, a Record press that starts (<c>recordToggle</c>, or <c>recordStart</c>
+/// in separate mode, as <c>recordHotkeyMode</c> reads live) on a game session whose
+/// profile has <c>recordingsEnabled</c> on (read live, R1) reserves a path beside the game's Clips
+/// and has the session start a Recording there; a later Record press stops it, and the writer posts its
+/// result back before <see cref="CaptureState.Recording"/> goes off. A session that ends mid-Recording
+/// finishes it with everything encoded, stopped with the reason of what ended it: its Target's exit
+/// or its window closing (<see cref="RecordingStopReasons.GameExit"/>), an Ignored handover
+/// (<see cref="RecordingStopReasons.Ignored"/>), the orchestrator stopping
+/// (<see cref="RecordingStopReasons.Shutdown"/>), else <see cref="RecordingStopReasons.SessionEnded"/>.
+/// While a Recording runs, a switch of the Target to another game is held, and committed the moment
+/// its writer posts back. On <see cref="Dispose"/>, a running Recording's writer is waited for (up to
+/// <see cref="ShutdownWait"/>) and its result handled before the thread ends; one not done by then is
+/// left open.
+/// With <see cref="ReplayClips"/>, the game session's settings
+/// are resolved again for its profile on each <see cref="SettingsUpdated"/> and after each Reset
+/// (R7, R8): when they need another encoder chain (<see cref="ChainKey.SameChain"/>), the session is
+/// asked to prepare it (<see cref="ICaptureSession.PrepareChain"/>), and a later change back drops
+/// it. The save press whose write switches the session to it (<see cref="IClipWrite.SwitchesTo"/>)
+/// updates the session's spec: its snapshot and audio, its Target kept. While a Recording runs on
+/// the session, it keeps one chain (AD-7): a chain prepared before the Recording starts is dropped,
+/// a change is not prepared but logged once through <see cref="Recordings.Info"/>, and when the
+/// Recording's writer posts back with its session still running, the settings are resolved again,
+/// so the first save after the stop switches to the new chain.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
+    /// <summary>How long <see cref="Dispose"/> waits for a running Recording's writer, inside the App's 5 s Quit.</summary>
+    internal static readonly TimeSpan ShutdownWait = TimeSpan.FromSeconds(3);
+
     private readonly Channel<SessionMessage> _channel = Channel.CreateUnbounded<SessionMessage>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false, AllowSynchronousContinuations = false });
 
@@ -58,15 +104,30 @@ public sealed class SessionOrchestrator : IDisposable
     private readonly Action<TargetChanged>? _targetChanged;
     private readonly TargetCapture? _targetCapture;
     private readonly ReplayClips? _clips;
+    private readonly Recordings? _recordings;
     private readonly Thread _thread;
 
     // Orchestrator thread only.
     private Active? _active;
+
+    // The game session drained after its Target exited (R1), still holding its Replay Buffer, and
+    // the one-shot timer that posts its expiry. Never set while a session is active.
+    private Active? _drain;
+    private Timer? _drainTimer;
     private TargetCandidate? _target;
-    private bool _recordingRunning;
     private ProposeTarget? _pendingTarget;
     private CaptureState _state = CaptureState.Initial;
     private long _nextSessionId;
+
+    // The Hotkey QPC of the last accepted save press, which the Save Cooldown runs from (R5); null
+    // before the first. Global: a new session doesn't clear it.
+    private long? _cooldownFrom;
+
+    // Clip writes started and not yet posted back, across sessions (R6).
+    private int _writing;
+
+    // The Recording started and not yet posted back; null when none runs.
+    private RecordingRun? _recording;
 
     private int _disposed;
 
@@ -84,6 +145,7 @@ public sealed class SessionOrchestrator : IDisposable
     /// <param name="targetChanged">Receives each committed change of the Target Game, on the orchestrator thread.</param>
     /// <param name="targetCapture">When given, each new Target Game ends the game session and starts one on its window.</param>
     /// <param name="clips">When given, a <c>save</c> press on the game session writes a Clip.</param>
+    /// <param name="recordings">When given, Record presses on the game session start and stop a Recording.</param>
     public SessionOrchestrator(
         ICaptureSessionFactory factory,
         Func<SettingsDocument> currentDocument,
@@ -92,7 +154,8 @@ public sealed class SessionOrchestrator : IDisposable
         IMicMuteStore? micMute = null,
         Action<TargetChanged>? targetChanged = null,
         TargetCapture? targetCapture = null,
-        ReplayClips? clips = null)
+        ReplayClips? clips = null,
+        Recordings? recordings = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(currentDocument);
@@ -105,6 +168,7 @@ public sealed class SessionOrchestrator : IDisposable
         _targetChanged = targetChanged;
         _targetCapture = targetCapture;
         _clips = clips;
+        _recordings = recordings;
 
         // Before the thread runs, so no session can start with any other mute.
         _state = CaptureState.Initial with { MicMuted = LoadMicMuted(micMute) };
@@ -158,7 +222,7 @@ public sealed class SessionOrchestrator : IDisposable
         return reply.Task;
     }
 
-    /// <summary>Stops taking messages, handles those already posted, ends any running session, and joins the thread.</summary>
+    /// <summary>Stops taking messages, handles those already posted, ends any running session, releases any drain, and joins the thread.</summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -196,8 +260,25 @@ public sealed class SessionOrchestrator : IDisposable
 
         if (_active is not null)
         {
-            EndActive("engine stopping", failure: null);
+            EndActive("engine stopping", failure: null, RecordingStopReasons.Shutdown);
         }
+
+        // The channel is complete, so the writer's post-back can't arrive: wait for it here (bounded).
+        if (_recording is { } recording)
+        {
+            if (recording.Done.Task.Wait(ShutdownWait))
+            {
+                OnRecordingWritten(new RecordingWritten(recording, recording.Done.Task.Result), commitPending: false);
+            }
+            else
+            {
+                // Left open: the next start reports it interrupted. The published state no longer claims it runs.
+                SetState(_state with { Recording = RecordingState.Off });
+                _recordings?.Info?.Invoke($"The Recording at {recording.Path} didn't finish within {ShutdownWait.TotalSeconds:0} s of shutdown; it was left open");
+            }
+        }
+
+        ReleaseDrain();
     }
 
     private void Handle(SessionMessage message)
@@ -225,6 +306,10 @@ public sealed class SessionOrchestrator : IDisposable
                 {
                     SaveClip(pressed.Qpc);
                 }
+                else if (pressed.Action is HotkeyAction.RecordToggle or HotkeyAction.RecordStart or HotkeyAction.RecordStop)
+                {
+                    OnRecordPress(pressed.Action, pressed.Qpc);
+                }
 
                 _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
                 break;
@@ -234,10 +319,10 @@ public sealed class SessionOrchestrator : IDisposable
                 break;
 
             case RecordingRunning recording:
-                _recordingRunning = recording.Running;
-                if (!_recordingRunning && _pendingTarget is { } pending)
+                // dev.simulate's display state only: a real Recording's state wins, and it never holds the Target.
+                if (_recording is null)
                 {
-                    CommitTarget(pending);
+                    SetState(_state with { Recording = recording.Running ? RecordingState.Running : RecordingState.Off });
                 }
 
                 break;
@@ -246,8 +331,34 @@ public sealed class SessionOrchestrator : IDisposable
                 OnClipWritten(written);
                 break;
 
+            case SettingsUpdated:
+                if (_active is { } active)
+                {
+                    ApplySettings(active);
+                }
+
+                break;
+
+            case RecordingWritten recorded:
+                // Not once Dispose has begun: a held Target must never start a session during Quit.
+                OnRecordingWritten(recorded, commitPending: Volatile.Read(ref _disposed) == 0);
+                break;
+
             case SessionClosed closed when _active?.Id == closed.SessionId:
-                EndActive(closed.Reason, failure: null);
+                // WGC can see the window close before Game Detection sees the exit: drain here too.
+                if (Drains(_active))
+                {
+                    DrainActive(closed.Reason, RecordingStopReasons.GameExit);
+                }
+                else
+                {
+                    EndActive(closed.Reason, failure: null, RecordingStopReasons.GameExit);
+                }
+
+                break;
+
+            case DrainExpired expired when _drain?.Id == expired.SessionId:
+                ReleaseDrain();
                 break;
 
             case SessionFailed failed when _active?.Id == failed.SessionId:
@@ -275,19 +386,24 @@ public sealed class SessionOrchestrator : IDisposable
     private RunningSession Start(StartSession start) => Start(start.Kind, start.Target, _ => start.Audio);
 
     /// <param name="audio">The session's audio, from the snapshot resolved here.</param>
-    private RunningSession Start(SessionKind kind, CaptureTarget target, Func<EffectiveSettings, SessionAudio> audio)
+    /// <param name="gameName">The Target's display name, kept for the session's Clips; null when not started on the Target.</param>
+    private RunningSession Start(SessionKind kind, CaptureTarget target, Func<EffectiveSettings, SessionAudio> audio, string? gameName = null)
     {
         if (_active is not null)
         {
             throw new ErrorCodeException(ErrorCodes.SessionRunning, "A session is already running.");
         }
 
-        // AD-5: resolved once, here; a retarget or a later settings change never touches it.
+        // A drained ring never outlives the start of a new session.
+        ReleaseDrain();
+
+        // AD-5: resolved here; a retarget never touches it, and a later settings change reaches a
+        // game session only through a chain switch at a save (ApplySettings).
         var snapshot = SettingsResolver.Resolve(_currentDocument(), target.ProfileId);
         var spec = new SessionSpec(kind, target, snapshot, audio(snapshot), _state.MicMuted);
         var id = ++_nextSessionId;
         var session = _factory.Start(spec, new Events(this, id));
-        var active = new Active(id, session, spec);
+        var active = new Active(id, session, spec, audio) { GameName = gameName };
         _active = active;
         SetState(_state with { Replay = kind == SessionKind.Game ? ReplayState.Buffering : ReplayState.Off });
         return new RunningSession(spec, active.Ended.Task);
@@ -340,10 +456,12 @@ public sealed class SessionOrchestrator : IDisposable
         return EndActive(reason, failure: null);
     }
 
-    private SessionOutcome EndActive(string reason, Exception? failure)
+    /// <param name="recordingReason">The stop reason of a Recording running on the session.</param>
+    private SessionOutcome EndActive(string reason, Exception? failure, string recordingReason = RecordingStopReasons.SessionEnded)
     {
         var active = _active!;
         _active = null;
+        MarkSessionEnded(active, recordingReason);
 
         SessionOutcome outcome;
         try
@@ -364,6 +482,78 @@ public sealed class SessionOrchestrator : IDisposable
         SetState(_state with { Replay = ReplayState.Off });
         active.Ended.TrySetResult(outcome);
         return outcome;
+    }
+
+    /// <summary>Whether <paramref name="active"/> is drained, not ended, when its Target goes (R1): a game session with Replay Clips.</summary>
+    private bool Drains(Active? active) => _clips is not null && active is { Spec.Kind: SessionKind.Game };
+
+    /// <summary>
+    /// Ends the active game session's capture but keeps its Replay Buffer for <c>save</c> presses
+    /// (R1): it becomes the drain, <see cref="ReplayState.Draining"/> is published, and a timer posts
+    /// <see cref="DrainExpired"/>, tagged with its id, after <see cref="ReplayClips.ExitDrain"/>.
+    /// </summary>
+    /// <param name="recordingReason">The stop reason of a Recording running on the session.</param>
+    private void DrainActive(string reason, string recordingReason)
+    {
+        var active = _active!;
+        _active = null;
+        MarkSessionEnded(active, recordingReason);
+        ReleaseDrain();
+
+        SessionOutcome outcome;
+        try
+        {
+            outcome = active.Session.Drain(reason);
+        }
+        catch (Exception e)
+        {
+            outcome = new SessionOutcome(null, reason, e);
+        }
+
+        if (outcome.Failure is not null)
+        {
+            // It never anchored, failed or couldn't stop cleanly: there is nothing to keep.
+            SetState(_state with { Replay = ReplayState.Off });
+            TryRelease(active);
+            active.Ended.TrySetResult(outcome);
+            return;
+        }
+
+        _drain = active;
+        SetState(_state with { Replay = ReplayState.Draining });
+        active.Ended.TrySetResult(outcome);
+        var id = active.Id;
+        _drainTimer = new Timer(_ => Post(new DrainExpired(id)), null, _clips!.ExitDrain ?? ReplayClips.DefaultExitDrain, System.Threading.Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>Frees the drained session's Replay Buffer, if any; <see cref="ReplayState.Off"/> unless a session is active.</summary>
+    private void ReleaseDrain()
+    {
+        if (_drain is not { } drain)
+        {
+            return;
+        }
+
+        _drain = null;
+        _drainTimer?.Dispose();
+        _drainTimer = null;
+        TryRelease(drain);
+        if (_active is null)
+        {
+            SetState(_state with { Replay = ReplayState.Off });
+        }
+    }
+
+    private static void TryRelease(Active session)
+    {
+        try
+        {
+            session.Session.Release();
+        }
+        catch (Exception)
+        {
+            // Releasing is best effort: a save in flight keeps its own lease either way (AD-8).
+        }
     }
 
     /// <summary>The saved mic mute; muted when there is no store or it fails.</summary>
@@ -420,9 +610,11 @@ public sealed class SessionOrchestrator : IDisposable
     /// <summary>
     /// Commits a proposed Target Game (AD-19). Another process, or none, becomes the Target and is
     /// published; a new window of the Target's own process only moves the debug capture to it. While
-    /// a Recording runs, a switch from the Target to another game is held as pending, each later one
-    /// replacing it; a proposal of the Target itself drops it. An exit or Ignored handover is never
-    /// held: the Target is gone, or must never be captured (AD-5).
+    /// a Recording runs, until its writer posts back, a switch from the Target to another game is held
+    /// as pending, each later one replacing it; a proposal of the Target itself drops it. An exit or
+    /// Ignored handover is never held: the Target is gone, or must never be captured (AD-5); the
+    /// Recording stops with <see cref="RecordingStopReasons.GameExit"/> or
+    /// <see cref="RecordingStopReasons.Ignored"/>.
     /// </summary>
     private void CommitTarget(ProposeTarget propose)
     {
@@ -440,7 +632,7 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
-        if (_recordingRunning && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
+        if (_recording is not null && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
         {
             _pendingTarget = propose;
             return;
@@ -459,9 +651,29 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
+        // Only an exit to no game leaves a drain running (one a closed window started, say).
+        if (to is not null || propose.Reason != TargetChangeReason.Exit)
+        {
+            ReleaseDrain();
+        }
+
         if (_active is { Spec.Kind: SessionKind.Game })
         {
-            EndActive("target changed", failure: null);
+            // Only an exit with no other game drains (R1); a switch or Ignored ends at once (FR-38).
+            var recordingReason = propose.Reason switch
+            {
+                TargetChangeReason.Exit => RecordingStopReasons.GameExit,
+                TargetChangeReason.Ignored => RecordingStopReasons.Ignored,
+                _ => RecordingStopReasons.SessionEnded,
+            };
+            if (to is null && propose.Reason == TargetChangeReason.Exit && Drains(_active))
+            {
+                DrainActive("target exited", recordingReason);
+            }
+            else
+            {
+                EndActive("target changed", failure: null, recordingReason);
+            }
         }
 
         if (to is not null)
@@ -504,7 +716,7 @@ public sealed class SessionOrchestrator : IDisposable
     {
         try
         {
-            Start(SessionKind.Game, new CaptureTarget(target.ProcessId, target.Window, target.ProfileId), _targetCapture!.Audio);
+            Start(SessionKind.Game, new CaptureTarget(target.ProcessId, target.Window, target.ProfileId), _targetCapture!.Audio, target.Name);
         }
         catch (Exception e)
         {
@@ -517,12 +729,55 @@ public sealed class SessionOrchestrator : IDisposable
     /// A <c>save</c> press (R4): with a game session holding a Replay Buffer, reserves the Clip's
     /// path (AD-21) in the Global Output Folder, else the default one, and hands the session the
     /// write; the writer posts its result back as a <see cref="ClipWritten"/>. Ignored with no game
-    /// session, or one with nothing to save yet.
+    /// session, or one with nothing to save yet. A press less than 1 s after the session's last
+    /// Reset (R5) is refused here, before the session is asked for anything: no keyframe, no Clip,
+    /// no Reset, only <see cref="ReplayClips.NotSaved"/> with <see cref="ErrorCodes.ClipTooShort"/>.
+    /// With no game session, a drained one (R1) takes the press and cuts to the end of what it holds.
+    /// Before any of that, the Save Cooldown (R5): a press less than the Global <c>saveCooldown</c>
+    /// after the last accepted one is ignored, with only <see cref="ReplayClips.Ignored"/>. Any other
+    /// press is accepted: it starts the next cooldown, publishes <see cref="CaptureState.CooldownUntil"/>
+    /// and calls <see cref="ReplayClips.Saving"/>, and an outcome always follows. A write that starts
+    /// publishes <see cref="CaptureState.ClipsWriting"/>. With
+    /// <see cref="ReplayClips.MaxWriters"/> writes in flight it is refused with
+    /// <see cref="ErrorCodes.SaveBusy"/> (R6), before the session is asked for anything. Once the
+    /// path is reserved, <see cref="ReplayClips.Library"/> is told the write begins, and
+    /// <see cref="OnClipWritten"/> (or a write that never started) tells it how it ended.
     /// </summary>
     private void SaveClip(long qpc)
     {
-        if (_clips is null || _active is not { Spec.Kind: SessionKind.Game } active)
+        var active = _active is { Spec.Kind: SessionKind.Game } game ? game : _drain;
+        if (_clips is null || active is null)
         {
+            return;
+        }
+
+        // R5: read at each press (Global, Immediate); measured in Hotkey QPC from the accepted press.
+        var document = _currentDocument();
+        var global = SettingsResolver.Resolve(document, null);
+        var cooldown = Math.Max(0, global.SaveCooldown) * Stopwatch.Frequency;
+        if (_cooldownFrom is { } from && qpc - from < cooldown)
+        {
+            _clips.Ignored?.Invoke(TimeSpan.FromSeconds((qpc - from) / (double)Stopwatch.Frequency));
+            return;
+        }
+
+        _cooldownFrom = qpc;
+        DateTimeOffset? until = cooldown == 0
+            ? null
+            : DateTimeOffset.UtcNow + TimeSpan.FromSeconds((qpc + cooldown - Stopwatch.GetTimestamp()) / (double)Stopwatch.Frequency);
+        SetState(_state with { CooldownUntil = until });
+        _clips.Saving?.Invoke(new ClipSaving(DateTimeOffset.UtcNow));
+
+        if (_writing >= ReplayClips.MaxWriters)
+        {
+            // R6: the ring keeps capturing; nothing is cut and nothing is Reset.
+            _clips.NotSaved?.Invoke(new ClipFailed(ErrorCodes.SaveBusy));
+            return;
+        }
+
+        if (active.ResetQpc is { } reset && qpc - reset < Stopwatch.Frequency)
+        {
+            _clips.NotSaved?.Invoke(new ClipFailed(ErrorCodes.ClipTooShort));
             return;
         }
 
@@ -533,47 +788,415 @@ public sealed class SessionOrchestrator : IDisposable
             write = active.Session.Save(qpc);
             if (write is null)
             {
+                // Nothing to save yet; the accepted press still gets its outcome.
+                _clips.NotSaved?.Invoke(new ClipFailed(ErrorCodes.ClipTooShort));
                 return;
             }
 
-            var document = _currentDocument();
             var folder = SettingsResolver.Resolve(document, null).OutputFolder ?? _clips.DefaultOutputFolder();
             var profileId = active.Spec.Target.ProfileId;
-            path = _clips.Paths.AllocateForGame(document, profileId, GameName(active.Spec.Target), folder, qpc);
+            path = _clips.Paths.AllocateForGame(document, profileId, GameName(active), folder, qpc);
         }
         catch (Exception e)
         {
-            _clips.Failed(e);
+            ReportSaveFailure(e);
             return;
         }
 
+        var sessionId = active.Id;
+        var library = _clips.Library ?? NoLibraryWrites.Instance;
+        library.BeginWrite(path, active.Spec.Target.ProfileId);
         try
         {
-            write.Write(path, error => Post(new ClipWritten(path, error)));
+            write.Write(path, error => Post(new ClipWritten(sessionId, qpc, write, path, error)));
+            _writing++;
         }
         catch (Exception e)
         {
             // It never started: nothing else will remove the reserved file.
             TryDelete(path);
-            _clips.Failed(e);
+            library.EndWrite(path, WriteOutcome.Failed);
+            TakeSwitch(active, write);
+            ReportSaveFailure(e);
+            return;
+        }
+
+        TakeSwitch(active, write);
+        SetState(_state with { ClipsWriting = _writing });
+    }
+
+    /// <summary>
+    /// When <paramref name="write"/>'s press switched the session's encoder chain (4.9), the spec
+    /// takes the prepared one's snapshot and audio, its Target kept: the session's later Clips have
+    /// its Tracks and video, whatever this write's outcome.
+    /// </summary>
+    private static void TakeSwitch(Active active, IClipWrite write)
+    {
+        if (write.SwitchesTo is { } switched)
+        {
+            active.Spec = active.Spec with { Snapshot = switched.Snapshot, Audio = switched.Audio };
+            active.Pending = false;
         }
     }
 
-    /// <summary>The Target's name when the session is on it, else the profile's executable name.</summary>
-    private string GameName(CaptureTarget target) =>
-        _target is { } candidate && candidate.ProcessId == target.ProcessId
+    /// <summary>
+    /// A save that made no Clip: a failure that isn't a refusal (<see cref="ErrorCodes.ClipTooShort"/>,
+    /// <see cref="ErrorCodes.SaveBusy"/>) goes to <see cref="ReplayClips.Failed"/> for logging, and
+    /// every one to <see cref="ReplayClips.NotSaved"/> with <see cref="WriteFailures.ReasonOf"/>.
+    /// </summary>
+    private void ReportSaveFailure(Exception e)
+    {
+        if (e is not ErrorCodeException { Code: ErrorCodes.ClipTooShort or ErrorCodes.SaveBusy })
+        {
+            _clips?.Failed(e);
+        }
+
+        _clips?.NotSaved?.Invoke(new ClipFailed(WriteFailures.ReasonOf(e)));
+    }
+
+    /// <summary>
+    /// The Target's name the session was started on (kept after the Target exits), else the Target's
+    /// when the session is on it, else the profile's executable name.
+    /// </summary>
+    private string GameName(Active active)
+    {
+        if (active.GameName is { } name)
+        {
+            return name;
+        }
+
+        var target = active.Spec.Target;
+        return _target is { } candidate && candidate.ProcessId == target.ProcessId
             ? candidate.Name
             : target.ProfileId is { } profileId ? Path.GetFileName(profileId) : "Game";
+    }
 
+    /// <summary>
+    /// A writer's result. A Clip written for the still-running session Resets its Replay Buffer
+    /// (R5, AD-19) at the Clip's end, and its press starts the 1 s a next press must wait; a failed
+    /// write Resets nothing, so the next Clip still starts at the last Reset.
+    /// </summary>
     private void OnClipWritten(ClipWritten written)
     {
-        if (written.Error is null)
+        // Whatever the session: the write is no longer in flight.
+        _writing--;
+        SetState(_state with { ClipsWriting = _writing });
+        (_clips?.Library ?? NoLibraryWrites.Instance).EndWrite(written.Path, written.Error is null ? WriteOutcome.Written : WriteOutcome.Failed);
+        if (written.Error is not null)
         {
-            _clips?.Saved(new ClipSaved(written.Path));
+            ReportSaveFailure(written.Error);
+            return;
         }
-        else
+
+        // The session still running, or the drained one (R1): either still holds its Replay Buffer.
+        var active = _active?.Id == written.SessionId ? _active : _drain?.Id == written.SessionId ? _drain : null;
+        if (active is not null)
         {
-            _clips?.Failed(written.Error);
+            // The running session takes the Effective Buffer Window at each Reset; a drained one keeps its ring as is.
+            if (ReferenceEquals(active, _active))
+            {
+                active.Session.SetBufferWindow(SettingsResolver.Resolve(_currentDocument(), active.Spec.Target.ProfileId).BufferWindow);
+            }
+
+            written.Write.Reset();
+            active.ResetQpc = active.ResetQpc is { } reset ? Math.Max(reset, written.Qpc) : written.Qpc;
+
+            // Each Reset resolves the settings again, so a failed in-advance build is asked for once more.
+            if (ReferenceEquals(active, _active))
+            {
+                ApplySettings(active);
+            }
+        }
+
+        _clips?.Saved(new ClipSaved(written.Path));
+    }
+
+    /// <summary>
+    /// Resolves the game session's settings again for its profile (R7, R8). When they need another
+    /// encoder chain than the session's (<see cref="ChainKey.SameChain"/>), the session is asked to
+    /// prepare it for its next save press; when they no longer do, a chain asked for is dropped.
+    /// Only for a game session with Replay Clips; a Track Layout that can't be resolved is skipped,
+    /// and a failure of the session is swallowed, as for mic mute.
+    /// </summary>
+    private void ApplySettings(Active active)
+    {
+        if (_clips is null || active.Spec.Kind != SessionKind.Game)
+        {
+            return;
+        }
+
+        SessionSpec next;
+        try
+        {
+            var snapshot = SettingsResolver.Resolve(_currentDocument(), active.Spec.Target.ProfileId);
+            next = active.Spec with { Snapshot = snapshot, Audio = active.Audio(snapshot) };
+        }
+        catch (Exception)
+        {
+            // An invalid Track Layout: the session keeps its chain.
+            return;
+        }
+
+        try
+        {
+            if (ChainKey.SameChain(next, active.Spec))
+            {
+                if (active.Pending)
+                {
+                    active.Pending = false;
+                    active.Session.PrepareChain(null);
+                }
+            }
+            else if (_recording?.SessionId == active.Id)
+            {
+                // AD-7: a Recording keeps the session on one chain until its writer posts back.
+                if (active.Pending)
+                {
+                    active.Pending = false;
+                    active.Session.PrepareChain(null);
+                }
+
+                if (!active.Deferred)
+                {
+                    active.Deferred = true;
+                    _recordings?.Info?.Invoke("The profile's video or Tracks changed while a Recording runs; the game session keeps its encoder chain until the Recording stops");
+                }
+            }
+            else
+            {
+                active.Pending = true;
+                active.Session.PrepareChain(next);
+            }
+        }
+        catch (Exception)
+        {
+            // The session's own failure path ends it if it is broken.
+        }
+    }
+
+    /// <summary>
+    /// A Record press (R1), in <c>recordHotkeyMode</c> read live from the current document, so a
+    /// committed mode change applies at the next press. An action the mode doesn't use is ignored.
+    /// <c>recordToggle</c> stops the running Recording, else starts one; <c>recordStart</c> starts
+    /// one only while none runs, and <c>recordStop</c> stops only a running one. A stop isn't gated
+    /// by <c>recordingsEnabled</c>, so a Recording switched off keeps running until it is stopped.
+    /// A press while a Recording is stopping is ignored.
+    /// </summary>
+    private void OnRecordPress(HotkeyAction action, long qpc)
+    {
+        if (_recordings is not { } recordings)
+        {
+            return;
+        }
+
+        // One document per press, so its mode and its profile's switch come from one revision.
+        var document = _currentDocument();
+        var mode = SettingsResolver.Resolve(document, null).RecordHotkeyMode;
+        if (!HotkeyPlan.IsActive(action, mode))
+        {
+            recordings.Info?.Invoke($"The {action} press isn't used in the {mode} Record Hotkey mode; it was ignored");
+            return;
+        }
+
+        if (_recording is not { } running)
+        {
+            if (action == HotkeyAction.RecordStop)
+            {
+                recordings.Info?.Invoke("The Record Stop press came with no Recording running; it was ignored");
+                return;
+            }
+
+            StartRecording(qpc, document);
+            return;
+        }
+
+        if (action == HotkeyAction.RecordStart)
+        {
+            recordings.Info?.Invoke("The Record Start press came while a Recording runs; it was ignored");
+            return;
+        }
+
+        if (running.Reason is not null)
+        {
+            recordings.Info?.Invoke("The Record press came while the Recording was stopping; it was ignored");
+            return;
+        }
+
+        running.Reason = RecordingStopReasons.Stopped;
+        try
+        {
+            running.Write.Stop(qpc);
+        }
+        catch (Exception e)
+        {
+            // The writer still finishes when the session's output ends.
+            recordings.Failed(e);
+        }
+    }
+
+    /// <summary>
+    /// Starts a Recording on the game session (R1, R2) when its profile's <c>recordingsEnabled</c>
+    /// is on, read live from the current document. One snapshot resolved for the profile (AD-5)
+    /// gives the Output Folder, else the default one, where the path is reserved (AD-21) beside the
+    /// game's Clips, and the chain the profile asks for: a mismatch with the session's still shares
+    /// the session's chain, and <see cref="Recordings.Info"/> says so. Once the path is reserved,
+    /// <see cref="Recordings.Library"/> is told the write begins, then <see cref="Recordings.Open"/>
+    /// keeps the path, and <see cref="OnRecordingWritten"/> (or a write that never started) tells the
+    /// Library how it ended, then lets the path go. No game session, a drain only, no
+    /// profile, the flag off, or a session that can't record yet: nothing happens but the Info.
+    /// </summary>
+    private void StartRecording(long qpc, SettingsDocument document)
+    {
+        var recordings = _recordings!;
+        if (_active is not { Spec.Kind: SessionKind.Game } active)
+        {
+            recordings.Info?.Invoke(_drain is not null
+                ? "The Record press came while the game session was draining; no Recording was started"
+                : "The Record press came with no game session; no Recording was started");
+            return;
+        }
+
+        var profileId = active.Spec.Target.ProfileId;
+        if (profileId is null || !document.Profiles.TryGetValue(profileId, out var profile))
+        {
+            recordings.Info?.Invoke("The Record press came for a game with no Game Profile; no Recording was started");
+            return;
+        }
+
+        if (!profile.RecordingsEnabled)
+        {
+            recordings.Info?.Invoke($"Recordings are off for {profile.Name}; the Record press was ignored");
+            return;
+        }
+
+        IRecordingWrite? write;
+        string path;
+        try
+        {
+            write = active.Session.Record(qpc);
+            if (write is null)
+            {
+                recordings.Info?.Invoke("The game session can't record yet; no Recording was started");
+                return;
+            }
+
+            // AD-5: one snapshot for the press; the Recording shares the session's chain whatever it asks for.
+            var snapshot = SettingsResolver.Resolve(document, profileId);
+            if (ChainKey.Of(SessionKind.Game, active.Spec.Target, snapshot) != ChainKey.Of(active.Spec))
+            {
+                recordings.Info?.Invoke("The profile's video or Tracks differ from the game session's; the Recording shares the session's");
+            }
+
+            var folder = snapshot.OutputFolder ?? recordings.DefaultOutputFolder();
+            path = recordings.Paths.AllocateForGame(document, profileId, GameName(active), folder, qpc);
+        }
+        catch (Exception e)
+        {
+            recordings.Failed(e);
+            return;
+        }
+
+        var library = recordings.Library ?? NoLibraryWrites.Instance;
+        library.BeginWrite(path, profileId);
+        recordings.Open?.Opened(path);
+        var recording = new RecordingRun(active.Id, path, write);
+        try
+        {
+            write.Start(path, error =>
+            {
+                // Before the post, so a shutdown that closed the channel still sees the result.
+                recording.Done.TrySetResult(error);
+                Post(new RecordingWritten(recording, error));
+            });
+        }
+        catch (Exception e)
+        {
+            // It never started: nothing else will remove the reserved file.
+            TryDelete(path);
+            library.EndWrite(path, WriteOutcome.Failed);
+            recordings.Open?.Closed(path);
+            recordings.Failed(e);
+            return;
+        }
+
+        _recording = recording;
+
+        // A chain prepared before the press is dropped (AD-7), even when the settings no longer
+        // resolve; the change waits for the Recording's end.
+        if (active.Pending)
+        {
+            active.Pending = false;
+            try
+            {
+                active.Session.PrepareChain(null);
+            }
+            catch (Exception)
+            {
+                // The session's own failure path ends it if it is broken.
+            }
+        }
+
+        active.Deferred = false;
+        ApplySettings(active);
+        SetState(_state with { Recording = RecordingState.Running });
+        recordings.Started(new RecordingStarted(path));
+    }
+
+    /// <summary>
+    /// A session ending under its running Recording stops it with <paramref name="reason"/>, one of
+    /// <see cref="RecordingStopReasons"/>; the writer finishes as the output ends.
+    /// </summary>
+    private void MarkSessionEnded(Active active, string reason)
+    {
+        if (_recording is { Reason: null } running && running.SessionId == active.Id)
+        {
+            running.Reason = reason;
+        }
+    }
+
+    /// <summary>
+    /// A Recording writer's result: the Library is told how it ended (written while its file holds
+    /// data), the Recording is published as stopped, with its stop reason or, when the writer
+    /// failed, <see cref="WriteFailures.ReasonOf"/>, and <see cref="CaptureState.Recording"/> goes off.
+    /// Then, with <paramref name="commitPending"/>, a Target switch held while it ran is committed.
+    /// A duplicate (the shutdown wait and the post-back both) is ignored.
+    /// </summary>
+    private void OnRecordingWritten(RecordingWritten written, bool commitPending)
+    {
+        var recording = written.Recording;
+        if (!ReferenceEquals(_recording, recording))
+        {
+            return;
+        }
+
+        _recording = null;
+        var recordings = _recordings!;
+        var error = written.Error;
+
+        // A failed writer deletes a file that holds nothing; one with data is kept, finished as far as it got.
+        var kept = error is null || File.Exists(recording.Path);
+        (recordings.Library ?? NoLibraryWrites.Instance).EndWrite(recording.Path, kept ? WriteOutcome.Written : WriteOutcome.Failed);
+        recordings.Open?.Closed(recording.Path);
+        if (error is not null)
+        {
+            recordings.Failed(error);
+        }
+
+        var reason = error is not null ? WriteFailures.ReasonOf(error) : recording.Reason ?? RecordingStopReasons.SessionEnded;
+        SetState(_state with { Recording = RecordingState.Off });
+        recordings.Stopped(new RecordingStopped(recording.Path, reason));
+
+        // Its session still running, and not about to end for a held Target switch: a change deferred
+        // while it ran is prepared now, so the next save switches to it.
+        if (commitPending && _pendingTarget is null && _active is { } active && active.Id == recording.SessionId)
+        {
+            active.Deferred = false;
+            ApplySettings(active);
+        }
+
+        if (commitPending && _pendingTarget is { } pending)
+        {
+            CommitTarget(pending);
         }
     }
 
@@ -600,23 +1223,61 @@ public sealed class SessionOrchestrator : IDisposable
         _publish(next);
     }
 
-    private sealed class Active(long id, ICaptureSession session, SessionSpec spec)
+    private sealed class Active(long id, ICaptureSession session, SessionSpec spec, Func<EffectiveSettings, SessionAudio> audio)
     {
         public long Id { get; } = id;
 
         public ICaptureSession Session { get; } = session;
 
+        /// <summary>The session's spec: its Target follows a retarget, its snapshot and audio a chain switch.</summary>
         public SessionSpec Spec { get; set; } = spec;
+
+        /// <summary>The session's audio from a snapshot, as at Start.</summary>
+        public Func<EffectiveSettings, SessionAudio> Audio { get; } = audio;
+
+        /// <summary>Whether the session was last asked to prepare a chain, not to drop one.</summary>
+        public bool Pending { get; set; }
+
+        /// <summary>Whether a chain change was deferred, and logged, during the running Recording.</summary>
+        public bool Deferred { get; set; }
+
+        /// <summary>The Target's display name at <see cref="StartOnTarget"/>; null for a session started otherwise.</summary>
+        public string? GameName { get; init; }
+
+        /// <summary>The press QPC of the session's last Reset (R5); null before its first Clip.</summary>
+        public long? ResetQpc { get; set; }
 
         public TaskCompletionSource<SessionOutcome> Ended { get; } = NewReply<SessionOutcome>();
     }
 
     private sealed record SessionClosed(long SessionId, string Reason) : SessionMessage;
 
-    /// <summary>A Clip writer's result, posted from its thread.</summary>
-    private sealed record ClipWritten(string Path, Exception? Error) : SessionMessage;
+    /// <summary>A Recording started on session <paramref name="sessionId"/>; orchestrator thread only.</summary>
+    private sealed class RecordingRun(long sessionId, string path, IRecordingWrite write)
+    {
+        public long SessionId { get; } = sessionId;
+
+        public string Path { get; } = path;
+
+        public IRecordingWrite Write { get; } = write;
+
+        /// <summary>Why it is stopping (<see cref="RecordingStopReasons"/>); null while it runs.</summary>
+        public string? Reason { get; set; }
+
+        /// <summary>Completed by the writer's callback, from its thread, with its error, before it posts back.</summary>
+        public TaskCompletionSource<Exception?> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    /// <summary>A Recording writer's result, posted from its thread.</summary>
+    private sealed record RecordingWritten(RecordingRun Recording, Exception? Error) : SessionMessage;
+
+    /// <summary>A Clip writer's result, posted from its thread, with the session, press and write it came from.</summary>
+    private sealed record ClipWritten(long SessionId, long Qpc, IClipWrite Write, string Path, Exception? Error) : SessionMessage;
 
     private sealed record SessionFailed(long SessionId, Exception Failure) : SessionMessage;
+
+    /// <summary>The drain timer of session <paramref name="SessionId"/> fired; ignored once that drain is gone.</summary>
+    private sealed record DrainExpired(long SessionId) : SessionMessage;
 
     /// <summary>One session's post-backs, tagged with its id so a late one from an ended session is ignored.</summary>
     private sealed class Events(SessionOrchestrator owner, long id) : ISessionEvents

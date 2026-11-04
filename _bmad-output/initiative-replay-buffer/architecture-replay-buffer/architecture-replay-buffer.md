@@ -83,7 +83,7 @@ graph LR
     - **Every state the App renders is a field of `state.snapshot`.** Contracts tests map each event type to its snapshot field.
     - Dismissing something is a command (`warning.dismiss`), never local App state.
   - **The Overlay and status line render only two shared shapes,** defined in Contracts:
-    - `capture.stateChanged { replay: off|buffering|draining, recording: off|running, monitorRecording: off|running, micMuted, cooldownUntil }`
+    - `capture.stateChanged { replay: off|buffering|draining, recording: off|running, monitorRecording: off|running, micMuted, cooldownUntil, clipsWriting }`
     - `warning.raised { id, code, severity, source, message, at, overlay, sound, dismissable }`
   - **Writes:** each connection has one writer thread fed by a bounded queue, and no other engine thread touches the pipe.
     - Coalescing types (`meters.levels`, at most 20 Hz; `estimate.changed`) keep only their latest value.

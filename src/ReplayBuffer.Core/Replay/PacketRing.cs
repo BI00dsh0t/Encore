@@ -3,13 +3,23 @@ using System.Runtime.InteropServices;
 namespace ReplayBuffer.Core.Replay;
 
 /// <summary>
-/// The Memory-mode Replay Buffer (AD-8): encoded packets of every stream, newest last, their bytes
-/// in reference-counted native slabs, trimmed to the Buffer Window plus <see cref="SlackUs"/> of GOP
+/// The Replay Buffer (AD-8): encoded packets of every stream, newest last, their bytes in
+/// reference-counted slabs, trimmed to the Buffer Window plus <see cref="SlackUs"/> of GOP
 /// slack. The entry array is preallocated and circular (it doubles only when full), and the bytes go
-/// into the current slab, so an append allocates nothing managed. A slab is freed once the ring no
+/// into the current slab, so an append allocates nothing managed. A keyframe index beside it (the
+/// sequence numbers of the video keyframe entries, as long as the entry array and grown with it)
+/// lets a cut find its keyframe without scanning every entry. A slab is freed once the ring no
 /// longer needs it and no <see cref="RingCut"/> pins it, so trimming or disposing the ring never frees
 /// bytes a writer is reading. <see cref="Append"/> and <see cref="Cut"/> take one short lock; a cut's
-/// bytes are read with none, since they are never rewritten.
+/// bytes are read with none, since they are never rewritten. In Memory mode a slab is native memory;
+/// in Disk mode (R3) it is one block of a <see cref="RingFile"/> the ring owns, and only a packet
+/// bigger than a block, or a slab wanted with no block free, is native memory
+/// (<see cref="MemorySlabs"/>). The index, the pins and the trimming are the same in both. The file
+/// is closed, and so deleted, once the ring is disposed and its last slab freed. Before each new
+/// native-memory slab the ring asks its <see cref="MemoryMargin"/>, if it has one (R3); refused, it
+/// stops growing: it drops its oldest entries until slabs it alone held free the new slab's size
+/// (trimming past slabs a cut pins, whose bytes stay), never the current slab's, and then allocates.
+/// A Disk-mode ring tries a block again after that trim before it spills to memory.
 /// </summary>
 public sealed class PacketRing : IDisposable
 {
@@ -21,6 +31,12 @@ public sealed class PacketRing : IDisposable
 
     private const long MicrosPerSecond = 1_000_000;
 
+    /// <summary>How far before a cut's keyframe its copy reaches back, for audio that leads the video and was appended before it.</summary>
+    private const long LookBackUs = MicrosPerSecond;
+
+    /// <summary>The entries <see cref="CopyTailTo"/> copies per hold of the locks.</summary>
+    private const int CopyBatch = 256;
+
     private readonly Lock _lock = new();
     private readonly long _windowUs;
     private readonly int _slabBytes;
@@ -31,15 +47,31 @@ public sealed class PacketRing : IDisposable
     private RingEntry[] _entries;
     private int _head;
     private int _count;
+
+    // The absolute sequence number of the entry at _head; entry i (from the head) is _headSeq + i.
+    private long _headSeq;
+
+    // The video keyframe entries' sequence numbers, oldest first: circular, as long as _entries.
+    private long[] _keys;
+    private int _keyHead;
+    private int _keyCount;
+    private int _videoStream = -1;
     private Slab? _current;
     private long _newestUs = long.MinValue;
     private int _liveSlabs;
+    private int _memorySlabs;
     private bool _disposed;
+
+    // Disk mode's file, and the bytes a copy out of it reads through, grown as needed.
+    private readonly RingFile? _file;
+    private byte[] _scratch = [];
+    private readonly MemoryMargin? _margin;
 
     /// <param name="windowUs">The Buffer Window, in µs.</param>
     /// <param name="capacity">The entries preallocated: the packets the window and its slack hold.</param>
     /// <param name="slabBytes">The shared slab size.</param>
-    public PacketRing(long windowUs, int capacity, int slabBytes = DefaultSlabBytes)
+    /// <param name="margin">The RAM margin each new native-memory slab is checked against; null for none.</param>
+    public PacketRing(long windowUs, int capacity, int slabBytes = DefaultSlabBytes, MemoryMargin? margin = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(windowUs, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
@@ -47,6 +79,37 @@ public sealed class PacketRing : IDisposable
         _windowUs = windowUs;
         _slabBytes = slabBytes;
         _entries = new RingEntry[capacity];
+        _keys = new long[capacity];
+        _margin = margin;
+    }
+
+    /// <summary>A Disk-mode ring: its slabs are <paramref name="file"/>'s blocks, and it owns the file.</summary>
+    /// <param name="windowUs">The Buffer Window, in µs.</param>
+    /// <param name="capacity">The entries preallocated: the packets the window and its slack hold.</param>
+    /// <param name="file">The ring file; the slab size is its block size.</param>
+    /// <param name="margin">The RAM margin each spilled native-memory slab is checked against; null for none.</param>
+    public PacketRing(long windowUs, int capacity, RingFile file, MemoryMargin? margin = null)
+        : this(windowUs, capacity, (file ?? throw new ArgumentNullException(nameof(file))).BlockBytes, margin)
+    {
+        _file = file;
+    }
+
+    /// <summary>Disk mode's ring file; null in Memory mode.</summary>
+    public RingFile? File => _file;
+
+    /// <summary>The Buffer Window it was sized for, in µs.</summary>
+    public long WindowUs => _windowUs;
+
+    /// <summary>The oldest indexed video keyframe's start, in µs since the anchor; <see cref="long.MaxValue"/> when there is none.</summary>
+    internal long FirstKeyUs
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _keyCount == 0 ? long.MaxValue : EntryAt((int)(_keys[_keyHead] - _headSeq)).TimeUs;
+            }
+        }
     }
 
     /// <summary>The packets held.</summary>
@@ -76,6 +139,18 @@ public sealed class PacketRing : IDisposable
     /// <summary>Slabs not yet freed, whether the ring or a cut holds them.</summary>
     internal int LiveSlabs => Volatile.Read(ref _liveSlabs);
 
+    /// <summary>On a Disk-mode ring, the slabs that went to native memory instead of a block.</summary>
+    internal int MemorySlabs
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _memorySlabs;
+            }
+        }
+    }
+
     /// <summary>Registers a stream before its first packet; returns its index.</summary>
     /// <param name="timeBaseNum">The numerator of the time base its timestamps are in.</param>
     /// <param name="timeBaseDen">The denominator.</param>
@@ -87,7 +162,38 @@ public sealed class PacketRing : IDisposable
         lock (_lock)
         {
             _streams.Add(new StreamInfo(timeBaseNum, timeBaseDen, isVideo));
-            return _streams.Count - 1;
+            var index = _streams.Count - 1;
+            if (isVideo && _videoStream < 0)
+            {
+                _videoStream = index;
+            }
+
+            return index;
+        }
+    }
+
+    /// <summary>The first video stream's index; -1 when there is none.</summary>
+    public int VideoStream
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _videoStream;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="ticks"/> in stream <paramref name="stream"/>'s time base as µs since the
+    /// anchor, by the formula that sets each entry's start, so a packet's PTS converts to exactly its
+    /// <see cref="RingPacket.TimeUs"/>.
+    /// </summary>
+    public long ToMicros(int stream, long ticks)
+    {
+        lock (_lock)
+        {
+            return ToMicros(ticks, _streams[stream]);
         }
     }
 
@@ -95,7 +201,7 @@ public sealed class PacketRing : IDisposable
     /// Copies one packet in, then trims from the oldest while it starts more than the window plus
     /// <see cref="SlackUs"/> before the newest.
     /// </summary>
-    public unsafe void Append(int stream, ReadOnlySpan<byte> data, long pts, long dts, long duration, bool isKey)
+    public void Append(int stream, ReadOnlySpan<byte> data, long pts, long dts, long duration, bool isKey)
     {
         lock (_lock)
         {
@@ -103,7 +209,7 @@ public sealed class PacketRing : IDisposable
             var info = _streams[stream];
             var slab = SlabFor(data.Length);
             var offset = slab.Used;
-            data.CopyTo(new Span<byte>(slab.Data + offset, data.Length));
+            slab.Write(offset, data);
             slab.Used += data.Length;
             slab.Live++;
 
@@ -117,8 +223,22 @@ public sealed class PacketRing : IDisposable
                 Grow();
             }
 
+            var sequence = _headSeq + _count;
+            if (slab.FirstSeq < 0)
+            {
+                slab.FirstSeq = sequence;
+            }
+
+            slab.LastSeq = sequence;
             _entries[(_head + _count) % _entries.Length] = new RingEntry(slab, offset, data.Length, stream, pts, dts, duration, isKey, timeUs);
             _count++;
+            if (isKey && info.IsVideo)
+            {
+                // Never full: it holds at most one sequence per entry, and grows with the entries.
+                _keys[(_keyHead + _keyCount) % _keys.Length] = sequence;
+                _keyCount++;
+            }
+
             Trim();
         }
     }
@@ -144,70 +264,78 @@ public sealed class PacketRing : IDisposable
     }
 
     /// <summary>
-    /// Pins what a Clip of <c>[startUs, endUs]</c> (µs since the anchor) holds: from K, the first
-    /// video keyframe at or after <paramref name="startUs"/> and not after <paramref name="endUs"/>,
-    /// every video packet up to <paramref name="endUs"/>, and every other packet that overlaps
-    /// <c>[K, endUs]</c>, in time order. Null when there is no such keyframe.
+    /// Pins what a Clip of <c>[fromUs, toUs)</c> (µs since the anchor) holds: from K, the first video
+    /// keyframe at or after <paramref name="fromUs"/>, every video packet that starts before
+    /// <paramref name="toUs"/>, and every other packet whose centre lies in <c>[K, toUs)</c>, in time
+    /// order. Two cuts that share a boundary so split the packets exactly, none in both and none
+    /// missing, and each audio end is the AAC boundary nearest the video's. Null when there is no
+    /// such keyframe, or it is not before <paramref name="toUs"/>.
     /// </summary>
-    public RingCut? Cut(long startUs, long endUs)
+    public RingCut? Cut(long fromUs, long toUs)
     {
-        // Under the lock only what pins: the sort and the projection run after it, on pinned bytes.
-        List<RingEntry> picked;
+        // Under the lock only what pins: K from the keyframe index, one contiguous copy of the
+        // entries from just before K to the newest, and the slabs that range touches. The filter,
+        // the sort and the projection run after it, on pinned bytes.
+        RingEntry[] copied;
+        StreamInfo[] streams;
         List<Slab> slabs;
         long[] origins;
-        long keyUs;
+        RingEntry keyEntry;
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            var key = -1;
-            for (var i = 0; i < _count; i++)
-            {
-                ref var entry = ref _entries[(_head + i) % _entries.Length];
-                if (entry.IsKey && _streams[entry.Stream].IsVideo && entry.TimeUs >= startUs && entry.TimeUs <= endUs)
-                {
-                    key = i;
-                    break;
-                }
-            }
-
+            var key = KeyAtOrAfter(fromUs);
             if (key < 0)
             {
                 return null;
             }
 
-            var keyEntry = _entries[(_head + key) % _entries.Length];
-            keyUs = keyEntry.TimeUs;
-            picked = new List<RingEntry>();
-            for (var i = 0; i < _count; i++)
+            keyEntry = EntryAt(key);
+            if (keyEntry.TimeUs >= toUs)
             {
-                var entry = _entries[(_head + i) % _entries.Length];
-                var info = _streams[entry.Stream];
-                var keep = info.IsVideo
-                    ? entry.TimeUs >= keyUs && entry.TimeUs <= endUs
-                    : entry.TimeUs < endUs && entry.TimeUs + ToMicros(entry.Duration, info) > keyUs;
-                if (keep)
+                return null;
+            }
+
+            var first = LookBack(key, keyEntry.TimeUs);
+
+            copied = new RingEntry[_count - first];
+            var start = (_head + first) % _entries.Length;
+            var head = Math.Min(copied.Length, _entries.Length - start);
+            Array.Copy(_entries, start, copied, 0, head);
+            Array.Copy(_entries, 0, copied, head, copied.Length - head);
+
+            // One pin per slab whose entries meet the copied range.
+            var firstSeq = _headSeq + first;
+            var lastSeq = _headSeq + _count - 1;
+            slabs = [];
+            foreach (var slab in _held)
+            {
+                if (slab.FirstSeq >= 0 && slab.FirstSeq <= lastSeq && slab.LastSeq >= firstSeq)
                 {
-                    picked.Add(entry);
+                    slab.AddRef();
+                    slabs.Add(slab);
                 }
             }
 
-            // One pin per slab the cut reads.
-            var pinned = new HashSet<Slab>(ReferenceEqualityComparer.Instance);
-            slabs = new List<Slab>();
-            foreach (var entry in picked)
-            {
-                if (pinned.Add(entry.Slab))
-                {
-                    slabs.Add(entry.Slab);
-                    entry.Slab.AddRef();
-                }
-            }
+            streams = [.. _streams];
 
             // Each stream is rebased to K in its own time base; the video exactly to K's PTS.
-            origins = new long[_streams.Count];
+            origins = new long[streams.Length];
             for (var s = 0; s < origins.Length; s++)
             {
-                origins[s] = s == keyEntry.Stream ? keyEntry.Pts : FromMicros(keyUs, _streams[s]);
+                origins[s] = s == keyEntry.Stream ? keyEntry.Pts : FromMicros(keyEntry.TimeUs, streams[s]);
+            }
+        }
+
+        var keyUs = keyEntry.TimeUs;
+        var picked = new List<RingEntry>(copied.Length);
+        foreach (var entry in copied)
+        {
+            var info = streams[entry.Stream];
+            var at = info.IsVideo ? entry.TimeUs : entry.TimeUs + (ToMicros(entry.Duration, info) / 2);
+            if (at >= keyUs && at < toUs)
+            {
+                picked.Add(entry);
             }
         }
 
@@ -215,7 +343,115 @@ public sealed class PacketRing : IDisposable
             .OrderBy(e => e.TimeUs)
             .Select(e => new RingPacket(e.Slab, e.Offset, e.Length, e.Stream, e.Pts, e.Dts, e.Duration, e.IsKey, e.TimeUs))
             .ToArray();
-        return new RingCut(packets, slabs, origins, keyUs, endUs);
+        return new RingCut(packets, slabs, origins, keyUs, toUs);
+    }
+
+    /// <summary>
+    /// Seeds <paramref name="target"/> (a Buffer Window resize, AD-8) with this ring's packets from
+    /// where a <see cref="Cut"/> from <paramref name="fromUs"/> would copy (its keyframe, less the
+    /// audio look-back; with no keyframe, the first packet at or after <paramref name="fromUs"/> less
+    /// the look-back) to the newest at the time. A target with no streams first gets this ring's, in
+    /// the same order. The tail can span the whole time a long Clip took to write, so it is copied in
+    /// batches of <see cref="CopyBatch"/> entries, each under this ring's lock and then the target's
+    /// only, so appends go on between them. Returns the sequence number of the next entry to copy,
+    /// for <see cref="CopyFrom"/>.
+    /// </summary>
+    internal long CopyTailTo(PacketRing target, long fromUs)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        long sequence;
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var key = KeyAtOrAfter(fromUs);
+            int first;
+            if (key >= 0)
+            {
+                first = LookBack(key, EntryAt(key).TimeUs);
+            }
+            else
+            {
+                first = 0;
+                while (first < _count && EntryAt(first).TimeUs < fromUs - LookBackUs)
+                {
+                    first++;
+                }
+            }
+
+            sequence = _headSeq + first;
+        }
+
+        while (true)
+        {
+            var next = CopyBatchTo(target, sequence, CopyBatch);
+            if (next - sequence < CopyBatch)
+            {
+                return next;
+            }
+
+            sequence = next;
+        }
+    }
+
+    /// <summary>
+    /// Copies every entry from sequence number <paramref name="sequence"/> to the newest into
+    /// <paramref name="target"/>, in one hold of both locks: the remainder after
+    /// <see cref="CopyTailTo"/>, appended while it ran.
+    /// </summary>
+    internal void CopyFrom(PacketRing target, long sequence)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        CopyBatchTo(target, sequence, int.MaxValue);
+    }
+
+    /// <summary>
+    /// Copies up to <paramref name="max"/> entries from sequence number <paramref name="sequence"/>
+    /// (or the head, if trimmed past it) into <paramref name="target"/>; returns the next sequence.
+    /// </summary>
+    private unsafe long CopyBatchTo(PacketRing target, long sequence, int max)
+    {
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            lock (target._lock)
+            {
+                if (target._streams.Count == 0)
+                {
+                    foreach (var stream in _streams)
+                    {
+                        target.AddStream(stream.Num, stream.Den, stream.IsVideo);
+                    }
+                }
+
+                var first = (int)Math.Max(0, sequence - _headSeq);
+                var end = (int)Math.Min(_count, (long)first + max);
+                for (var i = first; i < end; i++)
+                {
+                    var entry = EntryAt(i);
+                    ReadOnlySpan<byte> bytes;
+                    if (entry.Slab.File is null)
+                    {
+                        // A memory slab is read in place.
+                        bytes = new ReadOnlySpan<byte>(entry.Slab.Data + entry.Offset, entry.Length);
+                    }
+                    else
+                    {
+                        if (_scratch.Length < entry.Length)
+                        {
+                            _scratch = new byte[Math.Max(entry.Length, _scratch.Length * 2)];
+                        }
+
+                        var read = _scratch.AsSpan(0, entry.Length);
+                        entry.Slab.Read(entry.Offset, read);
+                        bytes = read;
+                    }
+
+                    target.Append(entry.Stream, bytes, entry.Pts, entry.Dts, entry.Duration, entry.IsKey);
+                }
+
+                return _headSeq + Math.Max(end, first);
+            }
+        }
     }
 
     /// <summary>Drops every packet and the ring's own references; slabs a cut pins live until it is disposed.</summary>
@@ -228,7 +464,7 @@ public sealed class PacketRing : IDisposable
                 return;
             }
 
-            _disposed = true;
+            Volatile.Write(ref _disposed, true);
             _count = 0;
             _current = null;
             foreach (var slab in _held)
@@ -238,7 +474,47 @@ public sealed class PacketRing : IDisposable
 
             _held.Clear();
             _entries = [];
+            _keys = [];
+            _keyCount = 0;
         }
+
+        if (LiveSlabs == 0)
+        {
+            _file?.Close();
+        }
+    }
+
+    private RingEntry EntryAt(int position) => _entries[(_head + position) % _entries.Length];
+
+    /// <summary>The position of the first video keyframe at or after <paramref name="fromUs"/>; -1 when there is none. Under the lock.</summary>
+    private int KeyAtOrAfter(long fromUs)
+    {
+        for (var k = 0; k < _keyCount; k++)
+        {
+            var position = (int)(_keys[(_keyHead + k) % _keys.Length] - _headSeq);
+            if (EntryAt(position).TimeUs >= fromUs)
+            {
+                return position;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// The first position a copy from the keyframe at <paramref name="key"/> takes. Lagging audio is
+    /// appended after K and is caught by the copy to the tail; the look-back catches audio that leads
+    /// the video, appended before K though it overlaps it. Under the lock.
+    /// </summary>
+    private int LookBack(int key, long keyUs)
+    {
+        var first = key;
+        while (first > 0 && EntryAt(first - 1).TimeUs > keyUs - LookBackUs)
+        {
+            first--;
+        }
+
+        return first;
     }
 
     private static long ToMicros(long ticks, StreamInfo stream) =>
@@ -274,16 +550,99 @@ public sealed class PacketRing : IDisposable
 
     private Slab NewSlab(int capacity)
     {
-        var slab = new Slab(capacity, this);
+        var slab = TryBlockSlab(capacity);
+        if (slab is null && _margin?.Allows(capacity) == false)
+        {
+            Reclaim(capacity);
+            slab = TryBlockSlab(capacity);
+        }
+
+        if (slab is null)
+        {
+            slab = new Slab(capacity, this);
+            if (_file is not null)
+            {
+                _memorySlabs++;
+            }
+        }
+
         Interlocked.Increment(ref _liveSlabs);
         _held.Add(slab);
         return slab;
     }
 
-    private void ReleaseHeld(Slab slab)
+    /// <summary>A Disk-mode ring's slab in a free block of its file; null in Memory mode, for a packet bigger than a block, or with none free.</summary>
+    private Slab? TryBlockSlab(int capacity) =>
+        _file is { } file && capacity <= file.BlockBytes && file.TryRent(out var block)
+            ? new Slab(file.BlockBytes, this, file, block)
+            : null;
+
+    /// <summary>
+    /// Inside the margin: drops the oldest entries until the memory slabs they free (those whose
+    /// last reference the ring held) reach <paramref name="bytes"/>, or a Disk-mode ring's block is
+    /// returned that the new slab fits (a block is then retried), never dropping the current slab's. Slabs a cut pins
+    /// leave the ring but free nothing, so the trim goes on past them. Then reports a ring left
+    /// holding under <see cref="RingGenerations.MinClipUs"/>, if it dropped anything. When no trim
+    /// could free anything (every older slab pinned), it drops nothing. Under the lock.
+    /// </summary>
+    private void Reclaim(long bytes)
+    {
+        var blockFits = _file is { } file && bytes <= file.BlockBytes;
+        if (!AnyFreeable(blockFits))
+        {
+            return;
+        }
+
+        long freed = 0;
+        var blockReturned = false;
+        var dropped = false;
+        while (freed < bytes && !blockReturned && _count > 0 && !ReferenceEquals(_entries[_head].Slab, _current))
+        {
+            dropped = true;
+            if (DropHead() is { } released)
+            {
+                if (released.File is null)
+                {
+                    freed += released.Capacity;
+                }
+                else
+                {
+                    blockReturned = blockFits;
+                }
+            }
+        }
+
+        if (dropped && (_count == 0 || _newestUs - _entries[_head].TimeUs < RingGenerations.MinClipUs))
+        {
+            _margin!.ReportShortRing();
+        }
+    }
+
+    /// <summary>
+    /// Whether a trim could free anything: a slab besides the current one that only the ring holds,
+    /// in memory, or a block when <paramref name="blockFits"/>, whose entries all come before the
+    /// current slab's first (the trim stops there). Cuts pin only under the lock, so none can be
+    /// pinned meanwhile. Under the lock.
+    /// </summary>
+    private bool AnyFreeable(bool blockFits)
+    {
+        var stop = _current is { FirstSeq: >= 0 } current ? current.FirstSeq : long.MaxValue;
+        foreach (var slab in _held)
+        {
+            if (!ReferenceEquals(slab, _current) && slab.LastSeq < stop && slab.RingOnly && (slab.File is null || blockFits))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Releases the ring's reference on <paramref name="slab"/>; whether that freed it.</summary>
+    private bool ReleaseHeld(Slab slab)
     {
         _held.Remove(slab);
-        slab.Release();
+        return slab.Release();
     }
 
     private void Trim()
@@ -291,16 +650,30 @@ public sealed class PacketRing : IDisposable
         var oldest = _newestUs - _windowUs - SlackUs;
         while (_count > 0 && _entries[_head].TimeUs < oldest)
         {
-            var slab = _entries[_head].Slab;
-            _entries[_head] = default;
-            _head = (_head + 1) % _entries.Length;
-            _count--;
-            slab.Live--;
-            if (slab.Live == 0 && !ReferenceEquals(slab, _current))
-            {
-                ReleaseHeld(slab);
-            }
+            DropHead();
         }
+    }
+
+    /// <summary>
+    /// Drops the oldest entry, and its keyframe index entry; when that was its slab's last live
+    /// entry and the slab isn't current, releases the ring's reference. Returns the slab if that
+    /// freed it, else null. Under the lock.
+    /// </summary>
+    private Slab? DropHead()
+    {
+        var slab = _entries[_head].Slab;
+        _entries[_head] = default;
+        if (_keyCount > 0 && _keys[_keyHead] == _headSeq)
+        {
+            _keyHead = (_keyHead + 1) % _keys.Length;
+            _keyCount--;
+        }
+
+        _head = (_head + 1) % _entries.Length;
+        _headSeq++;
+        _count--;
+        slab.Live--;
+        return slab.Live == 0 && !ReferenceEquals(slab, _current) && ReleaseHeld(slab) ? slab : null;
     }
 
     private void Grow()
@@ -311,11 +684,25 @@ public sealed class PacketRing : IDisposable
             grown[i] = _entries[(_head + i) % _entries.Length];
         }
 
+        var keys = new long[grown.Length];
+        for (var k = 0; k < _keyCount; k++)
+        {
+            keys[k] = _keys[(_keyHead + k) % _keys.Length];
+        }
+
         _entries = grown;
         _head = 0;
+        _keys = keys;
+        _keyHead = 0;
     }
 
-    private void OnFreed() => Interlocked.Decrement(ref _liveSlabs);
+    private void OnFreed()
+    {
+        if (Interlocked.Decrement(ref _liveSlabs) == 0 && Volatile.Read(ref _disposed))
+        {
+            _file?.Close();
+        }
+    }
 
     private sealed class StreamInfo(int num, int den, bool isVideo)
     {
@@ -331,8 +718,10 @@ public sealed class PacketRing : IDisposable
     private readonly record struct RingEntry(Slab Slab, int Offset, int Length, int Stream, long Pts, long Dts, long Duration, bool IsKey, long TimeUs);
 
     /// <summary>
-    /// One native block of packet bytes. Its count is the ring's one reference (while it is current
-    /// or holds live entries) plus one per cut that reads it; it is freed at 0.
+    /// One block of packet bytes: native memory (<see cref="Data"/>), or a block of the ring file
+    /// (<see cref="File"/> at <see cref="FileOffset"/>). Its count is the ring's one reference (while
+    /// it is current or holds live entries) plus one per cut that reads it; at 0 its memory is freed
+    /// or its block returned.
     /// </summary>
     internal sealed unsafe class Slab
     {
@@ -346,7 +735,22 @@ public sealed class PacketRing : IDisposable
             Data = (byte*)NativeMemory.Alloc((nuint)capacity);
         }
 
+        public Slab(int capacity, PacketRing owner, RingFile file, long fileOffset)
+        {
+            _owner = owner;
+            Capacity = capacity;
+            File = file;
+            FileOffset = fileOffset;
+        }
+
+        /// <summary>A memory slab's bytes; null for a file slab.</summary>
         public byte* Data { get; private set; }
+
+        /// <summary>A file slab's ring file; null for a memory slab.</summary>
+        public RingFile? File { get; }
+
+        /// <summary>Where a file slab's block starts in the file.</summary>
+        public long FileOffset { get; }
 
         public int Capacity { get; }
 
@@ -356,16 +760,63 @@ public sealed class PacketRing : IDisposable
         /// <summary>Ring entries in it; the ring's lock guards it.</summary>
         public int Live { get; set; }
 
+        /// <summary>The sequence number of the first entry appended into it; -1 before one. The ring's lock guards it.</summary>
+        public long FirstSeq { get; set; } = -1;
+
+        /// <summary>The sequence number of the last entry appended into it. The ring's lock guards it.</summary>
+        public long LastSeq { get; set; } = -1;
+
+        /// <summary>Writes <paramref name="data"/> at <paramref name="offset"/> into the slab; the ring's lock guards it.</summary>
+        public void Write(int offset, ReadOnlySpan<byte> data)
+        {
+            if (File is { } file)
+            {
+                file.Write(FileOffset + offset, data);
+            }
+            else
+            {
+                data.CopyTo(new Span<byte>(Data + offset, data.Length));
+            }
+        }
+
+        /// <summary>Reads <paramref name="destination"/>'s length from <paramref name="offset"/>; bytes once written never change.</summary>
+        public void Read(int offset, Span<byte> destination)
+        {
+            if (File is { } file)
+            {
+                file.Read(FileOffset + offset, destination);
+            }
+            else
+            {
+                new ReadOnlySpan<byte>(Data + offset, destination.Length).CopyTo(destination);
+            }
+        }
+
+        /// <summary>Whether the ring's is its only reference: no cut pins it.</summary>
+        public bool RingOnly => Volatile.Read(ref _references) == 1;
+
         public void AddRef() => Interlocked.Increment(ref _references);
 
-        public void Release()
+        /// <summary>Drops one reference; whether that was the last, so the slab was freed.</summary>
+        public bool Release()
         {
-            if (Interlocked.Decrement(ref _references) == 0)
+            if (Interlocked.Decrement(ref _references) != 0)
+            {
+                return false;
+            }
+
+            if (File is { } file)
+            {
+                file.Return(FileOffset);
+            }
+            else
             {
                 NativeMemory.Free(Data);
                 Data = null;
-                _owner.OnFreed();
             }
+
+            _owner.OnFreed();
+            return true;
         }
     }
 }
@@ -405,7 +856,20 @@ public readonly struct RingPacket
 
     public int Length { get; }
 
-    public unsafe ReadOnlySpan<byte> Bytes => new(_slab.Data + _offset, Length);
+    /// <summary>Copies its bytes into the start of <paramref name="destination"/>, which must hold <see cref="Length"/>.</summary>
+    public void CopyTo(Span<byte> destination)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(destination.Length, Length, nameof(destination));
+        _slab.Read(_offset, destination[..Length]);
+    }
+
+    /// <summary>Its bytes, as a new array (for tests).</summary>
+    internal byte[] ToArray()
+    {
+        var bytes = new byte[Length];
+        CopyTo(bytes);
+        return bytes;
+    }
 }
 
 /// <summary>
@@ -434,7 +898,7 @@ public sealed class RingCut : IDisposable
     /// <summary>The keyframe the Clip starts at, in µs since the anchor.</summary>
     public long StartUs { get; }
 
-    /// <summary>Where it was cut, in µs since the anchor.</summary>
+    /// <summary>Where it was cut, in µs since the anchor: the first instant it does not hold.</summary>
     public long EndUs { get; }
 
     /// <summary>Stream <paramref name="stream"/>'s time 0 in the Clip, in its own time base.</summary>

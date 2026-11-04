@@ -125,7 +125,9 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
 
 /// <summary>
 /// A session's description (AD-22): its kind, its target, the settings snapshot resolved once at
-/// Start (AD-5), and its audio. Only <see cref="Target"/> changes over a session, on a retarget.
+/// Start (AD-5), and its audio. <see cref="Target"/> changes on a retarget, and a game session's
+/// <see cref="Snapshot"/> and <see cref="Audio"/> at a save that switches its encoder chain
+/// (<see cref="ICaptureSession.PrepareChain"/>).
 /// <paramref name="MicMuted"/> is the mic mute at Start, in place before the first audio frame;
 /// later toggles reach the session through <see cref="ICaptureSession.SetMicMuted"/>, and the spec
 /// keeps the Start value.

@@ -37,3 +37,7 @@ GetSystemMetrics
 GetWindow
 GET_WINDOW_CMD
 GetProcessTimes
+SetFileInformationByHandle
+FILE_IO_PRIORITY_HINT_INFO
+GlobalMemoryStatusEx
+MEMORYSTATUSEX

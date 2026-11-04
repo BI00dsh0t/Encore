@@ -23,11 +23,19 @@ internal sealed class EventHub
     private StateSnapshot _state;
 
     /// <param name="devices">The device list the engine starts with; in the initial state, so no event and no <c>seq</c>.</param>
-    public EventHub(SettingsDocument settings, AudioDeviceList? devices = null)
+    /// <param name="library">The Library items the engine starts with; in the initial state likewise.</param>
+    /// <param name="cleanupBlocked">Whether Cleanup starts blocked by a rebuilt index; in the initial state likewise.</param>
+    /// <param name="libraryFolder">The absolute Output Folder the Library indexes; in the initial state likewise.</param>
+    /// <param name="estimate">The storage estimate the engine starts with; in the initial state likewise.</param>
+    public EventHub(SettingsDocument settings, AudioDeviceList? devices = null, IReadOnlyList<LibraryItem>? library = null, bool cleanupBlocked = false, string? libraryFolder = null, StorageEstimate? estimate = null)
     {
         _state = StateSnapshot.Initial(Guid.NewGuid().ToString("N"), Environment.ProcessId, settings) with
         {
             Devices = devices ?? AudioDeviceList.Empty,
+            Library = library ?? [],
+            CleanupBlocked = cleanupBlocked,
+            Estimate = estimate,
+            LibraryFolder = libraryFolder,
         };
     }
 

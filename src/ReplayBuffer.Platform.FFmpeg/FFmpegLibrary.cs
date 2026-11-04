@@ -69,12 +69,22 @@ public static unsafe class FFmpegLibrary
         }
     }
 
-    /// <summary>Throws <see cref="ErrorCodes.EncodeFailed"/> when an FFmpeg call returned an error.</summary>
+    /// <summary>
+    /// Throws when an FFmpeg call returned an error: <see cref="ErrorCodes.DiskFull"/> for
+    /// <c>AVERROR(ENOSPC)</c>, <see cref="ErrorCodes.AccessDenied"/> for <c>AVERROR(EACCES)</c>, and
+    /// <see cref="ErrorCodes.EncodeFailed"/> for any other.
+    /// </summary>
     internal static int Check(int result, string operation)
     {
         if (result < 0)
         {
-            throw new ErrorCodeException(ErrorCodes.EncodeFailed, $"{operation} failed: {ErrorText(result)}");
+            var code = result switch
+            {
+                -28 => ErrorCodes.DiskFull,
+                -13 => ErrorCodes.AccessDenied,
+                _ => ErrorCodes.EncodeFailed,
+            };
+            throw new ErrorCodeException(code, $"{operation} failed: {ErrorText(result)}");
         }
 
         return result;

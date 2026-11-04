@@ -31,6 +31,10 @@ internal sealed class BenchOptions
           ReplayBuffer.Bench tracks   --device-a <Output Device> --device-b <Output Device> [--input-device <name or id>]
                                       [--minutes 5] [--tone-dbfs 0] [--size 1920x1080] [--fps 60] [--bitrate 20000]
                                       [--vlc <vlc.exe>] [--reanalyze]
+          ReplayBuffer.Bench overlay  [--modes borderless,fullscreen,exclusive] [--seconds 15] [--settle 5]
+                                      [--target-fps 80] [--load-size WxH] [--load-timeout 60] [--load-warmup 10]
+                                      [--load-exe <exe>] [--overlay-exe <ReplayBuffer.Bench.Overlay.exe>] [--presentmon <exe>]
+                                      [--host stand-in|app] [--app-exe <ReplayBuffer.App.exe>] [--dot-only]
           ReplayBuffer.Bench report
 
         Capture options: [--size 1920x1080] [--fps 60] [--bitrate 20000] [--output-device <name or id>]
@@ -51,6 +55,13 @@ internal sealed class BenchOptions
         Mic = the Input Device) in a throwaway test instance, and checks the Track names and order, Track 1 as
         the only default, their lengths, sync, levels and full scale, and VLC's listing (when VLC is installed).
         Exit 0 when every check passes. --reanalyze checks tracks.mp4 again without devices.
+
+        overlay (story 5.2) runs the GPU load in each mode (borderless; fullscreen: DXGI fullscreen on a flip
+        swap chain; exclusive: a blt swap chain with fullscreen optimizations off) with story 5.1's Overlay dot
+        hidden, shown and hidden again (a minute per mode by default), and writes each phase's PresentMode, FPS and SHQueryUserNotificationState
+        to overlay.json and overlay.md. --host app (story 5.8) runs the real App on a throwaway test instance instead
+        of the stand-in, and shows its solid dot plus a saved and a failed message through dev.simulate (the dot
+        alone with --dot-only).
         """;
 
     private static readonly string[] Common = ["out", "repo", "engine", "ffmpeg"];
@@ -66,10 +77,11 @@ internal sealed class BenchOptions
 
         // Its Output Devices are --device-a and --device-b: --output-device doesn't apply.
         ["tracks"] = [.. Common, "size", "fps", "bitrate", "input-device", "minutes", "device-a", "device-b", "tone-dbfs", "vlc", "reanalyze"],
+        ["overlay"] = [.. Common, "modes", "seconds", "settle", "presentmon", "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe", "overlay-exe", "host", "app-exe", "dot-only"],
         ["report"] = [.. Common],
     };
 
-    private static readonly HashSet<string> FlagNames = new(StringComparer.Ordinal) { "no-gpu-sampler", "reanalyze", "inject", "auto" };
+    private static readonly HashSet<string> FlagNames = new(StringComparer.Ordinal) { "no-gpu-sampler", "reanalyze", "inject", "auto", "dot-only" };
 
     private readonly Dictionary<string, string> _values;
     private readonly HashSet<string> _flags;

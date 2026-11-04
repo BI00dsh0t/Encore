@@ -86,9 +86,8 @@ public static unsafe class ClipWriter
             var cut = source.Cut;
             foreach (var ring in cut.Packets)
             {
-                var bytes = ring.Bytes;
-                FFmpegLibrary.Check(ffmpeg.av_new_packet(packet, bytes.Length), "av_new_packet");
-                bytes.CopyTo(new Span<byte>(packet->data, bytes.Length));
+                FFmpegLibrary.Check(ffmpeg.av_new_packet(packet, ring.Length), "av_new_packet");
+                ring.CopyTo(new Span<byte>(packet->data, ring.Length));
 
                 var origin = cut.Origin(ring.Stream);
                 packet->stream_index = ring.Stream;
@@ -145,7 +144,7 @@ public static unsafe class ClipWriter
     }
 
     /// <summary>Background I/O and memory priority for the calling thread (AD-7); false when Windows refused it.</summary>
-    private static bool EnterBackgroundMode(ILogger logger)
+    internal static bool EnterBackgroundMode(ILogger logger)
     {
         if (PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_BEGIN))
         {

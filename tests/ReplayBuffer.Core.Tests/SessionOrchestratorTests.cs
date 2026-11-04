@@ -2,8 +2,10 @@ using System.Collections.Concurrent;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Core.Settings;
 
 namespace ReplayBuffer.Core.Tests;
 
@@ -336,52 +338,131 @@ public sealed class SessionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task ARunningRecordingHoldsASwitchUntilItClearsThenItCommitsAtOnce()
+    public async Task ARunningRecordingHoldsASwitchUntilItsWriterPostsBackThenItCommitsAtOnce()
     {
-        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
-        using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
-        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
-        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
-        var c = new TargetCandidate(Pid + 2, 5, @"c:\games\third.exe", "Third.exe");
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+            var (orchestrator, events, presses, _, published, factory) = NewRecordingOrchestrator(c => changes.Writer.TryWrite(c));
+            using var owned = orchestrator;
+            var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+            var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+            var c = new TargetCandidate(Pid + 2, 5, @"c:\games\third.exe", "Third.exe");
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
 
-        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
-        orchestrator.Post(new RecordingRunning(true));
-        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
-        orchestrator.Post(new ProposeTarget(c, TargetChangeReason.Focus));
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+            Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc);
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
 
-        // A proposal of the Target itself drops the held switch: clearing the flag then commits nothing.
-        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Focus));
-        orchestrator.Post(new RecordingRunning(false));
-        orchestrator.Post(new RecordingRunning(true));
-        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
-        await HandledAsync(orchestrator);
-        Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
-        Assert.False(changes.Reader.TryRead(out _));
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+            orchestrator.Post(new ProposeTarget(c, TargetChangeReason.Focus));
 
-        orchestrator.Post(new RecordingRunning(false));
+            // A proposal of the Target itself drops the held switch; the dev stub neither holds nor commits.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Focus));
+            orchestrator.Post(new RecordingRunning(false));
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 1);
+            Assert.False(changes.Reader.TryRead(out _));
+            Assert.Equal(RecordingState.Running, published.Last().Recording);
+            Assert.Single(factory.Sessions);
 
-        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Focus), await NextAsync(changes));
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, qpc + 2));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+            Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Focus), await NextAsync(changes));
+            Assert.Equal("target changed", factory.Sessions[0].EndReason);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
-    [Theory]
-    [InlineData(TargetChangeReason.Exit)]
-    [InlineData(TargetChangeReason.Ignored)]
-    public async Task AnExitOrIgnoredHandoverCommitsThroughARunningRecording(TargetChangeReason reason)
+    [Fact]
+    public async Task ARecordingStopsWithTheReasonOfWhatEndedItsSession()
     {
-        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
-        using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
-        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
-        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+            var (orchestrator, events, presses, made, _, factory) = NewRecordingOrchestrator(c => changes.Writer.TryWrite(c), drains: true);
+            using var owned = orchestrator;
+            var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+            var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
 
-        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
-        orchestrator.Post(new RecordingRunning(true));
-        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
-        orchestrator.Post(new ProposeTarget(b, reason));
-        await HandledAsync(orchestrator);
+            async Task<RecordingStarted> RecordOnA(TargetChangeReason reason)
+            {
+                orchestrator.Post(new ProposeTarget(a, reason));
+                Assert.Equal(a.ToTargetGame(), (await NextAsync(changes)).To);
+                await Press(orchestrator, presses, HotkeyAction.RecordToggle, ++qpc);
+                return Assert.IsType<RecordingStarted>(await NextAsync(events));
+            }
 
-        Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
-        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), reason), await NextAsync(changes));
-        Assert.False(changes.Reader.TryRead(out _));
+            // The Target exits: the session drains (R1), game-exit, and the exit isn't held.
+            var first = await RecordOnA(TargetChangeReason.Detected);
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            Assert.Equal(new TargetChanged(a.ToTargetGame(), null, TargetChangeReason.Exit), await NextAsync(changes));
+            made.Last().Finish();
+            Assert.Equal(new RecordingStopped(first.Path, RecordingStopReasons.GameExit), await NextAsync(events));
+            Assert.Equal(1, factory.Sessions[^1].Drains);
+
+            // Ignored hands over to another game at once: ignored.
+            var second = await RecordOnA(TargetChangeReason.Detected);
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Ignored));
+            Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Ignored), await NextAsync(changes));
+            made.Last().Finish();
+            Assert.Equal(new RecordingStopped(second.Path, RecordingStopReasons.Ignored), await NextAsync(events));
+
+            // The session's window closes: it drains too, game-exit.
+            var third = await RecordOnA(TargetChangeReason.Focus);
+            factory.Sessions[^1].Events.Closed("window closed");
+            made.Last().Finish();
+            Assert.Equal(new RecordingStopped(third.Path, RecordingStopReasons.GameExit), await NextAsync(events));
+            Assert.Equal("window closed", factory.Sessions[^1].EndReason);
+            Assert.Equal(1, factory.Sessions[^1].Drains);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DisposeMidRecordingFinishesItAsShutdownBeforeItReturns()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var library = new FakeLibraryWrites();
+            var (orchestrator, events, presses, made, _, factory) = NewRecordingOrchestrator(library: library);
+            using var owned = orchestrator;
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, System.Diagnostics.Stopwatch.GetTimestamp());
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
+
+            // The writer finishes once the session's output ends, after the channel has closed.
+            var session = factory.Sessions[0];
+            var recording = made.Single();
+            _ = session.Ended.Task.ContinueWith(_ => recording.Finish(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            orchestrator.Dispose();
+
+            Assert.Equal("engine stopping", session.EndReason);
+            Assert.True(events.Reader.TryRead(out var stopped));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Shutdown), stopped);
+            Assert.Equal([$"begin {started.Path} {ProfileId}", $"opened {started.Path}", $"end {started.Path} Written", $"closed {started.Path}"], library.Calls);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
     // Every message posted before it has been handled: an End with no session is refused in order.
@@ -446,6 +527,809 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task APressUnderASecondAfterAResetIsRefusedAndAFailedWriteResetsNothing()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var refused = System.Threading.Channels.Channel.CreateUnbounded<ClipFailed>();
+            var failures = System.Threading.Channels.Channel.CreateUnbounded<Exception>();
+            var writes = new ConcurrentQueue<string>();
+            var made = new ConcurrentQueue<FakeWrite>();
+            var factory = new FakeFactory
+            {
+                Save = _ =>
+                {
+                    // The third write fails.
+                    var write = new FakeWrite(writes, made.Count == 2 ? new IOException("disk gone") : null);
+                    made.Enqueue(write);
+                    return write;
+                },
+            };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => saved.Writer.TryWrite(s), e => failures.Writer.TryWrite(e), f => refused.Writer.TryWrite(f)));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
+            await NextAsync(saved);
+
+            // 0.5 s after that Reset: refused before the session is asked for anything.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second / 2)));
+            Assert.Equal(new ClipFailed(ErrorCodes.ClipTooShort), await NextAsync(refused));
+            Assert.Single(made);
+            Assert.Equal(1, made.Single().Resets);
+
+            // 1.5 s after it: saved, and Reset again.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 3 / 2)));
+            await NextAsync(saved);
+            Assert.Equal([1, 1], made.Select(w => w.Resets));
+
+            // A failed write Resets nothing.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 3)));
+            Assert.IsType<IOException>(await NextAsync(failures));
+            Assert.Equal([1, 1, 0], made.Select(w => w.Resets));
+            Assert.Equal(new ClipFailed(ErrorCodes.SaveFailed), await NextAsync(refused));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AWrittenClipGivesTheSessionTheEffectiveBufferWindowBeforeItsReset()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var writes = new ConcurrentQueue<string>();
+            var log = new ConcurrentQueue<string>();
+            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var factory = new FakeFactory { Save = _ => new FakeWrite(writes, gate: gate.Task, log: log), Log = log };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => saved.Writer.TryWrite(s), _ => { }, _ => { }));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            // Press 1 writes; meanwhile the Game Profile's Buffer Window changes from 60 s to 30 s.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            await WaitUntil(() => !writes.IsEmpty);
+            Volatile.Write(ref _document, Revision(4) with
+            {
+                Global = InFolder(folder, cooldown: 0),
+                Profiles = SettingsMaps.EmptyProfiles.Add(ProfileId, new GameProfile
+                {
+                    Name = "Game",
+                    Overrides = SettingsMaps.EmptyValues.Add(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(30)),
+                }),
+            });
+            gate.SetResult();
+
+            await NextAsync(saved);
+            Assert.Equal(["window 30", "reset"], log);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AnExitDrainsTheSessionSoASaveStillCutsUntilTheDrainExpiresAndReleasesIt()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var published = new ConcurrentQueue<CaptureState>();
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var writes = new ConcurrentQueue<string>();
+            var saves = 0;
+            var factory = new FakeFactory { Save = _ => { Interlocked.Increment(ref saves); return new FakeWrite(writes); } };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                published.Enqueue,
+                targetCapture: new TargetCapture(_ => NoAudio, (_, _) => { }),
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => saved.Writer.TryWrite(s), _ => { }, ExitDrain: TimeSpan.FromMilliseconds(200)));
+            // No Game Profile: the Clip is named after the Target, which is gone by the press.
+            var game = new TargetCandidate(Pid, 1, @"c:\games\unlisted.exe", "Unlisted Game");
+
+            orchestrator.Post(new ProposeTarget(game, TargetChangeReason.Detected));
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+
+            // The drained session takes the press, and the Clip keeps the game's name.
+            var clip = await NextAsync(saved);
+            Assert.StartsWith("Unlisted Game_", Path.GetFileName(clip.Path), StringComparison.Ordinal);
+            var session = Assert.Single(factory.Sessions);
+            Assert.Equal(1, session.Drains);
+            Assert.Equal(1, Volatile.Read(ref saves));
+
+            // After ExitDrain the ring is released, the state is off, and a press reaches no session.
+            await WaitUntil(() => session.Releases == 1);
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            await HandledAsync(orchestrator);
+            Assert.Equal(1, Volatile.Read(ref saves));
+            // The write's own ClipsWriting publishes repeat Draining: collapse consecutive repeats only.
+            var replays = published.Select(p => p.Replay).ToList();
+            Assert.Equal([ReplayState.Buffering, ReplayState.Draining, ReplayState.Off], replays.Where((r, i) => i == 0 || r != replays[i - 1]));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ANewTargetReleasesTheDrainWhileASwitchIgnoredOrDisposeNeverDrains()
+    {
+        var published = new ConcurrentQueue<CaptureState>();
+        var orchestrator = new SessionOrchestrator(
+            _factory,
+            () => Volatile.Read(ref _document),
+            published.Enqueue,
+            targetCapture: new TargetCapture(_ => NoAudio, (_, _) => { }),
+            clips: new ReplayClips(OutputPathAllocator.System, () => "unused", _ => { }, _ => { }, ExitDrain: TimeSpan.FromMinutes(5)));
+        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+        try
+        {
+            // A drained, then B detected: the drain is released before B's session starts.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Detected));
+
+            // A switch B -> A, and an exit to another game, end with no drain.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Focus));
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Exit));
+
+            // Ignored ends at once, no drain, and the state is off.
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Ignored));
+            await HandledAsync(orchestrator);
+
+            var sessions = _factory.Sessions;
+            Assert.Equal(4, sessions.Count);
+            Assert.Equal([1, 0, 0, 0], sessions.Select(s => s.Drains));
+            Assert.Equal(1, sessions[0].Releases);
+            Assert.All(sessions, s => Assert.NotNull(s.EndReason));
+            Assert.Equal(ReplayState.Off, published.Last().Replay);
+            Assert.Equal(
+                [ReplayState.Buffering, ReplayState.Draining, ReplayState.Off, ReplayState.Buffering, ReplayState.Off, ReplayState.Buffering, ReplayState.Off, ReplayState.Buffering, ReplayState.Off],
+                published.Select(p => p.Replay));
+
+            // A closed window drains too; marking the Target Ignored then releases the drain.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+            await WaitUntil(() => _factory.Sessions.Count == 5);
+            var closed = _factory.Sessions[^1];
+            closed.Events.Closed("window closed");
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Ignored));
+            await HandledAsync(orchestrator);
+            Assert.Equal((1, 1), (closed.Drains, closed.Releases));
+            Assert.Equal(ReplayState.Off, published.Last().Replay);
+
+            // A drain whose outcome is a failure holds nothing: released at once, and off.
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Detected));
+            await WaitUntil(() => _factory.Sessions.Count == 6);
+            var failed = _factory.Sessions[^1];
+            failed.DrainFailure = new IOException("never anchored");
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            await HandledAsync(orchestrator);
+            Assert.Equal((1, 1), (failed.Drains, failed.Releases));
+            Assert.Equal(ReplayState.Off, published.Last().Replay);
+
+            // Disposing mid-drain releases it.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            await HandledAsync(orchestrator);
+            var last = _factory.Sessions[^1];
+            Assert.Equal((1, 0), (last.Drains, last.Releases));
+        }
+        finally
+        {
+            orchestrator.Dispose();
+        }
+
+        Assert.Equal(1, _factory.Sessions[^1].Releases);
+        Assert.Equal(ReplayState.Off, published.Last().Replay);
+    }
+
+    [Fact]
+    public async Task PressesInsideTheSaveCooldownAreIgnoredAndOneAfterItSaves()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            // The default saveCooldown: 5 s.
+            _document = Revision(3) with { Global = InFolder(folder) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var ignored = new ConcurrentQueue<TimeSpan>();
+            var published = new ConcurrentQueue<CaptureState>();
+            var savings = 0;
+
+            // How many clip.saving events had fired when each Save was called: synchronous means one per press, first.
+            var savingsAtSave = new ConcurrentQueue<int>();
+            var writes = new ConcurrentQueue<string>();
+            var factory = new FakeFactory { Save = _ => { savingsAtSave.Enqueue(Volatile.Read(ref savings)); return new FakeWrite(writes); } };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                published.Enqueue,
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => events.Writer.TryWrite(s),
+                    e => events.Writer.TryWrite(e),
+                    f => events.Writer.TryWrite(f),
+                    Saving: s =>
+                    {
+                        Interlocked.Increment(ref savings);
+                        events.Writer.TryWrite(s);
+                    },
+                    Ignored: ignored.Enqueue));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var t = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            void Press(long qpc) => orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, qpc));
+
+            Press(t);
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.NotNull(published.Last().CooldownUntil);
+
+            // 1 s and 4 s later: inside the cooldown, so no Save and no event.
+            Press(t + second);
+            Press(t + (second * 4));
+
+            // 5.1 s later: accepted, and saved.
+            Press(t + (second * 51 / 10));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+
+            // Two Saves, each after its own press's clip.saving: emitted synchronously on the orchestrator thread.
+            Assert.Equal([1, 2], savingsAtSave);
+            Assert.Equal(2, ignored.Count);
+            Assert.False(events.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AnAcceptedPressPublishesTheCooldownAndTheWriteAtOnceAndTheWriteEnds()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            // The default saveCooldown: 5 s.
+            _document = Revision(3) with { Global = InFolder(folder) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var ignored = System.Threading.Channels.Channel.CreateUnbounded<TimeSpan>();
+            var published = new ConcurrentQueue<CaptureState>();
+            var gate = NewGate();
+            var writes = new ConcurrentQueue<string>();
+            var factory = new FakeFactory { Save = _ => new FakeWrite(writes, gate: gate.Task) };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                published.Enqueue,
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => events.Writer.TryWrite(s),
+                    e => events.Writer.TryWrite(e),
+                    f => events.Writer.TryWrite(f),
+                    Ignored: i => ignored.Writer.TryWrite(i)));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            var before = published.Count;
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
+
+            // 1 s later: inside the cooldown. Messages are handled in order, so once it is ignored the
+            // first press's turn is over, with the gate still closed.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + System.Diagnostics.Stopwatch.Frequency));
+            await NextAsync(ignored);
+
+            // Both states leave in the press's own orchestrator turn, which keeps them inside 250 ms;
+            // the ignored press adds none.
+            var states = published.Skip(before).ToList();
+            Assert.Equal(2, states.Count);
+            Assert.NotNull(states[1].CooldownUntil);
+            Assert.Equal(1, states[1].ClipsWriting);
+
+            gate.SetResult();
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.Equal(0, published.Last().ClipsWriting);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task APressWhileTwoClipsAreWritingIsRefusedAsBusyAndOneAfterThemSaves()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var writes = new ConcurrentQueue<string>();
+            var made = new ConcurrentQueue<FakeWrite>();
+            var gates = new[] { NewGate(), NewGate() };
+            var factory = new FakeFactory
+            {
+                Save = _ =>
+                {
+                    // The first two writes wait on their gates; later ones complete at once.
+                    var write = new FakeWrite(writes, gate: made.Count < gates.Length ? gates[made.Count].Task : null);
+                    made.Enqueue(write);
+                    return write;
+                },
+            };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => events.Writer.TryWrite(s),
+                    e => events.Writer.TryWrite(e),
+                    f => events.Writer.TryWrite(f),
+                    Saving: s => events.Writer.TryWrite(s)));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 2)));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+
+            // Two writing: the third is accepted, then refused before the session is asked for anything.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 4)));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.Equal(new ClipFailed(ErrorCodes.SaveBusy), await NextAsync(events));
+            Assert.Equal(2, made.Count);
+            Assert.Equal(2, writes.Distinct().Count());
+            Assert.Equal([0, 0], made.Select(w => w.Resets));
+
+            // Both finish: saved, each Reset once.
+            Array.ForEach(gates, g => g.SetResult());
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.Equal([1, 1], made.Select(w => w.Resets));
+
+            // A next press saves.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + (second * 6)));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.Equal(3, made.Count);
+            Assert.False(events.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AFailedWriteReportsItsReasonAndEndsItsLibraryWriteAndTheNextPressSaves()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var writes = new ConcurrentQueue<string>();
+            var made = new ConcurrentQueue<FakeWrite>();
+            var library = new FakeLibraryWrites();
+            var factory = new FakeFactory
+            {
+                Save = _ =>
+                {
+                    // The first write fails with the disk full.
+                    var write = new FakeWrite(writes, made.IsEmpty ? new IOException("disk full", unchecked((int)0x80070070)) : null);
+                    made.Enqueue(write);
+                    return write;
+                },
+            };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => events.Writer.TryWrite(s),
+                    _ => { },
+                    f => events.Writer.TryWrite(f),
+                    Saving: s => events.Writer.TryWrite(s),
+                    Library: library));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.Equal(new ClipFailed(ErrorCodes.DiskFull), await NextAsync(events));
+            Assert.Equal([0], made.Select(w => w.Resets));
+            var path1 = writes.Single();
+            Assert.Equal([$"begin {path1} {ProfileId}", $"end {path1} Failed"], library.Calls);
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + System.Diagnostics.Stopwatch.Frequency));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.IsType<ClipSaved>(await NextAsync(events));
+            Assert.Equal([0, 1], made.Select(w => w.Resets));
+            var path2 = writes.Last();
+            Assert.Equal([$"begin {path1} {ProfileId}", $"end {path1} Failed", $"begin {path2} {ProfileId}", $"end {path2} Written"], library.Calls);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AReserveThatFailsReportsSaveFailedAndTellsTheLibraryNothing()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            // The Output Folder lies under a file, so it can't be created.
+            var file = Path.Combine(folder, "a-file");
+            File.WriteAllText(file, "x");
+            _document = Revision(3) with { Global = SettingsDocument.Empty.Global.SetItem(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(0)) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var library = new FakeLibraryWrites();
+            var factory = new FakeFactory { Save = _ => new FakeWrite(new ConcurrentQueue<string>()) };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                clips: new ReplayClips(
+                    OutputPathAllocator.System,
+                    () => Path.Combine(file, "clips"),
+                    s => events.Writer.TryWrite(s),
+                    _ => { },
+                    f => events.Writer.TryWrite(f),
+                    Saving: s => events.Writer.TryWrite(s),
+                    Library: library));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            Assert.IsType<ClipSaving>(await NextAsync(events));
+            Assert.Equal(new ClipFailed(ErrorCodes.SaveFailed), await NextAsync(events));
+            Assert.Empty(library.Calls);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AProfilesVideoAndOwnMicApplyAtStartAndAnotherGameGetsTheGlobalOnes()
+    {
+        var globalMic = new LayoutDevice(Guid.NewGuid(), "global-mic", "Global mic", "", AudioFlow.Input, IsMic: true);
+        var ownMic = new LayoutDevice(Guid.NewGuid(), "own-mic", "Own mic", "", AudioFlow.Input, IsMic: true);
+        var plainGlobalMic = globalMic with { Key = Guid.NewGuid(), IsMic = false };
+        var global = new TrackLayout([globalMic], [new Track(Guid.NewGuid(), "Mic", [globalMic.Key], MuteAffected: true)]);
+        var own = new TrackLayout(
+            [plainGlobalMic, ownMic],
+            [new Track(Guid.NewGuid(), "Voice", [plainGlobalMic.Key], MuteAffected: true), new Track(Guid.NewGuid(), "Mic", [ownMic.Key], MuteAffected: true)]);
+        var video = new VideoSettings(VideoCodec.H264, 1920, 1080, 60, 20_000, RateControl.Vbr);
+        const string other = @"c:\games\other.exe";
+        _document = Revision(3) with
+        {
+            Global = SettingsDocument.Empty.Global.SetItem(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(global)),
+            Profiles = SettingsMaps.EmptyProfiles
+                .Add(ProfileId, new GameProfile
+                {
+                    Name = "Game",
+                    Overrides = SettingsMaps.EmptyValues
+                        .Add(Keys.Video.Name, Keys.Video.ToJson(video))
+                        .Add(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(own)),
+                })
+                .Add(other, new GameProfile { Name = "Other" }),
+        };
+        using var orchestrator = new SessionOrchestrator(
+            _factory,
+            () => Volatile.Read(ref _document),
+            _ => { },
+            targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, _) => { }));
+
+        orchestrator.Post(new ProposeTarget(new TargetCandidate(Pid, 1, ProfileId, "Game.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => _factory.Sessions.Count == 1);
+        orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+        orchestrator.Post(new ProposeTarget(new TargetCandidate(Pid + 1, 2, other, "Other.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => _factory.Sessions.Count == 2);
+
+        var (first, second) = (_factory.Sessions[0].Spec, _factory.Sessions[1].Spec);
+        Assert.Equal(video, first.Snapshot.Video);
+        Assert.Equal([("Mic", "own-mic")], first.Audio.GatedMicInputs().Select(i => (i.Track.Name, i.Device.EndpointId)));
+        Assert.Equal(SettingsResolver.Resolve(_document, null).Video, second.Snapshot.Video);
+        Assert.NotEqual(video, second.Snapshot.Video);
+        Assert.Equal([("Mic", "global-mic")], second.Audio.GatedMicInputs().Select(i => (i.Track.Name, i.Device.EndpointId)));
+    }
+
+    [Fact]
+    public async Task ASettingsChangeNeedingAnotherChainIsPreparedDroppedOnARevertAndTakenAtTheSwitchingSave()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-clips-").FullName;
+        try
+        {
+            var game = new LayoutDevice(Guid.NewGuid(), "game", "Game", "", AudioFlow.Output, IsMic: false);
+            var mic = new LayoutDevice(Guid.NewGuid(), "mic", "Mic", "", AudioFlow.Input, IsMic: true);
+            var mic2 = new LayoutDevice(Guid.NewGuid(), "mic2", "Mic 2", "", AudioFlow.Input, IsMic: true);
+            TrackLayout Global(bool muteAffected) => new(
+                [game, mic],
+                [new Track(Guid.NewGuid(), "Game", [game.Key], MuteAffected: false), new Track(Guid.NewGuid(), "Mic", [mic.Key], muteAffected)]);
+            var changed = new TrackLayout(
+                [game, mic with { IsMic = false }, mic2],
+                [
+                    new Track(Guid.NewGuid(), "Game", [game.Key], MuteAffected: false),
+                    new Track(Guid.NewGuid(), "Voice", [mic.Key], MuteAffected: false),
+                    new Track(Guid.NewGuid(), "Mic2", [mic2.Key], MuteAffected: true),
+                ]);
+            SettingsDocument With(TrackLayout globalLayout, TrackLayout? profileLayout)
+            {
+                var document = Revision(3) with { Global = InFolder(folder, cooldown: 0).SetItem(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(globalLayout)) };
+                return profileLayout is null
+                    ? document
+                    : document with { Profiles = document.Profiles.SetItem(ProfileId, document.Profiles[ProfileId] with { Overrides = document.Profiles[ProfileId].Overrides.SetItem(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(profileLayout)) }) };
+            }
+
+            var start = With(Global(muteAffected: true), null);
+            _document = start;
+            var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+            var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+            var writes = new ConcurrentQueue<string>();
+            FakeSession? session = null;
+            var factory = new FakeFactory { Save = _ => new FakeWrite(writes) { SwitchesTo = session!.Prepares.Last() } };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                _ => { },
+                press => presses.Writer.TryWrite(press),
+                targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, _) => { }),
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => saved.Writer.TryWrite(s), _ => { }));
+            orchestrator.Post(new ProposeTarget(new TargetCandidate(Pid, 1, ProfileId, "Game.exe"), TargetChangeReason.Detected));
+            await WaitUntil(() => factory.Sessions.Count == 1);
+            session = factory.Sessions[0];
+
+            // The profile's own layout: one chain with its Tracks.
+            Volatile.Write(ref _document, With(Global(muteAffected: true), changed));
+            orchestrator.Post(new SettingsUpdated());
+            await WaitUntil(() => session.Prepares.Count == 1);
+            Assert.Equal(["Game", "Voice", "Mic2"], session.Prepares.Last()!.Audio.Tracks.Select(t => t.Name));
+
+            // Back to the session's own: the prepared chain is dropped.
+            Volatile.Write(ref _document, start);
+            orchestrator.Post(new SettingsUpdated());
+            await WaitUntil(() => session.Prepares.Count == 2);
+            Assert.Null(session.Prepares.Last());
+
+            // Only muteAffected changes: still another chain.
+            Volatile.Write(ref _document, With(Global(muteAffected: false), null));
+            orchestrator.Post(new SettingsUpdated());
+            await WaitUntil(() => session.Prepares.Count == 3);
+            Assert.Empty(session.Prepares.Last()!.Audio.GatedMicInputs());
+
+            // The save that switches to it: its Reset, and a later commit with no change, ask for nothing.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, System.Diagnostics.Stopwatch.GetTimestamp()));
+            await NextAsync(saved);
+            orchestrator.Post(new SettingsUpdated());
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, System.Diagnostics.Stopwatch.GetTimestamp()));
+            while ((await NextPress(presses)).Action != HotkeyAction.RecordToggle)
+            {
+            }
+
+            Assert.Equal(3, session.Prepares.Count);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AChainChangeDuringARecordingWaitsForItsStopAndTheNextSaveSwitches()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            using var rig = NewChainRecordingRig(folder);
+            var (orchestrator, session) = (rig.Orchestrator, await rig.StartAsync());
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            await Press(orchestrator, rig.Presses, HotkeyAction.RecordToggle, qpc);
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(rig.Events));
+
+            // A change mid-Recording: nothing prepared, one Info line.
+            rig.ChangeVideo();
+            orchestrator.Post(new SettingsUpdated());
+            await Press(orchestrator, rig.Presses, HotkeyAction.MicMute, qpc + 1);
+            Assert.Empty(session.Prepares);
+            Assert.Single(rig.Deferrals);
+
+            // Saves (and their Resets) during it prepare nothing and log nothing more.
+            for (var i = 1; i <= 2; i++)
+            {
+                orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, qpc + (2 * i * second)));
+                await NextAsync(rig.Saved);
+            }
+
+            Assert.Empty(session.Prepares);
+            Assert.Single(rig.Deferrals);
+
+            // The stop prepares it, and the next save switches to it.
+            await Press(orchestrator, rig.Presses, HotkeyAction.RecordToggle, qpc + (6 * second));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(rig.Events));
+            await WaitUntil(() => session.Prepares.Count == 1);
+            Assert.Equal(ChainRecordingRig.Changed, session.Prepares.Single()!.Snapshot.Video);
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, qpc + (8 * second)));
+            await NextAsync(rig.Saved);
+            Assert.Equal([false, false, true], rig.Writes.Select(w => w.SwitchesTo is not null));
+            Assert.Single(session.Prepares);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AChainPendingAtARecordingsStartIsDroppedAndPreparedAgainAfterItsStop()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            using var rig = NewChainRecordingRig(folder);
+            var (orchestrator, session) = (rig.Orchestrator, await rig.StartAsync());
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            rig.ChangeVideo();
+            orchestrator.Post(new SettingsUpdated());
+            await WaitUntil(() => session.Prepares.Count == 1);
+
+            // The Recording starts on the session's chain; the prepared one is dropped.
+            await Press(orchestrator, rig.Presses, HotkeyAction.RecordToggle, qpc);
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(rig.Events));
+            Assert.Equal([ChainRecordingRig.Changed, null], session.Prepares.Select(p => p?.Snapshot.Video));
+            Assert.Single(rig.Deferrals);
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, qpc + (2 * second)));
+            await NextAsync(rig.Saved);
+            Assert.Null(Assert.Single(rig.Writes).SwitchesTo);
+
+            await Press(orchestrator, rig.Presses, HotkeyAction.RecordToggle, qpc + (4 * second));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(rig.Events));
+            await WaitUntil(() => session.Prepares.Count == 3);
+            Assert.Equal(ChainRecordingRig.Changed, session.Prepares.Last()!.Snapshot.Video);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>A game-session orchestrator with Replay Clips and Recordings, whose writes switch to the chain last prepared.</summary>
+    private ChainRecordingRig NewChainRecordingRig(string folder)
+    {
+        _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+        SetRecordingsEnabled(true);
+        return new ChainRecordingRig(this, folder);
+    }
+
+    private sealed class ChainRecordingRig : IDisposable
+    {
+        public static readonly VideoSettings Changed = new(VideoCodec.H264, 1280, 720, 60, 20_000, RateControl.Vbr);
+
+        private readonly SessionOrchestratorTests _owner;
+        private readonly ConcurrentQueue<string> _info = new();
+        private readonly ConcurrentQueue<FakeWrite> _writes = new();
+        private FakeSession? _session;
+
+        public ChainRecordingRig(SessionOrchestratorTests owner, string folder)
+        {
+            _owner = owner;
+            var paths = new ConcurrentQueue<string>();
+            var factory = new FakeFactory
+            {
+                Save = _ =>
+                {
+                    var write = new FakeWrite(paths) { SwitchesTo = _session!.Prepares.LastOrDefault() };
+                    _writes.Enqueue(write);
+                    return write;
+                },
+                Record = _ => new FakeRecording(),
+            };
+            Factory = factory;
+            Orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref owner._document),
+                _ => { },
+                press => Presses.Writer.TryWrite(press),
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => Saved.Writer.TryWrite(s), e => Events.Writer.TryWrite(e)),
+                recordings: new Recordings(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => Events.Writer.TryWrite(s),
+                    s => Events.Writer.TryWrite(s),
+                    e => Events.Writer.TryWrite(e),
+                    Info: _info.Enqueue));
+        }
+
+        public SessionOrchestrator Orchestrator { get; }
+
+        public FakeFactory Factory { get; }
+
+        public System.Threading.Channels.Channel<object> Events { get; } = System.Threading.Channels.Channel.CreateUnbounded<object>();
+
+        public System.Threading.Channels.Channel<HotkeyPress> Presses { get; } = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+
+        public System.Threading.Channels.Channel<ClipSaved> Saved { get; } = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+
+        public IEnumerable<FakeWrite> Writes => _writes;
+
+        /// <summary>The Info lines saying a chain change waits for the Recording.</summary>
+        public IEnumerable<string> Deferrals => _info.Where(i => i.Contains("until the Recording stops", StringComparison.Ordinal));
+
+        public async Task<FakeSession> StartAsync()
+        {
+            await Orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            return _session = Assert.Single(Factory.Sessions);
+        }
+
+        /// <summary>Commits the profile's video as <see cref="Changed"/>, which needs another chain.</summary>
+        public void ChangeVideo()
+        {
+            var document = Volatile.Read(ref _owner._document);
+            var profile = document.Profiles[ProfileId];
+            Volatile.Write(ref _owner._document, document with { Profiles = document.Profiles.SetItem(ProfileId, profile with { Overrides = profile.Overrides.SetItem(Keys.Video.Name, Keys.Video.ToJson(Changed)) }) });
+        }
+
+        public void Dispose() => Orchestrator.Dispose();
+    }
+
+    private static TaskCompletionSource NewGate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>The Global values with the Output Folder <paramref name="folder"/> and, when given, <paramref name="cooldown"/> as <c>saveCooldown</c>.</summary>
+    private static System.Collections.Immutable.ImmutableSortedDictionary<string, System.Text.Json.JsonElement> InFolder(string folder, int? cooldown = null)
+    {
+        var global = SettingsDocument.Empty.Global.SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(folder));
+        return cooldown is { } seconds ? global.SetItem(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(seconds)) : global;
+    }
+
+    private static async Task WaitUntil(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow + Timeout;
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < deadline, "Timed out waiting for the condition.");
+            await Task.Delay(20, Token);
+        }
+    }
+
     private static async Task<T> NextAsync<T>(System.Threading.Channels.Channel<T> channel) =>
         await channel.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
@@ -495,6 +1379,229 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task ARecordTogglePressRecordsOnlyWhenTheProfileEnablesItAndTheNextOneStopsIt()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+            var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+            var published = new ConcurrentQueue<CaptureState>();
+            var library = new FakeLibraryWrites();
+            var made = new ConcurrentQueue<FakeRecording>();
+            var factory = new FakeFactory
+            {
+                Record = _ =>
+                {
+                    var recording = new FakeRecording();
+                    made.Enqueue(recording);
+                    return recording;
+                },
+            };
+            using var orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref _document),
+                published.Enqueue,
+                press => presses.Writer.TryWrite(press),
+                recordings: new Recordings(
+                    OutputPathAllocator.System,
+                    () => throw new InvalidOperationException("the Global folder is set"),
+                    s => events.Writer.TryWrite(s),
+                    s => events.Writer.TryWrite(s),
+                    e => events.Writer.TryWrite(e),
+                    library,
+                    Open: library));
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var press = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            // recordingsEnabled off: nothing at all.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press));
+            await NextPress(presses);
+            Assert.Empty(made);
+            Assert.Empty(library.Calls);
+            Assert.False(events.Reader.TryRead(out _));
+            Assert.Empty(Directory.GetFiles(folder, "*", SearchOption.AllDirectories));
+            Assert.Equal([RecordingState.Off], published.Select(p => p.Recording));
+
+            // Read live at the press.
+            var document = Volatile.Read(ref _document);
+            Volatile.Write(ref _document, document with { Profiles = document.Profiles.SetItem(ProfileId, document.Profiles[ProfileId] with { RecordingsEnabled = true }) });
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press + 1));
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            var recording = Assert.Single(made);
+            Assert.Equal(started.Path, recording.Path);
+            Assert.Equal(Path.Combine(folder, "Game"), Path.GetDirectoryName(started.Path));
+            Assert.Equal([RecordingState.Off, RecordingState.Running], published.Select(p => p.Recording));
+
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press + 2));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+            Assert.Equal([press + 2], recording.Stops);
+            // The path is open from just after the Library's begin to just after its end (FR-12).
+            Assert.Equal([$"begin {started.Path} {ProfileId}", $"opened {started.Path}", $"end {started.Path} Written", $"closed {started.Path}"], library.Calls);
+            Assert.Equal([RecordingState.Off, RecordingState.Running, RecordingState.Off], published.Select(p => p.Recording));
+            Assert.Single(made);
+
+            // A session ending under a Recording stops it as session-ended once its writer finishes.
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press + 3));
+            var again = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            await orchestrator.EndAsync().WaitAsync(Timeout, Token);
+            made.Last().Finish();
+            Assert.Equal(new RecordingStopped(again.Path, RecordingStopReasons.SessionEnded), await NextAsync(events));
+            Assert.Equal(RecordingState.Off, published.Last().Recording);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task TheRecordHotkeyModeIsReadAtEachPressAndOnlyItsActionsAct()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var (orchestrator, events, presses, made, published, _) = NewRecordingOrchestrator();
+            using var owned = orchestrator;
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            // Toggle mode (the default): Start and Stop do nothing; press, press gives start, stop.
+            await Press(orchestrator, presses, HotkeyAction.RecordStart, qpc);
+            await Press(orchestrator, presses, HotkeyAction.RecordStop, qpc + 1);
+            Assert.Empty(made);
+            Assert.False(events.Reader.TryRead(out _));
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 2);
+            var first = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 3);
+            Assert.Equal(new RecordingStopped(first.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+
+            // Separate mode, committed mid-session: the toggle does nothing, Start twice gives one
+            // Recording, Stop stops it, and Stop with none running does nothing.
+            var document = Volatile.Read(ref _document);
+            Volatile.Write(ref _document, document with { Global = document.Global.SetItem(Keys.RecordHotkeyMode.Name, Keys.RecordHotkeyMode.ToJson(RecordHotkeyMode.Separate)) });
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 4);
+            Assert.Single(made);
+            await Press(orchestrator, presses, HotkeyAction.RecordStart, qpc + 5);
+            var second = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            await Press(orchestrator, presses, HotkeyAction.RecordStart, qpc + 6);
+            Assert.Equal(2, made.Count);
+            await Press(orchestrator, presses, HotkeyAction.RecordStop, qpc + 7);
+            Assert.Equal(new RecordingStopped(second.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+            Assert.Equal([qpc + 7], made.Last().Stops);
+            await Press(orchestrator, presses, HotkeyAction.RecordStop, qpc + 8);
+            Assert.Equal(2, made.Count);
+            Assert.False(events.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task TheRecordingsSwitchIsReadAtEachPressAndGatesOnlyTheStart()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            var (orchestrator, events, presses, made, published, _) = NewRecordingOrchestrator();
+            using var owned = orchestrator;
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            // No Target Game, so no game session: nothing, even with the switch on.
+            SetRecordingsEnabled(true);
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc);
+            Assert.Empty(made);
+            Assert.False(events.Reader.TryRead(out _));
+
+            // Off: the press does nothing, no event and no state change.
+            SetRecordingsEnabled(false);
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 1);
+            Assert.Empty(made);
+            Assert.False(events.Reader.TryRead(out _));
+            Assert.Empty(Directory.GetFiles(folder, "*", SearchOption.AllDirectories));
+            Assert.All(published, p => Assert.Equal(RecordingState.Off, p.Recording));
+
+            // Switching it on starts nothing; the next press does.
+            SetRecordingsEnabled(true);
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 2);
+            Assert.Empty(made);
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 3);
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
+
+            // Switching it off mid-Recording leaves it running until it is stopped.
+            SetRecordingsEnabled(false);
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 4);
+            Assert.Empty(made.Single().Stops);
+            Assert.False(events.Reader.TryRead(out _));
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 5);
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    private void SetRecordingsEnabled(bool enabled)
+    {
+        var document = Volatile.Read(ref _document);
+        Volatile.Write(ref _document, document with { Profiles = document.Profiles.SetItem(ProfileId, document.Profiles[ProfileId] with { RecordingsEnabled = enabled }) });
+    }
+
+    private static async Task Press(SessionOrchestrator orchestrator, System.Threading.Channels.Channel<HotkeyPress> presses, HotkeyAction action, long qpc)
+    {
+        orchestrator.Post(new HotkeyPressed(action, qpc));
+        await NextPress(presses);
+    }
+
+    /// <summary>
+    /// An orchestrator whose sessions record with <see cref="FakeRecording"/>s; with
+    /// <paramref name="targetChanged"/>, it also follows the Target with a game session, and with
+    /// <paramref name="drains"/>, it has Replay Clips, so a game session drains on its Target's exit (R1).
+    /// </summary>
+    private (SessionOrchestrator Orchestrator, System.Threading.Channels.Channel<object> Events, System.Threading.Channels.Channel<HotkeyPress> Presses, ConcurrentQueue<FakeRecording> Made, ConcurrentQueue<CaptureState> Published, FakeFactory Factory) NewRecordingOrchestrator(
+        Action<TargetChanged>? targetChanged = null, FakeLibraryWrites? library = null, bool drains = false)
+    {
+        var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
+        var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+        var made = new ConcurrentQueue<FakeRecording>();
+        var published = new ConcurrentQueue<CaptureState>();
+        var factory = new FakeFactory
+        {
+            Record = _ =>
+            {
+                var recording = new FakeRecording();
+                made.Enqueue(recording);
+                return recording;
+            },
+        };
+        var orchestrator = new SessionOrchestrator(
+            factory,
+            () => Volatile.Read(ref _document),
+            published.Enqueue,
+            press => presses.Writer.TryWrite(press),
+            targetChanged: targetChanged,
+            targetCapture: targetChanged is null ? null : new TargetCapture(_ => NoAudio, (_, e) => events.Writer.TryWrite(e)),
+            clips: drains ? new ReplayClips(OutputPathAllocator.System, () => throw new InvalidOperationException("the Global folder is set"), _ => { }, e => events.Writer.TryWrite(e)) : null,
+            recordings: new Recordings(
+                OutputPathAllocator.System,
+                () => throw new InvalidOperationException("the Global folder is set"),
+                s => events.Writer.TryWrite(s),
+                s => events.Writer.TryWrite(s),
+                e => events.Writer.TryWrite(e),
+                library,
+                Open: library));
+        return (orchestrator, events, presses, made, published, factory);
+    }
+
     private static async Task<HotkeyPress> NextPress(System.Threading.Channels.Channel<HotkeyPress> presses) =>
         await presses.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
@@ -532,6 +1639,12 @@ public sealed class SessionOrchestratorTests : IDisposable
         /// <summary>What each session's <c>Save</c> returns; none when null.</summary>
         public Func<long, IClipWrite?>? Save { get; init; }
 
+        /// <summary>What each session's <c>Record</c> returns; none when null.</summary>
+        public Func<long, IRecordingWrite?>? Record { get; init; }
+
+        /// <summary>Where each session records its <c>SetBufferWindow</c> calls, as "window N".</summary>
+        public ConcurrentQueue<string>? Log { get; init; }
+
         public IReadOnlyList<FakeSession> Sessions
         {
             get
@@ -553,21 +1666,83 @@ public sealed class SessionOrchestratorTests : IDisposable
 
             lock (_sessions)
             {
-                var session = new FakeSession(spec, events, _sessions.Count + 1) { SaveWith = Save };
+                var session = new FakeSession(spec, events, _sessions.Count + 1) { SaveWith = Save, RecordWith = Record, Log = Log };
                 _sessions.Add(session);
                 return session;
             }
         }
     }
 
-    /// <summary>A write that records its path and completes at once, from another thread, leaving the reserved file.</summary>
-    private sealed class FakeWrite(ConcurrentQueue<string> writes) : IClipWrite
+    /// <summary>
+    /// A write that records its path and completes from another thread, at once or once
+    /// <paramref name="gate"/> completes, leaving the reserved file, or failing with
+    /// <paramref name="failure"/>; it counts its Resets.
+    /// </summary>
+    private sealed class FakeWrite(ConcurrentQueue<string> writes, Exception? failure = null, Task? gate = null, ConcurrentQueue<string>? log = null) : IClipWrite
     {
+        private int _resets;
+
+        public int Resets => Volatile.Read(ref _resets);
+
+        public SessionSpec? SwitchesTo { get; init; }
+
         public void Write(string path, Action<Exception?> done)
         {
             writes.Enqueue(path);
-            ThreadPool.QueueUserWorkItem(_ => done(null));
+            (gate ?? Task.CompletedTask).ContinueWith(_ => done(failure), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
+
+        public void Reset()
+        {
+            Interlocked.Increment(ref _resets);
+            log?.Enqueue("reset");
+        }
+    }
+
+    /// <summary>A Recording that records its path and stops, and finishes from another thread on its stop.</summary>
+    private sealed class FakeRecording : IRecordingWrite
+    {
+        private readonly ConcurrentQueue<long> _stops = new();
+        private Action<Exception?>? _done;
+
+        public string? Path { get; private set; }
+
+        public IEnumerable<long> Stops => _stops;
+
+        public void Start(string path, Action<Exception?> done)
+        {
+            Path = path;
+            _done = done;
+        }
+
+        public void Stop(long qpc)
+        {
+            _stops.Enqueue(qpc);
+            Finish();
+        }
+
+        /// <summary>Finishes as the session's output ending would, from another thread.</summary>
+        public void Finish()
+        {
+            var done = _done!;
+            Task.Run(() => done(null), CancellationToken.None);
+        }
+    }
+
+    /// <summary>Records each Library call, and each open-Recording call, in order.</summary>
+    private sealed class FakeLibraryWrites : ILibraryWrites, IOpenRecordings
+    {
+        private readonly ConcurrentQueue<string> _calls = new();
+
+        public IEnumerable<string> Calls => _calls;
+
+        public void BeginWrite(string path, string? profileId) => _calls.Enqueue($"begin {path} {profileId}");
+
+        public void EndWrite(string path, WriteOutcome outcome) => _calls.Enqueue($"end {path} {outcome}");
+
+        public void Opened(string path) => _calls.Enqueue($"opened {path}");
+
+        public void Closed(string path) => _calls.Enqueue($"closed {path}");
     }
 
     /// <summary>A store that starts with <paramref name="saved"/> and records each save.</summary>
@@ -594,6 +1769,8 @@ public sealed class SessionOrchestratorTests : IDisposable
         private readonly ConcurrentQueue<nint> _retargets = new();
         private int _inside;
         private int _maxConcurrency;
+        private int _drains;
+        private int _releases;
 
         public SessionSpec Spec { get; } = spec;
 
@@ -619,6 +1796,19 @@ public sealed class SessionOrchestratorTests : IDisposable
 
         public IClipWrite? Save(long qpc) => SaveWith?.Invoke(qpc);
 
+        public Func<long, IRecordingWrite?>? RecordWith { get; init; }
+
+        public IRecordingWrite? Record(long qpc) => RecordWith?.Invoke(qpc);
+
+        public ConcurrentQueue<string>? Log { get; init; }
+
+        public void SetBufferWindow(int seconds) => Log?.Enqueue($"window {seconds}");
+
+        /// <summary>Each <c>PrepareChain</c> call's spec, null for a drop, in order.</summary>
+        public ConcurrentQueue<SessionSpec?> Prepares { get; } = new();
+
+        public void PrepareChain(SessionSpec? next) => Prepares.Enqueue(next);
+
         public void SetMicMuted(bool muted, long qpc)
         {
             ThreadIds.Enqueue(Environment.CurrentManagedThreadId);
@@ -638,6 +1828,22 @@ public sealed class SessionOrchestratorTests : IDisposable
             _retargets.Enqueue(target.Window);
             Interlocked.Decrement(ref _inside);
         }
+
+        public int Drains => Volatile.Read(ref _drains);
+
+        public int Releases => Volatile.Read(ref _releases);
+
+        /// <summary>When set, <see cref="Drain"/>'s outcome carries it, as a session that never anchored.</summary>
+        public Exception? DrainFailure { get; set; }
+
+        public SessionOutcome Drain(string reason)
+        {
+            Interlocked.Increment(ref _drains);
+            var outcome = End(reason);
+            return DrainFailure is { } failure ? outcome with { Failure = failure } : outcome;
+        }
+
+        public void Release() => Interlocked.Increment(ref _releases);
 
         public SessionOutcome End(string reason)
         {

@@ -6,7 +6,10 @@ using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Audio;
+using ReplayBuffer.Core.Feedback;
+using ReplayBuffer.Core.Library;
 using ReplayBuffer.Core.Output;
+using ReplayBuffer.Core.Replay;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Core.Settings;
 using ReplayBuffer.Engine.Audio;
@@ -16,6 +19,7 @@ using ReplayBuffer.Engine.Sessions;
 using ReplayBuffer.Engine.Settings;
 using ReplayBuffer.Engine.Supervision;
 using ReplayBuffer.Platform.Audio;
+using ReplayBuffer.Platform.FFmpeg;
 using ReplayBuffer.Platform.Windows;
 
 namespace ReplayBuffer.Engine;
@@ -56,6 +60,12 @@ internal sealed record EngineHostOptions
     /// <summary>The time between Game Detection polls.</summary>
     public TimeSpan GameScanInterval { get; init; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// Where Feedback Sounds play; <c>null</c> for WASAPI on a non-test instance, and a silent
+    /// output on a test one.
+    /// </summary>
+    public IFeedbackSoundOutput? FeedbackSounds { get; init; }
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
@@ -67,7 +77,9 @@ internal sealed record EngineHostOptions
 /// The orchestrator owns mic mute, kept in the instance's <c>runtime.json</c> (AD-5) and loaded
 /// before the pipe serves. It registers the Hotkeys (AD-11) before the pipe accepts connections; the
 /// orchestrator publishes each press as <c>hotkey.pressed</c>, and a <c>micMute</c> press also toggles
-/// mic mute, and a <c>save</c> press saves a Clip. Once the pipe serves, it
+/// mic mute, a <c>save</c> press saves a Clip, and a <c>recordToggle</c> press starts or stops a
+/// Recording beside the Replay Buffer, published as <c>recording.started</c> and
+/// <c>recording.stopped</c>. Once the pipe serves, it
 /// probes the video encoders off that path and publishes the result as <c>capture.videoOptions</c>.
 /// It lists the audio devices before the hub exists, so the first snapshot holds them, and then
 /// publishes <c>devices.changed</c> when the endpoints or the Track Layouts change them (R1).
@@ -77,8 +89,16 @@ internal sealed record EngineHostOptions
 /// mic mute reaches the meters as it does a session (R6).
 /// Game Detection proposes the Target Game to the orchestrator, which publishes <c>target.changed</c>;
 /// a Replay Buffer session follows the Target, its audio from the snapshot's Track Layout, and a
-/// <c>save</c> press writes a Clip, published as <c>clip.saved</c>. With <c>--debug-capture</c> a
+/// <c>save</c> press writes a Clip, published as <c>clip.saved</c>, or one too soon after the last
+/// Reset or the session's start is refused as <c>clip.failed</c>. With <c>--debug-capture</c> a
 /// capture session writing one file follows the Target instead.
+/// The FeedbackRouter turns Clips saved and not saved, Recording state changes and a disk full into
+/// <c>warning.raised</c> notices, and dismisses the info ones after 10 s. <c>dev.simulate</c> injects a
+/// stub Recording state, a disk full, a save failure or a saved notice; the installed instance refuses it.
+/// Each notice's Feedback Sound, if switched on, plays on a worker on <c>feedbackSoundDevice</c> or
+/// the default communications endpoint; <c>feedback.preview</c> plays one even when it is off. While
+/// a Track of the active Track Layout mixes that endpoint, a <c>feedback-device-captured</c> warning
+/// is active, re-checked on settings, endpoint and target changes.
 /// </summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
@@ -104,6 +124,12 @@ internal sealed class EngineHost : IAsyncDisposable
     private Task _heartbeat = Task.CompletedTask;
     private Task _probe = Task.CompletedTask;
     private GameMonitor? _games;
+    private LibraryActor _library = null!;
+    private FeedbackRouter? _feedback;
+    private FeedbackDeviceCheck? _feedbackCheck;
+    private MemoryMarginReporter? _marginReporter;
+    private EstimatePublisher? _estimates;
+    private FeedbackSoundPlayer? _sounds;
     private int _disposed;
 
     private EngineHost(
@@ -162,6 +188,9 @@ internal sealed class EngineHost : IAsyncDisposable
     /// <summary>The engine's one audio hub (AD-20); disposed last, after every session has ended.</summary>
     public AudioDeviceHub Audio { get; }
 
+    /// <summary>The LibraryActor, which a writer tells about each file it writes (R6).</summary>
+    internal ILibraryWrites Library => _library;
+
     public string PipeName => Server.PipeName;
 
     /// <summary>Completes once <c>engine.shutdown</c> has been answered.</summary>
@@ -175,6 +204,9 @@ internal sealed class EngineHost : IAsyncDisposable
         var hotkeyLog = loggers.CreateLogger("Hotkeys");
         var gameLog = loggers.CreateLogger("Games");
         var clipLog = loggers.CreateLogger("Clips");
+        var recordingLog = loggers.CreateLogger("Recordings");
+        var libraryLog = loggers.CreateLogger("Library");
+        var ffmpegLog = loggers.CreateLogger("FFmpeg");
         var replay = !hostOptions.DebugCapture && (hostOptions.ReplayBuffer ?? !instance.IsTest);
 
         // The pipe first: a second engine must fail before it touches the settings file.
@@ -183,12 +215,37 @@ internal sealed class EngineHost : IAsyncDisposable
         HotkeyService? hotkeys = null;
         DeviceListPublisher? devices = null;
         DeviceDropoutReporter? dropouts = null;
+        MemoryMarginReporter? marginReporter = null;
+        EstimatePublisher? estimates = null;
         TrackMeters? meters = null;
         GameMonitor? games = null;
+        LibraryActor? library = null;
+        FeedbackRouter? feedback = null;
+        FeedbackSoundPlayer? sounds = null;
+        FeedbackDeviceCheck? feedbackCheck = null;
         var audio = new AudioDeviceHub(loggers);
         try
         {
             var load = SettingsStore.Open(instance.RoamingDataFolder);
+
+            // The Library at start seeds the hub's initial state, as the device list does.
+            string OutputFolder() =>
+                SettingsResolver.Resolve(load.Store.Current, null).OutputFolder
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
+            // FR-12: the Recordings the last run left open are trimmed before the Library sees them.
+            var runtime = new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Runtime"));
+            var interrupted = InterruptedRecordings.Recover(runtime.ReadInterrupted(), recordingLog);
+
+            var libraryFile = Path.Combine(instance.RoamingDataFolder, "library.json");
+
+            // A top-level folder's Game Profile, for files found on disk (AD-21).
+            string? ProfileForFolder(string folder) =>
+                load.Store.Current.Profiles.FirstOrDefault(p => string.Equals(p.Value.Folder, folder, StringComparison.OrdinalIgnoreCase)).Key;
+            var libraryLoad = LibraryActor.Load(
+                OutputFolder(),
+                libraryFile,
+                ProfileForFolder,
+                e => libraryLog.LogWarning("The Library couldn't be read in full: {Message}", e.Message));
 
             // The device list seeds the hub's initial state; a change is published once the hub exists.
             EventHub? publishTo = null;
@@ -197,12 +254,70 @@ internal sealed class EngineHost : IAsyncDisposable
                 () => load.Store.Current,
                 list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
                 loggers.CreateLogger("Audio"));
-            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list));
+            // The storage estimate (R2) seeds the initial state likewise.
+            estimates = new EstimatePublisher(
+                () => load.Store.Current,
+                new SystemMemoryStatus(),
+                EstimatePublisher.FreeDiskBytes,
+                Path.Combine(instance.LocalDataFolder, "ring"),
+                e => Volatile.Read(ref publishTo)?.Publish(CaptureMessages.EstimateChanged, e),
+                hostOptions.Time);
+            var estimate = estimates.Seed();
+            var libraryFolder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(OutputFolder()));
+            var hub = devices.Seed(list => publishTo = new EventHub(load.Store.Current, list, libraryLoad.Items, libraryLoad.Corrupt, libraryFolder, estimate));
             load.Store.Changed += document => hub.Publish(SettingsMessages.Changed, new SettingsChanged(document.Revision, document));
             load.Store.Changed += devices.OnSettingsChanged;
+            load.Store.Changed += estimates.OnSettingsChanged;
 
+            // Every commit re-resolves the game session's settings (R7, R8), once the orchestrator exists.
+            SessionOrchestrator? settingsTo = null;
+            load.Store.Changed += _ => Volatile.Read(ref settingsTo)?.Post(new SettingsUpdated());
+
+            var libraryActor = library = new LibraryActor(
+                libraryLoad.Items,
+                OutputFolder,
+                libraryFile,
+                ProfileForFolder,
+                libraryLoad.Corrupt,
+                item => hub.Publish(LibraryMessages.ItemAdded, item),
+                item => hub.Publish(LibraryMessages.ItemChanged, item),
+                removed => hub.Publish(LibraryMessages.ItemRemoved, removed),
+                reset => hub.Publish(LibraryMessages.Reset, reset),
+                blocked => hub.Publish(LibraryMessages.CleanupBlockedChanged, blocked),
+                hostOptions.Time,
+                e => libraryLog.LogWarning("A Library disk operation failed: {Message}", e.Message),
+                createMissingFolder: !instance.IsTest,
+                readLength: path => MediaLength.Read(path, ffmpegLog),
+                folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed));
+
+            // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.
+            load.Store.Changed += _ => libraryActor.OutputFolderChanged();
+            string? corruptWarning = null;
             var warnings = new Warnings(hub, hostOptions.Time);
+            var feedbackLog = loggers.CreateLogger("Feedback");
+            var player = sounds = new FeedbackSoundPlayer(
+                hostOptions.FeedbackSounds ?? (instance.IsTest ? SilentFeedbackSoundOutput.Instance : new FeedbackSoundOutput()),
+                () => load.Store.Current,
+                (message, e) => feedbackLog.LogWarning(e, "{Message}", message));
+            var notices = feedback = new FeedbackRouter(warnings, hostOptions.Time, player);
+            var soundCheck = feedbackCheck = new FeedbackDeviceCheck(
+                player,
+                load.Store,
+                hostOptions.AudioEndpoints ?? audio,
+                () => hub.State.TargetGame?.ProfileId,
+                warnings,
+                feedbackLog);
+            Action<ClipFailed> notSaved = failed =>
+            {
+                hub.Publish(CaptureMessages.Failed, failed);
+                clipLog.LogInformation("The save made no Clip: {Reason}", failed.Reason);
+                notices.ClipNotSaved(failed);
+            };
             dropouts = new DeviceDropoutReporter(audio, warnings);
+
+            // One margin for the engine: every session and ring generation shares it, so neither re-arms the warning.
+            var margin = new MemoryMargin(new SystemMemoryStatus());
+            marginReporter = new MemoryMarginReporter(margin, warnings);
             var router = new CommandRouter(log);
             var apps = new AppSupervisor(
                 hub,
@@ -215,9 +330,30 @@ internal sealed class EngineHost : IAsyncDisposable
                 hostOptions.MeterAudio ?? audio,
                 levels => hub.Publish(AudioMessages.Levels, levels),
                 loggers.CreateLogger("Audio"));
+            // Ring files a killed engine left (DeleteOnClose covers a crash, not a power loss), before any session makes one.
+            var ringFolder = Path.Combine(instance.LocalDataFolder, "ring");
+            var stale = RingFile.RemoveStale(ringFolder);
+            if (SettingsResolver.Resolve(load.Store.Current, null).RingPath is { Length: > 0 } ringPath)
+            {
+                stale += RingFile.RemoveStale(ringPath);
+            }
+
+            if (stale > 0)
+            {
+                clipLog.LogInformation("Removed {Count} stale Replay Buffer ring files", stale);
+            }
+
+            var defaultOutputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
-                    new CaptureSessionOptions { OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"), Replay = replay },
+                    new CaptureSessionOptions
+                    {
+                        OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"),
+                        Replay = replay,
+                        RingFolder = ringFolder,
+                        Margin = margin,
+                        ResetGap = message => warnings.Raise(ErrorCodes.ResetGap, WarningSeverity.Warning, "replay", message, overlay: false),
+                    },
                     loggers,
                     audio,
                     encoders),
@@ -226,14 +362,19 @@ internal sealed class EngineHost : IAsyncDisposable
                 {
                     hub.Publish(CaptureMessages.StateChanged, state);
                     trackMeters.SetMicMuted(state.MicMuted);
+                    notices.StateChanged(state);
                 },
                 press =>
                 {
                     hub.Publish(HotkeyMessages.Pressed, press);
                     HotkeyService.LogPress(hotkeyLog, press);
                 },
-                new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Audio")),
-                changed => hub.Publish(GameMessages.TargetChanged, changed),
+                runtime,
+                changed =>
+                {
+                    hub.Publish(GameMessages.TargetChanged, changed);
+                    soundCheck.Check();
+                },
                 hostOptions.DebugCapture
                     ? new TargetCapture(
                         _ => SessionAudio.None,
@@ -246,14 +387,45 @@ internal sealed class EngineHost : IAsyncDisposable
                 replay
                     ? new ReplayClips(
                         OutputPathAllocator.System,
-                        () => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name),
+                        () => defaultOutputFolder,
                         saved =>
                         {
                             hub.Publish(CaptureMessages.Saved, saved);
                             clipLog.LogInformation("Clip saved to {Path}", saved.Path);
+                            notices.ClipSaved(saved);
                         },
-                        e => clipLog.LogWarning("The save failed: {Message}", e.Message))
+                        e => clipLog.LogWarning("The save failed: {Message}", e.Message),
+                        notSaved,
+                        Saving: saving =>
+                        {
+                            hub.Publish(CaptureMessages.Saving, saving);
+                            clipLog.LogDebug("Saving a Clip");
+                        },
+                        Ignored: since => clipLog.LogInformation(
+                            "The save press came {Seconds:0.0} s after the last accepted one, inside the Save Cooldown; it was ignored", since.TotalSeconds),
+                        Library: libraryActor)
+                    : null,
+                replay
+                    ? new Recordings(
+                        OutputPathAllocator.System,
+                        () => defaultOutputFolder,
+                        started =>
+                        {
+                            hub.Publish(RecordingMessages.Started, started);
+                            recordingLog.LogInformation("Recording to {Path}", started.Path);
+                        },
+                        stopped =>
+                        {
+                            hub.Publish(RecordingMessages.Stopped, stopped);
+                            recordingLog.LogInformation("Recording stopped ({Reason}): {Path}", stopped.Reason, stopped.Path);
+                        },
+                        e => recordingLog.LogWarning("The Recording failed: {Message}", e.Message),
+                        libraryActor,
+                        message => recordingLog.LogInformation("{Message}", message),
+                        runtime)
                     : null);
+
+            Volatile.Write(ref settingsTo, sessions);
 
             // Test instances detect games only when a test asks: other tests must never see a stray target.changed.
             if (hostOptions.GameWindows is not null || hostOptions.DebugCapture || replay || !instance.IsTest)
@@ -282,7 +454,7 @@ internal sealed class EngineHost : IAsyncDisposable
 
             // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
-            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games };
+            var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor, _feedback = notices, _feedbackCheck = soundCheck, _sounds = player, _marginReporter = marginReporter, _estimates = estimates };
 
             router.Register(SettingsMessages.Update, (update, _) => ValueTask.FromResult(new SettingsUpdateResult(load.Store.Update(update).Revision)));
             router.Register(AudioMessages.List, (_, _) => ValueTask.FromResult(devices.Current));
@@ -296,8 +468,33 @@ internal sealed class EngineHost : IAsyncDisposable
                 trackMeters.Unwatch();
                 return ValueTask.FromResult(Empty.Value);
             });
-            router.Register(FeedbackMessages.Dismiss, (dismiss, _) => ValueTask.FromResult(warnings.Dismiss(dismiss)));
+            router.Register(FeedbackMessages.Dismiss, (dismiss, _) =>
+            {
+                var dismissed = warnings.Dismiss(dismiss);
+
+                // Dismissing library-corrupt acknowledges the rebuilt index, so Cleanup may run again.
+                if (dismiss.Id == corruptWarning)
+                {
+                    libraryActor.AcknowledgeCorrupt();
+                }
+
+                return ValueTask.FromResult(dismissed);
+            });
+            router.Register(LibraryMessages.SetFavourite, async (favourite, _) =>
+            {
+                // Never retried: a stale identity comes back as library-item-changed (AD-3).
+                await libraryActor.SetFavourite(favourite).ConfigureAwait(false);
+                return Empty.Value;
+            });
+            router.Register(FeedbackMessages.Preview, (preview, _) =>
+            {
+                player.Preview(preview.Sound);
+                return ValueTask.FromResult(Empty.Value);
+            });
             router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
+            SessionOrchestrator simulateTo = sessions;
+            var simulator = new DevSimulator(instance, running => simulateTo.Post(new RecordingRunning(running)), notices.DiskFull, notSaved, () => notices.ClipSaved(new ClipSaved("dev.simulate")));
+            router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
                 EngineMessages.Shutdown,
@@ -345,6 +542,26 @@ internal sealed class EngineHost : IAsyncDisposable
                     overlay: false);
             }
 
+            // AD-16: an interrupted Recording is never resumed, only reported.
+            foreach (var message in interrupted)
+            {
+                warnings.Raise(ErrorCodes.RecordingInterrupted, WarningSeverity.Warning, "recordings", message, overlay: true);
+            }
+
+            // Only once they are reported: a start that fails before here reports them next time.
+            runtime.ClearInterrupted();
+
+            if (libraryLoad.Corrupt)
+            {
+                corruptWarning = warnings.Raise(
+                    ErrorCodes.LibraryCorrupt,
+                    WarningSeverity.Warning,
+                    "library",
+                    "The Library index was unreadable and was rebuilt from the Output Folder; Favourites may be lost. Cleanup stays off until this is acknowledged.",
+                    overlay: false).Id;
+            }
+
+            soundCheck.Check();
             server.Start(hub, router);
             games?.Start();
             if (hostOptions.ProbeEncoders)
@@ -363,9 +580,15 @@ internal sealed class EngineHost : IAsyncDisposable
             games?.Dispose();
             hotkeys?.Dispose();
             sessions?.Dispose();
+            library?.Dispose();
+            feedback?.Dispose();
+            feedbackCheck?.Dispose();
+            sounds?.Dispose();
             meters?.Dispose();
             devices?.Dispose();
             dropouts?.Dispose();
+            marginReporter?.Dispose();
+            estimates?.Dispose();
             audio.Dispose();
             server.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
@@ -393,12 +616,24 @@ internal sealed class EngineHost : IAsyncDisposable
 
         // Ends a running session, finishing its file, and joins the orchestrator thread.
         Sessions.Dispose();
+
+        // After the orchestrator, so every write it ended has been saved. A write still in flight here gets no EndWrite (4.5 deferred) and is found by the next start scan without its profile.
+        _library.Dispose();
+
+        // No more outcomes reach the router once the orchestrator has stopped.
+        _feedback?.Dispose();
+
+        // Plays what the router queued, then joins the sound worker.
+        _feedbackCheck?.Dispose();
+        _sounds?.Dispose();
         await Server.DisposeAsync().ConfigureAwait(false);
 
         // Closes the watch's subscriptions before the hub goes.
         Meters.Dispose();
         Devices.Dispose();
         Dropouts.Dispose();
+        _marginReporter?.Dispose();
+        _estimates?.Dispose();
         Audio.Dispose();
         _stopHeartbeat.Dispose();
         _stopProbe.Dispose();

@@ -1,0 +1,18 @@
+using ReplayBuffer.Core.Replay;
+using Windows.Win32;
+using Windows.Win32.System.SystemInformation;
+
+namespace ReplayBuffer.Platform.Windows;
+
+/// <summary>Windows' physical memory, by <c>GlobalMemoryStatusEx</c>, for the Replay Buffer's RAM margin (R3).</summary>
+public sealed unsafe class SystemMemoryStatus : IMemoryStatus
+{
+    /// <summary>The available and installed physical memory; on failure, unlimited available, so never at the margin.</summary>
+    public MemoryStatus Read()
+    {
+        var status = new MEMORYSTATUSEX { dwLength = (uint)sizeof(MEMORYSTATUSEX) };
+        return PInvoke.GlobalMemoryStatusEx(&status)
+            ? new MemoryStatus((long)status.ullAvailPhys, (long)status.ullTotalPhys)
+            : new MemoryStatus(long.MaxValue, 0);
+    }
+}

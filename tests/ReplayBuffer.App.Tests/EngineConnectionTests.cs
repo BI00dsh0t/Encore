@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using ReplayBuffer.App.Engine;
+using ReplayBuffer.App.Overlay;
 using ReplayBuffer.App.Settings;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Ipc;
@@ -193,6 +194,27 @@ public sealed class EngineConnectionTests : IAsyncDisposable
         Assert.Contains(ErrorCodes.EngineUntrusted, connection.Problem);
         Assert.Null(connection.State);
         Assert.Equal(EngineStatus.Connected, trusted.Status);
+    }
+
+    [Fact]
+    public async Task TheSimulatorsDiskFullShowsTheRedXUntilARecordingStarts()
+    {
+        var connection = await ConnectAsync();
+        // One action at a time, as the UI thread would run them: session events and the message timer both post.
+        var gate = new Lock();
+        var model = new OverlayViewModel(connection, action =>
+        {
+            lock (gate)
+            {
+                action();
+            }
+        });
+
+        await connection.SendAsync(DevMessages.Simulate, new DevSimulate(SimulatedEvent.DiskFull), Token);
+        await Eventually(() => model.DiskFull);
+
+        await connection.SendAsync(DevMessages.Simulate, new DevSimulate(SimulatedEvent.RecordingStarted), Token);
+        await Eventually(() => !model.DiskFull && model.Dot == OverlayDot.Solid);
     }
 
     private static async Task Eventually(Func<bool> condition)

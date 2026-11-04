@@ -26,12 +26,14 @@ public enum RecordingState
 /// <c>capture.stateChanged</c>, one of the two shapes the Overlay and status line render (AD-3).
 /// The SessionOrchestrator is its only producer (AD-19).
 /// </summary>
+/// <param name="ClipsWriting">How many Clips are being written right now; JSON without it reads as 0 (AD-22, additive).</param>
 public sealed record CaptureState(
     ReplayState Replay,
     RecordingState Recording,
     RecordingState MonitorRecording,
     bool MicMuted,
-    DateTimeOffset? CooldownUntil)
+    DateTimeOffset? CooldownUntil,
+    int ClipsWriting = 0)
 {
     /// <summary>Nothing running, and the mic muted, as AD-5 restores it with no saved state.</summary>
     public static CaptureState Initial { get; } = new(ReplayState.Off, RecordingState.Off, RecordingState.Off, MicMuted: true, CooldownUntil: null);
@@ -39,6 +41,19 @@ public sealed record CaptureState(
 
 /// <summary><c>clip.saved</c>: a Clip was written to <see cref="Path"/> (R4). The SessionOrchestrator is its only producer (AD-19).</summary>
 public sealed record ClipSaved(string Path);
+
+/// <summary>
+/// <c>clip.saving</c>: a <c>save</c> press was accepted at <see cref="At"/> and its Clip is on its
+/// way (R6); <c>clip.saved</c> or <c>clip.failed</c> follows. The SessionOrchestrator is its only
+/// producer (AD-19).
+/// </summary>
+public sealed record ClipSaving(DateTimeOffset At);
+
+/// <summary>
+/// <c>clip.failed</c>: a save made no Clip (R4); <see cref="Reason"/> is an error code, e.g.
+/// <see cref="ErrorCodes.ClipTooShort"/>. The SessionOrchestrator is its only producer (AD-19).
+/// </summary>
+public sealed record ClipFailed(string Reason);
 
 /// <summary>A codec this PC can encode, and the FFmpeg encoder the engine's probe chose for it (R2, AD-14).</summary>
 /// <param name="Encoder">The FFmpeg encoder name, e.g. <c>h264_nvenc</c>, or <c>libx264</c> when no hardware H.264 encoder works.</param>
@@ -103,6 +118,17 @@ public sealed record VideoOptions(bool Probed, IReadOnlyList<CodecOffer> Codecs,
     }
 }
 
+/// <summary>
+/// <c>estimate.changed</c>: what the Global Buffer Window costs in RAM or disk (R2), from the Global
+/// <c>video</c>, <c>bufferWindow</c>, <c>replayStorage</c>, <c>ringPath</c> and Track count.
+/// </summary>
+/// <param name="Storage">Where the ring lives, so whether <see cref="Bytes"/> is RAM or disk.</param>
+/// <param name="Bytes">The ring's bytes at worst for the Global settings.</param>
+/// <param name="WorstCase">True for VBR, whose bytes are counted at 1.5 times its bitrate.</param>
+/// <param name="FreeBytes">The free RAM for Memory, the ring folder drive's free space for Disk; null when unknown.</param>
+/// <param name="ExceedsFree">True when <see cref="Bytes"/> is over <see cref="FreeBytes"/>; false when that is unknown.</param>
+public sealed record StorageEstimate(ReplayStorage Storage, long Bytes, bool WorstCase, long? FreeBytes, bool ExceedsFree);
+
 /// <summary>Capture messages: the Replay Buffer, the capture session and the shared capture state.</summary>
 public static class CaptureMessages
 {
@@ -126,9 +152,31 @@ public static class CaptureMessages
         "lastClip",
         (snapshot, saved) => snapshot with { LastClip = saved });
 
+    /// <summary>A save press was accepted and its Clip is being made (R6); the snapshot keeps the last one.</summary>
+    public static EventType<ClipSaving> Saving { get; } = new(
+        "clip.saving",
+        CaptureJsonContext.Default.ClipSaving,
+        "lastClipSaving",
+        (snapshot, saving) => snapshot with { LastClipSaving = saving });
+
+    /// <summary>A save made no Clip (R4); the snapshot keeps the last failure.</summary>
+    public static EventType<ClipFailed> Failed { get; } = new(
+        "clip.failed",
+        CaptureJsonContext.Default.ClipFailed,
+        "lastClipFailure",
+        (snapshot, failed) => snapshot with { LastClipFailure = failed });
+
+    /// <summary>The Global settings' storage estimate (R2). Coalescing: a connection's queue keeps only the latest.</summary>
+    public static EventType<StorageEstimate> EstimateChanged { get; } = new(
+        "estimate.changed",
+        CaptureJsonContext.Default.StorageEstimate,
+        "estimate",
+        (snapshot, estimate) => snapshot with { Estimate = estimate },
+        coalesces: true);
+
     public static IReadOnlyList<CommandType> Commands { get; } = [];
 
-    public static IReadOnlyList<EventType> Events { get; } = [StateChanged, VideoOptionsChanged, Saved];
+    public static IReadOnlyList<EventType> Events { get; } = [StateChanged, VideoOptionsChanged, Saving, Saved, Failed, EstimateChanged];
 }
 
 [JsonSourceGenerationOptions(
@@ -138,5 +186,8 @@ public static class CaptureMessages
     RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(CaptureState))]
 [JsonSerializable(typeof(VideoOptions))]
+[JsonSerializable(typeof(ClipSaving))]
 [JsonSerializable(typeof(ClipSaved))]
+[JsonSerializable(typeof(ClipFailed))]
+[JsonSerializable(typeof(StorageEstimate))]
 public sealed partial class CaptureJsonContext : JsonSerializerContext;

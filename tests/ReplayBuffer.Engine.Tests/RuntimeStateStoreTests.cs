@@ -4,7 +4,7 @@ using ReplayBuffer.Engine.Settings;
 
 namespace ReplayBuffer.Engine.Tests;
 
-/// <summary><c>runtime.json</c>: mic mute kept between runs (AD-5), muted whenever it can't be read.</summary>
+/// <summary><c>runtime.json</c>: mic mute kept between runs (AD-5), muted whenever it can't be read, and the open Recordings (FR-12).</summary>
 public sealed class RuntimeStateStoreTests : IDisposable
 {
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "rb-runtime-" + Guid.NewGuid().ToString("N"));
@@ -29,6 +29,27 @@ public sealed class RuntimeStateStoreTests : IDisposable
         Assert.True(Store().Load());
 
         Assert.Single(_log.Entries, e => e.Level == LogLevel.Warning);
+    }
+
+    [Fact]
+    public void OpenRecordingsPersistBesideMicMuteUntilCleared()
+    {
+        var store = Store();
+        Assert.True(store.Load());
+        store.Save(false);
+        store.Opened("D:/Videos/a.mp4");
+        store.Opened("D:/Videos/b.mp4");
+        store.Closed("D:/Videos/a.mp4");
+        Assert.Equal("""{"micMuted":false,"openRecordings":["D:/Videos/b.mp4"]}""", File.ReadAllText(FilePath));
+
+        // The next run: reading leaves the paths; once cleared, the file keeps only its mic mute.
+        var next = Store();
+        Assert.Equal(["D:/Videos/b.mp4"], next.ReadInterrupted());
+        Assert.Contains("openRecordings", File.ReadAllText(FilePath), StringComparison.Ordinal);
+        next.ClearInterrupted();
+        Assert.Equal("""{"micMuted":false}""", File.ReadAllText(FilePath));
+        Assert.Empty(next.ReadInterrupted());
+        Assert.False(next.Load());
     }
 
     private RuntimeStateStore Store() => new(_folder, _log);

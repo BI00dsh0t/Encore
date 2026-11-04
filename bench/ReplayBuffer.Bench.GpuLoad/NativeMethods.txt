@@ -10,6 +10,11 @@ PostMessage
 GetSystemMetrics
 ShowWindow
 SetForegroundWindow
+GetForegroundWindow
+GetWindowThreadProcessId
+GetCurrentThreadId
+AttachThreadInput
+BringWindowToTop
 LoadCursor
 GetModuleHandle
 IDC_ARROW
@@ -24,6 +29,7 @@ IDXGIFactory5
 IDXGIAdapter1
 IDXGISwapChain1
 DXGI_ERROR_NOT_FOUND
+DXGI_ERROR_INVALID_CALL
 DXGI_PRESENT
 DXGI_MWA_FLAGS
 D3D11CreateDevice

@@ -104,7 +104,8 @@ public sealed record VideoEncoderOptions(
 /// (1 s). PTS are in 1/90000: a session's pacer gives each frame its slot's PTS
 /// (<see cref="PacedVideoEncoder"/>); the variable-rate API (<see cref="TryAcquire(long)"/>, for the
 /// probe and tests) takes capture QPC relative to the anchor. An IDR is also forced once a second
-/// of PTS has passed since the last one. NVENC and QSV return each packet as soon as its frame is
+/// of PTS has passed since the last one, and on the first frame captured after a save's press
+/// (<see cref="RequestKeyframe"/>, the save's cut, AD-10). NVENC and QSV return each packet as soon as its frame is
 /// encoded. BGRA frames go in as-is (X1); NV12 frames (X2) are tagged BT.709 limited range.
 /// </summary>
 public sealed unsafe class VideoEncoder : IDisposable
@@ -150,6 +151,15 @@ public sealed unsafe class VideoEncoder : IDisposable
     private int _ringNext;
     private long _lastPts = long.MinValue;
     private long _lastKeyPts = long.MinValue;
+
+    // Keyframe requests (AD-10): the latest ticket handed out and the latest press QPC asked for,
+    // and the latest ticket an encoded frame served, with that frame's PTS. _keyLock guards them
+    // all, and is only ever held for these reads and writes, never across an encode.
+    private readonly Lock _keyLock = new();
+    private long _keyRequests;
+    private long _keyAfterQpc = long.MinValue;
+    private long _servedTicket;
+    private long _servedPts;
     private long _dropped;
     private long _encoded;
     private long _flushed;
@@ -337,6 +347,37 @@ public sealed unsafe class VideoEncoder : IDisposable
     public long PoolMisses => Interlocked.Read(ref _poolMisses);
 
     /// <summary>
+    /// Asks for an IDR on the first frame encoded whose capture QPC is after
+    /// <paramref name="afterQpc"/> (the press, AD-10), and returns the request's ticket for
+    /// <see cref="TryGetForcedKey"/>. A frame captured at or before the press, still in the pacer's
+    /// hand-off or held for its slot, is not it; a repeat counts as captured at its slot's QPC. Safe
+    /// from any thread; it never waits on an encode. Requests outstanding together share one
+    /// keyframe, after the latest of their QPCs, which also restarts the once-a-second count.
+    /// </summary>
+    public long RequestKeyframe(long afterQpc)
+    {
+        lock (_keyLock)
+        {
+            _keyAfterQpc = Math.Max(_keyAfterQpc, afterQpc);
+            return ++_keyRequests;
+        }
+    }
+
+    /// <summary>
+    /// The PTS of the keyframe that served <paramref name="ticket"/> from <see cref="RequestKeyframe"/>;
+    /// false until a frame captured after its press has been encoded. Requests are seconds apart, so the
+    /// answer is the ticket's own keyframe.
+    /// </summary>
+    public bool TryGetForcedKey(long ticket, out long pts)
+    {
+        lock (_keyLock)
+        {
+            pts = _servedPts;
+            return _servedTicket >= ticket;
+        }
+    }
+
+    /// <summary>
     /// Encodes <paramref name="frame"/> (consumed) at slot PTS <paramref name="pts"/>.
     /// <paramref name="captureQpc"/> is the new frame's capture QPC, or 0 for a repeat, which
     /// records no latency.
@@ -399,7 +440,19 @@ public sealed unsafe class VideoEncoder : IDisposable
                 // The software path reuses its frames: clear what the last keyframe set.
                 input->pict_type = AVPictureType.AV_PICTURE_TYPE_NONE;
                 input->flags &= ~ffmpeg.AV_FRAME_FLAG_KEY;
-                if (_lastKeyPts == long.MinValue || pts - _lastKeyPts >= TimeBase)
+
+                // Every request outstanding when this frame is taken is served by it, if it was
+                // captured after the requests' press; a repeat (0) is taken at its slot's QPC.
+                var frameQpc = captureQpc != 0 ? captureQpc : CaptureQpcOf(pts);
+                long requested;
+                bool forced;
+                lock (_keyLock)
+                {
+                    requested = _keyRequests;
+                    forced = requested > _servedTicket && frameQpc > _keyAfterQpc;
+                }
+
+                if (forced || _lastKeyPts == long.MinValue || pts - _lastKeyPts >= TimeBase)
                 {
                     input->pict_type = AVPictureType.AV_PICTURE_TYPE_I;
                     input->flags |= ffmpeg.AV_FRAME_FLAG_KEY;
@@ -407,6 +460,15 @@ public sealed unsafe class VideoEncoder : IDisposable
                 }
 
                 FFmpegLibrary.Check(ffmpeg.avcodec_send_frame(_context, input), "avcodec_send_frame(video)");
+                if (forced)
+                {
+                    lock (_keyLock)
+                    {
+                        _servedPts = pts;
+                        _servedTicket = requested;
+                    }
+                }
+
                 Drain(flushing: false);
             }
         }

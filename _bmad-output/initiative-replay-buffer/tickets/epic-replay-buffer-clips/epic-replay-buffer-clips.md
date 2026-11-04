@@ -9,6 +9,7 @@ companions: []
 after: []
 refined: true
 risk: high
+status: done
 ---
 
 # Replay Buffer and Clips
@@ -90,6 +91,31 @@ In any detected game, pressing the Save Hotkey produces a playable multi-Track C
 - Decision: 2026-11-01, the Global Output Settings page lands in this epic (story 10), since epic 1 delivered the keys but no page. Unattended default, awaiting review.
 - Decision: 2026-11-01, `Library.BeginWrite`/`EndWrite` is a Core port with a no-op implementation until epic-library-cleanup provides the LibraryActor (story 5).
 - Decision: 2026-11-01, there's no `bmad-ux` pass for the Replay Buffer, Game Profile override and Hotkeys pages; the builder checks them by hand, as in epics 2 and 3. Unattended default, awaiting review.
+- Decision: 2026-11-03, from 4.6: `ReplayRingSink.Restart` opens a ring generation, but no engine path calls it yet. Its documented precondition is that no save is waiting for its keyframe or streams when it is called. Story 9's chain switch at the press frame breaks that precondition, so story 9 must do two things:
+  - Drain in-flight saves before `Restart`, or convert `VideoMicros`/`AllStreamsPast` per generation.
+  - Decide a cut's generation (and so its end) before `ClipWrite.Run` publishes its claim. Otherwise a fallback Clip just after a boundary, with a second write in flight, leaves `[boundary, key)` in neither Clip.
+  - Both are recorded as `deferred` in 4.6's plan.
+- Decision: 2026-11-03, from 4.7 (Disk mode; QA PASS with advisories, none fixed):
+  - Stories 4.8 and 4.10 take the RAM and disk limits. While a long Clip writes, its pinned blocks can't return to the ring file, so new slabs spill to native memory (`PacketRing.MemorySlabs`, silent). The disk stays within the estimate. 4.10's estimate or 4.8's margin should allow for it, and a one-time warning when `MemorySlabs` first rises would help.
+  - A Buffer Window change in Disk mode keeps the old and new ring files together until the old Clips finish writing, so disk use can briefly reach about twice the estimate. Accepted.
+  - A ring file write that fails mid-session (the drive is gone) fails the session; only file creation falls back to memory. Accepted.
+  - `RingFile.RemoveStale` deletes every `ring-*.bin` in the ring folder. It should match `ring-<digits>.bin` only (a foreign `ring-notes.bin` in a user-set `ringPath` would go). For the 4.13 sweep.
+  - `DiskRingClipTests` runs a real NVENC encode in the default suite. CLAUDE.md marks GPU encode tests Heavy/Explicit; the Core-level Memory-vs-Disk test already covers identity. For the 4.13 sweep.
+- Decision: 2026-11-03, from 4.8 (RAM margin; QA PASS, two non-blocking notes, not acted on):
+  - `MemoryMargin.Raised` runs `Warnings.Raise` on the encoder thread while the ring's lock is held, once per entry into the margin. It doesn't call back into the ring.
+  - With every older slab pinned and the margin refused, the ring still allocates the new slab; the pins go when their writes end.
+  - `memory-margin` warnings are not withdrawn on leaving the margin; they go only by `warning.dismiss`. Epic 5's status line may want to withdraw them.
+- Decision: 2026-11-03, from 4.10 (Replay Buffer page and estimate; QA PASS with three advisories, none fixed):
+  - The estimate covers the Global settings only, not a Game Profile's overrides. 4.9 and 4.11 should say so, or extend it, when per-profile settings reach the page.
+  - In Memory mode the free RAM adds back the engine's whole working set as the ring's own use, an approximation that can under-warn slightly.
+  - `EstimatePublisher` refreshes on a thread pool and every 30 s; a failed refresh is skipped silently.
+- Decision: 2026-11-04, from 4.12 (Hotkeys page; QA PASS, two notes): a combination an active Hotkey already holds goes to `RegisterHotKey`, not to the page, so capturing it on another row fires that action and the page's duplicate message appears only for inactive or failed bindings. The engine's `hotkey-duplicate` refusal still holds. A fix needs the engine to pause its Hotkeys during capture (an engine change); not done. Accepted.
+- Decision: 2026-11-04, from 4.9 (chain switch at the press; QA PASS with advisories, none fixed):
+  - 4.9 settled 4.6's two restart hazards by design: a ring sink per encoder chain, and each save bound to its chain before it claims. `RingGenerations.Restart`, `ReplayRingSink.Restart` and the previous-generation fallback are still unused by any engine path. For the 4.13 sweep.
+  - At a switch the new chain's AAC grid starts at the press QPC and the old one's at the anchor, so the two Clips can meet with up to about 10.7 ms of audio gap or overlap. Unmeasured; the Heavy test checks video only.
+  - The storage estimate on the Replay Buffer page (4.10) covers Global settings only, not a profile's overrides. 4.11 should say so or extend it.
+  - `Record` returns null while a switch is armed, which lasts until the next captured frame (longer with a static window), so a Record press in that window starts no Recording.
+  - A prepared chain holds an idle encoder session (and, in Disk mode, a second ring file) until the next save. A failed switching write can't retry the old chain's span.
 - Waits on epic-engine-baseline because: it needs the encoder and fragmented MP4 writer.
 - Waits on epic-multi-track-audio because: it needs the Track Layouts and the mixed Track audio.
 - Waits on epic-game-detection-profiles because: it needs the Target Game appeared and exited events, Game Profiles, and per-game folders and file names.
