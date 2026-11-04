@@ -45,7 +45,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 9.5 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.4 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with QA 9.4 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -175,7 +175,7 @@ The coordinator logs each QA round in the Log below.
 | 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `247284c`, builder approved) |
 | 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `166e1f3`) |
 | 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `d3dcad3`) |
-| 30.4 | 9.4 Library restyled | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in QA (story-2-7) |
+| 30.4 | 9.4 Library restyled | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | QA passed, merging |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in QA (qa-1-14) |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
@@ -740,3 +740,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Bugfix `flaky-engine-serve-capture-end` merged (`35b6acf`). Its first Engine run showed 2 more load-sensitive default tests (the rerun passed 180/180): `ReplayClipCaptureTests.AKilledTargetIsDrainedSoASaveStillCuts...` (TimeoutException at :296) and `TrackMixCaptureTests.EachTrackCarriesExactlyItsDevicesTones` (RMS 0.126, outside 0.142-0.174, at :98). Bugfix `flaky-engine-replay-trackmix` went to slice-epic-5. The RMS one is checked for a real mix glitch before any bound change. 9.4 READY FOR QA at `6446295`; QA went to story-2-7 (Sonnet, medium effort; cleared this time), and its card is In QA.
 - 2026-11-04: 9.5 READY FOR QA at `8013c3c`, and its card is In QA. Its QA waits for the next free worker: all 7 are busy (3 QA, 1 GPU runner, 1 bugfix, 2 implementers waiting on QA).
 - 2026-11-04: QA 8.6 passed at `f34fa7d` with 0 findings: Platform.Audio 25, Core 159 and Engine 182 passed; publish clean. No Contracts change. Name resolution falls back to the saved id for ambiguous names, an empty ParentName or a failed listing, so it never picks a wrong device. The Heavy pair test only builds the Run-key command string and never writes the registry. Note: the Track Layout page still shows a renumbered device as not connected (display only, in the plan's Design Notes). The merge waits for the 2 Heavy runs. QA 9.5 went to qa-1-14 (Sonnet, medium effort).
+- 2026-11-04: QA 9.4 passed at `6446295` with 0 findings: App 146 passed; no hard-coded colours; every row action kept; the empty-state rule bound to real VM properties; both themes load. 2-1-tracer is merging. story-2-7 is back in the pool.
