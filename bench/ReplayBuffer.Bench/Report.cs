@@ -116,6 +116,13 @@ internal static class Report
             md.AppendLine();
         }
 
+        if (fps.Overlay is { } overlay)
+        {
+            md.AppendLine(CultureInfo.InvariantCulture,
+                $"**Overlay on in the capture runs:** the App's dot (overlayDot `{overlay.Dot}`) and a message every {overlay.MessageSeconds} s; overlay planes on the load's monitor (SupportsOverlays): {overlay.OverlayPlanes switch { true => "yes", false => "no", null => "unknown" }}.");
+            md.AppendLine();
+        }
+
         if (fps.Aborted is not null)
         {
             md.AppendLine(CultureInfo.InvariantCulture, $"**Session ended early:** {fps.Aborted}");
@@ -143,12 +150,12 @@ internal static class Report
             Row("Gen2 GCs, steady state (all capture runs)", c?.Gen2Collections?.ToString(CultureInfo.InvariantCulture) ?? "n/a", "0", c?.Gen2Collections is { } g ? (g == 0 ? DriftMath.Pass : DriftMath.Miss) : ""),
         ]);
 
-        md.AppendLine("| Run | Condition | Pass | Avg FPS | 1 % low | Loss | Fresh slots | Duplicates | Queue drops | Skipped slots | Latency p99 | CPU (1 core) | Alloc/s | GC 0/1/2 |");
-        md.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+        md.AppendLine("| Run | Condition | Pass | Avg FPS | 1 % low | Loss | Fresh slots | Duplicates | Queue drops | Skipped slots | Latency p99 | CPU (1 core) | Alloc/s | GC 0/1/2 | PresentMode |");
+        md.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
         foreach (var r in fps.Runs)
         {
             md.AppendLine(CultureInfo.InvariantCulture,
-                $"| {r.Run} | {r.Condition} | {r.Pass} | {Num(r.AvgFps)} | {Num(r.OnePercentLowFps)} | {Pct(r.FpsLossPercent)} | {(r.FreshSlots is { } f ? $"{f} ({Pct(r.FreshSlotPercent)})" : "")} | {Pct(r.DuplicatePercent)} | {r.QueueDrops} | {r.SkippedSlots} | {Ms(r.LatencyP99Ms)} | {Pct(r.CpuPercentOneCore)} | {Num(r.AllocBytesPerSecond)} | {r.GcSteady} |");
+                $"| {r.Run} | {r.Condition} | {r.Pass} | {Num(r.AvgFps)} | {Num(r.OnePercentLowFps)} | {Pct(r.FpsLossPercent)} | {(r.FreshSlots is { } f ? $"{f} ({Pct(r.FreshSlotPercent)})" : "")} | {Pct(r.DuplicatePercent)} | {r.QueueDrops} | {r.SkippedSlots} | {Ms(r.LatencyP99Ms)} | {Pct(r.CpuPercentOneCore)} | {Num(r.AllocBytesPerSecond)} | {r.GcSteady} | {r.PresentMode} |");
         }
 
         md.AppendLine();

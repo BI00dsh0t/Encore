@@ -84,6 +84,7 @@ public sealed class OverlayBenchmarkTests : IDisposable
     [InlineData("--host", "app", "--overlay-exe", "x.exe")]
     [InlineData("--app-exe", "x.exe")]
     [InlineData("--host", "app", "--settle", "3")]
+    [InlineData("--overlay-dot", "always")]
     public void ABadHostIsAUsageError(params string[] args)
     {
         var context = _run.Context(["overlay", .. args]);
@@ -107,6 +108,22 @@ public sealed class OverlayBenchmarkTests : IDisposable
         var phases = report.GetProperty("phases").EnumerateArray().ToList();
         Assert.All(phases, p => Assert.Equal("Hardware: Legacy Flip", p.GetProperty("presentMode").GetString()));
         Assert.Equal([false, true, false], phases.Select(p => p.GetProperty("overlayWindowVisible").GetBoolean()));
+    }
+
+    /// <summary>Story 5.12: <c>bench fps --overlay</c> over the synthetic load with the real App; needs the GPU, PresentMon and the console.</summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public void FpsWithTheOverlayOnRunsTheLoadWithTheAppsOverlay()
+    {
+        var context = _run.Context("fps", "--overlay", "--seconds", "10", "--passes", "1", "--settle", "3");
+
+        var exit = FpsBenchmark.Run(context);
+
+        Assert.Equal(0, exit);
+        var overlay = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(_run.Folder, FpsBenchmark.FileName))).RootElement.GetProperty("overlay");
+        Assert.Equal("auto", overlay.GetProperty("dot").GetString());
+        Assert.Equal(FpsBenchmark.MessageSeconds, overlay.GetProperty("messageSeconds").GetInt32());
+        Assert.True(overlay.TryGetProperty("overlayPlanes", out _));
     }
 
     private static OverlayPhase Phase(string mode, string phase, double fps, string presentMode, int quns)
