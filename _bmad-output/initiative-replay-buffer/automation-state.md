@@ -39,13 +39,13 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.5 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix flaky-recording-crash-test |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.3 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.4 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with bugfix app-theme-test-order |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -175,8 +175,8 @@ The coordinator logs each QA round in the Log below.
 | 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `247284c`, builder approved) |
 | 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `166e1f3`) |
 | 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `d3dcad3`) |
-| 30.4 | 9.4 Library restyled | | pending |
-| 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
+| 30.4 | 9.4 Library restyled | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | | pending |
@@ -730,3 +730,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 9.3 passed at `d6ea6fb` (round 2). Nav items have a pressed state (a `NavPress` attached property), and the section label is out of the UIA tree (9 items). App 138 passed. 2-1-tracer is merging. story-2-7 is back in the pool.
 - 2026-11-04: Bugfix `dd-frame-gaps` READY at `dc882f8`. Root cause: `AcquireNextFrame`'s 100 ms wait held the multithread-protected device's lock, which the encoder thread needs every slot, so on a quiet monitor it stalled the encoder past the pacer's catch-up and left PTS gaps. The fix polls with a zero timeout every half slot, behind a new `IOutputDuplication` seam with a default test (`DesktopDuplicationCaptureTests`). The coordinator read the diff. The GPU runner is running the 3 Desktop Duplication Heavy tests and the whole `MonitorRecordingCaptureTests` class.
 - 2026-11-04: 8.5 merged (`af6eab8`; marked done with 5 Human Check rows in `101f32f`), and its card is Done. 8.6 (nothing to re-select after a reboot, a restart or a mixer restart) went to slice-epic-8 (Opus, medium effort), with its card In progress. No reboot, no service restarts and no default-device changes: a cold start on a Guid instance and a device-enumeration seam stand in; Heavy tests go to the runner.
+- 2026-11-04: 9.3 merged (`d3dcad3`; marked done, renders and its Human Check row in `7b4ad47`), and its card is Done. **App test-order bug** from 9.7: `ThemeTests.MicaIsBehindTheMainAppUnderFluentOnly...` fails after `SurfacesThemeTests.TheDialogAnswersYesNo...` (3 of 3; passes alone). Bugfix `app-theme-test-order` went to story-2-7 (Opus; not cleared, because the builder has it open, but it built the Mica test). 9.4 (Library) went to 2-1-tracer and 9.5 (settings group 1) to slice-epic-4, both Opus at medium effort, running in parallel on separate files.
