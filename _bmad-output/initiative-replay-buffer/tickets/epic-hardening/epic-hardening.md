@@ -64,6 +64,8 @@ The app runs for a month of daily use with nothing to do per session, which is t
 
 ## Notes
 
+- Decision: 2026-11-04, the builder halved 8.7's long runs so the final conformance run fits in about an hour: the drift Recording is 30 minutes (was 60), and `bench fps --overlay` runs 3 balanced passes of about 2.5 minutes each (was 5). The drift bound (under one frame) and the NFR-1 FPS target are unchanged. 8.7 drives a locally published build on the Dev instance, never the installed app; installing stays the builder's step.
+
 - Waits on epic-recordings because: it soaks and crash-tests Recordings.
 - Waits on epic-library-cleanup because: the soak includes the Library and Cleanup.
 - Decision: 2026-11-02, refined unattended from the initiative's lines, the PRD NFRs, the architecture ADs and PLAN.md §8. Story 1.8 already has mutual supervision and single instance; story 1.14's ReplayBuffer.Bench has the FPS and drift runs, extended with the Overlay by story 5.12; story 2.5 rebinds devices by id, then name; story 4.6 opens a new ring generation on a forced encoder restart and story 6.6 restarts a Recording on one; story 6.2 makes Recordings crash-safe and raises `recording-interrupted`; story 5.10's status line shows `engine-restarted` and `app-restarted`.
