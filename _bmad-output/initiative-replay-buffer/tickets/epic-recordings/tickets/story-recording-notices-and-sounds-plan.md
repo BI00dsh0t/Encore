@@ -3,7 +3,7 @@ title: 'Recording notices and sounds'
 type: 'feature'
 ticket: '8'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: 'b932e5aef70574fc52449988a7ea7e3667d0954e'
 route: 'full'
 route_source: 'auto'

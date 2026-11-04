@@ -138,7 +138,7 @@ The coordinator logs each QA round in the Log below.
 | 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `856bd57`) |
 | 27.6 | 6.6 One file however long, and forced encoder restarts | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `1cfccf0`) |
 | 27.7 | 6.7 Disk full during a Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `f144ae9`) |
-| 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
+| 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ede89f7`) |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | | pending |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | | pending |
 | 27.11 | 6.11 Recordings settings in the Main App | | pending |
@@ -587,3 +587,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 8.1 at `5776aa7`: **QA PASS**, with 1 should-fix: record the App's ~40 MB/h climb in the epic-hardening Notes for 8.8. 8.1 has been told to do that and merge (Sonnet). 2-1-tracer is back in the pool. 7.8 checkpointed at `9ab2453` and is waiting for the lock to build. The capture-cost investigation has moved on to a stage-split run.
 - 2026-11-04: QA 6.8 at `cdea684`: **QA PASS**, 0 findings. 6.8 has been told to merge (Sonnet). 8.1 did its should-fix (docs only, `c6e18c9`) and was given the go to merge. slice-epic-5 is back in the pool. **Flake watch:** one unidentified Engine test failed on its first run again (the 4th one-off today: two App, two Engine). Merges now rerun once and must report the test name if it fails twice. If it keeps happening, a small bugfix to find and fix the flaky test is worth it.
 - 2026-11-04: 8.1 merged (`81261bb`, marked done), after one conflict with develop in `BenchOptions.cs` (the soak's usage and options beside 5.12's `--overlay-dot`; both kept). The scoped build (0 warnings), Bench (143) and Engine (171) tests and the publish passed after the sync. Left: the App's ~40 MB/h private-bytes climb, in the epic-hardening Notes for 8.8. slice-epic-4 returns to the pool.
+- 2026-11-04: 6.8 merged (`ede89f7`, marked done), after syncing with develop (clean; build 0 warnings, Core 125/125, Engine 170 passed, publish OK). Its Human Check Queue row and the restart-notice decision are on develop.
