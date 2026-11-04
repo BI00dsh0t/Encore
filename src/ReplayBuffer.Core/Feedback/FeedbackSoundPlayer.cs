@@ -5,6 +5,16 @@ using ReplayBuffer.Core.Settings;
 
 namespace ReplayBuffer.Core.Feedback;
 
+/// <summary>The <c>feedbackSounds</c> names a <see cref="FeedbackNotice"/> carries as its sound.</summary>
+public static class FeedbackSoundNames
+{
+    public const string ClipSaved = "clipSaved";
+    public const string SaveFailed = "saveFailed";
+    public const string RecordingStarted = "recordingStarted";
+    public const string RecordingStopped = "recordingStopped";
+    public const string DiskFull = "diskFull";
+}
+
 /// <summary>Where Feedback Sounds play: the platform's render endpoints.</summary>
 public interface IFeedbackSoundOutput
 {
@@ -60,28 +70,13 @@ public sealed class FeedbackSoundPlayer : IDisposable
     /// <summary>The sound for a <c>feedbackSounds</c> name such as <c>clipSaved</c>, or <c>null</c> for an unknown one.</summary>
     public static FeedbackSound? Parse(string? name) => name switch
     {
-        "clipSaved" => FeedbackSound.ClipSaved,
-        "saveFailed" => FeedbackSound.SaveFailed,
-        "recordingStarted" => FeedbackSound.RecordingStarted,
-        "recordingStopped" => FeedbackSound.RecordingStopped,
-        "diskFull" => FeedbackSound.DiskFull,
+        FeedbackSoundNames.ClipSaved => FeedbackSound.ClipSaved,
+        FeedbackSoundNames.SaveFailed => FeedbackSound.SaveFailed,
+        FeedbackSoundNames.RecordingStarted => FeedbackSound.RecordingStarted,
+        FeedbackSoundNames.RecordingStopped => FeedbackSound.RecordingStopped,
+        FeedbackSoundNames.DiskFull => FeedbackSound.DiskFull,
         _ => null,
     };
-
-    /// <summary>Whether <paramref name="sound"/> is switched on in <paramref name="sounds"/>.</summary>
-    public static bool IsOn(FeedbackSounds sounds, FeedbackSound sound)
-    {
-        ArgumentNullException.ThrowIfNull(sounds);
-        return sound switch
-        {
-            FeedbackSound.ClipSaved => sounds.ClipSaved,
-            FeedbackSound.SaveFailed => sounds.SaveFailed,
-            FeedbackSound.RecordingStarted => sounds.RecordingStarted,
-            FeedbackSound.RecordingStopped => sounds.RecordingStopped,
-            FeedbackSound.DiskFull => sounds.DiskFull,
-            _ => false,
-        };
-    }
 
     /// <summary>
     /// The endpoint sounds play on now: <c>feedbackSoundDevice</c>, else the default communications
@@ -96,7 +91,7 @@ public sealed class FeedbackSoundPlayer : IDisposable
     /// </summary>
     public bool Play(string? name)
     {
-        if (Parse(name) is not { } sound || !IsOn(SettingsResolver.Resolve(_settings(), null).FeedbackSounds, sound))
+        if (Parse(name) is not { } sound || !SettingsResolver.Resolve(_settings(), null).FeedbackSounds.IsOn(sound))
         {
             return false;
         }

@@ -106,7 +106,10 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
     /// <summary>The monitor's output left the adapter; no more frames will arrive.</summary>
     public event Action? Closed;
 
-    /// <summary>The frame handler threw; capture continues, the caller decides.</summary>
+    /// <summary>
+    /// The frame handler threw (capture continues), or the duplication itself failed (its thread
+    /// ends); the caller decides.
+    /// </summary>
     public event Action<Exception>? Failed;
 
     public void Start()

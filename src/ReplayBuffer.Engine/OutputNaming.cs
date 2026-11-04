@@ -4,8 +4,9 @@ using ReplayBuffer.Core.Output;
 namespace ReplayBuffer.Engine;
 
 /// <summary>
-/// Debug-capture file names, <c>&lt;title&gt;_&lt;yyyy-MM-dd_HH-mm-ss&gt;.mp4</c>. A tracer
-/// shortcut: real writers get their paths from OutputPathAllocator (AD-21).
+/// Debug-capture file names, <c>&lt;title&gt;_&lt;yyyy-MM-dd_HH-mm-ss&gt;.mp4</c>, for the tracer's
+/// <c>capture</c> command and a serve session without a Replay Buffer (<c>--debug-capture</c> and
+/// test instances). Clips and Recordings get their paths from OutputPathAllocator (AD-21).
 /// </summary>
 public static class OutputNaming
 {
