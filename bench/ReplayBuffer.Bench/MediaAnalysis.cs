@@ -183,6 +183,14 @@ internal static class MediaAnalysis
         return means;
     }
 
+    /// <summary>Audio track <paramref name="track"/>'s burst onsets as file times, s, and its decoded sample count (story 8.7).</summary>
+    public static (List<double> Times, long Samples) TrackOnsets(FfmpegTools tools, string file, MediaScan scan, int track, double burstDbfs, CancellationToken cancellation)
+    {
+        var span = scan.AudioStreams.ElementAt(track);
+        var (onsets, samples) = DecodeOnsets(tools, file, track, burstDbfs, cancellation);
+        return (onsets.Select(n => span.StartSeconds + ((double)n / OnsetDetector.SampleRate)).ToList(), samples);
+    }
+
     private static (List<long> Onsets, long Samples) DecodeOnsets(FfmpegTools tools, string file, int track, double burstDbfs, CancellationToken cancellation)
     {
         var detector = new OnsetDetector(burstDbfs);

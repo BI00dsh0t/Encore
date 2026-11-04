@@ -52,10 +52,11 @@ internal sealed record DriftReport(
 /// </summary>
 internal static class MarkedCapture
 {
+    /// <param name="codec">The engine's <c>--codec</c> (h264, hevc or av1); null is its default, H.264.</param>
     /// <param name="probe">Screen grabs around the marker: one before the engine starts, one <see cref="BorderProbe.Delay"/> into its capture.</param>
     public static (int ExitCode, string Stderr, MarkerLog Log) Run(
         string engine, CaptureSettings settings, int seconds, string mp4, string? statsPath, string logPrefix, double toneDbfs, List<string> warnings,
-        BorderProbe? probe = null)
+        BorderProbe? probe = null, string? codec = null)
     {
         var output = ResolveDevice(AudioFlow.Output, settings.OutputDevice);
         var input = ResolveDevice(AudioFlow.Input, settings.InputDevice);
@@ -99,6 +100,11 @@ internal static class MarkedCapture
         if (statsPath is not null)
         {
             args.AddRange(["--stats", statsPath]);
+        }
+
+        if (codec is not null)
+        {
+            args.AddRange(["--codec", codec]);
         }
 
         Console.WriteLine($"Engine: {engine} {string.Join(' ', args)}");
@@ -222,6 +228,16 @@ internal static class DriftBenchmark
     public static int Run(BenchContext context)
     {
         var options = context.Options;
+        if (options.Flag("app"))
+        {
+            return ConformanceDrift.Run(context);
+        }
+
+        if (new[] { "save-seconds", "device-a", "device-b", "layout", "key", "record-key", "app-exe", "lock" }.FirstOrDefault(options.Has) is { } appOption)
+        {
+            throw new BenchUsageException($"--{appOption} is for drift --app.");
+        }
+
         var minutes = options.Double("minutes", 60, 1, 600);
         var settings = options.CaptureSettings();
         var toneDbfs = options.Double("tone-dbfs", OnsetDetector.DefaultBurstDbfs, -60, -3);
