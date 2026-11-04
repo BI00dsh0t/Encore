@@ -21,3 +21,10 @@ SIIGBF
 DeleteObject
 GetObject
 DIBSECTION
+SetWinEventHook
+UnhookWinEvent
+GetAncestor
+EnumWindows
+EVENT_OBJECT_CREATE
+EVENT_OBJECT_SHOW
+WINEVENT_OUTOFCONTEXT

@@ -32,10 +32,14 @@ internal sealed class ShellApp(Instance instance) : Application
     private MainWindow? _window;
     private OverlayWindow? _overlay;
     private TaskbarIcon? _tray;
+    private IDisposable? _captureExclusion;
     private bool _quitting;
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Before any window exists: every window of the process, popups and native dialogs included,
+        // is excluded from capture as it appears (AD-15).
+        _captureExclusion = CaptureExclusion.ExcludeNewWindows();
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -171,6 +175,7 @@ internal sealed class ShellApp(Instance instance) : Application
         _tray!.Dispose();
         _overlay!.Close();
         _window!.CloseForQuit();
+        _captureExclusion?.Dispose();
         Shutdown();
     }
 }
