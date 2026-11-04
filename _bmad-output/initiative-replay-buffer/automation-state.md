@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 5.11 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 7.6 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with the adaptive Overlay dot (new epic-5 story) |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.13 |
 
@@ -528,3 +528,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 4.11 merged (`90e1040`, marked done `a4ce0d0`). Its card is Done with its label detached. The epic 4 refactor sweep 4.13 went to story-2-7 (Opus, medium effort), scoped to epic 4's code, with its card In progress. After it come 4.14 (the end-to-end check on the builder's PC, HITL) and the v0.4.0 release.
 - 2026-11-04: 2-1-tracer had already built the adaptive dot on `feature/5.8-overlay-perf-research` (`3ad1f0b`, cut from 5.8's old tip; build and Contracts, Core, App and Desktop tests green; the overlayDot setting is on the General page) before reading the story brief. It is now adding ticket 5.15. Routing: cut `feature/5.15-adaptive-overlay-dot` from develop, cherry-pick `cf48145` and `3ad1f0b` (not the prototype), re-verify, then READY FOR QA. The research branch stays unmerged and holds the parked prototype.
 - 2026-11-04: Ticket 5.15 "Adaptive Overlay dot" was added on develop (`54cf952`); 5.12 and 5.13 now wait on it. The prototype is parked at `225de31` on the research branch. The Trello card was created (`6aeabc225526396a15b255cc`, In progress, purple) and added to `trello-board.md`, with Queue row 26.11a.
+- 2026-11-04: 7.6 is READY FOR QA at `d730418`. QA started on qa-2-1 (Sonnet), and its card is In QA.
