@@ -14,8 +14,11 @@ namespace ReplayBuffer.Platform.FFmpeg;
 /// its own in background I/O mode (AD-7), into a <see cref="FragmentedMp4Muxer"/> at the path the
 /// allocator reserved. It starts on the first video keyframe at or after the keyframe forced after
 /// the press, or, when none is served within <see cref="KeyWait"/>, the first one at or after the
-/// press. Each stream is rebased to that key K in its own time base, as <c>PacketRing.Cut</c> does:
-/// the video from K, and every other packet whose centre is at or after K. Until K is known its
+/// press. Each stream is rebased to that key K in its own time base, as <c>PacketRing.Cut</c> does,
+/// but keeps only the packets that start at or after K, not those centred there as a Clip does: a
+/// Clip's plain MP4 signals an earlier audio start in its edit list, while this fMP4 has none, and
+/// its muxer would stretch the first frame off the frame grid instead (an audio Track's first
+/// sample may now start up to one packet late). Until K is known its
 /// packets are held, at most <see cref="HoldUs"/> of them. A stop at E keeps the packets before E,
 /// judged the same way, and the file is finished once every stream has passed E,
 /// <see cref="StopWait"/> after the stop at the latest, or as soon as the session's output ends.
@@ -457,7 +460,10 @@ public sealed unsafe class RecordingWriter
     private void Emit(FragmentedMp4Muxer muxer, nint packet, int stream, long timeUs, long atUs)
     {
         _reached[stream] = Math.Max(_reached[stream], atUs);
-        if (atUs < _keyUs || atUs >= Interlocked.Read(ref _stopUs))
+        // From K by its start, not its centre: fMP4 has no edit list, so the muxer shifts every
+        // stream to the earliest packet and pins each one's first sample at 0; an audio packet
+        // that starts before K would stretch the first video frame off the frame grid.
+        if (timeUs < _keyUs || atUs >= Interlocked.Read(ref _stopUs))
         {
             Free(packet);
         }
@@ -539,7 +545,7 @@ public sealed unsafe class RecordingWriter
         _pending.RemoveRange(kept, _pending.Count - kept);
 
         // Each stream's times only grow, so the sort keeps every stream's own order; the earliest
-        // packet goes first, so the muxer's shift for negative times (AAC's first frame) holds for all.
+        // packet goes first, so the muxer's start shift is the same for every stream.
         _batch.Sort(ByTime);
         var next = 0;
         try

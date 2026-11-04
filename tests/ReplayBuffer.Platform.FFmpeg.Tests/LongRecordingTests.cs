@@ -118,6 +118,7 @@ public sealed class LongRecordingTests : IDisposable
         try
         {
             FFmpegLibrary.Check(ffmpeg.av_new_packet(packet, 16), "av_new_packet");
+            new Span<byte>(packet->data, 16).Clear(); // never an ADTS header by chance
             for (long frame = 0; frame < frames; frame++)
             {
                 Offer(writer, packet, 0, frame * VideoTicks, VideoTicks, frame % KeyEvery == 0);
