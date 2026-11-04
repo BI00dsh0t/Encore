@@ -23,9 +23,12 @@ internal sealed class ThemeService
 {
     /// <summary>
     /// WPF's Fluent theme puts Mica behind every window by itself. The App wants it on the Main App only
-    /// (DESIGN.md), and never under Gaming dark, so it turns that off and sets the backdrop itself.
+    /// (DESIGN.md), and never under Gaming dark, so this switch turns that off and <see cref="Decorate"/> sets
+    /// the backdrop itself. WPF caches the switch the first time any window shows, so the App's (and the
+    /// test host's) runtimeconfig sets it from process start; setting it here would come too late whenever
+    /// a window showed first.
     /// </summary>
-    private const string DisableFluentBackdropSwitch = "Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop";
+    public const string DisableFluentBackdropSwitch = "Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop";
 
     private readonly ResourceDictionary _resources;
     private readonly Action<AppTheme> _setThemeMode;
@@ -41,8 +44,6 @@ internal sealed class ThemeService
     /// App layers a disabled foreground over Fluent's own style for each (R4).
     /// </summary>
     private static readonly Type[] FluentDimsWhenDisabled = [typeof(TextBox), typeof(ListBoxItem), typeof(ListViewItem), typeof(TabItem)];
-
-    static ThemeService() => AppContext.SetSwitch(DisableFluentBackdropSwitch, true);
 
     private ThemeService(ResourceDictionary resources, Action<AppTheme> setThemeMode, Func<IEnumerable<Window>> windows)
     {
@@ -139,6 +140,7 @@ internal sealed class ThemeService
 
         ShellTheme.Place(merged, theme);
         SettingsLayout.Place(merged);
+        LibraryTheme.Place(merged);
         Theme = theme;
         foreach (var window in _windows())
         {
