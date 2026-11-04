@@ -21,7 +21,7 @@ public sealed class AppSupervisorTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         Directory.CreateDirectory(_folder);
-        var instance = new Instance(Instance.TestPrefix + Path.GetFileName(_folder), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
+        var instance = new Instance(Instance.TestPrefix + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
         _host = EngineHost.Start(instance, NullLoggerFactory.Instance, hostOptions: new EngineHostOptions { Heartbeat = null, ProbeEncoders = false, AppLauncher = _launcher });
         _client = await EngineClient.ConnectAsync(_host.PipeName, cancellationToken: Token);
     }
@@ -78,7 +78,7 @@ public sealed class AppSupervisorTests : IAsyncLifetime
     {
         var folder = _folder + "-restarted";
         Directory.CreateDirectory(folder);
-        var instance = new Instance(Instance.TestPrefix + Path.GetFileName(folder), Path.Combine(folder, "roaming"), Path.Combine(folder, "local"));
+        var instance = new Instance(Instance.TestPrefix + Guid.NewGuid().ToString("N"), Path.Combine(folder, "roaming"), Path.Combine(folder, "local"));
         try
         {
             await using var host = EngineHost.Start(

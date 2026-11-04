@@ -25,7 +25,7 @@ public sealed class IpcTests : IAsyncLifetime
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    private Instance TestInstance => new(ServeCommand.TestInstancePrefix + Path.GetFileName(_folder), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
+    private Instance TestInstance => new(ServeCommand.TestInstancePrefix + Path.GetFileName(_folder).Replace(".", "-"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
 
     public ValueTask InitializeAsync()
     {
