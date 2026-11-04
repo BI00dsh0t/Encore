@@ -139,6 +139,7 @@ internal sealed class ThemeService
         }
 
         ShellTheme.Place(merged, theme);
+        SettingsLayout.Place(merged);
         LibraryTheme.Place(merged);
         Theme = theme;
         foreach (var window in _windows())

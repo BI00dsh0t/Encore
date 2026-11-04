@@ -1,108 +1,110 @@
 <UserControl x:Class="ReplayBuffer.App.Settings.ReplayBufferSettingsView"
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="clr-namespace:ReplayBuffer.App.Theme">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
-        <Style x:Key="Label" TargetType="TextBlock">
-            <Setter Property="Margin" Value="0,0,12,0" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Margin" Value="0,3" />
-        </Style>
-        <Style TargetType="ComboBox">
-            <Setter Property="Margin" Value="0,3" />
-        </Style>
+        <theme:EmptyToCollapsedConverter x:Key="Collapsed" />
     </UserControl.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Grid.IsSharedSizeScope="True">
-            <TextBlock FontWeight="SemiBold" Text="Replay Buffer" />
-            <CheckBox Margin="0,6,0,0"
-                      Content="Use Global Buffer Window"
-                      IsChecked="{Binding BufferWindowUsesGlobal}"
-                      Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
-            <Grid Margin="0,6,0,0" IsEnabled="{Binding CanEditBufferWindow}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Style="{StaticResource Label}" Text="Buffer Window (s)" />
-                <TextBox Grid.Column="1" Text="{Binding BufferWindowText}" />
-            </Grid>
-            <StackPanel Visibility="{Binding IsGlobal, Converter={StaticResource Visible}}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <TextBlock Style="{StaticResource Label}" Text="Keep the buffer in" />
-                    <StackPanel Grid.Column="1" Margin="0,3" Orientation="Horizontal">
-                        <RadioButton Content="Memory" GroupName="Storage" IsChecked="{Binding IsMemory}" />
-                        <RadioButton Margin="12,0,0,0" Content="Disk" GroupName="Storage" IsChecked="{Binding IsDisk}" />
+        <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
+            <HeaderedContentControl Header="Replay Buffer" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Margin="0,0,0,4"
+                              Content="Use Global Buffer Window"
+                              IsChecked="{Binding BufferWindowUsesGlobal}"
+                              Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
+                    <Grid IsEnabled="{Binding CanEditBufferWindow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Buffer Window (s)" />
+                        <TextBox Grid.Column="1" Margin="0,4" Text="{Binding BufferWindowText}" />
+                    </Grid>
+                    <StackPanel Visibility="{Binding IsGlobal, Converter={StaticResource Visible}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Keep the buffer in" />
+                            <StackPanel Grid.Column="1" Margin="0,4" Orientation="Horizontal">
+                                <RadioButton Content="Memory" GroupName="Storage" IsChecked="{Binding IsMemory}" />
+                                <RadioButton Margin="12,0,0,0" Content="Disk" GroupName="Storage" IsChecked="{Binding IsDisk}" />
+                            </StackPanel>
+                            <TextBlock Grid.Row="1" Style="{DynamicResource RbSettingsLabelStyle}" Text="Ring folder (Disk)" />
+                            <TextBox Grid.Row="1" Grid.Column="1" Margin="0,4" Text="{Binding RingPath}" ToolTip="Empty uses the default folder." />
+                            <TextBlock Grid.Row="2" Style="{DynamicResource RbSettingsLabelStyle}" Text="Save cooldown (s)" />
+                            <TextBox Grid.Row="2" Grid.Column="1" Margin="0,4" Text="{Binding SaveCooldownText}" />
+                        </Grid>
+                        <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="{Binding EstimateText}" TextWrapping="Wrap" />
+                        <ContentControl Margin="0,8,0,0"
+                                        Content="{Binding EstimateWarning}"
+                                        Style="{DynamicResource RbInfoBarCautionStyle}"
+                                        Visibility="{Binding EstimateWarning, Converter={StaticResource Collapsed}}" />
+                        <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}"
+                                   Text="The estimate covers the Global settings; a game's own Buffer Window or Output Settings change it." />
                     </StackPanel>
-                    <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Ring folder (Disk)" />
-                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RingPath}" ToolTip="Empty uses the default folder." />
-                    <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="Save cooldown (s)" />
-                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SaveCooldownText}" />
-                </Grid>
-                <TextBlock Margin="0,6,0,0" Text="{Binding EstimateText}" />
-                <TextBlock Foreground="DarkRed" Text="{Binding EstimateWarning}" TextWrapping="Wrap" />
-                <TextBlock Foreground="Gray"
-                           Text="The estimate covers the Global settings; a game's own Buffer Window or Output Settings change it."
-                           TextWrapping="Wrap" />
-            </StackPanel>
+                </StackPanel>
+            </HeaderedContentControl>
 
-            <TextBlock Margin="0,18,0,0" FontWeight="SemiBold" Text="Output" />
-            <CheckBox Margin="0,6,0,0"
-                      Content="Use Global Output Settings"
-                      IsChecked="{Binding VideoUsesGlobal}"
-                      Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
-            <Grid Margin="0,6,0,0" IsEnabled="{Binding CanEditVideo}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <TextBlock Style="{StaticResource Label}" Text="Codec" />
-                <ComboBox Grid.Column="1"
-                          DisplayMemberPath="Label"
-                          ItemsSource="{Binding Codecs}"
-                          SelectedItem="{Binding SelectedCodec}" />
-                <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Resolution" />
-                <ComboBox Grid.Row="1"
-                          Grid.Column="1"
-                          DisplayMemberPath="Label"
-                          ItemsSource="{Binding Resolutions}"
-                          SelectedItem="{Binding SelectedResolution}" />
-                <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="Frame rate (fps)" />
-                <DockPanel Grid.Row="2" Grid.Column="1">
-                    <TextBlock Margin="8,0,0,0"
-                               VerticalAlignment="Center"
-                               DockPanel.Dock="Right"
-                               Foreground="Gray"
-                               Text="{Binding MaxFps, StringFormat='up to {0}'}" />
-                    <TextBox Text="{Binding FpsText}" />
-                </DockPanel>
-                <TextBlock Grid.Row="3" Style="{StaticResource Label}" Text="Bitrate (kbps)" />
-                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding BitrateText}" />
-                <CheckBox Grid.Row="4"
-                          Grid.Column="1"
-                          Margin="0,3"
-                          Content="Variable bitrate (VBR)"
-                          IsChecked="{Binding IsVbr}" />
-            </Grid>
-        </StackPanel>
+            <HeaderedContentControl Header="Output" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Margin="0,0,0,4"
+                              Content="Use Global Output Settings"
+                              IsChecked="{Binding VideoUsesGlobal}"
+                              Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
+                    <Grid IsEnabled="{Binding CanEditVideo}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Codec" />
+                        <ComboBox Grid.Column="1"
+                                  Margin="0,4"
+                                  DisplayMemberPath="Label"
+                                  ItemsSource="{Binding Codecs}"
+                                  SelectedItem="{Binding SelectedCodec}" />
+                        <TextBlock Grid.Row="1" Style="{DynamicResource RbSettingsLabelStyle}" Text="Resolution" />
+                        <ComboBox Grid.Row="1"
+                                  Grid.Column="1"
+                                  Margin="0,4"
+                                  DisplayMemberPath="Label"
+                                  ItemsSource="{Binding Resolutions}"
+                                  SelectedItem="{Binding SelectedResolution}" />
+                        <TextBlock Grid.Row="2" Style="{DynamicResource RbSettingsLabelStyle}" Text="Frame rate (fps)" />
+                        <DockPanel Grid.Row="2" Grid.Column="1">
+                            <TextBlock Margin="8,0,0,0"
+                                       VerticalAlignment="Center"
+                                       DockPanel.Dock="Right"
+                                       Style="{DynamicResource RbSettingsStatusTextStyle}"
+                                       Text="{Binding MaxFps, StringFormat='up to {0}'}" />
+                            <TextBox Margin="0,4" Text="{Binding FpsText}" />
+                        </DockPanel>
+                        <TextBlock Grid.Row="3" Style="{DynamicResource RbSettingsLabelStyle}" Text="Bitrate (kbps)" />
+                        <TextBox Grid.Row="3" Grid.Column="1" Margin="0,4" Text="{Binding BitrateText}" />
+                        <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Grid.Row="4"
+                                  Grid.Column="1"
+                                  Margin="0,4"
+                                  Content="Variable bitrate (VBR)"
+                                  IsChecked="{Binding IsVbr}" />
+                    </Grid>
+                </StackPanel>
+            </HeaderedContentControl>
+        </theme:SettingsContent>
     </ScrollViewer>
 </UserControl>
