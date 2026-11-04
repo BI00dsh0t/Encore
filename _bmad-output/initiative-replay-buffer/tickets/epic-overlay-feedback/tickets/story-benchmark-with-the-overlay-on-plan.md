@@ -106,12 +106,12 @@ deferred: []
   | Dot mode | borderless | fullscreen | exclusive |
   |---|---|---|---|
   | auto | iflip / iflip, 0.19 %, dot not on screen | iflip / iflip, 0.31 % | Legacy Flip / Legacy Flip, 0.72 % |
-  | always | iflip / iflip, **3.63 %**, dot on screen; focus/fullscreen check "no" | iflip / iflip, −0.15 %, dot on screen | Legacy Flip / Legacy Flip, 0.27 % |
+  | always | iflip / iflip, no measurable cost: +3.63 % and −3.03 % in two runs, each with one phase where the load lost the foreground | iflip / iflip, −0.15 %, dot on screen | Legacy Flip / Legacy Flip, 0.27 % |
   | onChange | iflip / iflip, −0.16 %, dot not on screen | iflip / iflip, −0.11 % | Legacy Flip / Legacy Flip, 0.19 % |
 
-  (iflip = Hardware Composed: Independent Flip.) With no overlay planes, auto behaves like onChange in borderless: the dot is gone by the time the shown phase is measured, and it costs nothing. In always, the dominant PresentMode stays iflip, but borderless loses 3.6 %.
+  (iflip = Hardware Composed: Independent Flip.) With no overlay planes, auto behaves like onChange in borderless: the dot is gone by the time the shown phase is measured, and it costs nothing. In always, borderless stays iflip, and its two runs (+3.63 %, then −3.03 % in the re-run below) are noise around zero. Each run had one phase with the load out of the foreground; the first run's was the shown phase.
 - `bench fps --overlay --seconds 60 --passes 2` (dot auto, a message every 10 s in the capture runs): FPS loss **5.80 %** (miss against 3 %), capture runs 6.04 % and 5.55 %, PresentMode iflip in every run, latency p99 28.7 ms.
-- Control without `--overlay`, same settings, straight after: FPS loss **6.66 %** (6.62 % and 6.69 %). The Overlay adds no measurable cost. The NFR-1 miss is capture's own cost on this PC today, against 1.14's 1.47 %. That needs its own investigation, outside this story, which changes no capture code.
+- Control without `--overlay`, same settings, straight after: FPS loss **6.66 %** (6.62 % and 6.69 %). The Overlay adds no measurable cost. The NFR-1 miss is capture's own cost on this PC today, against 1.14's 1.47 %. That needs its own investigation, outside this story, which changes no capture code. The 6.7 % and 1.47 % aren't like-for-like: 1.14 ran 3 balanced passes of 5 min, and 5.12 ran 2 passes of 60 s plus one of 30 s. 1.14 itself saw about 3 % run-to-run variance at 120 s. The overlay-against-control comparison holds, since both used the same settings straight after each other. A 5 min x 3 re-run wasn't done here, so it is the first step of the capture-cost investigation.
 
 **Human Check:** the 5.15 row (overlay planes back, research E1) covers the re-measure with planes present. Its 5.12 part: run `bench fps --overlay --game <GPU-bound game>` with the game in front.
 
@@ -142,11 +142,21 @@ deferred: []
 - **Follow-up review recommended:** false. One medium was patched and none were high.
 - **Verification:** Release build 0 warnings; Bench.Tests 134 passed, 11 skipped. The GPU runs above were made before the review patches. The patched `--overlay` path still needs a GPU run, which happens when the GPU lock frees.
 - **Residual risks:**
-  - The `always`/borderless figure (3.63 %) came from a noisy run: the load lost the foreground during the shown phase, and the second hidden phase was slow too. It is re-run below when the lock frees.
-  - NFR-1 misses for capture itself (6.66 % without the Overlay, against 1.14's 1.47 %). That is outside this story, which changes no capture code, and needs its own ticket.
+  - The `always`/borderless figure is noise. It was +3.63 % in the first run, which had a lost-focus shown phase, and −3.03 % in the re-run below.
+  - NFR-1 misses for capture itself (6.66 % without the Overlay, against 1.14's 1.47 %). That is outside this story, which changes no capture code, and needs its own ticket. The 6.7 % and 1.47 % aren't like-for-like: 1.14 ran 3 balanced passes of 5 min, and 5.12 ran 2 passes of 60 s plus one of 30 s. 1.14 itself saw about 3 % run-to-run variance at 120 s. The overlay-against-control comparison holds, since both used the same settings straight after each other. A 5 min x 3 re-run wasn't done here, so it is the first step of the capture-cost investigation.
 
 ### 2026-11-04 01:40–01:44 — Re-runs after review (under `.bench-running`)
 - **`always`, borderless, re-run** (`measurements/bench-5.12/overlay-always-borderless-rerun`): Hardware Composed: Independent Flip in all three phases. Cost −3.03 % (hidden 88.4, shown 91.08 fps). The load again lost the foreground in one phase, this time the first hidden one.
   - Together with the first run's +3.63 %, the `always` borderless figure is run-to-run noise around zero, not a cost.
-  - In both 5.12 runs the dot kept the load in independent flip. That differs from 5.8's Composed: Flip at 20:12 on 2026-11-03, with the same "no planes" answer. So `SupportsOverlays` false doesn't always mean DWM composes the load; the Human Check row covers the cause.
+  - In both 5.12 runs the dot kept the load in independent flip, even in the re-run's shown phase with the load in front. That is **unexplained** against 5.8's Composed: Flip at 20:12 on 2026-11-03, with the same "no planes" answer; focus does not account for it. The 5.15/5.12 Human Check row carries the cause.
 - **Patched `fps --overlay`, 30 s, 1 pass** (`measurements/bench-5.12/fps-overlay-patched`): exit 0. The `overlay` record is `{dot: auto, overlayPlanes: false, messageSeconds: 10}`. PresentMode was Hardware Composed: Independent Flip in both runs (baseline 79.65, capture 74.34 fps). FPS loss 6.67 % (miss), the same as capture alone. No on, off or message failure was reported.
+
+### Where the evidence is
+- The raw reports and PresentMon CSVs aren't in the repo (`measurements/` is gitignored). They are in the worktree `%USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\adoring-morse-f6f531\measurements\bench-5.12\`, one folder per run: `overlay-auto`, `overlay-always`, `overlay-onChange`, `fps-overlay`, `fps-control`, `overlay-always-borderless-rerun` and `fps-overlay-patched`.
+- GPU lock: the first runs held `.bench-running` from 2026-11-04T00:51:47 until they finished (the file named "5.12 benchmark-overlay-on (adoring-morse-f6f531)"). The re-runs held it from 01:40:54 to 01:44:06, and their log is in this session's scratchpad. The file was gone after each, and another session's soak held it in between.
+
+### 2026-11-04 — QA round 1 (FAIL, 2 doc fixes)
+- Fixed: the `always`/borderless conclusion (noise, not a 3.6 % cost) in the Results and the epic Decision.
+- Fixed: the NFR-1 comparison caveat (run lengths and passes differ from 1.14; no 5 min x 3 re-run).
+- Noted: the 5.8 contradiction is worded as unexplained; the evidence location and lock times are recorded above.
+
