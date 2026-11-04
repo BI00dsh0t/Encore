@@ -43,7 +43,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix e2e-test-instance-names |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 6.12 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
@@ -144,7 +144,7 @@ The coordinator logs each QA round in the Log below.
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
 | 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
-| 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in QA (qa-2-1) |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
@@ -642,3 +642,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.11 (story-2-7): `LibraryEndToEndTests` (Heavy, CPU only) passes against the in-process engine and the App's Library and settings pages; the five epic-7 Human Check rows point at 7.11's ordered checklist. **GPU pause breached twice, briefly:** the test's first two runs named the instance from a dotted temp folder, so `IsTest` was false and the engine ran a real Replay Buffer for about 5 s each on `msrdc.exe` (NVENC, in memory, no Clip written). Fixed in the test. `ClipsEndToEndTests` (4.14) and `OverlayEndToEndTests` (5.14) have the same dotted-name pattern: a one-line fix each, to rerun under Heavy when GPU tests resume. Skipped GPU runs from 7.11: a Hotkey-saved Clip on a real capture, a live Recording locked in the Library.
 - 2026-11-04: 7.11 merged into develop (`d8b48b9`, `test(app): merge 7.11-library-cleanup-end-to-end`) after QA PASS at `53427e7`, and marked done (its plan already had `status: done`). Synced with develop first (6.11): 0-warning build, App 126 passed. No Heavy runs.
 - 2026-11-04: 7.11 merged (`d8b48b9`, marked done `8d9371e`), and its card is Done with labels detached. **Epic 7 marked done.** Its v0.7.0 release is held until epic 6 finishes (see Decisions). story-2-7 is back in the pool.
+- 2026-11-04: 6.12 READY FOR QA at `781e6fa` (13 files, including `SessionOrchestrator` and `FeedbackRouter`), and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; focus: no behaviour change, forward hooks kept).
