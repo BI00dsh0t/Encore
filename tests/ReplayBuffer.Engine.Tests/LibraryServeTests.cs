@@ -86,6 +86,18 @@ public sealed class LibraryServeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CleanupPreviewOverIpcNamesTheSavedClip()
+    {
+        await SaveAsync();
+
+        var plan = await _client.SendAsync(LibraryMessages.CleanupPreview, new LibraryCleanupPreview(1, null), Token);
+
+        Assert.Equal((1, 64L), (plan.Count, plan.Bytes));
+        Assert.Equal(@"Game\Game_2026-11-03_10-00-00.mp4", Assert.Single(plan.Paths));
+        Assert.True(File.Exists(ClipPath));
+    }
+
+    [Fact]
     public async Task ASavedClipIsInTheFirstSnapshotAfterARestart()
     {
         await SaveAsync();

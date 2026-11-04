@@ -69,11 +69,11 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs`, `Messages/Library.cs` -- code, reason, preview command -- AD-22 additive
-- [ ] `src/ReplayBuffer.Core/Library/CleanupPlanner.cs` -- pure plan -- R7
-- [ ] `src/ReplayBuffer.Core/Library/LibraryActor.cs` -- gate, triggers, stepwise pass, re-check, preview, unreachable latch -- R7, AD-17
-- [ ] `src/ReplayBuffer.Engine/EngineHost.cs` -- wiring, warning, log, router -- R7
-- [ ] Tests -- Core (manual clock, fabricated items with `Date`/`Size`/`Modified` passed to the ctor): one per matrix row; the "favourited after plan" test calls `SetFavourite` from inside the log port when the plan line is logged (it lands before the first step). The rescan-pending test creates a subfolder (watcher → `PendRescan`), waits until the settle timer is armed on the manual clock, triggers, sees nothing deleted, then advances 250 ms and sees the delete. Engine: `cleanup.preview` over IPC returns the saved Clip's path and size.
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs`, `Messages/Library.cs` -- code, reason, preview command -- AD-22 additive
+- [x] `src/ReplayBuffer.Core/Library/CleanupPlanner.cs` -- pure plan -- R7
+- [x] `src/ReplayBuffer.Core/Library/LibraryActor.cs` -- gate, triggers, stepwise pass, re-check, preview, unreachable latch -- R7, AD-17
+- [x] `src/ReplayBuffer.Engine/EngineHost.cs` -- wiring, warning, log, router -- R7
+- [x] Tests -- Core (manual clock, fabricated items with `Date`/`Size`/`Modified` passed to the ctor): one per matrix row; the "favourited after plan" test calls `SetFavourite` from inside the log port when the plan line is logged (it lands before the first step). The rescan-pending test creates a subfolder (watcher → `PendRescan`), waits until the settle timer is armed on the manual clock, triggers, sees nothing deleted, then advances 250 ms and sees the delete. Engine: `cleanup.preview` over IPC returns the saved Clip's path and size.
 
 **Acceptance Criteria:**
 - Given `cleanup` limits are set and the gate is open, when a pass runs, then exactly the oldest non-Favourite, not-being-written items needed to get within both limits are deleted from disk, each published as `library.itemRemoved` with `reason: "cleanup"` and logged with its path and size.
@@ -82,6 +82,12 @@ deferred: []
 - Given only Favourites keep the folder over `maxBytes`, when passes run, then one `cleanup-limit-unreachable` warning is raised.
 
 ## Implementation Notes
+
+- A pass whose first plan is empty logs one "Cleanup finished: ..." line and ends; a pass with work logs "Cleanup plan: ..." (count, bytes, each path and size), each delete or skip, then "Cleanup finished: ...".
+- A trigger while a pass runs is ignored (the pass re-plans each step, and its skip set survives); an unexpected I/O or argument failure in a step ends the pass. An Output Folder change clears the skip set.
+- The re-check refreshes an item whose file was touched at the same size (reconcile compares sizes only, so it would otherwise be skipped forever), like `TryMatch`; the next pass may delete it. A size change or a missing file is `Pend`ed.
+- `TryKey` and `IsMp4` are internal so `CleanupPlanner` shares them. `EngineHost` raises the warning through a captured `warnTo` set once `Warnings` exists.
+- Tests: `LibraryCleanupTests` (9 tests, the gate as a 3-case theory) on `ManualTime`; `LibraryServeTests.CleanupPreviewOverIpcNamesTheSavedClip`.
 
 ## Plan Change Log
 
@@ -94,6 +100,8 @@ deferred: []
 - A being-written item counts at its index size (0 until `EndWrite`).
 
 ## Verification
+
+**Before any build or test:** `%USERPROFILE%\Documents\repos\ReplayBuffer\.bench-running` must not exist (another session's GPU benchmark is measuring). While it exists, don't build or test: keep writing code, then wait for it to go (check once a minute, up to 30 min); if it is still there, report the work as unverified.
 
 **Commands:**
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors

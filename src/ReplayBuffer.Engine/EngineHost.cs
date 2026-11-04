@@ -273,6 +273,8 @@ internal sealed class EngineHost : IAsyncDisposable
             SessionOrchestrator? settingsTo = null;
             load.Store.Changed += _ => Volatile.Read(ref settingsTo)?.Post(new SettingsUpdated());
 
+            // cleanup-limit-unreachable is raised once the warnings exist; Cleanup never runs before 60 s.
+            Warnings? warnTo = null;
             var libraryActor = library = new LibraryActor(
                 libraryLoad.Items,
                 OutputFolder,
@@ -289,12 +291,17 @@ internal sealed class EngineHost : IAsyncDisposable
                 createMissingFolder: !instance.IsTest,
                 readLength: path => MediaLength.Read(path, ffmpegLog),
                 folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed),
-                recycle: RecycleBin.Recycle);
+                recycle: RecycleBin.Recycle,
+                cleanup: () => SettingsResolver.Resolve(load.Store.Current, null).Cleanup,
+                limitUnreachable: message => Volatile.Read(ref warnTo)?.Raise(ErrorCodes.CleanupLimitUnreachable, WarningSeverity.Warning, "library", message, overlay: false),
+                log: message => libraryLog.LogInformation("{Message}", message));
 
             // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.
             load.Store.Changed += _ => libraryActor.OutputFolderChanged();
+            load.Store.Changed += _ => libraryActor.CleanupChanged();
             string? corruptWarning = null;
             var warnings = new Warnings(hub, hostOptions.Time);
+            Volatile.Write(ref warnTo, warnings);
             var feedbackLog = loggers.CreateLogger("Feedback");
             var player = sounds = new FeedbackSoundPlayer(
                 hostOptions.FeedbackSounds ?? (instance.IsTest ? SilentFeedbackSoundOutput.Instance : new FeedbackSoundOutput()),
@@ -503,6 +510,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 await libraryActor.Delete(delete).ConfigureAwait(false);
                 return Empty.Value;
             });
+            router.Register(LibraryMessages.CleanupPreview, async (preview, _) => await libraryActor.PreviewCleanup(preview).ConfigureAwait(false));
             router.Register(FeedbackMessages.Preview, (preview, _) =>
             {
                 player.Preview(preview.Sound);
