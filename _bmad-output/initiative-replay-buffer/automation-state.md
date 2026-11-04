@@ -43,7 +43,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix e2e-test-instance-names |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 7.11 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.11 |
 
@@ -158,7 +158,7 @@ The coordinator logs each QA round in the Log below.
 | 28.8 | 7.8 Cleanup | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `4b6b22f`) |
 | 28.9 | 7.9 Library and Cleanup settings page | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `63ba0b9`) |
 | 28.10 | 7.10 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `5fa03c4`) |
-| 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (qa-2-1) |
+| 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
@@ -637,3 +637,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.11 merged into develop (`093df7b`, after syncing develop's 7.10 merge: 0-warning build, App 126, Core 146, Contracts 121 passed) and marked done. Contracts change additive only: the `monitors.list` command in `Recording.cs`. Its Human Check row is queued. No GPU runs skipped: the story wrote no Heavy tests.
 - 2026-11-04: 6.11 merged (`093df7b`, marked done `7218e06`), and its card is Done with labels detached. qa-1-14 is back in the pool. 6.12 (refactor sweep) went to slice-epic-4 (Opus, medium effort; GPU tests paused), with its card In progress. 6.13 waits on 6.12.
 - 2026-11-04: 7.11 READY FOR QA at `53427e7` (131 passed, 9 for the builder, 2 not run because GPU tests are paused), and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort). **Incident:** the GPU pause was broken twice, briefly. 7.11's first two runs copied 5.14's instance naming. The random suffix had a dot, so `Instance.IsTest` was false, and the engine started a real Replay Buffer for about 5 s on the foreground window (`msrdc.exe`, NVENC, in memory only, no Clip written). It's fixed in 7.11 (a Guid-named instance, Replay Buffer explicitly off, `IsTest` and no-capture asserts). The same bug sits in `ClipsEndToEndTests` (4.14) and `OverlayEndToEndTests` (5.14). Bugfix `e2e-test-instance-names` went to slice-epic-5 (Sonnet, medium effort): Guid names, plus an `Instance` guard that refuses test-prefixed names that aren't test names. Those two tests can't be rerun until the GPU pause lifts.
+- 2026-11-04: QA 7.11 passed at `53427e7` with 0 findings. Guards confirmed in code before the one run (a Guid instance with `IsTest` asserted, Replay Buffer off, temp paths only, a recording shell). `LibraryEndToEndTests` passed in 7 s with no capture; 0-warning build; App.Tests 122 passed. qa-2-1 is back in the pool, and story-2-7 is merging.
