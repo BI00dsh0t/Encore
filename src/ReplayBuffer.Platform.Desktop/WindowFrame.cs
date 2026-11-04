@@ -49,18 +49,6 @@ public static class WindowFrame
         _ = PInvoke.DwmSetWindowAttribute(new HWND(hwnd), DWMWINDOWATTRIBUTE.DWMWA_TEXT_COLOR, &text, sizeof(uint));
     }
 
-    /// <summary>The caption colour DWM has for the window, as 0xRRGGBB, or null for the system's own.</summary>
-    public static unsafe uint? CaptionColor(nint hwnd)
-    {
-        uint value = DefaultColor;
-        if (PInvoke.DwmGetWindowAttribute(new HWND(hwnd), DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, &value, sizeof(uint)).Failed || value == DefaultColor)
-        {
-            return null;
-        }
-
-        return ColorRef(value);
-    }
-
     // COLORREF is 0x00BBGGRR; swapping red and blue goes both ways.
     private static uint ColorRef(uint rgb) => ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF);
 }

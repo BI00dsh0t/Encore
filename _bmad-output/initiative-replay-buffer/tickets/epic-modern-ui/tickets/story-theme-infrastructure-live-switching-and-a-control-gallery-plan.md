@@ -45,6 +45,7 @@ context: ['{project-root}/CLAUDE.md', 'ux-modern-ui/DESIGN.md', 'ux-modern-ui/EX
 - **The theme applied at start is the last one applied,** cached by the App in its local data folder. The engine's snapshot arrives after the first window is created (unless the App starts in the tray), so without the cache a Gaming user would see a Fluent flash. The engine's settings stay the record: each `settings.changed` applies the committed key and updates the cache.
 - **Type styles are ContentControl styles** (`RbSectionHeaderStyle`, `RbPageTitleStyle`, `RbBrandStyle`), because WPF has no text-transform and Gaming uppercases them in a template (DESIGN.md Typography).
 - **The DWM caption colour** is set here with Mica, as EXPERIENCE.md's Build Map gives it to story 2's ThemeService. Story 3 still owns the title bar's final look.
+- **Fluent's disabled text (QA 9.2, F1).** Fluent's built-in TextBox, ListBoxItem and ListViewItem keep full-contrast text when disabled. So under Fluent the service layers a style over each of Fluent's own styles (`BasedOn` the style in WPF's Fluent dictionary) that sets `TextFillColorDisabledBrush` while disabled. Everything else stays Fluent's.
 - **Pressed list items:** WPF's `ListBoxItem` has no pressed state, so Gaming shows hover and selected only.
 - **Tests scope the theme to one window** (`ThemeService.ForWindow`), since a process has one `Application` and other tests' views must not inherit it. A window-scoped `ThemeMode` skips a window whose `Resources` were set before it, so the gallery keeps no resources of its own. The App uses `Application.ThemeMode`, which has no such limit.
 
@@ -56,14 +57,15 @@ context: ['{project-root}/CLAUDE.md', 'ux-modern-ui/DESIGN.md', 'ux-modern-ui/EX
 ## Verification
 
 - Release build of the solution: 0 warnings.
-- Default tests: Contracts 123/123, Core 152/152, App 133 passed and 18 skipped (the opt-in Heavy tests). New tests:
+- Default tests: Contracts 123/123, Core 152/152, App 135 passed and 18 skipped (the opt-in Heavy tests). New tests:
   - `KeysTests.AppThemeIsGlobalImmediateFluentByDefaultAndWritesGamingDarkCamelCase`
   - `EngineConnectionTests.TheThemePickerSendsAppThemeAndTheEngineReadsItBackAfterARestart` (Guid test instance)
-  - `ThemeTests`: every token key in both themes; a `settings.changed` swapping the dictionary in the same window; every `DynamicResource` key in the App's XAML resolving in both themes; the gallery, Main App, every settings page and the Library loading in both themes with no binding error; the last theme read back; the gallery tray item on dev instances only.
+  - `ThemeTests`: Mica behind the Main App under Fluent only, never behind the gallery (QA F2; skipped where Windows has no backdrops); Fluent dims a disabled text box and list item (QA F1); every token key in both themes; a `settings.changed` swapping the dictionary in the same window; every `DynamicResource` key in the App's XAML resolving in both themes; the gallery, Main App, every settings page and the Library loading in both themes with no binding error; the last theme read back; the gallery tray item on dev instances only.
 - PNGs for the builder: `gallery-fluent.png` and `gallery-gaming-dark.png` beside the App test binary.
 - The NativeAOT engine publish (Contracts and Core changed): passed with 0 IL warnings.
 - Smoke run of the real App on a test instance, seeded with Gaming dark: it starts in Gaming dark, switches live to Fluent on the engine's snapshot, and writes `fluent` back to the cache.
 
 ## Log
 
-- 2026-11-04: built and verified on `feature/9.2-theme-infrastructure`.
+- 2026-11-04: built and verified on `feature/9.2-theme-infrastructure` (`ad57d54`).
+- 2026-11-04: QA round 1 had 2 findings, both fixed. F1: Fluent's disabled TextBox and list items now dim. F2: the set-only `WindowFrame.CaptionColor` is deleted, and `HasMica` backs the new frame test. Also from QA's notes: turning Mica off now restores the window's composition background.

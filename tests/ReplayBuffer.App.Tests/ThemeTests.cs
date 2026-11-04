@@ -5,11 +5,13 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ReplayBuffer.App.Theme;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Platform.Desktop;
 
 namespace ReplayBuffer.App.Tests;
 
@@ -138,6 +140,49 @@ public sealed partial class ThemeTests
             PresentationTraceSources.DataBindingSource.Listeners.Remove(errors);
             PresentationTraceSources.DataBindingSource.Switch.Level = level;
         }
+    });
+
+    [Fact]
+    public void MicaIsBehindTheMainAppUnderFluentOnlyAndNeverBehindOtherWindows() => Sta.Run(() =>
+    {
+        Assert.SkipUnless(WindowFrame.SupportsMica, "This Windows draws no system backdrops.");
+        var main = Offscreen(new MainWindow { DataContext = new MainViewModel(new FakeEngineSession(), action => action()) });
+        var gallery = Offscreen(new ControlGallery());
+        var mainTheme = ThemeService.ForWindow(main);
+        var galleryTheme = ThemeService.ForWindow(gallery);
+        main.Show();
+        gallery.Show();
+        mainTheme.Apply(AppTheme.Fluent);
+        galleryTheme.Apply(AppTheme.Fluent);
+        Sta.Pump(TimeSpan.FromMilliseconds(100));
+
+        Assert.True(WindowFrame.HasMica(new WindowInteropHelper(main).Handle));
+        Assert.False(WindowFrame.HasMica(new WindowInteropHelper(gallery).Handle));
+
+        mainTheme.Apply(AppTheme.GamingDark);
+        Assert.False(WindowFrame.HasMica(new WindowInteropHelper(main).Handle));
+        mainTheme.Apply(AppTheme.Fluent);
+        Assert.True(WindowFrame.HasMica(new WindowInteropHelper(main).Handle));
+
+        gallery.Close();
+        main.CloseForQuit();
+    });
+
+    [Fact]
+    public void FluentDimsADisabledTextBoxAndListItem() => Sta.Run(() =>
+    {
+        var box = new TextBox { Text = "Disabled", IsEnabled = false };
+        var item = new ListBoxItem { Content = "Disabled item", IsEnabled = false };
+        var window = Offscreen(new Window { Content = new StackPanel { Children = { box, new ListBox { Items = { item } } } } });
+        var theme = ThemeService.ForWindow(window);
+        theme.Apply(AppTheme.Fluent);
+        window.Show();
+        Sta.Pump(TimeSpan.FromMilliseconds(100));
+
+        var disabled = ((SolidColorBrush)window.FindResource("TextFillColorDisabledBrush")).Color;
+        Assert.Equal(disabled, ((SolidColorBrush)box.Foreground).Color);
+        Assert.Equal(disabled, ((SolidColorBrush)item.Foreground).Color);
+        window.Close();
     });
 
     [Fact]

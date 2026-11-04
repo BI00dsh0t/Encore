@@ -33,7 +33,14 @@ internal sealed class ThemeService
     private readonly SharedTheme _shared = new();
     private readonly FluentTheme _fluent = new();
     private readonly GamingDarkTheme _gaming = new();
+    // Each window with Mica on, and the composition background it had before.
     private readonly ConditionalWeakTable<Window, object> _mica = [];
+
+    /// <summary>
+    /// Fluent's built-in TextBox, ListBoxItem and ListViewItem keep full-contrast text when disabled, so the
+    /// App layers a disabled foreground over Fluent's own style for each (R4).
+    /// </summary>
+    private static readonly Type[] FluentDimsWhenDisabled = [typeof(TextBox), typeof(ListBoxItem), typeof(ListViewItem)];
 
     static ThemeService() => AppContext.SetSwitch(DisableFluentBackdropSwitch, true);
 
@@ -113,6 +120,11 @@ internal sealed class ThemeService
             merged.Add(_shared);
         }
 
+        if (theme == AppTheme.Fluent)
+        {
+            DimFluentDisabledText(merged);
+        }
+
         ResourceDictionary next = theme == AppTheme.GamingDark ? _gaming : _fluent;
         ResourceDictionary previous = theme == AppTheme.GamingDark ? _fluent : _gaming;
         var at = merged.IndexOf(previous);
@@ -165,15 +177,17 @@ internal sealed class ThemeService
         var mica = theme == AppTheme.Fluent && window is ShellWindow { UsesMica: true } && WindowFrame.SupportsMica;
         if (mica != _mica.TryGetValue(window, out _))
         {
+            var target = HwndSource.FromHwnd(hwnd).CompositionTarget;
             if (mica)
             {
                 // Mica shows only through a transparent window and composition background.
-                _mica.Add(window, true);
+                _mica.Add(window, target.BackgroundColor);
                 window.Background = Brushes.Transparent;
-                HwndSource.FromHwnd(hwnd).CompositionTarget.BackgroundColor = Colors.Transparent;
+                target.BackgroundColor = Colors.Transparent;
             }
             else
             {
+                target.BackgroundColor = _mica.TryGetValue(window, out var before) ? (Color)before : target.BackgroundColor;
                 _mica.Remove(window);
                 window.ClearValue(Control.BackgroundProperty);
             }
@@ -211,6 +225,24 @@ internal sealed class ThemeService
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // The engine's settings stay the record; this only saves a restyle at the next start.
+        }
+    }
+
+    // Based on the style in WPF's Fluent dictionary, which is first in the list once ThemeMode is set.
+    private void DimFluentDisabledText(IList<ResourceDictionary> merged)
+    {
+        var fluent = merged.FirstOrDefault(d => d.Source?.OriginalString.Contains("PresentationFramework.Fluent", StringComparison.Ordinal) == true);
+        foreach (var type in FluentDimsWhenDisabled)
+        {
+            if (fluent?[type] is not Style basis)
+            {
+                continue;
+            }
+
+            var disabled = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabled.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("TextFillColorDisabledBrush")));
+            var style = new Style(type, basis) { Triggers = { disabled } };
+            _fluent[type] = style;
         }
     }
 
