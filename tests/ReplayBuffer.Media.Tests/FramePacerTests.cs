@@ -258,6 +258,21 @@ public sealed class FramePacerTests
         Assert.InRange(pacer.RepeatedSlots, 23, 25);
     }
 
+    [Fact]
+    public void AChainStartedMidSessionGivesItsFirstFrameTheNearestSlotWithNoRepeatsBeforeIt()
+    {
+        var pacer = new FramePacer(Qpf, 30, Anchor, firstFrameTakesNearestSlot: true);
+        var first = Anchor + (5 * Qpf);
+
+        var decision = pacer.Offer(first);
+
+        Assert.Equal((PacerAction.Emit, 150L, pacer.Pts(150)), (decision.Action, decision.Slot, decision.Pts));
+        Assert.Equal(PacerAction.None, pacer.Poll(first).Action);
+        var repeat = pacer.Poll(pacer.SlotQpc(151) + (Qpf / 60));
+        Assert.Equal((PacerAction.Repeat, 151L), (repeat.Action, repeat.Slot));
+        Assert.Equal(1, pacer.RepeatedSlots);
+    }
+
     /// <summary>
     /// Drives the pacer as the encoder thread does: it wakes at each frame's arrival (its capture
     /// QPC) and at each deadline, polls until nothing is due, then offers the frame.

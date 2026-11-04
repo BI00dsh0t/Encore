@@ -31,6 +31,7 @@ internal sealed class MainViewModel : Observable
         Pages = SettingsPages.Create(new SettingsSender(engine), engine);
         General = Pages.OfType<GeneralSettingsPage>().Single();
         ReplayBuffer = Pages.OfType<ReplayBufferSettingsPage>().Single();
+        Hotkeys = Pages.OfType<HotkeysPage>().Single();
         TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
         GameProfiles = Pages.OfType<GameProfilesPage>().Single();
         _selectedPage = Pages[0];
@@ -46,6 +47,9 @@ internal sealed class MainViewModel : Observable
 
     /// <summary>The Replay Buffer page, which takes the snapshot's video options and storage estimate as well as its settings.</summary>
     public ReplayBufferSettingsPage ReplayBuffer { get; }
+
+    /// <summary>The Hotkeys page, which takes the snapshot's <c>hotkey.status</c> as well as its settings.</summary>
+    public HotkeysPage Hotkeys { get; }
 
     /// <summary>The Track Layout page, which takes the snapshot's device list as well as its settings.</summary>
     public TrackLayoutPage TrackLayout { get; }
@@ -159,6 +163,7 @@ internal sealed class MainViewModel : Observable
         Warnings = [.. state.Warnings.Select(w => $"{w.Severity}: {w.Message} ({w.Code})")];
         TrackLayout.ShowDevices(state.Devices);
         ReplayBuffer.ShowState(state);
+        Hotkeys.ShowStatus(state.Hotkeys);
         Library.Render(state);
 
         // Before rendering, so a draft the render watches is recorded against this engine run.
