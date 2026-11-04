@@ -3,14 +3,14 @@ title: 'Game Profile overrides in the Main App'
 type: 'feature'
 ticket: '11'
 created: '2026-11-03'
-status: 'ready-for-dev'
+status: 'built'
 baseline_revision: '034ee329738174db36e66b4d603511501022880c'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -68,12 +68,12 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Settings/SettingsSender.cs` -- add the scope helpers -- one place for profile reads and ops.
-- [ ] `src/ReplayBuffer.App/Settings/TrackLayoutPage.cs` + `TrackLayoutView.xaml` -- profile scope and Use Global -- reuse 2.7/2.11's editor.
-- [ ] `src/ReplayBuffer.App/Settings/ReplayBufferSettingsPage.cs` + `ReplayBufferSettingsView.xaml` -- profile scope, Use Global, Global-only rows hidden, estimate note -- reuse 4.10's video/bufferWindow editing.
-- [ ] `src/ReplayBuffer.App/Settings/GameProfilesPage.cs` + `GameProfilesView.xaml` -- picker and hosted editors -- 3.6's page is where a profile's settings live.
-- [ ] `src/ReplayBuffer.App/MainViewModel.cs` -- feed state and open flag to the Game Profiles page.
-- [ ] `tests/ReplayBuffer.App.Tests/GameProfilesPageTests.cs` -- two happy-path tests (layout override lifecycle; output + Buffer Window override lifecycle), and extend the view test to select a profile with an override, assert no binding errors mentioning the new types, and save `game-profile-overrides.png` to the test output folder (as `HotkeysPageTests` does).
+- [x] `src/ReplayBuffer.App/Settings/SettingsSender.cs` -- add the scope helpers -- one place for profile reads and ops.
+- [x] `src/ReplayBuffer.App/Settings/TrackLayoutPage.cs` + `TrackLayoutView.xaml` -- profile scope and Use Global -- reuse 2.7/2.11's editor.
+- [x] `src/ReplayBuffer.App/Settings/ReplayBufferSettingsPage.cs` + `ReplayBufferSettingsView.xaml` -- profile scope, Use Global, Global-only rows hidden, estimate note -- reuse 4.10's video/bufferWindow editing.
+- [x] `src/ReplayBuffer.App/Settings/GameProfilesPage.cs` + `GameProfilesView.xaml` -- picker and hosted editors -- 3.6's page is where a profile's settings live.
+- [x] `src/ReplayBuffer.App/MainViewModel.cs` -- feed state and open flag to the Game Profiles page.
+- [x] `tests/ReplayBuffer.App.Tests/GameProfilesPageTests.cs` -- two happy-path tests (layout override lifecycle; output + Buffer Window override lifecycle), and extend the view test to select a profile with an override, assert no binding errors mentioning the new types, and save `game-profile-overrides.png` to the test output folder (as `HotkeysPageTests` does).
 
 **Acceptance Criteria:**
 - Given a profile with no overrides, when the builder picks it under "Overrides for" and unticks Use Global for the Track Layout, then one `settings.update` carries `SetProfile(<id>, trackLayout, <Global layout>)` with the Global Track ids.
@@ -84,9 +84,21 @@ deferred: []
 
 ## Implementation Notes
 
+- `SettingsPage.Embedded(UserControl)` drops a hosted view's root `ScrollViewer`: nested inside the Game Profiles page it never scrolls but would swallow the mouse wheel. The profile instances of both pages use it; the Global pages don't.
+- `MainViewModel.UpdateOpenPage` closes before it opens, so leaving Game Profiles for Track Layout doesn't send the closing page's `meters.unwatch` after the opening page's `meters.watch`.
+- `ReplayBufferSettingsPage.IsProfile` (= `!IsGlobal`) exists for the Use Global boxes' visibility binding; the Buffer Window and storage rows share their label column through `SharedSizeGroup`.
+- The "Overrides for" section sits after "Add a game by hand" (still below the list), with a "Track Layout" heading above the hosted layout editor.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 3 findings — high 0, medium 1, low 2, false 0, maybe-false 0
+- findings:
+  - `[low]` `[reject]` After a reconnect, a closed Global Track Layout page's deferred `meters.unwatch` (from `ShowMeters`) can follow the hosted override editor's `meters.watch` in `Refresh`, so the override's meters read zero until its draft changes — real, but needs a disconnect during a page switch, only zeroes the level bars, and the fix needs an ordering branch in `Refresh`.
+  - `[medium]` `[patch]` A hosted editor that sets the same refusal twice raises no `Message` change, so `GameProfilesPage.ChildChanged` doesn't mirror it and the page shows nothing — fixed: `SettingsPage.Message`'s setter now raises on every set.
+  - `[low]` `[reject]` The Output/Buffer Window test sends four updates at revision 3 with no render between them — a test-realism note, not a code defect: in the app each click follows the previous commit's `settings.changed`, which re-renders the page; the ops' scope and values are what the AC checks.
 
 ## Design Notes
 
@@ -100,3 +112,24 @@ Scope-aware pages instead of new editors: the profile editors are second instanc
 
 **Manual checks (if no CLI):**
 - `tests/ReplayBuffer.App.Tests/bin/Release/**/game-profile-overrides.png` shows the editors; the end-to-end Clip check goes to the Human Check Queue.
+
+## Auto Run Result
+
+**Summary:** The Game Profiles page gains an "Overrides for" picker that hosts profile-scoped instances of the Replay Buffer page (Buffer Window and Output Settings) and the Track Layout editor (with Mic Devices and mute Tracks). Each key has a Use Global box: unticking sends `SetProfile` with a copy of the Global value (the layout keeps its Track ids), ticking sends `RemoveProfile`. Every edit is a profile-scoped `settings.update` op. The Global Replay Buffer page says its estimate covers the Global settings only. No Contracts, Core or Engine change.
+
+**Files changed:**
+- `src/ReplayBuffer.App/Settings/SettingsSender.cs` — `SettingsValues.HasOverride`, `Resolve`, `Set` (Global or profile op).
+- `src/ReplayBuffer.App/Settings/SettingsPage.cs` — `Embedded` drops a hosted view's ScrollViewer; `Message` raises on every set.
+- `src/ReplayBuffer.App/Settings/TrackLayoutPage.cs`, `TrackLayoutView.xaml` — optional profile scope, `UsesGlobal`, `CanEdit`.
+- `src/ReplayBuffer.App/Settings/ReplayBufferSettingsPage.cs`, `ReplayBufferSettingsView.xaml` — optional profile scope, Use Global for Buffer Window and Output, Global-only rows hidden, estimate note.
+- `src/ReplayBuffer.App/Settings/GameProfilesPage.cs`, `GameProfilesView.xaml` — picker, hosted editors, `ShowState`, `IsOpen`, message mirroring.
+- `src/ReplayBuffer.App/MainViewModel.cs` — feeds the snapshot and open flag to Game Profiles; closes before opening so meter watches aren't stopped.
+- `tests/ReplayBuffer.App.Tests/GameProfilesPageTests.cs` — layout override lifecycle, Output/Buffer Window override lifecycle, view test with `game-profile-overrides.png`.
+
+**Review:** 1 patch applied (medium: repeated hosted-editor message), 0 deferred, 2 rejected (low: meter order after a reconnect mid-switch; test sends at one revision — see the triage log).
+
+**Follow-up review recommended:** false (one medium patched, no high).
+
+**Verification:** `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors. `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build`: 104 total, 96 passed, 8 Heavy skipped, 0 failed. Other test projects not run: only App code changed. The engine publish was not needed. The screenshot shows the picker, the greyed Use Global Output and Buffer Window fields, and the editable Track Layout override.
+
+**Residual risks / HITL:** The real app was not run. For the Human Check Queue: give one game a 1080p override and its own Track Layout with a different Mic Device, save a Clip in it and in another game, and check each file's resolution and Tracks; mute in the first game silences only its Mic Device; Use Global removes the override.
