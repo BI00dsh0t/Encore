@@ -61,6 +61,12 @@
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
+    <!-- Inline caution text, such as Track Layout's double-counting warning. -->
+    <Style x:Key="RbSettingsCautionTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
     <!-- The page's refused-update or validation message: a danger info bar, shown only while it has text. -->
     <Style x:Key="RbSettingsPageMessageStyle" TargetType="ContentControl">
         <Setter Property="Focusable" Value="False" />
