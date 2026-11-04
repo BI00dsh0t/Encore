@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.1 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
@@ -111,7 +111,7 @@ The coordinator logs each QA round in the Log below.
 | 25.12 | 4.12 Hotkeys page in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `29d63b8`) |
 | 25.13 | 4.13 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `28fb010`) |
 | 25.14 | 4.14 Clips end to end on the builder's PC | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e5bfd26`) |
-| 25.15 | Release epic 4 (`v0.4.0`) | | pending |
+| 25.15 | Release epic 4 (`v0.4.0`) | coordinator | done |
 | 26 | Slice epic 5 (Overlay and Feedback Sounds) | slice-epic-5 | done |
 | 26.1 | 5.1 Tracer: capture state to the Overlay dot | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `c1afee0`) |
 | 26.2 | 5.2 Spike Q-4: the Overlay over exclusive fullscreen and its borderless FPS cost | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `5db7981`) |
@@ -158,7 +158,7 @@ The coordinator logs each QA round in the Log below.
 | 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
-| 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | | pending |
+| 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | | pending |
 | 29.3 | 8.3 GPU driver reset recovery | | pending |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
@@ -557,3 +557,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.9 merged (`597fe28`, `feat(app): merge 5.9-capture-exclusion`, after merging develop in: conflicts in `ShellApp.cs` and `NativeMethods.txt` kept both sides; build 0 warnings, App 113 passed and Platform.Desktop 13 passed). Contracts unchanged.
 - 2026-11-04: 5.9 merged (`597fe28`, marked done `39f1954`), and its card is Done. slice-epic-5 is back in the pool. 5.12 (the benchmark with the Overlay on) went to 2-1-tracer (Opus, medium effort; context kept from the research and 5.15), with its card In progress. It measures every `overlayDot` mode in every presentation mode under the GPU lock.
 - 2026-11-04: 4.14 merged (`e5bfd26`, `test(engine): merge 4.14-clips-end-to-end`, after merging develop in cleanly: build 0 warnings, Engine.Tests 167 passed, 26 skipped). QA's advisories 1 and 3 were folded into the plan, 2 and 4 handled at merge. The builder's epic-4 hand checks are one ordered list in 4.14's plan. The epic is not marked done and not released: the coordinator does that next.
+- 2026-11-04: 4.14 merged (`e5bfd26`, marked done `039b4da`), and its card is Done with a release comment. **Epic 4 is complete:** it was marked `status: done` (`0246ef0`) and **`v0.4.0` was released** by the coordinator (master `96ad304`, tag `v0.4.0`, back-merge `e3b0b12`). git flow's default merge messages were reworded to Conventional Commits before anything built on them (same trees and parents). The builder's epic-4 hand checks are in the 4.14 plan's checklist. Epic 4 being done unblocks 8.1 (the soak harness tracer), which went to slice-epic-4 (Opus, medium effort), with its card In progress.
