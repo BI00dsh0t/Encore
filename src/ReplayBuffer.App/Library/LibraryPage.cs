@@ -16,22 +16,50 @@ namespace ReplayBuffer.App.Library;
 /// While Cleanup is blocked by a rebuilt index (story 7.2) a banner says so, and Acknowledge dismisses
 /// the <c>library-corrupt</c> warning. Each row shows its length and the shell's thumbnail (story 7.3),
 /// asked by absolute path once the item is written, never while it is. Each row's star (story 7.4)
-/// sends <c>library.setFavourite</c> and changes only when the snapshot does. Members run on the UI thread.
+/// sends <c>library.setFavourite</c> and changes only when the snapshot does. The list is grouped by
+/// game or by day and filtered by game, date and Favourite (story 7.5), a choice remembered per
+/// instance. Members run on the UI thread.
 /// </summary>
 internal sealed class LibraryPage : Observable
 {
+    /// <summary>Core's <c>ProfileFolders.MonitorRecordings</c>; the App doesn't reference Core.</summary>
+    internal const string MonitorRecordings = "Monitor Recordings";
+
+    private const string OtherKey = "other";
+    private static readonly string MonitorRecordingsKey = FolderKey(MonitorRecordings);
+
     private readonly IEngineSession _engine;
     private readonly LibraryThumbnails? _thumbnails;
+    private readonly string? _viewStateFile;
+    private readonly TimeProvider _time;
+    private readonly Dictionary<string, LibraryRow> _rows = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, LibraryGroupHeader> _headers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, LibraryGameOption> _gameOptions = new(StringComparer.Ordinal);
+    private readonly LibraryGameOption _allGames = new(null) { Name = "All games" };
+    private List<(LibraryRow Row, LibraryItem Item, string Key)> _shown = [];
+    private bool _hasSnapshot;
     private FrameworkElement? _view;
     private bool _isCleanupBlocked;
     private string? _corruptWarningId;
+    private LibraryGrouping _groupBy;
+    private string? _gameFilter;
+    private LibraryDateFilter _dateFilter;
+    private bool _favouritesOnly;
 
     /// <param name="thumbnails">Where the rows' thumbnails come from; without it, every row shows the generic glyph.</param>
-    public LibraryPage(IEngineSession engine, LibraryThumbnails? thumbnails = null)
+    /// <param name="viewStateFile">Where the view choices are remembered; without it, they last only this run.</param>
+    /// <param name="time">The clock the date filter and day headers read "today" from.</param>
+    public LibraryPage(IEngineSession engine, LibraryThumbnails? thumbnails = null, string? viewStateFile = null, TimeProvider? time = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _thumbnails = thumbnails;
+        _viewStateFile = viewStateFile;
+        _time = time ?? TimeProvider.System;
         AcknowledgeCommand = new RelayCommand(() => _ = AcknowledgeAsync());
+        Games.Add(_allGames);
+
+        var view = LibraryViewState.Load(viewStateFile);
+        (_groupBy, _gameFilter, _dateFilter, _favouritesOnly) = (view.GroupBy, view.Game, view.Date, view.FavouritesOnly);
     }
 
     /// <summary>Whether the banner shows: the index was rebuilt and Cleanup is off until acknowledged.</summary>
@@ -44,8 +72,72 @@ internal sealed class LibraryPage : Observable
     /// <summary>Sends <c>warning.dismiss</c> for the active <c>library-corrupt</c> warning.</summary>
     public ICommand AcknowledgeCommand { get; }
 
-    /// <summary>The items, newest first.</summary>
+    /// <summary>All the items, newest first, whatever the grouping and filters.</summary>
     public ObservableCollection<LibraryRow> Rows { get; } = [];
+
+    /// <summary>What the list shows: each group's header followed by its rows, filtered.</summary>
+    public ObservableCollection<object> Entries { get; } = [];
+
+    /// <summary>"All games" and every game present, in group order.</summary>
+    public ObservableCollection<LibraryGameOption> Games { get; } = [];
+
+    public IReadOnlyList<LibraryChoice<LibraryGrouping>> GroupOptions { get; } =
+    [
+        new(LibraryGrouping.Game, "Game"),
+        new(LibraryGrouping.Day, "Day"),
+    ];
+
+    public IReadOnlyList<LibraryChoice<LibraryDateFilter>> DateOptions { get; } =
+    [
+        new(LibraryDateFilter.All, "All dates"),
+        new(LibraryDateFilter.Today, "Today"),
+        new(LibraryDateFilter.Last7Days, "Last 7 days"),
+        new(LibraryDateFilter.Last30Days, "Last 30 days"),
+    ];
+
+    public LibraryGrouping GroupBy
+    {
+        get => _groupBy;
+        set => SetView(ref _groupBy, value);
+    }
+
+    /// <summary>The shown game's group key; null for all games.</summary>
+    public string? GameFilter
+    {
+        get => _gameFilter;
+        set
+        {
+            if (SetView(ref _gameFilter, value))
+            {
+                OnPropertyChanged(nameof(SelectedGame));
+            }
+        }
+    }
+
+    /// <summary>The game combo's selection; a null set (the combo's items changing) is ignored.</summary>
+    public LibraryGameOption? SelectedGame
+    {
+        get => _gameFilter is null ? _allGames : _gameOptions.GetValueOrDefault(_gameFilter);
+        set
+        {
+            if (value is not null)
+            {
+                GameFilter = value.Key;
+            }
+        }
+    }
+
+    public LibraryDateFilter DateFilter
+    {
+        get => _dateFilter;
+        set => SetView(ref _dateFilter, value);
+    }
+
+    public bool FavouritesOnly
+    {
+        get => _favouritesOnly;
+        set => SetView(ref _favouritesOnly, value);
+    }
 
     public FrameworkElement View => _view ??= new LibraryView { DataContext = this };
 
@@ -59,29 +151,245 @@ internal sealed class LibraryPage : Observable
             .OrderByDescending(i => i.Date)
             .ThenBy(i => i.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var keys = ordered.Select(i => i.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var existing = Rows.ToDictionary(r => r.Path, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var row in Rows.Where(r => !keys.Contains(r.Path)).ToList())
+        var shown = new List<(LibraryRow Row, LibraryItem Item, string Key)>(ordered.Count);
+        var games = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var item in ordered)
         {
-            Rows.Remove(row);
-        }
-
-        for (var index = 0; index < ordered.Count; index++)
-        {
-            var item = ordered[index];
-            if (!existing.TryGetValue(item.Path, out var row))
+            if (!_rows.TryGetValue(item.Path, out var row))
             {
                 row = new LibraryRow(item.Path, r => _ = SetFavouriteAsync(r));
-                Rows.Insert(index, row);
-            }
-            else if (Rows.IndexOf(row) != index)
-            {
-                Rows.Move(Rows.IndexOf(row), index);
+                _rows.Add(item.Path, row);
             }
 
-            row.Show(item, GameOf(item, state.Settings));
+            var (key, name) = GameKeyOf(item, state.Settings);
+            games.TryAdd(key, name);
+            row.Show(item, name);
             RequestThumbnail(row, item, state.LibraryFolder);
+            shown.Add((row, item, key));
+        }
+
+        if (_rows.Count != ordered.Count)
+        {
+            var keys = ordered.Select(i => i.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var gone in _rows.Keys.Where(k => !keys.Contains(k)).ToList())
+            {
+                _rows.Remove(gone);
+            }
+        }
+
+        Sync(Rows, shown.ConvertAll(s => s.Row));
+        _shown = shown;
+        _hasSnapshot = true;
+        SyncGames(games);
+        Apply();
+    }
+
+    /// <summary>The item's game: its group key and the name its header shows.</summary>
+    /// <remarks>
+    /// Its profile's live name; else the profile whose folder is the item's top-level folder (scanned
+    /// files carry no profile id); else that folder's name; else "Other" at the Output Folder's root.
+    /// </remarks>
+    internal static (string Key, string Name) GameKeyOf(LibraryItem item, SettingsDocument settings)
+    {
+        if (item.ProfileId is { } id && settings.Profiles.TryGetValue(id, out var profile))
+        {
+            return (ProfileKey(id), profile.Name);
+        }
+
+        var separator = item.Path.IndexOfAny(['\\', '/']);
+        if (separator <= 0)
+        {
+            return (OtherKey, "Other");
+        }
+
+        var folder = item.Path[..separator];
+        foreach (var (profileId, candidate) in settings.Profiles)
+        {
+            if (string.Equals(candidate.Folder, folder, StringComparison.OrdinalIgnoreCase))
+            {
+                return (ProfileKey(profileId), candidate.Name);
+            }
+        }
+
+        return (FolderKey(folder), folder);
+    }
+
+    private static string ProfileKey(string id) => "profile:" + id;
+
+    private static string FolderKey(string folder) => "folder:" + folder.ToUpperInvariant();
+
+    // Games by name, then Monitor Recordings, then Other.
+    private static int GameRank(string key) => key == OtherKey ? 2 : key == MonitorRecordingsKey ? 1 : 0;
+
+    private void SyncGames(Dictionary<string, string> games)
+    {
+        var wanted = new List<LibraryGameOption>(games.Count + 1) { _allGames };
+        foreach (var (key, name) in games
+            .OrderBy(g => GameRank(g.Key))
+            .ThenBy(g => g.Value, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(g => g.Key, StringComparer.Ordinal))
+        {
+            if (!_gameOptions.TryGetValue(key, out var option))
+            {
+                option = new LibraryGameOption(key);
+                _gameOptions.Add(key, option);
+            }
+
+            option.Name = name;
+            wanted.Add(option);
+        }
+
+        foreach (var gone in _gameOptions.Keys.Where(k => !games.ContainsKey(k)).ToList())
+        {
+            _gameOptions.Remove(gone);
+        }
+
+        Sync(Games, wanted);
+
+        // A persisted filter survives the empty first render; a game gone from a real Library resets it.
+        if (_gameFilter is not null && !_gameOptions.ContainsKey(_gameFilter) && games.Count > 0)
+        {
+            GameFilter = null;
+        }
+        else
+        {
+            OnPropertyChanged(nameof(SelectedGame));
+        }
+    }
+
+    // Rebuilds Entries from the last snapshot under the current grouping and filters.
+    private void Apply()
+    {
+        if (!_hasSnapshot)
+        {
+            return;
+        }
+
+        var zone = _time.LocalTimeZone;
+        var today = _time.GetLocalNow().Date;
+        var from = _dateFilter switch
+        {
+            LibraryDateFilter.Today => today,
+            LibraryDateFilter.Last7Days => today.AddDays(-6),
+            LibraryDateFilter.Last30Days => today.AddDays(-29),
+            _ => DateTime.MinValue,
+        };
+
+        var filtered = new List<(LibraryRow Row, string Key, DateTime Day)>(_shown.Count);
+        foreach (var (row, item, key) in _shown)
+        {
+            var day = TimeZoneInfo.ConvertTime(item.Date, zone).Date;
+            if ((_gameFilter is null || key == _gameFilter)
+                && day >= from
+                && (_dateFilter == LibraryDateFilter.All || day <= today)
+                && (!_favouritesOnly || item.Favourite))
+            {
+                filtered.Add((row, key, day));
+            }
+        }
+
+        var wanted = new List<object>(filtered.Count + 16);
+        if (_groupBy == LibraryGrouping.Game)
+        {
+            // Games in the combo's order; rows stay newest first within each.
+            var order = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (var i = 1; i < Games.Count; i++)
+            {
+                order[Games[i].Key!] = i;
+            }
+
+            foreach (var group in filtered.GroupBy(f => f.Key).OrderBy(g => order.GetValueOrDefault(g.Key, int.MaxValue)))
+            {
+                wanted.Add(Header("game|" + group.Key, _gameOptions.TryGetValue(group.Key, out var o) ? o.Name : group.Key));
+                wanted.AddRange(group.Select(f => f.Row));
+            }
+        }
+        else
+        {
+            // Rows are newest first, so each day's rows are contiguous and the days come newest first.
+            DateTime? current = null;
+            foreach (var (row, _, day) in filtered)
+            {
+                if (current != day)
+                {
+                    current = day;
+                    wanted.Add(Header("day|" + day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), DayName(day, today)));
+                }
+
+                wanted.Add(row);
+            }
+        }
+
+        Sync(Entries, wanted);
+    }
+
+    private static string DayName(DateTime day, DateTime today) =>
+        day == today ? "Today"
+        : day == today.AddDays(-1) ? "Yesterday"
+        : day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private LibraryGroupHeader Header(string key, string name)
+    {
+        if (!_headers.TryGetValue(key, out var header))
+        {
+            header = new LibraryGroupHeader(key);
+            _headers.Add(key, header);
+        }
+
+        header.Name = name;
+        return header;
+    }
+
+    private bool SetView<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+    {
+        if (!Set(ref field, value, name))
+        {
+            return false;
+        }
+
+        Apply();
+        new LibraryViewState(_groupBy, _gameFilter, _dateFilter, _favouritesOnly).Save(_viewStateFile);
+        return true;
+    }
+
+    /// <summary>Makes <paramref name="target"/> equal <paramref name="wanted"/> in place, keeping the items both share.</summary>
+    /// <remarks>
+    /// Linear: the unwanted are dropped, and when what is left is still in the wanted order (a snapshot
+    /// or a filter change) the new items are merged in; a reorder (a grouping change) resets the list.
+    /// </remarks>
+    internal static void Sync<T>(ObservableCollection<T> target, IReadOnlyList<T> wanted)
+        where T : class
+    {
+        var position = new Dictionary<T, int>(wanted.Count, ReferenceEqualityComparer.Instance);
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            position[wanted[i]] = i;
+        }
+
+        for (var i = target.Count - 1; i >= 0; i--)
+        {
+            if (!position.ContainsKey(target[i]))
+            {
+                target.RemoveAt(i);
+            }
+        }
+
+        for (var i = 1; i < target.Count; i++)
+        {
+            if (position[target[i]] < position[target[i - 1]])
+            {
+                target.Clear();
+                break;
+            }
+        }
+
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            if (i >= target.Count || !ReferenceEquals(target[i], wanted[i]))
+            {
+                target.Insert(i, wanted[i]);
+            }
         }
     }
 
@@ -140,18 +448,6 @@ internal sealed class LibraryPage : Observable
         {
             // Already dismissed; the next snapshot clears the banner.
         }
-    }
-
-    /// <summary>The profile's name, else the item's top-level folder, else "Other".</summary>
-    internal static string GameOf(LibraryItem item, SettingsDocument settings)
-    {
-        if (item.ProfileId is { } id && settings.Profiles.TryGetValue(id, out var profile))
-        {
-            return profile.Name;
-        }
-
-        var separator = item.Path.IndexOfAny(['\\', '/']);
-        return separator > 0 ? item.Path[..separator] : "Other";
     }
 
     /// <summary>A size in MB below 1 GB, else in GB (1024-based), with one decimal.</summary>
@@ -293,3 +589,35 @@ internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite =
         IsLocked = item.BeingWritten;
     }
 }
+
+/// <summary>A group's header in the Library list; one instance per group key, its name kept current.</summary>
+internal sealed class LibraryGroupHeader(string key) : Observable
+{
+    private string _name = "";
+
+    public string Key { get; } = key;
+
+    public string Name
+    {
+        get => _name;
+        set => Set(ref _name, value);
+    }
+}
+
+/// <summary>One entry of the game filter; one instance per game key, so a renamed profile keeps its selection.</summary>
+/// <param name="key">The game's group key; null for "All games".</param>
+internal sealed class LibraryGameOption(string? key) : Observable
+{
+    private string _name = "";
+
+    public string? Key { get; } = key;
+
+    public string Name
+    {
+        get => _name;
+        set => Set(ref _name, value);
+    }
+}
+
+/// <summary>An option of a view combo: its value and display name.</summary>
+internal sealed record LibraryChoice<T>(T Value, string Name);
