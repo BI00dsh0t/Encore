@@ -3,7 +3,7 @@ title: 'Main App status line'
 type: 'feature'
 ticket: '10'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '143484bf848bc958bbbe74a457a769fa27c3b272'
 route: 'full'
 route_source: 'auto'
