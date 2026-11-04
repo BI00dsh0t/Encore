@@ -36,11 +36,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 5.8 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 7.4 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 5.7 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.4 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.12 |
 
@@ -119,8 +119,8 @@ The coordinator logs each QA round in the Log below.
 | 26.4 | 5.4 Feedback notices in the engine, with a dev simulator | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `9c364fa`) |
 | 26.5 | 5.5 Overlay message queue | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `b0f684e`) |
 | 26.6 | 5.6 Feedback Sounds in the engine | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ac6a3a2`) |
-| 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
-| 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | | pending |
+| 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `53d83b7`) |
+| 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 26.9 | 5.9 Capture exclusion for every App window | | pending |
 | 26.10 | 5.10 Main App status line | | pending |
 | 26.11 | 5.11 Feedback Sounds settings page | | pending |
@@ -132,7 +132,7 @@ The coordinator logs each QA round in the Log below.
 | 27.1 | 6.1 Tracer: Record Hotkey to a fragmented MP4 Recording beside the Replay Buffer | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f9c5a66`) |
 | 27.2 | 6.2 Crash-safe Recordings and recording-interrupted | 6.2 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ee4e90f`) |
 | 27.3 | 6.3 Record Hotkey modes and the Recordings switch | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `eee32cb`) |
-| 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
+| 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `e43dda1`) |
 | 27.5 | 6.5 Clips during a Recording on one encoder chain | | pending |
 | 27.6 | 6.6 One file however long, and forced encoder restarts | | pending |
 | 27.7 | 6.7 Disk full during a Recording | | pending |
@@ -464,3 +464,15 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 
 - 2026-11-03: 4.10 merged into `develop` (`518e4d9`, `feat(app): merge 4.10-buffer-output-settings`) and marked done, after QA PASS at `9cb23a0` with 0 blocking findings. Develop (6.3, 7.3) was merged into the branch first: the conflicts in `EngineHost` and `EventHub`'s constructor kept both sides. Release build 0 warnings; Contracts 118, Core 104, Engine 166 and App 81 passed; publish 0 warnings. Contracts change is additive (`StorageEstimate`, `estimate.changed`, `StateSnapshot.Estimate`). QA's advisories are recorded in the epic Notes. One Human Check row added.
 - 2026-11-03: 4.10 merged (`518e4d9`, marked done `cf86e75`). Its card is Done with its label detached, and qa-1-14 is back in the pool. 4.12 went to story-2-7 (Opus, medium effort), with its card In progress. 4.11 still waits on 4.9.
+- 2026-11-03: 5.7 stalled from 21:48 to 22:38, with uncommitted work waiting on a review subagent whose completion never arrived. The coordinator nudged it: review the diff itself if the lens is lost, sync with develop, then READY FOR QA. On each all-idle event, check every story's `lastActivityAt` for one stuck over 30 minutes.
+- 2026-11-03: 5.7 is READY FOR QA at `7b82d69` after the nudge. QA started on qa-1-14 (Sonnet), and its card is In QA.
+- 2026-11-03: QA 5.7 at `7b82d69`: **QA PASS**, 0 findings. 5.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
+- 2026-11-03: 5.7 merged (`53d83b7`) after QA PASS at `7b82d69` and a docs-only sync with develop (App.Tests 84 passed, 0-warning build). Ticket marked done.
+- 2026-11-03: 5.7 merged (`53d83b7`, marked done `a131491`), and its card is Done. slice-epic-8 is back in the pool. 5.8 went to slice-epic-4 (Opus, high effort), with its card In progress. Its brief covers the `.bench-running` lock and using Bench's synthetic GPU load as a stand-in game.
+- 2026-11-03/04: The usage limit stopped 4.9, 4.12, 6.4 and 5.8 mid-work (5.8 had only cut its branch). After the reset (about 00:40Z) the coordinator told each to resume, redoing any lost subagent's part itself. 7.4 is READY FOR QA at `83f6294` (its review lens was skipped at the limit; the Contracts change is additive). QA started on slice-epic-8 (Sonnet) with a closer read, and its card is In QA.
+- 2026-11-04: The Claude Code processes of 4.9 and 5.8 crashed (exit 0xC0000409, the process itself). 4.9 was mid-way through merging develop in, and 5.8 had no code yet. No lock or processes were left behind. Both were told to resume. 6.4 is READY FOR QA at `ccd440f`. QA started on qa-1-14 (Sonnet), and its card is In QA.
+- 2026-11-04: QA 7.4 at `83f6294`: **QA PASS**, 0 findings. 7.4 has been told to merge (Sonnet), and slice-epic-8 is back in the pool. 4.9 and 5.8 are running again after the crash.
+- 2026-11-04: QA 6.4 at `ccd440f`: **QA PASS**, 0 findings, with the Heavy MidRecording tests passing. 6.4 has been told to merge (Sonnet), and qa-1-14 is back in the pool. 7.4's process crashed before its merge (develop was untouched), and it was told to redo the merge.
+- 2026-11-04: 6.4 merged into `develop` (`e43dda1`, `feat(engine): merge 6.4-recording-lifecycle`) and marked done, after QA PASS at `ccd440f` with 0 findings. `develop` had moved only by docs commits since, so nothing was re-run: the verified results stand (Release build 0 warnings; Contracts 118, Core 104, Engine 166 passed with the two new Heavy tests passing; publish clean). Contracts: three additive `RecordingStopReasons` (`game-exit`, `ignored`, `shutdown`). A Recording at Quit now gets `EndWrite`, `recording.stopped` and its open entry closed, so a clean quit is no longer reported as interrupted. QA's notes: a new game proposed while an exited game's Recording is still finishing isn't held, and a Record press in that window is ignored as stopping. Unmeasured: the whole-host Quit time against the App's 5 s.
+- 2026-11-04: 6.4 merged (`e43dda1`, marked done `e610a10`), and its card is Done. qa-2-1 is back in the pool. Nothing new is ready: 6.5 also waits on 4.9. 7.4 is running its merge again.
+- 2026-11-04: The desktop app restarted at about 00:57Z. It stopped every session's turn and background subagent, and the coordinator's display holder. The coordinator restarted the display holder and told 7.4 (re-merge), 4.9 (review, then READY FOR QA), 5.8 (finish the partial implementation) and 4.12 (finish the review patches) to resume from their worktrees.

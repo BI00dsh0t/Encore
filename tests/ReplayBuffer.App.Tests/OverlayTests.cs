@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using ReplayBuffer.App.Engine;
 using ReplayBuffer.App.Overlay;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Platform.Desktop;
 
@@ -168,10 +169,42 @@ public sealed class OverlayTests
     }
 
     [Fact]
+    public void TheMicIconFollowsTheMuteWhileTheDotShows()
+    {
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), new ManualTime());
+
+        // The muted default with nothing running shows nothing.
+        Assert.True(CaptureState.Initial.MicMuted);
+        Assert.False(model.MicMuted);
+
+        Shift(engine, Buffering with { MicMuted = true });
+        Assert.True(model.MicMuted);
+        Shift(engine, Buffering with { MicMuted = false });
+        Assert.False(model.MicMuted);
+    }
+
+    [Fact]
+    public void TheRedXShowsWhileADiskFullWarningIsActive()
+    {
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), new ManualTime());
+        Assert.False(model.DiskFull);
+
+        Raise(engine, Notice("d", ErrorCodes.DiskFull, WarningSeverity.Error, "The disk is full", DateTimeOffset.UtcNow));
+        Assert.True(model.DiskFull);
+        Assert.Equal(OverlayDot.None, model.Dot);
+
+        Dismiss(engine, "d");
+        Assert.False(model.DiskFull);
+    }
+
+    [Fact]
     public void TheWindowIsTopmostClickThroughNeverActivatedAndExcludedFromCapture() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession();
-        var window = new OverlayWindow(new OverlayViewModel(engine, action => action(), new ManualTime()));
+        var time = new ManualTime();
+        var window = new OverlayWindow(new OverlayViewModel(engine, action => action(), time));
         try
         {
             var hwnd = window.Handle;
@@ -198,6 +231,14 @@ public sealed class OverlayTests
             Assert.True(window.IsVisible);
 
             Dismiss(engine, "a");
+            Assert.False(window.IsVisible);
+
+            // So does a disk-full warning, after its message has ended.
+            Raise(engine, Notice("d", ErrorCodes.DiskFull, WarningSeverity.Error, "The disk is full", DateTimeOffset.UtcNow));
+            time.Advance(OverlayViewModel.MessageDuration);
+            Assert.True(window.IsVisible);
+
+            Dismiss(engine, "d");
             Assert.False(window.IsVisible);
         }
         finally
