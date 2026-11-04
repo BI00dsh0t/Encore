@@ -187,6 +187,22 @@ public sealed class LibrarySettingsPageTests
         Assert.DoesNotContain(errors.Messages, m => m.Contains("LibrarySettings", StringComparison.Ordinal));
     });
 
+    [Fact]
+    public void AConfirmedLimitTheEngineRefusesShowsTheSavedLimitsAgain()
+    {
+        var page = Create();
+        _answer = true;
+        _engine.Reply = (command, _) => command == LibraryMessages.CleanupPreview
+            ? _plan
+            : throw new ReplayBuffer.Contracts.ErrorCodeException("settings-invalid", "refused");
+
+        page.SizeLimitEnabled = true;
+
+        Assert.Single(_prompts);
+        Assert.False(page.SizeLimitEnabled);
+        Assert.NotNull(page.Message);
+    }
+
     private LibrarySettingsPage Create(CleanupSettings? cleanup = null)
     {
         if (cleanup is not null)

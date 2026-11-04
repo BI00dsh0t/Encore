@@ -271,6 +271,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
             return;
         }
 
+        var basis = _cleanup;
         _busy = true;
         ShowLimits(next);
         try
@@ -297,17 +298,24 @@ internal sealed class LibrarySettingsPage : SettingsPage
 
             if (!Confirm(PlanText(plan)))
             {
-                ShowLimits(_cleanup);
+                return;
+            }
+
+            // A newer cleanup arrived while the prompt was open; sending next whole would overwrite it.
+            if (_cleanup != basis)
+            {
+                Message = "The Cleanup limits changed elsewhere, so this page reloaded. Make the change again if you still want it.";
                 return;
             }
 
             _cleanup = next;
-            ShowLimits(next);
             await SendAsync([SettingsValues.SetGlobal(Keys.Cleanup, next)]);
         }
         finally
         {
+            // Renders skipped while busy; show what is saved now (a failed or refused send included).
             _busy = false;
+            ShowLimits(_cleanup);
         }
     }
 

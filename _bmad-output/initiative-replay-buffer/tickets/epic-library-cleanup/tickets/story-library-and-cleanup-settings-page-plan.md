@@ -3,14 +3,14 @@ title: 'Library and Cleanup settings page'
 type: 'feature'
 ticket: '9'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'e4c8eab65bd50cb3afbec44e79fea6af1276d8af'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -66,10 +66,10 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Settings/LibrarySettingsPage.cs` -- the view model -- R7 confirmation, R8
-- [ ] `src/ReplayBuffer.App/Settings/LibrarySettingsView.xaml(.cs)` -- the view and folder picker -- R8
-- [ ] `src/ReplayBuffer.App/Settings/SettingsPage.cs`, `src/ReplayBuffer.App/MainViewModel.cs` -- register and feed the page
-- [ ] `tests/ReplayBuffer.App.Tests/LibrarySettingsPageTests.cs`, `TrackLayoutPageTests.cs` -- (1) enable size → preview with the new limit, prompt text holds count and size, update only on Yes; Cancel sends no update and cleanup stays null; (2) lowering asks again, raising and unticking don't; (3) bad values (size 0, -1, abc; days 0, 1.5) send nothing; (4) choosing a folder sends `outputFolder`, folder size text sums the snapshot's items; (5) the view renders without binding errors and saves a PNG
+- [x] `src/ReplayBuffer.App/Settings/LibrarySettingsPage.cs` -- the view model -- R7 confirmation, R8
+- [x] `src/ReplayBuffer.App/Settings/LibrarySettingsView.xaml(.cs)` -- the view and folder picker -- R8
+- [x] `src/ReplayBuffer.App/Settings/SettingsPage.cs`, `src/ReplayBuffer.App/MainViewModel.cs` -- register and feed the page
+- [x] `tests/ReplayBuffer.App.Tests/LibrarySettingsPageTests.cs`, `TrackLayoutPageTests.cs` -- (1) enable size → preview with the new limit, prompt text holds count and size, update only on Yes; Cancel sends no update and cleanup stays null; (2) lowering asks again, raising and unticking don't; (3) bad values (size 0, -1, abc; days 0, 1.5) send nothing; (4) choosing a folder sends `outputFolder`, folder size text sums the snapshot's items; (5) the view renders without binding errors and saves a PNG
 
 **Acceptance Criteria:**
 - Given no cleanup limit, when the size limit is ticked, then `cleanup.preview` is sent and the prompt shows its count and size, and `settings.update` is sent only after Yes; after No, `cleanup` is still null and nothing was sent.
@@ -80,9 +80,19 @@ deferred: []
 
 ## Implementation Notes
 
+- Saved (`_cleanup`) and shown (`_shown`) limits are kept apart, so Cancel restores the saved ones (the first test run caught this).
+- `FeedbackSoundsPageTests` assumed Feedback Sounds was the last page; it now only checks the page is present.
+- Test: `LibrarySettingsPageTests` (6 tests), writing `library-cleanup-settings.png` to the App test output folder.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 2 findings — high 0, medium 1, low 1, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` A confirmed update the engine refused or conflicted on left the page showing the unsaved limits: `OnRender` skipped `ShowLimits` while busy and nothing re-rendered. — `finally` now clears busy and shows the saved limits; test `AConfirmedLimitTheEngineRefusesShowsTheSavedLimitsAgain`.
+  - `[low]` `[patch]` A `cleanup` change arriving while the prompt was open would be overwritten by the whole `next` value sent at the new revision. — The confirmed path now refuses with a reload note when the saved limits changed since the preview.
 
 ## Design Notes
 
@@ -97,3 +107,18 @@ deferred: []
 **Commands:**
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors
 - `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build` -- expected: all pass
+
+## Auto Run Result
+
+**Summary:** A "Library and Cleanup" Settings page (last in the list) edits the Global `outputFolder` and `cleanup` limits. It shows the Library's folder and its size and file count, a Browse folder picker and Use default, each behind a prompt saying the Library will list only the new folder and existing files aren't moved. Each limit is a checkbox and a text box (GB above 0 up to 1 000 000; whole days 1 to 36 500). Turning a limit on or lowering one calls `cleanup.preview` and asks Yes/No with the count and size, that deletion is permanent and that Favourites and files being written are never deleted; only Yes sends. Raising or turning off sends at once. Bad values, Cancel, a failed preview or a refused send leave the saved limits shown. No Contracts or engine change.
+
+**Files:** `src/ReplayBuffer.App/Settings/LibrarySettingsPage.cs`, `LibrarySettingsView.xaml(.cs)` (new); `SettingsPage.cs`, `MainViewModel.cs` (register, feed state); tests `LibrarySettingsPageTests.cs` (new), `TrackLayoutPageTests.cs`, `FeedbackSoundsPageTests.cs` (page list).
+
+**Review:** quick lens, 2 findings, both patched (1 medium, 1 low); nothing deferred or rejected. Follow-up review not recommended (no high, one medium).
+
+**Verification:** `dotnet build ReplayBuffer.slnx -c Release` 0 warnings; App.Tests 121 passed, 12 explicit skipped. Other projects untouched, so not run; no engine change, so no NativeAOT publish.
+
+**HITL (Human Check Queue):** 7.9 — Settings > Library and Cleanup by hand: Browse to a folder and confirm (the Library lists only it), set a size limit just under the folder's size, read the prompt's count and size, confirm, and see the oldest non-Favourite Clip go; check how the page and prompts read. Proxy: `LibrarySettingsPageTests` through the view model with a fake engine, and the rendered `library-cleanup-settings.png`.
+
+**Residual risks:** the real folder picker and message box weren't driven by hand.
+
