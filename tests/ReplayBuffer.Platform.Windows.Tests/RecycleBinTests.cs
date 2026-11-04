@@ -22,18 +22,38 @@ public sealed class RecycleBinTests : IDisposable
         }
 
         Assert.True(File.Exists(path));
-        Assert.True(RecycleBin.Recycle(path));
-        Assert.False(File.Exists(path));
+        var restored = 0;
+        try
+        {
+            Assert.True(RecycleBin.Recycle(path));
+            Assert.False(File.Exists(path));
+        }
+        finally
+        {
+            // Always taken back out of the user's real Recycle Bin, even when an assert failed.
+            restored = Restore(path);
+        }
 
-        // The $I file (v2) names the original path; its $R twin holds the bytes. Both are taken back out.
+        Assert.Equal(1, restored);
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(path));
+    }
+
+    // The $I file (v2) names the original path; its $R twin holds the bytes. Moves each one recycled from
+    // path back there and deletes its $I.
+    private static int Restore(string path)
+    {
         var sid = WindowsIdentity.GetCurrent().User!.Value;
         var bin = Path.Combine(Path.GetPathRoot(path)!, "$Recycle.Bin", sid);
-        var info = Directory.EnumerateFiles(bin, "$I*").Single(i => string.Equals(OriginalPath(i), path, StringComparison.OrdinalIgnoreCase));
-        var data = Path.Combine(bin, "$R" + Path.GetFileName(info)[2..]);
-        File.Move(data, path);
-        File.Delete(info);
+        var restored = 0;
+        foreach (var info in Directory.EnumerateFiles(bin, "$I*").Where(i => string.Equals(OriginalPath(i), path, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            var data = Path.Combine(bin, "$R" + Path.GetFileName(info)[2..]);
+            File.Move(data, path, overwrite: true);
+            File.Delete(info);
+            restored++;
+        }
 
-        Assert.Equal([1, 2, 3], File.ReadAllBytes(path));
+        return restored;
     }
 
     // 8-byte version, 8-byte size, 8-byte FILETIME, 4-byte char count, then the UTF-16 path.

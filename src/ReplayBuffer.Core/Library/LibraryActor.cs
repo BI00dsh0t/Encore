@@ -316,7 +316,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     /// <summary>
     /// <c>library.rename</c> (story 7.7): renames the item's file to <see cref="LibraryRename.NewName"/>
-    /// plus <c>.mp4</c> in the same folder, and publishes exactly <c>library.itemRemoved</c> and
+    /// plus its own <c>.mp4</c> extension (its case kept) in the same folder, and publishes exactly <c>library.itemRemoved</c> and
     /// <c>library.itemAdded</c>, keeping its metadata. Faults with <see cref="ErrorCodes.FileBeingWritten"/>,
     /// <see cref="ErrorCodes.LibraryItemChanged"/>, <see cref="ErrorCodes.InvalidFileName"/>,
     /// <see cref="ErrorCodes.FileNameTaken"/> or <see cref="ErrorCodes.CommandFailed"/>, the index unchanged.
@@ -1209,7 +1209,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
             return;
         }
 
-        var name = args.NewName + Extension;
+        var name = args.NewName + Path.GetExtension(key);
         if (string.Equals(Path.GetFileName(key), name, StringComparison.Ordinal))
         {
             request.Done.TrySetResult();
@@ -1294,7 +1294,9 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
             {
                 Thread.Sleep(SharingRetryDelay);
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+#pragma warning disable CA1031 // Any failure, an injected port's included, refuses the command rather than ending the actor.
+            catch (Exception e)
+#pragma warning restore CA1031
             {
                 _failed(e);
                 done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, $"{message} {e.Message}"));
