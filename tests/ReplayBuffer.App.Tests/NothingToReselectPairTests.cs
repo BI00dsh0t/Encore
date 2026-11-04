@@ -80,7 +80,7 @@ public sealed class NothingToReselectPairTests : IAsyncDisposable
         Directory.CreateDirectory(TestInstance.LocalDataFolder);
         await File.WriteAllTextAsync(Path.Combine(TestInstance.LocalDataFolder, "runtime.json"), """{"micMuted":false}""", Token);
         Directory.CreateDirectory(Path.Combine(_output, "Game"));
-        await File.WriteAllBytesAsync(Path.Combine(_output, "Game", "Game_2026-11-04_10-00-00.mp4"), new byte[64], Token);
+        await File.WriteAllBytesAsync(Path.Combine(_output, "Game", "Game_2026-11-04_10-00-00.mp4"), CompleteMp4(), Token);
 
         var app = StartApp("--tray", "--instance", _instance);
         await WaitForStateAsync(s => s.AppPid == app.Id, BackWithin);
@@ -152,6 +152,24 @@ public sealed class NothingToReselectPairTests : IAsyncDisposable
         Assert.True(Assert.Single(state.Library).Favourite);
         Assert.Contains(state.Hotkeys.Bindings, b => b.Action == HotkeyAction.Save && b.Binding == new HotkeyBinding(0x86, 7));
         Assert.Equal(files, files.Keys.ToDictionary(f => f, f => Convert.ToBase64String(File.ReadAllBytes(f))));
+    }
+
+    /// <summary>
+    /// 64 bytes the Library's scan lists: an <c>ftyp</c> box, then a <c>moov</c> box, ending at the file's
+    /// length (<c>Mp4File.IsComplete</c>). Zeros alone aren't an MP4, and a scan never lists them.
+    /// </summary>
+    private static byte[] CompleteMp4()
+    {
+        var bytes = new byte[64];
+        void Box(int at, int size, string type)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(at), (uint)size);
+            System.Text.Encoding.ASCII.GetBytes(type, bytes.AsSpan(at + 4));
+        }
+
+        Box(0, 16, "ftyp");
+        Box(16, 48, "moov");
+        return bytes;
     }
 
     private static string Json(SettingsDocument document) => JsonSerializer.Serialize(document, SettingsJsonContext.Default.SettingsDocument);
