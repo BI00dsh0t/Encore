@@ -124,6 +124,7 @@ The coordinator logs each QA round in the Log below.
 | 26.9 | 5.9 Capture exclusion for every App window | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `7e09a01`) |
 | 26.11 | 5.11 Feedback Sounds settings page | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
+| 26.11a | 5.15 Adaptive Overlay dot (added 2026-11-04; 5.12 and 5.13 wait on it) | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
 | 26.12 | 5.12 Benchmark with the Overlay on | | pending |
 | 26.13 | 5.13 Refactor sweep | | pending |
 | 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | | pending |
@@ -526,3 +527,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 4.11 merged (`90e1040`, `feat(app): merge 4.11-profile-overrides`, after merging develop into the branch with one conflict in `MainViewModel.cs`, resolved by keeping 4.11's `UpdateOpenPage` and develop's removal of `Name<T>`: build 0 warnings, App.Tests 108 total, 99 passed, 9 Heavy skipped). No Contracts change. Its Human Check row is added above.
 - 2026-11-04: 4.11 merged (`90e1040`, marked done `a4ce0d0`). Its card is Done with its label detached. The epic 4 refactor sweep 4.13 went to story-2-7 (Opus, medium effort), scoped to epic 4's code, with its card In progress. After it come 4.14 (the end-to-end check on the builder's PC, HITL) and the v0.4.0 release.
 - 2026-11-04: 2-1-tracer had already built the adaptive dot on `feature/5.8-overlay-perf-research` (`3ad1f0b`, cut from 5.8's old tip; build and Contracts, Core, App and Desktop tests green; the overlayDot setting is on the General page) before reading the story brief. It is now adding ticket 5.15. Routing: cut `feature/5.15-adaptive-overlay-dot` from develop, cherry-pick `cf48145` and `3ad1f0b` (not the prototype), re-verify, then READY FOR QA. The research branch stays unmerged and holds the parked prototype.
+- 2026-11-04: Ticket 5.15 "Adaptive Overlay dot" was added on develop (`54cf952`); 5.12 and 5.13 now wait on it. The prototype is parked at `225de31` on the research branch. The Trello card was created (`6aeabc225526396a15b255cc`, In progress, purple) and added to `trello-board.md`, with Queue row 26.11a.
