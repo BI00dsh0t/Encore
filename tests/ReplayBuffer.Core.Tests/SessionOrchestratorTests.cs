@@ -1861,7 +1861,8 @@ public sealed partial class SessionOrchestratorTests : IDisposable
         int maxRecordings = int.MaxValue,
         Func<long, IClipWrite?>? save = null,
         Func<Recordings, Recordings>? recordingsWith = null,
-        DeviceRecovery? deviceRecovery = null)
+        DeviceRecovery? deviceRecovery = null,
+        IPowerNotifications? power = null)
     {
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
@@ -1899,7 +1900,8 @@ public sealed partial class SessionOrchestratorTests : IDisposable
                 library,
                 Open: library,
                 Restarted: r => events.Writer.TryWrite(r))),
-            deviceRecovery: deviceRecovery);
+            deviceRecovery: deviceRecovery,
+            power: power);
         return (orchestrator, events, presses, made, published, factory);
     }
 
@@ -2146,6 +2148,20 @@ public sealed partial class SessionOrchestratorTests : IDisposable
             }
 
             return true;
+        }
+
+        private int _suspends;
+
+        /// <summary>How many times it was asked to suspend for sleep.</summary>
+        public int Suspends => Volatile.Read(ref _suspends);
+
+        /// <summary>What <see cref="Suspend"/> answers: false as a session that hasn't anchored would.</summary>
+        public bool CanSuspend { get; set; } = true;
+
+        public bool Suspend()
+        {
+            Interlocked.Increment(ref _suspends);
+            return CanSuspend;
         }
 
         public void SetMicMuted(bool muted, long qpc)

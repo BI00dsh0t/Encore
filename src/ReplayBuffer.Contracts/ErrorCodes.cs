@@ -104,6 +104,13 @@ public static class ErrorCodes
     /// </summary>
     public const string RecordingInterrupted = "recording-interrupted";
 
+    /// <summary>
+    /// The PC went to sleep while a Recording or Monitor Recording ran (T-02). The Recording
+    /// ended at its last fragment with reason <c>suspend</c> and isn't restarted on resume; only
+    /// the Replay Buffer resumes, in a new ring generation.
+    /// </summary>
+    public const string RecordingSuspended = "recording-suspended";
+
     /// <summary>A session start was refused: a session is already running (AD-19).</summary>
     public const string SessionRunning = "session-running";
 
@@ -322,6 +329,7 @@ public static class ErrorCodes
         AppCrashLoop,
         InstanceRunning,
         RecordingInterrupted,
+        RecordingSuspended,
         SessionRunning,
         SessionNotRunning,
         RetargetOtherProcess,

@@ -112,6 +112,38 @@ public interface ICaptureSession
     /// an attempt is already running. Called on the orchestrator thread; never blocks.
     /// </summary>
     bool RecoverDevice() => false;
+
+    /// <summary>
+    /// The PC is going to sleep (T-02): stops feeding the encoder chains, then tears capture, the
+    /// chains and the device down off the calling thread, keeping the Replay Buffer saveable, and
+    /// ends a Recording on the session at its last fragment. No frames are captured until
+    /// <see cref="RecoverDevice"/> succeeds. False when it can't (not anchored, no Replay Buffer,
+    /// stopped). Called on the orchestrator thread; never blocks.
+    /// </summary>
+    bool Suspend() => false;
+}
+
+/// <summary>
+/// The PC's sleep and resume (T-02), AD-19's input: the orchestrator decides what a sleep stops
+/// and what a resume rebuilds.
+/// </summary>
+public interface IPowerNotifications
+{
+    /// <summary>
+    /// Calls <paramref name="changed"/> on each power change, on any thread, until the returned
+    /// subscription is disposed. Never throws; a source that can't subscribe does nothing.
+    /// </summary>
+    IDisposable Subscribe(Action<PowerChange> changed);
+}
+
+/// <summary>A power change <see cref="IPowerNotifications"/> reports.</summary>
+public enum PowerChange
+{
+    /// <summary>The PC is going to sleep.</summary>
+    Suspending,
+
+    /// <summary>The PC woke from sleep.</summary>
+    Resumed,
 }
 
 /// <summary>A Recording a session can write (R2): one fragmented MP4 from the session's encoders.</summary>

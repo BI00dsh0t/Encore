@@ -33,6 +33,15 @@ public sealed record EndSession(string Reason, TaskCompletionSource<SessionOutco
 public sealed record HotkeyPressed(HotkeyAction Action, long Qpc) : SessionMessage;
 
 /// <summary>
+/// The PC is going to sleep (T-02); <paramref name="Qpc"/> was read when the notification arrived.
+/// A running Recording or Monitor Recording stops there, and the game session suspends.
+/// </summary>
+public sealed record PowerSuspending(long Qpc) : SessionMessage;
+
+/// <summary>The PC woke from sleep (T-02): a suspended game session rebuilds its capture into a new ring generation.</summary>
+public sealed record PowerResumed : SessionMessage;
+
+/// <summary>
 /// The settings document was committed; any thread. The game session's settings are resolved again,
 /// and a profile's new Tracks or video apply from its next Clip (R7, R8).
 /// </summary>
@@ -119,6 +128,13 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// <see cref="DeviceRecovery.Recovered"/> and hands a running Recording over as any forced encoder
 /// restart does; a Monitor Recording is handed over the same way, its replacement published through
 /// <see cref="Recordings.MonitorStarted"/>, while <see cref="CaptureState.MonitorRecording"/> stays on.
+/// A sleep (<see cref="PowerSuspending"/>, from its <see cref="IPowerNotifications"/>, T-02) stops a
+/// running Recording with <see cref="RecordingStopReasons.Suspend"/>, ends the Monitor session, raises
+/// <see cref="ErrorCodes.RecordingSuspended"/> once when either ran, and suspends the game session
+/// (<see cref="ICaptureSession.Suspend"/>), keeping its Replay Buffer saveable; the resume
+/// (<see cref="PowerResumed"/>) drives the GPU reset's recovery, with its retries and give-up but no
+/// <see cref="DeviceRecovery.Reset"/> or <see cref="DeviceRecovery.Recovered"/>, and no Recording
+/// starts again.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -141,6 +157,7 @@ public sealed class SessionOrchestrator : IDisposable
     private readonly ReplayClips? _clips;
     private readonly Recordings? _recordings;
     private readonly DeviceRecovery _deviceRecovery;
+    private readonly IDisposable? _power;
     private readonly Thread _thread;
 
     // Orchestrator thread only.
@@ -204,6 +221,7 @@ public sealed class SessionOrchestrator : IDisposable
     /// <param name="clips">When given, a <c>save</c> press on the game session writes a Clip.</param>
     /// <param name="recordings">When given, Record presses on the game session start and stop a Recording.</param>
     /// <param name="deviceRecovery">How a session whose GPU device was lost is recovered; null is the defaults, with no callbacks.</param>
+    /// <param name="power">The PC's sleep and resume, posted as <see cref="PowerSuspending"/> and <see cref="PowerResumed"/>; null for none.</param>
     public SessionOrchestrator(
         ICaptureSessionFactory factory,
         Func<SettingsDocument> currentDocument,
@@ -214,7 +232,8 @@ public sealed class SessionOrchestrator : IDisposable
         TargetCapture? targetCapture = null,
         ReplayClips? clips = null,
         Recordings? recordings = null,
-        DeviceRecovery? deviceRecovery = null)
+        DeviceRecovery? deviceRecovery = null,
+        IPowerNotifications? power = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(currentDocument);
@@ -240,6 +259,9 @@ public sealed class SessionOrchestrator : IDisposable
 
         _thread = new Thread(Run) { Name = "SessionOrchestrator", IsBackground = true };
         _thread.Start();
+        _power = power?.Subscribe(change => Post(change == PowerChange.Suspending
+            ? new PowerSuspending(Stopwatch.GetTimestamp())
+            : new PowerResumed()));
     }
 
     /// <summary>The orchestrator thread's managed id.</summary>
@@ -290,6 +312,7 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
+        _power?.Dispose();
         _channel.Writer.TryComplete();
         if (Environment.CurrentManagedThreadId != _thread.ManagedThreadId)
         {
@@ -509,6 +532,14 @@ public sealed class SessionOrchestrator : IDisposable
 
             case RingRecheck when _ringWait is { } wait:
                 RecheckRing(wait);
+                break;
+
+            case PowerSuspending suspending:
+                OnSuspend(suspending.Qpc);
+                break;
+
+            case PowerResumed:
+                OnResume();
                 break;
 
             default:
@@ -1702,6 +1733,12 @@ public sealed class SessionOrchestrator : IDisposable
     /// </summary>
     private void OnDeviceLost(Active session, Exception failure, bool monitor)
     {
+        // An attempt that failed as the PC went to sleep: the resume retries.
+        if (session.Suspended)
+        {
+            return;
+        }
+
         if (session.LostAt is null)
         {
             session.LostAt = Stopwatch.GetTimestamp();
@@ -1731,7 +1768,7 @@ public sealed class SessionOrchestrator : IDisposable
     {
         session.Retry?.Dispose();
         session.Retry = null;
-        if (session.LostAt is not { } lostAt)
+        if (session.LostAt is not { } lostAt || session.Suspended)
         {
             return;
         }
@@ -1787,7 +1824,9 @@ public sealed class SessionOrchestrator : IDisposable
         }
         else
         {
-            message = $"The Replay Buffer couldn't recover from a GPU driver reset within {after:0} s; it stays off until the next game ({failure.Message})";
+            message = session.Resuming
+                ? $"The Replay Buffer couldn't restart capture after the PC woke within {after:0} s; it stays off until the next game ({failure.Message})"
+                : $"The Replay Buffer couldn't recover from a GPU driver reset within {after:0} s; it stays off until the next game ({failure.Message})";
             _gpuStoppedPid = session.Spec.Target.ProcessId;
             EndActive("gpu reset failed", new ErrorCodeException(ErrorCodes.GpuResetFailed, message, failure));
         }
@@ -1804,7 +1843,96 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         StopRecovery(session);
+
+        // A resume's rebuild isn't a GPU reset's recovery. One that installed just as the PC went to
+        // sleep is torn down by the suspend: the session stays suspended, and the resume rebuilds.
+        if (session.Suspended)
+        {
+            return;
+        }
+
+        if (session.Resuming)
+        {
+            session.Resuming = false;
+            return;
+        }
+
         _deviceRecovery.Recovered?.Invoke(Stopwatch.GetElapsedTime(lostAt));
+    }
+
+    /// <summary>
+    /// The PC is going to sleep (T-02, AD-19): a running Recording stops at <paramref name="qpc"/>
+    /// with <see cref="RecordingStopReasons.Suspend"/>, the Monitor session ends, and when either ran
+    /// <see cref="ErrorCodes.RecordingSuspended"/> is raised once. Then the game session stops its
+    /// recovery timer, if any (it stays lost), and suspends, keeping its Replay Buffer saveable. A
+    /// session that can't suspend is left as it is.
+    /// </summary>
+    private void OnSuspend(long qpc)
+    {
+        var ran = false;
+        if (_recording is { Reason: null } running)
+        {
+            ran = true;
+            running.Reason = RecordingStopReasons.Suspend;
+            try
+            {
+                running.Write.Stop(qpc);
+            }
+            catch (Exception e)
+            {
+                // The writer still finishes when the session's output ends.
+                _recordings?.Failed(e);
+            }
+        }
+
+        if (_monitor is { } monitor)
+        {
+            ran |= _monitorRecording is { Reason: null } monitorRunning && monitorRunning.SessionId == monitor.Id;
+            EndMonitor("suspend", RecordingStopReasons.Suspend);
+        }
+
+        if (ran)
+        {
+            _recordings?.Warn?.Invoke(ErrorCodes.RecordingSuspended, "The PC went to sleep; the Recording ended at its last fragment and isn't restarted");
+        }
+
+        if (_active is not { Suspended: false } active)
+        {
+            return;
+        }
+
+        try
+        {
+            active.Suspended = active.Session.Suspend();
+        }
+        catch (Exception e)
+        {
+            _recordings?.Info?.Invoke($"The game session couldn't suspend for sleep: {e.Message}");
+        }
+
+        // Kept lost: the resume restarts the wait from then. A session that didn't suspend keeps its retries.
+        if (active.Suspended)
+        {
+            active.Retry?.Dispose();
+            active.Retry = null;
+        }
+    }
+
+    /// <summary>
+    /// The PC woke (T-02): a suspended game session rebuilds as after a GPU reset, from now, with
+    /// its retries and give-up. A second resume, or one with nothing suspended, is ignored.
+    /// </summary>
+    private void OnResume()
+    {
+        if (_active is not { Suspended: true } active)
+        {
+            return;
+        }
+
+        active.Suspended = false;
+        active.Resuming = true;
+        active.LostAt = Stopwatch.GetTimestamp();
+        TryRecover(active, monitor: false);
     }
 
     /// <summary>Ends a session's recovery wait, if any: no retry is posted after this.</summary>
@@ -2068,6 +2196,12 @@ public sealed class SessionOrchestrator : IDisposable
 
         /// <summary>The one-shot timer posting its next recovery attempt; null for none.</summary>
         public Timer? Retry { get; set; }
+
+        /// <summary>Whether it was suspended for sleep (T-02) and hasn't been asked to resume yet.</summary>
+        public bool Suspended { get; set; }
+
+        /// <summary>Whether its recovery is a resume's, not a GPU reset's, until it recovers or gives up.</summary>
+        public bool Resuming { get; set; }
 
         public TaskCompletionSource<SessionOutcome> Ended { get; } = NewReply<SessionOutcome>();
     }
