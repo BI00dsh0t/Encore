@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix flaky-recording-crash-test |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.3 |
@@ -165,8 +165,8 @@ The coordinator logs each QA round in the Log below.
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
 | 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8a434c6`) |
-| 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | QA and Heavy passed, merging |
-| 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
+| 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `af6eab8`) |
+| 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 29.7 | 8.7 Final conformance run | | pending |
 | 29.8 | 8.8 8-hour soaks in Memory and Disk mode | | pending |
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
@@ -728,3 +728,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 9.7 merged (`8dbac3d`; marked done, renders and its Human Check row added in `bae77ea`), and its card is Done. slice-epic-4 is back in the pool. 9.4 and 9.5 wait on 9.3, which is in QA round 2.
 - 2026-11-04: QA 9.3 passed at `d6ea6fb` (round 2). Nav items have a pressed state (a `NavPress` attached property), and the section label is out of the UIA tree (9 items). App 138 passed. 2-1-tracer is merging. story-2-7 is back in the pool.
 - 2026-11-04: Bugfix `dd-frame-gaps` READY at `dc882f8`. Root cause: `AcquireNextFrame`'s 100 ms wait held the multithread-protected device's lock, which the encoder thread needs every slot, so on a quiet monitor it stalled the encoder past the pacer's catch-up and left PTS gaps. The fix polls with a zero timeout every half slot, behind a new `IOutputDuplication` seam with a default test (`DesktopDuplicationCaptureTests`). The coordinator read the diff. The GPU runner is running the 3 Desktop Duplication Heavy tests and the whole `MonitorRecordingCaptureTests` class.
+- 2026-11-04: 8.5 merged (`af6eab8`; marked done with 5 Human Check rows in `101f32f`), and its card is Done. 8.6 (nothing to re-select after a reboot, a restart or a mixer restart) went to slice-epic-8 (Opus, medium effort), with its card In progress. No reboot, no service restarts and no default-device changes: a cold start on a Guid instance and a device-enumeration seam stand in; Heavy tests go to the runner.
