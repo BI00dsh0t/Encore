@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 5.11 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 7.6 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 5.15 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with the adaptive Overlay dot (new epic-5 story) |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.13 |
 
@@ -531,3 +531,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Ticket 5.15 "Adaptive Overlay dot" was added on develop (`54cf952`); 5.12 and 5.13 now wait on it. The prototype is parked at `225de31` on the research branch. The Trello card was created (`6aeabc225526396a15b255cc`, In progress, purple) and added to `trello-board.md`, with Queue row 26.11a.
 - 2026-11-04: 7.6 is READY FOR QA at `d730418`. QA started on qa-2-1 (Sonnet), and its card is In QA.
 - 2026-11-04: 5.15 is READY FOR QA at `fb3849f` on `feature/5.15-adaptive-overlay-dot` (build 0 warnings; App, Contracts, Core and Desktop pass; publish clean; one additive `overlayDot` key; Human Check row at `4752a08`; no separate review lens, so QA is the first review). Its card is In QA. **QA is queued** for the next free worker: none is free, and slice-epic-4 stays reserved for 7.6's QA findings.
+- 2026-11-04: QA 7.6 at `d730418`: **QA PASS**, 0 blocking and 2 notes (the Human Check row is added at merge; the real Open and Explorer calls are HITL). QA skipped Platform.Desktop tests that the diff touches, so 7.6 was told to run them before merging. 7.6 is merging (Sonnet). QA 5.15 started on qa-2-1. 5.11 is READY FOR QA at `e51d26a`, with its card In QA, and its QA is queued for slice-epic-4 once 7.6 merges.
