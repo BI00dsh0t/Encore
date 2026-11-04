@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.7 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
@@ -167,7 +167,7 @@ The coordinator logs each QA round in the Log below.
 | 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8a434c6`) |
 | 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `af6eab8`) |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `041a8b6`) |
-| 29.7 | 8.7 Final conformance run | | pending |
+| 29.7 | 8.7 Final conformance run | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress (phase 1: build and smoke runs) |
 | 29.8 | 8.8 8-hour soaks in Memory and Disk mode | | pending |
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
 | 29.10 | 8.10 Refactor sweep | | pending |
