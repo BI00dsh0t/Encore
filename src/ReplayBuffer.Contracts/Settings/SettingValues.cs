@@ -180,6 +180,17 @@ public enum OverlayDotMode
     OnChange,
 }
 
+/// <summary>The <c>appTheme</c> key: the App's look (AD-23).</summary>
+[JsonConverter(typeof(CamelCaseEnumConverter<AppTheme>))]
+public enum AppTheme
+{
+    /// <summary>.NET WPF's Fluent theme, following the Windows mode and accent colour, with Mica on the Main App.</summary>
+    Fluent,
+
+    /// <summary>The fixed near-black palette with the teal accent, whatever the Windows mode.</summary>
+    GamingDark,
+}
+
 /// <summary>When a changed key takes effect.</summary>
 [JsonConverter(typeof(CamelCaseEnumConverter<AppliesAt>))]
 public enum AppliesAt
