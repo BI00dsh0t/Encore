@@ -3,7 +3,7 @@ title: 'Benchmark with the Overlay on'
 type: 'feature'
 ticket: '12'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '039b4da22ed5bd1893522737df13193f227e3801'
 route: 'full'
 route_source: 'auto'

@@ -126,7 +126,7 @@ The coordinator logs each QA round in the Log below.
 | 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `7e09a01`) |
 | 26.11 | 5.11 Feedback Sounds settings page | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `f1d9334`) |
 | 26.11a | 5.15 Adaptive Overlay dot (added 2026-11-04; 5.12 and 5.13 wait on it) | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `582d863`) |
-| 26.12 | 5.12 Benchmark with the Overlay on | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 26.12 | 5.12 Benchmark with the Overlay on | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `dc1f9b7`) |
 | 26.13 | 5.13 Refactor sweep | | pending |
 | 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | | pending |
 | 26.15 | Release epic 5 (`v0.5.0`) | | pending |
@@ -576,3 +576,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.7 merged (`f144ae9`, marked done `50e04f0`), and its card is Done. slice-epic-5 is back in the pool. 6.8 went to qa-2-1 (Opus, medium effort), with its card In progress.
 - 2026-11-04: QA 5.12 at `f146e8a`: **QA FAIL**, 2 doc-only findings: (1) the epic Decision and plan still quote the superseded "always costs borderless 3.63 %" (the rerun was −3.03 %, which is noise); (2) the plan doesn't say its 2 × 60 s runs aren't like-for-like with 1.14's 3 × 5 min baseline, so "6.7 % against 1.47 %" needs a caveat. 2-1-tracer is fixing both. The investigation was told to compare like for like. story-2-7 is back in the pool.
 - 2026-11-04: 5.12 fixed both doc findings at `c3c3381`. The coordinator checked the diff itself as round 2: **PASS** (always/borderless is reworded as noise, the NFR-1 like-for-like caveat is added, the evidence location is in the worktree's gitignored `measurements/bench-5.12`). 5.12 has been told to merge (Sonnet). Its merge unblocks 5.13 (the epic 5 refactor sweep).
+- 2026-11-04: 5.12 Benchmark with the Overlay on merged into develop (`dc1f9b7`) after QA round 2 PASS. It adds `bench fps --overlay` and `bench overlay --overlay-dot`. On this PC (no overlay planes) the Overlay adds no measurable FPS cost, auto matches onChange in borderless, and capture alone misses NFR-1 at about 6.7 % (not like-for-like with 1.14's 1.47 %; a like-for-like re-run is the first step of a separate capture-cost ticket). develop was merged into the branch first with no conflicts; build 0 warnings; Bench.Tests 134 passed, 11 skipped. The GPU benchmarks were not rerun. The Human Check is folded into the 5.15 row.
