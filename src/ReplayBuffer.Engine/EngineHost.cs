@@ -19,6 +19,7 @@ using ReplayBuffer.Engine.Sessions;
 using ReplayBuffer.Engine.Settings;
 using ReplayBuffer.Engine.Supervision;
 using ReplayBuffer.Platform.Audio;
+using ReplayBuffer.Platform.Capture;
 using ReplayBuffer.Platform.FFmpeg;
 using ReplayBuffer.Platform.Windows;
 
@@ -578,6 +579,10 @@ internal sealed class EngineHost : IAsyncDisposable
                 player.Preview(preview.Sound);
                 return ValueTask.FromResult(Empty.Value);
             });
+            router.Register(RecordingMessages.MonitorsList, (_, _) => ValueTask.FromResult(new MonitorList(
+            [
+                .. MonitorFinder.Describe().Select(m => new DisplayMonitor(m.DeviceName, m.FriendlyName, m.Width, m.Height, m.IsPrimary)),
+            ])));
             router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
             SessionOrchestrator simulateTo = sessions;
             var simulator = new DevSimulator(

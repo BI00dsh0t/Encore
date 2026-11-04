@@ -57,6 +57,38 @@ public sealed partial class SessionOrchestratorTests
     }
 
     [Fact]
+    public async Task AMonitorToggleOpensItsSessionOnTheSetMonitor()
+    {
+        const string Display2 = @"\\.\DISPLAY2";
+        var folder = Directory.CreateTempSubdirectory("rb-monitor-").FullName;
+        try
+        {
+            _document = Revision(3) with
+            {
+                Global = InFolder(folder, cooldown: 0).SetItem(Keys.MonitorRecordingMonitor.Name, Keys.MonitorRecordingMonitor.ToJson(Display2)),
+            };
+            var (orchestrator, events, presses, _, _, factory) = NewRecordingOrchestrator();
+            using var owned = orchestrator;
+            var qpc = Stopwatch.GetTimestamp();
+
+            await Press(orchestrator, presses, HotkeyAction.MonitorRecordToggle, qpc);
+
+            var session = Assert.Single(factory.Sessions);
+            Assert.Equal(Display2, session.Spec.Snapshot.MonitorRecordingMonitor);
+
+            // Stopped before Dispose, which would otherwise wait for its writer.
+            session.Events.Anchored(qpc + 1);
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            await Press(orchestrator, presses, HotkeyAction.MonitorRecordToggle, qpc + 2);
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AMonitorRecordingBesideAGameRecordingNeitherStopsNorHoldsATargetSwitch()
     {
         var folder = Directory.CreateTempSubdirectory("rb-monitor-").FullName;

@@ -3,14 +3,14 @@ title: 'Recordings settings in the Main App'
 type: 'feature'
 ticket: '11'
 created: '2026-11-04'
-status: 'ready-for-dev'
+status: 'built'
 baseline_revision: '20e6b640214d6c766cbaef652e0ebb6e7eeb2b26'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -85,9 +85,22 @@ deferred: []
 
 ## Implementation Notes
 
+- `FakeEngineSession` answers `monitors.list` itself (`Monitors` delegate, `MonitorFetches` counter), outside `Reply` and `Sent`, so the page's automatic fetch doesn't change other pages' `Sent` counts or break `Reply` lambdas that cast every argument to `SettingsUpdate`.
+- `NativeMethods.txt` lists `ENUM_DISPLAY_SETTINGS_MODE` (CsWin32 generates the constant through its enum).
+- A shared friendly name appends the short device name at the end of the label, e.g. "DELL — 2560×1440 (primary) (DISPLAY1)".
+- `SendMode` now calls `ShowRows()`, so a mode switch hides and shows rows at once.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 4 findings — high 0, medium 1, low 3, false 0, maybe-false 0
+- findings:
+  - `[low]` `[patch]` `RecordingsSettingsPage.FetchAsync` left an earlier fetch error in `Message` after a later fetch succeeded — fixed: a successful fetch clears `Message`; the test asserts it after the run-2 fetch.
+  - `[medium]` `[patch]` A row hidden by a mode change kept `IsCapturing`, so the next key bound a row the builder can't see — fixed: `HotkeyRow.Show` ends capture when the row is hidden; the mode test asserts `CapturingRow` is null after switching.
+  - `[low]` `[reject]` `MonitorFinder.Describe` lists a monitor as 0×0 when `EnumDisplaySettings` fails — the call doesn't fail for an attached, active monitor in everyday use; a fallback adds a branch for a case nobody meets. The engine test checks positive sizes on the builder's PC.
+  - `[low]` `[reject]` An older `monitors.list` reply could overwrite a newer one (Refresh during the first fetch, or a restart mid-fetch) — the replies are the same monitors within that moment, and the next Refresh corrects it; a sequence guard adds state for a case not met in everyday use.
 
 ## Design Notes
 
@@ -105,3 +118,23 @@ deferred: []
 
 **Manual checks (if no CLI):**
 - Inspect `recordings-settings.png` and `hotkeys-settings.png` from the view tests. Human Check row: the builder picks their second monitor, binds the Monitor Record keys in each mode, records it, and checks the pages by eye.
+
+## Auto Run Result
+
+**Summary:** R6's monitor choice. A new `monitors.list` command (Contracts `Recording.cs`, additive under AD-22) that the engine answers from `MonitorFinder.Describe()` (friendly names from DisplayConfig, current resolution, the primary first). A "Recordings" Settings page after Feedback Sounds picks `monitorRecordingMonitor` ("Primary monitor" first, a monitor that's gone shows "(not connected)"), with a Refresh button, sending one Global op. The Hotkeys page now shows each Record and Monitor Record row only in the mode that uses it.
+
+**Files changed:**
+- `src/ReplayBuffer.Contracts/Messages/Recording.cs`: `DisplayMonitor`, `MonitorList`, `RecordingMessages.MonitorsList`.
+- `src/ReplayBuffer.Platform.Capture/MonitorFinder.cs`, `NativeMethods.txt`: `MonitorDescription`, `Describe()`.
+- `src/ReplayBuffer.Engine/EngineHost.cs`: the `monitors.list` handler.
+- `src/ReplayBuffer.App/Settings/RecordingsSettingsPage.cs`, `RecordingsSettingsView.xaml(.cs)`: the new page; `SettingsPage.cs`, `MainViewModel.cs`: registration and refresh.
+- `src/ReplayBuffer.App/Settings/HotkeysPage.cs`, `HotkeysView.xaml`: `HotkeyRow.IsShown`.
+- Tests: new `RecordingsSettingsPageTests` (2 + view test writing `recordings-settings.png`), `MonitorListServeTests` (Engine, default run), a Core Monitor-session fact (`AMonitorToggleOpensItsSessionOnTheSetMonitor`), a Hotkeys mode fact, the page-title list, `FakeEngineSession`.
+
+**Review:** quick lens, 4 findings: 2 patched (1 medium, 1 low), 2 low rejected (reasons in the triage log), none deferred.
+
+**Follow-up review recommended:** false (one medium and one low patched, no high).
+
+**Verification:** Release build 0 warnings. App.Tests 126 passed, 16 explicit skipped; Core.Tests 146 passed; Engine `MonitorListServeTests` 1 passed on the builder's real monitors; `pwsh tools/publish-engine.ps1` published with no IL warnings. Contracts.Tests 121 passed (implementer run, before the patches, which touched only the App). No Heavy or GPU tests (GPU tests paused by the builder; none were written for this story). `recordings-settings.png` and `hotkeys-settings.png` inspected. Matrix: List, Pick, Back to primary, Missing and Fetch fails are covered by `RecordingsSettingsPageTests`; Modes by `HotkeysPageTests.EachRecordModeShowsOnlyTheRowsItUses`; all ran in the default run.
+
+**Residual risks:** The Monitor Recording of the picked monitor is proven only to the session spec (Core) plus 6.9's `MonitorFinder.Find`; recording a second monitor for real is the builder's check (Human Check Queue), as are real Hotkey capture and how the page reads. The duplicate-friendly-name label was checked only in code.
