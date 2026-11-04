@@ -24,7 +24,7 @@ deferred: []
 ## Boundaries & Constraints
 
 **Always:**
-- The DXGI query lives in `Platform.Desktop` (AD-2): `Monitors.OverlayPlanes(pid)` finds the `IDXGIOutput` whose `Monitor` is the Target Game's monitor (the primary monitor when there's no Target) and returns `IDXGIOutput2::SupportsOverlays`, or null when DXGI can't say. Null is treated as planes present, which keeps FR-6.
+- The DXGI query lives in `Platform.Desktop` (AD-2): `Monitors.OverlayPlanes(pid)` finds the `IDXGIOutput` whose `Monitor` is the Target Game's monitor (the primary monitor when there's no Target) and returns `IDXGIOutput2::SupportsOverlays`, or null when DXGI can't say. The view model runs the query on the thread pool and posts the answer back. Until it answers, and when the answer is null, the monitor is taken to have no planes, so the dot shows on change. A null answer is asked again after 10 s.
 - The view model asks once per Target Game process and again after `SystemEvents.DisplaySettingsChanged`, never on every refresh.
 - `overlayDot` is additive (AD-22): an `OverlayDotMode` enum, a Global-only `Immediate` key at the catalog's end, and `EffectiveSettings.OverlayDot`. 5.9 and 5.11 are building at the same time; neither adds a key, so there should be no conflict. A merge only appends to `Keys.All` and the KeysTests list.
 - Only the dot and the mic-muted icon follow the mode. The saving icon, the red X and the queued messages are unchanged.
@@ -92,3 +92,7 @@ Watch the dot in each `overlayDot` mode over a borderless game, and confirm inde
 - `[patch]` The 3 s timer could leave the dot on if it fired before the clock reached the window's end. Fixed: `Present` re-arms for what's left whenever the window is open and no timer is pending. A test fires the timer 1 ms early.
 - `[patch]` (a) An unknown plane answer (null) was cached until a display or Target change. Fixed: null is asked again after `UnknownPlanesRetry` (10 s), with a test. (b) The query runs on the UI thread. Measured on the builder's PC: 13 ms on the first, cold call, then about 0.4 ms. It runs at most once per Target change, so it stays on the UI thread, as documented at `Planes`.
 - Re-verified: Release build 0 warnings; App.Tests 104 passed, 9 Heavy skipped. Only App code changed, so Contracts, Core, Platform.Desktop and the publish weren't re-run.
+
+### 2026-11-04 — QA round 2 (FAIL, finding 2 open)
+- `[patch]` The query ran on the UI thread, and a null answer kept the dot always on. Fixed: the query runs through a `background` runner (the thread pool in the App) and posts its answer back. A display change bumps a generation counter so an older answer is dropped. Null, or no answer yet, means no planes (`== true`). Tests: an unknown answer shows the dot on change and is asked again after 10 s; a queued background query answers later and turns the always-shown dot on.
+- Re-verified: Release build 0 warnings; App.Tests 105 passed, 9 Heavy skipped. Only App changed.

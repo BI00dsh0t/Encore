@@ -66,7 +66,7 @@ internal sealed class ShellApp(Instance instance) : Application
 
         _tray = CreateTray(model, _window.Title);
         _engine.Changed += () => Dispatcher.BeginInvoke(SyncTray);
-        var overlay = new OverlayViewModel(_engine, action => Dispatcher.BeginInvoke(action), overlayPlanes: Monitors.OverlayPlanes);
+        var overlay = new OverlayViewModel(_engine, action => Dispatcher.BeginInvoke(action), overlayPlanes: Monitors.OverlayPlanes, background: action => Task.Run(action));
         _overlay = new OverlayWindow(overlay);
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.BeginInvoke(overlay.DisplaysChanged);
         if (!StartsInTray(e.Args))

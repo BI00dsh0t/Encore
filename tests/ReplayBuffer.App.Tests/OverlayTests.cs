@@ -243,19 +243,38 @@ public sealed class OverlayTests
     }
 
     [Fact]
-    public void AnUnknownPlaneAnswerIsAskedAgain()
+    public void AnUnknownPlaneAnswerShowsTheDotOnChangeAndIsAskedAgain()
     {
         var time = new ManualTime();
         var engine = new FakeEngineSession();
         bool? planes = null;
         var model = new OverlayViewModel(engine, action => action(), time, overlayPlanes: _ => planes);
         Shift(engine, Buffering);
-        Assert.True(model.DotAlways);
+        Assert.False(model.DotAlways);
 
-        planes = false;
+        planes = true;
         time.Advance(OverlayViewModel.UnknownPlanesRetry);
         engine.RaiseChanged();
+        Assert.True(model.DotAlways);
+    }
+
+    [Fact]
+    public void ThePlaneQueryRunsInTheBackgroundAndItsAnswerIsPostedBack()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var queued = new List<Action>();
+        var model = new OverlayViewModel(engine, action => action(), time, overlayPlanes: _ => true, background: queued.Add);
+
+        // Until it answers, the monitor is taken to have no planes.
+        Shift(engine, Buffering);
         Assert.False(model.DotAlways);
+        Assert.Single(queued);
+
+        queued[0]();
+        Assert.True(model.DotAlways);
+        time.Advance(OverlayViewModel.DotOnChangeDuration);
+        Assert.Equal(OverlayDot.Hollow, model.Dot);
     }
 
     [Fact]

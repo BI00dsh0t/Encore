@@ -35,6 +35,14 @@ internal sealed class OverlayViewModel : Observable
     private readonly List<Warning> _waiting = [];
     private readonly HashSet<string> _seen = [];
     private readonly Func<int?, bool?> _overlayPlanes;
+    private readonly Action<Action> _background;
+    // Whether a query is out, and for which Target Game process.
+    private bool _askOut;
+    private int? _askFor;
+
+    // Bumped by a display change, so an answer asked before it is dropped.
+    private int _generation;
+    private bool _inQuery;
     private ITimer? _cooldownEnd;
     private ITimer? _dotEnd;
     private DateTimeOffset _dotUntil;
@@ -55,12 +63,22 @@ internal sealed class OverlayViewModel : Observable
     /// Whether the monitor of a process (null: the primary) has hardware overlay planes, or null when unknown;
     /// the App passes <c>Monitors.OverlayPlanes</c>. When null, every monitor is taken to have them.
     /// </param>
-    public OverlayViewModel(IEngineSession engine, Action<Action> post, TimeProvider? time = null, Func<int?, bool?>? overlayPlanes = null)
+    /// <param name="background">
+    /// Runs the plane query off the UI thread; its answer comes back through <paramref name="post"/>. The App
+    /// passes the thread pool; when null, the query runs inline (tests).
+    /// </param>
+    public OverlayViewModel(
+        IEngineSession engine,
+        Action<Action> post,
+        TimeProvider? time = null,
+        Func<int?, bool?>? overlayPlanes = null,
+        Action<Action>? background = null)
     {
         _engine = engine;
         _post = post;
         _time = time ?? TimeProvider.System;
         _overlayPlanes = overlayPlanes ?? (_ => true);
+        _background = background ?? (action => action());
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -114,6 +132,8 @@ internal sealed class OverlayViewModel : Observable
     public void DisplaysChanged()
     {
         _planes = null;
+        _askOut = false;
+        _generation++;
         Refresh();
     }
 
@@ -192,7 +212,7 @@ internal sealed class OverlayViewModel : Observable
     private (OverlayDot Dot, bool Muted) Present(StateSnapshot? state, OverlayDot dot, bool muted)
     {
         var mode = state is null ? OverlayDotMode.Auto : SettingsValues.Global(state.Settings, Keys.OverlayDot);
-        DotAlways = mode == OverlayDotMode.Always || (mode == OverlayDotMode.Auto && Planes(state?.TargetGame?.ProcessId) != false);
+        DotAlways = mode == OverlayDotMode.Always || (mode == OverlayDotMode.Auto && Planes(state?.TargetGame?.ProcessId) == true);
         var now = _time.GetUtcNow();
         if ((dot, muted) != _steady)
         {
@@ -222,18 +242,62 @@ internal sealed class OverlayViewModel : Observable
     }
 
     // Asked once per Target Game, and again when the monitors change; an unknown answer is asked again after
-    // UnknownPlanesRetry. The query takes about 13 ms cold and 0.4 ms warm on the builder's PC (5.15 QA), so
-    // it runs here on the UI thread, at most once per Target change.
+    // UnknownPlanesRetry. The query runs in the background and posts its answer back; until it answers, and
+    // when it can't say, the monitor is taken to have no planes, so the dot shows on change (5.15 QA).
     private bool? Planes(int? processId)
     {
         var now = _time.GetUtcNow();
-        if (_planes is not { } known || known.ProcessId != processId || (known.Planes is null && now - known.At >= UnknownPlanesRetry))
+        var stale = _planes is not { } known || known.ProcessId != processId
+            || (known.Planes is null && now - known.At >= UnknownPlanesRetry);
+        if (stale && !(_askOut && _askFor == processId))
         {
-            known = (processId, _overlayPlanes(processId), now);
-            _planes = known;
+            (_askOut, _askFor) = (true, processId);
+            var generation = _generation;
+            _inQuery = true;
+            try
+            {
+                _background(() =>
+                {
+                    bool? planes;
+                    try
+                    {
+                        planes = _overlayPlanes(processId);
+                    }
+                    catch (Exception)
+                    {
+                        planes = null;
+                    }
+
+                    _post(() => Answered(generation, processId, planes));
+                });
+            }
+            finally
+            {
+                _inQuery = false;
+            }
         }
 
-        return known.Planes;
+        return _planes is { } answer && answer.ProcessId == processId ? answer.Planes : null;
+    }
+
+    // Runs on the UI thread. An answer that comes back inline, inside Planes, is read by the Refresh that asked.
+    private void Answered(int generation, int? processId, bool? planes)
+    {
+        if (generation != _generation)
+        {
+            return;
+        }
+
+        if (_askOut && _askFor == processId)
+        {
+            _askOut = false;
+        }
+
+        _planes = (processId, planes, _time.GetUtcNow());
+        if (!_inQuery)
+        {
+            Refresh();
+        }
     }
 
     // Queues the unseen Overlay warnings and picks the one to show; null while disconnected.
