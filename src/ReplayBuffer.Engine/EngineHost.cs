@@ -288,7 +288,8 @@ internal sealed class EngineHost : IAsyncDisposable
                 e => libraryLog.LogWarning("A Library disk operation failed: {Message}", e.Message),
                 createMissingFolder: !instance.IsTest,
                 readLength: path => MediaLength.Read(path, ffmpegLog),
-                folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed));
+                folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed),
+                recycle: RecycleBin.Recycle);
 
             // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.
             load.Store.Changed += _ => libraryActor.OutputFolderChanged();
@@ -508,6 +509,17 @@ internal sealed class EngineHost : IAsyncDisposable
             {
                 // Never retried: a stale identity comes back as library-item-changed (AD-3).
                 await libraryActor.SetFavourite(favourite).ConfigureAwait(false);
+                return Empty.Value;
+            });
+            router.Register(LibraryMessages.Rename, async (rename, _) =>
+            {
+                // Never retried: a refusal comes back with its code for the App to show.
+                await libraryActor.Rename(rename).ConfigureAwait(false);
+                return Empty.Value;
+            });
+            router.Register(LibraryMessages.Delete, async (delete, _) =>
+            {
+                await libraryActor.Delete(delete).ConfigureAwait(false);
                 return Empty.Value;
             });
             router.Register(FeedbackMessages.Preview, (preview, _) =>

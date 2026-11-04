@@ -35,6 +35,25 @@ public sealed record LibraryItem(
 /// <param name="Favourite">Whether it should be a Favourite.</param>
 public sealed record LibrarySetFavourite(string Path, long Size, DateTimeOffset? Modified, bool Favourite);
 
+/// <summary>
+/// <c>library.rename</c>'s arguments (story 7.7): the item's identity as the App saw it (AD-3) and its
+/// new base name. The engine appends <c>.mp4</c> and keeps the folder.
+/// </summary>
+/// <param name="Path">The item's path relative to the Output Folder.</param>
+/// <param name="Size">The item's <see cref="LibraryItem.Size"/>.</param>
+/// <param name="Modified">The item's <see cref="LibraryItem.Modified"/>.</param>
+/// <param name="NewName">The new file name without its folder or the <c>.mp4</c> extension.</param>
+public sealed record LibraryRename(string Path, long Size, DateTimeOffset? Modified, string NewName);
+
+/// <summary>
+/// <c>library.delete</c>'s arguments (story 7.7): the item's identity as the App saw it (AD-3). The file
+/// is moved to the Recycle Bin, never deleted permanently.
+/// </summary>
+/// <param name="Path">The item's path relative to the Output Folder.</param>
+/// <param name="Size">The item's <see cref="LibraryItem.Size"/>.</param>
+/// <param name="Modified">The item's <see cref="LibraryItem.Modified"/>.</param>
+public sealed record LibraryDelete(string Path, long Size, DateTimeOffset? Modified);
+
 /// <summary><c>library.itemRemoved</c>: the item at <see cref="Path"/> (relative to the Output Folder) left the Library.</summary>
 public sealed record LibraryItemRemoved(string Path);
 
@@ -103,7 +122,21 @@ public static class LibraryMessages
     public static CommandType<LibrarySetFavourite, Empty> SetFavourite { get; } =
         new("library.setFavourite", LibraryJsonContext.Default.LibrarySetFavourite, LibraryJsonContext.Default.Empty);
 
-    public static IReadOnlyList<CommandType> Commands { get; } = [SetFavourite];
+    /// <summary>
+    /// Renames an item's file in its folder; it is published as <c>library.itemRemoved</c> and
+    /// <c>library.itemAdded</c>, keeping the item's metadata. Refused while the item is being written.
+    /// </summary>
+    public static CommandType<LibraryRename, Empty> Rename { get; } =
+        new("library.rename", LibraryJsonContext.Default.LibraryRename, LibraryJsonContext.Default.Empty);
+
+    /// <summary>
+    /// Moves an item's file to the Recycle Bin; it is published as <c>library.itemRemoved</c>. Refused
+    /// while the item is being written, or when its volume has no Recycle Bin.
+    /// </summary>
+    public static CommandType<LibraryDelete, Empty> Delete { get; } =
+        new("library.delete", LibraryJsonContext.Default.LibraryDelete, LibraryJsonContext.Default.Empty);
+
+    public static IReadOnlyList<CommandType> Commands { get; } = [SetFavourite, Rename, Delete];
 
     public static IReadOnlyList<EventType> Events { get; } = [ItemAdded, ItemChanged, ItemRemoved, Reset, CleanupBlockedChanged, FolderChanged];
 
@@ -138,5 +171,7 @@ public static class LibraryMessages
 [JsonSerializable(typeof(LibraryCleanupBlocked))]
 [JsonSerializable(typeof(LibraryFolderChanged))]
 [JsonSerializable(typeof(LibrarySetFavourite))]
+[JsonSerializable(typeof(LibraryRename))]
+[JsonSerializable(typeof(LibraryDelete))]
 [JsonSerializable(typeof(Empty))]
 public sealed partial class LibraryJsonContext : JsonSerializerContext;
