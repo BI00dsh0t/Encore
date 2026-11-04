@@ -20,6 +20,9 @@ public enum SimulatedEvent
 
     /// <summary>A save made no Clip: <c>clip.failed</c> with <see cref="ErrorCodes.SaveFailed"/>.</summary>
     SaveFailed,
+
+    /// <summary>A save made a Clip: the <c>clip-saved</c> notice only. No <c>clip.saved</c> is published, as no file exists.</summary>
+    ClipSaved,
 }
 
 /// <summary><c>dev.simulate</c>'s arguments.</summary>

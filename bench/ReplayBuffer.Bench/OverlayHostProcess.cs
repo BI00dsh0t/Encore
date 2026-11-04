@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -9,7 +10,7 @@ namespace ReplayBuffer.Bench;
 /// <c>ReplayBuffer.Bench.Overlay.exe</c>, story 5.1's Overlay window hosted on its own for <c>bench overlay</c>:
 /// Bench waits for its <c>ready</c> line, shows and hides the dot over stdin, and stops it on every path.
 /// </summary>
-internal sealed class OverlayHostProcess : IDisposable
+internal sealed class OverlayHostProcess : IOverlayHost
 {
     public const string ProcessName = "ReplayBuffer.Bench.Overlay";
     public const string ExeName = ProcessName + ".exe";
@@ -108,6 +109,12 @@ internal sealed class OverlayHostProcess : IDisposable
 
     public void HideDot() => Send("hide", "hidden");
 
+    public void On() => ShowDot();
+
+    public void Off() => HideDot();
+
+    public bool WindowVisible() => IsWindowVisible(Hwnd);
+
     public void Dispose()
     {
         if (_disposed)
@@ -179,6 +186,10 @@ internal sealed class OverlayHostProcess : IDisposable
             // It exited in between.
         }
     }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(nint hwnd);
 
     /// <summary><c>--overlay-exe</c>; else the host built beside Bench's own configuration; else the newest Release build.</summary>
     public static string Resolve(BenchContext context)
