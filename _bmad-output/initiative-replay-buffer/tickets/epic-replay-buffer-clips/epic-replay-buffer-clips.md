@@ -108,6 +108,7 @@ In any detected game, pressing the Save Hotkey produces a playable multi-Track C
   - The estimate covers the Global settings only, not a Game Profile's overrides. 4.9 and 4.11 should say so, or extend it, when per-profile settings reach the page.
   - In Memory mode the free RAM adds back the engine's whole working set as the ring's own use, an approximation that can under-warn slightly.
   - `EstimatePublisher` refreshes on a thread pool and every 30 s; a failed refresh is skipped silently.
+- Decision: 2026-11-04, from 4.12 (Hotkeys page; QA PASS, two notes): a combination an active Hotkey already holds goes to `RegisterHotKey`, not to the page, so capturing it on another row fires that action and the page's duplicate message appears only for inactive or failed bindings. The engine's `hotkey-duplicate` refusal still holds. A fix needs the engine to pause its Hotkeys during capture (an engine change); not done. Accepted.
 - Waits on epic-engine-baseline because: it needs the encoder and fragmented MP4 writer.
 - Waits on epic-multi-track-audio because: it needs the Track Layouts and the mixed Track audio.
 - Waits on epic-game-detection-profiles because: it needs the Target Game appeared and exited events, Game Profiles, and per-game folders and file names.

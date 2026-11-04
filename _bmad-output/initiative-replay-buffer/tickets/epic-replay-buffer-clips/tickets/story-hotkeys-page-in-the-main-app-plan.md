@@ -3,7 +3,7 @@ title: 'Hotkeys page in the Main App'
 type: 'feature'
 ticket: '12'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'cd38af2df1edd7bc8dc77deaba516011c0958400'
 route: 'full'
 route_source: 'auto'
