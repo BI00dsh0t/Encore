@@ -40,8 +40,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.2 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.10 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.9 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
@@ -154,7 +154,7 @@ The coordinator logs each QA round in the Log below.
 | 28.6 | 7.6 Open, show in Explorer and copy for Discord | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done |
 | 28.7 | 7.7 Rename and delete, locked while being written | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `7a4d786`) |
 | 28.8 | 7.8 Cleanup | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `4b6b22f`) |
-| 28.9 | 7.9 Library and Cleanup settings page | | pending |
+| 28.9 | 7.9 Library and Cleanup settings page | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
 | 28.10 | 7.10 Refactor sweep | | pending |
 | 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
@@ -609,3 +609,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.9 merged (`c525d8e`, marked done `0208a76`), and its card is Done. qa-2-1 is back in the pool. 6.10 went to slice-epic-5 (Opus, medium effort), with its card In progress. Its brief flags that Desktop Duplication may not honour `WDA_EXCLUDEFROMCAPTURE`, and asks it to note how its cost compares with WGC's.
 - 2026-11-04: QA 7.8 round 2 at `899dd2d`: **PASS**, 0 findings. The junction and symlink escape is fixed in layers, QA's own repro no longer deletes the victim, and 7.7's delete is covered. There are 3 non-blocking notes. 7.8 has been told to merge (Sonnet). 2-1-tracer is back in the pool. 7.8's merge unblocks 7.9 (the Library and Cleanup settings page).
 - 2026-11-04: 7.8 merged (`4b6b22f`, marked done). Synced with develop first (6.9, v0.5.0 and others) with no conflicts: 0-warning build, Contracts 119, Core 145, Engine 172 (32 skipped), App 115 (12 skipped), publish clean. Contracts change was additive (`cleanup.preview`, `LibraryItemRemoved.Reason`, `cleanup-limit-unreachable`). QA's three non-blocking notes are in the epic Notes. Human Check for 7.8 is covered by 7.11.
+- 2026-11-04: 7.8 merged (`4b6b22f`, marked done `7218942`). Its card is Done with its label detached, and qa-1-14 is back in the pool. QA's 3 non-blocking notes are carried forward, including no test for 7.7's new guard, which only a junction swapped in after the scan could reach. 7.9 went to qa-2-1 (Opus, medium effort), with its card In progress.
