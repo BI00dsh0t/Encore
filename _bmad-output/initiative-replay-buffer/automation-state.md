@@ -182,6 +182,7 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 
 | Ticket | Check | How | Automated proxy |
 |--------|-------|-----|-----------------|
+| e2e-test-instance-names | Once GPU tests resume: rerun `ClipsEndToEndTests` and `OverlayEndToEndTests` under Heavy on their now-valid test instances | `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only` (Clips), same for App.Tests (Overlay) | the bugfix ran only their default builds and the guard unit test |
 | 1.14 | `bench fps` in a real GPU-bound game (Cyberpunk, RT Overdrive, Frame Generation off, overlay off) to confirm the synthetic-load figure | `bench fps --game Cyberpunk2077` while in gameplay | the synthetic-load run |
 | 1.14 | Real key presses for the Hotkey latency | `bench hotkey --presses 20` with a game focused | injected presses |
 | 1.14 | Playback in Discord and DaVinci Resolve (and any player the session couldn't script) | `bench playback --out <run folder>` | the players the session scripted |
