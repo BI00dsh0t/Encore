@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.7 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 9.7 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
@@ -178,7 +178,7 @@ The coordinator logs each QA round in the Log below.
 | 30.4 | 9.4 Library restyled | | pending |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
-| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in QA (slice-epic-5) |
+| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | QA passed, merging |
 | 30.8 | 9.8 Refactor sweep | | pending |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
@@ -716,3 +716,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Bugfix `recording-first-frame-pts` merged (`0b53953`). **Flaky default test:** `RecordingCrashTests.ARecordingKilledThreeSecondsInPlaysToItsLastFragmentAndIsReportedAtTheNextStart` failed once on the first Engine run after a fresh build, passed alone, then passed 4 full runs. It's likely the "cold-start Engine flake" (8.4's unnamed failure too). To fix or move to Heavy, like `AKilledAppIsRelaunchedByTheEngine` before; queued as a follow-up. QA 9.7 went to slice-epic-5 (Sonnet, medium effort).
 - 2026-11-04: 8.5 Heavy on `49130c4`: `ARemovedMonitorEndsItsMonitorRecordingPlayableWithMonitorRemoved` passed. `AGameRecordingRunsOnThroughEachDisplayChange` failed twice ("video runs 3.000 s, under 3.5 s"). It's a test bug: the test only waits 3 × 1 s before the stop, while its frame-step and audio checks passed. Sent back to slice-epic-8 to wait about 4 s; the runner reruns it after.
 - 2026-11-04: QA 9.3 round 1 found 2 low issues at `44ce0b0`: (1) the nav items have no pressed state; (2) the Settings section label is still a disabled ListBoxItem in UI Automation, though EXPERIENCE.md says it shouldn't be a list item. Everything else passed: App 138, no hard-coded colours, 960x600 and 480x320, keyboard navigation, the live switch and the narrow nav. The implementer (2-1-tracer) is fixing them.
+- 2026-11-04: QA 9.7 passed at `176a820` with 0 findings. No `MessageBox` is left; callers go through `Prompts.YesNo` unchanged. The Overlay glyphs keep fixed brushes, and the cards use theme keys with no Mica. The tray menu follows a switch without code changes. App 139 passed. Note: plain Esc on the old YesNo did nothing; the new dialog answers No, as the ticket asks. slice-epic-4 is merging. slice-epic-5 is back in the pool.
