@@ -39,10 +39,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.7 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix recording-first-frame-pts |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix flaky-recording-crash-test |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.3 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
@@ -165,7 +165,7 @@ The coordinator logs each QA round in the Log below.
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
 | 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8a434c6`) |
-| 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | QA passed, waiting for its 2 Heavy runs |
+| 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | QA and Heavy passed, merging |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
 | 29.7 | 8.7 Final conformance run | | pending |
 | 29.8 | 8.8 8-hour soaks in Memory and Disk mode | | pending |
@@ -174,11 +174,11 @@ The coordinator logs each QA round in the Log below.
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
 | 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `247284c`, builder approved) |
 | 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `166e1f3`) |
-| 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | QA passed, merging |
 | 30.4 | 9.4 Library restyled | | pending |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
-| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | | pending |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
@@ -243,6 +243,7 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 8.4 | Lock and unlock during capture (T-04) | With a game and the Replay Buffer running, press Win+L, wait about 30 s, unlock, then save a Clip. Expect: a playable Clip at the configured frame rate covering the lock (held frames over that stretch), with audio continuous and in sync, and no warning | Media pacer test (60 s with no frames, every slot repeated). The Heavy `AFrameStarvedSourceKeepsTheFrameRateWithAudioInSync` passed on the GPU runner at `7629641`, using the `StarveFrames` seam |
 | 8.4 | A UAC prompt (and Ctrl+Alt+Del) during capture (T-04) | With a game and the Replay Buffer running, open something that raises UAC (an elevated terminal, say) and leave the prompt up about 20 s, then cancel it. Do the same with Ctrl+Alt+Del. Save a Clip after each. Expect the same as the lock: a playable Clip at the configured rate, audio in sync, no generation break and no warning | as the lock row |
 | 9.2 | Themes switch live, and every control's states look right in Fluent and Gaming dark | On a dev instance, open the tray's **Control gallery** and the Main App. On General, switch Theme between "Fluent (follows Windows)" and "Gaming dark" and watch every control restyle in place. In both themes, hover, press and Tab through the gallery: hover, pressed and keyboard focus show on every control, and disabled ones are dimmed. Under Fluent, switch Windows to light mode and pick a new accent colour: the App follows without a restart. Confirm Mica shows behind the Main App window only (not the gallery), and that the Overlay stays transparent | `ThemeTests` (tokens in both themes, live swap in the same window, every page and the gallery loading in both themes, Mica on the Main App only, Fluent's disabled text). QA switched themes 40 times in the real App via UI Automation. The gallery's static states are in `gallery-fluent.png` and `gallery-gaming-dark.png` under `tickets/epic-modern-ui/ux-modern-ui/renders/`. Hover, focus, Windows-mode and accent following are unchecked |
+| 9.7 | The tray menu, the new dialog and the Overlay message follow the theme | In both themes: right-click the tray icon and look at the menu; delete a Clip from the Library and check the dialog (Yes is the accent default, Esc answers No and nothing is deleted); during a game, save a Clip and see the Overlay's message card in the theme's card, with the dot and saving icon in their usual colours. Switch the theme with the menu or dialog open and watch it restyle | `SurfacesThemeTests` (the tray menu follows a switch; the dialog answers Yes, No, Esc and close like MessageBox and is excluded from capture; the Library delete and the Cleanup confirmation get their answers; the Overlay card's brushes come from the theme and its glyph colours are unchanged). Renders `dialog-*`, `overlay-card-*` and `tray-menu-*` (Fluent and gaming dark) are under `tickets/epic-modern-ui/ux-modern-ui/renders/`. Under Fluent, Yes rendered grey, which is probably this PC's Windows accent. The real tray popup and an Overlay over a game are unchecked |
 
 ## Decisions Awaiting Review
 
@@ -707,3 +708,17 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 9.2 passed at `ecc4508` (round 2). Both findings are fixed: Fluent's disabled TextBox and ListBoxItem dim (#5DFFFFFF), and the dead `CaptionColor` is deleted, with a Mica test added. App 135 passed. QA's non-blocking note (Fluent's disabled TabItem isn't dimmed) is folded in as a one-line fix before the merge. story-2-7 is merging. qa-1-14 is back in the pool.
 - 2026-11-04: QA 8.5 passed at `49130c4` with 0 findings. `WM_DISPLAYCHANGE` goes through a hidden window with a 300 ms debounce. `EndMonitorIfRemoved` ends with `monitor-removed` and leaves the game session alone. Contracts changes are additive. The Overlay re-places on each change. Residual risk (noted): Desktop Duplication can fail before enumeration drops the monitor, so the Recording ends `session-ended`; real hot-plug is a Human Check. Note: plain `--report-trx` fails the testing-platform handshake here; the GPU runner found the working flag, so briefs shouldn't ask for it blindly. The merge waits for the 2 Heavy runs.
 - 2026-11-04: 9.2 merged (`166e1f3`; the TabItem dimming was folded in at `4dab533`; marked done, gallery renders and its Human Check row added in `9d8f588`). Its card is Done with labels detached. 9.3 (shell and navigation) went to 2-1-tracer and 9.7 (tray, dialogs and Overlay) to slice-epic-4 (both Opus, medium effort), running in parallel on separate files; they share only one line each in the dictionary merge list. story-2-7 couldn't be cleared (the builder has it open), so it was left as is.
+- 2026-11-04: PTS fix Heavy runs on `1f1f9a5` passed: `ClipsDuringARecording...` 4 of 4 and `*.RecordingCaptureTests` 7 of 7. slice-epic-5 is merging the bugfix.
+  - **New:** 2 Desktop Duplication tests fail on develop, with and without the fix. `WithWgcFailingAMonitorRecordingFallsBackToDesktopDuplication` and `ALostDuplicationIsRecreatedIntoTheSameRecording` show PTS gaps of 6 to 25 frames. They passed this morning on an idle desktop; now the builder is using the PC (browser video, GitKraken).
+  - **Suspected:** the Desktop Duplication path may not fill its gaps with repeated frames at 30 fps. Bugfix `dd-frame-gaps` went to qa-1-14 (Opus, medium effort).
+  - **Filter gotcha:** `--filter-class "*RecordingCaptureTests"` also matches `MonitorRecordingCaptureTests`, so use `*.RecordingCaptureTests` or full method names.
+  - The GPU runner is now on 8.5's 2 Heavy tests.
+- 2026-11-04: 9.3 READY FOR QA at `44ce0b0` and 9.7 at `176a820` (App 139 passed, no new Heavy tests); both cards are In QA. QA 9.3 went to story-2-7 (Sonnet, medium effort; not cleared, because the builder has it open, but it built 9.2 so its context helps). QA 9.7 waits for slice-epic-5 to finish the PTS merge. The GPU runner reports 8.5's display-change Heavy test likely has a test bug: it asserts at least 3.5 s of video, but the test records only about 3 s.
+- 2026-11-04: Bugfix `recording-first-frame-pts` merged (`0b53953`). **Flaky default test:** `RecordingCrashTests.ARecordingKilledThreeSecondsInPlaysToItsLastFragmentAndIsReportedAtTheNextStart` failed once on the first Engine run after a fresh build, passed alone, then passed 4 full runs. It's likely the "cold-start Engine flake" (8.4's unnamed failure too). To fix or move to Heavy, like `AKilledAppIsRelaunchedByTheEngine` before; queued as a follow-up. QA 9.7 went to slice-epic-5 (Sonnet, medium effort).
+- 2026-11-04: 8.5 Heavy on `49130c4`: `ARemovedMonitorEndsItsMonitorRecordingPlayableWithMonitorRemoved` passed. `AGameRecordingRunsOnThroughEachDisplayChange` failed twice ("video runs 3.000 s, under 3.5 s"). It's a test bug: the test only waits 3 × 1 s before the stop, while its frame-step and audio checks passed. Sent back to slice-epic-8 to wait about 4 s; the runner reruns it after.
+- 2026-11-04: QA 9.3 round 1 found 2 low issues at `44ce0b0`: (1) the nav items have no pressed state; (2) the Settings section label is still a disabled ListBoxItem in UI Automation, though EXPERIENCE.md says it shouldn't be a list item. Everything else passed: App 138, no hard-coded colours, 960x600 and 480x320, keyboard navigation, the live switch and the narrow nav. The implementer (2-1-tracer) is fixing them.
+- 2026-11-04: QA 9.7 passed at `176a820` with 0 findings. No `MessageBox` is left; callers go through `Prompts.YesNo` unchanged. The Overlay glyphs keep fixed brushes, and the cards use theme keys with no Mica. The tray menu follows a switch without code changes. App 139 passed. Note: plain Esc on the old YesNo did nothing; the new dialog answers No, as the ticket asks. slice-epic-4 is merging. slice-epic-5 is back in the pool.
+- 2026-11-04: Bugfix `flaky-recording-crash-test` went to slice-epic-5 (Opus, medium effort). It makes `RecordingCrashTests.ARecordingKilledThreeSecondsIn...` wait on a real condition instead of wall-clock time across a cold start, or moves it to Heavy as CLAUDE.md says.
+- 2026-11-04: 8.5 Heavy rerun on `0249eaa`: `AGameRecordingRunsOnThroughEachDisplayChange` passed (12 s). Both 8.5 Heavy tests now pass, and slice-epic-8 is merging. The GPU runner is idle.
+- 2026-11-04: 9.7 merged (`8dbac3d`; marked done, renders and its Human Check row added in `bae77ea`), and its card is Done. slice-epic-4 is back in the pool. 9.4 and 9.5 wait on 9.3, which is in QA round 2.
+- 2026-11-04: QA 9.3 passed at `d6ea6fb` (round 2). Nav items have a pressed state (a `NavPress` attached property), and the section label is out of the UIA tree (9 items). App 138 passed. 2-1-tracer is merging. story-2-7 is back in the pool.
