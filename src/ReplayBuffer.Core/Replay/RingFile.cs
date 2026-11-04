@@ -78,8 +78,9 @@ public sealed class RingFile
     }
 
     /// <summary>
-    /// Deletes every <c>ring-*.bin</c> in <paramref name="folder"/>, those a killed engine left;
-    /// one in use, or not deletable, is skipped. Returns how many went; 0 when there is no folder.
+    /// Deletes every <c>ring-&lt;n&gt;.bin</c> in <paramref name="folder"/>, those a killed engine
+    /// left; any other file, one in use, or one not deletable is skipped. Returns how many went; 0
+    /// when there is no folder.
     /// </summary>
     public static int RemoveStale(string folder)
     {
@@ -94,6 +95,11 @@ public sealed class RingFile
         {
             foreach (var path in Directory.EnumerateFiles(folder, Prefix + "*" + Extension))
             {
+                if (!IsRingName(System.IO.Path.GetFileName(path)))
+                {
+                    continue;
+                }
+
                 try
                 {
                     File.Delete(path);
@@ -111,6 +117,18 @@ public sealed class RingFile
         }
 
         return removed;
+    }
+
+    /// <summary>Whether <paramref name="name"/> is one <see cref="Create"/> gives: <c>ring-</c>, digits, <c>.bin</c>.</summary>
+    private static bool IsRingName(string name)
+    {
+        if (!name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) || !name.EndsWith(Extension, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var digits = name.AsSpan(Prefix.Length, name.Length - Prefix.Length - Extension.Length);
+        return !digits.IsEmpty && !digits.ContainsAnyExceptInRange('0', '9');
     }
 
     /// <summary>Takes a free block; false when every block is in use.</summary>
