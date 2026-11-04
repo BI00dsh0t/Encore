@@ -21,3 +21,6 @@ SIIGBF
 DeleteObject
 GetObject
 DIBSECTION
+SHParseDisplayName
+SHOpenFolderAndSelectItems
+ILFree
