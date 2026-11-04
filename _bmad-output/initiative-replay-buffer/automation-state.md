@@ -144,7 +144,7 @@ The coordinator logs each QA round in the Log below.
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
 | 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
-| 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | QA passed, merging |
+| 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c4a69ca`) |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
@@ -648,3 +648,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Bugfix `e2e-test-instance-names` merged (`2768713`). Its Human Check row (rerun `ClipsEndToEndTests` and `OverlayEndToEndTests` under Heavy once GPU tests resume) was committed at `5c17174`. slice-epic-5 is back in the pool.
 - 2026-11-04: QA 6.12 passed at `781e6fa` with 0 findings. No behaviour change: lock and disposed checks kept, the `OpenWrite` and `CloseWrite` order kept, and the `FeedbackRouterTests` shrink is only helpers moved out. 0-warning build; Contracts 121, Core 146, App 126 and Engine 176 passed. slice-epic-4 is merging. qa-2-1 is back in the pool.
 - 2026-11-04: 8.3 READY FOR QA at `2f5a69a` (18 files, about 1,670 lines; the Heavy simulated-reset test is written but not run because GPU tests are paused), and its card is In QA. QA went to qa-1-14 (Sonnet, high effort because the ticket is high risk; no Heavy runs and no TDR).
+- 2026-11-04: 6.12 merged (`c4a69ca`, marked done). Synced with develop first (7.11, the `e2e-test-instance-names` bugfix): no conflicts, 0-warning build, Contracts 122, Core 146, App 126 (17 skipped), Engine 176 (36 skipped). No Heavy runs. Skipped GPU runs: the Heavy Recording, Clip-during-Recording and Monitor Recording capture tests (to show they still write playable files after the sweep). Open items are in deferred-work.md with owners.
