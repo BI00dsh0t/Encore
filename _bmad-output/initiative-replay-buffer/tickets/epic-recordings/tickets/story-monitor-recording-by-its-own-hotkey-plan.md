@@ -3,7 +3,7 @@ title: 'Monitor Recording by its own Hotkey'
 type: 'feature'
 ticket: '9'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '4390a0e6adab46146917f7229c6a8af52b186a87'
 route: 'full'
 route_source: 'auto'
