@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using ReplayBuffer.App.Engine;
 using ReplayBuffer.Contracts.Settings;
 
@@ -21,7 +22,12 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
     public string? Message
     {
         get => _message;
-        protected set => Set(ref _message, value);
+        protected set
+        {
+            // Raised on every set, so a page hosting this one mirrors a repeated note too.
+            _message = value;
+            OnPropertyChanged();
+        }
     }
 
     public FrameworkElement View => _view ??= CreateView();
@@ -41,6 +47,22 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
     }
 
     protected abstract FrameworkElement CreateView();
+
+    /// <summary>
+    /// Drops <paramref name="view"/>'s root <see cref="ScrollViewer"/>, for a page hosted inside another
+    /// page's view: a nested ScrollViewer never scrolls there but swallows the mouse wheel.
+    /// </summary>
+    protected static FrameworkElement Embedded(UserControl view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        if (view.Content is ScrollViewer { Content: UIElement content } scroller)
+        {
+            scroller.Content = null;
+            view.Content = content;
+        }
+
+        return view;
+    }
 
     /// <summary>Copies the document's values into the page's properties.</summary>
     protected abstract void OnRender(SettingsDocument document);
