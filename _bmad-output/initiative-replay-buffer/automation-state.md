@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.2 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.14 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.9 |
@@ -129,7 +129,7 @@ The coordinator logs each QA round in the Log below.
 | 26.12 | 5.12 Benchmark with the Overlay on | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `dc1f9b7`) |
 | 26.13 | 5.13 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `5cfddb6`) |
 | 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `61949fa`) |
-| 26.15 | Release epic 5 (`v0.5.0`) | | pending |
+| 26.15 | Release epic 5 (`v0.5.0`) | coordinator | done |
 | 27 | Slice epic 6 (Recordings) | slice-epic-6 | done |
 | 27.1 | 6.1 Tracer: Record Hotkey to a fragmented MP4 Recording beside the Replay Buffer | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f9c5a66`) |
 | 27.2 | 6.2 Crash-safe Recordings and recording-interrupted | 6.2 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ee4e90f`) |
@@ -601,3 +601,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.14 is READY FOR QA at `300c8d9`: 122 checks passed unattended, and 9 items are on the builder's checklist. QA started on story-2-7 (Sonnet), with no GPU reruns, and its card is In QA.
 - 2026-11-04: QA 5.14 at `300c8d9`: **QA PASS**, 0 blocking and 3 low notes. 5.14 has been told to merge (Sonnet) without marking the epic done or releasing. story-2-7 is back in the pool. After the merge, the coordinator marks epic 5 done and releases v0.5.0.
 - 2026-11-04: 5.14 merged into develop (`61949fa`) after QA PASS at `300c8d9`. develop was merged into the branch first (docs only, so no rebuild); QA's step-3 note went into the plan (`bcc508a`). The ticket is marked done. The epic is not marked done and not released; the coordinator does that.
+- 2026-11-04: 5.14 merged (`61949fa`, marked done `78663a8`), and its card is Done with a release comment. **Epic 5 is complete:** it was marked `status: done` (`23a77c4`) and **`v0.5.0` was released** by the coordinator (master `4a0e27f`, tag `v0.5.0`, back-merge `9069eb0`; the merge messages were reworded to Conventional Commits before anything built on them). The builder's epic-5 hand checks are in the 5.14 plan's checklist. Nothing new is ready: 6.9, 7.8 and 8.2 are in flight, and epics 6 to 8 wait on them. slice-epic-5 is back in the pool.
