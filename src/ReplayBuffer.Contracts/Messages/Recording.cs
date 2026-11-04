@@ -26,6 +26,15 @@ public static class RecordingStopReasons
 
     /// <summary>The session it was recorded from ended.</summary>
     public const string SessionEnded = "session-ended";
+
+    /// <summary>The Target Game it was recorded from exited, or its window closed.</summary>
+    public const string GameExit = "game-exit";
+
+    /// <summary>The Target Game it was recorded from was set Ignored.</summary>
+    public const string Ignored = "ignored";
+
+    /// <summary>The engine shut down (Quit).</summary>
+    public const string Shutdown = "shutdown";
 }
 
 /// <summary>
