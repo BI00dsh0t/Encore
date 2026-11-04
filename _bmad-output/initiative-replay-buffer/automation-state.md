@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; finished 8.1 (merged), back in the pool |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 5.13 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with the capture-cost investigation |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.8 |
@@ -588,3 +588,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 6.8 at `cdea684`: **QA PASS**, 0 findings. 6.8 has been told to merge (Sonnet). 8.1 did its should-fix (docs only, `c6e18c9`) and was given the go to merge. slice-epic-5 is back in the pool. **Flake watch:** one unidentified Engine test failed on its first run again (the 4th one-off today: two App, two Engine). Merges now rerun once and must report the test name if it fails twice. If it keeps happening, a small bugfix to find and fix the flaky test is worth it.
 - 2026-11-04: 8.1 merged (`81261bb`, marked done), after one conflict with develop in `BenchOptions.cs` (the soak's usage and options beside 5.12's `--overlay-dot`; both kept). The scoped build (0 warnings), Bench (143) and Engine (171) tests and the publish passed after the sync. Left: the App's ~40 MB/h private-bytes climb, in the epic-hardening Notes for 8.8. slice-epic-4 returns to the pool.
 - 2026-11-04: 6.8 merged (`ede89f7`, marked done), after syncing with develop (clean; build 0 warnings, Core 125/125, Engine 170 passed, publish OK). Its Human Check Queue row and the restart-notice decision are on develop.
+- 2026-11-04: 5.13 (the epic 5 refactor sweep) is READY FOR QA at `1407cc8`. QA started on slice-epic-5 (Sonnet), checking the forward-hooks rule explicitly, and its card is In QA.
