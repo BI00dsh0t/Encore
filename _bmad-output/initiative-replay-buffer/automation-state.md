@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 5.11 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 5.15 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with the adaptive Overlay dot (new epic-5 story) |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.13 |
 
@@ -535,3 +535,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 7.6 at `d730418`: **QA PASS**, 0 blocking and 2 notes (the Human Check row is added at merge; the real Open and Explorer calls are HITL). QA skipped Platform.Desktop tests that the diff touches, so 7.6 was told to run them before merging. 7.6 is merging (Sonnet). QA 5.15 started on qa-2-1. 5.11 is READY FOR QA at `e51d26a`, with its card In QA, and its QA is queued for slice-epic-4 once 7.6 merges.
 - 2026-11-04: 7.6 merged into `develop` (`bc8787d`, `feat(app): merge 7.6-open-explorer-copy`) and marked done, after QA PASS at `d730418`. Develop was merged into the branch first (4.11, 5.10, 6.5 code): build 0 warnings, App.Tests 102 passed, Platform.Desktop.Tests 11 passed. Contracts unchanged; engine code untouched. Human Check row added.
 - 2026-11-04: 7.6 merged (`bc8787d`, marked done `e165dc9`; App and Platform.Desktop tests pass). Its card is Done with its label detached. QA 5.11 started on slice-epic-4 (Sonnet). 7.7 is now Ready and waits for the next free worker.
+- 2026-11-04: QA 5.15 at `fb3849f`: **QA FAIL**, 2 findings: (1) the 3 s dot timer isn't re-armed if it fires early, so the dot can stay on; (2) a null DXGI answer is cached as "has planes", and the query runs on the UI thread. The build, tests and publish are clean. The findings went to 2-1-tracer to fix. qa-2-1 is free and takes 7.7.
