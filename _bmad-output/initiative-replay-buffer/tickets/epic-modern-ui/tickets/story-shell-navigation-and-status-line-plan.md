@@ -1,3 +1,14 @@
+---
+title: 'Shell, navigation and status line'
+type: 'feature'
+ticket: '3'
+created: '2026-11-04'
+status: done
+baseline_revision: '20fcad3'
+risk: 'medium'
+context: ['{project-root}/CLAUDE.md', 'ux-modern-ui/DESIGN.md', 'ux-modern-ui/EXPERIENCE.md']
+---
+
 # 9.3 Shell, navigation and status line — plan and log
 
 **Problem:** The Main App is a TabControl (Library, Settings) with a Settings ListBox inside, and a plain status line above it. EXPERIENCE.md wants one flat nav pane, a themed title bar, a status header card with the record dot, and a 960×600 default window (R5, R6).
