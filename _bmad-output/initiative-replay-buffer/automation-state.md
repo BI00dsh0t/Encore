@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with QA 5.11 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 5.11 |
@@ -537,3 +537,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.6 merged (`bc8787d`, marked done `e165dc9`; App and Platform.Desktop tests pass). Its card is Done with its label detached. QA 5.11 started on slice-epic-4 (Sonnet). 7.7 is now Ready and waits for the next free worker.
 - 2026-11-04: QA 5.15 at `fb3849f`: **QA FAIL**, 2 findings: (1) the 3 s dot timer isn't re-armed if it fires early, so the dot can stay on; (2) a null DXGI answer is cached as "has planes", and the query runs on the UI thread. The build, tests and publish are clean. The findings went to 2-1-tracer to fix. qa-2-1 is free and takes 7.7.
 - 2026-11-04: 7.7 went to qa-2-1 (Opus, medium effort), with its card In progress. Its tests stay in temp folders and never touch the builder's real Library.
+- 2026-11-04: QA 5.11 at `e51d26a`: **QA PASS**, 0 findings (the Human Check row is added at merge). 5.11 has been told to merge (Sonnet), and slice-epic-4 is back in the pool.
