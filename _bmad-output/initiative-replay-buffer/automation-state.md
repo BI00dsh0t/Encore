@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.2 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.10 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 6.10 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.10 |
@@ -618,3 +618,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.9 merged (`63ba0b9`, marked done with its Human Check row at `5602f52`). Its card is Done with its label detached, and qa-2-1 is back in the pool. QA's note that the page doesn't refuse a junction as the Output Folder is covered by 7.8's engine checks against the resolved root. The epic 7 refactor sweep 7.10 went to story-2-7 (Opus, medium effort), with its card In progress. Its brief keeps every Cleanup and delete safety guard and its test.
 - 2026-11-04: QA 8.2 at `0661665`: **QA PASS**, 0 findings and 3 notes. **The flake is identified:** `AKilledAppIsRelaunchedByTheEngine` failed at its 30 s pair-start wait, then passed 5/5 reruns. Per CLAUDE.md, supervision timeouts are Heavy, so 8.2 moves it to Heavy and Explicit (test attribute only) before merging. 8.2 has been told to merge (Sonnet). qa-1-14 is back in the pool. 8.2's merge unblocks 8.3 (GPU driver reset recovery; it also waits on 6.6, done, and 6.9, done).
 - 2026-11-04: 8.2 merged (`fb0ab27`, `feat(engine): merge 8.2-engine-crash-recovery`) and marked done. Contracts change is additive (`EngineCrashLoop`, `AppCrashLoop`, `CrashLoopGuard`, `SimulatedEvent.EngineHang`). `AKilledAppIsRelaunchedByTheEngine` moved to Heavy. QA's 3 notes are in the epic Notes; the tray crash-loop state is a Human Check for 8.11.
+- 2026-11-04: 6.10 is READY FOR QA at `e42c1bb`. QA started on qa-1-14 (Sonnet), and its card is In QA. 8.2 is merging, with the flake moved to Heavy.
