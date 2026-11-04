@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.4 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
@@ -164,7 +164,7 @@ The coordinator logs each QA round in the Log below.
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
 | 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
-| 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
+| 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 29.5 | 8.5 Monitor changes | | pending |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
 | 29.7 | 8.7 Final conformance run | | pending |
@@ -680,3 +680,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.3 merged (`f91c32d`) after a sync with develop that resolved the overlap with 6.10's `ICaptureSource` (the recovery rebuilds a Monitor capture through the WGC-then-Desktop-Duplication path) and the `OpenWrite`/`CloseWrite` helpers. Before the merge: 0-warning build; default suites Contracts 122, Core 152, Engine 179 (37 explicit skipped), Platform.Capture 3, Platform.FFmpeg 37 (2 skipped), all passing; the NativeAOT publish clean. Marked done; three Human Check rows added (the Heavy run once GPU tests resume, a real `dxcap -forcetdr` with a Clip save, and one with a Monitor Recording).
 - 2026-11-04: Epic 9 planning reviewed by the coordinator and merged (`68dca7a`). It adds R37, architecture AD-23 (theming: one token set, an `appTheme` Global key with values `fluent` or `gamingDark`, live dictionary swap, dialogs as App windows) and 9 stories, 9.1 to 9.9. 9.1 waits on 6.13 and 7.11, and 8.7 now waits on 9.9. Its 9 Trello cards were created in Backlog with labels (purple on every story except 9.8; red on 9.2), and Queue rows 30.1 to 30.9 added. slice-epic-5 is back in the pool.
 - 2026-11-04: QA 6.13 passed at `4c6e5ea` with 0 findings. No-capture guards confirmed in code before the one run. `RecordingsEndToEndTests` passed in 2 s with no capture lines in the log; App.Tests 126 passed. The story saw 1 unexplained failure in 20 runs of that Explicit test (noted in its plan; not a blocker). story-2-7 is merging. qa-2-1 is back in the pool.
+- 2026-11-04: 8.3 merged (`f91c32d`, marked done and its Human Check rows added in `5eaa5ec`), and its card is Done with labels detached. The develop sync resolved conflicts with 6.10's `ICaptureSource` and 6.12's `OpenWrite` and `CloseWrite` helpers; the coordinator read the merge's resolution. Recovery now rebuilds a Monitor capture through the Desktop Duplication fallback. Contracts 122, Core 152, Engine 179, Platform.Capture 3 and Platform.FFmpeg 37 passed on the synced tree; publish clean. 8.4 went to slice-epic-8 (Opus, medium effort; no real sleep, lock or UAC, simulated through an injectable seam; GPU tests paused), with its card In progress.
