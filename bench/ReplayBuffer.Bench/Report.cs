@@ -35,7 +35,8 @@ internal sealed record BenchReport(
     HotkeyReport? Hotkey,
     TracksReport? Tracks,
     IReadOnlyList<string> NotRun,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors,
+    ConformanceDriftReport? Conformance = null);
 
 /// <summary>
 /// Merges the run folder's <c>fps.json</c>, <c>drift.json</c>, <c>playback.json</c>, <c>hotkey.json</c> and <c>tracks.json</c> into
@@ -56,7 +57,11 @@ internal static class Report
         var playback = Load<PlaybackReport>(runFolder, PlaybackCheck.FileName, "Playback", errors, notRun);
         var hotkey = Load<HotkeyReport>(runFolder, HotkeyBenchmark.FileName, "Hotkey", errors, notRun);
         var tracks = Load<TracksReport>(runFolder, TracksCheck.FileName, "Named Tracks", errors, notRun);
-        var report = new BenchReport(DateTimeOffset.Now, runFolder, fps, drift, playback, hotkey, tracks, notRun, errors);
+        // Story 8.7's drift --app: only listed when it ran, so earlier run folders keep their report.
+        var conformance = File.Exists(Path.Combine(runFolder, ConformanceDrift.FileName))
+            ? Load<ConformanceDriftReport>(runFolder, ConformanceDrift.FileName, "Conformance drift", errors, notRun)
+            : null;
+        var report = new BenchReport(DateTimeOffset.Now, runFolder, fps, drift, playback, hotkey, tracks, notRun, errors, conformance);
         BenchJson.Write(Path.Combine(runFolder, JsonName), report);
         File.WriteAllText(Path.Combine(runFolder, MarkdownName), Markdown(report));
         return report;
@@ -72,6 +77,11 @@ internal static class Report
 
         Fps(md, report.Fps);
         Drift(md, report.Drift);
+        if (report.Conformance is { } conformance)
+        {
+            md.AppendLine(ConformanceDrift.Markdown(conformance).Replace("# Final conformance drift", "## Final conformance drift", StringComparison.Ordinal));
+        }
+
         Playback(md, report.Playback);
         Hotkey(md, report.Hotkey);
         Tracks(md, report.Tracks);
@@ -120,6 +130,12 @@ internal static class Report
         {
             md.AppendLine(CultureInfo.InvariantCulture,
                 $"**Overlay on in the capture runs:** the App's dot (overlayDot `{overlay.Dot}`) and a message every {overlay.MessageSeconds} s; overlay planes on the load's monitor (SupportsOverlays): {overlay.OverlayPlanes switch { true => "yes", false => "no", null => "unknown" }}.");
+            if (overlay.Recording)
+            {
+                md.AppendLine();
+                md.AppendLine("**Recording on (story 8.7):** the capture runs are the App's own engine capturing the load, with its Replay Buffer and a real Recording, not the script's debug-capture; so the latency, slot and GC figures, which come from debug-capture's stats, are empty.");
+            }
+
             md.AppendLine();
         }
 
@@ -276,7 +292,7 @@ internal static class Report
             return;
         }
 
-        md.AppendLine(CultureInfo.InvariantCulture, $"Clip `{playback.Clip}`: {playback.Seconds} s, H.264 {playback.Capture.Size} at {playback.Capture.Fps} fps, {playback.AudioTracks} audio track(s). HEVC and AV1 are not checked.");
+        md.AppendLine(CultureInfo.InvariantCulture, $"Clip `{playback.Clip}`: {playback.Seconds} s, H.264 {playback.Capture.Size} at {playback.Capture.Fps} fps, {playback.AudioTracks} audio track(s).{(playback.Extras is null ? " HEVC and AV1 are not checked." : "")}");
         md.AppendLine();
         md.AppendLine(CultureInfo.InvariantCulture, $"Capture border shown around the marker window (§7.4 `IsBorderRequired`): **{playback.CaptureBorder ?? "not-checked"}**.");
         md.AppendLine();
@@ -293,9 +309,29 @@ internal static class Report
             md.AppendLine();
         }
 
+        Players(md, playback.Players);
+        foreach (var extra in playback.Extras ?? [])
+        {
+            md.AppendLine(CultureInfo.InvariantCulture, $"### {extra.Name} ({extra.Codec})");
+            md.AppendLine();
+            if (!extra.Encoded)
+            {
+                md.AppendLine(CultureInfo.InvariantCulture, $"Not encoded on this GPU: {extra.Error}");
+                md.AppendLine();
+                continue;
+            }
+
+            md.AppendLine(CultureInfo.InvariantCulture, $"File `{extra.File}`: {extra.AudioTracks} audio track(s): {string.Join(", ", extra.TrackTitles)}.");
+            md.AppendLine();
+            Players(md, extra.Players);
+        }
+    }
+
+    private static void Players(StringBuilder md, IReadOnlyList<PlayerCheck> players)
+    {
         md.AppendLine("| Player | Plays | A/V in sync | Audio tracks | Notes | Mark |");
         md.AppendLine("|---|---|---|---|---|---|");
-        foreach (var p in playback.Players)
+        foreach (var p in players)
         {
             // A pass needs both answers yes; a "no" to either is a miss; a skipped sync answer is not checked.
             // A scripted check sees playback only: it passes that, and leaves A/V sync to a person.

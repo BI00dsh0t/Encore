@@ -222,36 +222,7 @@ internal static class TracksCheck
             File.WriteAllText(Path.Combine(instance.RoamingDataFolder, "settings.json"), SettingsJson(Layout(a, b, mic)));
 
             var frequency = Stopwatch.Frequency;
-            var startA = Stopwatch.GetTimestamp();
-            toneA = StartTone(a, toneDbfs);
-            var firstA = toneA.BurstQpc(0);
-
-            // B's first burst comes a second plus its latency after it starts; take A's latency as B's, then check.
-            var latency = firstA - startA - frequency;
-            for (var attempt = 1; ; attempt++)
-            {
-                var phase = (long)(0.5 * frequency) - latency;
-                var now = Stopwatch.GetTimestamp() + (frequency / 20);
-                var at = firstA + phase + (long)Math.Ceiling((double)(now - firstA - phase) / frequency) * frequency;
-                SleepUntil(at);
-                toneB = StartTone(b, toneDbfs);
-                var offset = Phase(firstA, toneB.BurstQpc(0), frequency);
-                if (Math.Abs(offset - 0.5) <= 0.15 || attempt == 3)
-                {
-                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"B's bursts come {offset:0.###} s after A's."));
-                    if (Math.Abs(offset - 0.5) > 0.15)
-                    {
-                        warnings.Add(string.Create(CultureInfo.InvariantCulture, $"B's bursts come {offset:0.###} s after A's, not about 0.5 s."));
-                    }
-
-                    break;
-                }
-
-                // B's own latency, measured: the next try aims with it.
-                latency = toneB.BurstQpc(0) - at - frequency;
-                toneB.Dispose();
-                toneB = null;
-            }
+            (toneA, toneB) = StartStaggered(a, b, toneDbfs, warnings);
 
             using var marker = MarkerWindow.Open(settings.Fps);
             var hwnd = "0x" + marker.Handle.ToString("X", CultureInfo.InvariantCulture);
@@ -310,6 +281,57 @@ internal static class TracksCheck
                     warnings.Add($"Could not delete the test instance's folder {folder}.");
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Starts a tone player on <paramref name="a"/>, then one on <paramref name="b"/> whose bursts come about half a
+    /// second after A's (three tries at aiming for it, a warning when the last misses by more than 0.15 s).
+    /// </summary>
+    internal static (TonePlayer A, TonePlayer B) StartStaggered(AudioEndpoint a, AudioEndpoint b, double toneDbfs, List<string> warnings)
+    {
+        TonePlayer? toneB = null;
+        var frequency = Stopwatch.Frequency;
+        var startA = Stopwatch.GetTimestamp();
+        var toneA = StartTone(a, toneDbfs);
+        try
+        {
+            var firstA = toneA.BurstQpc(0);
+
+            // B's first burst comes a second plus its latency after it starts; take A's latency as B's, then check.
+            var latency = firstA - startA - frequency;
+            for (var attempt = 1; ; attempt++)
+            {
+                var phase = (long)(0.5 * frequency) - latency;
+                var now = Stopwatch.GetTimestamp() + (frequency / 20);
+                var at = firstA + phase + (long)Math.Ceiling((double)(now - firstA - phase) / frequency) * frequency;
+                SleepUntil(at);
+                toneB = StartTone(b, toneDbfs);
+                var offset = Phase(firstA, toneB.BurstQpc(0), frequency);
+                if (Math.Abs(offset - 0.5) <= 0.15 || attempt == 3)
+                {
+                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"B's bursts come {offset:0.###} s after A's."));
+                    if (Math.Abs(offset - 0.5) > 0.15)
+                    {
+                        warnings.Add(string.Create(CultureInfo.InvariantCulture, $"B's bursts come {offset:0.###} s after A's, not about 0.5 s."));
+                    }
+
+                    break;
+                }
+
+                // B's own latency, measured: the next try aims with it.
+                latency = toneB.BurstQpc(0) - at - frequency;
+                toneB.Dispose();
+                toneB = null;
+            }
+
+            return (toneA, toneB!);
+        }
+        catch
+        {
+            toneB?.Dispose();
+            toneA.Dispose();
+            throw;
         }
     }
 

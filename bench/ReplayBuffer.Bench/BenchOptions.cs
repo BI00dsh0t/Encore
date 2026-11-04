@@ -22,11 +22,16 @@ internal sealed class BenchOptions
                                       [--target-fps 80] [--load-size WxH] [--load-timeout 60] [--load-warmup 10]
                                       [--load-exe <ReplayBuffer.Bench.GpuLoad.exe>]
                                       [--presentmon <exe>] [--pwsh <exe>] [--no-gpu-sampler] <capture options>
-                                      [--overlay [--overlay-dot auto|always|onChange] [--app-exe <ReplayBuffer.App.exe>]]
+                                      [--overlay [--overlay-dot auto|always|onChange] [--app-exe <ReplayBuffer.App.exe>] [--recording]]
           ReplayBuffer.Bench drift    [--minutes 60] [--tone-dbfs -30] [--bucket-seconds 60] [--burst-track 0]
                                       [--reanalyze] <capture options>
+          ReplayBuffer.Bench drift --app [--minutes 30] [--save-seconds 300] [--device-a <Output Device>] [--device-b <Output Device>]
+                                      [--layout <settings.json>] [--key ctrl+alt+shift+f16] [--record-key ctrl+alt+shift+f17]
+                                      [--app-exe <ReplayBuffer.App.exe>] [--lock <.bench-running>] [--tone-dbfs -30]
+                                      [--bucket-seconds 60] [--reanalyze] <capture options>
           ReplayBuffer.Bench playback [--seconds 30] [--players "Discord,Chrome,VLC,Windows Media Player,DaVinci Resolve"]
                                       [--tone-dbfs -30] [--auto [--chrome <exe>] [--play-seconds 5] [--player-timeout 60]]
+                                      [--codecs h264,hevc,av1] [--recording-file <mp4>]
                                       <capture options>
           ReplayBuffer.Bench hotkey   [--presses 20] [--key ctrl+alt+f9] [--timeout 60] [--inject]
           ReplayBuffer.Bench tracks   --device-a <Output Device> --device-b <Output Device> [--input-device <name or id>]
@@ -71,7 +76,23 @@ internal sealed class BenchOptions
         whether each load's monitor has overlay planes.
 
         fps --overlay (story 5.12) runs the real App on a throwaway test instance beside the script: its dot and
-        a message every 10 s are on during the capture runs only, off during the baseline runs.
+        a message every 10 s are on during the capture runs only, off during the baseline runs. With --recording
+        (story 8.7) the capture runs are the App's own: the script's app condition starts no engine, and as each
+        app run settles the load's profile stops being Ignored, the App's Replay Buffer buffers it and Record is
+        pressed (a real Recording); the baseline runs stop it and set the profile Ignored again. --seconds is
+        150 by default (3 passes of 2.5 min, the builder's 2026-11-04 halving).
+
+        drift --app (story 8.7) is the final conformance run: the App (the local publish, publish/ReplayBuffer,
+        by default) on a throwaway test instance with Bench's marker window as its Target Game, the Replay Buffer,
+        Overlay, Library and Cleanup on, Save every --save-seconds, and a real --minutes Recording (30 by default)
+        over the builder's Track Layout (--layout reads one from a settings file, read only; by default Everything,
+        Game = --device-a, Chat = --device-b, Mic = --input-device, the BEACN devices). Bursts play into A and B
+        half a second apart. It measures A/V drift per Track and toned device, Track-to-Track drift between them,
+        and every Track's length, each against one frame; writes conformance-drift.json and conformance-drift.md;
+        exit 0 only on a pass. Holds the lock file (default .bench-running in the main checkout) for the capture.
+
+        playback --codecs (story 8.7) makes one clip per codec (h264, hevc, av1); a codec the GPU can't encode is
+        recorded as not encoded. --recording-file adds an existing file (the drift --app Recording) to the checks.
 
         soak (story 8.1) runs the real engine (serve --replay-buffer) and App (--tray) from the App's Release folder
         on a throwaway test instance, with the GPU load as the Target Game; presses the Save Hotkey every
@@ -92,9 +113,10 @@ internal sealed class BenchOptions
     private static readonly Dictionary<string, string[]> Allowed = new(StringComparer.Ordinal)
     {
         ["fps"] = [.. Common, .. Capture, "game", "seconds", "passes", "settle", "presentmon", "pwsh", "no-gpu-sampler",
-            "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe", "overlay", "overlay-dot", "app-exe"],
-        ["drift"] = [.. Common, .. Capture, "minutes", "tone-dbfs", "bucket-seconds", "burst-track", "reanalyze"],
-        ["playback"] = [.. Common, .. Capture, "seconds", "players", "tone-dbfs", "auto", "chrome", "play-seconds", "player-timeout"],
+            "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe", "overlay", "overlay-dot", "app-exe", "recording"],
+        ["drift"] = [.. Common, .. Capture, "minutes", "tone-dbfs", "bucket-seconds", "burst-track", "reanalyze",
+            "app", "save-seconds", "device-a", "device-b", "layout", "key", "record-key", "app-exe", "lock"],
+        ["playback"] = [.. Common, .. Capture, "seconds", "players", "tone-dbfs", "auto", "chrome", "play-seconds", "player-timeout", "codecs", "recording-file"],
         ["hotkey"] = [.. Common, "presses", "key", "timeout", "inject"],
 
         // Its Output Devices are --device-a and --device-b: --output-device doesn't apply.
@@ -105,7 +127,7 @@ internal sealed class BenchOptions
         ["report"] = [.. Common],
     };
 
-    private static readonly HashSet<string> FlagNames = new(StringComparer.Ordinal) { "no-gpu-sampler", "reanalyze", "inject", "auto", "dot-only", "overlay" };
+    private static readonly HashSet<string> FlagNames = new(StringComparer.Ordinal) { "no-gpu-sampler", "reanalyze", "inject", "auto", "dot-only", "overlay", "app", "recording" };
 
     private readonly Dictionary<string, string> _values;
     private readonly HashSet<string> _flags;

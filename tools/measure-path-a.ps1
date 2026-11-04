@@ -13,6 +13,8 @@
     Condition names: baseline, or capture followed by any of these suffixes, in any order
     (e.g. capture-x2-fast-thread):
       baseline       no capture; the game alone
+      app            no engine from this script: the caller (bench fps --recording, story 8.7) turns
+                     the real App's capture on while the run settles; PresentMon only
       capture        capture with the tracer's defaults
       -p<N>          --gpu-priority N   (e.g. capture-p7)
       -m<N>          --gpu-priority -N  (e.g. capture-m7)
@@ -114,11 +116,11 @@ function Fail([string] $Message) {
 
 function Resolve-Condition([string] $Name) {
     $condition = [pscustomobject]@{ Name = $Name; Capture = $false; Priority = $null; Stages = $null; EngineOptions = @() }
-    if ($Name -eq 'baseline') { return $condition }
+    if ($Name -in 'baseline', 'app') { return $condition }
 
     $parts = $Name -split '-'
     if ($parts[0] -ne 'capture') {
-        Fail "Unknown condition '$Name'. Use baseline, or capture with suffixes -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast, -thread."
+        Fail "Unknown condition '$Name'. Use baseline, app, or capture with suffixes -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast, -thread."
     }
 
     $condition.Capture = $true

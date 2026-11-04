@@ -20,7 +20,15 @@ internal sealed record PlaybackReport(
     IReadOnlyList<PlayerCheck> Players,
     IReadOnlyList<string> Warnings,
     bool? Auto = null,
-    BorderProbeResult? BorderProbe = null);
+    BorderProbeResult? BorderProbe = null,
+    IReadOnlyList<CodecPlayback>? Extras = null);
+
+/// <summary>
+/// Story 8.7: one more file the players were given, an HEVC or AV1 clip (<c>--codecs</c>) or an existing Recording
+/// (<c>--recording-file</c>). <paramref name="Encoded"/> is false, with <paramref name="Error"/>, when the GPU
+/// couldn't encode the codec: it has no file and no players.
+/// </summary>
+internal sealed record CodecPlayback(string Name, string Codec, string? File, bool Encoded, string? Error, int AudioTracks, IReadOnlyList<string> TrackTitles, IReadOnlyList<PlayerCheck> Players);
 
 /// <summary>
 /// <c>bench playback</c>: a short marked capture (both tracks, the default H.264 output), then a checklist
@@ -34,6 +42,9 @@ internal static class PlaybackCheck
     public const string FileName = "playback.json";
 
     public static readonly IReadOnlyList<string> DefaultPlayers = ["Discord", "Chrome", "VLC", "Windows Media Player", "DaVinci Resolve"];
+
+    /// <summary>The codecs <c>--codecs</c> makes clips of by default (story 8.7): H.264, then HEVC and AV1 where the GPU encodes them.</summary>
+    public static readonly IReadOnlyList<string> DefaultCodecs = ["h264", "hevc", "av1"];
 
     public static int Run(BenchContext context)
     {
@@ -51,6 +62,20 @@ internal static class PlaybackCheck
         var playSeconds = options.Int("play-seconds", 5, 1, 120);
         var playerTimeout = TimeSpan.FromSeconds(options.Int("player-timeout", 60, 10, 600));
         var chromeOption = options.Text("chrome");
+        var codecs = options.List("codecs", DefaultCodecs).Select(c => c.ToLowerInvariant()).Distinct().ToList();
+        if (codecs.FirstOrDefault(c => !DefaultCodecs.Contains(c)) is { } badCodec)
+        {
+            throw new BenchUsageException($"--codecs '{badCodec}' is not one of {string.Join(", ", DefaultCodecs)}.");
+        }
+
+        if (!codecs.Contains("h264"))
+        {
+            throw new BenchUsageException("--codecs must include h264: its clip is the one every player is checked with.");
+        }
+
+        var recordingFile = options.Text("recording-file") is { } given
+            ? File.Exists(given) ? Path.GetFullPath(given) : throw new BenchFailure($"--recording-file '{given}' does not exist.")
+            : null;
         var engine = context.ResolveEngine();
         var tools = context.ResolveFfmpeg();
         var clip = Path.Combine(context.RunFolder, "playback.mp4");
@@ -100,8 +125,56 @@ internal static class PlaybackCheck
             report = new PlaybackReport(DateTimeOffset.Now, clip, seconds, settings, audioTracks, border, checks, warnings, false);
         }
 
-        BenchJson.Write(Path.Combine(context.RunFolder, FileName), report);
+        var extras = new List<CodecPlayback>();
+        foreach (var codec in codecs.Where(c => c != "h264"))
+        {
+            var file = Path.Combine(context.RunFolder, $"playback-{codec}.mp4");
+            Console.WriteLine();
+            Console.WriteLine($"Playback: a {seconds} s {codec.ToUpperInvariant()} clip, into {file}");
+            var (codecExit, codecError, _) = MarkedCapture.Run(engine, settings, seconds, file, null, Path.Combine(context.RunFolder, "playback-" + codec), toneDbfs, warnings, codec: codec);
+            if (codecExit != 0 || !File.Exists(file))
+            {
+                var why = codecError.Length > 0 ? codecError : $"exit {codecExit}";
+                Console.WriteLine($"  {codec}: not encoded on this GPU ({why}).");
+                extras.Add(new CodecPlayback(codec, codec, null, false, why, 0, [], []));
+                continue;
+            }
+
+            extras.Add(Extra(codec, codec, file, tools, toneDbfs, auto, players, context.RunFolder, chromeOption, playSeconds, playerTimeout, warnings));
+        }
+
+        if (recordingFile is not null)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"Playback: the Recording {recordingFile}");
+            extras.Add(Extra("recording", "h264", recordingFile, tools, toneDbfs, auto, players, context.RunFolder, chromeOption, playSeconds, playerTimeout, warnings));
+        }
+
+        BenchJson.Write(Path.Combine(context.RunFolder, FileName), report with { Extras = extras });
         return 0;
+    }
+
+    /// <summary>One extra file: its Tracks from ffprobe, then the scripted players (<c>--auto</c>) or every player needing a person.</summary>
+    private static CodecPlayback Extra(
+        string name, string codec, string file, FfmpegTools tools, double toneDbfs, bool auto, IReadOnlyList<string> players, string work, string? chrome, int playSeconds, TimeSpan timeout,
+        List<string> warnings)
+    {
+        var tracks = 0;
+        IReadOnlyList<string> titles = [];
+        try
+        {
+            var scan = MediaAnalysis.Scan(tools, file, 0, toneDbfs, CancellationToken.None).AudioStreams.ToList();
+            tracks = scan.Count;
+            titles = [.. scan.Select(s => s.Title ?? "")];
+        }
+        catch (BenchFailure e)
+        {
+            warnings.Add($"Could not probe {file}: {e.Message}");
+        }
+
+        Console.WriteLine($"  {tracks} audio track(s): {string.Join(", ", titles)}");
+        var checks = auto ? Scripted(players, file, Directory.CreateDirectory(Path.Combine(work, "playback-" + name)).FullName, chrome, playSeconds, timeout) : [.. players.Select(PlayerScripts.NeedsPerson)];
+        return new CodecPlayback(name, codec, file, true, null, tracks, titles, checks);
     }
 
     /// <summary>The <c>--auto</c> checklist: Chrome and Windows Media Player scripted, every other player needing a person.</summary>

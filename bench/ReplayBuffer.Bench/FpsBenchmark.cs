@@ -30,7 +30,9 @@ internal sealed record FpsRun(
 /// mode and a message every <paramref name="MessageSeconds"/>; <paramref name="OverlayPlanes"/> is
 /// <c>SupportsOverlays</c> for the load's monitor (null when DXGI couldn't say).
 /// </summary>
-internal sealed record FpsOverlay(string Dot, bool? OverlayPlanes, int MessageSeconds);
+/// <param name="Recording">Story 8.7 (<c>--recording</c>): the capture runs were the App's own engine on the load, with
+/// the Replay Buffer and a real Recording on, not the script's debug-capture.</param>
+internal sealed record FpsOverlay(string Dot, bool? OverlayPlanes, int MessageSeconds, bool Recording = false);
 
 /// <summary>The capture condition's means over its runs.</summary>
 internal sealed record FpsCapture(
@@ -75,6 +77,12 @@ internal static class FpsBenchmark
     public const string FileName = "fps.json";
     public const double TargetLossPercent = 3;
 
+    /// <summary>The script's condition whose capture is the App's own (story 8.7, <c>--recording</c>).</summary>
+    public const string AppCondition = "app";
+
+    /// <summary><c>--seconds</c> with <c>--recording</c>: 2.5 minutes, halved from 1.14's 5 by the builder (2026-11-04).</summary>
+    public const int RecordingSeconds = 150;
+
     /// <summary>With <c>--overlay</c>, the App shows a message this often while its dot is on.</summary>
     public const int MessageSeconds = 10;
 
@@ -97,6 +105,13 @@ internal static class FpsBenchmark
         if (!withOverlay && options.Has("app-exe"))
         {
             throw new BenchUsageException("--app-exe is for --overlay.");
+        }
+
+        // Story 8.7: the capture runs are the real App's capture of the load, with a Recording, in the script's app condition.
+        var withRecording = options.Flag("recording");
+        if (withRecording && !withOverlay)
+        {
+            throw new BenchUsageException("--recording is for --overlay.");
         }
 
         var dot = AppOverlayHost.ParseDot(options);
@@ -122,7 +137,7 @@ internal static class FpsBenchmark
             loadTimeout = TimeSpan.FromSeconds(warmupSeconds + 30);
         }
         var game = realGame ?? GpuLoadProcess.ProcessName;
-        var seconds = options.Int("seconds", 300, 10, 7200);
+        var seconds = options.Int("seconds", withRecording ? RecordingSeconds : 300, 10, 7200);
         var passes = options.Int("passes", 3, 1, 20);
         var settle = options.Int("settle", 20, 0, 600);
         var settings = options.CaptureSettings();
@@ -130,7 +145,7 @@ internal static class FpsBenchmark
         var presentMon = context.ResolvePresentMon();
         var engine = context.ResolveEngine();
         var loadExe = realGame is null ? GpuLoadProcess.Resolve(context) : null;
-        var appExe = withOverlay ? AppOverlayHost.Resolve(context) : null;
+        var appExe = withRecording ? LiveApp.Resolve(context) : withOverlay ? AppOverlayHost.Resolve(context) : null;
         var folder = Path.Combine(context.RunFolder, "fps");
         var script = Path.Combine(context.RepoRoot, "tools", "measure-path-a.ps1");
 
@@ -138,7 +153,7 @@ internal static class FpsBenchmark
         {
             "-NoProfile", "-File", script,
             "-Game", game,
-            "-Conditions", "baseline,capture",
+            "-Conditions", withRecording ? "baseline," + AppCondition : "baseline,capture",
             "-Seconds", seconds.ToString(CultureInfo.InvariantCulture),
             "-Repeats", passes.ToString(CultureInfo.InvariantCulture),
             "-SettleSeconds", settle.ToString(CultureInfo.InvariantCulture),
@@ -169,6 +184,7 @@ internal static class FpsBenchmark
         GpuLoadInfo loadInfo;
         GpuLoadProcess? load = null;
         AppOverlayHost? appHost = null;
+        LiveCapture? live = null;
         Timer? messages = null;
         OverlaySwitch? overlay = null;
         FpsOverlay? overlayInfo = null;
@@ -207,7 +223,14 @@ internal static class FpsBenchmark
                 var (ignoredExe, pid) = load is not null ? (loadExe!, load.Id) : GameExe(game);
                 try
                 {
-                    appHost = AppOverlayHost.Start(appExe, ignoredExe, messages: false, dot);
+                    if (withRecording)
+                    {
+                        live = LiveCapture.Start(appExe, ignoredExe, settings, dot);
+                    }
+                    else
+                    {
+                        appHost = AppOverlayHost.Start(appExe, ignoredExe, messages: false, dot);
+                    }
                 }
                 catch (BenchFailure e)
                 {
@@ -215,9 +238,13 @@ internal static class FpsBenchmark
                     return 1;
                 }
 
-                overlayInfo = new FpsOverlay(AppOverlayHost.DotName(dot), ReplayBuffer.Platform.Desktop.Monitors.OverlayPlanes(pid), MessageSeconds);
-                Console.WriteLine($"Overlay: the App's dot ({overlayInfo.Dot}) and a message every {MessageSeconds} s in the capture runs; overlay planes on the load's monitor: {YesNo(overlayInfo.OverlayPlanes)}.");
-                var overlaySwitch = overlay = new OverlaySwitch(appHost, errors);
+                overlayInfo = new FpsOverlay(AppOverlayHost.DotName(dot), ReplayBuffer.Platform.Desktop.Monitors.OverlayPlanes(pid), MessageSeconds, withRecording);
+                Console.WriteLine(withRecording
+                    ? $"Capture runs: the App's own Replay Buffer on the load with a Recording, its dot ({overlayInfo.Dot}) and a message every {MessageSeconds} s; overlay planes on the load's monitor: {YesNo(overlayInfo.OverlayPlanes)}."
+                    : $"Overlay: the App's dot ({overlayInfo.Dot}) and a message every {MessageSeconds} s in the capture runs; overlay planes on the load's monitor: {YesNo(overlayInfo.OverlayPlanes)}.");
+                var overlaySwitch = overlay = live is not null
+                    ? new OverlaySwitch(live.On, live.Off, live.Message, errors)
+                    : new OverlaySwitch(appHost!.On, appHost!.Off, appHost!.Message, errors);
                 messages = new Timer(_ => overlaySwitch.Message());
             }
 
@@ -226,7 +253,7 @@ internal static class FpsBenchmark
             // The script's stderr (where its refusals go) is relayed line by line to errors, so the message reaches
             // whoever runs Bench. Its stdout streams to the console; with --overlay Bench reads it to follow the
             // runs, and echoes every line.
-            var start = new ProcessStartInfo(pwsh) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = appHost is not null };
+            var start = new ProcessStartInfo(pwsh) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = overlay is not null };
             foreach (var arg in args)
             {
                 start.ArgumentList.Add(arg);
@@ -300,6 +327,7 @@ internal static class FpsBenchmark
             }
 
             appHost?.Dispose();
+            live?.Dispose();
             load?.Dispose();
         }
 
@@ -396,7 +424,7 @@ internal static class FpsBenchmark
 
         var interleaved = runs.Where(r => r.Pass != "final").ToList();
         var baseline = interleaved.Where(r => r.Condition == "baseline").ToList();
-        var capture = interleaved.Where(r => r.Condition == "capture").ToList();
+        var capture = interleaved.Where(r => r.Condition is "capture" or AppCondition).ToList();
         var baselineFps = Mean(baseline.Select(r => r.AvgFps));
         var baselineLow = Mean(baseline.Select(r => r.OnePercentLowFps));
         FpsCapture? means = null;
@@ -452,9 +480,11 @@ internal static class FpsBenchmark
     /// messages. One lock serializes them, so no message is sent once the dot is off. A failure from the App's
     /// engine is reported, never thrown (on the timer's thread it would end Bench), and fails the run.
     /// </summary>
-    private sealed class OverlaySwitch(AppOverlayHost host, TextWriter errors)
+    private sealed class OverlaySwitch(Action on, Action off, Action message, TextWriter errors)
     {
         private readonly Lock _lock = new();
+        private readonly Action onAction = on;
+        private readonly Action offAction = off;
         private bool? _on;
 
         public bool Failed { get; private set; }
@@ -469,7 +499,7 @@ internal static class FpsBenchmark
                 }
 
                 _on = on;
-                Send(on ? host.On : host.Off, on ? "on" : "off");
+                Send(on ? onAction : offAction, on ? "on" : "off");
             }
         }
 
@@ -479,7 +509,7 @@ internal static class FpsBenchmark
             {
                 if (_on == true)
                 {
-                    Send(host.Message, "message");
+                    Send(message, "message");
                 }
             }
         }
@@ -490,7 +520,7 @@ internal static class FpsBenchmark
             {
                 send();
             }
-            catch (Exception e) when (e is ErrorCodeException or TimeoutException or ObjectDisposedException or InvalidOperationException)
+            catch (Exception e) when (e is ErrorCodeException or TimeoutException or ObjectDisposedException or InvalidOperationException or BenchFailure)
             {
                 Failed = true;
                 errors.WriteLine($"The App's Overlay {what} failed: {e.Message}");
