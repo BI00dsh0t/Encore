@@ -280,6 +280,59 @@ public sealed class LibraryActorTests : IDisposable
     }
 
     [Fact]
+    public async Task ASaveBlockedByAReaderIsRetriedSoAFavouriteReachesTheDisk()
+    {
+        // Story 8.6: library.json held open without delete sharing (a backup, a scanner) fails File.Replace.
+        File.WriteAllBytes(Path.Combine(Output, "Game", "clip.mp4"), Mp4());
+        var item = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items);
+        using var library = new Harness(this, [item]);
+        await library.Actor.SetFavourite(new LibrarySetFavourite(item.Path, item.Size, item.Modified, true));
+        Assert.True(Until(() => SavedFavourite() == true, TimeSpan.FromSeconds(5)), "the first save never landed");
+
+        using (new FileStream(LibraryFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            await library.Actor.SetFavourite(new LibrarySetFavourite(item.Path, item.Size, item.Modified, false));
+            library.WaitForEvent(e => e is LibraryItem { Favourite: false });
+            Thread.Sleep(200);
+        }
+
+        // The blocked save left the old value; the retry lands once the reader lets go.
+        Assert.True(SavedFavourite());
+        Assert.True(Until(() => SavedFavourite() == false, LibraryActor.SaveRetryDelay * 3), "the change never reached library.json");
+    }
+
+    private static bool Until(Func<bool> condition, TimeSpan within)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            if (clock.Elapsed > within)
+            {
+                return false;
+            }
+
+            Thread.Sleep(20);
+        }
+
+        return true;
+    }
+
+    /// <summary>The saved Favourite of the one item, or null while library.json can't be read.</summary>
+    private bool? SavedFavourite()
+    {
+        try
+        {
+            using var stream = new FileStream(LibraryFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var document = JsonDocument.Parse(stream);
+            return document.RootElement.GetProperty("items")[0].TryGetProperty("favourite", out var favourite) && favourite.GetBoolean();
+        }
+        catch (Exception e) when (e is IOException or JsonException or InvalidOperationException or IndexOutOfRangeException or KeyNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    [Fact]
     public async Task AStaleIdentityIsRefusedAndAFileChangedOnDiskIsRefreshed()
     {
         var clip = Path.Combine(Output, "clip.mp4");
