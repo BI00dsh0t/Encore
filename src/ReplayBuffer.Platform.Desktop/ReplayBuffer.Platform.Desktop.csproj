@@ -4,6 +4,9 @@
     <CsWin32RunAsBuildTask>true</CsWin32RunAsBuildTask>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="ReplayBuffer.Platform.Desktop.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
   </ItemGroup>
 </Project>
