@@ -3,7 +3,7 @@ title: 'Theme infrastructure, live switching and a control gallery'
 type: 'feature'
 ticket: '2'
 created: '2026-11-04'
-status: in-review
+status: done
 baseline_revision: '1fa7ed1'
 risk: 'high'
 context: ['{project-root}/CLAUDE.md', 'ux-modern-ui/DESIGN.md', 'ux-modern-ui/EXPERIENCE.md']
