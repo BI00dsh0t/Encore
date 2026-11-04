@@ -3,14 +3,14 @@ title: 'Recording notices and sounds'
 type: 'feature'
 ticket: '8'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'b932e5aef70574fc52449988a7ea7e3667d0954e'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
@@ -84,6 +84,14 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-04 — Review pass
+- verdicts: 4 findings — high 0, medium 2, low 2, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` A writer failure on the Recording an encoder restart replaced leaves `_replacing` false, so its replacement raises `recording-started` with a sound beside the restart's — confirmed in `OnRecordingWritten` (the error replaces the reason, state stays Running). Fixed: any stop while the last state was Running marks the next start as the replacement.
+  - `[medium]` `[patch]` A disk full on that replaced Recording: the replacement's start withdrew the new `disk-full` notice and played a start sound. Fixed by the same rule, and the replacement now withdraws nothing; covered by `ADiskFullOnARecordingAnEncoderRestartReplacedKeepsItsNoticeAndRaisesNoStart`.
+  - `[low]` `[reject]` A replacement that ends before the Recording it replaced is announced before the old stop, so it gets a start notice and sound — real but needs the old writer to outlast the new Recording; the fix needs the follow relation in the router, more complexity than the edge is worth.
+  - `[low]` `[reject]` dev.simulate raises its notices even when a real Recording keeps the state Running — dev and test instances only, and the stub exists only to exercise notices.
+
 ## Design Notes
 
 Decision: the encoder restart's replacement raises no `recording-started` notice; `recording-restarted` already names the new file and plays the start sound, so three notices for one restart would be noise. The router tells a replacement apart by the stop arriving while its last `StateChanged` said Running: the orchestrator turns the state Off before the stop only when no replacement follows.
@@ -99,3 +107,11 @@ Stop messages: `stopped` "Recording stopped"; `game-exit` "Recording stopped: th
 - `dotnet test --project tests/ReplayBuffer.Core.Tests -c Release --no-build` -- expected: all pass
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- expected: all pass
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL warnings (engine code changes)
+
+## Auto Run Result
+
+- **Summary:** the FeedbackRouter raises `recording-started` and `recording-stopped` from the real `recording.started` and `recording.stopped` events; each stop names its reason, a disk-full or encoder-restart stop is silent, and a restart's replacement raises no start notice. `CaptureState` drives only the solid dot. dev.simulate calls the same two methods.
+- **Files:** `src/ReplayBuffer.Core/Feedback/FeedbackRouter.cs` (new event methods, `StopMessage`); `src/ReplayBuffer.Engine/EngineHost.cs` (wires the Recordings callbacks and the simulator); `src/ReplayBuffer.Engine/Sessions/DevSimulator.cs` (stub raises the notices); `tests/ReplayBuffer.Core.Tests/FeedbackSoundsTests.cs` and `FeedbackRouterTests.cs` (matrix test with a fake render port, the restart disk-full test); `tests/ReplayBuffer.Engine.Tests/DevSimulateServeTests.cs` (constructor arguments).
+- **Review:** 2 medium patched (one root cause), 0 deferred, 2 low rejected (reasons in the triage log). Follow-up review: false (two medium patches share one root cause and one small fix, covered by a test).
+- **Verification:** `dotnet build ReplayBuffer.slnx -c Release` 0 warnings; Core.Tests 125/125; Engine.Tests 170 passed, 28 explicit skipped; `pwsh tools/publish-engine.ps1` published with no warnings.
+- **Residual risks:** the rejected restart ordering edge above; hearing the sounds is in the Human Check Queue.

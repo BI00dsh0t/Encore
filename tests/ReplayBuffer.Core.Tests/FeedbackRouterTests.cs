@@ -90,6 +90,23 @@ public sealed class FeedbackRouterTests
         Assert.Equal(ErrorCodes.RecordingStarted, Assert.Single(notices.Active).Value.Code);
     }
 
+    [Fact]
+    public void ADiskFullOnARecordingAnEncoderRestartReplacedKeepsItsNoticeAndRaisesNoStart()
+    {
+        var notices = new FakeNotices();
+        using var router = new FeedbackRouter(notices, new ManualTime());
+
+        router.StateChanged(CaptureState.Initial with { Recording = RecordingState.Running });
+        router.RecordingStopped(new RecordingStopped(@"c:\clips\Game.mp4", RecordingStopReasons.DiskFull));
+        router.DiskFull();
+        router.RecordingStarted(new RecordingStarted(@"c:\clips\Game.mp4"));
+        router.RecordingRestarted(new RecordingRestart(@"c:\clips\Game.mp4", @"c:\clips\Game.mp4"));
+
+        Assert.Equal(
+            [ErrorCodes.RecordingStopped, ErrorCodes.DiskFull, ErrorCodes.RecordingRestarted],
+            notices.Active.Values.Select(n => n.Code));
+    }
+
     private sealed class FakeNotices : IFeedbackNotices
     {
         public Dictionary<string, FeedbackNotice> Active { get; } = [];

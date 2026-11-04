@@ -108,7 +108,8 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     /// <summary>
     /// A Recording started (<c>recording.started</c>): a <c>recording-started</c> notice with the
     /// <c>recordingStarted</c> sound, and every <c>disk-full</c> notice is withdrawn. An encoder
-    /// restart's replacement raises nothing; its <see cref="RecordingRestarted"/> notice follows.
+    /// restart's replacement (a start after a stop that left the state Running) raises and withdraws
+    /// nothing; its <see cref="RecordingRestarted"/> notice follows.
     /// </summary>
     public void RecordingStarted(RecordingStarted started)
     {
@@ -120,13 +121,13 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
                 return;
             }
 
-            WithdrawAll(_diskFulls);
             if (_replacing)
             {
                 _replacing = false;
                 return;
             }
 
+            WithdrawAll(_diskFulls);
             RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Recording started", "recordingStarted"));
         }
     }
@@ -147,9 +148,10 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
                 return;
             }
 
-            // The orchestrator turns the state Off before an encoder-restart stop only when no replacement follows.
+            // The orchestrator turns the state Off before a stop unless an encoder restart's replacement
+            // follows, whatever the stop's reason (the old writer may still fail or fill the disk).
             var silent = stopped.Reason is RecordingStopReasons.DiskFull or RecordingStopReasons.EncoderRestart;
-            _replacing = stopped.Reason == RecordingStopReasons.EncoderRestart && _recording == RecordingState.Running;
+            _replacing = _recording == RecordingState.Running;
             RaiseInfo(new FeedbackNotice(
                 ErrorCodes.RecordingStopped,
                 IsKnownReason(stopped.Reason) ? WarningSeverity.Info : WarningSeverity.Warning,
