@@ -3,7 +3,7 @@ title: 'Adaptive Overlay dot'
 type: 'feature'
 ticket: '15'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '54cf952'
 route: 'full'
 route_source: 'auto'

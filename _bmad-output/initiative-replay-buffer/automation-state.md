@@ -124,7 +124,7 @@ The coordinator logs each QA round in the Log below.
 | 26.9 | 5.9 Capture exclusion for every App window | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `7e09a01`) |
 | 26.11 | 5.11 Feedback Sounds settings page | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `f1d9334`) |
-| 26.11a | 5.15 Adaptive Overlay dot (added 2026-11-04; 5.12 and 5.13 wait on it) | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 26.11a | 5.15 Adaptive Overlay dot (added 2026-11-04; 5.12 and 5.13 wait on it) | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `582d863`) |
 | 26.12 | 5.12 Benchmark with the Overlay on | | pending |
 | 26.13 | 5.13 Refactor sweep | | pending |
 | 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | | pending |
@@ -547,3 +547,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.15 round 3 at `5d1a3d5`: the coordinator checked the diff itself: **PASS** (`DotAlways` needs `== true`, the query runs on `Task.Run` and posts back, an exception counts as unknown, a display-change generation drops stale answers, and a test covers it). 5.15 has been told to merge (Sonnet).
 - 2026-11-04: QA 4.13 at `15043a9`: **QA PASS**, 0 findings, behaviour-preserving. 4.13 has been told to merge (Sonnet), and slice-epic-4 is back in the pool. Next for epic 4 come 4.14 (the end-to-end check on the builder's PC, HITL) and then the v0.4.0 release. A 5.15 fix report went to qa-2-1 by mistake, and the sessions sorted it out.
 - 2026-11-04: qa-1-14 (prompted by the story) re-checked 5.15 at `5d1a3d5` on its own: **PASS**, which agrees with the coordinator's round-3 check. 4.13 is merging.
+- 2026-11-04: 5.15 Adaptive Overlay dot merged into develop (`582d863`) after QA round 3 PASS (round 1 found the 3 s timer could stick and an unknown plane answer was cached; round 2 moved the DXGI query off the UI thread and made unknown mean no planes). It adds the additive `overlayDot` key and the tray capture-state icon. develop was merged into the branch first (one append conflict in `Platform.Desktop/NativeMethods.txt`). Build 0 warnings; App 112, Contracts 118, Core 111, Platform.Desktop 12 passed; publish clean. 5.12 and 5.13 are unblocked by it. `feature/5.8-overlay-perf-research` stays unmerged, holding the parked prototype.
