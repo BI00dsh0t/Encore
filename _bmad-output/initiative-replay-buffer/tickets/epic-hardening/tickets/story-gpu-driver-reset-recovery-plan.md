@@ -3,7 +3,7 @@ title: 'GPU driver reset recovery'
 type: 'feature'
 ticket: '3'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '0694fb36c64bdc0713e39f184066f7d4eb7a4ce3'
 route: 'full'
 route_source: 'auto'
