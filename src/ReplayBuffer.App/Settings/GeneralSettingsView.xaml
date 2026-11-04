@@ -7,5 +7,10 @@
         <TextBlock Text="Show the Overlay's dot" Margin="0,12,0,4" />
         <ComboBox ItemsSource="{Binding OverlayDotChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Mode"
                   SelectedValue="{Binding OverlayDot}" HorizontalAlignment="Left" MinWidth="320" />
+        <TextBlock Text="Theme" Margin="0,12,0,4" />
+        <ComboBox ItemsSource="{Binding AppThemeChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Theme"
+                  SelectedValue="{Binding AppTheme}" HorizontalAlignment="Left" MinWidth="320" />
+        <TextBlock Text="Applies at once to every window." Margin="0,4,0,0" Style="{DynamicResource CaptionTextBlockStyle}"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
     </StackPanel>
 </UserControl>

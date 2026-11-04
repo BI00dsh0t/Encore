@@ -203,6 +203,10 @@ public static class Keys
     public static SettingKey<OverlayDotMode> OverlayDot { get; } = new(
         "overlayDot", Json.OverlayDotMode, OverlayDotMode.Auto, overridable: false, AppliesAt.Immediate, Enum.IsDefined);
 
+    /// <summary>The Main App's look (AD-23). The engine only stores it; the App applies it on <c>settings.changed</c>.</summary>
+    public static SettingKey<AppTheme> AppTheme { get; } = new(
+        "appTheme", Json.AppTheme, Settings.AppTheme.Fluent, overridable: false, AppliesAt.Immediate, Enum.IsDefined);
+
     /// <summary>Every key, in catalog order.</summary>
     public static IReadOnlyList<SettingKey> All { get; } =
     [
@@ -222,6 +226,7 @@ public static class Keys
         ManualGames,
         StartWithWindows,
         OverlayDot,
+        AppTheme,
     ];
 
     private static readonly Dictionary<string, SettingKey> ByName = All.ToDictionary(k => k.Name, StringComparer.Ordinal);

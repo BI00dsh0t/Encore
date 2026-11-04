@@ -7,6 +7,8 @@ internal partial class MainWindow
 {
     private bool _quitting;
 
+    internal override bool UsesMica => true;
+
     public MainWindow()
     {
         InitializeComponent();

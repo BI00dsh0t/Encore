@@ -9,12 +9,19 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
 {
     private bool _startWithWindows;
     private OverlayDotMode _overlayDot = Keys.OverlayDot.Default;
+    private AppTheme _appTheme = Keys.AppTheme.Default;
 
     private static readonly IReadOnlyList<OverlayDotChoice> Choices =
     [
         new(OverlayDotMode.Auto, "Automatic: always, unless it would cost a borderless game FPS"),
         new(OverlayDotMode.Always, "Always, while capture runs"),
         new(OverlayDotMode.OnChange, $"For {(int)OverlayViewModel.DotOnChangeDuration.TotalSeconds} seconds after each change"),
+    ];
+
+    private static readonly IReadOnlyList<AppThemeChoice> Themes =
+    [
+        new(AppTheme.Fluent, "Fluent (follows Windows)"),
+        new(AppTheme.GamingDark, "Gaming dark"),
     ];
 
     public override string Title => "General";
@@ -51,6 +58,25 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
         }
     }
 
+    /// <summary>The <c>appTheme</c> choices, as the page lists them.</summary>
+    public IReadOnlyList<AppThemeChoice> AppThemeChoices => Themes;
+
+    /// <summary>
+    /// <c>appTheme</c>. Setting it sends the change at once; the App restyles when the engine's
+    /// <c>settings.changed</c> comes back (AD-23), so a refused update leaves the theme as it was.
+    /// </summary>
+    public AppTheme AppTheme
+    {
+        get => _appTheme;
+        set
+        {
+            if (Set(ref _appTheme, value))
+            {
+                _ = SendAsync([SettingsValues.SetGlobal(Keys.AppTheme, value)]);
+            }
+        }
+    }
+
     protected override FrameworkElement CreateView() => new GeneralSettingsView { DataContext = this };
 
     protected override void OnRender(SettingsDocument document)
@@ -59,8 +85,13 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
         OnPropertyChanged(nameof(StartWithWindows));
         _overlayDot = SettingsValues.Global(document, Keys.OverlayDot);
         OnPropertyChanged(nameof(OverlayDot));
+        _appTheme = SettingsValues.Global(document, Keys.AppTheme);
+        OnPropertyChanged(nameof(AppTheme));
     }
 }
 
 /// <summary>One <c>overlayDot</c> choice on the General page.</summary>
 internal sealed record OverlayDotChoice(OverlayDotMode Mode, string Label);
+
+/// <summary>One <c>appTheme</c> choice on the General page.</summary>
+internal sealed record AppThemeChoice(AppTheme Theme, string Label);

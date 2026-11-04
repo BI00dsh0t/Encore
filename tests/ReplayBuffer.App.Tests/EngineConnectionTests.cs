@@ -102,6 +102,23 @@ public sealed class EngineConnectionTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task TheThemePickerSendsAppThemeAndTheEngineReadsItBackAfterARestart()
+    {
+        var connection = await ConnectAsync();
+        var general = new GeneralSettingsPage(new SettingsSender(connection));
+        general.Render(connection.State!.Settings);
+        Assert.Equal(AppTheme.Fluent, general.AppTheme);
+
+        general.AppTheme = AppTheme.GamingDark;
+        await Eventually(() => SettingsValues.Global(connection.State!.Settings, Keys.AppTheme) == AppTheme.GamingDark);
+        Assert.True(await connection.ShutdownAsync(TimeSpan.FromSeconds(5)));
+
+        var restarted = await ConnectAsync();
+        Assert.NotEqual(connection.State!.Pid, restarted.State!.Pid);
+        Assert.Equal(AppTheme.GamingDark, SettingsValues.Global(restarted.State.Settings, Keys.AppTheme));
+    }
+
+    [Fact]
     public async Task ShutdownEndsTheEngineProcess()
     {
         var connection = await ConnectAsync();

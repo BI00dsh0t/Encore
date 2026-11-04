@@ -13,7 +13,7 @@ public sealed partial class KeysTests
             [
                 "video", "trackLayout", "bufferWindow", "replayStorage", "ringPath", "saveCooldown", "outputFolder",
                 "hotkeys", "recordHotkeyMode", "monitorRecordingMonitor", "feedbackSounds", "feedbackSoundDevice",
-                "cleanup", "manualGames", "startWithWindows", "overlayDot",
+                "cleanup", "manualGames", "startWithWindows", "overlayDot", "appTheme",
             ],
             Keys.All.Select(k => k.Name));
     }
@@ -84,6 +84,15 @@ public sealed partial class KeysTests
             """{"codec":"h264","width":1920,"height":1080,"fps":60,"bitrateKbps":40000,"rateControl":"cbr"}""",
             Keys.Video.DefaultJson.GetRawText());
         Assert.Equal("\"nextSession\"", JsonSerializer.Serialize(AppliesAt.NextSession, SettingsJsonContext.Default.AppliesAt));
+    }
+
+    [Fact]
+    public void AppThemeIsGlobalImmediateFluentByDefaultAndWritesGamingDarkCamelCase()
+    {
+        Assert.Equal(AppTheme.Fluent, Keys.AppTheme.Default);
+        Assert.False(Keys.AppTheme.Overridable);
+        Assert.Equal(AppliesAt.Immediate, Keys.AppTheme.AppliesAt);
+        Assert.Equal("\"gamingDark\"", Keys.AppTheme.ToJson(AppTheme.GamingDark).GetRawText());
     }
 
     [Theory]
