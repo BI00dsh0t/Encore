@@ -180,7 +180,7 @@ The coordinator logs each QA round in the Log below.
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `78d1c6a`) |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `5d43a43`) |
-| 30.9 | 9.9 Modern UI end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | QA passed, merging |
+| 30.9 | 9.9 Modern UI end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged) |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -775,3 +775,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 9.8 merged (`5d43a43`; marked done and shell renders refreshed in `e5fd82e`), and its card is Done. 9.9 (the epic 9 end-to-end check) went to slice-epic-5 (Opus, medium effort; 2-1-tracer couldn't be cleared because the builder has it open). The ticket's "against the installed build" is run against a local publish on a test instance: the installed app is never touched, and installing is the builder's checklist step.
 - 2026-11-04: 9.9 READY FOR QA at `030bb9c` (152 passed, 8 for the builder), and its card is In QA. QA went to qa-1-14 (Sonnet, medium effort; safety guards confirmed before its one run).
 - 2026-11-04: QA 9.9 passed at `030bb9c`. slice-epic-5 is merging. Next: mark epic 9 done, release v0.9.0, then epic 8's 8.7 (final conformance) unblocks.
+- 2026-11-04: 9.9 merged (`8efdf67`, `test(app): merge 9.9-modern-ui-end-to-end`), after syncing develop: 0-warning build, App 151 passed, 0 failed. Marked done. The builder's ordered epic-9 checklist is in its plan, and the six epic-9 Human Check rows point at it. slice-epic-5 is back in the pool.
