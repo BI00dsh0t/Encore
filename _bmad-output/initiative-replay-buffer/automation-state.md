@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.2 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.9 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 7.9 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -611,3 +611,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.8 merged (`4b6b22f`, marked done). Synced with develop first (6.9, v0.5.0 and others) with no conflicts: 0-warning build, Contracts 119, Core 145, Engine 172 (32 skipped), App 115 (12 skipped), publish clean. Contracts change was additive (`cleanup.preview`, `LibraryItemRemoved.Reason`, `cleanup-limit-unreachable`). QA's three non-blocking notes are in the epic Notes. Human Check for 7.8 is covered by 7.11.
 - 2026-11-04: 7.8 merged (`4b6b22f`, marked done `7218942`). Its card is Done with its label detached, and qa-1-14 is back in the pool. QA's 3 non-blocking notes are carried forward, including no test for 7.7's new guard, which only a junction swapped in after the scan could reach. 7.9 went to qa-2-1 (Opus, medium effort), with its card In progress.
 - 2026-11-04: The usage limit (reset 05:40) stopped 6.10 mid-implementation (8 uncommitted files on its branch at `5a05c9c`) and 7.9 at a WIP commit (`822ddf9`, unverified). 7.9 had briefly fast-forwarded `feature/6.9-monitor-recording` and reset it back to `ee952f2`; develop wasn't affected. 8.2 is READY FOR QA at `0661665`: additive Contracts (`EngineCrashLoop`, `AppCrashLoop`, `CrashLoopGuard`, `SimulatedEvent.EngineHang`), and the post-review soak passed (6/6 Clips, 10/10 bounds, 3/3 recoveries). At 09:37 the coordinator told 6.10 and 7.9 to resume and started QA 8.2 on qa-1-14 (Sonnet, high effort, no soak rerun), with its card In QA.
+- 2026-11-04: 7.9 is READY FOR QA at `493d23e` after resuming. QA started on 2-1-tracer (Sonnet), and its card is In QA.
