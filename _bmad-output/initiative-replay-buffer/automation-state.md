@@ -37,11 +37,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.14 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.7 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.12 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -125,7 +125,7 @@ The coordinator logs each QA round in the Log below.
 | 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `7e09a01`) |
 | 26.11 | 5.11 Feedback Sounds settings page | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `f1d9334`) |
 | 26.11a | 5.15 Adaptive Overlay dot (added 2026-11-04; 5.12 and 5.13 wait on it) | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `582d863`) |
-| 26.12 | 5.12 Benchmark with the Overlay on | | pending |
+| 26.12 | 5.12 Benchmark with the Overlay on | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
 | 26.13 | 5.13 Refactor sweep | | pending |
 | 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | | pending |
 | 26.15 | Release epic 5 (`v0.5.0`) | | pending |
@@ -555,3 +555,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 5.9 at `614b0b1`: **QA PASS**, 0 findings. 5.9 has been told to merge (Sonnet), keeping both sides of any Overlay conflict with 5.15. qa-1-14 is back in the pool. Its merge plus 5.15's unblocks 5.12 (the benchmark with the Overlay on).
 - 2026-11-04: QA 4.14 at `dcd748f`: **QA PASS**, 0 blocking and 4 advisories. 4.14 has been told to merge (Sonnet) without marking the epic done or releasing. story-2-7 is back in the pool. After the merge, the coordinator marks epic 4 `status: done` and runs the v0.4.0 release.
 - 2026-11-04: 5.9 merged (`597fe28`, `feat(app): merge 5.9-capture-exclusion`, after merging develop in: conflicts in `ShellApp.cs` and `NativeMethods.txt` kept both sides; build 0 warnings, App 113 passed and Platform.Desktop 13 passed). Contracts unchanged.
+- 2026-11-04: 5.9 merged (`597fe28`, marked done `39f1954`), and its card is Done. slice-epic-5 is back in the pool. 5.12 (the benchmark with the Overlay on) went to 2-1-tracer (Opus, medium effort; context kept from the research and 5.15), with its card In progress. It measures every `overlayDot` mode in every presentation mode under the GPU lock.
