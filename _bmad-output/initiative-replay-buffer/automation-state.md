@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with epic 9 planning |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
@@ -662,3 +662,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - **Notes kept:** the Monitor recovery path has no engine-level test, even Heavy. Give-up ends the session and releases the pre-reset buffer, as the ticket says.
   - **Not run (GPU tests paused):** the Heavy `AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile`, and a real forced TDR.
   - **Back in the pool:** qa-1-14.
+- 2026-11-04: **Builder: both looks become selectable themes.** Fluent (WPF `ThemeMode`, which follows Windows light or dark and the accent colour) and gaming dark (a custom dictionary, palette as in `research/ui-gaming-dark-render.png`) switch live and are saved in settings, with Fluent as the default. Real WPF renders of both, and their source, are in `research/` (`71cfc23`, `b2aaae6`). Epic 9 "Modern UI" planning went to slice-epic-5 (Opus, medium effort; `bmad-agent-po`, headless) on `feature/9.0-modern-ui-planning`. Its stories are: a `bmad-ux` design pass, theme infrastructure, one story per UI area, a refactor sweep, and an end-to-end check. It runs after epics 6 and 7, and 8.7 waits on it.
