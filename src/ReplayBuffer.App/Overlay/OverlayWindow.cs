@@ -11,9 +11,10 @@ namespace ReplayBuffer.App.Overlay;
 /// <summary>
 /// The Overlay: a dot in the top-right corner of the Target Game's monitor; to its left, right to
 /// left, the mic-muted icon while the mic is muted, the green saving icon while a Clip is being saved
-/// (R2) and a red X while the disk is full (R3); and the queued message below them (R3), green for a
-/// notice and red for an error. It is a topmost, click-through window that is never activated and is
-/// excluded from capture (AD-15). The window is one fixed-width strip of fixed slots, so the dot stays
+/// (R2) and a red X while the disk is full (R3); and the queued message below them (R3) on the
+/// theme's card, in its success colour for a notice and its danger colour for an error. The glyphs keep
+/// fixed colours in both themes (AD-23). It is a topmost, click-through window that is never activated
+/// and is excluded from capture (AD-15). The window is one fixed-width strip of fixed slots, so the dot stays
 /// put as the icons come and go; while a message shows it grows left and down, the dot still in its
 /// place. It is hidden while there is no dot, icon, X or message. Nothing is drawn in or hooked onto
 /// the game (NFR-3).
@@ -48,7 +49,12 @@ internal sealed class OverlayWindow : ShellWindow
     private static readonly Brush Red = Freeze(new SolidColorBrush(Color.FromRgb(0xE5, 0x39, 0x35)));
     private static readonly Brush Green = Freeze(new SolidColorBrush(Color.FromRgb(0x43, 0xA0, 0x47)));
     private static readonly Brush Light = Freeze(new SolidColorBrush(Color.FromRgb(0xEE, 0xEE, 0xEE)));
-    private static readonly Brush Shade = Freeze(new SolidColorBrush(Color.FromArgb(0xB0, 0x00, 0x00, 0x00)));
+
+    // The message card's theme keys (DESIGN.md "Overlay message card"); the glyphs above keep fixed colours.
+    internal const string CardBrushKey = "RbOverlayCardBrush";
+    internal const string CardStrokeKey = "SurfaceStrokeColorFlyoutBrush";
+    internal const string ErrorTextKey = "SystemFillColorCriticalBrush";
+    internal const string NoticeTextKey = "SystemFillColorSuccessBrush";
 
     // A downward arrow over a bar, in the icon's 16 DIP square.
     private static readonly Geometry SaveGlyph = Freeze(Geometry.Parse("M6,1 H10 V7 H13 L8,12 L3,7 H6 Z M2,13 H14 V15.5 H2 Z"));
@@ -122,10 +128,13 @@ internal sealed class OverlayWindow : ShellWindow
             VerticalAlignment = VerticalAlignment.Top,
             Children = { _cross, _icon, _mic, _dot },
         };
+        // The card is the Overlay's one themed element: its fill, stroke, corner and type follow the theme
+        // live through resource references, while the window itself stays transparent.
+        _text.SetResourceReference(StyleProperty, "CaptionTextBlockStyle");
         _message = new Border
         {
-            Background = Shade,
-            Padding = new Thickness(6, 2, 6, 2),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(7, 2, 7, 2),
             Height = MessageHeightDip,
             MaxWidth = MessageWidthDip,
             HorizontalAlignment = HorizontalAlignment.Right,
@@ -134,6 +143,9 @@ internal sealed class OverlayWindow : ShellWindow
             IsHitTestVisible = false,
             Child = _text,
         };
+        _message.SetResourceReference(Border.BackgroundProperty, CardBrushKey);
+        _message.SetResourceReference(Border.BorderBrushProperty, CardStrokeKey);
+        _message.SetResourceReference(Border.CornerRadiusProperty, "ControlCornerRadius");
         _root = new Grid { Width = WidthDip, Height = DotSizeDip, IsHitTestVisible = false, Children = { strip, _message } };
 
         // Top-right, so the dot keeps its corner if rounding leaves the window a pixel off the grid's shape.
@@ -185,7 +197,7 @@ internal sealed class OverlayWindow : ShellWindow
         if (_model.Message is { } message)
         {
             _text.Text = message.Message;
-            _text.Foreground = message.Severity == WarningSeverity.Error ? Red : Green;
+            _text.SetResourceReference(TextBlock.ForegroundProperty, message.Severity == WarningSeverity.Error ? ErrorTextKey : NoticeTextKey);
             _message.Visibility = Visibility.Visible;
         }
         else
