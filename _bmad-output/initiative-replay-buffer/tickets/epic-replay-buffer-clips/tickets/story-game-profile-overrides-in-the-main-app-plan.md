@@ -3,7 +3,7 @@ title: 'Game Profile overrides in the Main App'
 type: 'feature'
 ticket: '11'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '034ee329738174db36e66b4d603511501022880c'
 route: 'full'
 route_source: 'auto'
