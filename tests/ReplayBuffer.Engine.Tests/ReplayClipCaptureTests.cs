@@ -276,7 +276,9 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
             () => document,
             published.Enqueue,
             targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, e) => saved.Writer.TryComplete(e)),
-            clips: new ReplayClips(OutputPathAllocator.System, () => _directory, c => saved.Writer.TryWrite(c), e => saved.Writer.TryComplete(e), ExitDrain: TimeSpan.FromSeconds(3))))
+            clips: new ReplayClips(OutputPathAllocator.System, () => _directory, c => saved.Writer.TryWrite(c), e => saved.Writer.TryComplete(e),
+                NotSaved: f => saved.Writer.TryComplete(new InvalidOperationException($"the save made no Clip: {f.Reason}")),
+                ExitDrain: TimeSpan.FromSeconds(3))))
         {
             orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
             anchor = await anchored.Task.WaitAsync(Timeout, Token);
@@ -290,8 +292,10 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
                 owner.WaitForExit(TimeSpan.FromSeconds(10));
             }
 
+            // The press goes in as soon as the drain is seen, so all of the 3 s drain is slack for a
+            // loaded machine; a fixed 1 s wait first left 2 s. A refused save fails with its reason
+            // (NotSaved) instead of a 30 s timeout.
             await WaitForReplay(published, ReplayState.Draining);
-            await Task.Delay(TimeSpan.FromSeconds(1), Token);
             Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
             clip = await saved.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
