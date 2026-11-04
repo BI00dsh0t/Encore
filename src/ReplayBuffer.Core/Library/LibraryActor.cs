@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
@@ -21,7 +22,10 @@ public sealed record LibraryLoad(IReadOnlyList<LibraryItem> Items, bool Corrupt)
 /// against disk (R2), so only what differs from the index is published. Items being written are never
 /// persisted. Each item's length (story 7.3) is read by a low-priority worker beside the actor, which
 /// only reads the file and posts the result back; the actor applies it, publishes it as
-/// <c>library.itemChanged</c> and caches it in <c>library.json</c> by size and modified time.
+/// <c>library.itemChanged</c> and caches it in <c>library.json</c> by size and modified time. The App's
+/// rename and delete (story 7.7) run here too, by the item's identity (AD-3): never on a file being
+/// written, and each path they touch is registered first, so the watcher's echo isn't an outside change.
+/// A delete only ever moves the file to the Recycle Bin, through the injected port.
 /// </summary>
 public sealed class LibraryActor : ILibraryWrites, IDisposable
 {
@@ -32,6 +36,9 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private const string BakExtension = ".bak";
     private const string CorruptExtension = ".corrupt";
     private const int WatcherBufferSize = 64 * 1024;
+    private const int SharingRetries = 10;
+    private const int ErrorSharingViolation = unchecked((int)0x80070020);
+    private const int ErrorLockViolation = unchecked((int)0x80070021);
 
     // How long watcher events gather before their paths are reconciled, and the retry of a busy file.
     private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(250);
@@ -41,6 +48,17 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     // How long the watcher's echo of the actor's own file operation is ignored.
     private static readonly TimeSpan RegistrationTime = TimeSpan.FromSeconds(5);
+
+    // A rename or recycle that meets a sharing violation (e.g. the length worker's read) is tried again.
+    private static readonly TimeSpan SharingRetryDelay = TimeSpan.FromMilliseconds(50);
+
+    // Device names Windows reserves, whatever the extension.
+    private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
 
     private static readonly EnumerationOptions Recursive = new()
     {
@@ -66,6 +84,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private readonly bool _createMissingFolder;
     private readonly Func<string, double?>? _readLength;
     private readonly Action<LibraryFolderChanged>? _folderChanged;
+    private readonly Func<string, bool>? _recycle;
     private readonly Thread _thread;
 
     // The length worker's jobs; written by the actor thread only.
@@ -118,6 +137,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// <param name="createMissingFolder">Whether a missing Output Folder is created so it can be watched.</param>
     /// <param name="readLength">Reads a file's length in seconds by its absolute path, or null when it can't; called on a low-priority worker. Without it no length is read.</param>
     /// <param name="folderChanged">Publishes <c>library.folderChanged</c>, just before the <c>library.reset</c> of a new Output Folder.</param>
+    /// <param name="recycle">Moves a file to the Recycle Bin by its absolute path, on the actor thread: false when its volume has none, an <see cref="IOException"/> carrying the HRESULT when it fails. Without it every delete is refused with <see cref="ErrorCodes.RecycleBinUnavailable"/>.</param>
     public LibraryActor(
         IReadOnlyList<LibraryItem> items,
         Func<string> outputFolder,
@@ -133,7 +153,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         Action<Exception> failed,
         bool createMissingFolder,
         Func<string, double?>? readLength = null,
-        Action<LibraryFolderChanged>? folderChanged = null)
+        Action<LibraryFolderChanged>? folderChanged = null,
+        Func<string, bool>? recycle = null)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentException.ThrowIfNullOrEmpty(libraryFile);
@@ -150,6 +171,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _createMissingFolder = createMissingFolder;
         _readLength = readLength;
         _folderChanged = folderChanged;
+        _recycle = recycle;
         _cleanupBlocked = cleanupBlocked;
         foreach (var item in items)
         {
@@ -289,13 +311,32 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     public Task SetFavourite(LibrarySetFavourite args)
     {
         ArgumentNullException.ThrowIfNull(args);
-        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_channel.Writer.TryWrite(new SetFavouriteRequest(args, done)))
-        {
-            done.TrySetException(new ErrorCodeException(ErrorCodes.EngineDisconnected, "The Library has shut down."));
-        }
+        return Post(done => new SetFavouriteRequest(args, done));
+    }
 
-        return done.Task;
+    /// <summary>
+    /// <c>library.rename</c> (story 7.7): renames the item's file to <see cref="LibraryRename.NewName"/>
+    /// plus its own <c>.mp4</c> extension (its case kept) in the same folder, and publishes exactly <c>library.itemRemoved</c> and
+    /// <c>library.itemAdded</c>, keeping its metadata. Faults with <see cref="ErrorCodes.FileBeingWritten"/>,
+    /// <see cref="ErrorCodes.LibraryItemChanged"/>, <see cref="ErrorCodes.InvalidFileName"/>,
+    /// <see cref="ErrorCodes.FileNameTaken"/> or <see cref="ErrorCodes.CommandFailed"/>, the index unchanged.
+    /// </summary>
+    public Task Rename(LibraryRename args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        return Post(done => new RenameRequest(args, done));
+    }
+
+    /// <summary>
+    /// <c>library.delete</c> (story 7.7): moves the item's file to the Recycle Bin, publishes
+    /// <c>library.itemRemoved</c> and saves. Faults with <see cref="ErrorCodes.FileBeingWritten"/>,
+    /// <see cref="ErrorCodes.LibraryItemChanged"/>, <see cref="ErrorCodes.RecycleBinUnavailable"/> (the file
+    /// untouched) or <see cref="ErrorCodes.CommandFailed"/>, the index unchanged.
+    /// </summary>
+    public Task Delete(LibraryDelete args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        return Post(done => new DeleteRequest(args, done));
     }
 
     /// <summary>
@@ -345,6 +386,24 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         {
             _lengthThread.Join();
         }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="name"/> can be a file's base name: not empty, no character Windows forbids,
+    /// not ending with a dot or a space, and not a reserved device name before its first dot.
+    /// </summary>
+    internal static bool ValidName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)
+            || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || name.EndsWith('.')
+            || name.EndsWith(' '))
+        {
+            return false;
+        }
+
+        var dot = name.IndexOf('.', StringComparison.Ordinal);
+        return !ReservedNames.Contains(dot < 0 ? name : name[..dot]);
     }
 
     private static string FullFolder(string folder) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
@@ -517,6 +576,18 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
+    // A command's request, answered by the actor; faulted at once once the actor is disposed.
+    private Task Post(Func<TaskCompletionSource, Message> request)
+    {
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_channel.Writer.TryWrite(request(done)))
+        {
+            done.TrySetException(new ErrorCodeException(ErrorCodes.EngineDisconnected, "The Library has shut down."));
+        }
+
+        return done.Task;
+    }
+
     private void Run()
     {
         var reader = _channel.Reader;
@@ -645,6 +716,30 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
                 {
                     // A no-op once answered; an unexpected failure (reported by Run) mustn't leave the router waiting.
                     request.Done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, "The Favourite couldn't be set."));
+                }
+
+                break;
+
+            case RenameRequest request:
+                try
+                {
+                    OnRename(request);
+                }
+                finally
+                {
+                    request.Done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, "The file couldn't be renamed."));
+                }
+
+                break;
+
+            case DeleteRequest request:
+                try
+                {
+                    OnDelete(request);
+                }
+                finally
+                {
+                    request.Done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, "The file couldn't be deleted."));
                 }
 
                 break;
@@ -989,55 +1084,14 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     /// <summary>
     /// Sets the Favourite when the command's identity matches the item and, for a written item, the file
-    /// on disk; else refuses it. A file missing on disk is reconciled once it settles; one whose size or
-    /// modified time differs is refreshed and published, so the App's next command matches.
+    /// on disk; else refuses it (see <see cref="TryMatch"/>).
     /// </summary>
     private void OnSetFavourite(SetFavouriteRequest request)
     {
         var args = request.Args;
-        if (string.IsNullOrEmpty(args.Path)
-            || !TryKey(_folder, Path.GetFullPath(Path.Combine(_folder, args.Path)), out var key)
-            || !_items.TryGetValue(key, out var item)
-            || item.Size != args.Size
-            || item.Modified != args.Modified)
+        if (!TryMatch(args.Path, args.Size, args.Modified, request.Done, out var key, out var item))
         {
-            Refuse(request.Done, args.Path);
             return;
-        }
-
-        // Being written: the writer owns the file, so only the index is compared.
-        if (!item.BeingWritten)
-        {
-            var path = Path.Combine(_folder, key);
-            var file = new FileInfo(path);
-            if (!file.Exists)
-            {
-                Pend(path);
-                Refuse(request.Done, args.Path);
-                return;
-            }
-
-            var modified = Utc(file.LastWriteTimeUtc);
-            if (file.Length != item.Size || modified != item.Modified)
-            {
-                var resized = file.Length != item.Size;
-                item = item with { Size = file.Length, Modified = modified, LengthSeconds = resized ? null : item.LengthSeconds };
-                if (resized)
-                {
-                    _modified.Remove(key);
-                }
-
-                _items[key] = item;
-                _changed(item);
-                _dirty = true;
-                if (resized)
-                {
-                    QueueLength(key);
-                }
-
-                Refuse(request.Done, args.Path);
-                return;
-            }
         }
 
         if (item.Favourite != args.Favourite)
@@ -1049,6 +1103,206 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
 
         request.Done.TrySetResult();
+    }
+
+    /// <summary>
+    /// Whether a command's identity (AD-3) matches the item and, unless it is being written, the file on
+    /// disk; else it is refused with <see cref="ErrorCodes.LibraryItemChanged"/>. A file missing on disk is
+    /// reconciled once it settles; one whose size or modified time differs is refreshed and published, so
+    /// the App's next command matches.
+    /// </summary>
+    private bool TryMatch(string? path, long size, DateTimeOffset? modified, TaskCompletionSource done, out string key, out LibraryItem item)
+    {
+        if (!TryItem(path, out key, out var found)
+            || found.Size != size
+            || found.Modified != modified)
+        {
+            item = null!;
+            Refuse(done, path);
+            return false;
+        }
+
+        item = found;
+
+        // Being written: the writer owns the file, so only the index is compared.
+        if (item.BeingWritten)
+        {
+            return true;
+        }
+
+        var full = Path.Combine(_folder, key);
+        var file = new FileInfo(full);
+        if (!file.Exists)
+        {
+            Pend(full);
+            Refuse(done, path);
+            return false;
+        }
+
+        var onDisk = Utc(file.LastWriteTimeUtc);
+        if (file.Length != item.Size || onDisk != item.Modified)
+        {
+            var resized = file.Length != item.Size;
+            item = item with { Size = file.Length, Modified = onDisk, LengthSeconds = resized ? null : item.LengthSeconds };
+            if (resized)
+            {
+                _modified.Remove(key);
+            }
+
+            _items[key] = item;
+            _changed(item);
+            _dirty = true;
+            if (resized)
+            {
+                QueueLength(key);
+            }
+
+            Refuse(done, path);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>The indexed item a command's relative path names.</summary>
+    private bool TryItem(string? path, out string key, [NotNullWhen(true)] out LibraryItem? item)
+    {
+        item = null;
+        key = "";
+        return !string.IsNullOrEmpty(path)
+            && TryKey(_folder, Path.GetFullPath(Path.Combine(_folder, path)), out key)
+            && _items.TryGetValue(key, out item);
+    }
+
+    /// <summary>Refuses a rename or delete of an item a writer is still writing; checked before the identity.</summary>
+    private bool RefuseBeingWritten(string? path, TaskCompletionSource done)
+    {
+        if (!TryItem(path, out _, out var item) || !item.BeingWritten)
+        {
+            return false;
+        }
+
+        done.TrySetException(new ErrorCodeException(
+            ErrorCodes.FileBeingWritten,
+            $"The Library item '{path}' is still being written."));
+        return true;
+    }
+
+    /// <summary>
+    /// Renames a written item's file in its folder (see <see cref="Rename"/>): both paths are registered
+    /// first, so the watcher's echo is ignored, and the move keeps the item's metadata.
+    /// </summary>
+    private void OnRename(RenameRequest request)
+    {
+        var args = request.Args;
+        if (RefuseBeingWritten(args.Path, request.Done)
+            || !TryMatch(args.Path, args.Size, args.Modified, request.Done, out var key, out var item))
+        {
+            return;
+        }
+
+        if (!ValidName(args.NewName))
+        {
+            request.Done.TrySetException(new ErrorCodeException(
+                ErrorCodes.InvalidFileName,
+                $"'{args.NewName}' can't be used as a file name."));
+            return;
+        }
+
+        var name = args.NewName + Path.GetExtension(key);
+        if (string.Equals(Path.GetFileName(key), name, StringComparison.Ordinal))
+        {
+            request.Done.TrySetResult();
+            return;
+        }
+
+        var newKey = Path.Combine(Path.GetDirectoryName(key) ?? "", name);
+        var from = Path.Combine(_folder, key);
+        var to = Path.Combine(_folder, newKey);
+
+        // A case-only rename of the same file is allowed; any other file, item or write there isn't.
+        var sameFile = string.Equals(newKey, key, StringComparison.OrdinalIgnoreCase);
+        if (!sameFile && (_items.ContainsKey(newKey) || _beingWritten.ContainsKey(to) || File.Exists(to) || Directory.Exists(to)))
+        {
+            request.Done.TrySetException(new ErrorCodeException(
+                ErrorCodes.FileNameTaken,
+                $"A file named '{name}' already exists there."));
+            return;
+        }
+
+        Register(from);
+        Register(to);
+        if (!Retried(() => File.Move(from, to), request.Done, "The file couldn't be renamed."))
+        {
+            return;
+        }
+
+        MoveItem(item, newKey);
+        request.Done.TrySetResult();
+    }
+
+    /// <summary>
+    /// Moves a written item's file to the Recycle Bin (see <see cref="Delete"/>); its path is registered
+    /// first, so the watcher's echo is ignored.
+    /// </summary>
+    private void OnDelete(DeleteRequest request)
+    {
+        var args = request.Args;
+        if (RefuseBeingWritten(args.Path, request.Done)
+            || !TryMatch(args.Path, args.Size, args.Modified, request.Done, out var key, out _))
+        {
+            return;
+        }
+
+        var path = Path.Combine(_folder, key);
+        var recycled = false;
+        if (_recycle is { } recycle)
+        {
+            Register(path);
+            if (!Retried(() => recycled = recycle(path), request.Done, "The file couldn't be deleted."))
+            {
+                return;
+            }
+        }
+
+        if (!recycled)
+        {
+            request.Done.TrySetException(new ErrorCodeException(
+                ErrorCodes.RecycleBinUnavailable,
+                $"The drive of '{args.Path}' has no Recycle Bin, so it wasn't deleted."));
+            return;
+        }
+
+        Remove(key);
+        request.Done.TrySetResult();
+    }
+
+    /// <summary>
+    /// Runs a file operation, trying a sharing violation again up to 10 times 50 ms apart; any other
+    /// failure, or the last try, is reported and refuses the command with <see cref="ErrorCodes.CommandFailed"/>.
+    /// </summary>
+    private bool Retried(Action operation, TaskCompletionSource done, string message)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                operation();
+                return true;
+            }
+            catch (IOException e) when (e.HResult is ErrorSharingViolation or ErrorLockViolation && attempt < SharingRetries)
+            {
+                Thread.Sleep(SharingRetryDelay);
+            }
+#pragma warning disable CA1031 // Any failure, an injected port's included, refuses the command rather than ending the actor.
+            catch (Exception e)
+#pragma warning restore CA1031
+            {
+                _failed(e);
+                done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, $"{message} {e.Message}"));
+                return false;
+            }
+        }
     }
 
     private static void Refuse(TaskCompletionSource done, string? path) =>
@@ -1399,6 +1653,10 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private sealed record LengthRead(string Folder, string Key, long Size, DateTime Modified, double? Length) : Message;
 
     private sealed record SetFavouriteRequest(LibrarySetFavourite Args, TaskCompletionSource Done) : Message;
+
+    private sealed record RenameRequest(LibraryRename Args, TaskCompletionSource Done) : Message;
+
+    private sealed record DeleteRequest(LibraryDelete Args, TaskCompletionSource Done) : Message;
 
     private sealed record LengthJob(string Folder, string Key, string Path, long Size);
 }

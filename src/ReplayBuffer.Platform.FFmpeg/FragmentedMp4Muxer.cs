@@ -18,6 +18,8 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
     private readonly bool _durable;
+    private readonly bool _flushToDisk;
+    private readonly long? _capacity;
     private AVFormatContext* _context;
     private DurableOutput? _output;
     private bool _started;
@@ -35,17 +37,27 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     /// a fragment ends only at <see cref="CutFragment"/>, and the header and each fragment are
     /// flushed to the disk before the call returns. A write failure is rethrown as it was thrown.
     /// </param>
-    internal FragmentedMp4Muxer(string path, ILogger logger, bool durable)
+    /// <param name="flushToDisk">A durable muxer's flushes reach the disk, not just the OS; false only for tests.</param>
+    /// <param name="capacity">A durable muxer's file fails as a full disk past this many bytes; a test seam, null for none.</param>
+    internal FragmentedMp4Muxer(string path, ILogger logger, bool durable, bool flushToDisk = true, long? capacity = null)
     {
         Path = path;
         _logger = logger;
         _durable = durable;
+        _flushToDisk = flushToDisk;
+        _capacity = capacity;
         AVFormatContext* context = null;
         FFmpegLibrary.Check(ffmpeg.avformat_alloc_output_context2(&context, null, "mp4", path), "avformat_alloc_output_context2");
         _context = context;
     }
 
     public string Path { get; }
+
+    /// <summary>A durable muxer's file length after its last successful flush: the header and every whole fragment; 0 before.</summary>
+    internal long DurableBytes { get; private set; }
+
+    /// <summary>The fragments a durable muxer has cut and flushed, not counting a cut that wrote nothing.</summary>
+    internal int Fragments { get; private set; }
 
     /// <inheritdoc/>
     internal override bool NeedsGlobalHeader => (_context->oformat->flags & ffmpeg.AVFMT_GLOBALHEADER) != 0;
@@ -111,7 +123,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
         AVDictionary* options = null;
         if (_durable)
         {
-            _output = new DurableOutput(Path);
+            _output = new DurableOutput(Path, _flushToDisk, _capacity);
             _context->pb = _output.Context;
             _context->flags |= ffmpeg.AVFMT_FLAG_CUSTOM_IO;
             ffmpeg.av_dict_set(&options, "movflags", "frag_custom+empty_moov+default_base_moof", 0);
@@ -139,7 +151,12 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
         }
 
         // The empty moov is on the disk before the first fragment.
-        _output?.Flush();
+        if (_output is not null)
+        {
+            _output.Flush();
+            DurableBytes = _output.Length;
+        }
+
         _started = true;
         _logger.LogInformation("Writing {Path}", Path);
     }
@@ -198,6 +215,11 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 
             Check(ffmpeg.av_write_frame(_context, null), "av_write_frame(flush)");
             _output!.Flush();
+            if (_output.Length > DurableBytes)
+            {
+                DurableBytes = _output.Length;
+                Fragments++;
+            }
         }
     }
 

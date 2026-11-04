@@ -150,6 +150,14 @@ public static class ErrorCodes
     public const string DiskFull = "disk-full";
 
     /// <summary>
+    /// A warning (R5): a Recording's disk filled while the Replay Buffer kept its ring on disk, so the
+    /// Replay Buffer stopped. Shown on the overlay; it stays until the wait for room ends (the
+    /// Replay Buffer restarts once a recheck finds room for its ring, or another session starts, or
+    /// the Target changes or exits), or it is dismissed.
+    /// </summary>
+    public const string ReplayStoppedDiskFull = "replay-stopped-disk-full";
+
+    /// <summary>
     /// A save failed (R6) because the Output Folder or the file could not be written. Raised by the
     /// Clip writer now, and by the Recording writer later. No file is left and nothing is Reset.
     /// </summary>
@@ -177,6 +185,13 @@ public static class ErrorCodes
     public const string RecordingStopped = "recording-stopped";
 
     /// <summary>
+    /// A warning: a forced encoder restart ended a running Recording and started a new one at once,
+    /// so it continues in a second file; the notice names both. With the <c>recordingStarted</c>
+    /// sound; the engine withdraws it after 10 s.
+    /// </summary>
+    public const string RecordingRestarted = "recording-restarted";
+
+    /// <summary>
     /// <c>library.json</c> and its <c>.bak</c> were both unreadable, so the Library index was rebuilt
     /// from the Output Folder and Favourites may be lost. A dismissable warning; Cleanup stays off
     /// (<c>cleanupBlocked</c>) until it is dismissed.
@@ -189,6 +204,24 @@ public static class ErrorCodes
     /// item the snapshot now shows. Never retried automatically.
     /// </summary>
     public const string LibraryItemChanged = "library-item-changed";
+
+    /// <summary>A Library rename or delete named an item a writer is still writing (a Clip or a Recording); nothing changed.</summary>
+    public const string FileBeingWritten = "file-being-written";
+
+    /// <summary>
+    /// A Library rename's new name can't be a file name: empty, holding a character Windows forbids,
+    /// ending with a dot or a space, or a reserved device name. Nothing changed.
+    /// </summary>
+    public const string InvalidFileName = "invalid-file-name";
+
+    /// <summary>A Library rename's new name is already used by another file or Library item in that folder; nothing changed.</summary>
+    public const string FileNameTaken = "file-name-taken";
+
+    /// <summary>
+    /// A Library delete was refused because the file's volume has no Recycle Bin (or the shell would
+    /// delete it permanently). The file and its item are untouched; nothing is ever deleted permanently.
+    /// </summary>
+    public const string RecycleBinUnavailable = "recycle-bin-unavailable";
 
     /// <summary>
     /// A warning: a Track of the active Track Layout mixes the Output Device that Feedback Sounds
@@ -258,14 +291,20 @@ public static class ErrorCodes
         ClipTooShort,
         SaveBusy,
         DiskFull,
+        ReplayStoppedDiskFull,
         AccessDenied,
         SaveFailed,
         ClipSaved,
         ClipFailed,
         RecordingStarted,
         RecordingStopped,
+        RecordingRestarted,
         LibraryCorrupt,
         LibraryItemChanged,
+        FileBeingWritten,
+        InvalidFileName,
+        FileNameTaken,
+        RecycleBinUnavailable,
         FeedbackDeviceCaptured,
         MemoryMargin,
         ResetGap,

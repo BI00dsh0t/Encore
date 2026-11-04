@@ -72,6 +72,20 @@ public sealed class LibraryServeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RenameOverIpcUpdatesTheSnapshot()
+    {
+        await SaveAsync();
+        var item = Assert.Single(_client.State.Library);
+
+        await _client.SendAsync(LibraryMessages.Rename, new LibraryRename(item.Path, item.Size, item.Modified, "best"), Token);
+        await NextAsync("library.itemRemoved");
+        await NextAsync("library.itemAdded");
+
+        Assert.Equal(item with { Path = @"Game\best.mp4" }, Assert.Single(_client.State.Library));
+        Assert.True(File.Exists(Path.Combine(Output, "Game", "best.mp4")));
+    }
+
+    [Fact]
     public async Task ASavedClipIsInTheFirstSnapshotAfterARestart()
     {
         await SaveAsync();

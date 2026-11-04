@@ -41,3 +41,15 @@ SetFileInformationByHandle
 FILE_IO_PRIORITY_HINT_INFO
 GlobalMemoryStatusEx
 MEMORYSTATUSEX
+CoInitializeEx
+CoUninitialize
+CoCreateInstance
+FileOperation
+IFileOperation
+IShellItem
+SHCreateItemFromParsingName
+GetDriveType
+SHQueryRecycleBin
+SHQUERYRBINFO
+FILEOPERATION_FLAGS
+DRIVE_FIXED

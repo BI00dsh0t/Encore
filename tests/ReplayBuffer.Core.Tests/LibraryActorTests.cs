@@ -333,6 +333,124 @@ public sealed class LibraryActorTests : IDisposable
         library.WaitFor(index => index[@"Game\clip.mp4"] is { BeingWritten: false, Favourite: true, Size: 48, Modified: not null });
     }
 
+    [Fact]
+    public async Task ARenameMovesTheFileKeepsItsFavouriteAndIsPublishedOnce()
+    {
+        File.WriteAllBytes(Path.Combine(Output, "Game", "a.mp4"), Mp4());
+        var item = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items) with { Favourite = true };
+        using var library = new Harness(this, [item]);
+
+        await library.Actor.Rename(new LibraryRename(item.Path, item.Size, item.Modified, "b"));
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+
+        Assert.False(File.Exists(Path.Combine(Output, "Game", "a.mp4")));
+        Assert.True(File.Exists(Path.Combine(Output, "Game", "b.mp4")));
+        Assert.Collection(
+            library.Events,
+            e => Assert.Equal(@"Game\a.mp4", Assert.IsType<LibraryItemRemoved>(e).Path),
+            e => Assert.Equal(item with { Path = @"Game\b.mp4" }, Assert.IsType<LibraryItem>(e)));
+    }
+
+    [Fact]
+    public async Task ADeleteRecyclesThroughThePortAndNoRecycleBinKeepsTheFile()
+    {
+        var bin = Path.Combine(_folder, "bin");
+        Directory.CreateDirectory(bin);
+        File.WriteAllBytes(Path.Combine(Output, "a.mp4"), Mp4());
+        File.WriteAllBytes(Path.Combine(Output, "kept.mp4"), Mp4());
+        var items = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items.OrderBy(i => i.Path, StringComparer.Ordinal).ToList();
+        var recycled = new List<string>();
+        using var library = new Harness(this, items, recycle: path =>
+        {
+            if (Path.GetFileName(path) == "kept.mp4")
+            {
+                return false;
+            }
+
+            recycled.Add(path);
+            File.Move(path, Path.Combine(bin, Path.GetFileName(path)));
+            return true;
+        });
+
+        await library.Actor.Delete(new LibraryDelete(items[0].Path, items[0].Size, items[0].Modified));
+        var noBin = await Assert.ThrowsAsync<ErrorCodeException>(() =>
+            library.Actor.Delete(new LibraryDelete(items[1].Path, items[1].Size, items[1].Modified)));
+
+        Assert.Equal([Path.Combine(Output, "a.mp4")], recycled);
+        Assert.Equal("a.mp4", Assert.IsType<LibraryItemRemoved>(Assert.Single(library.Events)).Path);
+        Assert.Equal(ErrorCodes.RecycleBinUnavailable, noBin.Code);
+        Assert.True(File.Exists(Path.Combine(Output, "kept.mp4")));
+        library.WaitFor(index => index.Count == 1 && index.ContainsKey("kept.mp4"));
+    }
+
+    [Fact]
+    public async Task AClipOrARecordingBeingWrittenIsNeitherRenamedNorDeleted()
+    {
+        var clip = Path.Combine(Output, "Game", "clip.mp4");
+        var recording = Path.Combine(Output, "Game", "recording.mp4");
+        using var library = new Harness(this, [], recycle: _ => throw new InvalidOperationException("Recycled a file being written."));
+
+        // A Clip's empty reservation, and a Recording's fragmented MP4 growing in an open stream.
+        library.Actor.BeginWrite(clip, ProfileId);
+        File.WriteAllBytes(clip, []);
+        library.Actor.BeginWrite(recording, ProfileId);
+        using var stream = new FileStream(recording, FileMode.CreateNew, FileAccess.Write, FileShare.Read | FileShare.Delete);
+        stream.Write(Fragment("ftyp", 8));
+        stream.Write(Fragment("moov", 8));
+        stream.Write(Fragment("moof", 8));
+        stream.Write(Fragment("mdat", 32));
+        stream.Flush();
+        library.WaitFor(index => index.Count == 2);
+
+        foreach (var key in new[] { @"Game\clip.mp4", @"Game\recording.mp4" })
+        {
+            var renamed = await Assert.ThrowsAsync<ErrorCodeException>(() => library.Actor.Rename(new LibraryRename(key, 0, null, "other")));
+            var deleted = await Assert.ThrowsAsync<ErrorCodeException>(() => library.Actor.Delete(new LibraryDelete(key, 0, null)));
+            Assert.Equal((ErrorCodes.FileBeingWritten, ErrorCodes.FileBeingWritten), (renamed.Code, deleted.Code));
+        }
+
+        stream.Write(Fragment("moof", 8));
+        stream.Write(Fragment("mdat", 16));
+        stream.Flush();
+        Assert.Empty(File.ReadAllBytes(clip));
+        Assert.Equal(80, new FileInfo(recording).Length);
+        Assert.False(File.Exists(Path.Combine(Output, "Game", "other.mp4")));
+
+        static byte[] Fragment(string type, int size)
+        {
+            var box = new byte[size];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(box, size);
+            System.Text.Encoding.ASCII.GetBytes(type).CopyTo(box, 4);
+            return box;
+        }
+    }
+
+    [Fact]
+    public async Task ABadNameATakenNameAndAStaleIdentityAreRefused()
+    {
+        File.WriteAllBytes(Path.Combine(Output, "a.mp4"), Mp4());
+        File.WriteAllBytes(Path.Combine(Output, "b.mp4"), Mp4());
+        var items = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items;
+        var item = items.Single(i => i.Path == "a.mp4");
+        using var library = new Harness(this, items);
+
+        foreach (var name in new[] { "a:b", "CON", "x." })
+        {
+            var bad = await Assert.ThrowsAsync<ErrorCodeException>(() => library.Actor.Rename(new LibraryRename(item.Path, item.Size, item.Modified, name)));
+            Assert.Equal(ErrorCodes.InvalidFileName, bad.Code);
+        }
+
+        var taken = await Assert.ThrowsAsync<ErrorCodeException>(() => library.Actor.Rename(new LibraryRename(item.Path, item.Size, item.Modified, "b")));
+        Assert.Equal(ErrorCodes.FileNameTaken, taken.Code);
+
+        var stale = await Assert.ThrowsAsync<ErrorCodeException>(() =>
+            library.Actor.Rename(new LibraryRename(item.Path, item.Size, item.Modified!.Value.AddMinutes(-1), "c")));
+        Assert.Equal(ErrorCodes.LibraryItemChanged, stale.Code);
+
+        Assert.True(File.Exists(Path.Combine(Output, "a.mp4")));
+        Assert.Empty(library.Events);
+    }
+
     /// <summary>A live actor over the test's Output Folder, with the index its events build.</summary>
     private sealed class Harness : IDisposable
     {
@@ -341,7 +459,7 @@ public sealed class LibraryActorTests : IDisposable
         private readonly List<object> _events = [];
         private string _currentFolder = "";
 
-        public Harness(LibraryActorTests test, IReadOnlyList<LibraryItem> items, bool cleanupBlocked = false, Func<string, double?>? readLength = null)
+        public Harness(LibraryActorTests test, IReadOnlyList<LibraryItem> items, bool cleanupBlocked = false, Func<string, double?>? readLength = null, Func<string, bool>? recycle = null)
         {
             Folder = test.Output;
             foreach (var item in items)
@@ -370,7 +488,8 @@ public sealed class LibraryActorTests : IDisposable
                 TimeProvider.System,
                 _ => { },
                 createMissingFolder: true,
-                readLength: readLength);
+                readLength: readLength,
+                recycle: recycle);
         }
 
         public LibraryActor Actor { get; }

@@ -1,5 +1,6 @@
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Core.Sessions;
 
 namespace ReplayBuffer.Core.Feedback;
 
@@ -24,9 +25,11 @@ public interface IFeedbackNotices
 
 /// <summary>
 /// Turns outcomes into notices (FR-6): Clip saved, Clip not saved, Recording started and stopped
-/// (from <see cref="CaptureState.Recording"/> transitions) and disk full. Info notices are withdrawn
-/// after <see cref="InfoLifetime"/>; a Clip not saved stays until the next saved Clip, a disk full
-/// until the next Recording starts, or until the user dismisses either. With a
+/// (from <see cref="CaptureState.Recording"/> transitions), Recording restarted and disk full. Info
+/// notices, and the restart's, are withdrawn after <see cref="InfoLifetime"/>; a Clip not saved
+/// stays until the next saved Clip, a disk full
+/// until the next Recording starts, a Replay Buffer stopped by a full disk (R5) until it restarts,
+/// or until the user dismisses any of them. With a
 /// <see cref="FeedbackSoundPlayer"/>, each notice's sound is queued as it is raised; a sound that is
 /// switched off isn't played, and its notice carries no <see cref="FeedbackNotice.Sound"/>. Thread-safe.
 /// </summary>
@@ -42,6 +45,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     private readonly Dictionary<string, ITimer> _timers = new(StringComparer.Ordinal);
     private readonly List<string> _clipFailures = [];
     private readonly List<string> _diskFulls = [];
+    private readonly List<string> _replayStops = [];
     private RecordingState _recording = RecordingState.Off;
     private bool _disposed;
 
@@ -104,6 +108,31 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         }
     }
 
+    /// <summary>
+    /// A forced encoder restart ended a Recording and started another (R4): a
+    /// <c>recording-restarted</c> warning naming both files, with the <c>recordingStarted</c> sound,
+    /// withdrawn after <see cref="InfoLifetime"/>. The Recording state never left Running, so no
+    /// started or stopped notice comes with it.
+    /// </summary>
+    public void RecordingRestarted(RecordingRestart restart)
+    {
+        ArgumentNullException.ThrowIfNull(restart);
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            RaiseInfo(new FeedbackNotice(
+                ErrorCodes.RecordingRestarted,
+                WarningSeverity.Warning,
+                Recordings,
+                $"Recording restarted after an encoder restart: {Path.GetFileName(restart.StoppedPath)} → {Path.GetFileName(restart.StartedPath)}",
+                "recordingStarted"));
+        }
+    }
+
     /// <summary>The volume is full: a <c>disk-full</c> notice.</summary>
     public void DiskFull()
     {
@@ -116,6 +145,40 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
 
             _diskFulls.Add(Raise(new FeedbackNotice(
                 ErrorCodes.DiskFull, WarningSeverity.Error, Recordings, "The disk is full", "diskFull")));
+        }
+    }
+
+    /// <summary>A full disk stopped a Disk-mode Replay Buffer (R5): a <c>replay-stopped-disk-full</c> warning, with no sound.</summary>
+    public void ReplayStoppedDiskFull()
+    {
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            // The disk-full notice already played its sound.
+            _replayStops.Add(notices.Raise(new FeedbackNotice(
+                ErrorCodes.ReplayStoppedDiskFull,
+                WarningSeverity.Warning,
+                "replay",
+                "The Replay Buffer stopped: its disk is full. It restarts once there is room.",
+                null)));
+        }
+    }
+
+    /// <summary>The wait after a full disk ended: every <c>replay-stopped-disk-full</c> notice is withdrawn.</summary>
+    public void ReplayResumed()
+    {
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            WithdrawAll(_replayStops);
         }
     }
 

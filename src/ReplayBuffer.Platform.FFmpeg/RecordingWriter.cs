@@ -3,6 +3,7 @@ using System.Diagnostics;
 using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
+using ReplayBuffer.Core.Output;
 using Windows.Win32;
 using Windows.Win32.System.Threading;
 
@@ -23,7 +24,8 @@ namespace ReplayBuffer.Platform.FFmpeg;
 /// centre) once every audio stream has reached V, or once the video is <see cref="AudioWaitUs"/>
 /// past V, so no Track's fragment runs ahead of the video; then the fragment goes to the disk.
 /// Every packet it was handed is freed on every path. It owns its streams' parameters, so the
-/// session can free the tap, the ring and the encoders while it still finishes.
+/// session can free the tap, the ring and the encoders while it still finishes. On a full disk (R5)
+/// it writes no trailer and cuts the file back to its last complete fragment, or deletes it when none is.
 /// </summary>
 public sealed unsafe class RecordingWriter
 {
@@ -100,6 +102,15 @@ public sealed unsafe class RecordingWriter
 
     /// <summary>The tap it is attached to, set by <see cref="RecordingTap.Attach"/>.</summary>
     internal RecordingTap? Tap { get; set; }
+
+    /// <summary>Whether each fragment is flushed to the disk (R3); false only for tests, which write hours of fragments.</summary>
+    internal bool FlushToDisk { get; init; } = true;
+
+    /// <summary>A test seam: the file fails as a full disk past this many bytes; null for none.</summary>
+    internal long? CapacityBytes { get; init; }
+
+    /// <summary>The packets offered and not yet taken by the writer thread; for tests to pace themselves.</summary>
+    internal int Queued => _queue.Count;
 
     /// <summary>Starts the writer thread, once.</summary>
     public void Start()
@@ -211,6 +222,7 @@ public sealed unsafe class RecordingWriter
         var background = ClipWriter.EnterBackgroundMode(_log);
         Exception? error = null;
         FragmentedMp4Muxer? muxer = null;
+        long? keepBytes = null;
         try
         {
             muxer = Open();
@@ -229,7 +241,12 @@ public sealed unsafe class RecordingWriter
         {
             error = e;
             Release();
-            if (muxer is not null && _written > 0)
+            if (WriteFailures.ReasonOf(e) == ErrorCodes.DiskFull)
+            {
+                // The trailer would fail too; the file is cut back to its last whole fragment below.
+                keepBytes = muxer is { Fragments: > 0 } ? muxer.DurableBytes : 0;
+            }
+            else if (muxer is not null && _written > 0)
             {
                 // What it holds stays playable: finish it as far as it got.
                 try
@@ -252,7 +269,11 @@ public sealed unsafe class RecordingWriter
             }
         }
 
-        if (error is not null && _written == 0)
+        if (keepBytes is { } keep)
+        {
+            KeepWholeFragments(keep);
+        }
+        else if (error is not null && _written == 0)
         {
             TryDelete();
         }
@@ -268,7 +289,7 @@ public sealed unsafe class RecordingWriter
         _passed = new bool[streams.Count];
         _reached = new long[streams.Count];
         Array.Fill(_reached, long.MinValue);
-        var muxer = new FragmentedMp4Muxer(_path, _log, durable: true);
+        var muxer = new FragmentedMp4Muxer(_path, _log, durable: true, FlushToDisk, CapacityBytes);
         try
         {
             for (var i = 0; i < streams.Count; i++)
@@ -586,6 +607,32 @@ public sealed unsafe class RecordingWriter
             {
                 Free(item.Packet);
             }
+        }
+    }
+
+    /// <summary>A full disk: the file is cut to <paramref name="bytes"/>, its header and whole fragments, or deleted when that is 0.</summary>
+    private void KeepWholeFragments(long bytes)
+    {
+        if (bytes == 0)
+        {
+            _log.LogWarning("The disk filled before the Recording {Path} had a whole fragment; it is deleted", _path);
+            TryDelete();
+            return;
+        }
+
+        try
+        {
+            // Shrinking a file needs no free space.
+            using (var file = new FileStream(_path, FileMode.Open, FileAccess.Write, FileShare.Read))
+            {
+                file.SetLength(bytes);
+            }
+
+            _log.LogWarning("The disk filled during the Recording {Path}; it keeps its {Bytes} bytes of whole fragments", _path, bytes);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            _log.LogWarning("Could not cut the Recording {Path} back to its whole fragments: {Message}", _path, e.Message);
         }
     }
 
