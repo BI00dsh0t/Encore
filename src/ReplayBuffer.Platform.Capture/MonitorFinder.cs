@@ -17,7 +17,10 @@ public sealed record MonitorInfo(nint Handle, string DeviceName, bool IsPrimary)
 /// </summary>
 public sealed record MonitorDescription(string DeviceName, string FriendlyName, int Width, int Height, bool IsPrimary);
 
-/// <summary>Finds the monitor a Monitor Recording captures (6.9) by its device name.</summary>
+/// <summary>
+/// Finds the monitor a Monitor Recording captures (6.9) by its device name, and describes the
+/// attached monitors for <c>monitors.list</c> (6.11).
+/// </summary>
 public static unsafe class MonitorFinder
 {
     private const uint MonitorInfoPrimary = 1; // MONITORINFOF_PRIMARY

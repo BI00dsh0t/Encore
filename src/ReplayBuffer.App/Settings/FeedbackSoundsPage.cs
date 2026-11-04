@@ -89,14 +89,7 @@ internal sealed class FeedbackSoundsPage : SettingsPage
         }
     }
 
-    internal bool IsOn(FeedbackSound sound) => sound switch
-    {
-        FeedbackSound.ClipSaved => _sounds.ClipSaved,
-        FeedbackSound.SaveFailed => _sounds.SaveFailed,
-        FeedbackSound.RecordingStarted => _sounds.RecordingStarted,
-        FeedbackSound.RecordingStopped => _sounds.RecordingStopped,
-        _ => _sounds.DiskFull,
-    };
+    internal bool IsOn(FeedbackSound sound) => _sounds.IsOn(sound);
 
     internal void Switch(FeedbackSoundRow row, bool value)
     {
@@ -105,14 +98,7 @@ internal sealed class FeedbackSoundsPage : SettingsPage
             return;
         }
 
-        _sounds = row.Sound switch
-        {
-            FeedbackSound.ClipSaved => _sounds with { ClipSaved = value },
-            FeedbackSound.SaveFailed => _sounds with { SaveFailed = value },
-            FeedbackSound.RecordingStarted => _sounds with { RecordingStarted = value },
-            FeedbackSound.RecordingStopped => _sounds with { RecordingStopped = value },
-            _ => _sounds with { DiskFull = value },
-        };
+        _sounds = _sounds.With(row.Sound, value);
         row.Changed();
         _ = SendAsync([SettingsValues.SetGlobal(Keys.FeedbackSounds, _sounds)]);
     }

@@ -1249,26 +1249,8 @@ public sealed class SessionOrchestrator : IDisposable
             return null;
         }
 
-        var library = recordings.Library ?? NoLibraryWrites.Instance;
-        library.BeginWrite(path, profileId);
-        recordings.Open?.Opened(path);
-        var recording = new RecordingRun(active.Id, path, write);
-        try
+        if (OpenWrite(recordings, new RecordingRun(active.Id, path, write), profileId) is not { } recording)
         {
-            write.Start(path, error =>
-            {
-                // Before the post, so a shutdown that closed the channel still sees the result.
-                recording.Done.TrySetResult(error);
-                Post(new RecordingWritten(recording, error));
-            });
-        }
-        catch (Exception e)
-        {
-            // It never started: nothing else will remove the reserved file.
-            TryDelete(path);
-            library.EndWrite(path, WriteOutcome.Failed);
-            recordings.Open?.Closed(path);
-            recordings.Failed(e);
             return null;
         }
 
@@ -1373,6 +1355,7 @@ public sealed class SessionOrchestrator : IDisposable
             OnMonitorRecordingWritten(written);
             return;
         }
+
         var restarted = ReferenceEquals(_ending, recording);
         if (!restarted && !ReferenceEquals(_recording, recording))
         {
@@ -1391,18 +1374,7 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         var recordings = _recordings!;
-        var error = written.Error;
-
-        // A failed writer deletes a file that holds nothing; one with data is kept, finished as far as it got.
-        var kept = error is null || File.Exists(recording.Path);
-        (recordings.Library ?? NoLibraryWrites.Instance).EndWrite(recording.Path, kept ? WriteOutcome.Written : WriteOutcome.Failed);
-        recordings.Open?.Closed(recording.Path);
-        if (error is not null)
-        {
-            recordings.Failed(error);
-        }
-
-        var reason = error is not null ? WriteFailures.ReasonOf(error) : recording.Reason ?? RecordingStopReasons.SessionEnded;
+        var reason = CloseWrite(recordings, written);
         var off = _recording is null && _ending is null;
         if (off)
         {
@@ -1610,26 +1582,8 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
-        var library = recordings.Library ?? NoLibraryWrites.Instance;
-        library.BeginWrite(path, null);
-        recordings.Open?.Opened(path);
-        var recording = new RecordingRun(monitor.Id, path, write) { Monitor = true };
-        try
+        if (OpenWrite(recordings, new RecordingRun(monitor.Id, path, write) { Monitor = true }, profileId: null) is not { } recording)
         {
-            write.Start(path, error =>
-            {
-                // Before the post, so a shutdown that closed the channel still sees the result.
-                recording.Done.TrySetResult(error);
-                Post(new RecordingWritten(recording, error));
-            });
-        }
-        catch (Exception e)
-        {
-            // It never started: nothing else will remove the reserved file.
-            TryDelete(path);
-            library.EndWrite(path, WriteOutcome.Failed);
-            recordings.Open?.Closed(path);
-            recordings.Failed(e);
             EndMonitor("monitor recording failed", RecordingStopReasons.SessionEnded);
             return;
         }
@@ -1692,16 +1646,7 @@ public sealed class SessionOrchestrator : IDisposable
 
         _monitorRecording = null;
         var recordings = _recordings!;
-        var error = written.Error;
-        var kept = error is null || File.Exists(recording.Path);
-        (recordings.Library ?? NoLibraryWrites.Instance).EndWrite(recording.Path, kept ? WriteOutcome.Written : WriteOutcome.Failed);
-        recordings.Open?.Closed(recording.Path);
-        if (error is not null)
-        {
-            recordings.Failed(error);
-        }
-
-        var reason = error is not null ? WriteFailures.ReasonOf(error) : recording.Reason ?? RecordingStopReasons.SessionEnded;
+        var reason = CloseWrite(recordings, written);
         SetState(_state with { MonitorRecording = RecordingState.Off });
         (recordings.MonitorStopped ?? recordings.Stopped)(new RecordingStopped(recording.Path, reason));
         if (reason == ErrorCodes.DiskFull)
@@ -1713,6 +1658,58 @@ public sealed class SessionOrchestrator : IDisposable
         {
             EndMonitor("monitor recording stopped", RecordingStopReasons.SessionEnded);
         }
+    }
+
+    /// <summary>
+    /// Begins <paramref name="recording"/>'s write in the Library and the open-Recordings record and
+    /// starts its writer, which posts <see cref="RecordingWritten"/> when it finishes. Returns null,
+    /// the failure reported and the reserved file removed, when the writer doesn't start.
+    /// </summary>
+    private RecordingRun? OpenWrite(Recordings recordings, RecordingRun recording, string? profileId)
+    {
+        var path = recording.Path;
+        var library = recordings.Library ?? NoLibraryWrites.Instance;
+        library.BeginWrite(path, profileId);
+        recordings.Open?.Opened(path);
+        try
+        {
+            recording.Write.Start(path, error =>
+            {
+                // Before the post, so a shutdown that closed the channel still sees the result.
+                recording.Done.TrySetResult(error);
+                Post(new RecordingWritten(recording, error));
+            });
+        }
+        catch (Exception e)
+        {
+            // It never started: nothing else will remove the reserved file.
+            TryDelete(path);
+            library.EndWrite(path, WriteOutcome.Failed);
+            recordings.Open?.Closed(path);
+            recordings.Failed(e);
+            return null;
+        }
+
+        return recording;
+    }
+
+    /// <summary>
+    /// Ends a finished Recording's write in the Library and the open-Recordings record, reports a
+    /// writer failure, and returns the stop's reason: the failure's, else the one it was stopped with.
+    /// A failed writer deletes a file that holds nothing; one with data is kept, finished as far as it got.
+    /// </summary>
+    private static string CloseWrite(Recordings recordings, RecordingWritten written)
+    {
+        var (recording, error) = (written.Recording, written.Error);
+        var kept = error is null || File.Exists(recording.Path);
+        (recordings.Library ?? NoLibraryWrites.Instance).EndWrite(recording.Path, kept ? WriteOutcome.Written : WriteOutcome.Failed);
+        recordings.Open?.Closed(recording.Path);
+        if (error is not null)
+        {
+            recordings.Failed(error);
+        }
+
+        return error is not null ? WriteFailures.ReasonOf(error) : recording.Reason ?? RecordingStopReasons.SessionEnded;
     }
 
     /// <summary>

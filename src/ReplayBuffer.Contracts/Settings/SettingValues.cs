@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ReplayBuffer.Contracts.Messages;
 
 namespace ReplayBuffer.Contracts.Settings;
 
@@ -131,7 +132,30 @@ public enum RecordHotkeyMode
 
 /// <summary>The <c>feedbackSounds</c> key: which Feedback Sounds play.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record FeedbackSounds(bool ClipSaved, bool SaveFailed, bool RecordingStarted, bool RecordingStopped, bool DiskFull);
+public sealed record FeedbackSounds(bool ClipSaved, bool SaveFailed, bool RecordingStarted, bool RecordingStopped, bool DiskFull)
+{
+    /// <summary>Whether <paramref name="sound"/> is switched on; <c>false</c> for a value the enum doesn't name.</summary>
+    public bool IsOn(FeedbackSound sound) => sound switch
+    {
+        FeedbackSound.ClipSaved => ClipSaved,
+        FeedbackSound.SaveFailed => SaveFailed,
+        FeedbackSound.RecordingStarted => RecordingStarted,
+        FeedbackSound.RecordingStopped => RecordingStopped,
+        FeedbackSound.DiskFull => DiskFull,
+        _ => false,
+    };
+
+    /// <summary>A copy with <paramref name="sound"/> switched to <paramref name="on"/>; unchanged for a value the enum doesn't name.</summary>
+    public FeedbackSounds With(FeedbackSound sound, bool on) => sound switch
+    {
+        FeedbackSound.ClipSaved => this with { ClipSaved = on },
+        FeedbackSound.SaveFailed => this with { SaveFailed = on },
+        FeedbackSound.RecordingStarted => this with { RecordingStarted = on },
+        FeedbackSound.RecordingStopped => this with { RecordingStopped = on },
+        FeedbackSound.DiskFull => this with { DiskFull = on },
+        _ => this,
+    };
+}
 
 /// <summary>The <c>cleanup</c> key: each limit null means that limit is off.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

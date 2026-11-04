@@ -122,3 +122,36 @@
   summary: Epic 7 (7.1–7.9) left small duplicates, dead members, over-public members and stale docs, and no test of the final-path guard on rename, delete and Cleanup (story 7.8 QA note 1).
   evidence: Story 7.10's sweep. Behaviour, IPC, events, `library.json`, log and UI text are unchanged.
   outcome: Closed by story 7.10: `LibraryActor` shares its request posting (`Post<T>`), its registration-timer disposal, its rescan-and-clean, its Cleanup timer callback, its changed-on-disk log line and one limits read in `EndCleanup`; the unused `ThreadId` and the test-only `Move` path are removed and `ValidName` is private; the class, `Reconcile`, `ILibraryWrites`/`NoLibraryWrites` and `LibraryItem` docs are current. The App shares its rename/delete send (`LibraryPage.SendActionAsync`), its Yes/No prompt (`Prompts.YesNo`), the day format and the folder-change note, and narrows `LibraryPage`, `LibraryThumbnails.Size` and `LibraryViewState.Default`. The tests drop the test-only Move test, share `Modified` and `Box`, and add `AFileWhoseFinalPathIsOutsideIsNeitherPreviewedCleanedRenamedNorDeleted`, which closes 7.8 QA note 1.
+
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-engine-baseline/tickets/story-sessionorchestrator-and-the-capture-session-api-plan.md`
+  summary: Serve still names a session's output with `OutputNaming.Allocate`; story 7.10 named epic 6's sweep as its owner.
+  evidence: Story 6.12's sweep. Every Clip and Recording now gets its path from `OutputPathAllocator` (AD-21). `CaptureSession.Open` uses `OutputNaming` only for a session without a Replay Buffer (`serve --debug-capture` and test instances), and the tracer's `debug-capture` command uses it for its debug files. Moving those to the allocator would rename debug files, which a behaviour-preserving sweep can't do, and nothing user-facing writes through it.
+  outcome: Closed by story 6.12: kept as the debug-capture namer, and its doc now says where it is used.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-overlay-feedback/tickets/story-refactor-sweep-plan.md`
+  summary: FeedbackRouter repeats its disposed guard and names sounds and the `"replay"` source inline; the feedback tests carry two fake notice sinks (story 5.13).
+  evidence: Story 6.12's sweep, after 6.8 and 6.9 finished changing the router.
+  outcome: Closed by story 6.12: one `UnlessDisposed` guard, `FeedbackSoundNames` holds the sound names (shared with `FeedbackSoundPlayer.Parse`), a `Replay` source constant, one shared `FakeFeedbackNotices`, and the router tests use the shared `ManualTime`.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-overlay-feedback/tickets/story-refactor-sweep-plan.md`
+  summary: `FeedbackSounds`' per-sound `IsOn` and `With` were written twice, in the App's `FeedbackSoundsPage` and Core's `FeedbackSoundPlayer` (story 5.13).
+  evidence: Story 6.12's sweep. Adding methods to the Contracts record is additive under AD-22: the JSON shape is unchanged.
+  outcome: Closed by story 6.12: `FeedbackSounds.IsOn` and `FeedbackSounds.With` in Contracts; the page and the player call them.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-overlay-feedback/tickets/story-refactor-sweep-plan.md`
+  summary: The engine's serve tests have no shared harness: each class repeats its temp folder, test `Instance` and disposal list (story 5.13).
+  evidence: Story 6.12's sweep. About a dozen serve test classes share the pattern, most outside epic 6 (Library, Hotkeys, Meter, game detection), and a shared base touches all of them for little gain.
+  outcome: Recorded, open (story 6.12). Low. Owned by epic 8's sweep.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-per-game-profile-settings-at-the-next-reset-plan.md`
+  summary: A Record press while a chain switch is armed starts no Recording (story 4.9's residual, owned by epic 6).
+  evidence: `SessionOrchestrator.BeginRecording` gets null from `Session.Record` while a switch is armed and reports "can't record yet"; with a static window that lasts until the next captured frame. Starting the Recording on the new chain changes the press's behaviour, which a sweep can't do.
+  outcome: Recorded, open (story 6.12). Owner changed from epic 6 to epic 8's hardening.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-recordings/tickets/story-monitor-recording-by-its-own-hotkey-plan.md`
+  summary: The Monitor session opens its own D3D11 device on its monitor's adapter, where AD-7 says the engine uses one device (6.9's deferred review finding).
+  evidence: `CaptureSession.Open` calls `D3D11Device.CreateForMonitor` for a Monitor session; sharing the game session's device is a larger change, chosen in 6.9's Design Notes pending the builder's review.
+  outcome: Recorded, open (story 6.12). Awaiting the builder's review; an AD-7 spine update or a shared device belongs to epic 8.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-recordings/tickets/story-desktop-duplication-fallback-for-monitor-recording-plan.md`
+  summary: 6.10's QA notes: `DesktopDuplicationCapture.Failed`'s doc said capture continues though its thread ends; a start while the secure desktop is up fails the session instead of retrying.
+  evidence: The constructor makes one `DuplicateOutput` call. Retrying it changes the fallback's behaviour; the secure desktop is story 8.4's.
+  outcome: Doc closed by story 6.12 (`Failed` now names both cases). The start-on-the-secure-desktop retry is recorded, open, owned by story 8.4.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-recordings/tickets/story-refactor-sweep-plan.md`
+  summary: Epic 6 (6.1–6.11) left duplicated Recording write handling in the orchestrator and stale docs.
+  evidence: Story 6.12's sweep. Behaviour, IPC, events, log and UI text are unchanged. 6.7's Disk-mode restart margin is in the Decisions Awaiting Review.
+  outcome: Closed by story 6.12: the game and Monitor Recordings share `SessionOrchestrator.OpenWrite` (begin, start, undo on a failed start) and `CloseWrite` (end the write, report, pick the reason); `MonitorFinder`'s and `OutputNaming`'s docs cover 6.11 and the debug path.
