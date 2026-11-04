@@ -111,7 +111,7 @@ deferred: []
     - `ADisplayChangePlacesTheWindowOnTheNewPrimaryAtItsDpi`;
     - `AMonitorsChangedEventUpdatesTheListWithoutAFetch`.
   - Contracts: a sample payload for `monitors.changed`. The registry tests cover the new field and event.
-- [x] Heavy, in `MonitorRecordingCaptureTests.cs`, written and not run (only the GPU runner runs Heavy GPU tests). Both take `BenchLock`.
+- [x] Heavy, in `MonitorRecordingCaptureTests.cs`, passed on the GPU runner. Both take `BenchLock`.
   - `ARemovedMonitorEndsItsMonitorRecordingPlayableWithMonitorRemoved`:
     - A Monitor Recording of the real primary runs for about 3 s. The fake port then drops that monitor; the real one stays.
     - Expected: `Stopped(M, monitor-removed)` and one `monitor-removed` warning. The file decodes cleanly and holds at least 2.5 s at a constant 30 fps with both Tracks in step.
@@ -175,7 +175,7 @@ deferred: []
     - Engine: 180 passed, 41 explicit skipped.
     - App: 128 passed, 18 explicit skipped.
   - `tools/publish-engine.ps1`: published, no IL warnings.
-  - Heavy: written, not run. They are listed under Verification for the GPU runner.
+  - **Heavy: passed on the GPU runner:** `ARemovedMonitorEndsItsMonitorRecordingPlayableWithMonitorRemoved` at `49130c4`, and `AGameRecordingRunsOnThroughEachDisplayChange` at `0249eaa` (12 s), after a test fix that records for about 4 s so it clears its 3.5 s bound.
 - **Matrix audit:** every row has a default-run test except "Port can't subscribe" (logged no-op, by inspection) and "Monitor unknown" (guard, by inspection). "Ends with a playable file" is proven only by the Heavy test.
 - **Residual risks:** no real hot-plug has happened. Two things are open:
   - The order and timing of WGC's item close, Desktop Duplication's `ACCESS_LOST` and the broadcast on a real unplug. Both orders are handled.
