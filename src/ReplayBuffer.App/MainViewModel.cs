@@ -1,24 +1,18 @@
-using System.Globalization;
 using ReplayBuffer.App.Engine;
 using ReplayBuffer.App.Library;
 using ReplayBuffer.App.Settings;
+using ReplayBuffer.App.Status;
 using ReplayBuffer.Contracts.Messages;
 
 namespace ReplayBuffer.App;
 
 /// <summary>
-/// The Main App window's state: the engine's snapshot as text for the Status area, and the Settings
-/// pages. Everything shown comes from <see cref="IEngineSession.State"/> (AD-3).
+/// The Main App window's state: the status line, the Library and the Settings pages. Everything
+/// shown comes from <see cref="IEngineSession.State"/> (AD-3).
 /// </summary>
 internal sealed class MainViewModel : Observable
 {
     private readonly IEngineSession _engine;
-    private string _status = "";
-    private string _engineDetails = "";
-    private string _capture = "";
-    private string _targetGame = "";
-    private string _settingsRevision = "";
-    private IReadOnlyList<string> _warnings = [];
     private SettingsPage _selectedPage;
     private bool _isWindowShown;
     private bool _isSettingsTabSelected;
@@ -28,6 +22,7 @@ internal sealed class MainViewModel : Observable
     public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null)
     {
         _engine = engine;
+        StatusLine = new StatusLine(engine);
         Pages = SettingsPages.Create(new SettingsSender(engine), engine);
         General = Pages.OfType<GeneralSettingsPage>().Single();
         ReplayBuffer = Pages.OfType<ReplayBufferSettingsPage>().Single();
@@ -39,6 +34,9 @@ internal sealed class MainViewModel : Observable
         engine.Changed += () => post(Refresh);
         Refresh();
     }
+
+    /// <summary>The status line above every page: capture state and the active warnings.</summary>
+    public StatusLine StatusLine { get; }
 
     public IReadOnlyList<SettingsPage> Pages { get; }
 
@@ -98,69 +96,16 @@ internal sealed class MainViewModel : Observable
         }
     }
 
-    public string Status
-    {
-        get => _status;
-        private set => Set(ref _status, value);
-    }
-
-    public string EngineDetails
-    {
-        get => _engineDetails;
-        private set => Set(ref _engineDetails, value);
-    }
-
-    public string Capture
-    {
-        get => _capture;
-        private set => Set(ref _capture, value);
-    }
-
-    /// <summary>The Target Game line: its name and process, or none.</summary>
-    public string TargetGame
-    {
-        get => _targetGame;
-        private set => Set(ref _targetGame, value);
-    }
-
-    public string SettingsRevision
-    {
-        get => _settingsRevision;
-        private set => Set(ref _settingsRevision, value);
-    }
-
-    public IReadOnlyList<string> Warnings
-    {
-        get => _warnings;
-        private set => Set(ref _warnings, value);
-    }
-
     /// <summary>Reads the session again. Runs on the UI thread.</summary>
     public void Refresh()
     {
-        Status = _engine.Status switch
-        {
-            EngineStatus.Connecting => "Connecting to the engine…",
-            EngineStatus.Connected => "Connected to the engine.",
-            EngineStatus.Restarting => "Restarting the engine…" + (_engine.Problem is { } why ? " " + why : ""),
-            EngineStatus.NotRunning => "The engine isn't running." + (_engine.Problem is { } problem ? " " + problem : ""),
-            _ => "The engine disconnected. Reconnecting…",
-        };
+        StatusLine.Render(_engine.Status, _engine.Problem, _engine.State);
 
         if (_engine.State is not { } state)
         {
             return;
         }
 
-        EngineDetails = string.Create(CultureInfo.InvariantCulture, $"Process {state.Pid}, run {state.EngineInstanceId}, event {state.Seq}");
-        var capture = state.Capture;
-        Capture = $"Replay Buffer {Name(capture.Replay)}, Recording {Name(capture.Recording)}, " +
-            $"Monitor Recording {Name(capture.MonitorRecording)}, mic {(capture.MicMuted ? "muted" : "live")}";
-        TargetGame = state.TargetGame is { } target
-            ? string.Create(CultureInfo.InvariantCulture, $"Target Game: {target.Name} (process {target.ProcessId})")
-            : "Target Game: none";
-        SettingsRevision = state.Settings.Revision.ToString(CultureInfo.InvariantCulture);
-        Warnings = [.. state.Warnings.Select(w => $"{w.Severity}: {w.Message} ({w.Code})")];
         TrackLayout.ShowDevices(state.Devices);
         ReplayBuffer.ShowState(state);
         Hotkeys.ShowStatus(state.Hotkeys);
@@ -177,7 +122,4 @@ internal sealed class MainViewModel : Observable
     // The Track Layout page meters only while on screen, so a hidden window doesn't keep the engine metering.
     private void UpdateOpenPage() =>
         TrackLayout.IsOpen = IsWindowShown && IsSettingsTabSelected && SelectedPage == TrackLayout;
-
-    private static string Name<T>(T value)
-        where T : struct, Enum => value.ToString().ToLowerInvariant();
 }

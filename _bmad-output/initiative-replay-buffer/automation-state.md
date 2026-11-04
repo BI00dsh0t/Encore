@@ -36,13 +36,13 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 5.8 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.5 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 7.6 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.5 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 6.5 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 4.11 |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with overlay research |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.11 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -107,7 +107,7 @@ The coordinator logs each QA round in the Log below.
 | 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `2b218ae`) |
 | 25.9 | 4.9 Per-Game-Profile settings at the next Reset | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `2a93e4b`) |
 | 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done |
-| 25.11 | 4.11 Game Profile overrides in the Main App | | pending |
+| 25.11 | 4.11 Game Profile overrides in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 25.12 | 4.12 Hotkeys page in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `29d63b8`) |
 | 25.13 | 4.13 Refactor sweep | | pending |
 | 25.14 | 4.14 Clips end to end on the builder's PC | | pending |
@@ -120,9 +120,9 @@ The coordinator logs each QA round in the Log below.
 | 26.5 | 5.5 Overlay message queue | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `b0f684e`) |
 | 26.6 | 5.6 Feedback Sounds in the engine | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ac6a3a2`) |
 | 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `53d83b7`) |
-| 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
-| 26.9 | 5.9 Capture exclusion for every App window | | pending |
-| 26.10 | 5.10 Main App status line | | pending |
+| 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `67ecdf3`) |
+| 26.9 | 5.9 Capture exclusion for every App window | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
+| 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `7e09a01`) |
 | 26.11 | 5.11 Feedback Sounds settings page | | pending |
 | 26.12 | 5.12 Benchmark with the Overlay on | | pending |
 | 26.13 | 5.13 Refactor sweep | | pending |
@@ -133,7 +133,7 @@ The coordinator logs each QA round in the Log below.
 | 27.2 | 6.2 Crash-safe Recordings and recording-interrupted | 6.2 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ee4e90f`) |
 | 27.3 | 6.3 Record Hotkey modes and the Recordings switch | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `eee32cb`) |
 | 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `e43dda1`) |
-| 27.5 | 6.5 Clips during a Recording on one encoder chain | | pending |
+| 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 27.6 | 6.6 One file however long, and forced encoder restarts | | pending |
 | 27.7 | 6.7 Disk full during a Recording | | pending |
 | 27.8 | 6.8 Recording notices and sounds | | pending |
@@ -149,7 +149,7 @@ The coordinator logs each QA round in the Log below.
 | 28.3 | 7.3 Length and thumbnails | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `c2508c3`) |
 | 28.4 | 7.4 Favourite | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `bcc45ff`) |
 | 28.5 | 7.5 Group and filter by game, date and Favourite | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ca3aa83`) |
-| 28.6 | 7.6 Open, show in Explorer and copy for Discord | | pending |
+| 28.6 | 7.6 Open, show in Explorer and copy for Discord | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 28.7 | 7.7 Rename and delete, locked while being written | | pending |
 | 28.8 | 7.8 Cleanup | | pending |
 | 28.9 | 7.9 Library and Cleanup settings page | | pending |
@@ -210,6 +210,8 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 7.3 | Library rows show a real thumbnail and length for your Clips (R3) | Start the Dev engine with `ReplayBuffer.Engine serve` and the Main App, open the Library tab with a few saved Clips (and a Clip saved now). Each written row should show the shell's thumbnail at the left (a grey play glyph if Windows has none, e.g. HEVC/AV1 without the codec extension), its length as m:ss and its size in MB or GB; a Clip being saved shows "Saving…" with no thumbnail or length, then both appear once written. Check the thumbnails look right (not upside down, colours right, not stretched) | `ShellThumbnail.TryGet` on a 1280×720 H.264 test clip gave an upright 192×108 image, random bytes gave none; `LibraryPageTests` (no request while written, one after `EndWrite`, `0:30`/`1:02:03`, MB/GB); `MediaLengthTests` (30 s clip within 0.1 s of ffprobe) |
 | 4.10 | The Replay Buffer page's estimate and warning on your PC (R2) | Start the Dev engine and the Main App, open Settings > Replay Buffer. Change the Buffer Window, the bitrate (and CBR/VBR) and Memory/Disk, and the estimate should update at once, with "worst case" for VBR. Set a Buffer Window larger than your free RAM (or a Disk ring folder on a nearly full drive): the red warning should appear and the value should still save. Press Save in a game to check a save still works. | `ReplayBufferSettingsPageTests` (edits send one Global op; the estimate and warning follow the snapshot), a screenshot of the page, and the 5-minute CBR ring within 20 % of the estimate |
 | 4.12 | Settings > Hotkeys by hand (R9): rebind, duplicate refusal, saving in-game with the App closed | Open Settings > Hotkeys and rebind Save. Try a duplicate on another row: a combination the engine already holds (an active binding) fires its action instead of reaching the page, so the page's message appears only for an inactive or failed binding's combination. Save a Clip with the new binding inside a fullscreen game, then close the Main App and save again. Check the page by eye | `HotkeysPageTests` (4): one op per change, duplicate and plain-key refusals, Clear, Record mode, a taken status shown as failed, and the view rendered to `hotkeys-settings.png` in the App test output folder. The engine's `hotkey-duplicate` refusal and the helper-process `hotkey-taken` check are covered by `HotkeyServeTests` |
+| 5.8 | The real App's Overlay over a real legacy exclusive-fullscreen game, and borderless independent flip with no other overlays (R1, R7) | (1) Start the Dev engine (`ReplayBuffer.Engine serve`) and the Main App, play a game that PresentMon reads as Hardware: Legacy Flip, press Save, then cause a failed save (`dev.simulate saveFailed`). The game should stay fullscreen and focused throughout, and the saved and failed Feedback Sounds should be told apart by ear. (2) Close NVIDIA Overlay, Discord and Steam, and leave one monitor attached, then run `ReplayBuffer.Bench overlay --host app --modes borderless` and `ReplayBuffer.Bench overlay --modes borderless` (the stand-in). Does the dot keep the load in Hardware Composed: Independent Flip? | `bench overlay --host app` at the console, 2026-11-03 20:17: fullscreen stayed Independent Flip (−0.2 %) and exclusive stayed Legacy Flip (0.08 %), with the load in front and no DXGI fullscreen change through the dot and the saved and failed messages. Borderless fell to Composed: Flip with the dot shown (App 7.57 %, App `--dot-only` 7.85 %, spike stand-in 7.39 %). Heavy test `TheRealAppsOverlayKeepsTheExclusiveLoadInFullscreen` passed. QA at `50cba20` |
+| 5.10 | The Main App status line with a real dropout and a real engine restart (R5) | Start the Dev engine and the Main App. (1) Unplug a device used by a Track in the layout: its device-dropout warning should appear at the top of the status line, newest first, with its time; Dismiss it. (2) Kill `ReplayBuffer.Engine.exe` in Task Manager: the line should say the engine is restarting, then show the engine-restarted warning once it reconnects. Check the line by eye on each tab | `StatusLineTests` (each state's text, newest first, Dismiss sends `warning.dismiss`, no button when not dismissable, reconnect replaces the list) and the explicit render of the window to `status-line.png`. QA at `c0862ba` |
 
 ## Decisions Awaiting Review
 
@@ -274,6 +276,7 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-02 | 8.9 | T-01 to T-25 recorded in `conformance-t01-t25.md` beside the epic; T-09's HDR half and T-12 (Post-roll) out of v1; T-11 met by 4.4's `save-busy`; failures needing new behaviour become bugfixes against the owning story | PLAN.md §8 predates the PRD's overrides |
 | 2026-11-02 | 8.11 | A closing end-to-end story on the builder's PC (hitl) after the sweep, ending with ShadowPlay uninstalled | The epic's Done when ends with checks only the builder can run |
 | 2026-11-03 | 4.1 | With no `outputFolder` set, Clips go to `<Videos>\<instance name>`; a game with no Game Profile yet saves to a folder named after its executable (until 3.4 profiles reach it); Disk mode buffers in memory with a log line until 4.7 | The PRD has no default Output Folder, and 4.1 is a tracer |
+| 2026-11-03 | 5.8 | **Pending your call:** FR-6's 3 s mitigation (show the dot only for 3 s after each state change) is not built. Spike 5.2's "no mitigation needed" doesn't hold on this PC as it is now: the dot takes a borderless game out of independent flip (−7.4 to −7.9 % FPS), and the App and the spike's stand-in cost the same | Spike 5.2 measured independent flip with no cost at 13:12. After the 20:01 reboot (NVIDIA Overlay, Discord and Steam running, 2 monitors), every borderless run with a dot falls to Composed: Flip, so the free overlay plane is gone, not something the App adds. The mitigation departs from FR-6, so it is the builder's to choose; the Human Check above re-measures with the other overlays off |
 
 ## Log
 
@@ -489,3 +492,12 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 7.5 at `a60793d`: **QA PASS**, 0 findings. 7.5 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-04: 4.9 merged into `develop` (`2a93e4b`, `feat(engine): merge 4.9-profile-settings-at-reset`) and marked done, after QA PASS at `30b908c` with 0 blocking findings. Develop (7.4, 4.12) was synced in first: 0-warning build, Contracts 118, Core 109, Media 99, Engine 167 passed, publish clean (11.4 MB). The advisories are in the epic Notes (audio seam, estimate scope, Record while armed). Human Check: none new.
 - 2026-11-04: 7.5 merged into `develop` (`ca3aa83`, `feat(app): merge 7.5-group-and-filter`) and marked done, after QA PASS at `a60793d` with 0 findings. Develop (4.9, 4.12, 5.8 and others) was merged into the branch first without conflicts (Release build 0 warnings, App.Tests 94 passed, 8 explicit skipped). App-only; no Contracts change. No new Human Check rows (the grouped list and filter bar are 7.11's hand check).
+- 2026-11-04: 4.9 merged (`2a93e4b`, marked done `21b9120`). Its card is Done with its label detached, and 2-1-tracer is back in the pool. Newly ready: 4.11 went to story-2-7, 5.10 to slice-epic-5 and 6.5 to slice-epic-8 (all Opus, medium effort), with cards In progress. 5.8 is READY FOR QA at `50cba20`, and QA started on qa-1-14 (Sonnet), with its card In QA. 5.8 raises a builder decision: with the dot shown, the borderless stand-in now drops from Independent Flip to Composed: Flip (about 7.5 % FPS), unlike spike 5.2's run. The likely cause is no free overlay plane, with NVIDIA Overlay, Discord and Steam running and two monitors attached. AC 3 is held for that decision (see Decisions Awaiting Review), not counted as a QA failure.
+- 2026-11-04: The builder was asked about 5.8's Overlay cost (always-on dot vs 3 s dot vs a setting vs re-measure). Their answer: "research more performant options for displaying an overlay". The research went to 2-1-tracer (Opus, high effort) on a branch cut from 5.8's tip, with a doc at `research/overlay-presentation-options.md` and Bench-only prototypes measured under the GPU lock. 5.8 itself changes no Overlay drawing code, so its QA continues and it may merge with AC 3 held for the research outcome.
+- 2026-11-04: 7.5 merged (`ca3aa83`, marked done `143484b`), and its card is Done; 7.6 is now Ready. QA 5.8 round 1 FAILED on 1 finding (the AC 3 decision wasn't in the state file's queues). The story fixed it on develop at `d47a62c`, and the coordinator checked the rows itself as round 2: **PASS**. 5.8 has been told to merge (Sonnet). 4.11 (`2fc9e93`), 5.10 (`c0862ba`) and 6.5 (`7a32c50`) are READY FOR QA, with cards In QA. QA 6.5 is on qa-1-14 and QA 5.10 on qa-2-1. QA 4.11 takes slice-epic-4 once 5.8 merges, and 7.6 takes the next free worker.
+
+- 2026-11-04: 5.8 merged (`67ecdf3`, `feat(bench): merge 5.8-overlay-exclusive-fullscreen`, after merging develop in cleanly: build 0 warnings, Contracts 118, Engine 190, Bench 139, publish clean). QA PASS in round 2. AC 3 (borderless independent flip) stays open for the builder; the overlay-presentation research runs separately.- 2026-11-04: QA 5.10 at `c0862ba`: **QA PASS** with 1 low finding (no Human Check row). 5.10 has been told to add the row at merge and merge (Sonnet). qa-2-1 took QA 4.11.
+- 2026-11-04: 5.8 merged (`67ecdf3`, marked done `62ff935`). Its card is Done with its labels detached. 5.9 is now Ready and waits for the next free worker (5.10's, after it merges). 7.6 went to slice-epic-4 (Opus, medium effort), with its card In progress. 5.10 added its Human Check row on develop (`54a69b8`), and its merge go-ahead is queued.
+
+- 2026-11-04: 5.10 merged (`7e09a01`, `feat(app): merge 5.10-status-line`, after merging develop in cleanly: Release build 0 warnings, App.Tests 97 passed with 9 explicit skipped; the run overlapped another session's `.bench-running` marker but passed). QA PASS at `c0862ba`; its one low finding (no Human Check row) was settled by the 5.10 row, committed on develop at `54a69b8`. App-only: no Contracts, Core or Engine changes.
+- 2026-11-04: 5.10 merged (`7e09a01`, marked done `21e1c5a`). Its card is Done with its label detached. 5.9 went to slice-epic-5 (Opus, medium effort), with its card In progress. 5.11 is now Ready and waits for the next free worker.

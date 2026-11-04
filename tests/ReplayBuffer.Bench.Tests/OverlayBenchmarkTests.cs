@@ -4,7 +4,8 @@ namespace ReplayBuffer.Bench.Tests;
 
 /// <summary>
 /// Story 5.2's <c>bench overlay</c> without a GPU: the load's fullscreen modes on its command line and ready line,
-/// the Overlay host's ready line, a PresentMon CSV, and the summary and report built from the phases.
+/// the Overlay host's ready line, a PresentMon CSV, and the summary and report built from the phases. Story 5.8's
+/// <c>--host app</c> run over the exclusive load is the one Heavy test.
 /// </summary>
 public sealed class OverlayBenchmarkTests : IDisposable
 {
@@ -67,11 +68,45 @@ public sealed class OverlayBenchmarkTests : IDisposable
         Assert.False(flip.FullscreenD3D);
         Assert.False(legacy.OverlayShows);
         Assert.True(legacy.FullscreenD3D);
+        Assert.True(legacy.ExclusiveKept);
+        Assert.True(OverlayBenchmark.Summarize("exclusive", exclusive, ["load: rebuilt the buffers"]).ExclusiveKept);
+        Assert.False(OverlayBenchmark.Summarize("exclusive", exclusive, ["20:17:31.250 fullscreen false"]).ExclusiveKept);
 
-        var report = new OverlayReport(DateTimeOffset.Now, RemoteSession: true, 60, 10, [], null, [.. borderless, .. exclusive], [flip, legacy], null);
+        var report = new OverlayReport(DateTimeOffset.Now, "app", RemoteSession: true, 60, 10, [], null, [.. borderless, .. exclusive], [flip, legacy], null);
         var markdown = OverlayBenchmark.Markdown(report);
         Assert.Contains(OverlayBenchmark.RemoteLabel, markdown, StringComparison.Ordinal);
         Assert.Contains("| borderless | Hardware Composed: Independent Flip | Hardware Composed: Independent Flip |", markdown, StringComparison.Ordinal);
+        Assert.Contains("Overlay host: app.", markdown, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("--host", "foo")]
+    [InlineData("--host", "app", "--overlay-exe", "x.exe")]
+    [InlineData("--app-exe", "x.exe")]
+    [InlineData("--host", "app", "--settle", "3")]
+    public void ABadHostIsAUsageError(params string[] args)
+    {
+        var context = _run.Context(["overlay", .. args]);
+
+        Assert.Throws<BenchUsageException>(() => OverlayBenchmark.Run(context));
+    }
+
+    /// <summary>The real App's Overlay over the legacy exclusive load (story 5.8): needs the GPU, PresentMon and the console.</summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public void TheRealAppsOverlayKeepsTheExclusiveLoadInFullscreen()
+    {
+        var context = _run.Context("overlay", "--host", "app", "--modes", "exclusive", "--seconds", "10", "--settle", "5");
+
+        var exit = OverlayBenchmark.Run(context);
+
+        var report = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(_run.Folder, OverlayBenchmark.FileName))).RootElement;
+        var markdown = File.ReadAllText(Path.Combine(_run.Folder, OverlayBenchmark.MarkdownName));
+        Assert.True(exit == 0, markdown);
+        Assert.True(report.GetProperty("summaries")[0].GetProperty("exclusiveKept").GetBoolean(), markdown);
+        var phases = report.GetProperty("phases").EnumerateArray().ToList();
+        Assert.All(phases, p => Assert.Equal("Hardware: Legacy Flip", p.GetProperty("presentMode").GetString()));
+        Assert.Equal([false, true, false], phases.Select(p => p.GetProperty("overlayWindowVisible").GetBoolean()));
     }
 
     private static OverlayPhase Phase(string mode, string phase, double fps, string presentMode, int quns)

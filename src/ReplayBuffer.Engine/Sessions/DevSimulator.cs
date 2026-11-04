@@ -4,14 +4,15 @@ using ReplayBuffer.Contracts.Messages;
 namespace ReplayBuffer.Engine.Sessions;
 
 /// <summary>
-/// Serves <c>dev.simulate</c>: injects a stub Recording state, a disk full or a save failure, so the
+/// Serves <c>dev.simulate</c>: injects a stub Recording state, a disk full, a save failure or a saved notice, so the
 /// feedback notices can be exercised before the features behind them exist. Dev and test instances
 /// only; the installed instance refuses it.
 /// </summary>
 /// <param name="recording">Sets the stub Recording state, through the SessionOrchestrator.</param>
 /// <param name="diskFull">Reports a full volume.</param>
 /// <param name="saveFailed">The engine's not-saved path: publishes <c>clip.failed</c> and its notice.</param>
-internal sealed class DevSimulator(Instance instance, Action<bool> recording, Action diskFull, Action<ClipFailed> saveFailed)
+/// <param name="saved">Raises the saved notice only; no <c>clip.saved</c> is published, as no file exists.</param>
+internal sealed class DevSimulator(Instance instance, Action<bool> recording, Action diskFull, Action<ClipFailed> saveFailed, Action saved)
 {
     /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.NotDevInstance"/> in the installed instance.</exception>
     public Empty Simulate(DevSimulate simulate)
@@ -35,6 +36,9 @@ internal sealed class DevSimulator(Instance instance, Action<bool> recording, Ac
                 break;
             case SimulatedEvent.SaveFailed:
                 saveFailed(new ClipFailed(ErrorCodes.SaveFailed));
+                break;
+            case SimulatedEvent.ClipSaved:
+                saved();
                 break;
             default:
                 throw new ErrorCodeException(ErrorCodes.InvalidArguments, $"'{simulate.Event}' is not an event dev.simulate injects.");

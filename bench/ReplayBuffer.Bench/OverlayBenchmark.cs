@@ -34,11 +34,13 @@ internal sealed record OverlayModeSummary(
     bool IndependentFlipKept,
     bool OverlayShows,
     bool FullscreenD3D,
-    IReadOnlyList<string> FullscreenChanges);
+    IReadOnlyList<string> FullscreenChanges,
+    bool ExclusiveKept);
 
 /// <summary><c>overlay.json</c>.</summary>
 internal sealed record OverlayReport(
     DateTimeOffset Created,
+    string Host,
     bool RemoteSession,
     int Seconds,
     int Settle,
@@ -52,7 +54,9 @@ internal sealed record OverlayReport(
 /// <c>bench overlay</c> (story 5.2, PRD Q-4): for each <c>--modes</c> entry it starts the synthetic GPU load in that
 /// mode and story 5.1's Overlay window beside it, then records the load's presents with PresentMon with the dot
 /// hidden, shown, and hidden again, and each phase's <c>SHQueryUserNotificationState</c>. It writes
-/// <c>overlay.json</c> and <c>overlay.md</c> into the run folder.
+/// <c>overlay.json</c> and <c>overlay.md</c> into the run folder. <c>--host app</c> (story 5.8) drives the real
+/// App's Overlay instead, through its engine (<see cref="AppOverlayHost"/>), with a saved and a failed notice in
+/// the shown phase.
 /// </summary>
 internal static class OverlayBenchmark
 {
@@ -60,11 +64,18 @@ internal static class OverlayBenchmark
     public const string MarkdownName = "overlay.md";
     public const string RemoteLabel = "measured over RDP: not representative";
     public static readonly string[] Modes = ["borderless", "fullscreen", "exclusive"];
+    public static readonly string[] Hosts = ["stand-in", "app"];
 
     /// <summary>The modes in which the GPU load's frames reach the screen without DWM: the dot can't be seen there.</summary>
     private static readonly string[] Exclusive = ["Hardware: Legacy Flip", "Hardware: Legacy Copy to front buffer"];
 
     private const int QunsRunningD3DFullScreen = 3;
+    private const string LoadNotePrefix = "load: ";
+
+    // --host app: each Overlay message shows for 4 s, and the shown phase queues three. Off-again is hidden only
+    // once its own Recording-stopped message has gone (settle) and the shown phase outlasted its queue.
+    private const int AppMinSettle = 5;
+    private const int AppMinSeconds = 10;
 
     public static int Run(BenchContext context, TextWriter? errors = null)
     {
@@ -76,9 +87,35 @@ internal static class OverlayBenchmark
             throw new BenchUsageException($"--modes '{unknown}' is not one of {string.Join(", ", Modes)}.");
         }
 
+        var host = options.Text("host", "stand-in");
+        if (!Hosts.Contains(host))
+        {
+            throw new BenchUsageException($"--host '{host}' is not one of {string.Join(", ", Hosts)}.");
+        }
+
+        var app = host == "app";
+        if (app && options.Has("overlay-exe"))
+        {
+            throw new BenchUsageException("--overlay-exe is the stand-in's; --host app runs the App (--app-exe).");
+        }
+
+        if (!app && options.Flag("dot-only"))
+        {
+            throw new BenchUsageException("--dot-only is for --host app; the stand-in shows only the dot.");
+        }
+
+        if (!app && options.Has("app-exe"))
+        {
+            throw new BenchUsageException("--app-exe is for --host app.");
+        }
+
         // Three phases of 5 s settling and 15 s of presents: a minute per mode.
         var seconds = options.Int("seconds", 15, 5, 600);
         var settle = options.Int("settle", 5, 0, 120);
+        if (app && (settle < AppMinSettle || seconds < AppMinSeconds))
+        {
+            throw new BenchUsageException($"--host app needs --settle {AppMinSettle} and --seconds {AppMinSeconds} or more, so its 4 s messages have gone before a hidden phase.");
+        }
         var targetFps = options.Double("target-fps", GpuLoadProcess.DefaultTargetFps, 1, 1000);
         var loadSize = options.Text("load-size");
         if (loadSize is not null)
@@ -90,7 +127,7 @@ internal static class OverlayBenchmark
         var loadTimeout = TimeSpan.FromSeconds(Math.Max(options.Int("load-timeout", 60, 5, 600), (loadWarmup ?? 10) + 30));
         var presentMon = context.ResolvePresentMon();
         var loadExe = GpuLoadProcess.Resolve(context);
-        var overlayExe = OverlayHostProcess.Resolve(context);
+        var overlayExe = app ? AppOverlayHost.Resolve(context) : OverlayHostProcess.Resolve(context);
         var folder = Path.Combine(context.RunFolder, "overlay");
         Directory.CreateDirectory(folder);
         var remote = IsRemoteSession();
@@ -104,6 +141,9 @@ internal static class OverlayBenchmark
         var loads = new List<GpuLoadInfo>();
         OverlayHostReady? overlayReady = null;
         string? aborted = null;
+
+        // The App and its engine outlive the loads; the stand-in is started beside each load.
+        using var appHost = app ? AppOverlayHost.Start(overlayExe, loadExe, messages: !options.Flag("dot-only")) : null;
         foreach (var mode in modes)
         {
             if (GpuLoadProcess.Running() is { Count: > 0 } running)
@@ -127,8 +167,9 @@ internal static class OverlayBenchmark
             using (load)
             {
                 loads.Add(load.Info);
-                using var overlay = OverlayHostProcess.Start(overlayExe, load.Id);
-                overlayReady ??= overlay.Ready;
+                using var standIn = app ? null : OverlayHostProcess.Start(overlayExe, load.Id);
+                overlayReady ??= standIn?.Ready;
+                IOverlayHost overlay = (IOverlayHost?)appHost ?? standIn!;
                 var modePhases = new List<OverlayPhase>();
                 foreach (var (phase, shown) in new[] { ("off", false), ("on", true), ("off-again", false) })
                 {
@@ -136,18 +177,18 @@ internal static class OverlayBenchmark
                     BringToFront(load.Hwnd);
                     if (shown)
                     {
-                        overlay.ShowDot();
+                        overlay.On();
                     }
                     else
                     {
-                        overlay.HideDot();
+                        overlay.Off();
                     }
 
                     Console.WriteLine($"[{mode}/{phase}] settling {settle} s, then PresentMon {seconds} s ...");
                     Thread.Sleep(TimeSpan.FromSeconds(settle));
                     var state = NotificationState();
                     var inFrontBefore = GetForegroundWindow() == load.Hwnd;
-                    var visible = IsWindowVisible(overlay.Hwnd);
+                    var visible = overlay.WindowVisible();
                     var csv = Path.Combine(folder, $"{mode}-{phase}-presentmon.csv");
                     var error = RecordPresents(presentMon, load.Info.Process + ".exe", csv, seconds, folder, $"{mode}-{phase}");
 
@@ -173,7 +214,7 @@ internal static class OverlayBenchmark
                 phases.AddRange(modePhases);
                 // The fullscreen changes after ready, and the load's own notes on refused or rebuilt swap chains.
                 var changes = load.FullscreenChanges
-                    .Concat(load.Stderr.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(l => "load: " + l))
+                    .Concat(load.Stderr.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(l => LoadNotePrefix + l))
                     .ToList();
                 summaries.Add(Summarize(mode, modePhases, changes));
                 if (load.HasExited)
@@ -183,7 +224,7 @@ internal static class OverlayBenchmark
             }
         }
 
-        var report = new OverlayReport(DateTimeOffset.Now, remote, seconds, settle, loads, overlayReady, phases, summaries, aborted);
+        var report = new OverlayReport(DateTimeOffset.Now, host, remote, seconds, settle, loads, overlayReady, phases, summaries, aborted);
         BenchJson.Write(Path.Combine(context.RunFolder, FileName), report);
         File.WriteAllText(Path.Combine(context.RunFolder, MarkdownName), Markdown(report));
         Console.WriteLine($"Overlay report: {Path.Combine(context.RunFolder, MarkdownName)}");
@@ -216,7 +257,10 @@ internal static class OverlayBenchmark
             IndependentFlipKept: off?.PresentMode is { } before && on?.PresentMode == before && before.Contains("Independent Flip", StringComparison.Ordinal),
             OverlayShows: on?.OverlayOnScreen ?? false,
             FullscreenD3D: phases.Any(p => p.NotificationState == QunsRunningD3DFullScreen),
-            fullscreenChanges);
+            fullscreenChanges,
+            // Every entry but the load's own notes ("load: ...") is a timed DXGI fullscreen change after ready.
+            ExclusiveKept: phases.Count == 3 && phases.All(p => p.LoadInForeground && p.Error is null)
+                && fullscreenChanges.All(c => c.StartsWith(LoadNotePrefix, StringComparison.Ordinal)));
     }
 
     internal static string Markdown(OverlayReport report)
@@ -224,7 +268,7 @@ internal static class OverlayBenchmark
         var md = new StringBuilder();
         md.AppendLine("# Overlay over the GPU load (story 5.2, PRD Q-4)");
         md.AppendLine();
-        md.AppendLine(CultureInfo.InvariantCulture, $"Created {report.Created:yyyy-MM-dd HH:mm:ss zzz}. PresentMon {report.Seconds} s per phase after {report.Settle} s settling.");
+        md.AppendLine(CultureInfo.InvariantCulture, $"Created {report.Created:yyyy-MM-dd HH:mm:ss zzz}. Overlay host: {report.Host}. PresentMon {report.Seconds} s per phase after {report.Settle} s settling.");
         md.AppendLine(report.RemoteSession
             ? $"**Remote Desktop session: every figure here is {RemoteLabel}.**"
             : "Console session (not Remote Desktop).");
@@ -247,11 +291,11 @@ internal static class OverlayBenchmark
         md.AppendLine();
         md.AppendLine("## Summary");
         md.AppendLine();
-        md.AppendLine("| Mode | PresentMode, dot hidden | PresentMode, dot shown | PresentMode, hidden again | FPS hidden | FPS shown | FPS cost | Independent flip kept | Dot on screen | QUNS D3D fullscreen |");
-        md.AppendLine("|---|---|---|---|---|---|---|---|---|---|");
+        md.AppendLine("| Mode | PresentMode, dot hidden | PresentMode, dot shown | PresentMode, hidden again | FPS hidden | FPS shown | FPS cost | Independent flip kept | Dot on screen | QUNS D3D fullscreen | Fullscreen and focus kept |");
+        md.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|");
         foreach (var s in report.Summaries)
         {
-            md.AppendLine(CultureInfo.InvariantCulture, $"| {s.Mode} | {s.PresentModeOff} | {s.PresentModeOn} | {s.PresentModeOffAgain} | {Num(s.FpsOff)} | {Num(s.FpsOn)} | {Pct(s.FpsCostPercent)} | {YesNo(s.IndependentFlipKept)} | {YesNo(s.OverlayShows)} | {YesNo(s.FullscreenD3D)} |");
+            md.AppendLine(CultureInfo.InvariantCulture, $"| {s.Mode} | {s.PresentModeOff} | {s.PresentModeOn} | {s.PresentModeOffAgain} | {Num(s.FpsOff)} | {Num(s.FpsOn)} | {Pct(s.FpsCostPercent)} | {YesNo(s.IndependentFlipKept)} | {YesNo(s.OverlayShows)} | {YesNo(s.FullscreenD3D)} | {YesNo(s.ExclusiveKept)} |");
         }
 
         md.AppendLine();
@@ -277,7 +321,7 @@ internal static class OverlayBenchmark
         }
 
         md.AppendLine();
-        md.AppendLine("Dot on screen: its window is visible and the load's frames go through DWM (any PresentMode but Hardware: Legacy Flip or Legacy Copy). FPS cost is against the mean of the two hidden phases.");
+        md.AppendLine("Dot on screen: its window is visible and the load's frames go through DWM (any PresentMode but Hardware: Legacy Flip or Legacy Copy). FPS cost is against the mean of the two hidden phases. Fullscreen and focus kept: the load was in front before and after every phase, never exited and reported no DXGI fullscreen change.");
         return md.ToString();
     }
 
@@ -379,10 +423,6 @@ internal static class OverlayBenchmark
 
     [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindowVisible(nint hwnd);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
