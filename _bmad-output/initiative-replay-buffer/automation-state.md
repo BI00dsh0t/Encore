@@ -39,13 +39,13 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 6.12 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.3 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 6.13 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -145,7 +145,7 @@ The coordinator logs each QA round in the Log below.
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
 | 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
 | 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c4a69ca`) |
-| 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
+| 27.13 | 6.13 Recordings end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
@@ -649,3 +649,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 6.12 passed at `781e6fa` with 0 findings. No behaviour change: lock and disposed checks kept, the `OpenWrite` and `CloseWrite` order kept, and the `FeedbackRouterTests` shrink is only helpers moved out. 0-warning build; Contracts 121, Core 146, App 126 and Engine 176 passed. slice-epic-4 is merging. qa-2-1 is back in the pool.
 - 2026-11-04: 8.3 READY FOR QA at `2f5a69a` (18 files, about 1,670 lines; the Heavy simulated-reset test is written but not run because GPU tests are paused), and its card is In QA. QA went to qa-1-14 (Sonnet, high effort because the ticket is high risk; no Heavy runs and no TDR).
 - 2026-11-04: 6.12 merged (`c4a69ca`, marked done). Synced with develop first (7.11, the `e2e-test-instance-names` bugfix): no conflicts, 0-warning build, Contracts 122, Core 146, App 126 (17 skipped), Engine 176 (36 skipped). No Heavy runs. Skipped GPU runs: the Heavy Recording, Clip-during-Recording and Monitor Recording capture tests (to show they still write playable files after the sweep). Open items are in deferred-work.md with owners.
+- 2026-11-04: 6.12 merged (`c4a69ca`, marked done `1ae4c3a`), and its card is Done. slice-epic-4 is back in the pool. 6.13 (the epic 6 end-to-end check) went to story-2-7 (Opus, medium effort), with its card In progress. It does no capture at all: only the capture-free parts with a guarded Guid test instance, and one builder checklist. Once it merges, epic 6 is marked done and v0.6.0, then v0.7.0, are cut.
