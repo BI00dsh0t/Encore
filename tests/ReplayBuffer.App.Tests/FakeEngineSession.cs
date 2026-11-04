@@ -21,8 +21,29 @@ internal sealed class FakeEngineSession : IEngineSession
 
     public List<object> Sent { get; } = [];
 
+    /// <summary>
+    /// Answers <c>monitors.list</c>, which the Recordings page sends on its own whenever an engine run
+    /// connects; kept apart from <see cref="Reply"/> and <see cref="Sent"/> so other tests don't see it.
+    /// </summary>
+    public Func<MonitorList> Monitors { get; set; } = () => new MonitorList([]);
+
+    public int MonitorFetches { get; private set; }
+
     public Task<TResult> SendAsync<TArgs, TResult>(CommandType<TArgs, TResult> command, TArgs args, CancellationToken cancellationToken = default)
     {
+        if (ReferenceEquals(command, RecordingMessages.MonitorsList))
+        {
+            MonitorFetches++;
+            try
+            {
+                return Task.FromResult((TResult)(object)Monitors());
+            }
+            catch (Exception e)
+            {
+                return Task.FromException<TResult>(e);
+            }
+        }
+
         Sent.Add(args!);
         try
         {
