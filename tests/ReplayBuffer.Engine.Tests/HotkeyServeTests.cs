@@ -282,7 +282,7 @@ public sealed class HotkeyServeTests : IDisposable
         }
     }
 
-    private static class Input
+    internal static class Input
     {
         private const uint InputKeyboard = 1;
         private const uint KeyUp = 0x0002;
