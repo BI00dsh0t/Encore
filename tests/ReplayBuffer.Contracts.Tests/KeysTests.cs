@@ -13,7 +13,7 @@ public sealed partial class KeysTests
             [
                 "video", "trackLayout", "bufferWindow", "replayStorage", "ringPath", "saveCooldown", "outputFolder",
                 "hotkeys", "recordHotkeyMode", "monitorRecordingMonitor", "feedbackSounds", "feedbackSoundDevice",
-                "cleanup", "manualGames", "startWithWindows",
+                "cleanup", "manualGames", "startWithWindows", "overlayDot",
             ],
             Keys.All.Select(k => k.Name));
     }

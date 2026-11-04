@@ -1,6 +1,8 @@
 using ReplayBuffer.App.Engine;
+using ReplayBuffer.App.Settings;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Overlay;
 
@@ -20,6 +22,10 @@ internal enum OverlayDot
 /// Which warnings were shown is the Overlay's own fact, kept by id, so a reconnect never replays one.
 /// The mic-muted icon shows while the mic is muted and the dot shows, and the red X while a
 /// <c>disk-full</c> Overlay warning is active, whatever the dot (R3).
+/// The dot and the mic-muted icon show always, or only for <see cref="DotOnChangeDuration"/> after each
+/// change of either, as <c>overlayDot</c> says. Its default, <c>auto</c>, shows them always where the Target
+/// Game's monitor reports hardware overlay planes, since only a free plane keeps a borderless game in
+/// independent flip under a topmost window (research for story 5.8; the builder's decision, 2026-11-03).
 /// </summary>
 internal sealed class OverlayViewModel : Observable
 {
@@ -28,7 +34,20 @@ internal sealed class OverlayViewModel : Observable
     private readonly TimeProvider _time;
     private readonly List<Warning> _waiting = [];
     private readonly HashSet<string> _seen = [];
+    private readonly Func<int?, bool?> _overlayPlanes;
+    private readonly Action<Action> _background;
+    // Whether a query is out, and for which Target Game process.
+    private bool _askOut;
+    private int? _askFor;
+
+    // Bumped by a display change, so an answer asked before it is dropped.
+    private int _generation;
+    private bool _inQuery;
     private ITimer? _cooldownEnd;
+    private ITimer? _dotEnd;
+    private DateTimeOffset _dotUntil;
+    private (OverlayDot Dot, bool Muted) _steady;
+    private (int? ProcessId, bool? Planes, DateTimeOffset At)? _planes;
     private ITimer? _messageEnd;
     private Warning? _shown;
     private Warning? _message;
@@ -40,11 +59,26 @@ internal sealed class OverlayViewModel : Observable
 
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
     /// <param name="time">Times the Save Cooldown's end and each message; <see cref="TimeProvider.System"/> when null.</param>
-    public OverlayViewModel(IEngineSession engine, Action<Action> post, TimeProvider? time = null)
+    /// <param name="overlayPlanes">
+    /// Whether the monitor of a process (null: the primary) has hardware overlay planes, or null when unknown;
+    /// the App passes <c>Monitors.OverlayPlanes</c>. When null, every monitor is taken to have them.
+    /// </param>
+    /// <param name="background">
+    /// Runs the plane query off the UI thread; its answer comes back through <paramref name="post"/>. The App
+    /// passes the thread pool; when null, the query runs inline (tests).
+    /// </param>
+    public OverlayViewModel(
+        IEngineSession engine,
+        Action<Action> post,
+        TimeProvider? time = null,
+        Func<int?, bool?>? overlayPlanes = null,
+        Action<Action>? background = null)
     {
         _engine = engine;
         _post = post;
         _time = time ?? TimeProvider.System;
+        _overlayPlanes = overlayPlanes ?? (_ => true);
+        _background = background ?? (action => action());
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -85,6 +119,24 @@ internal sealed class OverlayViewModel : Observable
         private set => Set(ref _diskFull, value);
     }
 
+    /// <summary>How long the dot shows after each change when it doesn't show always.</summary>
+    public static TimeSpan DotOnChangeDuration { get; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>How long an unknown answer to the overlay-plane query stands before it is asked again.</summary>
+    public static TimeSpan UnknownPlanesRetry { get; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>Whether the dot shows for as long as its state lasts, rather than on each change.</summary>
+    public bool DotAlways { get; private set; } = true;
+
+    /// <summary>The monitors changed: ask again whether the Target Game's has overlay planes. Runs on the UI thread.</summary>
+    public void DisplaysChanged()
+    {
+        _planes = null;
+        _askOut = false;
+        _generation++;
+        Refresh();
+    }
+
     /// <summary>How long each queued message shows.</summary>
     public static TimeSpan MessageDuration { get; } = TimeSpan.FromSeconds(4);
 
@@ -102,14 +154,22 @@ internal sealed class OverlayViewModel : Observable
         private set => Set(ref _targetProcessId, value);
     }
 
+    /// <summary>
+    /// The dot the capture state calls for, before <c>overlayDot</c> decides whether it shows: solid while a
+    /// Recording or Monitor Recording runs, hollow while the Replay Buffer buffers or drains. The tray icon
+    /// shows the same state in every mode.
+    /// </summary>
+    public static OverlayDot DotFor(CaptureState? capture) =>
+        capture is null ? OverlayDot.None
+        : capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running ? OverlayDot.Solid
+        : capture.Replay is ReplayState.Buffering or ReplayState.Draining ? OverlayDot.Hollow
+        : OverlayDot.None;
+
     /// <summary>Reads the session again. Runs on the UI thread.</summary>
     public void Refresh()
     {
         var state = _engine.Status == EngineStatus.Connected ? _engine.State : null;
-        var dot = state?.Capture is not { } capture ? OverlayDot.None
-            : capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running ? OverlayDot.Solid
-            : capture.Replay is ReplayState.Buffering or ReplayState.Draining ? OverlayDot.Hollow
-            : OverlayDot.None;
+        var dot = DotFor(state?.Capture);
 
         // The cooldown ends without an event, so a one-shot timer reads the session again then.
         _cooldownEnd?.Dispose();
@@ -122,7 +182,7 @@ internal sealed class OverlayViewModel : Observable
         }
 
         var saving = current is not null && (current.ClipsWriting > 0 || remaining > TimeSpan.Zero);
-        var micMuted = dot != OverlayDot.None && current!.MicMuted;
+        (dot, var micMuted) = Present(state, dot, dot != OverlayDot.None && current!.MicMuted);
         var diskFull = state is not null && state.Warnings.Any(w => w.Overlay && w.Code == ErrorCodes.DiskFull);
         var message = NextMessage(state);
 
@@ -145,6 +205,98 @@ internal sealed class OverlayViewModel : Observable
             Message = message;
             MicMuted = micMuted;
             DiskFull = diskFull;
+        }
+    }
+
+    // The dot and the mic icon as shown: always, or for DotOnChangeDuration after either changes.
+    private (OverlayDot Dot, bool Muted) Present(StateSnapshot? state, OverlayDot dot, bool muted)
+    {
+        var mode = state is null ? OverlayDotMode.Auto : SettingsValues.Global(state.Settings, Keys.OverlayDot);
+        DotAlways = mode == OverlayDotMode.Always || (mode == OverlayDotMode.Auto && Planes(state?.TargetGame?.ProcessId) == true);
+        var now = _time.GetUtcNow();
+        if ((dot, muted) != _steady)
+        {
+            _steady = (dot, muted);
+            _dotEnd?.Dispose();
+            _dotEnd = null;
+            _dotUntil = now + DotOnChangeDuration;
+        }
+
+        var shown = DotAlways || now < _dotUntil;
+
+        // A timer can fire a little before the clock reaches the end: arm again for what's left, so the dot
+        // never stays up until the next engine change.
+        if (!DotAlways && dot != OverlayDot.None && now < _dotUntil && _dotEnd is null)
+        {
+            _dotEnd = _time.CreateTimer(_ => _post(EndDot), null, _dotUntil - now, Timeout.InfiniteTimeSpan);
+        }
+
+        return shown ? (dot, muted) : (OverlayDot.None, false);
+    }
+
+    private void EndDot()
+    {
+        _dotEnd?.Dispose();
+        _dotEnd = null;
+        Refresh();
+    }
+
+    // Asked once per Target Game, and again when the monitors change; an unknown answer is asked again after
+    // UnknownPlanesRetry. The query runs in the background and posts its answer back; until it answers, and
+    // when it can't say, the monitor is taken to have no planes, so the dot shows on change (5.15 QA).
+    private bool? Planes(int? processId)
+    {
+        var now = _time.GetUtcNow();
+        var stale = _planes is not { } known || known.ProcessId != processId
+            || (known.Planes is null && now - known.At >= UnknownPlanesRetry);
+        if (stale && !(_askOut && _askFor == processId))
+        {
+            (_askOut, _askFor) = (true, processId);
+            var generation = _generation;
+            _inQuery = true;
+            try
+            {
+                _background(() =>
+                {
+                    bool? planes;
+                    try
+                    {
+                        planes = _overlayPlanes(processId);
+                    }
+                    catch (Exception)
+                    {
+                        planes = null;
+                    }
+
+                    _post(() => Answered(generation, processId, planes));
+                });
+            }
+            finally
+            {
+                _inQuery = false;
+            }
+        }
+
+        return _planes is { } answer && answer.ProcessId == processId ? answer.Planes : null;
+    }
+
+    // Runs on the UI thread. An answer that comes back inline, inside Planes, is read by the Refresh that asked.
+    private void Answered(int generation, int? processId, bool? planes)
+    {
+        if (generation != _generation)
+        {
+            return;
+        }
+
+        if (_askOut && _askFor == processId)
+        {
+            _askOut = false;
+        }
+
+        _planes = (processId, planes, _time.GetUtcNow());
+        if (!_inQuery)
+        {
+            Refresh();
         }
     }
 

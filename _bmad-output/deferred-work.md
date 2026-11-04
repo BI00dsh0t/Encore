@@ -35,3 +35,28 @@
   summary: Epic 3 (3.1–3.6, 3.8) deferred nothing beyond the two items above; of its plans only 3.5's `deferred:` is non-empty.
   evidence: Story 3.7 closed the duplicates epic 3 left instead: the `Canonicalize` failure filter and AD-18's listed-path match (`GamePaths.CanonicalizeFailed`, `GamePaths.CanonicalOrLowercase`), GameMonitor's exit and Ignored hand-over (`GameMonitor.HandOver`), the settings conflict-retry loop (`SettingsRetry.Update`), the allocator's QPC-to-local time (`OutputPathAllocator.LocalTimeOf`) and `"Game"` fallback (`PathNames.GameFallback`), and the Game Profiles page's flag setters (`GameProfileItem.SendFlag`).
   outcome: Closed by story 3.7.
+
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-failed-saves-retry-and-the-file-being-written-signal-plan.md`
+  summary: A Clip still writing when the engine shuts down is not published, and its write gets `BeginWrite` but never `EndWrite`.
+  evidence: Deferred from 4.1 (the writer posts ClipWritten to an orchestrator that may already be disposed; nothing joins it) and 4.5 (Dispose completes the channel, so OnClipWritten, which calls EndWrite, never runs). Shutdown only; AD-17 has `.rbpart` ignored and deleted at start. The fix needs new dispose handling: end in-flight writes as Failed, or rebuild being-written state at start.
+  outcome: Recorded, open (story 4.13). Owned by epic 7's LibraryActor.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-disk-mode-ring-plan.md`
+  summary: In Disk mode, while a long Clip writes, its pins hold trimmed ring blocks, so new slabs spill to native memory, silently.
+  evidence: 4.7's review rejected it as the planned fallback (the disk stays within the estimate; RAM grows only during the write) and left pin headroom to stories 4.8 and 4.10, which did not add it. Nothing tells the user RAM is in use in Disk mode.
+  outcome: Recorded, open (story 4.13). Owned by epic 8's hardening.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-memory-mode-ram-margin-plan.md`
+  summary: The `memory-margin` warnings aren't withdrawn when the margin is left; they go only by `warning.dismiss`, like `device-dropout`.
+  evidence: 4.8's Implementation Notes. Withdrawing them changes the warnings' lifecycle, which belongs with how the status line shows them.
+  outcome: Recorded, open (story 4.13). Owned by epic 5's status line.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-hotkeys-page-in-the-main-app-plan.md`
+  summary: Capturing a combination an active Hotkey holds on the Hotkeys page fires that Hotkey's action instead of being captured.
+  evidence: 4.12's Implementation Notes: a combination the engine (or another app) holds reaches the engine, not the page. A fix needs the engine to pause its Hotkeys during capture, an engine change.
+  outcome: Recorded, open (story 4.13). Owned by epic 8's hardening.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-per-game-profile-settings-at-the-next-reset-plan.md`
+  summary: At a chain switch the audio seam between the two Clips (up to about 10.7 ms of gap or overlap) is unmeasured, and a Record press while a switch is armed starts no Recording.
+  evidence: 4.9's residuals: the new chain's AAC grid starts at the press QPC and the old one's at the anchor, and the Heavy test checks only the video seam; `Record` returns null while armed, which with a static window lasts until the next captured frame.
+  outcome: Recorded, open (story 4.13). The Record press is owned by epic 6 (Recordings); the audio seam by epic 8's hardening.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-refactor-sweep-plan.md`
+  summary: Epic 4 (4.1–4.12) left three items for its sweep: the unused encoder-restart path, the stale ring-file match and a GPU test in the default suite.
+  evidence: 4.6's `RingGenerations.Restart`, `ReplayRingSink.Restart` and the previous-generation fallback in `Cut` had no caller after 4.9 moved to a ring sink per chain; `RingFile.RemoveStale` matched every `ring-*.bin` (4.7 QA); `DiskRingClipTests` ran an NVENC encode by default (4.7 QA).
+  outcome: Closed by story 4.13: the restart path is removed, `RemoveStale` deletes only `ring-<digits>.bin`, and `DiskRingClipTests` is Heavy/Explicit.

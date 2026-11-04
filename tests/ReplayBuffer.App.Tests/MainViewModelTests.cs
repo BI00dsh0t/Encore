@@ -79,6 +79,19 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void ChoosingWhenTheOverlayDotShowsSendsAGlobalSet()
+    {
+        _engine.Reply = (_, _) => new SettingsUpdateResult(1);
+        var model = Create();
+        Assert.Equal(OverlayDotMode.Auto, model.General.OverlayDot);
+
+        model.General.OverlayDot = OverlayDotMode.Always;
+
+        var op = Assert.Single(Assert.IsType<SettingsUpdate>(Assert.Single(_engine.Sent)).Ops);
+        Assert.Equal(("overlayDot", "always"), (op.Key, op.Value.GetString()));
+    }
+
+    [Fact]
     public void AConflictReloadsThePageFromTheCurrentDocument()
     {
         _engine.State = _engine.State! with { Settings = Document(revision: 1, startWithWindows: false) };

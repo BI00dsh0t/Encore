@@ -10,11 +10,13 @@ using ReplayBuffer.Contracts.Settings;
 namespace ReplayBuffer.App.Settings;
 
 /// <summary>
-/// The Global <c>trackLayout</c> (R1, R2): an unsaved draft of its devices and Tracks, which Save sends as
+/// The Global <c>trackLayout</c> (R1, R2), or with a profile id that Game Profile's override of it (R7):
+/// an unsaved draft of its devices and Tracks, which Save sends as
 /// one <c>settings.update</c>. Devices come from the snapshot's <c>devices</c> list; a layout device that
 /// isn't present shows as unavailable and stays in the layout. While the page is open it meters its draft
 /// (R6) through <c>meters.watch</c>, and each Track shows its level from the snapshot's <c>meters</c>.
-/// Members run on the UI thread.
+/// A profile without an override shows the Global layout, which it can't edit, until "Use Global" is
+/// unticked. Members run on the UI thread.
 /// </summary>
 internal sealed class TrackLayoutPage : SettingsPage
 {
@@ -32,11 +34,14 @@ internal sealed class TrackLayoutPage : SettingsPage
     private string? _watchedJson;
     private string? _watchedInstanceId;
     private bool _unwatchPending;
+    private bool _usesGlobal;
 
-    public TrackLayoutPage(SettingsSender sender, IEngineSession engine)
+    public TrackLayoutPage(SettingsSender sender, IEngineSession engine, string? profileId = null)
         : base(sender)
     {
         _engine = engine;
+        ProfileId = profileId;
+        _usesGlobal = profileId is not null;
         AddDeviceCommand = new RelayCommand(AddDevice);
         RemoveDeviceCommand = new RelayCommand(RemoveDevice);
         AddTrackCommand = new RelayCommand(AddTrack);
@@ -49,6 +54,45 @@ internal sealed class TrackLayoutPage : SettingsPage
     }
 
     public override string Title => "Track Layout";
+
+    /// <summary>The Game Profile whose override this page edits; null on the Global page.</summary>
+    public string? ProfileId { get; }
+
+    public bool IsProfile => ProfileId is not null;
+
+    /// <summary>
+    /// Whether the profile has no override and so uses the Global layout; false on the Global page.
+    /// Ticking it removes the override and drops the draft; unticking it sets the override to the Global
+    /// layout as is, so the Track ids and device keys stay the same.
+    /// </summary>
+    public bool UsesGlobal
+    {
+        get => _usesGlobal;
+        set
+        {
+            if (!IsProfile || value == _usesGlobal)
+            {
+                return;
+            }
+
+            ShowUsesGlobal(value);
+            var global = SettingsValues.Global(Document, Keys.TrackLayout);
+            if (value)
+            {
+                Message = null;
+                _basis = global;
+                Load(global);
+                _ = SendAsync([SettingsOp.RemoveProfile(ProfileId!, Keys.TrackLayout.Name)]);
+            }
+            else
+            {
+                _ = SendAsync([SettingsValues.Set(Keys.TrackLayout, global, ProfileId)]);
+            }
+        }
+    }
+
+    /// <summary>Whether the draft can be edited: always on the Global page, else while the profile has its own layout.</summary>
+    public bool CanEdit => !IsProfile || !UsesGlobal;
 
     /// <summary>The draft's devices, in layout order.</summary>
     public ObservableCollection<TrackLayoutDeviceItem> Devices { get; } = [];
@@ -171,12 +215,17 @@ internal sealed class TrackLayoutPage : SettingsPage
         [.. Devices.Select(d => d.Device)],
         [.. Tracks.Select(t => new Track(t.Id, t.Name, [.. t.DeviceKeys], t.MuteAffected))]);
 
-    protected override FrameworkElement CreateView() => new TrackLayoutView { DataContext = this };
+    protected override FrameworkElement CreateView()
+    {
+        var view = new TrackLayoutView { DataContext = this };
+        return IsProfile ? Embedded(view) : view;
+    }
 
     protected override void OnRender(SettingsDocument document)
     {
-        var layout = SettingsValues.Global(document, Keys.TrackLayout);
-        if (!IsDirty)
+        var layout = SettingsValues.Resolve(document, Keys.TrackLayout, ProfileId);
+        ShowUsesGlobal(IsProfile && !SettingsValues.HasOverride(document, Keys.TrackLayout, ProfileId!));
+        if (UsesGlobal || !IsDirty)
         {
             _basis = layout;
             Load(layout);
@@ -192,6 +241,14 @@ internal sealed class TrackLayoutPage : SettingsPage
             _basis = layout;
             Load(layout);
             Message = "The Track Layout changed elsewhere, so this page reloaded it.";
+        }
+    }
+
+    private void ShowUsesGlobal(bool value)
+    {
+        if (Set(ref _usesGlobal, value, nameof(UsesGlobal)))
+        {
+            OnPropertyChanged(nameof(CanEdit));
         }
     }
 
@@ -431,7 +488,7 @@ internal sealed class TrackLayoutPage : SettingsPage
     private async Task SaveAsync()
     {
         // The draft stays dirty until settings.changed arrives, so a second Save would send against the old revision.
-        if (_saving)
+        if (_saving || !CanEdit)
         {
             return;
         }
@@ -445,7 +502,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         _saving = true;
         try
         {
-            await SendAsync([SettingsValues.SetGlobal(Keys.TrackLayout, ToLayout())]);
+            await SendAsync([SettingsValues.Set(Keys.TrackLayout, ToLayout(), ProfileId)]);
         }
         finally
         {

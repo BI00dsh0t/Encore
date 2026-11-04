@@ -93,6 +93,7 @@ Label ids take the form `ari:cloud:trello::label/workspace/6ae9f97af5eb2665e5252
 | 5.12 Benchmark with the Overlay on | `6ae9fb58d1ff81d4fa9da5cb` |
 | 5.13 Refactor sweep | `6ae9fb5a53939009b9b4dae4` |
 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | `6ae9fb5b0b019e206baf24a9` |
+| 5.15 Adaptive Overlay dot | `6aeabc225526396a15b255cc` |
 | 6.1 Tracer: Record Hotkey to a fragmented MP4 Recording beside the Replay Buffer | `6ae9fbb382e57754455e52a4` |
 | 6.2 Crash-safe Recordings and recording-interrupted | `6ae9fbb4448044d3ce6b1bec` |
 | 6.3 Record Hotkey modes and the Recordings switch | `6ae9fbb5a1f741b5f4d3a7f7` |

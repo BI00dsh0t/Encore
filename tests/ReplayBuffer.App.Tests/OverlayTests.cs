@@ -8,6 +8,7 @@ using ReplayBuffer.App.Engine;
 using ReplayBuffer.App.Overlay;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Platform.Desktop;
 
 namespace ReplayBuffer.App.Tests;
@@ -166,6 +167,129 @@ public sealed class OverlayTests
         Assert.Equal("x2", model.Message?.Id);
         time.Advance(OverlayViewModel.MessageDuration);
         Assert.Null(model.Message);
+    }
+
+    [Fact]
+    public void WithoutOverlayPlanesTheDotShowsForThreeSecondsAfterEachChange()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var model = new OverlayViewModel(engine, action => action(), time, overlayPlanes: _ => false);
+
+        Shift(engine, Buffering with { MicMuted = true });
+        Assert.False(model.DotAlways);
+        Assert.Equal((OverlayDot.Hollow, true), (model.Dot, model.MicMuted));
+        time.Advance(OverlayViewModel.DotOnChangeDuration);
+        Assert.Equal((OverlayDot.None, false), (model.Dot, model.MicMuted));
+
+        // A timer that fires before the clock reaches the end arms again for what's left.
+        Shift(engine, Buffering with { MicMuted = false });
+        time.Advance(OverlayViewModel.DotOnChangeDuration - TimeSpan.FromMilliseconds(1), clockLags: TimeSpan.FromMilliseconds(1));
+        Assert.Equal(OverlayDot.Hollow, model.Dot);
+        time.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.Equal(OverlayDot.None, model.Dot);
+
+        // Unmuting is a change too.
+        Shift(engine, Buffering with { MicMuted = true });
+        time.Advance(OverlayViewModel.DotOnChangeDuration);
+        Shift(engine, Buffering with { MicMuted = false });
+        Assert.Equal(OverlayDot.Hollow, model.Dot);
+        time.Advance(OverlayViewModel.DotOnChangeDuration);
+        Assert.Equal(OverlayDot.None, model.Dot);
+
+        // overlayDot: always shows it for as long as it lasts, whatever the monitor.
+        SetOverlayDot(engine, OverlayDotMode.Always);
+        Assert.Equal(OverlayDot.Hollow, model.Dot);
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(OverlayDot.Hollow, model.Dot);
+    }
+
+    [Fact]
+    public void WithOverlayPlanesTheDotStaysUnlessOnChangeIsChosenAndADisplayChangeAsksAgain()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var asked = new List<int?>();
+        var planes = true;
+        var model = new OverlayViewModel(engine, action => action(), time, overlayPlanes: pid =>
+        {
+            asked.Add(pid);
+            return planes;
+        });
+
+        engine.State = engine.State! with { TargetGame = new TargetGame("game", "game.exe", 77) };
+        Shift(engine, Buffering);
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(OverlayDot.Hollow, model.Dot);
+        Assert.True(model.DotAlways);
+
+        // Asked once per Target Game (none at first, then process 77), and again when the monitors change.
+        Assert.Equal([null, 77], asked);
+        var count = asked.Count;
+        planes = false;
+        model.DisplaysChanged();
+        Assert.Equal(count + 1, asked.Count);
+        Assert.Equal(OverlayDot.None, model.Dot);
+
+        // onChange shows it on a change only, even with planes.
+        planes = true;
+        model.DisplaysChanged();
+        SetOverlayDot(engine, OverlayDotMode.OnChange);
+        Assert.Equal(OverlayDot.None, model.Dot);
+        Shift(engine, Buffering with { Recording = RecordingState.Running });
+        Assert.Equal(OverlayDot.Solid, model.Dot);
+        time.Advance(OverlayViewModel.DotOnChangeDuration);
+        Assert.Equal(OverlayDot.None, model.Dot);
+    }
+
+    [Fact]
+    public void AnUnknownPlaneAnswerShowsTheDotOnChangeAndIsAskedAgain()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        bool? planes = null;
+        var model = new OverlayViewModel(engine, action => action(), time, overlayPlanes: _ => planes);
+        Shift(engine, Buffering);
+        Assert.False(model.DotAlways);
+
+        planes = true;
+        time.Advance(OverlayViewModel.UnknownPlanesRetry);
+        engine.RaiseChanged();
+        Assert.True(model.DotAlways);
+    }
+
+    [Fact]
+    public void ThePlaneQueryRunsInTheBackgroundAndItsAnswerIsPostedBack()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        var queued = new List<Action>();
+        var model = new OverlayViewModel(engine, action => action(), time, overlayPlanes: _ => true, background: queued.Add);
+
+        // Until it answers, the monitor is taken to have no planes.
+        Shift(engine, Buffering);
+        Assert.False(model.DotAlways);
+        Assert.Single(queued);
+
+        queued[0]();
+        Assert.True(model.DotAlways);
+        time.Advance(OverlayViewModel.DotOnChangeDuration);
+        Assert.Equal(OverlayDot.Hollow, model.Dot);
+    }
+
+    [Fact]
+    public void TheTrayShowsTheCaptureStateWhateverTheOverlayDot()
+    {
+        var engine = new FakeEngineSession();
+        Assert.Equal("Not capturing", TrayCapture.Describe(TrayCapture.For(engine)));
+
+        engine.State = engine.State! with { Capture = Buffering };
+        Assert.Equal("Replay Buffer on", TrayCapture.Describe(TrayCapture.For(engine)));
+        engine.State = engine.State with { Capture = Buffering with { Recording = RecordingState.Running } };
+        Assert.Equal("Recording", TrayCapture.Describe(TrayCapture.For(engine)));
+
+        engine.Status = EngineStatus.Disconnected;
+        Assert.Equal(OverlayDot.None, TrayCapture.For(engine));
     }
 
     [Fact]
@@ -346,6 +470,15 @@ public sealed class OverlayTests
         engine.RaiseChanged();
     }
 
+    private static void SetOverlayDot(FakeEngineSession engine, OverlayDotMode mode)
+    {
+        engine.State = engine.State! with
+        {
+            Settings = SettingsDocument.Empty with { Global = SettingsMaps.EmptyValues.Add(Keys.OverlayDot.Name, Keys.OverlayDot.ToJson(mode)) },
+        };
+        engine.RaiseChanged();
+    }
+
     private static Warning Notice(string id, string code, WarningSeverity severity, string message, DateTimeOffset at) =>
         new(id, code, severity, "capture", message, at, Overlay: true, Sound: null, Dismissable: true);
 
@@ -376,10 +509,11 @@ public sealed class OverlayTests
             return timer;
         }
 
-        public void Advance(TimeSpan by)
+        /// <param name="clockLags">Fires the timers due by <c>by + clockLags</c>, as a timer that runs a little early does.</param>
+        public void Advance(TimeSpan by, TimeSpan clockLags = default)
         {
             _now += by;
-            foreach (var due in _timers.Where(t => t.DueAt <= _now).ToList())
+            foreach (var due in _timers.Where(t => t.DueAt <= _now + clockLags).ToList())
             {
                 _timers.Remove(due);
                 due.Fire();

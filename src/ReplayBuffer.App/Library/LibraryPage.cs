@@ -18,7 +18,9 @@ namespace ReplayBuffer.App.Library;
 /// asked by absolute path once the item is written, never while it is. Each row's star (story 7.4)
 /// sends <c>library.setFavourite</c> and changes only when the snapshot does. The list is grouped by
 /// game or by day and filtered by game, date and Favourite (story 7.5), a choice remembered per
-/// instance. Members run on the UI thread.
+/// instance. Each row opens in the default player, shows in Explorer and copies as a file drop
+/// (story 7.6) through the shell, by absolute path, after checking only that the file still exists.
+/// Members run on the UI thread.
 /// </summary>
 internal sealed class LibraryPage : Observable
 {
@@ -32,6 +34,7 @@ internal sealed class LibraryPage : Observable
     private readonly LibraryThumbnails? _thumbnails;
     private readonly string? _viewStateFile;
     private readonly TimeProvider _time;
+    private readonly ILibraryShell _shell;
     private readonly Dictionary<string, LibraryRow> _rows = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, LibraryGroupHeader> _headers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, LibraryGameOption> _gameOptions = new(StringComparer.Ordinal);
@@ -45,16 +48,26 @@ internal sealed class LibraryPage : Observable
     private string? _gameFilter;
     private LibraryDateFilter _dateFilter;
     private bool _favouritesOnly;
+    private string? _libraryFolder;
+    private string? _actionError;
+    private string? _actionErrorPath;
 
     /// <param name="thumbnails">Where the rows' thumbnails come from; without it, every row shows the generic glyph.</param>
     /// <param name="viewStateFile">Where the view choices are remembered; without it, they last only this run.</param>
     /// <param name="time">The clock the date filter and day headers read "today" from.</param>
-    public LibraryPage(IEngineSession engine, LibraryThumbnails? thumbnails = null, string? viewStateFile = null, TimeProvider? time = null)
+    /// <param name="shell">The row actions' shell; the Windows shell without it.</param>
+    public LibraryPage(
+        IEngineSession engine,
+        LibraryThumbnails? thumbnails = null,
+        string? viewStateFile = null,
+        TimeProvider? time = null,
+        ILibraryShell? shell = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _thumbnails = thumbnails;
         _viewStateFile = viewStateFile;
         _time = time ?? TimeProvider.System;
+        _shell = shell ?? new WindowsLibraryShell();
         AcknowledgeCommand = new RelayCommand(() => _ = AcknowledgeAsync());
         Games.Add(_allGames);
 
@@ -68,6 +81,21 @@ internal sealed class LibraryPage : Observable
         get => _isCleanupBlocked;
         private set => Set(ref _isCleanupBlocked, value);
     }
+
+    /// <summary>The last row action's failure, shown under the filters; null once one succeeds or its row leaves the Library.</summary>
+    public string? ActionError
+    {
+        get => _actionError;
+        private set
+        {
+            if (Set(ref _actionError, value))
+            {
+                OnPropertyChanged(nameof(HasActionError));
+            }
+        }
+    }
+
+    public bool HasActionError => ActionError is not null;
 
     /// <summary>Sends <c>warning.dismiss</c> for the active <c>library-corrupt</c> warning.</summary>
     public ICommand AcknowledgeCommand { get; }
@@ -146,6 +174,7 @@ internal sealed class LibraryPage : Observable
     {
         ArgumentNullException.ThrowIfNull(state);
         IsCleanupBlocked = state.CleanupBlocked;
+        _libraryFolder = state.LibraryFolder;
         _corruptWarningId = state.Warnings.FirstOrDefault(w => w.Code == ErrorCodes.LibraryCorrupt)?.Id;
         var ordered = state.Library
             .OrderByDescending(i => i.Date)
@@ -158,7 +187,7 @@ internal sealed class LibraryPage : Observable
         {
             if (!_rows.TryGetValue(item.Path, out var row))
             {
-                row = new LibraryRow(item.Path, r => _ = SetFavouriteAsync(r));
+                row = new LibraryRow(item.Path, r => _ = SetFavouriteAsync(r), Act);
                 _rows.Add(item.Path, row);
             }
 
@@ -176,6 +205,11 @@ internal sealed class LibraryPage : Observable
             {
                 _rows.Remove(gone);
             }
+        }
+
+        if (_actionErrorPath is { } failed && !_rows.ContainsKey(failed))
+        {
+            ClearActionError();
         }
 
         Sync(Rows, shown.ConvertAll(s => s.Row));
@@ -415,6 +449,61 @@ internal sealed class LibraryPage : Observable
         }
     }
 
+    // One shell action on the row's file; only its existence is checked, never its contents (AD-1).
+    private void Act(LibraryRow row, LibraryAction action)
+    {
+        var folder = _libraryFolder;
+        var path = string.IsNullOrEmpty(folder) ? null : System.IO.Path.Combine(folder, row.Path);
+        if (path is null || !System.IO.File.Exists(path))
+        {
+            Fail(row, "That file no longer exists.");
+            return;
+        }
+
+        try
+        {
+            switch (action)
+            {
+                case LibraryAction.Open:
+                    _shell.Open(path);
+                    break;
+                case LibraryAction.ShowInExplorer:
+                    _shell.ShowInExplorer(path);
+                    break;
+                default:
+                    _shell.Copy(path);
+                    break;
+            }
+        }
+#pragma warning disable CA1031 // Any shell failure is shown as a short error, never a crash.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            var verb = action switch
+            {
+                LibraryAction.Open => "open",
+                LibraryAction.ShowInExplorer => "show",
+                _ => "copy",
+            };
+            Fail(row, $"Couldn't {verb} the file.");
+            return;
+        }
+
+        ClearActionError();
+    }
+
+    private void Fail(LibraryRow row, string message)
+    {
+        _actionErrorPath = row.Path;
+        ActionError = message;
+    }
+
+    private void ClearActionError()
+    {
+        _actionErrorPath = null;
+        ActionError = null;
+    }
+
     // The row's identity as last shown (AD-3); the star follows the snapshot, never this send.
     private async Task SetFavouriteAsync(LibraryRow row)
     {
@@ -479,7 +568,8 @@ internal sealed class LibraryPage : Observable
 
 /// <summary>One Library item as the page shows it.</summary>
 /// <param name="setFavourite">Sends the row's Favourite toggle; the star command's action.</param>
-internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite = null) : Observable
+/// <param name="act">Runs a shell action on the row's file; the Open, Show in Explorer and Copy commands' action.</param>
+internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite = null, Action<LibraryRow, LibraryAction>? act = null) : Observable
 {
     private string _game = "";
     private string _date = "";
@@ -489,6 +579,9 @@ internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite =
     private bool _isLocked;
     private bool _isFavourite;
     private RelayCommand? _favouriteCommand;
+    private RelayCommand? _openCommand;
+    private RelayCommand? _showInExplorerCommand;
+    private RelayCommand? _copyCommand;
 
     /// <summary>The item's key: its path relative to the Output Folder.</summary>
     public string Path { get; } = path;
@@ -549,6 +642,7 @@ internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite =
             if (Set(ref _isLocked, value))
             {
                 OnPropertyChanged(nameof(Lock));
+                _copyCommand?.RaiseCanExecuteChanged();
             }
         }
     }
@@ -575,6 +669,16 @@ internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite =
     /// <summary>Toggles the Favourite through the engine.</summary>
     public ICommand FavouriteCommand => _favouriteCommand ??= new RelayCommand(() => setFavourite?.Invoke(this));
 
+    /// <summary>Opens the file in its default player, even while it is being written.</summary>
+    public ICommand OpenCommand => _openCommand ??= new RelayCommand(() => act?.Invoke(this, LibraryAction.Open));
+
+    /// <summary>Shows the file selected in Explorer, even while it is being written.</summary>
+    public ICommand ShowInExplorerCommand =>
+        _showInExplorerCommand ??= new RelayCommand(() => act?.Invoke(this, LibraryAction.ShowInExplorer));
+
+    /// <summary>Copies the file as a file drop; disabled until it is written.</summary>
+    public ICommand CopyCommand => _copyCommand ??= new RelayCommand(() => act?.Invoke(this, LibraryAction.Copy), () => !IsLocked);
+
     /// <summary>The item last shown, whose identity (path, size, modified time) a command sends.</summary>
     internal LibraryItem? Item { get; private set; }
 
@@ -588,6 +692,14 @@ internal sealed class LibraryRow(string path, Action<LibraryRow>? setFavourite =
         Length = item.BeingWritten ? "" : LibraryPage.LengthText(item.LengthSeconds);
         IsLocked = item.BeingWritten;
     }
+}
+
+/// <summary>A row's shell action.</summary>
+internal enum LibraryAction
+{
+    Open,
+    ShowInExplorer,
+    Copy,
 }
 
 /// <summary>A group's header in the Library list; one instance per group key, its name kept current.</summary>

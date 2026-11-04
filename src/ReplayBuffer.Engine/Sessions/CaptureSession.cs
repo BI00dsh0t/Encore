@@ -474,12 +474,11 @@ internal sealed class CaptureSession : ICaptureSession
     /// press), then up to as long again for every stream to pass it by an AAC frame (encoding and
     /// the AAC FIFO lag it), cuts <c>[max(key - bufferWindow, last Reset, earlier write's claim), key)</c>
     /// from the first keyframe in it, and writes the Clip. The Buffer Window is the one in effect at
-    /// the press (a resize applies at a Reset), and the cut comes from one ring generation: less
-    /// than 1 s past a generation's boundary, the previous one up to the boundary, where the Clip
-    /// then ends and the next one starts (<see cref="RingGenerations.Cut"/>). A chain started
-    /// mid-session cuts from its first keyframe when that is under a frame before the start
-    /// (<see cref="EncoderChain.SnapStart"/>). The claim (<see cref="ClipClaim"/>) keeps a Clip
-    /// written while an earlier one still writes from cutting back over it. A press less than 1 s
+    /// the press (a resize applies at a Reset), and the cut comes from one ring generation
+    /// (<see cref="RingGenerations.Cut"/>). A chain started mid-session cuts from its first
+    /// keyframe when that is under a frame before the start (<see cref="EncoderChain.SnapStart"/>).
+    /// The claim (<see cref="ClipClaim"/>) keeps a Clip written while an earlier one still writes
+    /// from cutting back over it. A press less than 1 s
     /// after the anchor is refused with <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe
     /// is asked for. Once drained (<see cref="Drain"/>), the encoders are flushed and gone: the
     /// write asks for no keyframe, and the Clip runs to the end of the ring; after
@@ -1608,7 +1607,7 @@ internal sealed class CaptureSession : ICaptureSession
 
                 ClipWriter.Write(source, path, log);
 
-                // The cut's end: the press's keyframe, or a ring generation's boundary when the cut came from the one before it.
+                // The cut's end: the press's keyframe.
                 var endUs = source.Cut.EndUs;
                 session._claim.Succeeded(toUs, endUs);
                 claimed = null;
