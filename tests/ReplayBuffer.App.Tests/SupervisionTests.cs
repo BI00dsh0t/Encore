@@ -110,6 +110,24 @@ public sealed class SupervisionTests : IAsyncDisposable
 
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
+    public async Task ASimulatedEngineHangIsKilledAndRelaunchedAsStoppedAnswering()
+    {
+        var (app, engine) = await StartPairAsync();
+        using var old = Process.GetProcessById(engine);
+        await using (var client = await ConnectAsync())
+        {
+            await client.SendAsync(DevMessages.Simulate, new DevSimulate(SimulatedEvent.EngineHang), Token).WaitAsync(TimeSpan.FromSeconds(5), Token);
+        }
+
+        var state = await WaitForStateAsync(
+            s => s.Pid != engine && s.AppPid == app.Id && HasWarning(s, ErrorCodes.EngineRestarted),
+            TimeSpan.FromSeconds(20));
+        Assert.True(old.HasExited);
+        Assert.Contains("answering", Assert.Single(state.Warnings, w => w.Code == ErrorCodes.EngineRestarted).Message);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task ADroppedConnectionToALiveEngineReconnectsWithNoRelaunch()
     {
         var (app, engine) = await StartPairAsync();
@@ -144,7 +162,8 @@ public sealed class SupervisionTests : IAsyncDisposable
         Assert.Contains("answering", Assert.Single(state.Warnings, w => w.Code == ErrorCodes.EngineRestarted).Message);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AKilledAppIsRelaunchedByTheEngine()
     {
         var (app, engine) = await StartPairAsync();

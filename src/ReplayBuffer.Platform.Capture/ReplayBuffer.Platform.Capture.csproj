@@ -9,6 +9,8 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ReplayBuffer.Platform.FFmpeg.Tests" />
+    <!-- DesktopDuplicationCapture.SimulateAccessLost, the session's ACCESS_LOST test hook (6.10). -->
+    <InternalsVisibleTo Include="ReplayBuffer.Engine" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ReplayBuffer.Core\ReplayBuffer.Core.csproj" />

@@ -27,6 +27,43 @@ public static class Supervision
 
     /// <summary>How long with no restart starts the backoff again from its first delay.</summary>
     public static TimeSpan BackoffReset { get; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>How many restarts within <see cref="CrashLoopWindow"/> the supervisors allow; one more is a crash loop.</summary>
+    public const int CrashLoopRestarts = 3;
+
+    /// <summary>The span <see cref="CrashLoopRestarts"/> counts over; it slides with each restart.</summary>
+    public static TimeSpan CrashLoopWindow { get; } = TimeSpan.FromMinutes(10);
+}
+
+/// <summary>
+/// The crash-loop rule of both supervisors (AD-16): a restart is allowed while fewer than
+/// <see cref="Supervision.CrashLoopRestarts"/> restarts fall within the last
+/// <see cref="Supervision.CrashLoopWindow"/>; the next one is a crash loop. Not thread-safe.
+/// </summary>
+public sealed class CrashLoopGuard(TimeProvider time)
+{
+    private readonly Queue<DateTimeOffset> _restarts = new();
+
+    /// <summary>Records a restart and returns true, or returns false for a crash loop and records nothing.</summary>
+    public bool TryRestart()
+    {
+        var now = time.GetUtcNow();
+        while (_restarts.TryPeek(out var oldest) && now - oldest >= Supervision.CrashLoopWindow)
+        {
+            _restarts.Dequeue();
+        }
+
+        if (_restarts.Count >= Supervision.CrashLoopRestarts)
+        {
+            return false;
+        }
+
+        _restarts.Enqueue(now);
+        return true;
+    }
+
+    /// <summary>Forgets every restart, after the user restarts by hand.</summary>
+    public void Reset() => _restarts.Clear();
 }
 
 /// <summary>

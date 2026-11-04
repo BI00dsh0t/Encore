@@ -86,6 +86,12 @@ public static class ErrorCodes
     /// <summary>The engine relaunched an App that exited with no <c>engine.shutdown</c> (AD-16).</summary>
     public const string AppRestarted = "app-restarted";
 
+    /// <summary>The engine crashed or hung again after 3 restarts within 10 minutes; the App stopped relaunching it (AD-16).</summary>
+    public const string EngineCrashLoop = "engine-crash-loop";
+
+    /// <summary>The App exited again after 3 relaunches within 10 minutes; the engine stopped relaunching it (AD-16).</summary>
+    public const string AppCrashLoop = "app-crash-loop";
+
     /// <summary>Another copy of this process already runs for this instance (AD-16).</summary>
     public const string InstanceRunning = "instance-running";
 
@@ -260,6 +266,13 @@ public static class ErrorCodes
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
 
+    /// <summary>
+    /// A warning (AD-12): Windows.Graphics.Capture couldn't capture the Monitor Recording's monitor,
+    /// so it is captured through DXGI Desktop Duplication instead; the file is the same. Raised once
+    /// per Monitor session.
+    /// </summary>
+    public const string MonitorCaptureFallback = "monitor-capture-fallback";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -290,6 +303,8 @@ public static class ErrorCodes
         WarningNotDismissable,
         EngineRestarted,
         AppRestarted,
+        EngineCrashLoop,
+        AppCrashLoop,
         InstanceRunning,
         RecordingInterrupted,
         SessionRunning,
@@ -324,5 +339,6 @@ public static class ErrorCodes
         ResetGap,
         EncoderBudget,
         NotDevInstance,
+        MonitorCaptureFallback,
     ];
 }

@@ -173,6 +173,62 @@ public sealed class EngineConnectionTests : IAsyncDisposable
         Assert.True(second.HasExited);
     }
 
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AFourthCrashWithinTenMinutesIsACrashLoopUntilRestart()
+    {
+        var log = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var connection = Create(EngineExe, log.Enqueue);
+        connection.StartSupervising();
+        for (var kill = 1; kill <= Supervision.CrashLoopRestarts + 1; kill++)
+        {
+            await Eventually(() => connection.Status == EngineStatus.Connected && connection.State?.AppPid == Environment.ProcessId);
+            var pid = connection.State!.Pid;
+            _enginePids.Add(pid);
+            using var engine = Process.GetProcessById(pid);
+            engine.Kill();
+            await engine.WaitForExitAsync(Token);
+
+            // Wait for the connection to leave the killed engine before the next round reads its state.
+            await Eventually(() => connection.Status != EngineStatus.Connected || connection.State?.Pid != pid);
+        }
+
+        await Eventually(() => connection.Status == EngineStatus.CrashLoop);
+        Assert.Contains(log, line => line.Contains(ErrorCodes.EngineCrashLoop, StringComparison.Ordinal));
+        Assert.Contains(ErrorCodes.EngineCrashLoop, connection.Problem);
+        var none = await Assert.ThrowsAsync<ErrorCodeException>(() =>
+            EngineClient.ConnectAsync(PipeName.ForCurrentUser(_instance), new EngineClientOptions { ConnectTimeout = TimeSpan.FromMilliseconds(500) }, Token));
+        Assert.Equal(ErrorCodes.EngineDisconnected, none.Code);
+
+        connection.RestartAfterCrashLoop();
+
+        await Eventually(() => connection.Status == EngineStatus.Connected && connection.State?.AppPid == Environment.ProcessId);
+        _enginePids.Add(connection.State!.Pid);
+        Assert.DoesNotContain(connection.State.Warnings, w => w.Code == ErrorCodes.EngineRestarted);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AnEngineThatCrashesBeforeServingEndsInACrashLoop()
+    {
+        // An "engine" that exits 1 at once: every launch fails before the pipe serves.
+        var log = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var connection = new EngineConnection(new EngineConnectionOptions
+        {
+            InstanceName = _instance,
+            EnginePath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+            EngineArguments = ["/c", "exit", "1"],
+            AttemptTimeout = TimeSpan.FromMilliseconds(200),
+            Log = log.Enqueue,
+        });
+        _connections.Add(connection);
+        connection.StartSupervising();
+
+        await Eventually(() => connection.Status == EngineStatus.CrashLoop);
+
+        Assert.Contains(log, line => line.Contains(ErrorCodes.EngineCrashLoop, StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task AServerThatIsNotTheTrustedEngineIsRefusedAndNeverLaunchedOver()
     {
@@ -227,7 +283,7 @@ public sealed class EngineConnectionTests : IAsyncDisposable
         }
     }
 
-    private EngineConnection Create(string enginePath)
+    private EngineConnection Create(string enginePath, Action<string>? log = null)
     {
         var connection = new EngineConnection(new EngineConnectionOptions
         {
@@ -235,6 +291,7 @@ public sealed class EngineConnectionTests : IAsyncDisposable
             EnginePath = enginePath,
             EngineArguments = ["serve", "--instance", _instance],
             LaunchTimeout = TimeSpan.FromSeconds(30),
+            Log = log,
         });
         _connections.Add(connection);
         return connection;

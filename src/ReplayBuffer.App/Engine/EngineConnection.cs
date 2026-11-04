@@ -19,6 +19,12 @@ internal enum EngineStatus
     Restarting,
     NotRunning,
     Disconnected,
+
+    /// <summary>
+    /// The engine crashed or hung again after <see cref="Supervision.CrashLoopRestarts"/> restarts within
+    /// <see cref="Supervision.CrashLoopWindow"/>: the App stopped relaunching it until the user restarts it.
+    /// </summary>
+    CrashLoop,
 }
 
 /// <summary>What the App's views need from the engine: its state, and a way to send commands.</summary>
@@ -77,6 +83,9 @@ internal sealed record EngineConnectionOptions
     /// <summary>The process <c>app.attach</c> names, which the engine relaunches if it dies.</summary>
     public int AppPid { get; init; } = Environment.ProcessId;
 
+    /// <summary>Writes one line to the App's log; the supervise loop logs a crash loop through it.</summary>
+    public Action<string>? Log { get; init; }
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
@@ -84,8 +93,11 @@ internal sealed record EngineConnectionOptions
 /// The App's connection to its engine, and its half of supervision (AD-16). <see cref="ConnectAsync"/>
 /// connects, launching the engine when none answers. <see cref="StartSupervising"/> keeps it that
 /// way: it attaches with <c>app.attach</c>, kills an engine that is hung, relaunches one that
-/// crashed, with backoff, and raises <see cref="EngineEnded"/> when the engine ends cleanly on its
-/// own. <see cref="ShutdownAsync"/> stops supervising, then shuts the engine down for Quit.
+/// crashed, with backoff and <c>serve --restarted crashed|hung</c>, and raises <see cref="EngineEnded"/>
+/// when the engine ends cleanly on its own. A crash or hang after <see cref="Supervision.CrashLoopRestarts"/>
+/// restarts within <see cref="Supervision.CrashLoopWindow"/> is a crash loop: no relaunch, status
+/// <see cref="EngineStatus.CrashLoop"/>, until <see cref="RestartAfterCrashLoop"/>.
+/// <see cref="ShutdownAsync"/> stops supervising, then shuts the engine down for Quit.
 /// </summary>
 internal sealed class EngineConnection(EngineConnectionOptions options) : IEngineSession, IAsyncDisposable
 {
@@ -96,6 +108,12 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
     private static readonly TimeSpan KillWait = TimeSpan.FromSeconds(5);
 
     private readonly string _pipeName = PipeName.ForCurrentUser(options.InstanceName);
+    private readonly CrashLoopGuard _guard = new(options.Time);
+    private RestartBackoff _backoff = new(options.Time);
+    private TaskCompletionSource? _restartRequested;
+
+    /// <summary>Why the engine the last <see cref="ConnectOrLaunchAsync"/> launched failed: it exited non-zero, or never answered.</summary>
+    private EngineRestartReason? _launchFailure;
     private Link? _link;
     private Process? _launched;
     private CancellationTokenSource? _supervise;
@@ -140,8 +158,15 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         SetStatus(EngineStatus.Connecting);
-        await ConnectOrLaunchAsync(live: null, cancellationToken).ConfigureAwait(false);
+        await ConnectOrLaunchAsync(live: null, restart: null, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// The tray's Restart, in <see cref="EngineStatus.CrashLoop"/>: clears the crash-loop guard and the
+    /// backoff and starts the engine again, with no restart reason, as the user asked for it.
+    /// Does nothing in any other status.
+    /// </summary>
+    public void RestartAfterCrashLoop() => Volatile.Read(ref _restartRequested)?.TrySetResult();
 
     /// <summary>Starts the supervise loop (AD-16): connect, attach, watch, and kill or relaunch as needed.</summary>
     public void StartSupervising()
@@ -272,7 +297,6 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
 
     private async Task SuperviseAsync(CancellationToken cancellationToken)
     {
-        var backoff = new RestartBackoff(options.Time);
         EngineRestartReason? restart = null;
         Process? live = null;
         SetStatus(EngineStatus.Connecting);
@@ -280,15 +304,13 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         {
             try
             {
-                var outcome = await ConnectOrLaunchAsync(live, cancellationToken).ConfigureAwait(false);
+                var outcome = await ConnectOrLaunchAsync(live, restart, cancellationToken).ConfigureAwait(false);
                 if (outcome == Outcome.Unanswered)
                 {
                     // A dropped connection to a live engine that won't take a new one: it is hung.
                     await KillAsync(live!).ConfigureAwait(false);
                     live = null;
-                    restart = EngineRestartReason.Hung;
-                    SetStatus(EngineStatus.Restarting);
-                    await Task.Delay(backoff.Next(), options.Time, cancellationToken).ConfigureAwait(false);
+                    restart = await RestartAsync(EngineRestartReason.Hung, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
@@ -302,11 +324,21 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
                             return;
                         }
 
-                        restart = EngineRestartReason.Crashed;
+                        // It crashed while reconnecting; the reconnect already set the status.
+                        live = null;
+                        restart = await RestartAsync(EngineRestartReason.Crashed, cancellationToken, status: false).ConfigureAwait(false);
+                        continue;
                     }
 
                     live = null;
-                    await Task.Delay(backoff.Next(), options.Time, cancellationToken).ConfigureAwait(false);
+                    if (_launchFailure is { } failure)
+                    {
+                        // The engine it launched crashed or hung before serving: a restart like any other, so a crash loop ends.
+                        restart = await RestartAsync(failure, cancellationToken, status: false).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    await Task.Delay(_backoff.Next(), options.Time, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
@@ -326,9 +358,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
                     _problem = hung;
                     await link.Client.DisposeAsync().ConfigureAwait(false);
                     await KillAsync(link.Engine).ConfigureAwait(false);
-                    restart = EngineRestartReason.Hung;
-                    SetStatus(EngineStatus.Restarting);
-                    await Task.Delay(backoff.Next(), options.Time, cancellationToken).ConfigureAwait(false);
+                    restart = await RestartAsync(EngineRestartReason.Hung, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
@@ -348,9 +378,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
                 }
 
                 _problem = $"The engine exited with code {code}.";
-                restart = EngineRestartReason.Crashed;
-                SetStatus(EngineStatus.Restarting);
-                await Task.Delay(backoff.Next(), options.Time, cancellationToken).ConfigureAwait(false);
+                restart = await RestartAsync(EngineRestartReason.Crashed, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -360,9 +388,53 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
             {
                 _problem = e.Message;
                 SetStatus(EngineStatus.NotRunning);
-                await Task.Delay(backoff.Next(), options.Time, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(_backoff.Next(), options.Time, cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+
+    /// <summary>
+    /// Every relaunch after a crash or hang: asks the crash-loop guard, then waits out the backoff and
+    /// returns <paramref name="reason"/> for <c>serve --restarted</c>. A crash loop waits instead for
+    /// <see cref="RestartAfterCrashLoop"/>, and returns no reason. <paramref name="status"/> false keeps
+    /// the status already set.
+    /// </summary>
+    private async Task<EngineRestartReason?> RestartAsync(EngineRestartReason reason, CancellationToken cancellationToken, bool status = true)
+    {
+        if (_guard.TryRestart())
+        {
+            if (status)
+            {
+                SetStatus(EngineStatus.Restarting);
+            }
+
+            await Task.Delay(_backoff.Next(), options.Time, cancellationToken).ConfigureAwait(false);
+            return reason;
+        }
+
+        var restartRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Volatile.Write(ref _restartRequested, restartRequested);
+        var what = reason == EngineRestartReason.Hung ? "hung" : "crashed";
+        _problem = $"The engine keeps crashing ({ErrorCodes.EngineCrashLoop}), so it isn't being restarted. Restart it from the tray menu.";
+        options.Log?.Invoke(
+            $"{ErrorCodes.EngineCrashLoop}: the engine {what} again after {Supervision.CrashLoopRestarts} restarts "
+            + $"within {Supervision.CrashLoopWindow.TotalMinutes:0} min; not relaunching it");
+        SetStatus(EngineStatus.CrashLoop);
+        try
+        {
+            await restartRequested.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Volatile.Write(ref _restartRequested, null);
+        }
+
+        _guard.Reset();
+        _backoff = new RestartBackoff(options.Time);
+        _problem = null;
+        options.Log?.Invoke("Restarting the engine after a crash loop, as asked from the tray");
+        SetStatus(EngineStatus.Connecting);
+        return null;
     }
 
     /// <summary>The engine exited with code 0, not from this App's Quit: the App quits too.</summary>
@@ -435,13 +507,14 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
     }
 
     /// <summary>
-    /// Connects, launching the engine when none answers, unless <paramref name="live"/> is an engine still
+    /// Connects, launching the engine when none answers (with <paramref name="restart"/>), unless <paramref name="live"/> is an engine still
     /// running: then it only reconnects, and gives up after <see cref="Supervision.ReplyLimit"/>.
     /// </summary>
-    private async Task<Outcome> ConnectOrLaunchAsync(Process? live, CancellationToken cancellationToken)
+    private async Task<Outcome> ConnectOrLaunchAsync(Process? live, EngineRestartReason? restart, CancellationToken cancellationToken)
     {
         _launched?.Dispose();
         _launched = null;
+        _launchFailure = null;
         var since = options.Time.GetTimestamp();
         while (true)
         {
@@ -473,7 +546,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
             }
             else if (_launched is null)
             {
-                if (!TryLaunch())
+                if (!TryLaunch(restart))
                 {
                     break;
                 }
@@ -483,6 +556,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
             else if (_launched.HasExited)
             {
                 _problem = $"The engine exited with code {_launched.ExitCode}.";
+                _launchFailure = _launched.ExitCode != 0 ? EngineRestartReason.Crashed : null;
                 break;
             }
             else if (options.Time.GetElapsedTime(since) >= options.LaunchTimeout)
@@ -498,6 +572,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
                 }
 
                 _problem = $"The engine didn't answer within {options.LaunchTimeout.TotalSeconds:0} s.";
+                _launchFailure = EngineRestartReason.Hung;
                 break;
             }
         }
@@ -594,7 +669,8 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         return null;
     }
 
-    private bool TryLaunch()
+    /// <summary>Starts the engine; after a crash or hang with <c>--restarted crashed|hung</c>, so it raises <c>engine-restarted</c> itself.</summary>
+    private bool TryLaunch(EngineRestartReason? restart)
     {
         var start = new ProcessStartInfo(options.EnginePath)
         {
@@ -605,6 +681,12 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         foreach (var argument in options.EngineArguments)
         {
             start.ArgumentList.Add(argument);
+        }
+
+        if (restart is { } reason)
+        {
+            start.ArgumentList.Add("--restarted");
+            start.ArgumentList.Add(reason == EngineRestartReason.Hung ? "hung" : "crashed");
         }
 
         try

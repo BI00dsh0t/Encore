@@ -345,7 +345,7 @@ internal sealed class AppOverlayHost : IOverlayHost
 
     [DllImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint processId);
+    internal static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint processId);
 
     [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetFinalPathNameByHandle(SafeFileHandle file, StringBuilder path, uint length, uint flags);

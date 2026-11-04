@@ -16,6 +16,8 @@ The single place to resume the unattended build of initiative-replay-buffer afte
 - **Unsliced epics (4–8):** a slicing session runs Sofia (`bmad-agent-po`) to break the epic into stories, choosing defaults where the PRD and architecture leave a gap, and lists each such choice in the Decisions Awaiting Review below.
 - The PC is kept awake and unlocked while sessions work (the app's keep-awake hold plus a display-required holder). Never change Windows settings.
 - Commit at every checkpoint and keep each plan's log current; the usage limit can land at any time.
+- **Who takes `.bench-running` (2026-11-04):** `bench soak` and any test that uses `BenchLock` (today `CaptureExclusionTests` and `MonitorRecordingCaptureTests`; grep `BenchLock`) take the lock themselves and wait while it exists. **Never create the file by hand around them**, or they wait on it and hang (QA 6.10 hit this). Only wrap runs whose code doesn't take it (older Heavy tests, `bench fps` and `bench overlay` unless they say otherwise) by creating it before and deleting it after.
+- **GPU tests paused (builder, 2026-11-04): "avoid running GPU tests until I say to run them again."** No Heavy real-capture, encode, GPU-load or device-loss runs, no `bench fps`, `overlay` or `soak`, nothing that takes `.bench-running`. Builds, default (non-Heavy) test runs and the NativeAOT publish are fine. Stories still write their Heavy tests and list each as "not run (GPU tests paused by the builder)"; QA doesn't fail a story for that. Every brief repeats this until the builder lifts it. Keep a list of the skipped GPU runs in the Log so they can run later.
 - **Refactor sweeps keep forward hooks (2026-11-04):** a sweep must not delete code as "unused" when a later, not-yet-built ticket or the epic Notes depend on it. Before removing a type or member, grep the ticket tree (`_bmad-output/initiative-replay-buffer/tickets`) for its name. Epic 4's sweep deleted `RingGenerations.Restart`, and 6.6 had to restore it (`c7d7158`).
 - **Lean tests (builder, 2026-11-03):** this is a personal project with no end users or stakeholders. Stories write a simple suite that verifies the functionality: one or two happy-path tests per AC, plus a test for any bug that really bit. No exhaustive edge-case tables, no long real-time waits, no benchmark-style assertions in the default run. QA doesn't fail a story for thin tests unless a core function is untested. Slow, hardware-bound or flaky tests go in the opt-in category that the test-trim work sets up (see `CLAUDE.md` "Tests" once it merges).
 - **Model and effort per task (builder, 2026-11-02):** set them when starting a session (`start_session` `model`/`effort`) or, for a pool worker, before sending its brief (`set_session_model`/`set_session_effort`). Stories run on Opus (`claude-opus-5-5`), at high effort when the ticket's risk is high and at the default otherwise. QA rounds, merges, releases and syncs with develop run on Sonnet (`claude-sonnet-5-5`). A re-check after QA fixes (round 2 onward) runs at low effort. A story session that is told to merge may switch itself to Sonnet first.
@@ -37,10 +39,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.2 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.10 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.2 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 6.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.10 |
@@ -140,8 +142,8 @@ The coordinator logs each QA round in the Log below.
 | 27.7 | 6.7 Disk full during a Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `f144ae9`) |
 | 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ede89f7`) |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
-| 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
-| 27.11 | 6.11 Recordings settings in the Main App | | pending |
+| 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
+| 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
 | 27.12 | 6.12 Refactor sweep | | pending |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
@@ -160,8 +162,8 @@ The coordinator logs each QA round in the Log below.
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
-| 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
-| 29.3 | 8.3 GPU driver reset recovery | | pending |
+| 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
+| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
 | 29.5 | 8.5 Monitor changes | | pending |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
@@ -616,3 +618,14 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 7.9 at `493d23e`: **QA PASS**, 0 findings and 2 notes. 7.9 has been told to merge (Sonnet) and to add its Human Check row. 2-1-tracer is back in the pool. 7.9's merge unblocks 7.10 (the epic 7 refactor sweep).
 - 2026-11-04: 7.9 merged (`63ba0b9`, `feat(app): merge 7.9-library-cleanup-settings`) and marked done. It adds a Library and Cleanup Settings page (App-only, no Contracts change). Its Human Check row is queued. QA's 2 notes are in the epic Notes.
 - 2026-11-04: 7.9 merged (`63ba0b9`, marked done with its Human Check row at `5602f52`). Its card is Done with its label detached, and qa-2-1 is back in the pool. QA's note that the page doesn't refuse a junction as the Output Folder is covered by 7.8's engine checks against the resolved root. The epic 7 refactor sweep 7.10 went to story-2-7 (Opus, medium effort), with its card In progress. Its brief keeps every Cleanup and delete safety guard and its test.
+- 2026-11-04: QA 8.2 at `0661665`: **QA PASS**, 0 findings and 3 notes. **The flake is identified:** `AKilledAppIsRelaunchedByTheEngine` failed at its 30 s pair-start wait, then passed 5/5 reruns. Per CLAUDE.md, supervision timeouts are Heavy, so 8.2 moves it to Heavy and Explicit (test attribute only) before merging. 8.2 has been told to merge (Sonnet). qa-1-14 is back in the pool. 8.2's merge unblocks 8.3 (GPU driver reset recovery; it also waits on 6.6, done, and 6.9, done).
+- 2026-11-04: 8.2 merged (`fb0ab27`, `feat(engine): merge 8.2-engine-crash-recovery`) and marked done. Contracts change is additive (`EngineCrashLoop`, `AppCrashLoop`, `CrashLoopGuard`, `SimulatedEvent.EngineHang`). `AKilledAppIsRelaunchedByTheEngine` moved to Heavy. QA's 3 notes are in the epic Notes; the tray crash-loop state is a Human Check for 8.11.
+- 2026-11-04: 6.10 is READY FOR QA at `e42c1bb`. QA started on qa-1-14 (Sonnet), and its card is In QA. 8.2 is merging, with the flake moved to Heavy.
+- 2026-11-04: 8.2 merged (`fb0ab27`, logged `f90fe71`). The flaky `AKilledAppIsRelaunchedByTheEngine` is now Heavy and Explicit, and QA's notes are in the epic Notes. Its card is Done with its label detached, and slice-epic-4 is back in the pool. 8.3 (GPU driver reset recovery, high risk, HITL) went to slice-epic-8 (Opus, high effort), with its card In progress. Device loss is simulated only, never a real TDR; the real reset goes to the Human Check Queue. It may wire 6.6's missing production restart trigger.
+- 2026-11-04: **GPU tests paused by the builder** (see Standing decisions). Told 8.3 (slice-epic-8), QA 6.10 (qa-1-14) and 7.10 (story-2-7). Skipped so far: 6.10's Heavy Desktop Duplication fallback run in QA (the story ran it itself, 8/8), and 8.3's simulated device-loss Heavy run.
+- 2026-11-04: QA 6.10 at `e42c1bb`: **QA PASS**, 0 findings and 2 notes. Its Heavy `MonitorRecordingCaptureTests` (8/8) ran just before the GPU pause reached it; that's the last GPU run. QA found that pre-creating `.bench-running` makes `BenchLock`-based tests hang, which explains the empty 09:52 file. QA removed it, and the "Who takes `.bench-running`" rule was added. 6.10 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
+- 2026-11-04: 6.10 merged (`4bf3a8e`, marked done). QA passed at `e42c1bb` with 0 findings and 2 notes (a stale `Failed` doc on `DesktopDuplicationCapture`; a single `DuplicateOutput` at start, so a UAC prompt up at the press fails the session), recorded in the epic Notes. Synced with develop first: 0-warning build, Contracts 121, Core 145, Platform.Capture 3, Engine 211 passed, publish clean; no GPU tests (paused). Contracts change: additive `ErrorCodes.MonitorCaptureFallback`. Unblocks 6.11. Human Check: confirm on the PC that a forced-fallback Monitor Recording of the real Main App and Overlay hides them (6.9's row also covers this path).
+- 2026-11-04: 6.10 merged (`4bf3a8e`, logged `379a084`), and its card is Done. slice-epic-5 is back in the pool. 6.11 went to qa-1-14 (Opus, medium effort; GPU tests paused), with its card In progress.
+- 2026-11-04: 7.10 (the epic 7 refactor sweep) is READY FOR QA at `0f66b44`; its own review caught and restored a removed rename-guard assertion. QA started on 2-1-tracer (Sonnet; GPU tests paused), checking every Cleanup and delete guard and its test. Its card is In QA.
+- 2026-11-04: QA 7.10 at `0f66b44`: **QA PASS**, 0 findings (Core 145/145, App 121). 7.10 has been told to merge (Sonnet; no GPU tests). 2-1-tracer is back in the pool. 7.10's merge unblocks 7.11 (the epic 7 end-to-end check).
+- 2026-11-04: **Builder: a modern UI epic.** They chose a new epic (a `bmad-ux` design pass, then stories per area), run after epics 6 and 7 and before epic 8's final conformance. Mockups of the two looks (Windows 11 Fluent and gaming dark) were shown; the builder's pick of look is pending.

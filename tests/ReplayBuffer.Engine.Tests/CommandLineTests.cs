@@ -31,6 +31,16 @@ public sealed class CommandLineTests
         Assert.NotNull(CommandLine.Parse(["serve", "--instance", "ReplayBuffer-Test-soak1", "--replay-buffer", "--debug-capture"]).Error);
     }
 
+    [Fact]
+    public void ServeTakesWhyTheAppRestartedIt()
+    {
+        Assert.Equal(new ServeCommand(null, Restarted: Contracts.Messages.EngineRestartReason.Hung), CommandLine.Parse(["serve", "--restarted", "hung"]).Command);
+        Assert.Equal(
+            new ServeCommand("ReplayBuffer-Test-r1", Restarted: Contracts.Messages.EngineRestartReason.Crashed),
+            CommandLine.Parse(["serve", "--instance", "ReplayBuffer-Test-r1", "--restarted", "crashed"]).Command);
+        Assert.Contains("crashed or hung", CommandLine.Parse(["serve", "--restarted", "maybe"]).Error);
+    }
+
     [Theory]
     [InlineData("serve", "--instance", "ReplayBuffer")]
     [InlineData("serve", "--instance", "ReplayBuffer-Dev")]
