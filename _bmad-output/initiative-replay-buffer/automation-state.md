@@ -165,7 +165,7 @@ The coordinator logs each QA round in the Log below.
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
 | 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8a434c6`) |
-| 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | QA passed, waiting for its 2 Heavy runs |
+| 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | QA and Heavy passed, merging |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
 | 29.7 | 8.7 Final conformance run | | pending |
 | 29.8 | 8.8 8-hour soaks in Memory and Disk mode | | pending |
@@ -718,3 +718,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 9.3 round 1 found 2 low issues at `44ce0b0`: (1) the nav items have no pressed state; (2) the Settings section label is still a disabled ListBoxItem in UI Automation, though EXPERIENCE.md says it shouldn't be a list item. Everything else passed: App 138, no hard-coded colours, 960x600 and 480x320, keyboard navigation, the live switch and the narrow nav. The implementer (2-1-tracer) is fixing them.
 - 2026-11-04: QA 9.7 passed at `176a820` with 0 findings. No `MessageBox` is left; callers go through `Prompts.YesNo` unchanged. The Overlay glyphs keep fixed brushes, and the cards use theme keys with no Mica. The tray menu follows a switch without code changes. App 139 passed. Note: plain Esc on the old YesNo did nothing; the new dialog answers No, as the ticket asks. slice-epic-4 is merging. slice-epic-5 is back in the pool.
 - 2026-11-04: Bugfix `flaky-recording-crash-test` went to slice-epic-5 (Opus, medium effort). It makes `RecordingCrashTests.ARecordingKilledThreeSecondsIn...` wait on a real condition instead of wall-clock time across a cold start, or moves it to Heavy as CLAUDE.md says.
+- 2026-11-04: 8.5 Heavy rerun on `0249eaa`: `AGameRecordingRunsOnThroughEachDisplayChange` passed (12 s). Both 8.5 Heavy tests now pass, and slice-epic-8 is merging. The GPU runner is idle.
