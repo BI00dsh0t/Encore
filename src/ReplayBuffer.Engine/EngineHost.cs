@@ -427,6 +427,25 @@ internal sealed class EngineHost : IAsyncDisposable
                         {
                             recordingLog.LogWarning("An encoder restart ended the Recording {Stopped}; it continues in {Started}", restart.StoppedPath, restart.StartedPath);
                             notices.RecordingRestarted(restart);
+                        },
+                        DiskFull: () =>
+                        {
+                            recordingLog.LogWarning("The Recording's disk is full; the Recording stopped");
+                            notices.DiskFull();
+                        },
+                        RingFits: snapshot => ReplayRings.Fits(snapshot, ringFolder, EstimatePublisher.FreeDiskBytes),
+                        ReplayDiskFull: stopped =>
+                        {
+                            if (stopped)
+                            {
+                                recordingLog.LogWarning("The disk is full: the Disk-mode Replay Buffer stopped until its ring fits again");
+                                notices.ReplayStoppedDiskFull();
+                            }
+                            else
+                            {
+                                recordingLog.LogInformation("The wait for room for the Replay Buffer's ring ended");
+                                notices.ReplayResumed();
+                            }
                         })
                     : null);
 

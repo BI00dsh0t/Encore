@@ -91,6 +91,10 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// a change is not prepared but logged once through <see cref="Recordings.Info"/>, and when the
 /// Recording's writer posts back with its session still running, the settings are resolved again,
 /// so the first save after the stop switches to the new chain.
+/// A Recording whose disk fills (R5) is stopped with <see cref="RecordingStopReasons.DiskFull"/> and
+/// reported through <see cref="Recordings.DiskFull"/>; when its session's ring is on disk, the session
+/// is ended too, and a timer posts a recheck every <see cref="Recordings.RingRecheck"/> until the ring
+/// fits its drive again (<see cref="Recordings.RingFits"/>), when it restarts on the Target.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -120,6 +124,11 @@ public sealed class SessionOrchestrator : IDisposable
     private Timer? _drainTimer;
     private TargetCandidate? _target;
     private ProposeTarget? _pendingTarget;
+
+    // The Target whose Disk-mode Replay Buffer a full disk stopped (R5), and the periodic timer that
+    // posts its rechecks; null when nothing waits.
+    private TargetCandidate? _ringWait;
+    private Timer? _ringTimer;
     private CaptureState _state = CaptureState.Initial;
     private long _nextSessionId;
 
@@ -307,6 +316,10 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         ReleaseDrain();
+
+        // No callback: the engine is stopping.
+        _ringTimer?.Dispose();
+        _ringTimer = null;
     }
 
     private void Handle(SessionMessage message)
@@ -397,6 +410,10 @@ public sealed class SessionOrchestrator : IDisposable
                 OnChainRestarted(_active, restarted.Qpc);
                 break;
 
+            case RingRecheck when _ringWait is { } wait:
+                RecheckRing(wait);
+                break;
+
             default:
                 // A post-back from a session that has already ended.
                 break;
@@ -426,8 +443,9 @@ public sealed class SessionOrchestrator : IDisposable
             throw new ErrorCodeException(ErrorCodes.SessionRunning, "A session is already running.");
         }
 
-        // A drained ring never outlives the start of a new session.
+        // A drained ring never outlives the start of a new session, nor does a wait for room for one.
         ReleaseDrain();
+        ClearRingWait();
 
         // AD-5: resolved here; a retarget never touches it, and a later settings change reaches a
         // game session only through a chain switch at a save (ApplySettings).
@@ -677,6 +695,9 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         _target = to;
+
+        // A wait for room for the ring belongs to the Target it stopped on.
+        ClearRingWait();
         _targetChanged?.Invoke(new TargetChanged(current?.ToTargetGame(), to?.ToTargetGame(), propose.Reason));
         if (_targetCapture is null)
         {
@@ -724,7 +745,12 @@ public sealed class SessionOrchestrator : IDisposable
 
         if (_active is null)
         {
-            StartOnTarget(target);
+            // A Replay Buffer a full disk stopped waits for its recheck.
+            if (_ringWait is null)
+            {
+                StartOnTarget(target);
+            }
+
             return;
         }
 
@@ -1300,6 +1326,11 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         recordings.Stopped(new RecordingStopped(recording.Path, reason));
+        if (reason == ErrorCodes.DiskFull)
+        {
+            OnDiskFull(recordings, recording);
+        }
+
         if (restarted && _recording is { } next && ReferenceEquals(next.Follows, recording))
         {
             Announce(next);
@@ -1322,6 +1353,65 @@ public sealed class SessionOrchestrator : IDisposable
         {
             CommitTarget(pending);
         }
+    }
+
+    /// <summary>
+    /// A Recording stopped on a full disk (R5): reported, and when its session is still running on the
+    /// Target with its ring on disk, the session ends and waits, rechecked every
+    /// <see cref="Recordings.RingRecheck"/>, for room for the ring.
+    /// </summary>
+    private void OnDiskFull(Recordings recordings, RecordingRun recording)
+    {
+        recordings.DiskFull?.Invoke();
+        if (Volatile.Read(ref _disposed) != 0
+            || _clips is null
+            || _targetCapture is null
+            || _target is not { } target
+            || _active is not { Spec.Kind: SessionKind.Game } active
+            || active.Id != recording.SessionId
+            || active.Spec.Snapshot.ReplayStorage != ReplayStorage.Disk)
+        {
+            return;
+        }
+
+        // A restart's replacement still running here stops as session-ended: its own writer didn't fail.
+        EndActive("disk full", failure: null, RecordingStopReasons.SessionEnded);
+        _ringWait = target;
+        var every = recordings.RingRecheck ?? Recordings.DefaultRingRecheck;
+        _ringTimer = new Timer(_ => Post(new RingRecheck()), null, every, every);
+        recordings.ReplayDiskFull?.Invoke(true);
+        recordings.Info?.Invoke($"The disk filled under the Recording at {recording.Path}; the Disk-mode Replay Buffer stopped and restarts once its ring fits again");
+    }
+
+    /// <summary>A recheck after a full disk: the Replay Buffer restarts on the Target once its ring fits, or the wait ends when the Target has gone.</summary>
+    private void RecheckRing(TargetCandidate wait)
+    {
+        if (_active is not null || _target is not { } target || target.ProcessId != wait.ProcessId)
+        {
+            ClearRingWait();
+            return;
+        }
+
+        var snapshot = SettingsResolver.Resolve(_currentDocument(), target.ProfileId);
+        if (snapshot.ReplayStorage != ReplayStorage.Disk || (_recordings?.RingFits?.Invoke(snapshot) ?? true))
+        {
+            ClearRingWait();
+            StartOnTarget(target);
+        }
+    }
+
+    /// <summary>Ends a wait for room for the ring, if any, and reports it.</summary>
+    private void ClearRingWait()
+    {
+        if (_ringWait is null)
+        {
+            return;
+        }
+
+        _ringWait = null;
+        _ringTimer?.Dispose();
+        _ringTimer = null;
+        _recordings?.ReplayDiskFull?.Invoke(false);
     }
 
     private static void TryDelete(string path)
@@ -1405,6 +1495,9 @@ public sealed class SessionOrchestrator : IDisposable
 
     /// <summary>Session <paramref name="SessionId"/>'s encoder chain was forcibly rebuilt; its frames from <paramref name="Qpc"/> on are the new chain's.</summary>
     private sealed record SessionChainRestarted(long SessionId, long Qpc) : SessionMessage;
+
+    /// <summary>The ring recheck timer fired; ignored once no Replay Buffer waits for room.</summary>
+    private sealed record RingRecheck : SessionMessage;
 
     /// <summary>The drain timer of session <paramref name="SessionId"/> fired; ignored once that drain is gone.</summary>
     private sealed record DrainExpired(long SessionId) : SessionMessage;

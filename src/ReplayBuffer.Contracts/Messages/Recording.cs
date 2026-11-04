@@ -38,6 +38,9 @@ public static class RecordingStopReasons
 
     /// <summary>A forced encoder restart ended it; a new Recording starts at once in another file.</summary>
     public const string EncoderRestart = "encoder-restart";
+
+    /// <summary>Its disk filled (R5); the file ends at its last complete fragment. Equal to <see cref="ErrorCodes.DiskFull"/>.</summary>
+    public const string DiskFull = "disk-full";
 }
 
 /// <summary>
