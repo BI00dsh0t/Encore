@@ -40,10 +40,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 6.12 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix e2e-test-instance-names |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 6.12 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.3 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
@@ -144,7 +144,7 @@ The coordinator logs each QA round in the Log below.
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
 | 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
-| 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in QA (qa-2-1) |
+| 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | QA passed, merging |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
@@ -163,7 +163,7 @@ The coordinator logs each QA round in the Log below.
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
-| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
+| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in QA (qa-1-14) |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
 | 29.5 | 8.5 Monitor changes | | pending |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
@@ -645,3 +645,6 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.11 merged (`d8b48b9`, marked done `8d9371e`), and its card is Done with labels detached. **Epic 7 marked done.** Its v0.7.0 release is held until epic 6 finishes (see Decisions). story-2-7 is back in the pool.
 - 2026-11-04: 6.12 READY FOR QA at `781e6fa` (13 files, including `SessionOrchestrator` and `FeedbackRouter`), and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; focus: no behaviour change, forward hooks kept).
 - 2026-11-04: Bugfix `e2e-test-instance-names` READY FOR QA at `67506fd`. The coordinator checked the small diff and passed it with 0 findings: an `Instance.Name` guard (throws for a test-prefixed name that isn't a valid test name; additive tightening, no API break), Guid names in 7 tests, and dot-to-dash names in 7 Engine classes that compute their name on every access. The guard also caught `RecordingCrashTests`. Contracts 122, Engine 212 and App 142 passed; publish clean. `ClipsEndToEndTests` and `OverlayEndToEndTests` weren't run (GPU tests paused). slice-epic-5 is merging.
+- 2026-11-04: Bugfix `e2e-test-instance-names` merged (`2768713`). Its Human Check row (rerun `ClipsEndToEndTests` and `OverlayEndToEndTests` under Heavy once GPU tests resume) was committed at `5c17174`. slice-epic-5 is back in the pool.
+- 2026-11-04: QA 6.12 passed at `781e6fa` with 0 findings. No behaviour change: lock and disposed checks kept, the `OpenWrite` and `CloseWrite` order kept, and the `FeedbackRouterTests` shrink is only helpers moved out. 0-warning build; Contracts 121, Core 146, App 126 and Engine 176 passed. slice-epic-4 is merging. qa-2-1 is back in the pool.
+- 2026-11-04: 8.3 READY FOR QA at `2f5a69a` (18 files, about 1,670 lines; the Heavy simulated-reset test is written but not run because GPU tests are paused), and its card is In QA. QA went to qa-1-14 (Sonnet, high effort because the ticket is high risk; no Heavy runs and no TDR).
