@@ -38,10 +38,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.1 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.7 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with the capture-cost investigation |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.8 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.12 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with QA 5.12 |
 
@@ -138,7 +138,7 @@ The coordinator logs each QA round in the Log below.
 | 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `856bd57`) |
 | 27.6 | 6.6 One file however long, and forced encoder restarts | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `1cfccf0`) |
 | 27.7 | 6.7 Disk full during a Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `f144ae9`) |
-| 27.8 | 6.8 Recording notices and sounds | | pending |
+| 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | | pending |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | | pending |
 | 27.11 | 6.11 Recordings settings in the Main App | | pending |
@@ -573,3 +573,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 6.7 at `7c2e3b8`: **QA PASS**, 0 findings. 6.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool. 7.7 is merging now. 8.1 is triaging its review before rerunning the soak with a corrected slope rule.
 - 2026-11-04: 7.7 merged (`7a4d786`, marked done `707c37b`, with its Human Check row). Its card is Done with its label detached, and qa-2-1 is back in the pool. 7.8 Cleanup (high risk) went to qa-1-14 (Opus, high effort), with its card In progress. Its brief puts the deletion guards first: Favourites, files being written, outside the Library, a corrupt or reconciling index, and a dry-run log.
 - 2026-11-04: 6.7 merged (`f144ae9`, `feat(engine): merge 6.7-disk-full-recording`, marked done `50e04f0`). Branch synced with develop first (7.7, 6.6): build 0 warnings; Contracts 118, Core 123, Platform.FFmpeg 37 (2 explicit skipped), Engine 170 (28 explicit skipped) pass; publish clean. Contracts: two additive constants (`ErrorCodes.ReplayStoppedDiskFull`, `RecordingStopReasons.DiskFull`). Disk full is simulated only (a capacity seam throwing the real `ERROR_DISK_FULL` IOException). One medium deferred to Decisions Awaiting Review (the Disk-mode restart loop on a shared drive).
+- 2026-11-04: 6.7 merged (`f144ae9`, marked done `50e04f0`), and its card is Done. slice-epic-5 is back in the pool. 6.8 went to qa-2-1 (Opus, medium effort), with its card In progress.
