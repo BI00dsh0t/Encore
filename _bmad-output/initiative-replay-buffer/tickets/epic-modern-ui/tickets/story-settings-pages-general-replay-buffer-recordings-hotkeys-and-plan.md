@@ -3,14 +3,14 @@ title: 'Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback
 type: 'feature'
 ticket: '5'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '995f9df6d87c55f1d93cff545e8071873f826d27'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md', '{project-root}/_bmad-output/initiative-replay-buffer/tickets/epic-modern-ui/ux-modern-ui/EXPERIENCE.md']
@@ -58,15 +58,15 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Theme/SettingsLayout.xaml` + `SettingsLayout.cs` -- new `ResourceDictionary` class (like `ShellFluent`) with: `RbSettingsContentStyle` (StackPanel: `MaxWidth` 720, left-aligned, `Grid.IsSharedSizeScope` true); `RbSettingsSectionStyle` (HeaderedContentControl, not focusable: header in a ContentControl styled `{DynamicResource RbSectionHeaderStyle}`, 8 px gap, then a Border `{DynamicResource RbCardStyle}` holding the content; bottom margin 24 = `spacing.xl` between sections); `RbSettingsLabelStyle` (TextBlock: right margin 12, centred vertically, `text-primary`); `RbSettingsHelpTextStyle` (TextBlock: caption size, `text-secondary`, wrap, top margin 4); `RbSettingsStatusTextStyle` (TextBlock inline status: `text-secondary`, wrap) and `RbSettingsErrorTextStyle` (`danger`); `RbSettingsPageMessageStyle` (ContentControl showing its content inside `{DynamicResource RbInfoBarDangerStyle}`, collapsed when content is null or empty, `MaxWidth` 720, left-aligned). A `Place(IList<ResourceDictionary>)` static that inserts one instance before the last entry if absent, and an `EmptyToCollapsedConverter` (null/empty string → Collapsed) that views declare locally. -- the reusable layout 9.6 builds on.
-- [ ] `src/ReplayBuffer.App/Theme/ThemeService.cs` -- one line in `Apply` placing the dictionary.
-- [ ] `src/ReplayBuffer.App/MainWindow.xaml` -- `PageMessage` becomes a ContentControl with `RbSettingsPageMessageStyle`, content `SelectedPage.Message`, still hidden off the settings tab (e.g. a wrapper whose Visibility binds `IsSettingsTabSelected`, since a local value would beat the style's trigger).
-- [ ] `GeneralSettingsView.xaml` -- sections "Appearance" (Theme row: label column + combo, help text under the combo) then "Startup and Overlay" (check box, then "Show the Overlay's dot" label above its combo), as the renders.
-- [ ] `ReplayBufferSettingsView.xaml` -- sections "Replay Buffer" and "Output" as cards; drop the local implicit TextBox/ComboBox styles (use explicit row margins); rows on the shared label column; `EstimateWarning` as a caution info bar collapsed when empty; the Gray note and "up to {0}" as help/secondary text.
-- [ ] `RecordingsSettingsView.xaml` -- "Recordings" section card: monitor row (label, combo, Refresh) and help text.
-- [ ] `HotkeysView.xaml` -- "Hotkeys" section card: record-mode row, then the rows; drop the implicit Button style (explicit margins); row status in `text-secondary`, `danger` when `IsFailed`, via DynamicResource setters.
-- [ ] `FeedbackSoundsView.xaml` -- "Feedback Sounds" section card: `CapturedWarning` as `danger` inline text collapsed when empty, the device row, the sound rows (check box + Play button).
-- [ ] `tests/ReplayBuffer.App.Tests/SettingsLayoutTests.cs` -- (1) each of the five pages in MainWindow under both themes loads and shows its expected section headers (General: Appearance and Startup and Overlay); saves `settings-<page>-<fluent|gaming-dark>.png` beside the test binary; (2) a refused General update shows the danger info bar with the page's message, and it's collapsed after a successful update; (3) a source scan of the five views finds no literal colour (`Gray`, `DarkRed`, `#hex`) and no key-less `<Style TargetType=`.
+- [x] `src/ReplayBuffer.App/Theme/SettingsLayout.xaml` + `SettingsLayout.cs` -- new `ResourceDictionary` class (like `ShellFluent`) with: `RbSettingsContentStyle` (StackPanel: `MaxWidth` 720, left-aligned, `Grid.IsSharedSizeScope` true); `RbSettingsSectionStyle` (HeaderedContentControl, not focusable: header in a ContentControl styled `{DynamicResource RbSectionHeaderStyle}`, 8 px gap, then a Border `{DynamicResource RbCardStyle}` holding the content; bottom margin 24 = `spacing.xl` between sections); `RbSettingsLabelStyle` (TextBlock: right margin 12, centred vertically, `text-primary`); `RbSettingsHelpTextStyle` (TextBlock: caption size, `text-secondary`, wrap, top margin 4); `RbSettingsStatusTextStyle` (TextBlock inline status: `text-secondary`, wrap) and `RbSettingsErrorTextStyle` (`danger`); `RbSettingsPageMessageStyle` (ContentControl showing its content inside `{DynamicResource RbInfoBarDangerStyle}`, collapsed when content is null or empty, `MaxWidth` 720, left-aligned). A `Place(IList<ResourceDictionary>)` static that inserts one instance before the last entry if absent, and an `EmptyToCollapsedConverter` (null/empty string → Collapsed) that views declare locally. -- the reusable layout 9.6 builds on.
+- [x] `src/ReplayBuffer.App/Theme/ThemeService.cs` -- one line in `Apply` placing the dictionary.
+- [x] `src/ReplayBuffer.App/MainWindow.xaml` -- `PageMessage` becomes a ContentControl with `RbSettingsPageMessageStyle`, content `SelectedPage.Message`, still hidden off the settings tab (e.g. a wrapper whose Visibility binds `IsSettingsTabSelected`, since a local value would beat the style's trigger).
+- [x] `GeneralSettingsView.xaml` -- sections "Appearance" (Theme row: label column + combo, help text under the combo) then "Startup and Overlay" (check box, then "Show the Overlay's dot" label above its combo), as the renders.
+- [x] `ReplayBufferSettingsView.xaml` -- sections "Replay Buffer" and "Output" as cards; drop the local implicit TextBox/ComboBox styles (use explicit row margins); rows on the shared label column; `EstimateWarning` as a caution info bar collapsed when empty; the Gray note and "up to {0}" as help/secondary text.
+- [x] `RecordingsSettingsView.xaml` -- "Recordings" section card: monitor row (label, combo, Refresh) and help text.
+- [x] `HotkeysView.xaml` -- "Hotkeys" section card: record-mode row, then the rows; drop the implicit Button style (explicit margins); row status in `text-secondary`, `danger` when `IsFailed`, via DynamicResource setters.
+- [x] `FeedbackSoundsView.xaml` -- "Feedback Sounds" section card: `CapturedWarning` as `danger` inline text collapsed when empty, the device row, the sound rows (check box + Play button).
+- [x] `tests/ReplayBuffer.App.Tests/SettingsLayoutTests.cs` -- (1) each of the five pages in MainWindow under both themes loads and shows its expected section headers (General: Appearance and Startup and Overlay); saves `settings-<page>-<fluent|gaming-dark>.png` beside the test binary; (2) a refused General update shows the danger info bar with the page's message, and it's collapsed after a successful update; (3) a source scan of the five views finds no literal colour (`Gray`, `DarkRed`, `#hex`) and no key-less `<Style TargetType=`.
 
 **Acceptance Criteria:**
 - Given the Main App under either theme, when the builder opens General, Replay Buffer, Recordings, Hotkeys or Feedback Sounds, then each shows its sections as a header above a card, labels in one column, help text muted, and no control in the default WPF look.
@@ -76,9 +76,21 @@ deferred: []
 
 ## Implementation Notes
 
+- `RbSettingsContentStyle` is applied to `theme:SettingsContent`, a StackPanel subclass in `SettingsLayout.cs` that measures to the full offered width up to its MaxWidth. A plain left-aligned StackPanel shrinks to its rows' desired widths (narrow text boxes), and a stretched one past its MaxWidth is centred by WPF.
+- General now has a root `ScrollViewer` like the other views.
+- Hotkeys' row status uses a view-local keyed style (`HotkeyStatus`) with DynamicResource setters, since an inline key-less style would fail the source scan.
+- Setting labels inherit the font size, as the controls beside them do; giving them `BodyTextBlockFontSize` made them larger than the control text under both themes.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 3 findings — high 0, medium 0, low 3, false 0, maybe-false 0
+- findings:
+  - `[low]` `[patch]` `EstimateText` used `RbSettingsLabelStyle`, a row-label style, on a full-width body line — dropped the style; the line sets `text-primary` directly.
+  - `[low]` `[reject]` the section test checks `Header` values, not the rendered header ContentControl — lean tests; the header template is one element in `RbSettingsSectionStyle`, and the saved PNGs show it.
+  - `[low]` `[reject]` no test hides the page bar on the Library page — that wrapper trigger is 9.3's existing `IsSettingsTabSelected` rule, moved unchanged; lean tests.
 
 ## Design Notes
 
@@ -92,3 +104,11 @@ The page message stays docked at the bottom of the content column (where 9.3 put
 
 **Manual checks (if no CLI):**
 - Open the saved `settings-*.png` beside the test binary and compare with the renders.
+
+## Auto Run Result
+
+- **Summary:** the shared settings layout (`Theme/SettingsLayout.xaml` + `.cs`: content column, section header + card, label, help, status and error text, page-message danger bar, `SettingsContent`, `EmptyToCollapsedConverter`), merged by one line in `ThemeService.Apply`; General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds restyled onto it; the shell's page message is the danger info bar.
+- **Files:** `Theme/SettingsLayout.xaml`, `Theme/SettingsLayout.cs` (new layout); `Theme/ThemeService.cs` (one Place line); `MainWindow.xaml` (PageMessage only); the five `Settings/*View.xaml` (sections, tokens, no implicit control styles); `tests/.../SettingsLayoutTests.cs` (pages in both themes + PNGs, refused-update bar, source scan).
+- **Review:** 1 low patched, 0 deferred, 2 low rejected (reasons in the triage log). Follow-up review: false (no high or medium patched).
+- **Verification:** `dotnet build ReplayBuffer.slnx -c Release` 0 warnings; App tests 165 total, 147 passed, 18 explicit skipped, 0 failed (the known Mica order failure didn't occur).
+- **Residual risks:** Game Profiles' Overrides embed the Replay Buffer view, so it now shows those cards inside 9.6's page (unreviewed visually until 9.6). The page bar docks at the bottom of the content column, not directly under the cards as in the render. HITL: the builder changes a setting on each page in both themes, sees the estimate and a Hotkey duplicate, and checks keyboard focus.

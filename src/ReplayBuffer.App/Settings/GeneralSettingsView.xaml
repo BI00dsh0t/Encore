@@ -1,16 +1,32 @@
 <UserControl x:Class="ReplayBuffer.App.Settings.GeneralSettingsView"
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel>
-        <CheckBox Content="Start with Windows, in the tray" IsChecked="{Binding StartWithWindows}" />
-        <TextBlock Text="Show the Overlay's dot" Margin="0,12,0,4" />
-        <ComboBox ItemsSource="{Binding OverlayDotChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Mode"
-                  SelectedValue="{Binding OverlayDot}" HorizontalAlignment="Left" MinWidth="320" />
-        <TextBlock Text="Theme" Margin="0,12,0,4" />
-        <ComboBox ItemsSource="{Binding AppThemeChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Theme"
-                  SelectedValue="{Binding AppTheme}" HorizontalAlignment="Left" MinWidth="320" />
-        <TextBlock Text="Applies at once to every window." Margin="0,4,0,0" Style="{DynamicResource CaptionTextBlockStyle}"
-                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-    </StackPanel>
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="clr-namespace:ReplayBuffer.App.Theme">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
+            <HeaderedContentControl Header="Appearance" Style="{DynamicResource RbSettingsSectionStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Theme" />
+                    <StackPanel Grid.Column="1">
+                        <ComboBox ItemsSource="{Binding AppThemeChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Theme"
+                                  SelectedValue="{Binding AppTheme}" HorizontalAlignment="Left" MinWidth="320" />
+                        <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="Applies at once to every window." />
+                    </StackPanel>
+                </Grid>
+            </HeaderedContentControl>
+            <HeaderedContentControl Header="Startup and Overlay" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <CheckBox Content="Start with Windows, in the tray" IsChecked="{Binding StartWithWindows}" />
+                    <TextBlock Margin="0,12,0,4" Style="{DynamicResource RbSettingsLabelStyle}" Text="Show the Overlay's dot" />
+                    <ComboBox ItemsSource="{Binding OverlayDotChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Mode"
+                              SelectedValue="{Binding OverlayDot}" HorizontalAlignment="Left" MinWidth="320" />
+                </StackPanel>
+            </HeaderedContentControl>
+        </theme:SettingsContent>
+    </ScrollViewer>
 </UserControl>
