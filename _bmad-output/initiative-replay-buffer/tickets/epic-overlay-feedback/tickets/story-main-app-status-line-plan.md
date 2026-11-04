@@ -3,14 +3,14 @@ title: 'Main App status line'
 type: 'feature'
 ticket: '10'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '143484bf848bc958bbbe74a457a769fa27c3b272'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -69,11 +69,11 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Status/StatusLine.cs` (new) -- `StatusLine(IEngineSession)` : `Observable` with `string State`, `IReadOnlyList<StatusWarning> Warnings`, `Render(EngineStatus, string?, StateSnapshot?)`; nested/sibling `StatusWarning` row (`Id`, `Time`, `Severity`, `Message`, `CanDismiss`, `DismissCommand`). Keep the connection-text switch from `MainViewModel` here.
-- [ ] `src/ReplayBuffer.App/Status/StatusLineView.xaml(.cs)` (new) -- `UserControl`: the state line (SemiBold), then an `ItemsControl` of rows (time, severity, message wrapping, Dismiss button visible only when `CanDismiss`, via `BooleanToVisibilityConverter`). Cap the list's height (e.g. `MaxHeight` 120 with a `ScrollViewer`) so it doesn't push the pages away.
-- [ ] `src/ReplayBuffer.App/MainViewModel.cs`, `src/ReplayBuffer.App/MainWindow.xaml` -- as in the Code Map.
-- [ ] `tests/ReplayBuffer.App.Tests/StatusLineTests.cs` (new) -- the matrix rows as a few `[Fact]`s; plus an explicit `[Fact(Explicit = true)] [Trait("Category","Heavy")]` that renders `MainWindow` with a sample snapshot to `status-line.png` in `Path.GetTempPath()` (or `RB_SCREENSHOT` env path) via `RenderTargetBitmap`, for the HITL screenshot.
-- [ ] `tests/ReplayBuffer.App.Tests/MainViewModelTests.cs` -- update the asserts for the removed properties.
+- [x] `src/ReplayBuffer.App/Status/StatusLine.cs` (new) -- `StatusLine(IEngineSession)` : `Observable` with `string State`, `IReadOnlyList<StatusWarning> Warnings`, `Render(EngineStatus, string?, StateSnapshot?)`; nested/sibling `StatusWarning` row (`Id`, `Time`, `Severity`, `Message`, `CanDismiss`, `DismissCommand`). Keep the connection-text switch from `MainViewModel` here.
+- [x] `src/ReplayBuffer.App/Status/StatusLineView.xaml(.cs)` (new) -- `UserControl`: the state line (SemiBold), then an `ItemsControl` of rows (time, severity, message wrapping, Dismiss button visible only when `CanDismiss`, via `BooleanToVisibilityConverter`). Cap the list's height (e.g. `MaxHeight` 120 with a `ScrollViewer`) so it doesn't push the pages away.
+- [x] `src/ReplayBuffer.App/MainViewModel.cs`, `src/ReplayBuffer.App/MainWindow.xaml` -- as in the Code Map.
+- [x] `tests/ReplayBuffer.App.Tests/StatusLineTests.cs` (new) -- the matrix rows as a few `[Fact]`s; plus an explicit `[Fact(Explicit = true)] [Trait("Category","Heavy")]` that renders `MainWindow` with a sample snapshot to `status-line.png` in `Path.GetTempPath()` (or `RB_SCREENSHOT` env path) via `RenderTargetBitmap`, for the HITL screenshot.
+- [x] `tests/ReplayBuffer.App.Tests/MainViewModelTests.cs` -- update the asserts for the removed properties.
 
 **Acceptance Criteria:**
 - Given each capture state (off, buffering on a Target Game, draining, Recording, Monitor Recording, mic muted), when the snapshot renders, then the status line shows its text.
@@ -88,6 +88,11 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-03 — Review pass
+- verdicts: 1 findings — high 0, medium 0, low 1, false 0, maybe-false 0
+- findings:
+  - `[low]` `[patch]` `StatusLine.Render` kept the last engine's warnings, with live Dismiss buttons, while the session was Restarting or Disconnected (`EngineConnection.State` still holds the old link's snapshot) — fixed: warnings render only while `Connected`, matching `OverlayViewModel.Refresh`; the reconnect snapshot restores the list.
+
 ## Design Notes
 
 - The status line is a separate view model and view so `MainViewModel` changes stay small while 4.11 edits it.
@@ -99,3 +104,26 @@ deferred: []
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors
 - `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build` -- expected: all pass
 - `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --explicit only --filter-method "*StatusLine*"` (or the MTP equivalent) -- expected: PNG written
+
+## Auto Run Result
+
+**Summary:** A status line docked above the tabs of the Main App, on every page, replaces story 1.7's Status tab. It shows the capture state ("Replay Buffer off", "Buffering on <Target Game>", "Draining", then "Recording", "Monitor Recording" and "Mic muted"), or the engine connection text when not connected, and the active warnings newest first, each with its local time, severity, message and a Dismiss button (`warning.dismiss`) when dismissable. Rows go only when the snapshot drops them.
+
+**Files changed:**
+- `src/ReplayBuffer.App/Status/StatusLine.cs`: new view model and `StatusWarning` row.
+- `src/ReplayBuffer.App/Status/StatusLineView.xaml(.cs)`: new view.
+- `src/ReplayBuffer.App/MainViewModel.cs`: Status-tab properties removed; `StatusLine` added and rendered.
+- `src/ReplayBuffer.App/MainWindow.xaml`: Status tab removed; status line above the `TabControl`.
+- `tests/ReplayBuffer.App.Tests/StatusLineTests.cs`: new tests, plus an explicit Heavy test that renders the window to a PNG.
+- `tests/ReplayBuffer.App.Tests/MainViewModelTests.cs`: asserts moved to `StatusLine`.
+
+**Review:** quick lens, 1 finding (low), patched. Nothing deferred or rejected.
+
+**Follow-up review recommended:** false (one low patched).
+
+**Verification:** Release build 0 warnings; App.Tests 97 passed, 9 explicit skipped, 0 failed (after the patch); the explicit PNG test passed and the rendered window was inspected. No Contracts, Core or Engine changes, so no publish and no other test projects.
+
+**Matrix audit:** every row is covered by `StatusLineTests` (state texts; newest first and reconnect; dismiss and no-button) and ran in the default run.
+
+**Residual risks:** 4.11 edits `MainViewModel.cs` in parallel; a merge conflict around the removed properties is possible. The builder still checks by hand: unplug a layout device and see its dropout; kill the engine and see the restart reported.
+

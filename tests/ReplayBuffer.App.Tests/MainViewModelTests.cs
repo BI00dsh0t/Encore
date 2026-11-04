@@ -17,12 +17,12 @@ public sealed class MainViewModelTests
     public void ARefreshRendersTheSnapshotAndTheSettingsPages()
     {
         var model = Create();
-        Assert.Equal("Target Game: none", model.TargetGame);
+        Assert.Equal("Replay Buffer off · Mic muted", model.StatusLine.State);
         _engine.State = _engine.State! with
         {
             Seq = 7,
             Settings = Document(revision: 3, startWithWindows: true),
-            Capture = CaptureState.Initial with { Replay = ReplayState.Buffering },
+            Capture = CaptureState.Initial with { Replay = ReplayState.Buffering, MicMuted = false },
             TargetGame = new TargetGame(@"c:\games\game.exe", "Game.exe", 77),
             Warnings = [new Warning("w1", ErrorCodes.SettingsUnreadable, WarningSeverity.Error, "settings", "Defaults in use.", DateTimeOffset.UnixEpoch, false, null, true)],
         };
@@ -31,12 +31,8 @@ public sealed class MainViewModelTests
         Assert.False(model.General.StartWithWindows);
         RunPosted();
 
-        Assert.Equal("Connected to the engine.", model.Status);
-        Assert.Equal("Process 4242, run run-1, event 7", model.EngineDetails);
-        Assert.Contains("Replay Buffer buffering", model.Capture);
-        Assert.Equal("Target Game: Game.exe (process 77)", model.TargetGame);
-        Assert.Equal("3", model.SettingsRevision);
-        Assert.Equal(["Error: Defaults in use. (settings-unreadable)"], model.Warnings);
+        Assert.Equal("Buffering on Game.exe", model.StatusLine.State);
+        Assert.Equal("Defaults in use.", Assert.Single(model.StatusLine.Warnings).Message);
         Assert.True(model.General.StartWithWindows);
         Assert.Same(model.General, model.SelectedPage);
     }
@@ -50,8 +46,8 @@ public sealed class MainViewModelTests
 
         var model = Create();
 
-        Assert.Equal("The engine isn't running. No engine answered.", model.Status);
-        Assert.Equal("", model.EngineDetails);
+        Assert.Equal("The engine isn't running. No engine answered.", model.StatusLine.State);
+        Assert.Empty(model.StatusLine.Warnings);
     }
 
     [Fact]
@@ -62,7 +58,7 @@ public sealed class MainViewModelTests
 
         var model = Create();
 
-        Assert.Equal("Restarting the engine… The engine exited with code 1.", model.Status);
+        Assert.Equal("Restarting the engine… The engine exited with code 1.", model.StatusLine.State);
     }
 
     [Fact]
