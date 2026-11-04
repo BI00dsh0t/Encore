@@ -177,7 +177,7 @@ The coordinator logs each QA round in the Log below.
 | 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `d3dcad3`) |
 | 30.4 | 9.4 Library restyled | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `894974a`) |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `80f3933`) |
-| 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | QA passed, merging |
+| 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `78d1c6a`) |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | | pending |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
