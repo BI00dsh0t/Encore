@@ -45,7 +45,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.3 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with QA 9.3 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -174,7 +174,7 @@ The coordinator logs each QA round in the Log below.
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
 | 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `247284c`, builder approved) |
 | 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `166e1f3`) |
-| 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in QA (story-2-7) |
+| 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | QA passed, merging |
 | 30.4 | 9.4 Library restyled | | pending |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
@@ -721,3 +721,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Bugfix `flaky-recording-crash-test` went to slice-epic-5 (Opus, medium effort). It makes `RecordingCrashTests.ARecordingKilledThreeSecondsIn...` wait on a real condition instead of wall-clock time across a cold start, or moves it to Heavy as CLAUDE.md says.
 - 2026-11-04: 8.5 Heavy rerun on `0249eaa`: `AGameRecordingRunsOnThroughEachDisplayChange` passed (12 s). Both 8.5 Heavy tests now pass, and slice-epic-8 is merging. The GPU runner is idle.
 - 2026-11-04: 9.7 merged (`8dbac3d`; marked done, renders and its Human Check row added in `bae77ea`), and its card is Done. slice-epic-4 is back in the pool. 9.4 and 9.5 wait on 9.3, which is in QA round 2.
+- 2026-11-04: QA 9.3 passed at `d6ea6fb` (round 2). Nav items have a pressed state (a `NavPress` attached property), and the section label is out of the UIA tree (9 items). App 138 passed. 2-1-tracer is merging. story-2-7 is back in the pool.
