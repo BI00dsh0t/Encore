@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.10 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 6.10 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
@@ -143,7 +143,7 @@ The coordinator logs each QA round in the Log below.
 | 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ede89f7`) |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
-| 27.11 | 6.11 Recordings settings in the Main App | | pending |
+| 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
 | 27.12 | 6.12 Refactor sweep | | pending |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
@@ -625,3 +625,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: **GPU tests paused by the builder** (see Standing decisions). Told 8.3 (slice-epic-8), QA 6.10 (qa-1-14) and 7.10 (story-2-7). Skipped so far: 6.10's Heavy Desktop Duplication fallback run in QA (the story ran it itself, 8/8), and 8.3's simulated device-loss Heavy run.
 - 2026-11-04: QA 6.10 at `e42c1bb`: **QA PASS**, 0 findings and 2 notes. Its Heavy `MonitorRecordingCaptureTests` (8/8) ran just before the GPU pause reached it; that's the last GPU run. QA found that pre-creating `.bench-running` makes `BenchLock`-based tests hang, which explains the empty 09:52 file. QA removed it, and the "Who takes `.bench-running`" rule was added. 6.10 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-04: 6.10 merged (`4bf3a8e`, marked done). QA passed at `e42c1bb` with 0 findings and 2 notes (a stale `Failed` doc on `DesktopDuplicationCapture`; a single `DuplicateOutput` at start, so a UAC prompt up at the press fails the session), recorded in the epic Notes. Synced with develop first: 0-warning build, Contracts 121, Core 145, Platform.Capture 3, Engine 211 passed, publish clean; no GPU tests (paused). Contracts change: additive `ErrorCodes.MonitorCaptureFallback`. Unblocks 6.11. Human Check: confirm on the PC that a forced-fallback Monitor Recording of the real Main App and Overlay hides them (6.9's row also covers this path).
+- 2026-11-04: 6.10 merged (`4bf3a8e`, logged `379a084`), and its card is Done. slice-epic-5 is back in the pool. 6.11 went to qa-1-14 (Opus, medium effort; GPU tests paused), with its card In progress.
