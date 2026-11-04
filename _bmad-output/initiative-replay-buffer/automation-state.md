@@ -39,13 +39,13 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.7 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix recording-first-frame-pts |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 9.2 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -173,12 +173,12 @@ The coordinator logs each QA round in the Log below.
 | 29.10 | 8.10 Refactor sweep | | pending |
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
 | 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `247284c`, builder approved) |
-| 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
-| 30.3 | 9.3 Shell, navigation and status line | | pending |
+| 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `166e1f3`) |
+| 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
 | 30.4 | 9.4 Library restyled | | pending |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
-| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | | pending |
+| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 30.8 | 9.8 Refactor sweep | | pending |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
@@ -706,3 +706,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.5 READY FOR QA at `49130c4`: Contracts 124, Core 159, Platform.Capture 4, Platform.Desktop 13, Engine 180 and App 128 passed; publish clean. Its card is In QA. QA went to slice-epic-4 (Sonnet, medium effort; no Heavy runs, no display changes). Its 2 Heavy `MonitorRecordingCaptureTests` (they take BenchLock themselves) are queued on the GPU runner after the PTS fix runs. 4 Human Checks are in its plan: unplug and replug a monitor, change the primary, and change the resolution or refresh rate.
 - 2026-11-04: QA 9.2 passed at `ecc4508` (round 2). Both findings are fixed: Fluent's disabled TextBox and ListBoxItem dim (#5DFFFFFF), and the dead `CaptionColor` is deleted, with a Mica test added. App 135 passed. QA's non-blocking note (Fluent's disabled TabItem isn't dimmed) is folded in as a one-line fix before the merge. story-2-7 is merging. qa-1-14 is back in the pool.
 - 2026-11-04: QA 8.5 passed at `49130c4` with 0 findings. `WM_DISPLAYCHANGE` goes through a hidden window with a 300 ms debounce. `EndMonitorIfRemoved` ends with `monitor-removed` and leaves the game session alone. Contracts changes are additive. The Overlay re-places on each change. Residual risk (noted): Desktop Duplication can fail before enumeration drops the monitor, so the Recording ends `session-ended`; real hot-plug is a Human Check. Note: plain `--report-trx` fails the testing-platform handshake here; the GPU runner found the working flag, so briefs shouldn't ask for it blindly. The merge waits for the 2 Heavy runs.
+- 2026-11-04: 9.2 merged (`166e1f3`; the TabItem dimming was folded in at `4dab533`; marked done, gallery renders and its Human Check row added in `9d8f588`). Its card is Done with labels detached. 9.3 (shell and navigation) went to 2-1-tracer and 9.7 (tray, dialogs and Overlay) to slice-epic-4 (both Opus, medium effort), running in parallel on separate files; they share only one line each in the dictionary merge list. story-2-7 couldn't be cleared (the builder has it open), so it was left as is.
