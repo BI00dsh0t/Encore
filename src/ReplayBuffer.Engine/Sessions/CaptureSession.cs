@@ -660,6 +660,7 @@ internal sealed class CaptureSession : ICaptureSession
         // Kept out of the teardown: closing it ends the Recording, which must post back after the orchestrator hears of the restart.
         var tap = old.TakeTap();
         EncoderChain? next = null;
+        var installed = false;
         try
         {
             // Each save bound to it cuts at its press, since its keyframe never comes; the ring's restart needs them done.
@@ -684,34 +685,14 @@ internal sealed class CaptureSession : ICaptureSession
             }
 
             old.Dispose(keepRing: true);
-            try
+            if (_options.RestartFault?.Invoke() is { } fault)
             {
-                if (_options.RestartFault?.Invoke() is { } fault)
-                {
-                    throw fault;
-                }
-
-                next = new EncoderChain(old.Spec, old.EncoderName, old.Codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
-                next.Subscribe();
-                next.Build(_anchorQpc, first: false, latency: null, restartOf: old.Ring, window: old.WindowSeconds);
-            }
-            catch (Exception e)
-            {
-                next?.Dispose();
-                old.Ring?.Dispose();
-                lock (_gate)
-                {
-                    lock (_chainLock)
-                    {
-                        _restarting = false;
-                    }
-                }
-
-                _log.LogError("The encoder restart ({Reason}) couldn't rebuild the chain: {Message}", reason, e.Message);
-                Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "The encoder restart couldn't rebuild the encoder chain: " + e.Message, e));
-                return;
+                throw fault;
             }
 
+            next = new EncoderChain(old.Spec, old.EncoderName, old.Codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
+            next.Subscribe();
+            next.Build(_anchorQpc, first: false, latency: null, restartOf: old.Ring, window: old.WindowSeconds);
             var now = Stopwatch.GetTimestamp();
             next.StartAudio(now);
             lock (_gate)
@@ -719,6 +700,7 @@ internal sealed class CaptureSession : ICaptureSession
                 lock (_chainLock)
                 {
                     _current = next;
+                    installed = true;
                     _restarting = false;
                     StartBuildLocked();
                 }
@@ -726,6 +708,27 @@ internal sealed class CaptureSession : ICaptureSession
 
             _log.LogInformation("The encoder chain restarted in {Ms:0} ms; the frames captured meanwhile were dropped", (now - began) * 1000.0 / _qpcFrequency);
             _events.ChainRestarted(now);
+        }
+        catch (Exception e)
+        {
+            // Not yet current: the new chain and the ring go with the session, which fails here.
+            if (!installed)
+            {
+                next?.Dispose();
+                old.Ring?.Dispose();
+            }
+
+            _log.LogError("The encoder restart ({Reason}) failed: {Message}", reason, e.Message);
+
+            // Failed first, so the session is stopped before anything may act on the disposed chain again.
+            Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "The encoder restart couldn't rebuild the encoder chain: " + e.Message, e));
+            lock (_gate)
+            {
+                lock (_chainLock)
+                {
+                    _restarting = false;
+                }
+            }
         }
         finally
         {

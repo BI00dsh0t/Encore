@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -40,36 +41,6 @@ public sealed class RecordingCaptureTests : IDisposable
         $timer.Add_Tick({
             $v = [int](($start.ElapsedMilliseconds / 4) % 255)
             $form.BackColor = [Drawing.Color]::FromArgb($v, 255 - $v, 128)
-        })
-        $timer.Start()
-        $form.Show()
-        $form.Hide()
-        [void] $form.ShowDialog()
-        """;
-
-    // The tracer's window, grown to 1000x700 at 3.5 s after it opens and back at 5.5 s.
-    private const string ResizingWindowScript =
-        """
-        param([string] $Title)
-        Add-Type -AssemblyName System.Windows.Forms
-        $form = New-Object System.Windows.Forms.Form
-        $form.Text = $Title
-        $form.Width = 641
-        $form.Height = 481
-        $start = [Diagnostics.Stopwatch]::StartNew()
-        $script:resized = 0
-        $timer = New-Object System.Windows.Forms.Timer
-        $timer.Interval = 16
-        $timer.Add_Tick({
-            $v = [int](($start.ElapsedMilliseconds / 4) % 255)
-            $form.BackColor = [Drawing.Color]::FromArgb($v, 255 - $v, 128)
-            if ($script:resized -eq 0 -and $start.ElapsedMilliseconds -ge 3500) {
-                $form.Size = New-Object Drawing.Size(1000, 700)
-                $script:resized = 1
-            } elseif ($script:resized -eq 1 -and $start.ElapsedMilliseconds -ge 5500) {
-                $form.Size = New-Object Drawing.Size(641, 481)
-                $script:resized = 2
-            }
         })
         $timer.Start()
         $form.Show()
@@ -316,21 +287,18 @@ public sealed class RecordingCaptureTests : IDisposable
     {
         var logs = new ListLoggerProvider();
         using var loggers = LoggerFactory.Create(builder => builder.AddProvider(logs));
-        using var rig = await StartRecordingAsync(loggers: loggers, windowScript: ResizingWindowScript);
+        using var rig = await StartRecordingAsync(loggers: loggers);
 
-        // Five seconds at least, and past the window's resize and its return.
-        await Task.Delay(TimeSpan.FromSeconds(5), Token);
-        var open = TimeSpan.FromSeconds((double)(Stopwatch.GetTimestamp() - rig.OpenedAt) / Stopwatch.Frequency);
-        if (open < TimeSpan.FromSeconds(7))
-        {
-            await Task.Delay(TimeSpan.FromSeconds(7) - open, Token);
-        }
+        // A runs five seconds: the window grows to 1000x700 and goes back while it runs.
+        await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+        Resize(rig.Window, 1000, 700);
+        await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+        Resize(rig.Window, 641, 481);
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
 
-        var restart = Stopwatch.StartNew();
         Assert.True(rig.Factory.Session!.RestartChain("simulated"));
         var a = rig.Started.Path;
         Assert.Equal(new RecordingStopped(a, RecordingStopReasons.EncoderRestart), await rig.NextAsync());
-        var measured = restart.Elapsed.TotalSeconds;
         var b = Assert.IsType<RecordingStarted>(await rig.NextAsync()).Path;
         Assert.Equal(new RecordingRestart(a, b), await rig.NextAsync());
 
@@ -353,11 +321,19 @@ public sealed class RecordingCaptureTests : IDisposable
             .Select(m => double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture))
             .ToList();
         Assert.Equal(2, starts.Count);
+        var rebuild = logs.Entries
+            .Select(e => Regex.Match(e.Message, @"The encoder chain restarted in (\d+) ms"))
+            .Single(m => m.Success);
+        var rebuilt = double.Parse(rebuild.Groups[1].Value, CultureInfo.InvariantCulture) / 1000;
         var video = SessionTestKit.Probe(a, "-select_streams", "v:0", "-show_streams").GetProperty("streams")[0];
         var aEnd = starts[0] + double.Parse(video.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture);
         var gap = starts[1] - aEnd;
-        Assert.InRange(gap, -2.0 / 30, measured + (2.0 / 30));
+        Assert.InRange(gap, -2.0 / 30, rebuilt + (2.0 / 30));
     }
+
+    /// <summary>Resizes the game's window from outside its process, keeping its place.</summary>
+    private static void Resize(nint window, int width, int height) =>
+        Assert.True(Native.SetWindowPos(window, 0, 0, 0, width, height, Native.NoMoveNoZOrderNoActivate), $"SetWindowPos failed: {Marshal.GetLastPInvokeError()}");
 
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
@@ -457,8 +433,7 @@ public sealed class RecordingCaptureTests : IDisposable
         bool clips = false,
         Func<SettingsDocument, SettingsDocument>? pending = null,
         Func<Exception?>? restartFault = null,
-        ILoggerFactory? loggers = null,
-        string windowScript = WindowScript)
+        ILoggerFactory? loggers = null)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)>
@@ -494,8 +469,7 @@ public sealed class RecordingCaptureTests : IDisposable
         SessionOrchestrator? orchestrator = null;
         try
         {
-            var window = SessionTestKit.OpenWindow(_directory, _processes, windowScript);
-            var openedAt = Stopwatch.GetTimestamp();
+            var window = SessionTestKit.OpenWindow(_directory, _processes, WindowScript);
             var anchored = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
             var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
             var options = new CaptureSessionOptions
@@ -539,7 +513,7 @@ public sealed class RecordingCaptureTests : IDisposable
             var start = Stopwatch.GetTimestamp();
             Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, start)));
             var started = Assert.IsType<RecordingStarted>(await events.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token));
-            return new Rig(orchestrator, hub, events, published, library, start, started) { Factory = factory, OpenedAt = openedAt };
+            return new Rig(orchestrator, hub, events, published, library, start, started) { Factory = factory, Window = window.Handle };
         }
         catch
         {
@@ -576,8 +550,8 @@ public sealed class RecordingCaptureTests : IDisposable
         /// <summary>The session factory, which keeps the session it started and its first failure.</summary>
         public required CapturingFactory Factory { get; init; }
 
-        /// <summary>The QPC just after the game's window appeared.</summary>
-        public long OpenedAt { get; init; }
+        /// <summary>The game's window.</summary>
+        public nint Window { get; init; }
 
         public async Task<object> NextAsync() => await Events.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
@@ -656,6 +630,15 @@ public sealed class RecordingCaptureTests : IDisposable
             public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
                 entries.Enqueue((logLevel, formatter(state, exception)));
         }
+    }
+
+    private static class Native
+    {
+        // SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE.
+        public const uint NoMoveNoZOrderNoActivate = 0x0002 | 0x0004 | 0x0010;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     }
 
     /// <summary>Records each Library call, in order.</summary>

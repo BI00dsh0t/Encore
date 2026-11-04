@@ -3,14 +3,14 @@ title: 'One file however long, and forced encoder restarts'
 type: 'feature'
 ticket: '6'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '10a44f7a3b19e987a9bbace8eaec1359e1689e1b'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
@@ -104,6 +104,16 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-04 — Review pass
+- verdicts: 6 findings — high 0, medium 1, low 5, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` The restart thread had no top-level catch: a throw from `old.Dispose`, `StartAudio` or the install would kill the engine with `_restarting` stuck true — fixed: one catch over the whole worker logs, disposes an uninstalled chain and the ring, `Fail`s with `encode-failed`, then clears `_restarting`.
+  - `[low]` `[reject]` A restart starting between `Save` and `ClipWrite.Write` lets that save register on the disposed old chain — real, but `RestartChain` has no production caller (only tests), so no user can reach it; the fix is a new guard in `Write`. Logged as a residual risk for the story that adds a real trigger.
+  - `[low]` `[patch]` On a failed rebuild `_restarting` was cleared before `Fail` stopped the session, so `ResizeAt`/`StartBuildLocked` could touch the disposed chain and ring — fixed: `Fail` first, then the flag.
+  - `[low]` `[reject]` At shutdown, if A misses `ShutdownWait`, B's announcement still names A in `Restarted` with no `Stopped(A)` — needs a restart within 3 s of Quit and a writer that hangs past 3 s; A's file is then reported `recording-interrupted` at the next start anyway; the fix adds branches.
+  - `[low]` `[patch]` The Heavy test's gap bound included A's post-back, looser than the restart — fixed: bounded by the session's logged rebuild time plus two frames.
+  - `[low]` `[patch]` The Heavy test's resize was timed by the window script, so it could fall before Recording A — fixed: the test resizes the window with `SetWindowPos` after `Started(A)` and back, before the restart.
+
 ## Design Notes
 
 The session tears the old chain down before building the new one, because `ReplayRingSink.Restart` needs the old encoders to have stopped writing into the ring, and AD-7 caps live chains. The capture keeps running; frames during the rebuild are dropped, so the gap between the files is the rebuild's length (plus up to a frame). The new Recording attaches on the orchestrator thread as soon as `ChainRestarted` arrives and asks for a keyframe after the restart QPC, so the first frame encoded after it (or the next, if the post was slow) starts file B.
@@ -122,3 +132,24 @@ GPU lock: any command that runs real capture or encode (the Platform.FFmpeg.Test
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- expected: pass
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*Restart*"` (session holds the GPU lock) -- expected: pass
 - `pwsh tools/publish-engine.ps1` -- expected: no IL or AOT warnings
+
+## Auto Run Result
+
+- **Summary:** A forced encoder restart (`CaptureSession.RestartChain`) tears the game session's chain down and rebuilds the same spec into a new generation of the same ring (4.6), then posts `ChainRestarted`. The orchestrator ends the running Recording with `encoder-restart` and starts a new one at once on the new chain, in a new allocator path. When the old writer posts back, it publishes `recording.stopped`, `recording.started` and a `recording-restarted` warning naming both files, with the `recordingStarted` sound. `CaptureState.Recording` stays Running throughout. A synthetic 4-hour, three-Track RecordingWriter test proves one file however long. A Heavy test proves a window resize mid-Recording keeps one 640×480 file and a restart gives two playable files that meet within the rebuild time.
+- **Files:**
+  - Contracts: `RecordingStopReasons.EncoderRestart` and `ErrorCodes.RecordingRestarted`, both additive (AD-22).
+  - Core: `ISessionEvents.ChainRestarted`, `Recordings.Restarted` with `RecordingRestart`, the orchestrator's restart handover (`BeginRecording`, `_ending`, `Follows`, `Announce`), and `FeedbackRouter.RecordingRestarted`.
+  - Engine: `CaptureSession.RestartChain` and its guards, `CaptureSessionOptions.RestartFault`, `EncoderChain.Build(restartOf, window)` with `IsDisposed` and `TakeTap`, and the `EngineHost` wiring.
+  - Platform.FFmpeg: test seams `RecordingWriter.FlushToDisk` and `RecordingWriter.Queued`, threaded through the muxer and `DurableOutput`.
+  - Tests: 4 orchestrator tests, 1 router test, the new `LongRecordingTests`, 1 default and 2 Heavy Engine tests.
+- **Review:** quick lens, 6 findings. 4 patched (1 medium, 3 low), 2 rejected (low; the reasons are in the triage log). None deferred.
+- **Follow-up review recommended:** false. One medium and no high were patched.
+- **Verification:**
+  - Release build: 0 warnings.
+  - Default suites: Contracts 118, Core 116, Platform.FFmpeg 37 passed (1 explicit skipped), Engine 168 passed (26 explicit skipped).
+  - Heavy `*Restart*` under the GPU lock: 3 passed, the two new tests among them, after the review fixes.
+  - `tools/publish-engine.ps1`: no IL or AOT warnings.
+- **Residual risks:**
+  - Nothing in production triggers a restart yet. There is no device-lost or driver-reset detection, only `RestartChain`, which tests call.
+  - The story that adds a real trigger should also guard the window between `Save` and `ClipWrite.Write`, and run the restart from the orchestrator's side.
+  - The 4-hour test's packets carry junk payloads, so it proves the container's timing, not decoding.
