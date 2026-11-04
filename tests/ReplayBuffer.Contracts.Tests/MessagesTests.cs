@@ -24,6 +24,7 @@ public sealed partial class MessagesTests
         ["clip.failed"] = """{"reason":"clip-too-short"}""",
         ["recording.started"] = """{"path":"C:\\Videos\\Game\\Game_2026-11-03_10-00-00.mp4"}""",
         ["recording.stopped"] = """{"path":"C:\\Videos\\Game\\Game_2026-11-03_10-00-00.mp4","reason":"stopped"}""",
+        ["estimate.changed"] = """{"storage":"disk","bytes":1600000000,"worstCase":true,"freeBytes":1000000000,"exceedsFree":true}""",
         ["capture.videoOptions"] = """{"probed":true,"codecs":[{"codec":"h264","encoder":"h264_nvenc","mayNotPlayEverywhere":false},{"codec":"av1","encoder":"av1_nvenc","mayNotPlayEverywhere":true}],"resolutions":[{"width":1920,"height":1080}],"maxFps":120}""",
         ["warning.raised"] = """{"id":"w2","code":"settings-unreadable","severity":"warning","source":"settings","message":"m","at":"2026-10-25T12:00:00+00:00","overlay":true,"sound":null,"dismissable":true}""",
         ["warning.dismissed"] = """{"id":"w1"}""",
@@ -37,10 +38,11 @@ public sealed partial class MessagesTests
         ["game.detected"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
         ["game.exited"] = """{"profileId":"c:\\games\\game.exe","name":"Game.exe","processId":7}""",
         ["library.itemAdded"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":"c:\\games\\game.exe","size":0,"date":"2026-11-03T10:00:00+00:00","beingWritten":true}""",
-        ["library.itemChanged"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":null,"size":1024,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}""",
+        ["library.itemChanged"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4","profileId":null,"size":1024,"date":"2026-11-03T10:00:00+00:00","beingWritten":false,"lengthSeconds":30.5}""",
         ["library.itemRemoved"] = """{"path":"Game\\Game_2026-11-03_10-00-00.mp4"}""",
         ["library.reset"] = """{"items":[{"path":"clip.mp4","profileId":null,"size":48,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}]}""",
         ["library.cleanupBlockedChanged"] = """{"blocked":true}""",
+        ["library.folderChanged"] = """{"folder":"C:\\Videos\\ReplayBuffer"}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);
@@ -263,6 +265,24 @@ public sealed partial class MessagesTests
 
     [GeneratedRegex("^[a-z]+\\.[a-z][a-zA-Z]*$")]
     private static partial Regex NounVerb();
+
+    [Fact]
+    public void AnItemsLengthAndTheLibraryFolderRoundTripAndAreOptional()
+    {
+        var item = new LibraryItem("clip.mp4", null, 48, DateTimeOffset.UnixEpoch, false, 30.5);
+        var json = JsonSerializer.Serialize(item, LibraryJsonContext.Default.LibraryItem);
+
+        Assert.Contains("\"lengthSeconds\":30.5", json, StringComparison.Ordinal);
+        Assert.Equal(item, JsonSerializer.Deserialize(json, LibraryJsonContext.Default.LibraryItem));
+        Assert.Equal(@"C:\Videos", LibraryMessages.FolderChanged.Apply(StateSnapshot.Initial("e", 1, SettingsDocument.Empty), new LibraryFolderChanged(@"C:\Videos")).LibraryFolder);
+
+        // AD-22, additive: an item and a snapshot from before story 7.3 read as no length and no folder.
+        var old = JsonSerializer.Deserialize(
+            """{"path":"clip.mp4","profileId":null,"size":48,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}""",
+            LibraryJsonContext.Default.LibraryItem);
+        Assert.Null(old!.LengthSeconds);
+        Assert.Null(StateSnapshot.Initial("e", 1, SettingsDocument.Empty).LibraryFolder);
+    }
 }
 
 public sealed class FrameTests

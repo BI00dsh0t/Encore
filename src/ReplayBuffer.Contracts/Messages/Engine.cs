@@ -82,6 +82,10 @@ public sealed record StateSnapshot
         init => _videoOptions = value ?? VideoOptions.Unprobed;
     }
 
+    /// <summary>The Global settings' storage estimate (R2), or <c>null</c> before the engine has made one.</summary>
+    /// <remarks>A snapshot without the field (an engine from before story 4.10) reads as none.</remarks>
+    public StorageEstimate? Estimate { get; init; }
+
     /// <summary>The audio devices the App can offer (R1); empty until the engine lists them.</summary>
     /// <remarks>A snapshot without the field (an engine from before story 2.3) reads as the empty list.</remarks>
     public AudioDeviceList Devices
@@ -125,6 +129,13 @@ public sealed record StateSnapshot
     /// </summary>
     /// <remarks>A snapshot without the field (an engine from before story 7.2) reads as false.</remarks>
     public bool CleanupBlocked { get; init; }
+
+    /// <summary>
+    /// The absolute Output Folder the Library indexes (story 7.3), which each item's path is relative
+    /// to; <c>null</c> when unknown.
+    /// </summary>
+    /// <remarks>A snapshot without the field (an engine from before story 7.3) reads as <c>null</c>.</remarks>
+    public string? LibraryFolder { get; init; }
 
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];

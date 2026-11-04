@@ -29,10 +29,11 @@ internal sealed class MainViewModel : Observable
         _engine = engine;
         Pages = SettingsPages.Create(new SettingsSender(engine), engine);
         General = Pages.OfType<GeneralSettingsPage>().Single();
+        ReplayBuffer = Pages.OfType<ReplayBufferSettingsPage>().Single();
         TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
         GameProfiles = Pages.OfType<GameProfilesPage>().Single();
         _selectedPage = Pages[0];
-        Library = new LibraryPage(engine);
+        Library = new LibraryPage(engine, LibraryThumbnails.Shell(post));
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -41,6 +42,9 @@ internal sealed class MainViewModel : Observable
 
     /// <summary>The General page, which the tray's Start with Windows item shares.</summary>
     public GeneralSettingsPage General { get; }
+
+    /// <summary>The Replay Buffer page, which takes the snapshot's video options and storage estimate as well as its settings.</summary>
+    public ReplayBufferSettingsPage ReplayBuffer { get; }
 
     /// <summary>The Track Layout page, which takes the snapshot's device list as well as its settings.</summary>
     public TrackLayoutPage TrackLayout { get; }
@@ -153,6 +157,7 @@ internal sealed class MainViewModel : Observable
         SettingsRevision = state.Settings.Revision.ToString(CultureInfo.InvariantCulture);
         Warnings = [.. state.Warnings.Select(w => $"{w.Severity}: {w.Message} ({w.Code})")];
         TrackLayout.ShowDevices(state.Devices);
+        ReplayBuffer.ShowState(state);
         Library.Render(state);
 
         // Before rendering, so a draft the render watches is recorded against this engine run.

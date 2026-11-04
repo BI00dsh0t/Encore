@@ -104,6 +104,10 @@ In any detected game, pressing the Save Hotkey produces a playable multi-Track C
   - `MemoryMargin.Raised` runs `Warnings.Raise` on the encoder thread while the ring's lock is held, once per entry into the margin. It doesn't call back into the ring.
   - With every older slab pinned and the margin refused, the ring still allocates the new slab; the pins go when their writes end.
   - `memory-margin` warnings are not withdrawn on leaving the margin; they go only by `warning.dismiss`. Epic 5's status line may want to withdraw them.
+- Decision: 2026-11-03, from 4.10 (Replay Buffer page and estimate; QA PASS with three advisories, none fixed):
+  - The estimate covers the Global settings only, not a Game Profile's overrides. 4.9 and 4.11 should say so, or extend it, when per-profile settings reach the page.
+  - In Memory mode the free RAM adds back the engine's whole working set as the ring's own use, an approximation that can under-warn slightly.
+  - `EstimatePublisher` refreshes on a thread pool and every 30 s; a failed refresh is skipped silently.
 - Waits on epic-engine-baseline because: it needs the encoder and fragmented MP4 writer.
 - Waits on epic-multi-track-audio because: it needs the Track Layouts and the mixed Track audio.
 - Waits on epic-game-detection-profiles because: it needs the Target Game appeared and exited events, Game Profiles, and per-game folders and file names.

@@ -1,4 +1,5 @@
 using ReplayBuffer.App.Engine;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 
 namespace ReplayBuffer.App.Overlay;
@@ -17,6 +18,8 @@ internal enum OverlayDot
 /// The snapshot's <c>overlay: true</c> warnings queue (R3): each shows as <see cref="Message"/> for
 /// <see cref="MessageDuration"/>, oldest first, and an unseen repeat of a waiting one takes its place.
 /// Which warnings were shown is the Overlay's own fact, kept by id, so a reconnect never replays one.
+/// The mic-muted icon shows while the mic is muted and the dot shows, and the red X while a
+/// <c>disk-full</c> Overlay warning is active, whatever the dot (R3).
 /// </summary>
 internal sealed class OverlayViewModel : Observable
 {
@@ -31,6 +34,8 @@ internal sealed class OverlayViewModel : Observable
     private Warning? _message;
     private OverlayDot _dot;
     private bool _saving;
+    private bool _micMuted;
+    private bool _diskFull;
     private int? _targetProcessId;
 
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
@@ -58,6 +63,26 @@ internal sealed class OverlayViewModel : Observable
     {
         get => _saving;
         private set => Set(ref _saving, value);
+    }
+
+    /// <summary>
+    /// Whether the mic-muted icon shows: the mic is muted while the dot shows. The muted default
+    /// alone never shows it, so nothing shows while nothing runs.
+    /// </summary>
+    public bool MicMuted
+    {
+        get => _micMuted;
+        private set => Set(ref _micMuted, value);
+    }
+
+    /// <summary>
+    /// Whether the red X shows: a <c>disk-full</c> Overlay warning is active, until the engine
+    /// dismisses it. It doesn't follow the dot, since a full disk can stop the capture.
+    /// </summary>
+    public bool DiskFull
+    {
+        get => _diskFull;
+        private set => Set(ref _diskFull, value);
     }
 
     /// <summary>How long each queued message shows.</summary>
@@ -97,15 +122,19 @@ internal sealed class OverlayViewModel : Observable
         }
 
         var saving = current is not null && (current.ClipsWriting > 0 || remaining > TimeSpan.Zero);
+        var micMuted = dot != OverlayDot.None && current!.MicMuted;
+        var diskFull = state is not null && state.Warnings.Any(w => w.Overlay && w.Code == ErrorCodes.DiskFull);
         var message = NextMessage(state);
 
         // The window updates per property: hide before the Target moves, and move before showing,
-        // so the dot, the icon and the message never flash on the wrong monitor.
-        if (dot == OverlayDot.None && !saving && message is null)
+        // so the dot, the icons and the message never flash on the wrong monitor.
+        if (dot == OverlayDot.None && !saving && message is null && !diskFull)
         {
             Dot = dot;
             Saving = saving;
             Message = message;
+            MicMuted = micMuted;
+            DiskFull = diskFull;
             TargetProcessId = state?.TargetGame?.ProcessId;
         }
         else
@@ -114,6 +143,8 @@ internal sealed class OverlayViewModel : Observable
             Dot = dot;
             Saving = saving;
             Message = message;
+            MicMuted = micMuted;
+            DiskFull = diskFull;
         }
     }
 
