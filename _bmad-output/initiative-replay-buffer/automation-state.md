@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 7.6 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.5 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 6.5 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 4.11 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with overlay research |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.11 |
@@ -501,3 +501,9 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 
 - 2026-11-04: 5.10 merged (`7e09a01`, `feat(app): merge 5.10-status-line`, after merging develop in cleanly: Release build 0 warnings, App.Tests 97 passed with 9 explicit skipped; the run overlapped another session's `.bench-running` marker but passed). QA PASS at `c0862ba`; its one low finding (no Human Check row) was settled by the 5.10 row, committed on develop at `54a69b8`. App-only: no Contracts, Core or Engine changes.
 - 2026-11-04: 5.10 merged (`7e09a01`, marked done `21e1c5a`). Its card is Done with its label detached. 5.9 went to slice-epic-5 (Opus, medium effort), with its card In progress. 5.11 is now Ready and waits for the next free worker.
+- 2026-11-04 ~02:53Z: **PAUSED by the builder** ("pause graphics tests for now", then "actually, just pause everything"). The coordinator stopped every session's turn. Then the builder said: "continue the research. But do not implement or test anything yet", so only the overlay research runs, as reading and writing only (no builds, tests, prototypes or GPU runs; proposed measurements go in the doc). After the stops, develop is clean (no merge in progress), `.bench-running` is absent, no worktree processes are left, and every worktree is clean. State at the pause:
+  - QA 6.5 PASSED, but it isn't merged: its branch has develop merged in (`2a8c979`), and the merge into develop is still to do.
+  - QA 4.11 was stopped mid-run, so it needs a fresh QA.
+  - 7.6 (`feature/7.6-open-explorer-copy`) and 5.9 (`feature/5.9-capture-exclusion`) had just cut their branches, with no code yet.
+  - 5.11 is Ready, but no brief was sent (qa-1-14 is cleared and retitled "5.11", unbriefed).
+  - On resume: tell 6.5 to merge, rerun QA 4.11, re-send the 7.6 and 5.9 briefs, and brief 5.11.
