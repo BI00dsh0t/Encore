@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 5.8 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 4.12 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.5 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.12 |
@@ -478,3 +478,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: The desktop app restarted at about 00:57Z. It stopped every session's turn and background subagent, and the coordinator's display holder. The coordinator restarted the display holder and told 7.4 (re-merge), 4.9 (review, then READY FOR QA), 5.8 (finish the partial implementation) and 4.12 (finish the review patches) to resume from their worktrees.
 - 2026-11-04: 7.4 merged into `develop` (`bcc45ff`, `feat(core): merge 7.4-favourite`) and marked done, after QA PASS at `83f6294` with 0 findings. Develop was synced in twice (5.7, 4.10, 6.4): build 0 warnings; Contracts 118, Core 107, Engine 167 (one flaky failure under load passed on rerun), App 85 pass; publish clean. Contracts: additive `LibraryItem.Favourite`/`Modified`, `library.setFavourite`, `library-item-changed`. A Favourite is lost if a file is renamed while the engine is off (pre-existing, path-keyed index).
 - 2026-11-04: 7.4 merged (`bcc45ff`, marked done `069bac7`), and its card is Done. slice-epic-5 is back in the pool. 7.5 went to qa-2-1 (Opus, medium effort), with its card In progress.
+- 2026-11-04: 4.12 is READY FOR QA at `2f56fab`. QA started on qa-1-14 (Sonnet), and its card is In QA. 7.4's merge run had one Engine test fail and then pass on rerun; that's the third one-off flake today (two App, one Engine), so watch it.
