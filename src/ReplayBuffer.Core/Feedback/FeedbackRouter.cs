@@ -1,5 +1,6 @@
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Core.Sessions;
 
 namespace ReplayBuffer.Core.Feedback;
 
@@ -24,8 +25,9 @@ public interface IFeedbackNotices
 
 /// <summary>
 /// Turns outcomes into notices (FR-6): Clip saved, Clip not saved, Recording started and stopped
-/// (from <see cref="CaptureState.Recording"/> transitions) and disk full. Info notices are withdrawn
-/// after <see cref="InfoLifetime"/>; a Clip not saved stays until the next saved Clip, a disk full
+/// (from <see cref="CaptureState.Recording"/> transitions), Recording restarted and disk full. Info
+/// notices, and the restart's, are withdrawn after <see cref="InfoLifetime"/>; a Clip not saved
+/// stays until the next saved Clip, a disk full
 /// until the next Recording starts, or until the user dismisses either. With a
 /// <see cref="FeedbackSoundPlayer"/>, each notice's sound is queued as it is raised; a sound that is
 /// switched off isn't played, and its notice carries no <see cref="FeedbackNotice.Sound"/>. Thread-safe.
@@ -101,6 +103,31 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
             {
                 RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStopped, WarningSeverity.Info, Recordings, "Recording stopped", "recordingStopped"));
             }
+        }
+    }
+
+    /// <summary>
+    /// A forced encoder restart ended a Recording and started another (R4): a
+    /// <c>recording-restarted</c> warning naming both files, with the <c>recordingStarted</c> sound,
+    /// withdrawn after <see cref="InfoLifetime"/>. The Recording state never left Running, so no
+    /// started or stopped notice comes with it.
+    /// </summary>
+    public void RecordingRestarted(RecordingRestart restart)
+    {
+        ArgumentNullException.ThrowIfNull(restart);
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            RaiseInfo(new FeedbackNotice(
+                ErrorCodes.RecordingRestarted,
+                WarningSeverity.Warning,
+                Recordings,
+                $"Recording restarted after an encoder restart: {Path.GetFileName(restart.StoppedPath)} → {Path.GetFileName(restart.StartedPath)}",
+                "recordingStarted"));
         }
     }
 

@@ -167,8 +167,8 @@ public interface IOpenRecordings
 }
 
 /// <summary>
-/// How a session posts back to the orchestrator from its media threads (AD-19). Both calls only
-/// post a message and return; the orchestrator ends the session.
+/// How a session posts back to the orchestrator from its media threads (AD-19). Every call only
+/// posts a message and returns; the orchestrator ends the session, and starts and stops Recordings.
 /// </summary>
 public interface ISessionEvents
 {
@@ -177,6 +177,14 @@ public interface ISessionEvents
 
     /// <summary>Capture or encoding failed.</summary>
     void Failed(Exception failure);
+
+    /// <summary>
+    /// The session's encoder chain was forcibly rebuilt (R4); frames from <paramref name="qpc"/> on
+    /// are the new chain's. A Recording that ran on the old chain has ended at its last packet.
+    /// </summary>
+    void ChainRestarted(long qpc)
+    {
+    }
 }
 
 /// <summary>How a session ended: the finished file (null when none was written), why, and any failure.</summary>

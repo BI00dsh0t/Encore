@@ -23,8 +23,9 @@ namespace ReplayBuffer.Engine.Sessions;
 /// stays idle: its audio starts at the save press that switches the session to it
 /// (<see cref="StartAudio"/>), its frames at the first one captured after that press, in the slot
 /// nearest it. A Track with no devices is silence, advanced from QPC every
-/// <see cref="SilenceInterval"/> by a timer, off the capture thread. The session's locks guard the
-/// writer count and the retirement fields.
+/// <see cref="SilenceInterval"/> by a timer, off the capture thread. A chain rebuilt by a forced
+/// encoder restart (R4) takes over its predecessor's <see cref="ReplayRingSink"/> in a new ring
+/// generation. The session's locks guard the writer count and the retirement fields.
 /// </summary>
 internal sealed class EncoderChain : IDisposable
 {
@@ -116,6 +117,9 @@ internal sealed class EncoderChain : IDisposable
     /// <summary>Whether <see cref="Build"/> has opened every encoder.</summary>
     public bool IsBuilt { get; private set; }
 
+    /// <summary>Whether it has been disposed.</summary>
+    public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
     /// <summary>Where its audio starts: the session anchor for the first chain, the switching press for a later one.</summary>
     public long AudioAnchorQpc => _audioAnchorQpc;
 
@@ -179,20 +183,47 @@ internal sealed class EncoderChain : IDisposable
     /// The first chain's pacer gives its first frame slot 0; a later one's, the slot nearest it.
     /// </summary>
     /// <param name="latency">The stats' latency histogram, for the first chain of a measured run.</param>
-    public void Build(long sessionAnchorQpc, bool first, LatencyHistogram? latency)
+    /// <param name="restartOf">
+    /// A forced restart's predecessor's ring, whose encoders have stopped writing: this chain takes it
+    /// over in a new generation (<see cref="ReplayRingSink.Restart"/>) of <paramref name="window"/>
+    /// seconds, instead of a ring of its own; null for a new ring.
+    /// </param>
+    /// <param name="window">The Buffer Window the restarted ring holds, in seconds; with <paramref name="restartOf"/> only.</param>
+    public void Build(long sessionAnchorQpc, bool first, LatencyHistogram? latency, ReplayRingSink? restartOf = null, int window = 0)
     {
         _sessionAnchorQpc = sessionAnchorQpc;
         PacketSink packets;
         var video = Spec.Snapshot.Video;
-        if (_options.Replay)
+        if (_options.Replay && restartOf is not null)
         {
-            var window = Spec.Snapshot.BufferWindow;
             WindowSeconds = window;
             var ring = NewRing(window);
+            int generation;
+            try
+            {
+                generation = restartOf.Restart(ring);
+            }
+            catch
+            {
+                ring.Dispose();
+                throw;
+            }
+
+            _ring = restartOf;
+            _tap = new RecordingTap(_ring);
+            packets = _tap;
+            _log.LogInformation("Replay Buffer restarted in ring generation {Generation}: {Window} s {Storage}, {Capacity} packets preallocated",
+                generation, window, StorageOf(ring), RingCapacity(window));
+        }
+        else if (_options.Replay)
+        {
+            var bufferWindow = Spec.Snapshot.BufferWindow;
+            WindowSeconds = bufferWindow;
+            var ring = NewRing(bufferWindow);
             _ring = new ReplayRingSink(ring);
             _tap = new RecordingTap(_ring);
             packets = _tap;
-            _log.LogInformation("Replay Buffer of {Window} s {Storage}, {Capacity} packets preallocated", window, StorageOf(ring), RingCapacity(window));
+            _log.LogInformation("Replay Buffer of {Window} s {Storage}, {Capacity} packets preallocated", bufferWindow, StorageOf(ring), RingCapacity(bufferWindow));
         }
         else
         {
@@ -309,6 +340,17 @@ internal sealed class EncoderChain : IDisposable
         }
 
         _paced.Post(frame, qpc);
+    }
+
+    /// <summary>
+    /// Takes the Recording tap out of the chain, so <see cref="Dispose"/> leaves it to the caller: a
+    /// forced restart closes it, ending the Recording, only once the orchestrator has been told.
+    /// </summary>
+    public RecordingTap? TakeTap()
+    {
+        var tap = _tap;
+        _tap = null;
+        return tap;
     }
 
     /// <summary>No frame can arrive now: lets the encoder thread offer what is queued before the flush.</summary>

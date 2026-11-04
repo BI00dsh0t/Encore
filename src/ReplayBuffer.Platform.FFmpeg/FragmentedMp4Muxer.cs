@@ -18,6 +18,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
     private readonly bool _durable;
+    private readonly bool _flushToDisk;
     private AVFormatContext* _context;
     private DurableOutput? _output;
     private bool _started;
@@ -35,11 +36,13 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     /// a fragment ends only at <see cref="CutFragment"/>, and the header and each fragment are
     /// flushed to the disk before the call returns. A write failure is rethrown as it was thrown.
     /// </param>
-    internal FragmentedMp4Muxer(string path, ILogger logger, bool durable)
+    /// <param name="flushToDisk">A durable muxer's flushes reach the disk, not just the OS; false only for tests.</param>
+    internal FragmentedMp4Muxer(string path, ILogger logger, bool durable, bool flushToDisk = true)
     {
         Path = path;
         _logger = logger;
         _durable = durable;
+        _flushToDisk = flushToDisk;
         AVFormatContext* context = null;
         FFmpegLibrary.Check(ffmpeg.avformat_alloc_output_context2(&context, null, "mp4", path), "avformat_alloc_output_context2");
         _context = context;
@@ -111,7 +114,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
         AVDictionary* options = null;
         if (_durable)
         {
-            _output = new DurableOutput(Path);
+            _output = new DurableOutput(Path, _flushToDisk);
             _context->pb = _output.Context;
             _context->flags |= ffmpeg.AVFMT_FLAG_CUSTOM_IO;
             ffmpeg.av_dict_set(&options, "movflags", "frag_custom+empty_moov+default_base_moof", 0);

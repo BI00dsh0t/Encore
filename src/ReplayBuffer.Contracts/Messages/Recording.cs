@@ -35,6 +35,9 @@ public static class RecordingStopReasons
 
     /// <summary>The engine shut down (Quit).</summary>
     public const string Shutdown = "shutdown";
+
+    /// <summary>A forced encoder restart ended it; a new Recording starts at once in another file.</summary>
+    public const string EncoderRestart = "encoder-restart";
 }
 
 /// <summary>
