@@ -32,6 +32,7 @@ internal sealed class ShellApp(Instance instance) : Application
     private MainWindow? _window;
     private OverlayWindow? _overlay;
     private TaskbarIcon? _tray;
+    private OverlayDot _trayDot;
     private bool _quitting;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -64,7 +65,10 @@ internal sealed class ShellApp(Instance instance) : Application
         }
 
         _tray = CreateTray(model, _window.Title);
-        _overlay = new OverlayWindow(new OverlayViewModel(_engine, action => Dispatcher.BeginInvoke(action)));
+        _engine.Changed += () => Dispatcher.BeginInvoke(SyncTray);
+        var overlay = new OverlayViewModel(_engine, action => Dispatcher.BeginInvoke(action), overlayPlanes: Monitors.OverlayPlanes);
+        _overlay = new OverlayWindow(overlay);
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.BeginInvoke(overlay.DisplaysChanged);
         if (!StartsInTray(e.Args))
         {
             _window.Open();
@@ -142,20 +146,28 @@ internal sealed class ShellApp(Instance instance) : Application
         var menu = CreateTrayMenu(model, () => _window!.Open(), async () => await QuitAsync());
         var tray = new TaskbarIcon
         {
-            ToolTipText = title,
-            IconSource = new GeneratedIconSource
-            {
-                Text = "R",
-                Foreground = Brushes.White,
-                Background = new SolidColorBrush(Color.FromRgb(0xC6, 0x28, 0x28)),
-                FontWeight = FontWeights.Bold,
-            },
+            ToolTipText = $"{title}: {TrayCapture.Describe(OverlayDot.None)}",
+            IconSource = TrayCapture.Icon(OverlayDot.None),
             ContextMenu = menu,
             LeftClickCommand = new RelayCommand(() => _window!.Open()),
             NoLeftClickDelay = true,
         };
         tray.ForceCreate(enablesEfficiencyMode: false);
         return tray;
+    }
+
+    // The tray carries the capture state in every overlayDot mode (story 5.15).
+    private void SyncTray()
+    {
+        var dot = TrayCapture.For(_engine!);
+        if (_tray is null || dot == _trayDot)
+        {
+            return;
+        }
+
+        _trayDot = dot;
+        _tray.IconSource = TrayCapture.Icon(dot);
+        _tray.ToolTipText = $"{_window!.Title}: {TrayCapture.Describe(dot)}";
     }
 
     private async Task QuitAsync()

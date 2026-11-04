@@ -20,6 +20,7 @@ namespace ReplayBuffer.Contracts.Settings;
 [JsonSerializable(typeof(ReplayStorage))]
 [JsonSerializable(typeof(HotkeySettings))]
 [JsonSerializable(typeof(RecordHotkeyMode))]
+[JsonSerializable(typeof(OverlayDotMode))]
 [JsonSerializable(typeof(FeedbackSounds))]
 [JsonSerializable(typeof(CleanupSettings))]
 [JsonSerializable(typeof(AppliesAt))]
