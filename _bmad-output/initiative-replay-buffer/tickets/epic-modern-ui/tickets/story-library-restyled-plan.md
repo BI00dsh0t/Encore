@@ -3,7 +3,7 @@ title: 'Library restyled'
 type: 'feature'
 ticket: '4'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '995f9df6d87c55f1d93cff545e8071873f826d27'
 route: 'full'
 route_source: 'auto'
