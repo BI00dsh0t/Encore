@@ -43,6 +43,7 @@ public sealed partial class MessagesTests
         ["library.reset"] = """{"items":[{"path":"clip.mp4","profileId":null,"size":48,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}]}""",
         ["library.cleanupBlockedChanged"] = """{"blocked":true}""",
         ["library.folderChanged"] = """{"folder":"C:\\Videos\\ReplayBuffer"}""",
+        ["monitors.changed"] = """{"monitors":[{"deviceName":"\\\\.\\DISPLAY1","friendlyName":"Dell","width":2560,"height":1440,"primary":true}]}""",
     };
 
     private static IEnumerable<string> SnapshotFields => EngineJsonContext.Default.StateSnapshot.Properties.Select(p => p.Name);

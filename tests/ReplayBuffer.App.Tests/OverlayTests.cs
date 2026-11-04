@@ -323,6 +323,38 @@ public sealed class OverlayTests
     }
 
     [Fact]
+    public void ADisplayChangePlacesTheWindowOnTheNewPrimaryAtItsDpi() => Sta.Run(() =>
+    {
+        var engine = new FakeEngineSession();
+        var primary = new MonitorArea(0, 0, 1920, 1080, 96);
+        var model = new OverlayViewModel(engine, action => action(), new ManualTime());
+        var window = new OverlayWindow(model, _ => primary);
+        try
+        {
+            Shift(engine, Buffering);
+            AssertDotOn(primary);
+
+            // The primary moves to a 150 % monitor (T-03): nothing the Overlay shows changed, but it moves there.
+            primary = new MonitorArea(0, 0, 1600, 900, 144);
+            model.DisplaysChanged();
+            AssertDotOn(primary);
+        }
+        finally
+        {
+            window.Close();
+        }
+
+        // The dot's corner, as OverlayWindow.Place puts it: the strip of three icon slots extends it left.
+        void AssertDotOn(MonitorArea monitor)
+        {
+            var (x, y, size) = Monitors.TopRight(monitor, OverlayWindow.DotSizeDip, OverlayWindow.InsetDip);
+            var left = x - (int)Math.Round(3 * (16 + 6) * (size / OverlayWindow.DotSizeDip));
+            var bounds = OverlayWindowStyle.Bounds(window.Handle);
+            Assert.Equal((left, y), (bounds.Left, bounds.Top));
+        }
+    });
+
+    [Fact]
     public void TheWindowIsTopmostClickThroughNeverActivatedAndExcludedFromCapture() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession();

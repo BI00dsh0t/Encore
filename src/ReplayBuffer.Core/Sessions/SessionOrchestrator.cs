@@ -42,6 +42,12 @@ public sealed record PowerSuspending(long Qpc) : SessionMessage;
 public sealed record PowerResumed : SessionMessage;
 
 /// <summary>
+/// The displays changed (T-03): a Monitor Recording whose monitor is no longer attached ends with
+/// <see cref="RecordingStopReasons.MonitorRemoved"/>; a game session is left as it is.
+/// </summary>
+public sealed record DisplaysChanged : SessionMessage;
+
+/// <summary>
 /// The settings document was committed; any thread. The game session's settings are resolved again,
 /// and a profile's new Tracks or video apply from its next Clip (R7, R8).
 /// </summary>
@@ -135,6 +141,11 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// (<see cref="PowerResumed"/>) drives the GPU reset's recovery, with its retries and give-up but no
 /// <see cref="DeviceRecovery.Reset"/> or <see cref="DeviceRecovery.Recovered"/>, and no Recording
 /// starts again.
+/// A display change (<see cref="DisplaysChanged"/>, from its <see cref="IDisplayMonitors"/>, T-03)
+/// ends a Monitor session whose monitor is gone, its Monitor Recording stopping at its last frame with
+/// <see cref="RecordingStopReasons.MonitorRemoved"/> and <see cref="ErrorCodes.MonitorRemoved"/> raised;
+/// a Monitor session that closes or fails while its monitor is gone ends the same way. Game capture is
+/// of a window, so a display change never touches the game session.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -158,6 +169,8 @@ public sealed class SessionOrchestrator : IDisposable
     private readonly Recordings? _recordings;
     private readonly DeviceRecovery _deviceRecovery;
     private readonly IDisposable? _power;
+    private readonly IDisplayMonitors? _displays;
+    private readonly IDisposable? _displaysChanged;
     private readonly Thread _thread;
 
     // Orchestrator thread only.
@@ -222,6 +235,7 @@ public sealed class SessionOrchestrator : IDisposable
     /// <param name="recordings">When given, Record presses on the game session start and stop a Recording.</param>
     /// <param name="deviceRecovery">How a session whose GPU device was lost is recovered; null is the defaults, with no callbacks.</param>
     /// <param name="power">The PC's sleep and resume, posted as <see cref="PowerSuspending"/> and <see cref="PowerResumed"/>; null for none.</param>
+    /// <param name="displays">The attached monitors, whose changes are posted as <see cref="DisplaysChanged"/>; null for none.</param>
     public SessionOrchestrator(
         ICaptureSessionFactory factory,
         Func<SettingsDocument> currentDocument,
@@ -233,7 +247,8 @@ public sealed class SessionOrchestrator : IDisposable
         ReplayClips? clips = null,
         Recordings? recordings = null,
         DeviceRecovery? deviceRecovery = null,
-        IPowerNotifications? power = null)
+        IPowerNotifications? power = null,
+        IDisplayMonitors? displays = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(currentDocument);
@@ -262,6 +277,8 @@ public sealed class SessionOrchestrator : IDisposable
         _power = power?.Subscribe(change => Post(change == PowerChange.Suspending
             ? new PowerSuspending(Stopwatch.GetTimestamp())
             : new PowerResumed()));
+        _displays = displays;
+        _displaysChanged = displays?.Subscribe(() => Post(new DisplaysChanged()));
     }
 
     /// <summary>The orchestrator thread's managed id.</summary>
@@ -313,6 +330,7 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         _power?.Dispose();
+        _displaysChanged?.Dispose();
         _channel.Writer.TryComplete();
         if (Environment.CurrentManagedThreadId != _thread.ManagedThreadId)
         {
@@ -471,12 +489,21 @@ public sealed class SessionOrchestrator : IDisposable
                 break;
 
             case SessionClosed closed when _monitor?.Id == closed.SessionId:
-                EndMonitor(closed.Reason, RecordingStopReasons.SessionEnded);
+                // WGC can see the monitor go before the display change arrives.
+                if (!EndMonitorIfRemoved(_monitor))
+                {
+                    EndMonitor(closed.Reason, RecordingStopReasons.SessionEnded);
+                }
+
                 break;
 
             case SessionFailed failed when _monitor?.Id == failed.SessionId:
-                _recordings?.Failed(failed.Failure);
-                EndMonitor("failure: " + failed.Failure.Message, RecordingStopReasons.SessionEnded);
+                if (!EndMonitorIfRemoved(_monitor))
+                {
+                    _recordings?.Failed(failed.Failure);
+                    EndMonitor("failure: " + failed.Failure.Message, RecordingStopReasons.SessionEnded);
+                }
+
                 break;
 
             case SessionAnchored anchored when _monitor?.Id == anchored.SessionId:
@@ -540,6 +567,14 @@ public sealed class SessionOrchestrator : IDisposable
 
             case PowerResumed:
                 OnResume();
+                break;
+
+            case DisplaysChanged:
+                if (_monitor is { } changedMonitor)
+                {
+                    EndMonitorIfRemoved(changedMonitor);
+                }
+
                 break;
 
             default:
@@ -1935,6 +1970,46 @@ public sealed class SessionOrchestrator : IDisposable
         active.Resuming = true;
         active.LostAt = Stopwatch.GetTimestamp();
         TryRecover(active, monitor: false);
+    }
+
+    /// <summary>
+    /// Ends the Monitor session when the monitor it captures is no longer attached (T-03): its Monitor
+    /// Recording stops at its last frame with <see cref="RecordingStopReasons.MonitorRemoved"/>, its file
+    /// kept, and <see cref="ErrorCodes.MonitorRemoved"/> is raised. False, with nothing done, when the
+    /// monitor is still attached, the session's monitor is unknown, or no display source was given.
+    /// </summary>
+    private bool EndMonitorIfRemoved(Active monitor)
+    {
+        if (_displays is not { } displays)
+        {
+            return false;
+        }
+
+        string? device;
+        IReadOnlyList<DisplayMonitor> attached;
+        try
+        {
+            device = monitor.Session.MonitorDevice;
+            attached = displays.List();
+        }
+        catch (Exception e)
+        {
+            _recordings?.Info?.Invoke($"The monitors couldn't be read after a display change: {e.Message}");
+            return false;
+        }
+
+        // An empty list is a read that failed mid-change, not every monitor gone.
+        if (string.IsNullOrEmpty(device) || attached.Count == 0
+            || attached.Any(m => string.Equals(m.DeviceName, device, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        EndMonitor("monitor removed", RecordingStopReasons.MonitorRemoved);
+        _recordings?.Warn?.Invoke(
+            ErrorCodes.MonitorRemoved,
+            $"Monitor {device} was removed; the Monitor Recording ended at its last frame and its file was kept");
+        return true;
     }
 
     /// <summary>Ends a session's recovery wait, if any: no retry is posted after this.</summary>

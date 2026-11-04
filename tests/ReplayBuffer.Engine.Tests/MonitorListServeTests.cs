@@ -51,4 +51,28 @@ public sealed class MonitorListServeTests : IAsyncLifetime
         Assert.True(list.Monitors[0].Primary);
         Assert.All(list.Monitors, m => Assert.True(m.FriendlyName.Length > 0 && m.Width > 0 && m.Height > 0, $"{m}"));
     }
+
+    [Fact]
+    public async Task ADisplayChangePublishesTheNewListAndMonitorsListReadsTheDisplayPort()
+    {
+        var dell = new DisplayMonitor(@"\\.\DISPLAY1", "DELL", 2560, 1440, true);
+        var lg = new DisplayMonitor(@"\\.\DISPLAY2", "LG", 1920, 1080, false);
+        var displays = new FakeDisplays([dell, lg]);
+        var host = EngineHost.Start(TestInstance, NullLoggerFactory.Instance, hostOptions: new EngineHostOptions { Heartbeat = null, ProbeEncoders = false, Displays = displays });
+        _disposables.Add(host);
+        var client = await EngineClient.ConnectAsync(host.PipeName, new EngineClientOptions(), Token);
+        _disposables.Add(client);
+        Assert.Equal([dell, lg], (await client.SendAsync(RecordingMessages.MonitorsList, Empty.Value, Token).WaitAsync(Within, Token)).Monitors);
+
+        // The LG is unplugged (T-03): monitors.changed carries the list, and monitors.list agrees.
+        displays.Change([dell]);
+        var deadline = DateTime.UtcNow + Within;
+        while (client.State.Monitors is null && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20, Token);
+        }
+
+        Assert.Equal([dell], client.State.Monitors?.Monitors);
+        Assert.Equal([dell], (await client.SendAsync(RecordingMessages.MonitorsList, Empty.Value, Token).WaitAsync(Within, Token)).Monitors);
+    }
 }

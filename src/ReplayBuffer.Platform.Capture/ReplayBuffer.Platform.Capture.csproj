@@ -9,6 +9,8 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ReplayBuffer.Platform.FFmpeg.Tests" />
+    <!-- DisplayMonitors.SimulateDisplayChange, the display-change test hook (8.5). -->
+    <InternalsVisibleTo Include="ReplayBuffer.Platform.Capture.Tests" />
     <!-- DesktopDuplicationCapture.SimulateAccessLost, the session's ACCESS_LOST test hook (6.10). -->
     <InternalsVisibleTo Include="ReplayBuffer.Engine" />
   </ItemGroup>

@@ -137,6 +137,7 @@ internal sealed class ThemeService
             merged.Insert(merged.IndexOf(_shared) + 1, next);
         }
 
+        ShellTheme.Place(merged, theme);
         Theme = theme;
         foreach (var window in _windows())
         {

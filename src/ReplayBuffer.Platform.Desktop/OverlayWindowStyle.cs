@@ -61,6 +61,13 @@ public static class OverlayWindowStyle
         }
     }
 
+    /// <summary>The window's bounds (<c>GetWindowRect</c>): left, top, right and bottom.</summary>
+    /// <exception cref="Win32Exception">The window doesn't exist.</exception>
+    public static (int Left, int Top, int Right, int Bottom) Bounds(nint hwnd) =>
+        PInvoke.GetWindowRect(new HWND(hwnd), out var rect)
+            ? (rect.left, rect.top, rect.right, rect.bottom)
+            : throw new Win32Exception();
+
     /// <summary>The foreground window's handle, or 0 when there is none.</summary>
     public static nint ForegroundWindow() => PInvoke.GetForegroundWindow();
 }
