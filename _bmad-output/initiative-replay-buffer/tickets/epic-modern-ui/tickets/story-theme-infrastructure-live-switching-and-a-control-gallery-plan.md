@@ -45,7 +45,7 @@ context: ['{project-root}/CLAUDE.md', 'ux-modern-ui/DESIGN.md', 'ux-modern-ui/EX
 - **The theme applied at start is the last one applied,** cached by the App in its local data folder. The engine's snapshot arrives after the first window is created (unless the App starts in the tray), so without the cache a Gaming user would see a Fluent flash. The engine's settings stay the record: each `settings.changed` applies the committed key and updates the cache.
 - **Type styles are ContentControl styles** (`RbSectionHeaderStyle`, `RbPageTitleStyle`, `RbBrandStyle`), because WPF has no text-transform and Gaming uppercases them in a template (DESIGN.md Typography).
 - **The DWM caption colour** is set here with Mica, as EXPERIENCE.md's Build Map gives it to story 2's ThemeService. Story 3 still owns the title bar's final look.
-- **Fluent's disabled text (QA 9.2, F1).** Fluent's built-in TextBox, ListBoxItem and ListViewItem keep full-contrast text when disabled. So under Fluent the service layers a style over each of Fluent's own styles (`BasedOn` the style in WPF's Fluent dictionary) that sets `TextFillColorDisabledBrush` while disabled. Everything else stays Fluent's.
+- **Fluent's disabled text (QA 9.2, F1).** Fluent's built-in TextBox, ListBoxItem, ListViewItem and TabItem keep full-contrast text when disabled. So under Fluent the service layers a style over each of Fluent's own styles (`BasedOn` the style in WPF's Fluent dictionary) that sets `TextFillColorDisabledBrush` while disabled. Everything else stays Fluent's.
 - **Pressed list items:** WPF's `ListBoxItem` has no pressed state, so Gaming shows hover and selected only.
 - **Tests scope the theme to one window** (`ThemeService.ForWindow`), since a process has one `Application` and other tests' views must not inherit it. A window-scoped `ThemeMode` skips a window whose `Resources` were set before it, so the gallery keeps no resources of its own. The App uses `Application.ThemeMode`, which has no such limit.
 
@@ -69,3 +69,4 @@ context: ['{project-root}/CLAUDE.md', 'ux-modern-ui/DESIGN.md', 'ux-modern-ui/EX
 
 - 2026-11-04: built and verified on `feature/9.2-theme-infrastructure` (`ad57d54`).
 - 2026-11-04: QA round 1 had 2 findings, both fixed. F1: Fluent's disabled TextBox and list items now dim. F2: the set-only `WindowFrame.CaptionColor` is deleted, and `HasMica` backs the new frame test. Also from QA's notes: turning Mica off now restores the window's composition background.
+- 2026-11-04: QA round 2 passed at `ecc4508`. Folded in its non-blocking note: Fluent's disabled TabItem now dims too.

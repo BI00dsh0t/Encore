@@ -37,10 +37,10 @@ internal sealed class ThemeService
     private readonly ConditionalWeakTable<Window, object> _mica = [];
 
     /// <summary>
-    /// Fluent's built-in TextBox, ListBoxItem and ListViewItem keep full-contrast text when disabled, so the
+    /// Fluent's built-in TextBox, ListBoxItem, ListViewItem and TabItem keep full-contrast text when disabled, so the
     /// App layers a disabled foreground over Fluent's own style for each (R4).
     /// </summary>
-    private static readonly Type[] FluentDimsWhenDisabled = [typeof(TextBox), typeof(ListBoxItem), typeof(ListViewItem)];
+    private static readonly Type[] FluentDimsWhenDisabled = [typeof(TextBox), typeof(ListBoxItem), typeof(ListViewItem), typeof(TabItem)];
 
     static ThemeService() => AppContext.SetSwitch(DisableFluentBackdropSwitch, true);
 
