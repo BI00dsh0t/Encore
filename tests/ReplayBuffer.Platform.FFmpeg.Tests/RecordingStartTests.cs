@@ -68,6 +68,7 @@ public sealed class RecordingStartTests : IDisposable
         try
         {
             FFmpegLibrary.Check(ffmpeg.av_new_packet(packet, 16), "av_new_packet");
+            new Span<byte>(packet->data, 16).Clear(); // never an ADTS header by chance
             for (long frame = 0; frame < Seconds * Fps; frame++)
             {
                 Offer(writer, packet, 0, frame * VideoTicks, VideoTicks, frame % KeyEvery == 0);
@@ -91,7 +92,7 @@ public sealed class RecordingStartTests : IDisposable
 
     private static List<long> VideoPts(string path) => [.. Packets(path, "v:0").Select(p => p.Pts)];
 
-    private static List<(long Pts, long Duration)> Packets(string path, string stream)
+    internal static List<(long Pts, long Duration)> Packets(string path, string stream)
     {
         var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "ffprobe.exe"))
         {

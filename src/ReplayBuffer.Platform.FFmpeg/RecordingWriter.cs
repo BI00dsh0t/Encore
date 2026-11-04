@@ -15,8 +15,10 @@ namespace ReplayBuffer.Platform.FFmpeg;
 /// allocator reserved. It starts on the first video keyframe at or after the keyframe forced after
 /// the press, or, when none is served within <see cref="KeyWait"/>, the first one at or after the
 /// press. Each stream is rebased to that key K in its own time base, as <c>PacketRing.Cut</c> does,
-/// and keeps the packets that start at or after K, so the first frame stays on the frame grid
-/// (an audio Track's first sample may start up to one packet late). Until K is known its
+/// but keeps only the packets that start at or after K, not those centred there as a Clip does: a
+/// Clip's plain MP4 signals an earlier audio start in its edit list, while this fMP4 has none, and
+/// its muxer would stretch the first frame off the frame grid instead (an audio Track's first
+/// sample may now start up to one packet late). Until K is known its
 /// packets are held, at most <see cref="HoldUs"/> of them. A stop at E keeps the packets before E,
 /// judged the same way, and the file is finished once every stream has passed E,
 /// <see cref="StopWait"/> after the stop at the latest, or as soon as the session's output ends.
