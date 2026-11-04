@@ -82,7 +82,11 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// (R7, R8): when they need another encoder chain (<see cref="ChainKey.SameChain"/>), the session is
 /// asked to prepare it (<see cref="ICaptureSession.PrepareChain"/>), and a later change back drops
 /// it. The save press whose write switches the session to it (<see cref="IClipWrite.SwitchesTo"/>)
-/// updates the session's spec: its snapshot and audio, its Target kept.
+/// updates the session's spec: its snapshot and audio, its Target kept. While a Recording runs on
+/// the session, it keeps one chain (AD-7): a chain prepared before the Recording starts is dropped,
+/// a change is not prepared but logged once through <see cref="Recordings.Info"/>, and when the
+/// Recording's writer posts back with its session still running, the settings are resolved again,
+/// so the first save after the stop switches to the new chain.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -943,6 +947,21 @@ public sealed class SessionOrchestrator : IDisposable
                     active.Session.PrepareChain(null);
                 }
             }
+            else if (_recording?.SessionId == active.Id)
+            {
+                // AD-7: a Recording keeps the session on one chain until its writer posts back.
+                if (active.Pending)
+                {
+                    active.Pending = false;
+                    active.Session.PrepareChain(null);
+                }
+
+                if (!active.Deferred)
+                {
+                    active.Deferred = true;
+                    _recordings?.Info?.Invoke("The profile's video or Tracks changed while a Recording runs; the game session keeps its encoder chain until the Recording stops");
+                }
+            }
             else
             {
                 active.Pending = true;
@@ -1061,7 +1080,7 @@ public sealed class SessionOrchestrator : IDisposable
                 return;
             }
 
-            // AD-5: one snapshot for the press; 6.5 waits for a chain that matches it.
+            // AD-5: one snapshot for the press; the Recording shares the session's chain whatever it asks for.
             var snapshot = SettingsResolver.Resolve(document, profileId);
             if (ChainKey.Of(SessionKind.Game, active.Spec.Target, snapshot) != ChainKey.Of(active.Spec))
             {
@@ -1101,6 +1120,24 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         _recording = recording;
+
+        // A chain prepared before the press is dropped (AD-7), even when the settings no longer
+        // resolve; the change waits for the Recording's end.
+        if (active.Pending)
+        {
+            active.Pending = false;
+            try
+            {
+                active.Session.PrepareChain(null);
+            }
+            catch (Exception)
+            {
+                // The session's own failure path ends it if it is broken.
+            }
+        }
+
+        active.Deferred = false;
+        ApplySettings(active);
         SetState(_state with { Recording = RecordingState.Running });
         recordings.Started(new RecordingStarted(path));
     }
@@ -1148,6 +1185,15 @@ public sealed class SessionOrchestrator : IDisposable
         var reason = error is not null ? WriteFailures.ReasonOf(error) : recording.Reason ?? RecordingStopReasons.SessionEnded;
         SetState(_state with { Recording = RecordingState.Off });
         recordings.Stopped(new RecordingStopped(recording.Path, reason));
+
+        // Its session still running, and not about to end for a held Target switch: a change deferred
+        // while it ran is prepared now, so the next save switches to it.
+        if (commitPending && _pendingTarget is null && _active is { } active && active.Id == recording.SessionId)
+        {
+            active.Deferred = false;
+            ApplySettings(active);
+        }
+
         if (commitPending && _pendingTarget is { } pending)
         {
             CommitTarget(pending);
@@ -1191,6 +1237,9 @@ public sealed class SessionOrchestrator : IDisposable
 
         /// <summary>Whether the session was last asked to prepare a chain, not to drop one.</summary>
         public bool Pending { get; set; }
+
+        /// <summary>Whether a chain change was deferred, and logged, during the running Recording.</summary>
+        public bool Deferred { get; set; }
 
         /// <summary>The Target's display name at <see cref="StartOnTarget"/>; null for a session started otherwise.</summary>
         public string? GameName { get; init; }

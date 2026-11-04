@@ -38,11 +38,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 7.6 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.5 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 4.11 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; holds the uncommitted overlay prototype, so do not reuse until the builder decides |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.11 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 5.11 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 7.6 |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with the adaptive Overlay dot (new epic-5 story) |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.13 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -107,9 +107,9 @@ The coordinator logs each QA round in the Log below.
 | 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `2b218ae`) |
 | 25.9 | 4.9 Per-Game-Profile settings at the next Reset | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `2a93e4b`) |
 | 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done |
-| 25.11 | 4.11 Game Profile overrides in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
+| 25.11 | 4.11 Game Profile overrides in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done |
 | 25.12 | 4.12 Hotkeys page in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `29d63b8`) |
-| 25.13 | 4.13 Refactor sweep | | pending |
+| 25.13 | 4.13 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 25.14 | 4.14 Clips end to end on the builder's PC | | pending |
 | 25.15 | Release epic 4 (`v0.4.0`) | | pending |
 | 26 | Slice epic 5 (Overlay and Feedback Sounds) | slice-epic-5 | done |
@@ -123,7 +123,8 @@ The coordinator logs each QA round in the Log below.
 | 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `67ecdf3`) |
 | 26.9 | 5.9 Capture exclusion for every App window | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `7e09a01`) |
-| 26.11 | 5.11 Feedback Sounds settings page | | pending |
+| 26.11 | 5.11 Feedback Sounds settings page | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
+| 26.11a | 5.15 Adaptive Overlay dot (added 2026-11-04; 5.12 and 5.13 wait on it) | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
 | 26.12 | 5.12 Benchmark with the Overlay on | | pending |
 | 26.13 | 5.13 Refactor sweep | | pending |
 | 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | | pending |
@@ -133,8 +134,8 @@ The coordinator logs each QA round in the Log below.
 | 27.2 | 6.2 Crash-safe Recordings and recording-interrupted | 6.2 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ee4e90f`) |
 | 27.3 | 6.3 Record Hotkey modes and the Recordings switch | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `eee32cb`) |
 | 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `e43dda1`) |
-| 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
-| 27.6 | 6.6 One file however long, and forced encoder restarts | | pending |
+| 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `856bd57`) |
+| 27.6 | 6.6 One file however long, and forced encoder restarts | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 27.7 | 6.7 Disk full during a Recording | | pending |
 | 27.8 | 6.8 Recording notices and sounds | | pending |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | | pending |
@@ -210,8 +211,10 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 7.3 | Library rows show a real thumbnail and length for your Clips (R3) | Start the Dev engine with `ReplayBuffer.Engine serve` and the Main App, open the Library tab with a few saved Clips (and a Clip saved now). Each written row should show the shell's thumbnail at the left (a grey play glyph if Windows has none, e.g. HEVC/AV1 without the codec extension), its length as m:ss and its size in MB or GB; a Clip being saved shows "Saving…" with no thumbnail or length, then both appear once written. Check the thumbnails look right (not upside down, colours right, not stretched) | `ShellThumbnail.TryGet` on a 1280×720 H.264 test clip gave an upright 192×108 image, random bytes gave none; `LibraryPageTests` (no request while written, one after `EndWrite`, `0:30`/`1:02:03`, MB/GB); `MediaLengthTests` (30 s clip within 0.1 s of ffprobe) |
 | 4.10 | The Replay Buffer page's estimate and warning on your PC (R2) | Start the Dev engine and the Main App, open Settings > Replay Buffer. Change the Buffer Window, the bitrate (and CBR/VBR) and Memory/Disk, and the estimate should update at once, with "worst case" for VBR. Set a Buffer Window larger than your free RAM (or a Disk ring folder on a nearly full drive): the red warning should appear and the value should still save. Press Save in a game to check a save still works. | `ReplayBufferSettingsPageTests` (edits send one Global op; the estimate and warning follow the snapshot), a screenshot of the page, and the 5-minute CBR ring within 20 % of the estimate |
 | 4.12 | Settings > Hotkeys by hand (R9): rebind, duplicate refusal, saving in-game with the App closed | Open Settings > Hotkeys and rebind Save. Try a duplicate on another row: a combination the engine already holds (an active binding) fires its action instead of reaching the page, so the page's message appears only for an inactive or failed binding's combination. Save a Clip with the new binding inside a fullscreen game, then close the Main App and save again. Check the page by eye | `HotkeysPageTests` (4): one op per change, duplicate and plain-key refusals, Clear, Record mode, a taken status shown as failed, and the view rendered to `hotkeys-settings.png` in the App test output folder. The engine's `hotkey-duplicate` refusal and the helper-process `hotkey-taken` check are covered by `HotkeyServeTests` |
+| 4.11 | Per-game overrides on the Game Profiles page, by hand, and in real Clips (R7, R8) | Start the Dev engine with `ReplayBuffer.Engine serve` and the Main App, open Settings > Game Profiles, pick a game under "Overrides for", untick Use Global for Output and choose 1920 × 1080, untick Use Global for the Track Layout, add a different Mic Device and Save. Save a Clip in that game and in another game, and check each file's resolution and audio Tracks (`ffprobe`). Press the Mic Mute Hotkey in the first game: only its Mic Device should go silent. Tick Use Global and the override should go; the next Reset (after the next Clip) should bring the Global values back | `GameProfilesPageTests` through the view model (layout override: Global copy keeps Track ids, Mic saved as a profile op, Use Global removes it; Output and Buffer Window overrides sent profile-scoped), and a screenshot of the page (`game-profile-overrides.png` in the App test output folder); QA PASS at `f2b90d7`. A real game, real Clips and the mute are untested |
 | 5.8 | The real App's Overlay over a real legacy exclusive-fullscreen game, and borderless independent flip with no other overlays (R1, R7) | (1) Start the Dev engine (`ReplayBuffer.Engine serve`) and the Main App, play a game that PresentMon reads as Hardware: Legacy Flip, press Save, then cause a failed save (`dev.simulate saveFailed`). The game should stay fullscreen and focused throughout, and the saved and failed Feedback Sounds should be told apart by ear. (2) Close NVIDIA Overlay, Discord and Steam, and leave one monitor attached, then run `ReplayBuffer.Bench overlay --host app --modes borderless` and `ReplayBuffer.Bench overlay --modes borderless` (the stand-in). Does the dot keep the load in Hardware Composed: Independent Flip? | `bench overlay --host app` at the console, 2026-11-03 20:17: fullscreen stayed Independent Flip (−0.2 %) and exclusive stayed Legacy Flip (0.08 %), with the load in front and no DXGI fullscreen change through the dot and the saved and failed messages. Borderless fell to Composed: Flip with the dot shown (App 7.57 %, App `--dot-only` 7.85 %, spike stand-in 7.39 %). Heavy test `TheRealAppsOverlayKeepsTheExclusiveLoadInFullscreen` passed. QA at `50cba20` |
 | 5.10 | The Main App status line with a real dropout and a real engine restart (R5) | Start the Dev engine and the Main App. (1) Unplug a device used by a Track in the layout: its device-dropout warning should appear at the top of the status line, newest first, with its time; Dismiss it. (2) Kill `ReplayBuffer.Engine.exe` in Task Manager: the line should say the engine is restarting, then show the engine-restarted warning once it reconnects. Check the line by eye on each tab | `StatusLineTests` (each state's text, newest first, Dismiss sends `warning.dismiss`, no button when not dismissable, reconnect replaces the list) and the explicit render of the window to `status-line.png`. QA at `c0862ba` |
+| 5.15 | Whether the PC has hardware overlay planes, and the adaptive dot in each mode (research E1) | Read `dxdiag /t` "MPO MaxPlanes" (or the parked `ReplayBuffer.Bench.Overlay --probe` on `feature/5.8-overlay-perf-research`) now, then again after each of these, one at a time: the second monitor off; RTX HDR, RTX Video Super Resolution and NVIDIA Image Scaling off; NVIDIA Overlay, Discord and Steam closed. In a borderless game, watch the dot with `overlayDot` set to auto, always and onChange. Where planes exist, run `bench overlay --host app --modes borderless` and confirm the shown phase stays Hardware Composed: Independent Flip | unit tests of the mode decision and the 3 s timer with a fake plane query and clock; on this PC `SupportsOverlays` is false on both outputs (2026-11-03) |
 
 ## Decisions Awaiting Review
 
@@ -512,3 +515,19 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - **Recommendation:** an adaptive dot, always shown where the game's output reports overlay planes and shown for 3 s on change where it doesn't, with an `overlayDot: auto|always|onChange` setting and the tray icon as an always-on cue. The fallback is the 3 s dot everywhere.
   - Experiments E1 to E5 are proposed, not run. E1 is the builder's: find why MPO is off (second monitor, RTX HDR, VSR or NIS, overlay apps).
   - A Bench prototype (the probe and the overlay kinds) is left uncommitted in 2-1-tracer's worktree. Still paused, awaiting the builder's decision.
+- 2026-11-04: **RESUMED by the builder** ("resume everything"). They chose the **adaptive Overlay dot** (`f2ff2fe`). Restarts:
+  - 6.5 was told to merge.
+  - QA 4.11 is rerunning from the start on qa-2-1.
+  - 7.6 and 5.9 are resuming on their cut branches.
+  - 5.11 was briefed on qa-1-14 (Opus, medium effort).
+  - 2-1-tracer (Opus, medium effort, context kept from the research) parks its prototype on the research branch, adds the new "Adaptive Overlay dot" story to epic-overlay-feedback (after 8; stories 12 and 13 wait on it), then builds it.
+- 2026-11-04: QA 4.11 at `2fc9e93`: **QA FAIL**, 1 finding: the UI never says overrides apply at the next Reset. The build and App.Tests pass. The findings went to story-2-7 to fix; the round-2 re-check runs at low effort.
+- 2026-11-04: 6.5 merged (`856bd57`, marked done below). QA 6.5 PASSED at `7a32c50`; develop was merged into the branch again before the merge, with a 0-warning build, Core 111 and Engine 167 passed, and a clean publish.
+- 2026-11-04: 6.5 merged (`856bd57`, marked done `00a026c`), and its card is Done. 6.6 (high risk) went to slice-epic-8 (Opus, high effort), with its card In progress. qa-2-1 is free and holds for the 4.11 re-check.
+- 2026-11-04: 4.11 fixed its QA finding at `f2b90d7` (a next-Reset note in `GameProfilesView.xaml`, 4 lines). The coordinator checked the diff itself as the round-2 re-check: **PASS**. 4.11 has been told to merge (Sonnet) and to add its Human Check row.
+- 2026-11-04: 4.11 merged (`90e1040`, `feat(app): merge 4.11-profile-overrides`, after merging develop into the branch with one conflict in `MainViewModel.cs`, resolved by keeping 4.11's `UpdateOpenPage` and develop's removal of `Name<T>`: build 0 warnings, App.Tests 108 total, 99 passed, 9 Heavy skipped). No Contracts change. Its Human Check row is added above.
+- 2026-11-04: 4.11 merged (`90e1040`, marked done `a4ce0d0`). Its card is Done with its label detached. The epic 4 refactor sweep 4.13 went to story-2-7 (Opus, medium effort), scoped to epic 4's code, with its card In progress. After it come 4.14 (the end-to-end check on the builder's PC, HITL) and the v0.4.0 release.
+- 2026-11-04: 2-1-tracer had already built the adaptive dot on `feature/5.8-overlay-perf-research` (`3ad1f0b`, cut from 5.8's old tip; build and Contracts, Core, App and Desktop tests green; the overlayDot setting is on the General page) before reading the story brief. It is now adding ticket 5.15. Routing: cut `feature/5.15-adaptive-overlay-dot` from develop, cherry-pick `cf48145` and `3ad1f0b` (not the prototype), re-verify, then READY FOR QA. The research branch stays unmerged and holds the parked prototype.
+- 2026-11-04: Ticket 5.15 "Adaptive Overlay dot" was added on develop (`54cf952`); 5.12 and 5.13 now wait on it. The prototype is parked at `225de31` on the research branch. The Trello card was created (`6aeabc225526396a15b255cc`, In progress, purple) and added to `trello-board.md`, with Queue row 26.11a.
+- 2026-11-04: 7.6 is READY FOR QA at `d730418`. QA started on qa-2-1 (Sonnet), and its card is In QA.
+- 2026-11-04: 5.15 is READY FOR QA at `fb3849f` on `feature/5.15-adaptive-overlay-dot` (build 0 warnings; App, Contracts, Core and Desktop pass; publish clean; one additive `overlayDot` key; Human Check row at `4752a08`; no separate review lens, so QA is the first review). Its card is In QA. **QA is queued** for the next free worker: none is free, and slice-epic-4 stays reserved for 7.6's QA findings.

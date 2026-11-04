@@ -17,9 +17,11 @@ internal sealed record ResolutionItem(int Width, int Height, string Label);
 /// <c>ringPath</c>, <c>saveCooldown</c> and <c>video</c>, each edit sent at once as one Global op. An
 /// invalid entry is not sent: the page shows the rendered value again with a <see cref="SettingsPage.Message"/>.
 /// It shows the engine's storage estimate (R2) and warns, blocking nothing, when it is over the free
-/// bytes. Members run on the UI thread.
+/// bytes. With a profile id it edits that Game Profile's <c>bufferWindow</c> and <c>video</c> overrides
+/// (R7) instead: each key either uses Global, shown and not editable, or has the profile's own value.
+/// Members run on the UI thread.
 /// </summary>
-internal sealed class ReplayBufferSettingsPage(SettingsSender sender) : SettingsPage(sender)
+internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? profileId = null) : SettingsPage(sender)
 {
     private int _bufferWindow = Keys.BufferWindow.Default;
     private ReplayStorage _storage = Keys.ReplayStorage.Default;
@@ -30,14 +32,77 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender) : Settings
     private StorageEstimate? _estimate;
     private IReadOnlyList<CodecItem> _codecs = [];
     private IReadOnlyList<ResolutionItem> _resolutions = [];
+    private bool _bufferWindowUsesGlobal = profileId is not null;
+    private bool _videoUsesGlobal = profileId is not null;
 
     public override string Title => "Replay Buffer";
+
+    /// <summary>The Game Profile whose overrides this page edits; null on the Global page.</summary>
+    public string? ProfileId { get; } = profileId;
+
+    /// <summary>The Global page: it also shows storage, the ring folder, the save cooldown and the estimate, which profiles can't override.</summary>
+    public bool IsGlobal => ProfileId is null;
+
+    public bool IsProfile => !IsGlobal;
+
+    /// <summary>
+    /// Whether the profile has no <c>bufferWindow</c> override; false on the Global page. Ticking it
+    /// removes the override; unticking it sets the override to the Global value.
+    /// </summary>
+    public bool BufferWindowUsesGlobal
+    {
+        get => _bufferWindowUsesGlobal;
+        set
+        {
+            if (IsGlobal || value == _bufferWindowUsesGlobal)
+            {
+                return;
+            }
+
+            ShowBufferWindowUsesGlobal(value);
+            _bufferWindow = SettingsValues.Global(Document, Keys.BufferWindow);
+            OnPropertyChanged(nameof(BufferWindowText));
+            _ = SendAsync([UseGlobalOp(Keys.BufferWindow, value, _bufferWindow)]);
+        }
+    }
+
+    public bool CanEditBufferWindow => IsGlobal || !BufferWindowUsesGlobal;
+
+    /// <summary>Whether the profile has no <c>video</c> override; as <see cref="BufferWindowUsesGlobal"/>.</summary>
+    public bool VideoUsesGlobal
+    {
+        get => _videoUsesGlobal;
+        set
+        {
+            if (IsGlobal || value == _videoUsesGlobal)
+            {
+                return;
+            }
+
+            ShowVideoUsesGlobal(value);
+            _video = SettingsValues.Global(Document, Keys.Video);
+            ShowLists();
+            ShowVideo();
+            _ = SendAsync([UseGlobalOp(Keys.Video, value, _video)]);
+        }
+    }
+
+    public bool CanEditVideo => IsGlobal || !VideoUsesGlobal;
 
     /// <summary><c>bufferWindow</c>, in s; at least 1.</summary>
     public string BufferWindowText
     {
         get => Text(_bufferWindow);
-        set => SendInt(value, ref _bufferWindow, v => v >= 1, Keys.BufferWindow, "The Buffer Window must be a whole number of seconds, 1 or more.");
+        set
+        {
+            if (!CanEditBufferWindow)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            SendInt(value, ref _bufferWindow, v => v >= 1, Keys.BufferWindow, ProfileId, "The Buffer Window must be a whole number of seconds, 1 or more.");
+        }
     }
 
     /// <summary><c>replayStorage</c> is Memory.</summary>
@@ -89,7 +154,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender) : Settings
     public string SaveCooldownText
     {
         get => Text(_saveCooldown);
-        set => SendInt(value, ref _saveCooldown, v => v >= 0, Keys.SaveCooldown, "The save cooldown must be a whole number of seconds, 0 or more.");
+        set => SendInt(value, ref _saveCooldown, v => v >= 0, Keys.SaveCooldown, null, "The save cooldown must be a whole number of seconds, 0 or more.");
     }
 
     /// <summary>The probed codecs, or the current one alone before the probe.</summary>
@@ -224,15 +289,25 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender) : Settings
         ? string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e9:0.0} GB")
         : string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e6:0.0} MB");
 
-    protected override FrameworkElement CreateView() => new ReplayBufferSettingsView { DataContext = this };
+    protected override FrameworkElement CreateView()
+    {
+        var view = new ReplayBufferSettingsView { DataContext = this };
+        return IsGlobal ? view : Embedded(view);
+    }
 
     protected override void OnRender(SettingsDocument document)
     {
-        _bufferWindow = SettingsValues.Global(document, Keys.BufferWindow);
+        if (IsProfile)
+        {
+            ShowBufferWindowUsesGlobal(!SettingsValues.HasOverride(document, Keys.BufferWindow, ProfileId!));
+            ShowVideoUsesGlobal(!SettingsValues.HasOverride(document, Keys.Video, ProfileId!));
+        }
+
+        _bufferWindow = SettingsValues.Resolve(document, Keys.BufferWindow, ProfileId);
         _storage = SettingsValues.Global(document, Keys.ReplayStorage);
         _ringPath = SettingsValues.Global(document, Keys.RingPath);
         _saveCooldown = SettingsValues.Global(document, Keys.SaveCooldown);
-        _video = SettingsValues.Global(document, Keys.Video);
+        _video = SettingsValues.Resolve(document, Keys.Video, ProfileId);
         ShowLists();
         foreach (var name in (string[])[nameof(BufferWindowText), nameof(IsMemory), nameof(IsDisk), nameof(RingPath), nameof(SaveCooldownText)])
         {
@@ -262,6 +337,26 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender) : Settings
 
     private static bool TryParse(string? text, out int value) =>
         int.TryParse(text?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+
+    private SettingsOp UseGlobalOp<T>(SettingKey<T> key, bool useGlobal, T global) => useGlobal
+        ? SettingsOp.RemoveProfile(ProfileId!, key.Name)
+        : SettingsValues.Set(key, global, ProfileId);
+
+    private void ShowBufferWindowUsesGlobal(bool value)
+    {
+        if (Set(ref _bufferWindowUsesGlobal, value, nameof(BufferWindowUsesGlobal)))
+        {
+            OnPropertyChanged(nameof(CanEditBufferWindow));
+        }
+    }
+
+    private void ShowVideoUsesGlobal(bool value)
+    {
+        if (Set(ref _videoUsesGlobal, value, nameof(VideoUsesGlobal)))
+        {
+            OnPropertyChanged(nameof(CanEditVideo));
+        }
+    }
 
     private void ShowLists()
     {
@@ -300,7 +395,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender) : Settings
         }
     }
 
-    private void SendInt(string? text, ref int field, Func<int, bool> isValid, SettingKey<int> key, string refusal, [System.Runtime.CompilerServices.CallerMemberName] string? property = null)
+    private void SendInt(string? text, ref int field, Func<int, bool> isValid, SettingKey<int> key, string? scope, string refusal, [System.Runtime.CompilerServices.CallerMemberName] string? property = null)
     {
         if (!TryParse(text, out var value) || !isValid(value))
         {
@@ -316,7 +411,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender) : Settings
 
         field = value;
         OnPropertyChanged(property);
-        _ = SendAsync([SettingsValues.SetGlobal(key, value)]);
+        _ = SendAsync([SettingsValues.Set(key, value, scope)]);
     }
 
     private void SendStorage(ReplayStorage storage)
@@ -335,7 +430,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender) : Settings
     // Sends the whole video value with one field changed.
     private void SendVideo(VideoSettings video, string property)
     {
-        if (video == _video)
+        if (video == _video || !CanEditVideo)
         {
             OnPropertyChanged(property);
             return;
@@ -343,7 +438,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender) : Settings
 
         _video = video;
         ShowVideo();
-        _ = SendAsync([SettingsValues.SetGlobal(Keys.Video, video)]);
+        _ = SendAsync([SettingsValues.Set(Keys.Video, video, ProfileId)]);
     }
 
     // Shows the rendered value again, with why the entry wasn't sent.

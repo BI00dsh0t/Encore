@@ -100,6 +100,17 @@ hitl = false
 risk = "low"
 
 [[entry]]
+id = 15
+type = "story"
+title = "Adaptive Overlay dot"
+description = "The builder's decision of 2026-11-03 after story 8 found the borderless load falling from independent flip to Composed: Flip (about 7.5 % FPS) with the dot shown, because the PC had no hardware overlay planes (research/overlay-presentation-options.md, option E). Platform.Desktop asks DXGI whether the output holding the Target Game's window (the primary monitor when there is none) has overlay planes (IDXGIOutput2::SupportsOverlays), once per Target Game and again on a display change. A new Global settings key overlayDot (auto | always | onChange, default auto, applied immediately; additive, AD-22) decides when the dot and the mic-muted icon show: always where planes exist or with always, and for 3 s after each change of the dot or the mute where they don't or with onChange. The saving icon, the red X and the queued messages show as before. The tray icon shows the capture state (off, Replay Buffer on, recording) in every mode, so the state can be read when the dot is hidden. The General page lists the overlayDot choice. R1 part: the dot's presentation. R7 part: the presentation path."
+verify = "Automated tests with a fake clock and a fake plane query: auto with planes keeps the dot for as long as the state lasts; auto without planes shows the dot and the mic icon for 3 s after each change, then hides them; always and onChange override the query; a display change asks again; the saving icon and messages are unchanged; the tray icon follows the capture state; the General page sends overlayDot. A test checks the DXGI query answers for the primary monitor. Human Check: the builder checks SupportsOverlays while toggling the second monitor, RTX HDR, VSR and NIS and the overlay apps, watches the dot in each mode, and confirms independent flip with bench overlay where planes exist."
+covers = ["R1", "R7"]
+after = [8]
+hitl = true
+risk = "medium"
+
+[[entry]]
 id = 10
 type = "story"
 title = "Main App status line"
@@ -128,7 +139,7 @@ title = "Benchmark with the Overlay on"
 description = "ReplayBuffer.Bench's fps command gains an --overlay switch that launches the installed App as a separate process (Bench never references the App, AD-2) so its Overlay runs with a buffering dot and a message every 10 s, and the FPS run is repeated with capture and the Overlay on, against story 1.14's NFR-1 target (provisional 3% at 1080p60), reporting PresentMode as well as FPS. The synthetic GPU load run is automated; the run in the builder's GPU-bound game is queued as a Human Check. R7 part: the Overlay share of R36."
 verify = "The bench report for the synthetic GPU load with capture and the Overlay on is within the NFR-1 target and shows no PresentMode change from the Overlay; the result is recorded in the epic's Notes."
 covers = ["R7"]
-after = [8, 9]
+after = [8, 9, 15]
 hitl = true
 risk = "medium"
 
@@ -139,7 +150,7 @@ title = "Refactor sweep"
 description = "Cleanup only, scoped at its start from plans and review findings the epic deferred."
 verify = "All tests pass, and the Overlay, sounds and status line still report a saved and a failed Clip after the sweep; every deferred cleanup item is closed or recorded."
 covers = []
-after = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+after = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15]
 hitl = false
 risk = "low"
 

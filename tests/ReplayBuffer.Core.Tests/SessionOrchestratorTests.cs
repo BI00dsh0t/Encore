@@ -1150,6 +1150,167 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task AChainChangeDuringARecordingWaitsForItsStopAndTheNextSaveSwitches()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            using var rig = NewChainRecordingRig(folder);
+            var (orchestrator, session) = (rig.Orchestrator, await rig.StartAsync());
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            await Press(orchestrator, rig.Presses, HotkeyAction.RecordToggle, qpc);
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(rig.Events));
+
+            // A change mid-Recording: nothing prepared, one Info line.
+            rig.ChangeVideo();
+            orchestrator.Post(new SettingsUpdated());
+            await Press(orchestrator, rig.Presses, HotkeyAction.MicMute, qpc + 1);
+            Assert.Empty(session.Prepares);
+            Assert.Single(rig.Deferrals);
+
+            // Saves (and their Resets) during it prepare nothing and log nothing more.
+            for (var i = 1; i <= 2; i++)
+            {
+                orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, qpc + (2 * i * second)));
+                await NextAsync(rig.Saved);
+            }
+
+            Assert.Empty(session.Prepares);
+            Assert.Single(rig.Deferrals);
+
+            // The stop prepares it, and the next save switches to it.
+            await Press(orchestrator, rig.Presses, HotkeyAction.RecordToggle, qpc + (6 * second));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(rig.Events));
+            await WaitUntil(() => session.Prepares.Count == 1);
+            Assert.Equal(ChainRecordingRig.Changed, session.Prepares.Single()!.Snapshot.Video);
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, qpc + (8 * second)));
+            await NextAsync(rig.Saved);
+            Assert.Equal([false, false, true], rig.Writes.Select(w => w.SwitchesTo is not null));
+            Assert.Single(session.Prepares);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AChainPendingAtARecordingsStartIsDroppedAndPreparedAgainAfterItsStop()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            using var rig = NewChainRecordingRig(folder);
+            var (orchestrator, session) = (rig.Orchestrator, await rig.StartAsync());
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+            var second = System.Diagnostics.Stopwatch.Frequency;
+
+            rig.ChangeVideo();
+            orchestrator.Post(new SettingsUpdated());
+            await WaitUntil(() => session.Prepares.Count == 1);
+
+            // The Recording starts on the session's chain; the prepared one is dropped.
+            await Press(orchestrator, rig.Presses, HotkeyAction.RecordToggle, qpc);
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(rig.Events));
+            Assert.Equal([ChainRecordingRig.Changed, null], session.Prepares.Select(p => p?.Snapshot.Video));
+            Assert.Single(rig.Deferrals);
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, qpc + (2 * second)));
+            await NextAsync(rig.Saved);
+            Assert.Null(Assert.Single(rig.Writes).SwitchesTo);
+
+            await Press(orchestrator, rig.Presses, HotkeyAction.RecordToggle, qpc + (4 * second));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(rig.Events));
+            await WaitUntil(() => session.Prepares.Count == 3);
+            Assert.Equal(ChainRecordingRig.Changed, session.Prepares.Last()!.Snapshot.Video);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>A game-session orchestrator with Replay Clips and Recordings, whose writes switch to the chain last prepared.</summary>
+    private ChainRecordingRig NewChainRecordingRig(string folder)
+    {
+        _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+        SetRecordingsEnabled(true);
+        return new ChainRecordingRig(this, folder);
+    }
+
+    private sealed class ChainRecordingRig : IDisposable
+    {
+        public static readonly VideoSettings Changed = new(VideoCodec.H264, 1280, 720, 60, 20_000, RateControl.Vbr);
+
+        private readonly SessionOrchestratorTests _owner;
+        private readonly ConcurrentQueue<string> _info = new();
+        private readonly ConcurrentQueue<FakeWrite> _writes = new();
+        private FakeSession? _session;
+
+        public ChainRecordingRig(SessionOrchestratorTests owner, string folder)
+        {
+            _owner = owner;
+            var paths = new ConcurrentQueue<string>();
+            var factory = new FakeFactory
+            {
+                Save = _ =>
+                {
+                    var write = new FakeWrite(paths) { SwitchesTo = _session!.Prepares.LastOrDefault() };
+                    _writes.Enqueue(write);
+                    return write;
+                },
+                Record = _ => new FakeRecording(),
+            };
+            Factory = factory;
+            Orchestrator = new SessionOrchestrator(
+                factory,
+                () => Volatile.Read(ref owner._document),
+                _ => { },
+                press => Presses.Writer.TryWrite(press),
+                clips: new ReplayClips(OutputPathAllocator.System, () => folder, s => Saved.Writer.TryWrite(s), e => Events.Writer.TryWrite(e)),
+                recordings: new Recordings(
+                    OutputPathAllocator.System,
+                    () => folder,
+                    s => Events.Writer.TryWrite(s),
+                    s => Events.Writer.TryWrite(s),
+                    e => Events.Writer.TryWrite(e),
+                    Info: _info.Enqueue));
+        }
+
+        public SessionOrchestrator Orchestrator { get; }
+
+        public FakeFactory Factory { get; }
+
+        public System.Threading.Channels.Channel<object> Events { get; } = System.Threading.Channels.Channel.CreateUnbounded<object>();
+
+        public System.Threading.Channels.Channel<HotkeyPress> Presses { get; } = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
+
+        public System.Threading.Channels.Channel<ClipSaved> Saved { get; } = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
+
+        public IEnumerable<FakeWrite> Writes => _writes;
+
+        /// <summary>The Info lines saying a chain change waits for the Recording.</summary>
+        public IEnumerable<string> Deferrals => _info.Where(i => i.Contains("until the Recording stops", StringComparison.Ordinal));
+
+        public async Task<FakeSession> StartAsync()
+        {
+            await Orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            return _session = Assert.Single(Factory.Sessions);
+        }
+
+        /// <summary>Commits the profile's video as <see cref="Changed"/>, which needs another chain.</summary>
+        public void ChangeVideo()
+        {
+            var document = Volatile.Read(ref _owner._document);
+            var profile = document.Profiles[ProfileId];
+            Volatile.Write(ref _owner._document, document with { Profiles = document.Profiles.SetItem(ProfileId, profile with { Overrides = profile.Overrides.SetItem(Keys.Video.Name, Keys.Video.ToJson(Changed)) }) });
+        }
+
+        public void Dispose() => Orchestrator.Dispose();
+    }
+
     private static TaskCompletionSource NewGate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>The Global values with the Output Folder <paramref name="folder"/> and, when given, <paramref name="cooldown"/> as <c>saveCooldown</c>.</summary>

@@ -17,99 +17,105 @@
     </UserControl.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel>
-            <TextBlock FontWeight="SemiBold" Text="Devices" />
-            <ListBox Height="110"
-                     Margin="0,6,0,0"
-                     ItemsSource="{Binding Devices}"
-                     SelectedItem="{Binding SelectedDevice}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding Label}" />
-                            <TextBlock Margin="8,0,0,0" Foreground="DarkRed" Text="{Binding Note}" />
-                            <CheckBox Margin="12,0,0,0"
-                                      Content="Mic"
-                                      IsChecked="{Binding IsMic}"
-                                      Visibility="{Binding CanBeMic, Converter={StaticResource Visible}}" />
-                        </StackPanel>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
-                <Button Command="{Binding RemoveDeviceCommand}" Content="Remove" Style="{StaticResource Row}" />
-            </StackPanel>
-            <DockPanel Margin="0,6,0,0">
-                <Button Command="{Binding AddDeviceCommand}"
-                        Content="Add"
-                        DockPanel.Dock="Right"
-                        Margin="6,0,0,0"
-                        Padding="8,2" />
-                <ComboBox ItemTemplate="{StaticResource DeviceTemplate}"
-                          ItemsSource="{Binding Choices}"
-                          SelectedItem="{Binding SelectedChoice}" />
-            </DockPanel>
-
-            <TextBlock Margin="0,18,0,0" FontWeight="SemiBold" Text="Tracks" />
-            <ListBox Height="110"
-                     Margin="0,6,0,0"
-                     ItemsSource="{Binding Tracks}"
-                     SelectedItem="{Binding SelectedTrack}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Orientation="Horizontal">
-                            <ProgressBar Width="80"
-                                         Height="8"
-                                         Margin="0,0,8,0"
-                                         VerticalAlignment="Center"
-                                         Maximum="1"
-                                         Minimum="0"
-                                         Value="{Binding Level, Mode=OneWay}" />
-                            <TextBlock Text="{Binding Name}" />
-                            <TextBlock Margin="6,0,0,0"
-                                       Foreground="DarkOrange"
-                                       Text="&#x26A0;"
-                                       ToolTip="{Binding Warning}"
-                                       Visibility="{Binding HasWarning, Converter={StaticResource Visible}}" />
-                        </StackPanel>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
-                <Button Command="{Binding AddTrackCommand}" Content="Add Track" Style="{StaticResource Row}" />
-                <Button Command="{Binding MoveUpCommand}" Content="Up" Style="{StaticResource Row}" />
-                <Button Command="{Binding MoveDownCommand}" Content="Down" Style="{StaticResource Row}" />
-                <Button Command="{Binding DeleteTrackCommand}" Content="Delete" Style="{StaticResource Row}" />
-            </StackPanel>
-            <StackPanel Margin="0,12,0,0" DataContext="{Binding SelectedTrack}">
-                <TextBlock Text="Name" />
-                <TextBox Margin="0,4,0,0" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
-                <CheckBox Margin="0,8,0,0" Content="Mic Mute affects this Track" IsChecked="{Binding MuteAffected}" />
-                <TextBlock Margin="0,6,0,0"
-                           Foreground="DarkOrange"
-                           Text="{Binding Warning}"
-                           TextWrapping="Wrap"
-                           Visibility="{Binding HasWarning, Converter={StaticResource Visible}}" />
-                <TextBlock Margin="0,8,0,0" Text="Devices on this Track" />
-                <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding Checks}">
-                    <ItemsControl.ItemTemplate>
+            <CheckBox Margin="0,0,0,12"
+                      Content="Use Global Track Layout"
+                      IsChecked="{Binding UsesGlobal}"
+                      Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
+            <StackPanel IsEnabled="{Binding CanEdit}">
+                <TextBlock FontWeight="SemiBold" Text="Devices" />
+                <ListBox Height="110"
+                         Margin="0,6,0,0"
+                         ItemsSource="{Binding Devices}"
+                         SelectedItem="{Binding SelectedDevice}">
+                    <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <CheckBox Margin="0,2" IsChecked="{Binding IsChecked}">
-                                <ContentPresenter Content="{Binding Device}" ContentTemplate="{StaticResource DeviceTemplate}" />
-                            </CheckBox>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Label}" />
+                                <TextBlock Margin="8,0,0,0" Foreground="DarkRed" Text="{Binding Note}" />
+                                <CheckBox Margin="12,0,0,0"
+                                          Content="Mic"
+                                          IsChecked="{Binding IsMic}"
+                                          Visibility="{Binding CanBeMic, Converter={StaticResource Visible}}" />
+                            </StackPanel>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                    <Button Command="{Binding RemoveDeviceCommand}" Content="Remove" Style="{StaticResource Row}" />
+                </StackPanel>
+                <DockPanel Margin="0,6,0,0">
+                    <Button Command="{Binding AddDeviceCommand}"
+                            Content="Add"
+                            DockPanel.Dock="Right"
+                            Margin="6,0,0,0"
+                            Padding="8,2" />
+                    <ComboBox ItemTemplate="{StaticResource DeviceTemplate}"
+                              ItemsSource="{Binding Choices}"
+                              SelectedItem="{Binding SelectedChoice}" />
+                </DockPanel>
 
-            <StackPanel Margin="0,18,0,0" Orientation="Horizontal">
-                <Button Command="{Binding SaveCommand}"
-                        Content="Save"
-                        IsEnabled="{Binding IsDirty}"
-                        Style="{StaticResource Row}" />
-                <Button Command="{Binding RevertCommand}"
-                        Content="Revert"
-                        IsEnabled="{Binding IsDirty}"
-                        Style="{StaticResource Row}" />
+                <TextBlock Margin="0,18,0,0" FontWeight="SemiBold" Text="Tracks" />
+                <ListBox Height="110"
+                         Margin="0,6,0,0"
+                         ItemsSource="{Binding Tracks}"
+                         SelectedItem="{Binding SelectedTrack}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <ProgressBar Width="80"
+                                             Height="8"
+                                             Margin="0,0,8,0"
+                                             VerticalAlignment="Center"
+                                             Maximum="1"
+                                             Minimum="0"
+                                             Value="{Binding Level, Mode=OneWay}" />
+                                <TextBlock Text="{Binding Name}" />
+                                <TextBlock Margin="6,0,0,0"
+                                           Foreground="DarkOrange"
+                                           Text="&#x26A0;"
+                                           ToolTip="{Binding Warning}"
+                                           Visibility="{Binding HasWarning, Converter={StaticResource Visible}}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                    <Button Command="{Binding AddTrackCommand}" Content="Add Track" Style="{StaticResource Row}" />
+                    <Button Command="{Binding MoveUpCommand}" Content="Up" Style="{StaticResource Row}" />
+                    <Button Command="{Binding MoveDownCommand}" Content="Down" Style="{StaticResource Row}" />
+                    <Button Command="{Binding DeleteTrackCommand}" Content="Delete" Style="{StaticResource Row}" />
+                </StackPanel>
+                <StackPanel Margin="0,12,0,0" DataContext="{Binding SelectedTrack}">
+                    <TextBlock Text="Name" />
+                    <TextBox Margin="0,4,0,0" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                    <CheckBox Margin="0,8,0,0" Content="Mic Mute affects this Track" IsChecked="{Binding MuteAffected}" />
+                    <TextBlock Margin="0,6,0,0"
+                               Foreground="DarkOrange"
+                               Text="{Binding Warning}"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding HasWarning, Converter={StaticResource Visible}}" />
+                    <TextBlock Margin="0,8,0,0" Text="Devices on this Track" />
+                    <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding Checks}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Margin="0,2" IsChecked="{Binding IsChecked}">
+                                    <ContentPresenter Content="{Binding Device}" ContentTemplate="{StaticResource DeviceTemplate}" />
+                                </CheckBox>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <StackPanel Margin="0,18,0,0" Orientation="Horizontal">
+                    <Button Command="{Binding SaveCommand}"
+                            Content="Save"
+                            IsEnabled="{Binding IsDirty}"
+                            Style="{StaticResource Row}" />
+                    <Button Command="{Binding RevertCommand}"
+                            Content="Revert"
+                            IsEnabled="{Binding IsDirty}"
+                            Style="{StaticResource Row}" />
+                </StackPanel>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
