@@ -3,7 +3,7 @@ title: 'Disk full during a Recording'
 type: 'feature'
 ticket: '7'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: 'de2abb2d08355dac8b1f66f760a1a1a0ffdc7533'
 route: 'full'
 route_source: 'auto'
