@@ -27,7 +27,7 @@ public delegate void CapturedFrameHandler(long qpc, nint texture, VideoSize cont
 /// process access; or, for a Monitor Recording (6.9, <see cref="ForMonitor"/>), of one monitor.
 /// Frames arrive on a free-threaded pool's worker thread, one at a time.
 /// </summary>
-public sealed unsafe class WindowCapture : IDisposable
+public sealed unsafe class WindowCapture : ICaptureSource
 {
     private const string GraphicsCaptureItemClass = "Windows.Graphics.Capture.GraphicsCaptureItem";
 

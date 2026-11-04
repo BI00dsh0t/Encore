@@ -384,6 +384,7 @@ internal sealed class EngineHost : IAsyncDisposable
                         RingFolder = ringFolder,
                         Margin = margin,
                         ResetGap = message => warnings.Raise(ErrorCodes.ResetGap, WarningSeverity.Warning, "replay", message, overlay: false),
+                        CaptureFallback = message => warnings.Raise(ErrorCodes.MonitorCaptureFallback, WarningSeverity.Warning, "recordings", message, overlay: false),
                     },
                     loggers,
                     audio,
