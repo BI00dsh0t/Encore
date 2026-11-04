@@ -105,7 +105,7 @@ The coordinator logs each QA round in the Log below.
 | 25.6 | 4.6 Ring generations and Buffer Window resizing | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `e7058ea`) |
 | 25.7 | 4.7 Disk-mode ring | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c96ab9c`) |
 | 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `2b218ae`) |
-| 25.9 | 4.9 Per-Game-Profile settings at the next Reset | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 25.9 | 4.9 Per-Game-Profile settings at the next Reset | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `2a93e4b`) |
 | 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done |
 | 25.11 | 4.11 Game Profile overrides in the Main App | | pending |
 | 25.12 | 4.12 Hotkeys page in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `29d63b8`) |
@@ -487,3 +487,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 4.9 at `30b908c`: **QA PASS**, 0 blocking and 4 advisories, with the Heavy ChainSwitchCaptureTests passing. 4.9 has been told to merge (Sonnet), and slice-epic-8 is back in the pool. Its merge unblocks 4.11, 5.10 and 6.5.
 - 2026-11-04: 7.5 is READY FOR QA at `a60793d`. QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-04: QA 7.5 at `a60793d`: **QA PASS**, 0 findings. 7.5 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
+- 2026-11-04: 4.9 merged into `develop` (`2a93e4b`, `feat(engine): merge 4.9-profile-settings-at-reset`) and marked done, after QA PASS at `30b908c` with 0 blocking findings. Develop (7.4, 4.12) was synced in first: 0-warning build, Contracts 118, Core 109, Media 99, Engine 167 passed, publish clean (11.4 MB). The advisories are in the epic Notes (audio seam, estimate scope, Record while armed). Human Check: none new.
