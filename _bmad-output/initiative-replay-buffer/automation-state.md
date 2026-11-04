@@ -43,7 +43,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 6.13 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 6.13 |
 
@@ -145,7 +145,7 @@ The coordinator logs each QA round in the Log below.
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
 | 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
 | 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c4a69ca`) |
-| 27.13 | 6.13 Recordings end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (qa-2-1) |
+| 27.13 | 6.13 Recordings end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
@@ -679,3 +679,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.13 READY FOR QA at `4c6e5ea` (127 passed, 11 for the builder, 11 not run because GPU tests are paused), and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; it confirms the no-capture guards in the code before its single run).
 - 2026-11-04: 8.3 merged (`f91c32d`) after a sync with develop that resolved the overlap with 6.10's `ICaptureSource` (the recovery rebuilds a Monitor capture through the WGC-then-Desktop-Duplication path) and the `OpenWrite`/`CloseWrite` helpers. Before the merge: 0-warning build; default suites Contracts 122, Core 152, Engine 179 (37 explicit skipped), Platform.Capture 3, Platform.FFmpeg 37 (2 skipped), all passing; the NativeAOT publish clean. Marked done; three Human Check rows added (the Heavy run once GPU tests resume, a real `dxcap -forcetdr` with a Clip save, and one with a Monitor Recording).
 - 2026-11-04: Epic 9 planning reviewed by the coordinator and merged (`68dca7a`). It adds R37, architecture AD-23 (theming: one token set, an `appTheme` Global key with values `fluent` or `gamingDark`, live dictionary swap, dialogs as App windows) and 9 stories, 9.1 to 9.9. 9.1 waits on 6.13 and 7.11, and 8.7 now waits on 9.9. Its 9 Trello cards were created in Backlog with labels (purple on every story except 9.8; red on 9.2), and Queue rows 30.1 to 30.9 added. slice-epic-5 is back in the pool.
+- 2026-11-04: QA 6.13 passed at `4c6e5ea` with 0 findings. No-capture guards confirmed in code before the one run. `RecordingsEndToEndTests` passed in 2 s with no capture lines in the log; App.Tests 126 passed. The story saw 1 unexplained failure in 20 runs of that Explicit test (noted in its plan; not a blocker). story-2-7 is merging. qa-2-1 is back in the pool.
