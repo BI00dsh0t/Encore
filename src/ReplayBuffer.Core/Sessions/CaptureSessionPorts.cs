@@ -103,6 +103,15 @@ public interface ICaptureSession
     /// just after a Reset; never blocks.
     /// </summary>
     bool SwitchChain(SessionSpec next) => false;
+
+    /// <summary>
+    /// Starts one attempt, off the calling thread, to rebuild the session's capture, device and
+    /// encoder chains after <see cref="ISessionEvents.DeviceLost"/>: it posts
+    /// <see cref="ISessionEvents.ChainRestarted"/> when it succeeds, or
+    /// <see cref="ISessionEvents.DeviceLost"/> again when it fails. False when nothing is lost or
+    /// an attempt is already running. Called on the orchestrator thread; never blocks.
+    /// </summary>
+    bool RecoverDevice() => false;
 }
 
 /// <summary>A Recording a session can write (R2): one fragmented MP4 from the session's encoders.</summary>
@@ -209,6 +218,16 @@ public interface ISessionEvents
     /// <see cref="ICaptureSession.Record"/> can succeed.
     /// </summary>
     void Anchored(long qpc)
+    {
+    }
+
+    /// <summary>
+    /// The session's GPU device was removed or reset (a driver reset), or an attempt to recover
+    /// from that failed. No frames are captured or encoded until a recovery
+    /// (<see cref="ICaptureSession.RecoverDevice"/>) succeeds, which posts
+    /// <see cref="ChainRestarted"/>.
+    /// </summary>
+    void DeviceLost(Exception failure)
     {
     }
 }

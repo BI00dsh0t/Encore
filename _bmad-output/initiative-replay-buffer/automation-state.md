@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.3 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 6.13 |
@@ -145,7 +145,7 @@ The coordinator logs each QA round in the Log below.
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
 | 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
 | 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `c4a69ca`) |
-| 27.13 | 6.13 Recordings end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
+| 27.13 | 6.13 Recordings end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
 | 28.1 | 7.1 Tracer: a saved Clip appears in the Library within 2 s | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `c6d9c39`) |
@@ -163,7 +163,7 @@ The coordinator logs each QA round in the Log below.
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
-| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in QA (qa-1-14) |
+| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
 | 29.5 | 8.5 Monitor changes | | pending |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
@@ -172,6 +172,15 @@ The coordinator logs each QA round in the Log below.
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
 | 29.10 | 8.10 Refactor sweep | | pending |
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
+| 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | | pending |
+| 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | | pending |
+| 30.3 | 9.3 Shell, navigation and status line | | pending |
+| 30.4 | 9.4 Library restyled | | pending |
+| 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
+| 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
+| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | | pending |
+| 30.8 | 9.8 Refactor sweep | | pending |
+| 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -182,6 +191,9 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 
 | Ticket | Check | How | Automated proxy |
 |--------|-------|-----|-----------------|
+| 8.3 | Once GPU tests resume: run the Heavy simulated-reset test `AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile` | `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*GpuReset*"` under `.bench-running` | written and compiles; not run (GPU tests paused by the builder); Core fakes cover the retry, give-up and handover |
+| 8.3 | A real GPU driver reset during a game, then a Clip save | elevated `dxcap -forcetdr` while a game runs with the Replay Buffer (and a Recording) on; save a Clip after. Watch for WGC raising Closed instead of a device error, ffmpeg's NVENC close blocking on the removed device, and recovery taking over 5 s | the fault seam only (`dev.simulate gpuReset`, `D3D11Device.SimulateLoss`); nothing ran on a really lost device |
+| 8.3 | A forced reset with a Monitor Recording running | `dxcap -forcetdr` (elevated) during a Monitor Recording; it should continue in a second file in Monitor Recordings, the status line showing `gpu-reset` until it recovers | Core test of the Monitor handover with fakes |
 | e2e-test-instance-names | Once GPU tests resume: rerun `ClipsEndToEndTests` and `OverlayEndToEndTests` under Heavy on their now-valid test instances | `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only` (Clips), same for App.Tests (Overlay) | the bugfix ran only their default builds and the guard unit test |
 | 1.14 | `bench fps` in a real GPU-bound game (Cyberpunk, RT Overdrive, Frame Generation off, overlay off) to confirm the synthetic-load figure | `bench fps --game Cyberpunk2077` while in gameplay | the synthetic-load run |
 | 1.14 | Real key presses for the Hotkey latency | `bench hotkey --presses 20` with a game focused | injected presses |
@@ -651,3 +663,21 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.3 READY FOR QA at `2f5a69a` (18 files, about 1,670 lines; the Heavy simulated-reset test is written but not run because GPU tests are paused), and its card is In QA. QA went to qa-1-14 (Sonnet, high effort because the ticket is high risk; no Heavy runs and no TDR).
 - 2026-11-04: 6.12 merged (`c4a69ca`, marked done). Synced with develop first (7.11, the `e2e-test-instance-names` bugfix): no conflicts, 0-warning build, Contracts 122, Core 146, App 126 (17 skipped), Engine 176 (36 skipped). No Heavy runs. Skipped GPU runs: the Heavy Recording, Clip-during-Recording and Monitor Recording capture tests (to show they still write playable files after the sweep). Open items are in deferred-work.md with owners.
 - 2026-11-04: 6.12 merged (`c4a69ca`, marked done `1ae4c3a`), and its card is Done. slice-epic-4 is back in the pool. 6.13 (the epic 6 end-to-end check) went to story-2-7 (Opus, medium effort), with its card In progress. It does no capture at all: only the capture-free parts with a guarded Guid test instance, and one builder checklist. Once it merges, epic 6 is marked done and v0.6.0, then v0.7.0, are cut.
+- 2026-11-04: QA 8.3 passed at `2f5a69a` with 0 blocking findings.
+  - **Results:** 0-warning build. Contracts 121, Core 151, Engine 177, Platform.Capture 3 and Platform.FFmpeg 37 passed. Publish clean.
+  - **Architecture:** AD-19, AD-22 and AD-7 teardown order hold. Retries are bounded. Give-up is also checked when an attempt hangs.
+  - **Notes sent back to fix before merging:**
+    1. The gpu-reset warning isn't withdrawn after Recovered.
+    2. `TearDownLost` isn't exception-safe.
+    3. `Retarget` uses `_device` after releasing the gate.
+
+    The coordinator checks the fix diff.
+  - **Notes kept:** the Monitor recovery path has no engine-level test, even Heavy. Give-up ends the session and releases the pre-reset buffer, as the ticket says.
+  - **Not run (GPU tests paused):** the Heavy `AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile`, and a real forced TDR.
+  - **Back in the pool:** qa-1-14.
+- 2026-11-04: **Builder: both looks become selectable themes.** Fluent (WPF `ThemeMode`, which follows Windows light or dark and the accent colour) and gaming dark (a custom dictionary, palette as in `research/ui-gaming-dark-render.png`) switch live and are saved in settings, with Fluent as the default. Real WPF renders of both, and their source, are in `research/` (`71cfc23`, `b2aaae6`). Epic 9 "Modern UI" planning went to slice-epic-5 (Opus, medium effort; `bmad-agent-po`, headless) on `feature/9.0-modern-ui-planning`. Its stories are: a `bmad-ux` design pass, theme infrastructure, one story per UI area, a refactor sweep, and an end-to-end check. It runs after epics 6 and 7, and 8.7 waits on it.
+- 2026-11-04: 8.3 fixes at `bf38783`, checked by the coordinator and approved. `GpuResetWarnings` withdraws `gpu-reset` on Recovered, and on give-up replaces it with `gpu-reset-failed` (with a default test). `TearDownLost` disposes each step under its own guard. `Retarget` builds the capture under the gate. Core 151 and Engine 178 passed; publish clean. slice-epic-8 is merging.
+- 2026-11-04: 6.13 READY FOR QA at `4c6e5ea` (127 passed, 11 for the builder, 11 not run because GPU tests are paused), and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; it confirms the no-capture guards in the code before its single run).
+- 2026-11-04: 8.3 merged (`f91c32d`) after a sync with develop that resolved the overlap with 6.10's `ICaptureSource` (the recovery rebuilds a Monitor capture through the WGC-then-Desktop-Duplication path) and the `OpenWrite`/`CloseWrite` helpers. Before the merge: 0-warning build; default suites Contracts 122, Core 152, Engine 179 (37 explicit skipped), Platform.Capture 3, Platform.FFmpeg 37 (2 skipped), all passing; the NativeAOT publish clean. Marked done; three Human Check rows added (the Heavy run once GPU tests resume, a real `dxcap -forcetdr` with a Clip save, and one with a Monitor Recording).
+- 2026-11-04: Epic 9 planning reviewed by the coordinator and merged (`68dca7a`). It adds R37, architecture AD-23 (theming: one token set, an `appTheme` Global key with values `fluent` or `gamingDark`, live dictionary swap, dialogs as App windows) and 9 stories, 9.1 to 9.9. 9.1 waits on 6.13 and 7.11, and 8.7 now waits on 9.9. Its 9 Trello cards were created in Backlog with labels (purple on every story except 9.8; red on 9.2), and Queue rows 30.1 to 30.9 added. slice-epic-5 is back in the pool.
+- 2026-11-04: QA 6.13 passed at `4c6e5ea` with 0 findings. No-capture guards confirmed in code before the one run. `RecordingsEndToEndTests` passed in 2 s with no capture lines in the log; App.Tests 126 passed. The story saw 1 unexplained failure in 20 runs of that Explicit test (noted in its plan; not a blocker). story-2-7 is merging. qa-2-1 is back in the pool.

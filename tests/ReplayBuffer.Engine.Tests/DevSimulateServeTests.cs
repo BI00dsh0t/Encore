@@ -84,14 +84,37 @@ public sealed class DevSimulateServeTests : IAsyncLifetime
             () => calls++,
             _ => calls++,
             () => calls++,
+            () => calls++,
             () => calls++);
 
         var refused = Assert.Throws<ErrorCodeException>(() => simulator.Simulate(new DevSimulate(SimulatedEvent.DiskFull)));
         var hang = Assert.Throws<ErrorCodeException>(() => simulator.Simulate(new DevSimulate(SimulatedEvent.EngineHang)));
+        var gpuReset = Assert.Throws<ErrorCodeException>(() => simulator.Simulate(new DevSimulate(SimulatedEvent.GpuReset)));
 
         Assert.Equal(ErrorCodes.NotDevInstance, refused.Code);
         Assert.Equal(ErrorCodes.NotDevInstance, hang.Code);
+        Assert.Equal(ErrorCodes.NotDevInstance, gpuReset.Code);
         Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public void AGpuResetReachesItsActionOnADevInstance()
+    {
+        var resets = 0;
+        var simulator = new DevSimulator(
+            TestInstance,
+            _ => { },
+            _ => { },
+            _ => { },
+            () => { },
+            _ => { },
+            () => { },
+            () => { },
+            () => resets++);
+
+        simulator.Simulate(new DevSimulate(SimulatedEvent.GpuReset));
+
+        Assert.Equal(1, resets);
     }
 
     private static bool Has(StateSnapshot snapshot, string code) => snapshot.Warnings.Any(w => w.Code == code);

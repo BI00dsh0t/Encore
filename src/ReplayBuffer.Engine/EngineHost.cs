@@ -499,7 +499,8 @@ internal sealed class EngineHost : IAsyncDisposable
                             recordingLog.LogWarning("{Code}: {Message}", code, message);
                             warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay: true);
                         })
-                    : null);
+                    : null,
+                new GpuResetWarnings(warnings, clipLog).Recovery);
 
             Volatile.Write(ref settingsTo, sessions);
 
@@ -598,7 +599,8 @@ internal sealed class EngineHost : IAsyncDisposable
                     // A real hang: no heartbeat, and every publish, snapshot and attach blocks on the hub.
                     host._stopHeartbeat.Cancel();
                     hub.Freeze();
-                });
+                },
+                D3D11Device.SimulateReset);
             router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(

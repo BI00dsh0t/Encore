@@ -72,6 +72,17 @@ after = [
 ]
 
 [[epic]]
+id = 9
+slug = "epic-modern-ui"
+title = "Modern UI"
+description = "The Main App has two looks, chosen in Settings: Fluent (the default, following Windows light or dark mode and the accent colour, with Mica where available) and Gaming dark. Switching applies live to the shell, the Library, every settings page, the tray menu, the dialogs and the Overlay's messages, and is kept across restarts. A bmad-ux design pass sets both looks first, and nothing the app does changes."
+covers = ["R37"]
+after = [
+  { epic = 6, needs = "the Recordings settings and notices, finished, to restyle" },
+  { epic = 7, needs = "the Library page and the Library and Cleanup settings page, finished, to restyle" },
+]
+
+[[epic]]
 id = 8
 slug = "epic-hardening"
 title = "Hardening and hands-off operation"
@@ -85,4 +96,5 @@ after = [
   { epic = 5, needs = "the status line that reports restarts, the Overlay to re-place on monitor changes, and bench fps --overlay" },
   { epic = 2, needs = "device rebinding for resume and mixer restarts, and the named-Track checks for the conformance run" },
   { epic = 3, needs = "Game Profiles to check for persistence across restarts" },
+  { epic = 9, needs = "the finished, restyled App, so the final conformance run and the soaks run against the UI that ships" },
 ]
