@@ -161,4 +161,8 @@ Nothing deferred or rejected. A follow-up review isn't recommended: no high was 
 - Cleanup is permanent by design (no Recycle Bin), and it is untried on the builder's real Output Folder (7.11).
 - The unreachable warning covers the size limit only: an old Favourite under an age limit is kept silently. This is an unattended default, for Decisions Awaiting Review.
 - A pass saves `library.json` once per delete.
-
+- QA round 1 re-verification, after the layered reparse-point fix:
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings.
+  - Core: 133/133, including both junction tests; Developer Mode is on, so the symbolic-link part ran.
+  - Engine: 170 passed, 28 explicit skipped.
+  - `pwsh tools/publish-engine.ps1`: clean.

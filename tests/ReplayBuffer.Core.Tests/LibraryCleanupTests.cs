@@ -48,8 +48,7 @@ public sealed class LibraryCleanupTests : IDisposable
         {
             lock (_lock)
             {
-                Assert.All(_removed, r => Assert.Equal(LibraryRemovalReasons.Cleanup, r.Reason));
-                return [.. _removed.Select(r => r.Path)];
+                return [.. _removed.Where(r => r.Reason == LibraryRemovalReasons.Cleanup).Select(r => r.Path)];
             }
         }
     }
@@ -272,8 +271,14 @@ public sealed class LibraryCleanupTests : IDisposable
         _time.Advance(StartDelay);
         WaitForPasses(1);
 
+        // The start rescan drops the item reached through the junction from the index (no reason: not Cleanup's).
         Assert.Equal(["a.mp4"], preview.Paths);
         Assert.Equal(["a.mp4"], Deleted);
+        lock (_lock)
+        {
+            Assert.Contains(_removed, r => r.Path == through.Path && r.Reason is null);
+        }
+
         Assert.True(File.Exists(outside));
     }
 
