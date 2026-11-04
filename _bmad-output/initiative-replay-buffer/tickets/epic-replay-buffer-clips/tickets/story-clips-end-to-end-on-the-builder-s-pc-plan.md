@@ -3,7 +3,7 @@ title: 'Clips end to end on the builder''s PC'
 type: 'chore'
 ticket: '14'
 created: '2026-11-04'
-status: review
+status: done
 baseline_revision: '157826b'
 route: 'hitl'
 risk: 'low'
