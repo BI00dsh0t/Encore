@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 5.8 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 7.4 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with QA 7.4 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.4 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
@@ -469,3 +469,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-03: QA 5.7 at `7b82d69`: **QA PASS**, 0 findings. 5.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-03: 5.7 merged (`53d83b7`) after QA PASS at `7b82d69` and a docs-only sync with develop (App.Tests 84 passed, 0-warning build). Ticket marked done.
 - 2026-11-03: 5.7 merged (`53d83b7`, marked done `a131491`), and its card is Done. slice-epic-8 is back in the pool. 5.8 went to slice-epic-4 (Opus, high effort), with its card In progress. Its brief covers the `.bench-running` lock and using Bench's synthetic GPU load as a stand-in game.
+- 2026-11-03/04: The usage limit stopped 4.9, 4.12, 6.4 and 5.8 mid-work (5.8 had only cut its branch). After the reset (about 00:40Z) the coordinator told each to resume, redoing any lost subagent's part itself. 7.4 is READY FOR QA at `83f6294` (its review lens was skipped at the limit; the Contracts change is additive). QA started on slice-epic-8 (Sonnet) with a closer read, and its card is In QA.
