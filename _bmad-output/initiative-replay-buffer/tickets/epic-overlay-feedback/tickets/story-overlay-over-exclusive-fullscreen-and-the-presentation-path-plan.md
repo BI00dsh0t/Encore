@@ -3,7 +3,7 @@ title: 'Overlay over exclusive fullscreen and the presentation path'
 type: 'feature'
 ticket: '8'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: 'edb82dafb05f69e35c9f8db6704679d546758640'
 route: 'full'
 route_source: 'auto'
