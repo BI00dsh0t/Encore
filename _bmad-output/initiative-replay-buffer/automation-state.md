@@ -38,9 +38,9 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 7.6 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.5 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 5.11 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 4.11 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with the adaptive Overlay dot (new epic-5 story) |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.11 |
 
@@ -134,7 +134,7 @@ The coordinator logs each QA round in the Log below.
 | 27.3 | 6.3 Record Hotkey modes and the Recordings switch | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `eee32cb`) |
 | 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `e43dda1`) |
 | 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `856bd57`) |
-| 27.6 | 6.6 One file however long, and forced encoder restarts | | pending |
+| 27.6 | 6.6 One file however long, and forced encoder restarts | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 27.7 | 6.7 Disk full during a Recording | | pending |
 | 27.8 | 6.8 Recording notices and sounds | | pending |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | | pending |
@@ -520,3 +520,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - 2-1-tracer (Opus, medium effort, context kept from the research) parks its prototype on the research branch, adds the new "Adaptive Overlay dot" story to epic-overlay-feedback (after 8; stories 12 and 13 wait on it), then builds it.
 - 2026-11-04: QA 4.11 at `2fc9e93`: **QA FAIL**, 1 finding: the UI never says overrides apply at the next Reset. The build and App.Tests pass. The findings went to story-2-7 to fix; the round-2 re-check runs at low effort.
 - 2026-11-04: 6.5 merged (`856bd57`, marked done below). QA 6.5 PASSED at `7a32c50`; develop was merged into the branch again before the merge, with a 0-warning build, Core 111 and Engine 167 passed, and a clean publish.
+- 2026-11-04: 6.5 merged (`856bd57`, marked done `00a026c`), and its card is Done. 6.6 (high risk) went to slice-epic-8 (Opus, high effort), with its card In progress. qa-2-1 is free and holds for the 4.11 re-check.
