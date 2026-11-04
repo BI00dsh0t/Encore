@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 5.11 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.7 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with the adaptive Overlay dot (new epic-5 story) |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.13 |
@@ -540,3 +540,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.7 went to qa-2-1 (Opus, medium effort), with its card In progress. Its tests stay in temp folders and never touch the builder's real Library.
 - 2026-11-04: QA 5.11 at `e51d26a`: **QA PASS**, 0 findings (the Human Check row is added at merge). 5.11 has been told to merge (Sonnet), and slice-epic-4 is back in the pool.
 - 2026-11-04: 5.11 merged into `develop` (`f1d9334`, `feat(app): merge 5.11-feedback-sounds-page`) and marked done, after QA PASS at `e51d26a` (0 findings). Develop (4.11, 6.5, 7.6) was merged into the branch first with no conflicts; the 0-warning build and App.Tests (106 passed, 10 explicit skipped) were rerun. App-only: no Contracts change. A Human Check row for hearing each sound and the page's look is queued.
+- 2026-11-04: 5.11 merged (`f1d9334`, marked done `c0f25b3`). Its card is Done with its label detached, and qa-1-14 is back in the pool.
