@@ -42,7 +42,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
         : base(sender)
     {
         _engine = engine;
-        Confirm = ConfirmWithMessageBox;
+        Confirm = ConfirmWithPrompt;
         UseDefaultFolderCommand = new RelayCommand(UseDefaultFolder);
     }
 
@@ -354,5 +354,5 @@ internal sealed class LibrarySettingsPage : SettingsPage
         OnPropertyChanged(property);
     }
 
-    private bool ConfirmWithMessageBox(string message) => Prompts.YesNo(_view, message, Title, MessageBoxImage.Warning);
+    private bool ConfirmWithPrompt(string message) => Prompts.YesNo(_view, message, Title, MessageBoxImage.Warning);
 }

@@ -129,7 +129,7 @@ internal sealed class TrackLayoutPage : SettingsPage
     }
 
     /// <summary>
-    /// Whether the page is on screen: the window shown, the Settings tab and this page selected. Opening
+    /// Whether the page is on screen: the window shown and this settings page selected in the nav. Opening
     /// watches the draft; closing sends <c>meters.unwatch</c> and zeroes every level.
     /// </summary>
     public bool IsOpen

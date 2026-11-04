@@ -11,7 +11,7 @@ using ReplayBuffer.Contracts.Settings;
 namespace ReplayBuffer.App.Library;
 
 /// <summary>
-/// The Library tab (story 7.1): the snapshot's Library items, newest first, each with its name, game,
+/// The Library page (story 7.1): the snapshot's Library items, newest first, each with its name, game,
 /// date and size, and an item still being written shown locked. It only reads the snapshot (AD-1).
 /// While Cleanup is blocked by a rebuilt index (story 7.2) a banner says so, and Acknowledge dismisses
 /// the <c>library-corrupt</c> warning. Each row shows its length and the shell's thumbnail (story 7.3),
