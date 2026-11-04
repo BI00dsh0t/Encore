@@ -176,7 +176,7 @@ The coordinator logs each QA round in the Log below.
 | 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `166e1f3`) |
 | 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `d3dcad3`) |
 | 30.4 | 9.4 Library restyled | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in QA (story-2-7) |
-| 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | ready for QA, waiting for a QA worker |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | | pending |
@@ -738,3 +738,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: After the 14:30 usage-limit reset: 9.4 and 9.5 were resumed. Bugfixes `app-theme-test-order` (`4cc2c18`; a product fix: WPF caches `DisableFluentThemeWindowBackdrop` at the first window shown, so it's now set in the runtimeconfig) and `flaky-engine-serve-capture-end` (`8e01aea`; waits on real conditions) were checked by the coordinator and approved to merge. 8.6 READY FOR QA at `f34fa7d`; QA went to qa-1-14 (Sonnet, medium effort), and its 2 Heavy tests went to the GPU runner after a safety read (test-instance processes and Run key only).
 - 2026-11-04: Bugfix `app-theme-test-order` merged (`a953cbb`); App 145 passed twice. story-2-7 is back in the pool.
 - 2026-11-04: Bugfix `flaky-engine-serve-capture-end` merged (`35b6acf`). Its first Engine run showed 2 more load-sensitive default tests (the rerun passed 180/180): `ReplayClipCaptureTests.AKilledTargetIsDrainedSoASaveStillCuts...` (TimeoutException at :296) and `TrackMixCaptureTests.EachTrackCarriesExactlyItsDevicesTones` (RMS 0.126, outside 0.142-0.174, at :98). Bugfix `flaky-engine-replay-trackmix` went to slice-epic-5. The RMS one is checked for a real mix glitch before any bound change. 9.4 READY FOR QA at `6446295`; QA went to story-2-7 (Sonnet, medium effort; cleared this time), and its card is In QA.
+- 2026-11-04: 9.5 READY FOR QA at `8013c3c`, and its card is In QA. Its QA waits for the next free worker: all 7 are busy (3 QA, 1 GPU runner, 1 bugfix, 2 implementers waiting on QA).
