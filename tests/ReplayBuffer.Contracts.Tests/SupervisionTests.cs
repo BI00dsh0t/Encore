@@ -51,6 +51,40 @@ public sealed class SupervisionTests
     }
 
     [Fact]
+    public void ThreeRestartsInTenMinutesAreAllowedAndTheFourthIsACrashLoopUntilTheWindowSlides()
+    {
+        var time = new ManualTime();
+        var guard = new CrashLoopGuard(time);
+        Assert.True(guard.TryRestart());
+        time.Advance(TimeSpan.FromSeconds(30));
+        Assert.True(guard.TryRestart());
+        time.Advance(TimeSpan.FromSeconds(30));
+        Assert.True(guard.TryRestart());
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        Assert.False(guard.TryRestart());
+
+        // 10 min 15 s after the first restart, it has left the window; the other two haven't.
+        time.Advance(TimeSpan.FromSeconds(525));
+        Assert.True(guard.TryRestart());
+        Assert.False(guard.TryRestart());
+    }
+
+    [Fact]
+    public void AResetGuardAllowsRestartsAgain()
+    {
+        var guard = new CrashLoopGuard(new ManualTime());
+        for (var i = 0; i < Supervision.CrashLoopRestarts; i++)
+        {
+            Assert.True(guard.TryRestart());
+        }
+
+        Assert.False(guard.TryRestart());
+        guard.Reset();
+        Assert.True(guard.TryRestart());
+    }
+
+    [Fact]
     public void TheMutexNameCarriesProcessAndInstance()
     {
         Assert.Equal(@"Local\ReplayBuffer.Engine.v1.ReplayBuffer-Dev", SingleInstance.MutexName(SingleInstance.Engine, Instance.DevName));

@@ -1,4 +1,5 @@
 using System.Globalization;
+using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.Engine;
@@ -88,8 +89,10 @@ public sealed record DebugCaptureSize(int Width, int Height);
 /// the Replay Buffer does (epic 4); it also turns Game Detection on for a test instance.
 /// <see cref="ReplayBuffer"/> (<c>--replay-buffer</c>, test instances only) turns the Replay Buffer,
 /// and with it Game Detection, on for the test instance, so a separate engine process can save Clips.
+/// <see cref="Restarted"/> (<c>--restarted crashed|hung</c>) is how the App relaunches an engine that
+/// crashed or hung: the engine raises <c>engine-restarted</c> before its pipe serves (AD-16).
 /// </summary>
-public sealed record ServeCommand(string? Instance, bool DebugCapture = false, bool ReplayBuffer = false) : EngineCommand
+public sealed record ServeCommand(string? Instance, bool DebugCapture = false, bool ReplayBuffer = false, EngineRestartReason? Restarted = null) : EngineCommand
 {
     /// <summary>The only instance names <c>--instance</c> accepts, so tests never touch a real instance.</summary>
     public const string TestInstancePrefix = Contracts.Instance.TestPrefix;
@@ -105,6 +108,7 @@ public static class CommandLine
         """
         Usage:
           ReplayBuffer.Engine serve [--instance ReplayBuffer-Test-<suffix>] [--debug-capture | --replay-buffer (needs --instance)]
+                                    [--restarted crashed|hung]
           ReplayBuffer.Engine debug-list
           ReplayBuffer.Engine debug-capture (--window <title> | --hwnd <handle>) [--seconds 30]
                               [--output <file.mp4>] [--output-device <name>] [--input-device <name>]
@@ -381,10 +385,24 @@ public static class CommandLine
         string? name = null;
         var debugCapture = false;
         var replayBuffer = false;
+        EngineRestartReason? restarted = null;
         for (var i = 1; i < args.Count; i++)
         {
             switch (args[i])
             {
+                case "--restarted" when restarted is null && i + 1 < args.Count:
+                    restarted = args[++i] switch
+                    {
+                        "crashed" => EngineRestartReason.Crashed,
+                        "hung" => EngineRestartReason.Hung,
+                        _ => null,
+                    };
+                    if (restarted is null)
+                    {
+                        return Fail($"'{args[i]}' is not one of crashed or hung.");
+                    }
+
+                    break;
                 case "--debug-capture" when !debugCapture:
                     debugCapture = true;
                     break;
@@ -400,7 +418,7 @@ public static class CommandLine
 
                     break;
                 default:
-                    return Fail("serve takes only --instance <name>, --replay-buffer and --debug-capture.");
+                    return Fail("serve takes only --instance <name>, --replay-buffer, --debug-capture and --restarted crashed|hung.");
             }
         }
 
@@ -414,7 +432,7 @@ public static class CommandLine
             return Fail("--replay-buffer and --debug-capture can't be combined: a debug capture turns the Replay Buffer off.");
         }
 
-        return new ParseResult(new ServeCommand(name, debugCapture, replayBuffer), null);
+        return new ParseResult(new ServeCommand(name, debugCapture, replayBuffer, restarted), null);
     }
 
     private static ParseResult Fail(string error) => new(null, error);

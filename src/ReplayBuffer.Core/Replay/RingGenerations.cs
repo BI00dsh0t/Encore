@@ -122,6 +122,10 @@ public sealed class RingGenerations : IDisposable
     /// Precondition: no save is waiting for its keyframe or its streams (the caller drains or waits
     /// for in-flight saves first), since <see cref="ToMicros"/> and <see cref="AllStreamsPast"/>
     /// read the new generation from here on, which has no streams until the new chain adds them.
+    /// A restart while the current generation is itself a restart's with no keyframe yet (a
+    /// failed recovery attempt after a GPU reset, say) replaces that empty generation instead:
+    /// it is retired, and its predecessor stays the new one's, so the content before the first
+    /// restart stays cuttable.
     /// </summary>
     public int Restart(PacketRing next)
     {
@@ -130,6 +134,14 @@ public sealed class RingGenerations : IDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             var previous = _current;
+            if (_predecessor is { } kept && previous.StartUs == long.MaxValue)
+            {
+                Retire(previous);
+                Open(new Generation(previous.Number + 1, next, long.MaxValue));
+                _predecessor = kept;
+                return _current.Number;
+            }
+
             Open(new Generation(previous.Number + 1, next, long.MaxValue));
             _predecessor = previous;
             return _current.Number;

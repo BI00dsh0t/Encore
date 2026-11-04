@@ -111,6 +111,36 @@ public sealed class RingGenerationsTests
         }
     }
 
+    [Fact]
+    public void ARestartBeforeTheLastOnesFirstKeyframeReplacesItAndKeepsTheContentBeforeBoth()
+    {
+        using var generations = new RingGenerations(NewRing(60));
+        Streams(generations);
+        Feed(generations, 0, 10 * Second);
+
+        // A failed recovery attempt's chain opened generation 2 and added its streams, but wrote nothing.
+        Assert.Equal(2, generations.Restart(NewRing(60)));
+        Streams(generations);
+        Assert.Equal(3, generations.Restart(NewRing(60)));
+
+        // During the outage: generation 1, to its last packet.
+        var (outage, outageGeneration) = generations.Cut(0, 10 * Second)!.Value;
+        using (outage)
+        {
+            Assert.Equal(1, outageGeneration);
+            Assert.True(outage.EndUs - outage.StartUs >= 9 * Second);
+        }
+
+        // Less than 1 s past generation 3's first keyframe: still generation 1, its predecessor.
+        Streams(generations);
+        Feed(generations, 11 * Second, 14 * Second);
+        var (early, earlyGeneration) = generations.Cut(0, (11 * Second) + 500_000)!.Value;
+        using (early)
+        {
+            Assert.Equal(1, earlyGeneration);
+        }
+    }
+
     private static PacketRing NewRing(int seconds) =>
         new(seconds * Second, capacity: 256, slabBytes: 64 * 1024);
 

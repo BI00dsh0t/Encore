@@ -4,11 +4,11 @@ type: architecture-spine
 purpose: build-substrate
 altitude: initiative
 paradigm: 'ports-and-adapters engine with a single-threaded orchestrator, hosting a pipes-and-filters media pipeline; MVVM thin client over IPC'
-scope: 'initiative-replay-buffer: the engine process and the Main App, all 8 epics'
+scope: 'initiative-replay-buffer: the engine process and the Main App, all 9 epics'
 status: final
 created: '2026-10-25'
-updated: '2026-10-25'
-binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36]
+updated: '2026-11-04'
+binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37]
 sources:
   - _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md
   - PLAN.md
@@ -318,6 +318,18 @@ graph LR
     - the IPC `seq`/snapshot mechanism;
     - one Contracts message file per epic area (`Audio.cs`, `Game.cs`, `Capture.cs`, `Library.cs`, `Recording.cs`, `Feedback.cs`).
 
+### AD-23 — App theming: two themes on one token set
+
+- **Binds:** R37
+- **Prevents:** pages styled differently by different stories; a theme switch that needs a restart or misses a window; the engine growing a UI concern
+- **Rule:**
+  - **Setting:** `appTheme` (`fluent` | `gamingDark`, default `fluent`) is a Global-only key in the AD-4 catalog, applied immediately and added under AD-22. The engine stores it; only the App reads it, on `settings.changed`.
+  - **Fluent** is .NET 10 WPF's built-in theme: `Application.ThemeMode = System`, which follows the Windows app mode and accent colour live. The Main App window sets Mica where Windows supports it.
+  - **Gaming dark** is `ThemeMode = Dark` with one App resource dictionary merged after Fluent's, overriding Fluent's brush keys and adding control templates. Its palette is fixed, whatever the Windows mode.
+  - **Tokens:** both themes define one set of semantic resource keys, listed in DESIGN.md (epic-modern-ui). App XAML and code take colours, brushes, corner radii and type only from those keys, through `DynamicResource`. The one exception is the Overlay's status glyphs (dot, saving icon, mic-muted icon, red X), which keep fixed colours.
+  - **Switching** swaps the merged dictionaries on the UI thread. Every window, the tray context menu, the App's dialogs and the Overlay take their resources from `Application.Resources`, so they restyle with no restart. The theme is applied before the first window shows.
+  - **Dialogs** are App windows, never `MessageBox`, so they follow the theme and keep `WDA_EXCLUDEFROMCAPTURE` (AD-15).
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -429,6 +441,7 @@ ReplayBuffer/
 | R26 folders and file names | Core (OutputPathAllocator) | AD-21 |
 | R27–R29 Library, Cleanup | Core (LibraryActor), App (shell actions) | AD-17, AD-1 |
 | R31, R34, R35 startup, supervision, hands-off | App (supervisor), Engine | AD-16, AD-22 |
+| R37 themes | App (ThemeService, theme dictionaries), Contracts (key catalog) | AD-23, AD-4 |
 | R32 Hotkeys | Platform.Windows | AD-11 |
 | R33, R36 drift, FPS | Bench, Media | AD-6, AD-13, AD-7 |
 | NFR-2, NFR-3 constraints | all | AD-1, AD-2, AD-7, AD-11, AD-12, AD-16 |

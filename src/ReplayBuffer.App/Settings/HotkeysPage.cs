@@ -225,6 +225,8 @@ internal sealed class HotkeysPage : SettingsPage
         HotkeyAction.RecordStart => "Record start",
         HotkeyAction.RecordStop => "Record stop",
         HotkeyAction.MonitorRecordToggle => "Monitor Recording (toggle)",
+        HotkeyAction.MonitorRecordStart => "Monitor Recording (start)",
+        HotkeyAction.MonitorRecordStop => "Monitor Recording (stop)",
         _ => action.ToString(),
     };
 
@@ -255,6 +257,8 @@ internal sealed class HotkeysPage : SettingsPage
         HotkeyAction.RecordStart => hotkeys with { RecordStart = binding },
         HotkeyAction.RecordStop => hotkeys with { RecordStop = binding },
         HotkeyAction.MonitorRecordToggle => hotkeys with { MonitorRecordToggle = binding },
+        HotkeyAction.MonitorRecordStart => hotkeys with { MonitorRecordStart = binding },
+        HotkeyAction.MonitorRecordStop => hotkeys with { MonitorRecordStop = binding },
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
     };
 
@@ -295,6 +299,7 @@ internal sealed class HotkeysPage : SettingsPage
         _mode = mode;
         OnPropertyChanged(nameof(IsToggleMode));
         OnPropertyChanged(nameof(IsSeparateMode));
+        ShowRows();
         _ = SendAsync([SettingsValues.SetGlobal(Keys.RecordHotkeyMode, mode)]);
     }
 
@@ -303,9 +308,17 @@ internal sealed class HotkeysPage : SettingsPage
         foreach (var row in Rows)
         {
             var status = _status.Bindings.FirstOrDefault(b => b.Action == row.Action);
-            row.Show(Describe(_hotkeys.For(row.Action)), StatusText(status), IsFailedStatus(status));
+            row.Show(Describe(_hotkeys.For(row.Action)), StatusText(status), IsFailedStatus(status), IsUsed(row.Action, _mode));
         }
     }
+
+    // Engine rule (HotkeyPlan.IsActive): Toggle uses the toggle rows, Separate the start and stop rows.
+    private static bool IsUsed(HotkeyAction action, RecordHotkeyMode mode) => action switch
+    {
+        HotkeyAction.RecordToggle or HotkeyAction.MonitorRecordToggle => mode == RecordHotkeyMode.Toggle,
+        HotkeyAction.RecordStart or HotkeyAction.RecordStop or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop => mode == RecordHotkeyMode.Separate,
+        _ => true,
+    };
 }
 
 /// <summary>One action's row on the <see cref="HotkeysPage"/>.</summary>
@@ -315,6 +328,7 @@ internal sealed class HotkeyRow : Observable
     private string _statusText = "Not set";
     private bool _isFailed;
     private bool _isCapturing;
+    private bool _isShown = true;
 
     public HotkeyRow(HotkeysPage page, HotkeyAction action, string label)
     {
@@ -345,6 +359,13 @@ internal sealed class HotkeyRow : Observable
         private set => Set(ref _isFailed, value);
     }
 
+    /// <summary>The selected Record mode uses the action; the view hides the row otherwise.</summary>
+    public bool IsShown
+    {
+        get => _isShown;
+        private set => Set(ref _isShown, value);
+    }
+
     /// <summary>The row is waiting for a combination.</summary>
     public bool IsCapturing
     {
@@ -363,8 +384,15 @@ internal sealed class HotkeyRow : Observable
 
     public ICommand ClearCommand { get; }
 
-    internal void Show(string bindingText, string statusText, bool isFailed)
+    internal void Show(string bindingText, string statusText, bool isFailed, bool isShown)
     {
+        IsShown = isShown;
+
+        // A hidden row can't take the next key press.
+        if (!isShown)
+        {
+            IsCapturing = false;
+        }
         if (_bindingText != bindingText)
         {
             _bindingText = bindingText;

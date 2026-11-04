@@ -21,7 +21,7 @@ public sealed class AppSupervisorTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         Directory.CreateDirectory(_folder);
-        var instance = new Instance(Instance.TestPrefix + Path.GetFileName(_folder), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
+        var instance = new Instance(Instance.TestPrefix + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
         _host = EngineHost.Start(instance, NullLoggerFactory.Instance, hostOptions: new EngineHostOptions { Heartbeat = null, ProbeEncoders = false, AppLauncher = _launcher });
         _client = await EngineClient.ConnectAsync(_host.PipeName, cancellationToken: Token);
     }
@@ -71,6 +71,59 @@ public sealed class AppSupervisorTests : IAsyncLifetime
         await Eventually(() => _client.State.AppPid == relaunched.Id);
         relaunched.Exit(0);
         await Eventually(() => _launcher.Started.Count == 2);
+    }
+
+    [Fact]
+    public async Task AnEngineStartedAsRestartedRaisesEngineRestartedInItsFirstSnapshotAndAnAttachAddsNoSecond()
+    {
+        var folder = _folder + "-restarted";
+        Directory.CreateDirectory(folder);
+        var instance = new Instance(Instance.TestPrefix + Guid.NewGuid().ToString("N"), Path.Combine(folder, "roaming"), Path.Combine(folder, "local"));
+        try
+        {
+            await using var host = EngineHost.Start(
+                instance,
+                NullLoggerFactory.Instance,
+                hostOptions: new EngineHostOptions { Heartbeat = null, ProbeEncoders = false, AppLauncher = new FakeLauncher(), Restarted = EngineRestartReason.Crashed });
+            await using var client = await EngineClient.ConnectAsync(host.PipeName, cancellationToken: Token);
+
+            var first = Assert.Single(client.State.Warnings);
+            Assert.Equal(ErrorCodes.EngineRestarted, first.Code);
+            Assert.Contains("unexpectedly", first.Message);
+
+            await client.SendAsync(EngineMessages.Attach, new AppAttach(100, EngineRestartReason.Crashed), Token);
+            await Eventually(() => client.State.AppPid == 100);
+            Assert.Equal(first.Id, Assert.Single(client.State.Warnings).Id);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task TheFourthAppExitWithinTheWindowIsACrashLoopAndIsNotRelaunched()
+    {
+        await _client.SendAsync(EngineMessages.Attach, new AppAttach(100), Token);
+        await Eventually(() => _launcher.Opened.ContainsKey(100));
+
+        // Three relaunches (backoff 0, 1 and 2 s), each of which exits again before attaching.
+        _launcher.Opened[100].Exit(1);
+        for (var restarts = 1; restarts <= Contracts.Supervision.CrashLoopRestarts; restarts++)
+        {
+            await Eventually(() => _launcher.Started.Count == restarts);
+            _launcher.Started.Last().Exit(1);
+        }
+
+        await Eventually(() => _client.State.Warnings.Any(w => w.Code == ErrorCodes.AppCrashLoop));
+        var warning = _client.State.Warnings.Single(w => w.Code == ErrorCodes.AppCrashLoop);
+        Assert.Equal((WarningSeverity.Error, false), (warning.Severity, warning.Overlay));
+        await _host.Apps.Watching;
+        Assert.Equal(Contracts.Supervision.CrashLoopRestarts, _launcher.Started.Count);
+
+        // An App started by hand ends the crash loop, and its warning.
+        await _client.SendAsync(EngineMessages.Attach, new AppAttach(200), Token);
+        await Eventually(() => _client.State.AppPid == 200 && _client.State.Warnings.All(w => w.Code != ErrorCodes.AppCrashLoop));
     }
 
     [Fact]

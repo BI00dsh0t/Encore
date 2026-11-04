@@ -60,7 +60,7 @@ public sealed class RecordingCrashTests : IDisposable
 
     private string Kills => Path.Combine(_directory, "kills");
 
-    private Instance TestInstance => new(ServeCommand.TestInstancePrefix + Path.GetFileName(_directory), Path.Combine(_directory, "roaming"), Path.Combine(_directory, "local"));
+    private Instance TestInstance => new(ServeCommand.TestInstancePrefix + Path.GetFileName(_directory).Replace(".", "-"), Path.Combine(_directory, "roaming"), Path.Combine(_directory, "local"));
 
     private string RuntimeFile => Path.Combine(TestInstance.LocalDataFolder, RuntimeStateStore.FileName);
 

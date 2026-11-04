@@ -9,6 +9,7 @@ companions: []
 after: []
 refined: true
 risk: high
+status: done
 ---
 
 # Recordings and Monitor Recording
@@ -83,5 +84,6 @@ A whole session in an opted-in game ends as one playable file, even after a cras
 - Decision: 2026-11-02, the set check's findings applied: story 1 waits on 3.6 for the Recordings switch, story 2 on 2.4 for runtime.json, story 7 on 5.7 for the red X; story 9 also covers a Monitor Recording's interrupted warning and full disk. Declined: splitting story 7's Disk-mode stop and restart into its own story, as it is small beside the Recording's disk-full path it shares; story 11 keeps its wait on 10 because both touch monitor enumeration in Platform.Capture.
 - Decision: 2026-11-02, a closing end-to-end story on the builder's PC (hitl) follows the sweep, because the Done when ends "Verified integrated on the builder's PC".
 - Decision: 2026-11-04, story 6.6 built the forced encoder restart (`CaptureSession.RestartChain`: tear the chain down, rebuild the same spec into a new ring generation, then the orchestrator ends the Recording with `encoder-restart` and starts a new one at once, raising `recording-restarted`), but **no production path calls it yet**: there is no device-lost or driver-reset detection, so only tests trigger a restart. A later story must wire a real trigger (and run the restart from the orchestrator's side, closing the window between a save's `Save` and `Write`). Epic 4's refactor sweep had removed the ring `Restart` path as unused; 6.6 restored it.
+- Decision: 2026-11-04, story 6.10 added the Desktop Duplication fallback (`DesktopDuplicationCapture` behind `ICaptureSource`, chosen only in the Monitor session when WGC can't be created or started; one `monitor-capture-fallback` warning). QA notes left open: `DesktopDuplicationCapture.Failed`'s own doc still says capture continues although its thread ends (the port's doc is right); and its constructor makes one `DuplicateOutput` call, so a start while the secure desktop is up (a UAC prompt) fails the session instead of retrying. A device removal or monitor detach was never exercised on real hardware, and the cursor and rotated outputs aren't handled.
 - Waits on epic-replay-buffer-clips because: it needs the capture, Track and encoding pipeline, and the "file being written" signal.
 - Waits on epic-overlay-feedback because: it needs the Overlay's solid dot, the red X, and the Feedback Sounds channel.

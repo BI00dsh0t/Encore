@@ -44,6 +44,16 @@ public static class RecordingStopReasons
 }
 
 /// <summary>
+/// One attached display monitor, as <c>monitors.list</c> reports it: its GDI device name (such as
+/// <c>\\.\DISPLAY1</c>, the value <c>monitorRecordingMonitor</c> holds), its friendly name, and its
+/// current resolution in pixels.
+/// </summary>
+public sealed record DisplayMonitor(string DeviceName, string FriendlyName, int Width, int Height, bool Primary);
+
+/// <summary><c>monitors.list</c>'s reply: every attached monitor, the primary first.</summary>
+public sealed record MonitorList(IReadOnlyList<DisplayMonitor> Monitors);
+
+/// <summary>
 /// Recording messages (epic-recordings): Recordings and Monitor Recording.
 /// The area's payloads, its own JSON context and its entries in these lists are added here only (AD-22).
 /// </summary>
@@ -69,7 +79,11 @@ public static class RecordingMessages
         "lastRecordingStopped",
         (snapshot, stopped) => snapshot with { LastRecordingStopped = stopped });
 
-    public static IReadOnlyList<CommandType> Commands { get; } = [];
+    /// <summary>Lists the attached monitors, for the Monitor Recording monitor choice (R6).</summary>
+    public static CommandType<Empty, MonitorList> MonitorsList { get; } =
+        new("monitors.list", RecordingJsonContext.Default.Empty, RecordingJsonContext.Default.MonitorList);
+
+    public static IReadOnlyList<CommandType> Commands { get; } = [MonitorsList];
 
     public static IReadOnlyList<EventType> Events { get; } = [Started, Stopped];
 }
@@ -81,4 +95,7 @@ public static class RecordingMessages
     RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(RecordingStarted))]
 [JsonSerializable(typeof(RecordingStopped))]
+[JsonSerializable(typeof(DisplayMonitor))]
+[JsonSerializable(typeof(MonitorList))]
+[JsonSerializable(typeof(Empty))]
 public sealed partial class RecordingJsonContext : JsonSerializerContext;

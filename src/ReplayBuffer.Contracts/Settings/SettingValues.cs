@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ReplayBuffer.Contracts.Messages;
 
 namespace ReplayBuffer.Contracts.Settings;
 
@@ -77,7 +78,10 @@ public static class HotkeyModifiers
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record HotkeyBinding(int Vk, int Modifiers);
 
-/// <summary>The <c>hotkeys</c> key (AD-11): one binding, or null for unbound, per <c>HotkeyAction</c>.</summary>
+/// <summary>
+/// The <c>hotkeys</c> key (AD-11): one binding, or null for unbound, per <c>HotkeyAction</c>. The
+/// Monitor Record start and stop bindings came later (6.9): a document without them reads them as unbound.
+/// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record HotkeySettings(
     HotkeyBinding? Save,
@@ -85,7 +89,9 @@ public sealed record HotkeySettings(
     HotkeyBinding? RecordToggle,
     HotkeyBinding? RecordStart,
     HotkeyBinding? RecordStop,
-    HotkeyBinding? MonitorRecordToggle)
+    HotkeyBinding? MonitorRecordToggle,
+    HotkeyBinding? MonitorRecordStart = null,
+    HotkeyBinding? MonitorRecordStop = null)
 {
     /// <summary>The binding of <paramref name="action"/>, or null when it is unbound.</summary>
     public HotkeyBinding? For(HotkeyAction action) => action switch
@@ -96,6 +102,8 @@ public sealed record HotkeySettings(
         HotkeyAction.RecordStart => RecordStart,
         HotkeyAction.RecordStop => RecordStop,
         HotkeyAction.MonitorRecordToggle => MonitorRecordToggle,
+        HotkeyAction.MonitorRecordStart => MonitorRecordStart,
+        HotkeyAction.MonitorRecordStop => MonitorRecordStop,
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
     };
 }
@@ -110,6 +118,8 @@ public enum HotkeyAction
     RecordStart,
     RecordStop,
     MonitorRecordToggle,
+    MonitorRecordStart,
+    MonitorRecordStop,
 }
 
 /// <summary>Whether Record is one toggle Hotkey or separate start and stop Hotkeys.</summary>
@@ -122,7 +132,30 @@ public enum RecordHotkeyMode
 
 /// <summary>The <c>feedbackSounds</c> key: which Feedback Sounds play.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record FeedbackSounds(bool ClipSaved, bool SaveFailed, bool RecordingStarted, bool RecordingStopped, bool DiskFull);
+public sealed record FeedbackSounds(bool ClipSaved, bool SaveFailed, bool RecordingStarted, bool RecordingStopped, bool DiskFull)
+{
+    /// <summary>Whether <paramref name="sound"/> is switched on; <c>false</c> for a value the enum doesn't name.</summary>
+    public bool IsOn(FeedbackSound sound) => sound switch
+    {
+        FeedbackSound.ClipSaved => ClipSaved,
+        FeedbackSound.SaveFailed => SaveFailed,
+        FeedbackSound.RecordingStarted => RecordingStarted,
+        FeedbackSound.RecordingStopped => RecordingStopped,
+        FeedbackSound.DiskFull => DiskFull,
+        _ => false,
+    };
+
+    /// <summary>A copy with <paramref name="sound"/> switched to <paramref name="on"/>; unchanged for a value the enum doesn't name.</summary>
+    public FeedbackSounds With(FeedbackSound sound, bool on) => sound switch
+    {
+        FeedbackSound.ClipSaved => this with { ClipSaved = on },
+        FeedbackSound.SaveFailed => this with { SaveFailed = on },
+        FeedbackSound.RecordingStarted => this with { RecordingStarted = on },
+        FeedbackSound.RecordingStopped => this with { RecordingStopped = on },
+        FeedbackSound.DiskFull => this with { DiskFull = on },
+        _ => this,
+    };
+}
 
 /// <summary>The <c>cleanup</c> key: each limit null means that limit is off.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

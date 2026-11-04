@@ -7,6 +7,7 @@ using Windows.Graphics.DirectX;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D11;
+using Windows.Win32.Graphics.Gdi;
 using Windows.Win32.System.Com;
 using Windows.Win32.System.WinRT;
 using Windows.Win32.System.WinRT.Direct3D11;
@@ -23,9 +24,10 @@ public delegate void CapturedFrameHandler(long qpc, nint texture, VideoSize cont
 
 /// <summary>
 /// Windows.Graphics.Capture of one window (AD-12): a window item only, no hooks, no
-/// process access. Frames arrive on a free-threaded pool's worker thread, one at a time.
+/// process access; or, for a Monitor Recording (6.9, <see cref="ForMonitor"/>), of one monitor.
+/// Frames arrive on a free-threaded pool's worker thread, one at a time.
 /// </summary>
-public sealed unsafe class WindowCapture : IDisposable
+public sealed unsafe class WindowCapture : ICaptureSource
 {
     private const string GraphicsCaptureItemClass = "Windows.Graphics.Capture.GraphicsCaptureItem";
 
@@ -70,6 +72,11 @@ public sealed unsafe class WindowCapture : IDisposable
     /// faster than <paramref name="fps"/> can fill every slot with a new frame.
     /// </param>
     public WindowCapture(D3D11Device device, nint hwnd, int fps, CapturedFrameHandler onFrame, ILogger logger)
+        : this(device, CreateItem(hwnd), hwnd, fps, onFrame, logger)
+    {
+    }
+
+    private WindowCapture(D3D11Device device, GraphicsCaptureItem item, nint hwnd, int fps, CapturedFrameHandler onFrame, ILogger logger)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(fps, 1);
         _device = device;
@@ -77,7 +84,7 @@ public sealed unsafe class WindowCapture : IDisposable
         _logger = logger;
         _hwnd = new HWND((void*)hwnd);
 
-        _item = CreateItem(hwnd);
+        _item = item;
         _item.Closed += OnItemClosed;
         _poolSize = _item.Size;
 
@@ -90,7 +97,24 @@ public sealed unsafe class WindowCapture : IDisposable
         _session.MinUpdateInterval = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / (2L * fps));
         TryDisableBorder();
         _watchdog = new Timer(_ => CheckWindow(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        logger.LogInformation("Capturing window '{Title}' at {Width}x{Height}, at most {Fps} fps", _item.DisplayName, _poolSize.Width, _poolSize.Height, 2 * fps);
+        logger.LogInformation("Capturing {Kind} '{Title}' at {Width}x{Height}, at most {Fps} fps",
+            hwnd == 0 ? "monitor" : "window", _item.DisplayName, _poolSize.Width, _poolSize.Height, 2 * fps);
+    }
+
+    /// <summary>
+    /// Captures the monitor <paramref name="hmonitor"/> (6.9), at its full size. With no window to
+    /// watch, only the item's own <c>Closed</c> (the monitor detached) raises <see cref="Closed"/>.
+    /// Windows marked <c>WDA_EXCLUDEFROMCAPTURE</c> don't appear in it.
+    /// </summary>
+    public static WindowCapture ForMonitor(D3D11Device device, nint hmonitor, int fps, CapturedFrameHandler onFrame, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        if (hmonitor == 0)
+        {
+            throw new ArgumentException("No monitor was given.", nameof(hmonitor));
+        }
+
+        return new WindowCapture(device, CreateMonitorItem(hmonitor), 0, fps, onFrame, logger);
     }
 
     /// <summary>The size WGC captures <paramref name="hwnd"/> at now.</summary>
@@ -129,7 +153,10 @@ public sealed unsafe class WindowCapture : IDisposable
     public void Start()
     {
         _session.StartCapture();
-        _watchdog.Change(WatchdogInterval, WatchdogInterval);
+        if (!_hwnd.IsNull)
+        {
+            _watchdog.Change(WatchdogInterval, WatchdogInterval);
+        }
     }
 
     /// <summary>Stops capture and waits for a frame in flight to finish.</summary>
@@ -296,6 +323,28 @@ public sealed unsafe class WindowCapture : IDisposable
 
             var itemIid = GraphicsCaptureItemIid;
             ((IGraphicsCaptureItemInterop*)factory)->CreateForWindow(new HWND((void*)hwnd), &itemIid, &item);
+            return GraphicsCaptureItem.FromAbi((nint)item);
+        }
+        finally
+        {
+            if (item is not null) ((IUnknown*)item)->Release();
+            if (factory is not null) ((IUnknown*)factory)->Release();
+            className.Dispose();
+        }
+    }
+
+    private static GraphicsCaptureItem CreateMonitorItem(nint hmonitor)
+    {
+        void* factory = null;
+        void* item = null;
+        PInvoke.WindowsCreateString(GraphicsCaptureItemClass, (uint)GraphicsCaptureItemClass.Length, out var className).ThrowOnFailure();
+        try
+        {
+            var interopIid = GraphicsCaptureItemInteropIid;
+            PInvoke.RoGetActivationFactory(new HSTRING((void*)className.DangerousGetHandle()), &interopIid, &factory).ThrowOnFailure();
+
+            var itemIid = GraphicsCaptureItemIid;
+            ((IGraphicsCaptureItemInterop*)factory)->CreateForMonitor(new HMONITOR((void*)hmonitor), &itemIid, &item);
             return GraphicsCaptureItem.FromAbi((nint)item);
         }
         finally

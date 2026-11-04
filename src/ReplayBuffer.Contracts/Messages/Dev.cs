@@ -23,6 +23,15 @@ public enum SimulatedEvent
 
     /// <summary>A save made a Clip: the <c>clip-saved</c> notice only. No <c>clip.saved</c> is published, as no file exists.</summary>
     ClipSaved,
+
+    /// <summary>The engine hangs: its heartbeat stops and its event hub freezes, so the App kills and relaunches it (AD-16).</summary>
+    EngineHang,
+
+    /// <summary>
+    /// The GPU driver resets: every live capture device reports itself lost, so the sessions on it
+    /// raise <see cref="ErrorCodes.GpuReset"/> and rebuild.
+    /// </summary>
+    GpuReset,
 }
 
 /// <summary><c>dev.simulate</c>'s arguments.</summary>

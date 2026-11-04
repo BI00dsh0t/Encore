@@ -30,7 +30,7 @@ public sealed class LibraryServeTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         Directory.CreateDirectory(Path.Combine(Output, "Game"));
-        _instance = new Instance(Instance.TestPrefix + Path.GetFileName(_folder), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
+        _instance = new Instance(Instance.TestPrefix + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
         await StartAsync();
 
         var update = new SettingsUpdate(
@@ -83,6 +83,18 @@ public sealed class LibraryServeTests : IAsyncLifetime
 
         Assert.Equal(item with { Path = @"Game\best.mp4" }, Assert.Single(_client.State.Library));
         Assert.True(File.Exists(Path.Combine(Output, "Game", "best.mp4")));
+    }
+
+    [Fact]
+    public async Task CleanupPreviewOverIpcNamesTheSavedClip()
+    {
+        await SaveAsync();
+
+        var plan = await _client.SendAsync(LibraryMessages.CleanupPreview, new LibraryCleanupPreview(1, null), Token);
+
+        Assert.Equal((1, 64L), (plan.Count, plan.Bytes));
+        Assert.Equal(@"Game\Game_2026-11-03_10-00-00.mp4", Assert.Single(plan.Paths));
+        Assert.True(File.Exists(ClipPath));
     }
 
     [Fact]

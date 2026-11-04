@@ -95,11 +95,38 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// reported through <see cref="Recordings.DiskFull"/>; when its session's ring is on disk, the session
 /// is ended too, and a timer posts a recheck every <see cref="Recordings.RingRecheck"/> until the ring
 /// fits its drive again (<see cref="Recordings.RingFits"/>), when it restarts on the Target.
+/// With <see cref="Recordings"/>, a Monitor Record press that starts (<c>monitorRecordToggle</c>, or
+/// <c>monitorRecordStart</c> in separate mode, as <c>recordHotkeyMode</c> reads live) starts the
+/// Monitor session (6.9) in a second slot beside the game session: a <see cref="SessionKind.Monitor"/>
+/// session on the Global snapshot and Global Track Layout, capturing the monitor its snapshot names.
+/// At its anchor (<see cref="ISessionEvents.Anchored"/>) a Recording starts on it in
+/// <c>&lt;Output Folder&gt;\Monitor Recordings</c>; a later press stops it, and once its writer posts
+/// back the Monitor session ends. <see cref="CaptureState.MonitorRecording"/> is on from the press
+/// to then. It never touches the Target, and never holds a Target switch. Encoder chains are counted
+/// (AD-7, <see cref="ICaptureSession.Chains"/>): a Monitor press is refused with
+/// <see cref="ErrorCodes.EncoderBudget"/> (<see cref="Recordings.Warn"/>) when the game session still
+/// runs two once a chain it prepared is dropped. While the Monitor session runs, a chain change of
+/// the game session is not prepared in advance but switched at its next Reset, tearing the old chain
+/// down first (<see cref="ICaptureSession.SwitchChain"/>); a refused switch is retried at the next Reset.
+/// A session whose GPU device was lost (<see cref="ISessionEvents.DeviceLost"/>, a driver reset, R3)
+/// is recovered here (<see cref="DeviceRecovery"/>): the first loss calls
+/// <see cref="DeviceRecovery.Reset"/> and asks the session to rebuild at once
+/// (<see cref="ICaptureSession.RecoverDevice"/>); each failed attempt is retried after
+/// <see cref="DeviceRecovery.RetryEvery"/>, until <see cref="DeviceRecovery.GiveUpAfter"/> has passed
+/// since the loss, when the session is ended and <see cref="DeviceRecovery.Failed"/> called. A given-up
+/// game session stays off until the Target's process changes; a new window of it doesn't restart it.
+/// A recovery posts <see cref="ISessionEvents.ChainRestarted"/>, which calls
+/// <see cref="DeviceRecovery.Recovered"/> and hands a running Recording over as any forced encoder
+/// restart does; a Monitor Recording is handed over the same way, its replacement published through
+/// <see cref="Recordings.MonitorStarted"/>, while <see cref="CaptureState.MonitorRecording"/> stays on.
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
     /// <summary>How long <see cref="Dispose"/> waits for a running Recording's writer, inside the App's 5 s Quit.</summary>
     internal static readonly TimeSpan ShutdownWait = TimeSpan.FromSeconds(3);
+
+    /// <summary>AD-7's encoder budget: at most this many encoder chains run at once, across sessions.</summary>
+    internal const int MaxChains = 2;
 
     private readonly Channel<SessionMessage> _channel = Channel.CreateUnbounded<SessionMessage>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false, AllowSynchronousContinuations = false });
@@ -113,6 +140,7 @@ public sealed class SessionOrchestrator : IDisposable
     private readonly TargetCapture? _targetCapture;
     private readonly ReplayClips? _clips;
     private readonly Recordings? _recordings;
+    private readonly DeviceRecovery _deviceRecovery;
     private readonly Thread _thread;
 
     // Orchestrator thread only.
@@ -145,6 +173,19 @@ public sealed class SessionOrchestrator : IDisposable
     // The Recording a forced encoder restart ended, until its writer posts back; null for none.
     private RecordingRun? _ending;
 
+    // The Monitor session (6.9), from its press until its Monitor Recording's writer posts back; null for none.
+    private Active? _monitor;
+
+    // The Monitor Recording started at the Monitor session's anchor and not yet posted back; null for none.
+    private RecordingRun? _monitorRecording;
+
+    // The Monitor Recording a forced encoder restart ended, until its writer posts back; null for none.
+    private RecordingRun? _monitorEnding;
+
+    // The process of the Target whose game session gave up on a GPU reset (R3): no new window of it
+    // restarts the Replay Buffer; null once the Target's process changes.
+    private int? _gpuStoppedPid;
+
     private int _disposed;
 
     /// <param name="factory">Starts the capture sessions.</param>
@@ -162,6 +203,7 @@ public sealed class SessionOrchestrator : IDisposable
     /// <param name="targetCapture">When given, each new Target Game ends the game session and starts one on its window.</param>
     /// <param name="clips">When given, a <c>save</c> press on the game session writes a Clip.</param>
     /// <param name="recordings">When given, Record presses on the game session start and stop a Recording.</param>
+    /// <param name="deviceRecovery">How a session whose GPU device was lost is recovered; null is the defaults, with no callbacks.</param>
     public SessionOrchestrator(
         ICaptureSessionFactory factory,
         Func<SettingsDocument> currentDocument,
@@ -171,7 +213,8 @@ public sealed class SessionOrchestrator : IDisposable
         Action<TargetChanged>? targetChanged = null,
         TargetCapture? targetCapture = null,
         ReplayClips? clips = null,
-        Recordings? recordings = null)
+        Recordings? recordings = null,
+        DeviceRecovery? deviceRecovery = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(currentDocument);
@@ -185,6 +228,7 @@ public sealed class SessionOrchestrator : IDisposable
         _targetCapture = targetCapture;
         _clips = clips;
         _recordings = recordings;
+        _deviceRecovery = deviceRecovery ?? new DeviceRecovery();
 
         // Before the thread runs, so no session can start with any other mute.
         _state = CaptureState.Initial with { MicMuted = LoadMicMuted(micMute) };
@@ -279,10 +323,15 @@ public sealed class SessionOrchestrator : IDisposable
             EndActive("engine stopping", failure: null, RecordingStopReasons.Shutdown);
         }
 
+        if (_monitor is not null)
+        {
+            EndMonitor("engine stopping", RecordingStopReasons.Shutdown);
+        }
+
         // The channel is complete, so the writers' post-backs can't arrive: wait for them here (one
-        // bounded wait for both), a restart's ending Recording first.
+        // bounded wait for all), a restart's ending Recording first.
         var waited = Stopwatch.StartNew();
-        foreach (var recording in new[] { _ending, _recording })
+        foreach (var recording in new[] { _ending, _recording, _monitorEnding, _monitorRecording })
         {
             if (recording is null)
             {
@@ -301,6 +350,14 @@ public sealed class SessionOrchestrator : IDisposable
             {
                 _ending = null;
             }
+            else if (ReferenceEquals(_monitorEnding, recording))
+            {
+                _monitorEnding = null;
+            }
+            else if (ReferenceEquals(_monitorRecording, recording))
+            {
+                _monitorRecording = null;
+            }
             else
             {
                 _recording = null;
@@ -315,6 +372,7 @@ public sealed class SessionOrchestrator : IDisposable
             SetState(_state with { Recording = RecordingState.Off });
         }
 
+        SetState(_state with { MonitorRecording = RecordingState.Off });
         ReleaseDrain();
 
         // No callback: the engine is stopping.
@@ -351,6 +409,10 @@ public sealed class SessionOrchestrator : IDisposable
                 {
                     OnRecordPress(pressed.Action, pressed.Qpc);
                 }
+                else if (pressed.Action is HotkeyAction.MonitorRecordToggle or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop)
+                {
+                    OnMonitorPress(pressed.Action, pressed.Qpc);
+                }
 
                 _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
                 break;
@@ -385,6 +447,32 @@ public sealed class SessionOrchestrator : IDisposable
                 OnRecordingWritten(recorded, commitPending: Volatile.Read(ref _disposed) == 0);
                 break;
 
+            case SessionClosed closed when _monitor?.Id == closed.SessionId:
+                EndMonitor(closed.Reason, RecordingStopReasons.SessionEnded);
+                break;
+
+            case SessionFailed failed when _monitor?.Id == failed.SessionId:
+                _recordings?.Failed(failed.Failure);
+                EndMonitor("failure: " + failed.Failure.Message, RecordingStopReasons.SessionEnded);
+                break;
+
+            case SessionAnchored anchored when _monitor?.Id == anchored.SessionId:
+                OnMonitorAnchored(_monitor, anchored.Qpc);
+                break;
+
+            case SessionDeviceLost lost when _monitor?.Id == lost.SessionId:
+                OnDeviceLost(_monitor, lost.Failure, monitor: true);
+                break;
+
+            case RetryDeviceRecovery retry when _monitor?.Id == retry.SessionId:
+                TryRecover(_monitor, monitor: true);
+                break;
+
+            case SessionChainRestarted restarted when _monitor?.Id == restarted.SessionId:
+                OnRecovered(_monitor);
+                OnMonitorChainRestarted(_monitor, restarted.Qpc);
+                break;
+
             case SessionClosed closed when _active?.Id == closed.SessionId:
                 // WGC can see the window close before Game Detection sees the exit: drain here too.
                 if (Drains(_active))
@@ -407,7 +495,16 @@ public sealed class SessionOrchestrator : IDisposable
                 break;
 
             case SessionChainRestarted restarted when _active?.Id == restarted.SessionId:
+                OnRecovered(_active);
                 OnChainRestarted(_active, restarted.Qpc);
+                break;
+
+            case SessionDeviceLost lost when _active?.Id == lost.SessionId:
+                OnDeviceLost(_active, lost.Failure, monitor: false);
+                break;
+
+            case RetryDeviceRecovery retry when _active?.Id == retry.SessionId:
+                TryRecover(_active, monitor: false);
                 break;
 
             case RingRecheck when _ringWait is { } wait:
@@ -511,6 +608,7 @@ public sealed class SessionOrchestrator : IDisposable
     {
         var active = _active!;
         _active = null;
+        StopRecovery(active);
         MarkSessionEnded(active, recordingReason);
 
         SessionOutcome outcome;
@@ -547,6 +645,7 @@ public sealed class SessionOrchestrator : IDisposable
     {
         var active = _active!;
         _active = null;
+        StopRecovery(active);
         MarkSessionEnded(active, recordingReason);
         ReleaseDrain();
 
@@ -645,6 +744,18 @@ public sealed class SessionOrchestrator : IDisposable
             }
         }
 
+        if (_monitor is { } monitor)
+        {
+            try
+            {
+                monitor.Session.SetMicMuted(muted, qpc);
+            }
+            catch (Exception)
+            {
+                // As for the game session.
+            }
+        }
+
         try
         {
             _micMute?.Save(muted);
@@ -696,6 +807,9 @@ public sealed class SessionOrchestrator : IDisposable
 
         _target = to;
 
+        // A Replay Buffer given up on a GPU reset stays off only for the Target it stopped on.
+        _gpuStoppedPid = null;
+
         // A wait for room for the ring belongs to the Target it stopped on.
         ClearRingWait();
         _targetChanged?.Invoke(new TargetChanged(current?.ToTargetGame(), to?.ToTargetGame(), propose.Reason));
@@ -745,8 +859,8 @@ public sealed class SessionOrchestrator : IDisposable
 
         if (_active is null)
         {
-            // A Replay Buffer a full disk stopped waits for its recheck.
-            if (_ringWait is null)
+            // A Replay Buffer a full disk stopped waits for its recheck; one a GPU reset stopped, for the next Target.
+            if (_ringWait is null && _gpuStoppedPid != target.ProcessId)
             {
                 StartOnTarget(target);
             }
@@ -959,10 +1073,11 @@ public sealed class SessionOrchestrator : IDisposable
             written.Write.Reset();
             active.ResetQpc = active.ResetQpc is { } reset ? Math.Max(reset, written.Qpc) : written.Qpc;
 
-            // Each Reset resolves the settings again, so a failed in-advance build is asked for once more.
+            // Each Reset resolves the settings again, so a failed in-advance build is asked for once
+            // more, and a change held while the Monitor session runs switches here.
             if (ReferenceEquals(active, _active))
             {
-                ApplySettings(active);
+                ApplySettings(active, atReset: true);
             }
         }
 
@@ -974,9 +1089,13 @@ public sealed class SessionOrchestrator : IDisposable
     /// encoder chain than the session's (<see cref="ChainKey.SameChain"/>), the session is asked to
     /// prepare it for its next save press; when they no longer do, a chain asked for is dropped.
     /// Only for a game session with Replay Clips; a Track Layout that can't be resolved is skipped,
-    /// and a failure of the session is swallowed, as for mic mute.
+    /// and a failure of the session is swallowed, as for mic mute. While the Monitor session runs,
+    /// nothing is prepared in advance (AD-7: it holds a chain of its own); a chain prepared is
+    /// dropped, and only <paramref name="atReset"/>, just after a Reset, is the session switched,
+    /// tearing down first (<see cref="ICaptureSession.SwitchChain"/>); its spec then takes the new
+    /// snapshot and audio. A refused switch waits for the next Reset.
     /// </summary>
-    private void ApplySettings(Active active)
+    private void ApplySettings(Active active, bool atReset = false)
     {
         if (_clips is null || active.Spec.Kind != SessionKind.Game)
         {
@@ -1018,6 +1137,19 @@ public sealed class SessionOrchestrator : IDisposable
                 {
                     active.Deferred = true;
                     _recordings?.Info?.Invoke("The profile's video or Tracks changed while a Recording runs; the game session keeps its encoder chain until the Recording stops");
+                }
+            }
+            else if (_monitor is not null)
+            {
+                if (active.Pending)
+                {
+                    active.Pending = false;
+                    active.Session.PrepareChain(null);
+                }
+
+                if (atReset && active.Session.SwitchChain(next))
+                {
+                    active.Spec = active.Spec with { Snapshot = next.Snapshot, Audio = next.Audio };
                 }
             }
             else
@@ -1170,26 +1302,8 @@ public sealed class SessionOrchestrator : IDisposable
             return null;
         }
 
-        var library = recordings.Library ?? NoLibraryWrites.Instance;
-        library.BeginWrite(path, profileId);
-        recordings.Open?.Opened(path);
-        var recording = new RecordingRun(active.Id, path, write);
-        try
+        if (OpenWrite(recordings, new RecordingRun(active.Id, path, write), profileId) is not { } recording)
         {
-            write.Start(path, error =>
-            {
-                // Before the post, so a shutdown that closed the channel still sees the result.
-                recording.Done.TrySetResult(error);
-                Post(new RecordingWritten(recording, error));
-            });
-        }
-        catch (Exception e)
-        {
-            // It never started: nothing else will remove the reserved file.
-            TryDelete(path);
-            library.EndWrite(path, WriteOutcome.Failed);
-            recordings.Open?.Closed(path);
-            recordings.Failed(e);
             return null;
         }
 
@@ -1261,7 +1375,8 @@ public sealed class SessionOrchestrator : IDisposable
 
         recording.Follows = null;
         var recordings = _recordings!;
-        recordings.Started(new RecordingStarted(recording.Path));
+        var started = recording.Monitor ? recordings.MonitorStarted ?? recordings.Started : recordings.Started;
+        started(new RecordingStarted(recording.Path));
         recordings.Restarted?.Invoke(new RecordingRestart(follows.Path, recording.Path));
     }
 
@@ -1289,6 +1404,12 @@ public sealed class SessionOrchestrator : IDisposable
     private void OnRecordingWritten(RecordingWritten written, bool commitPending)
     {
         var recording = written.Recording;
+        if (recording.Monitor)
+        {
+            OnMonitorRecordingWritten(written);
+            return;
+        }
+
         var restarted = ReferenceEquals(_ending, recording);
         if (!restarted && !ReferenceEquals(_recording, recording))
         {
@@ -1307,18 +1428,7 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         var recordings = _recordings!;
-        var error = written.Error;
-
-        // A failed writer deletes a file that holds nothing; one with data is kept, finished as far as it got.
-        var kept = error is null || File.Exists(recording.Path);
-        (recordings.Library ?? NoLibraryWrites.Instance).EndWrite(recording.Path, kept ? WriteOutcome.Written : WriteOutcome.Failed);
-        recordings.Open?.Closed(recording.Path);
-        if (error is not null)
-        {
-            recordings.Failed(error);
-        }
-
-        var reason = error is not null ? WriteFailures.ReasonOf(error) : recording.Reason ?? RecordingStopReasons.SessionEnded;
+        var reason = CloseWrite(recordings, written);
         var off = _recording is null && _ending is null;
         if (off)
         {
@@ -1353,6 +1463,498 @@ public sealed class SessionOrchestrator : IDisposable
         {
             CommitTarget(pending);
         }
+    }
+
+    /// <summary>
+    /// A Monitor Record press (6.9), in <c>recordHotkeyMode</c> read live, exactly as a Record press:
+    /// an action the mode doesn't use is ignored; <c>monitorRecordToggle</c> stops the running
+    /// Monitor Recording, else starts one; <c>monitorRecordStart</c> starts one only while none runs,
+    /// and <c>monitorRecordStop</c> stops only a running one. A press while one is stopping is ignored.
+    /// A stop before the Monitor session anchored ends it at once, with no Recording.
+    /// </summary>
+    private void OnMonitorPress(HotkeyAction action, long qpc)
+    {
+        if (_recordings is not { } recordings)
+        {
+            return;
+        }
+
+        var document = _currentDocument();
+        var mode = SettingsResolver.Resolve(document, null).RecordHotkeyMode;
+        if (!HotkeyPlan.IsActive(action, mode))
+        {
+            recordings.Info?.Invoke($"The {action} press isn't used in the {mode} Record Hotkey mode; it was ignored");
+            return;
+        }
+
+        if (_monitor is null)
+        {
+            if (action == HotkeyAction.MonitorRecordStop)
+            {
+                recordings.Info?.Invoke("The Monitor Record Stop press came with no Monitor Recording running; it was ignored");
+                return;
+            }
+
+            if (_monitorRecording is not null || _monitorEnding is not null)
+            {
+                // Its session ended (closed or failed) and its writer hasn't posted back yet.
+                recordings.Info?.Invoke("The Monitor Record press came while the last Monitor Recording was still finishing; it was ignored");
+                return;
+            }
+
+            StartMonitor(document);
+            return;
+        }
+
+        if (action == HotkeyAction.MonitorRecordStart)
+        {
+            recordings.Info?.Invoke("The Monitor Record Start press came while a Monitor Recording runs; it was ignored");
+            return;
+        }
+
+        if (_monitorRecording is not { } running)
+        {
+            // Not anchored yet: nothing was written, and nothing is left.
+            EndMonitor("monitor recording stopped", RecordingStopReasons.Stopped);
+            return;
+        }
+
+        if (running.Reason is not null)
+        {
+            recordings.Info?.Invoke("The Monitor Record press came while the Monitor Recording was stopping; it was ignored");
+            return;
+        }
+
+        running.Reason = RecordingStopReasons.Stopped;
+        try
+        {
+            running.Write.Stop(qpc);
+        }
+        catch (Exception e)
+        {
+            // The writer still finishes when the session's output ends.
+            recordings.Failed(e);
+        }
+    }
+
+    /// <summary>
+    /// Starts the Monitor session (6.9) on the Global snapshot (AD-5) and its Track Layout, unless the
+    /// encoder budget (AD-7) is spent: a chain the game session prepared is dropped first, and when
+    /// the game session still runs <see cref="MaxChains"/>, the press is refused with
+    /// <see cref="ErrorCodes.EncoderBudget"/>. <see cref="CaptureState.MonitorRecording"/> goes on;
+    /// the Recording starts at the session's anchor.
+    /// </summary>
+    private void StartMonitor(SettingsDocument document)
+    {
+        var recordings = _recordings!;
+        if (_active is { } game)
+        {
+            int chains;
+            try
+            {
+                if (game.Pending)
+                {
+                    game.Pending = false;
+                    game.Session.PrepareChain(null);
+                }
+
+                chains = game.Session.Chains;
+            }
+            catch (Exception)
+            {
+                // The session's own failure path ends it if it is broken.
+                chains = 1;
+            }
+
+            if (chains + 1 > MaxChains)
+            {
+                recordings.Warn?.Invoke(
+                    ErrorCodes.EncoderBudget,
+                    $"The Monitor Recording didn't start: the game session already runs {chains} encoder chains, and another would exceed the encoder budget.");
+
+                // The chain dropped above is asked for again: nothing runs beside the game session.
+                ApplySettings(game);
+                return;
+            }
+        }
+
+        Active monitor;
+        try
+        {
+            var snapshot = SettingsResolver.Resolve(document, null);
+            var spec = new SessionSpec(SessionKind.Monitor, new CaptureTarget(0, 0, null), snapshot, MonitorAudio(snapshot), _state.MicMuted);
+            var id = ++_nextSessionId;
+            var session = _factory.Start(spec, new Events(this, id));
+            monitor = new Active(id, session, spec, MonitorAudio);
+        }
+        catch (Exception e)
+        {
+            recordings.Failed(e);
+            return;
+        }
+
+        _monitor = monitor;
+        SetState(_state with { MonitorRecording = RecordingState.Running });
+    }
+
+    /// <summary>The Monitor session's audio: the Global Track Layout's.</summary>
+    private static SessionAudio MonitorAudio(EffectiveSettings snapshot) => SessionAudio.FromLayout(snapshot.TrackLayout);
+
+    /// <summary>
+    /// The Monitor session's first frame, at <paramref name="qpc"/>: its Recording starts there
+    /// (<see cref="BeginMonitorRecording"/>) and is published as started. One that can't start ends
+    /// the Monitor session.
+    /// </summary>
+    private void OnMonitorAnchored(Active monitor, long qpc)
+    {
+        if (_monitorRecording is not null)
+        {
+            return;
+        }
+
+        if (BeginMonitorRecording(monitor, qpc) is not { } recording)
+        {
+            EndMonitor("monitor recording failed", RecordingStopReasons.SessionEnded);
+            return;
+        }
+
+        var recordings = _recordings!;
+        (recordings.MonitorStarted ?? recordings.Started)(new RecordingStarted(recording.Path));
+    }
+
+    /// <summary>
+    /// A Monitor Recording from <paramref name="qpc"/> on the Monitor session, at a path reserved now
+    /// in <c>&lt;Output Folder&gt;\Monitor Recordings</c> (AD-21), with the Library and
+    /// <see cref="Recordings.Open"/> told as for a game Recording; it becomes
+    /// <see cref="_monitorRecording"/>. Null, with the Info or the failure reported, when none
+    /// started. Nothing is published here, and the session is left running.
+    /// </summary>
+    private RecordingRun? BeginMonitorRecording(Active monitor, long qpc)
+    {
+        var recordings = _recordings!;
+        IRecordingWrite? write;
+        string path;
+        try
+        {
+            write = monitor.Session.Record(qpc);
+            if (write is null)
+            {
+                recordings.Info?.Invoke("The Monitor session can't record; no Monitor Recording was started");
+                return null;
+            }
+
+            var folder = SettingsResolver.Resolve(_currentDocument(), null).OutputFolder ?? recordings.DefaultOutputFolder();
+            path = recordings.Paths.AllocateForMonitor(folder, qpc);
+        }
+        catch (Exception e)
+        {
+            recordings.Failed(e);
+            return null;
+        }
+
+        if (OpenWrite(recordings, new RecordingRun(monitor.Id, path, write) { Monitor = true }, profileId: null) is not { } recording)
+        {
+            return null;
+        }
+
+        _monitorRecording = recording;
+        return recording;
+    }
+
+    /// <summary>
+    /// The Monitor session's encoder chain was forcibly rebuilt at <paramref name="qpc"/> (a GPU
+    /// reset's recovery), as <see cref="OnChainRestarted"/> for the game session: its running Monitor
+    /// Recording becomes <see cref="_monitorEnding"/>, stopped with
+    /// <see cref="RecordingStopReasons.EncoderRestart"/>, and a new one starts at once in a new file.
+    /// Nothing is published until the old one's writer posts back; when no new one could start, the
+    /// Monitor session ends then.
+    /// </summary>
+    private void OnMonitorChainRestarted(Active monitor, long qpc)
+    {
+        if (_recordings is not { } recordings || _monitorRecording is not { } running || running.SessionId != monitor.Id || running.Reason is not null)
+        {
+            return;
+        }
+
+        running.Reason = RecordingStopReasons.EncoderRestart;
+        if (_monitorEnding is not null)
+        {
+            recordings.Info?.Invoke("A second encoder restart came while the last one's Monitor Recording was still finishing; the Monitor Recording stops");
+            return;
+        }
+
+        _monitorEnding = running;
+        _monitorRecording = null;
+        if (BeginMonitorRecording(monitor, qpc) is not { } next)
+        {
+            recordings.Info?.Invoke($"The encoder restart ended the Monitor Recording at {running.Path}, and no new one could start");
+            return;
+        }
+
+        next.Follows = running;
+    }
+
+    /// <summary>
+    /// A session's GPU device was lost, or an attempt to recover it failed (R3, AD-19). The first
+    /// loss is reported through <see cref="DeviceRecovery.Reset"/> and recovered at once; after a
+    /// failed attempt, the next starts after <see cref="DeviceRecovery.RetryEvery"/>, unless
+    /// <see cref="DeviceRecovery.GiveUpAfter"/> has passed since the loss, when the session is given up.
+    /// </summary>
+    private void OnDeviceLost(Active session, Exception failure, bool monitor)
+    {
+        if (session.LostAt is null)
+        {
+            session.LostAt = Stopwatch.GetTimestamp();
+            _deviceRecovery.Reset?.Invoke(monitor
+                ? $"The GPU driver reset; the Monitor Recording is rebuilding its capture and encoder ({failure.Message})"
+                : $"The GPU driver reset; the Replay Buffer is rebuilding its capture and encoders ({failure.Message})");
+            TryRecover(session, monitor);
+            return;
+        }
+
+        if (Stopwatch.GetElapsedTime(session.LostAt.Value) >= (_deviceRecovery.GiveUpAfter ?? DeviceRecovery.DefaultGiveUpAfter))
+        {
+            GiveUpRecovery(session, failure, monitor);
+            return;
+        }
+
+        ScheduleRecovery(session);
+    }
+
+    /// <summary>
+    /// Asks a lost session for one recovery attempt (<see cref="ICaptureSession.RecoverDevice"/>). A
+    /// throw counts as a failed attempt; a refusal (one still running, say) is asked again after
+    /// <see cref="DeviceRecovery.RetryEvery"/>, and past <see cref="DeviceRecovery.GiveUpAfter"/> the
+    /// session is given up. Nothing happens once the session has recovered.
+    /// </summary>
+    private void TryRecover(Active session, bool monitor)
+    {
+        session.Retry?.Dispose();
+        session.Retry = null;
+        if (session.LostAt is not { } lostAt)
+        {
+            return;
+        }
+
+        bool started;
+        try
+        {
+            started = session.Session.RecoverDevice();
+        }
+        catch (Exception e)
+        {
+            Post(new SessionDeviceLost(session.Id, e));
+            return;
+        }
+
+        if (started)
+        {
+            // Asked again after RetryEvery: refused while this attempt runs, so one that hangs still reaches the give-up.
+            ScheduleRecovery(session);
+            return;
+        }
+
+        if (Stopwatch.GetElapsedTime(lostAt) >= (_deviceRecovery.GiveUpAfter ?? DeviceRecovery.DefaultGiveUpAfter))
+        {
+            GiveUpRecovery(session, new TimeoutException("No recovery attempt succeeded in time."), monitor);
+            return;
+        }
+
+        ScheduleRecovery(session);
+    }
+
+    /// <summary>A one-shot timer posting the session's next recovery attempt after <see cref="DeviceRecovery.RetryEvery"/>.</summary>
+    private void ScheduleRecovery(Active session)
+    {
+        session.Retry?.Dispose();
+        var id = session.Id;
+        session.Retry = new Timer(_ => Post(new RetryDeviceRecovery(id)), null, _deviceRecovery.RetryEvery ?? DeviceRecovery.DefaultRetryEvery, System.Threading.Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>
+    /// Recovery took too long: the game session ends with <see cref="ErrorCodes.GpuResetFailed"/>, and
+    /// stays off until the Target's process changes; the Monitor session just ends. Then
+    /// <see cref="DeviceRecovery.Failed"/>.
+    /// </summary>
+    private void GiveUpRecovery(Active session, Exception failure, bool monitor)
+    {
+        var after = (_deviceRecovery.GiveUpAfter ?? DeviceRecovery.DefaultGiveUpAfter).TotalSeconds;
+        string message;
+        if (monitor)
+        {
+            message = $"The Monitor Recording couldn't recover from a GPU driver reset within {after:0} s; it stopped ({failure.Message})";
+            EndMonitor("gpu reset failed", RecordingStopReasons.SessionEnded);
+        }
+        else
+        {
+            message = $"The Replay Buffer couldn't recover from a GPU driver reset within {after:0} s; it stays off until the next game ({failure.Message})";
+            _gpuStoppedPid = session.Spec.Target.ProcessId;
+            EndActive("gpu reset failed", new ErrorCodeException(ErrorCodes.GpuResetFailed, message, failure));
+        }
+
+        _deviceRecovery.Failed?.Invoke(message);
+    }
+
+    /// <summary>A session's chain restarted: when it was a GPU reset's recovery, the wait ends and <see cref="DeviceRecovery.Recovered"/> is told how long it took.</summary>
+    private void OnRecovered(Active session)
+    {
+        if (session.LostAt is not { } lostAt)
+        {
+            return;
+        }
+
+        StopRecovery(session);
+        _deviceRecovery.Recovered?.Invoke(Stopwatch.GetElapsedTime(lostAt));
+    }
+
+    /// <summary>Ends a session's recovery wait, if any: no retry is posted after this.</summary>
+    private static void StopRecovery(Active session)
+    {
+        session.LostAt = null;
+        session.Retry?.Dispose();
+        session.Retry = null;
+    }
+
+    /// <summary>
+    /// Ends the Monitor session: a Monitor Recording running on it stops with
+    /// <paramref name="recordingReason"/>, its writer finishing as the output ends; with none left,
+    /// <see cref="CaptureState.MonitorRecording"/> goes off. The game session's settings are then
+    /// resolved again, so a chain change held while it ran is prepared in advance.
+    /// </summary>
+    private void EndMonitor(string reason, string recordingReason)
+    {
+        var monitor = _monitor!;
+        _monitor = null;
+        StopRecovery(monitor);
+        if (_monitorRecording is { Reason: null } running && running.SessionId == monitor.Id)
+        {
+            running.Reason = recordingReason;
+        }
+
+        SessionOutcome outcome;
+        try
+        {
+            outcome = monitor.Session.End(reason);
+        }
+        catch (Exception e)
+        {
+            outcome = new SessionOutcome(null, reason, e);
+        }
+
+        if (_monitorRecording is null && _monitorEnding is null)
+        {
+            SetState(_state with { MonitorRecording = RecordingState.Off });
+        }
+
+        monitor.Ended.TrySetResult(outcome);
+        if (Volatile.Read(ref _disposed) == 0 && _active is { } game)
+        {
+            ApplySettings(game);
+        }
+    }
+
+    /// <summary>
+    /// A Monitor Recording writer's result: the Library and <see cref="Recordings.Open"/> are told as
+    /// for a game Recording, <see cref="CaptureState.MonitorRecording"/> goes off, it is published as
+    /// stopped (<see cref="Recordings.MonitorStopped"/>), a full disk is reported
+    /// (<see cref="Recordings.DiskFull"/>), and the Monitor session ends. Nothing of the game
+    /// session's Recording, Target or ring is touched. A duplicate is ignored.
+    /// </summary>
+    private void OnMonitorRecordingWritten(RecordingWritten written)
+    {
+        var recording = written.Recording;
+        var restarted = ReferenceEquals(_monitorEnding, recording);
+        if (!restarted && !ReferenceEquals(_monitorRecording, recording))
+        {
+            return;
+        }
+
+        if (restarted)
+        {
+            _monitorEnding = null;
+        }
+        else
+        {
+            // A restart's replacement that ends before the one it replaced: started before it stopped.
+            Announce(recording);
+            _monitorRecording = null;
+        }
+
+        var recordings = _recordings!;
+        var reason = CloseWrite(recordings, written);
+        var off = _monitorRecording is null && _monitorEnding is null;
+        if (off)
+        {
+            SetState(_state with { MonitorRecording = RecordingState.Off });
+        }
+
+        (recordings.MonitorStopped ?? recordings.Stopped)(new RecordingStopped(recording.Path, reason));
+        if (reason == ErrorCodes.DiskFull)
+        {
+            recordings.DiskFull?.Invoke();
+        }
+
+        if (restarted && _monitorRecording is { } next && ReferenceEquals(next.Follows, recording))
+        {
+            Announce(next);
+        }
+
+        if (off && _monitor?.Id == recording.SessionId)
+        {
+            EndMonitor("monitor recording stopped", RecordingStopReasons.SessionEnded);
+        }
+    }
+
+    /// <summary>
+    /// Begins <paramref name="recording"/>'s write in the Library and the open-Recordings record and
+    /// starts its writer, which posts <see cref="RecordingWritten"/> when it finishes. Returns null,
+    /// the failure reported and the reserved file removed, when the writer doesn't start.
+    /// </summary>
+    private RecordingRun? OpenWrite(Recordings recordings, RecordingRun recording, string? profileId)
+    {
+        var path = recording.Path;
+        var library = recordings.Library ?? NoLibraryWrites.Instance;
+        library.BeginWrite(path, profileId);
+        recordings.Open?.Opened(path);
+        try
+        {
+            recording.Write.Start(path, error =>
+            {
+                // Before the post, so a shutdown that closed the channel still sees the result.
+                recording.Done.TrySetResult(error);
+                Post(new RecordingWritten(recording, error));
+            });
+        }
+        catch (Exception e)
+        {
+            // It never started: nothing else will remove the reserved file.
+            TryDelete(path);
+            library.EndWrite(path, WriteOutcome.Failed);
+            recordings.Open?.Closed(path);
+            recordings.Failed(e);
+            return null;
+        }
+
+        return recording;
+    }
+
+    /// <summary>
+    /// Ends a finished Recording's write in the Library and the open-Recordings record, reports a
+    /// writer failure, and returns the stop's reason: the failure's, else the one it was stopped with.
+    /// A failed writer deletes a file that holds nothing; one with data is kept, finished as far as it got.
+    /// </summary>
+    private static string CloseWrite(Recordings recordings, RecordingWritten written)
+    {
+        var (recording, error) = (written.Recording, written.Error);
+        var kept = error is null || File.Exists(recording.Path);
+        (recordings.Library ?? NoLibraryWrites.Instance).EndWrite(recording.Path, kept ? WriteOutcome.Written : WriteOutcome.Failed);
+        recordings.Open?.Closed(recording.Path);
+        if (error is not null)
+        {
+            recordings.Failed(error);
+        }
+
+        return error is not null ? WriteFailures.ReasonOf(error) : recording.Reason ?? RecordingStopReasons.SessionEnded;
     }
 
     /// <summary>
@@ -1461,6 +2063,12 @@ public sealed class SessionOrchestrator : IDisposable
         /// <summary>The press QPC of the session's last Reset (R5); null before its first Clip.</summary>
         public long? ResetQpc { get; set; }
 
+        /// <summary>The <see cref="Stopwatch"/> timestamp its GPU device was lost at; null while it isn't lost.</summary>
+        public long? LostAt { get; set; }
+
+        /// <summary>The one-shot timer posting its next recovery attempt; null for none.</summary>
+        public Timer? Retry { get; set; }
+
         public TaskCompletionSource<SessionOutcome> Ended { get; } = NewReply<SessionOutcome>();
     }
 
@@ -1483,6 +2091,9 @@ public sealed class SessionOrchestrator : IDisposable
 
         /// <summary>The Recording a forced encoder restart ended and this one replaced, until this one is announced.</summary>
         public RecordingRun? Follows { get; set; }
+
+        /// <summary>Whether it is the Monitor session's Monitor Recording, not the game session's.</summary>
+        public bool Monitor { get; init; }
     }
 
     /// <summary>A Recording writer's result, posted from its thread.</summary>
@@ -1493,8 +2104,17 @@ public sealed class SessionOrchestrator : IDisposable
 
     private sealed record SessionFailed(long SessionId, Exception Failure) : SessionMessage;
 
+    /// <summary>Session <paramref name="SessionId"/>'s output anchored at its first frame, at <paramref name="Qpc"/>.</summary>
+    private sealed record SessionAnchored(long SessionId, long Qpc) : SessionMessage;
+
     /// <summary>Session <paramref name="SessionId"/>'s encoder chain was forcibly rebuilt; its frames from <paramref name="Qpc"/> on are the new chain's.</summary>
     private sealed record SessionChainRestarted(long SessionId, long Qpc) : SessionMessage;
+
+    /// <summary>Session <paramref name="SessionId"/>'s GPU device was lost, or an attempt to recover it failed.</summary>
+    private sealed record SessionDeviceLost(long SessionId, Exception Failure) : SessionMessage;
+
+    /// <summary>The recovery retry timer of session <paramref name="SessionId"/> fired; ignored once that session is gone or recovered.</summary>
+    private sealed record RetryDeviceRecovery(long SessionId) : SessionMessage;
 
     /// <summary>The ring recheck timer fired; ignored once no Replay Buffer waits for room.</summary>
     private sealed record RingRecheck : SessionMessage;
@@ -1510,5 +2130,9 @@ public sealed class SessionOrchestrator : IDisposable
         public void Failed(Exception failure) => owner.Post(new SessionFailed(id, failure));
 
         public void ChainRestarted(long qpc) => owner.Post(new SessionChainRestarted(id, qpc));
+
+        public void Anchored(long qpc) => owner.Post(new SessionAnchored(id, qpc));
+
+        public void DeviceLost(Exception failure) => owner.Post(new SessionDeviceLost(id, failure));
     }
 }

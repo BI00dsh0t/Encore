@@ -9,7 +9,7 @@ using ReplayBuffer.Core.Settings;
 
 namespace ReplayBuffer.Core.Tests;
 
-public sealed class SessionOrchestratorTests : IDisposable
+public sealed partial class SessionOrchestratorTests : IDisposable
 {
     private const int Pid = 4242;
     private const string ProfileId = @"c:\games\game.exe";
@@ -1860,7 +1860,8 @@ public sealed class SessionOrchestratorTests : IDisposable
         bool drains = false,
         int maxRecordings = int.MaxValue,
         Func<long, IClipWrite?>? save = null,
-        Func<Recordings, Recordings>? recordingsWith = null)
+        Func<Recordings, Recordings>? recordingsWith = null,
+        DeviceRecovery? deviceRecovery = null)
     {
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
@@ -1897,7 +1898,8 @@ public sealed class SessionOrchestratorTests : IDisposable
                 e => events.Writer.TryWrite(e),
                 library,
                 Open: library,
-                Restarted: r => events.Writer.TryWrite(r))));
+                Restarted: r => events.Writer.TryWrite(r))),
+            deviceRecovery: deviceRecovery);
         return (orchestrator, events, presses, made, published, factory);
     }
 
@@ -2107,6 +2109,44 @@ public sealed class SessionOrchestratorTests : IDisposable
         public ConcurrentQueue<SessionSpec?> Prepares { get; } = new();
 
         public void PrepareChain(SessionSpec? next) => Prepares.Enqueue(next);
+
+        /// <summary>What <c>Chains</c> reports.</summary>
+        public int ChainCount { get; set; } = 1;
+
+        public int Chains => ChainCount;
+
+        /// <summary>Each <c>SwitchChain</c> call's spec, in order; each is taken.</summary>
+        public ConcurrentQueue<SessionSpec> Switches { get; } = new();
+
+        public bool SwitchChain(SessionSpec next)
+        {
+            Switches.Enqueue(next);
+            return true;
+        }
+
+        private int _recovers;
+        private volatile bool _failRecovery;
+
+        /// <summary>How many recovery attempts were asked for.</summary>
+        public int Recovers => Volatile.Read(ref _recovers);
+
+        /// <summary>When set, each recovery attempt fails: it posts <c>DeviceLost</c> again, from another thread.</summary>
+        public bool FailRecovery
+        {
+            get => _failRecovery;
+            set => _failRecovery = value;
+        }
+
+        public bool RecoverDevice()
+        {
+            Interlocked.Increment(ref _recovers);
+            if (FailRecovery)
+            {
+                Task.Run(() => Events.DeviceLost(new InvalidOperationException("the recovery attempt failed")), CancellationToken.None);
+            }
+
+            return true;
+        }
 
         public void SetMicMuted(bool muted, long qpc)
         {
