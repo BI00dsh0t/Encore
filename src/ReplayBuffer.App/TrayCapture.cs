@@ -18,7 +18,7 @@ internal static class TrayCapture
 
     /// <summary>The state the tray shows: the Overlay's dot before <c>overlayDot</c>, none while disconnected.</summary>
     public static OverlayDot For(IEngineSession engine) =>
-        OverlayViewModel.DotFor(engine.Status == EngineStatus.Connected ? engine.State?.Capture : null);
+        OverlayViewModel.DotFor(engine.ConnectedState()?.Capture);
 
     public static string Describe(OverlayDot dot) => dot switch
     {

@@ -105,13 +105,9 @@ internal sealed class OverlayHostProcess : IOverlayHost
         return new OverlayHostReady((nint)handle, excluded == "excluded=true", (uint)exStyle);
     }
 
-    public void ShowDot() => Send("show", "shown");
+    public void On() => Send("show", "shown");
 
-    public void HideDot() => Send("hide", "hidden");
-
-    public void On() => ShowDot();
-
-    public void Off() => HideDot();
+    public void Off() => Send("hide", "hidden");
 
     public bool WindowVisible() => IsWindowVisible(Hwnd);
 

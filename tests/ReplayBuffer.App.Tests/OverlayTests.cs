@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Threading;
 using ReplayBuffer.App.Engine;
 using ReplayBuffer.App.Overlay;
 using ReplayBuffer.Contracts;
@@ -384,14 +383,14 @@ public sealed class OverlayTests
             other.Show();
             other.Activate();
             box.Focus();
-            Pump(TimeSpan.FromMilliseconds(200));
+            Sta.Pump(TimeSpan.FromMilliseconds(200));
             var hwnd = new WindowInteropHelper(other).Handle;
             Assert.Equal(hwnd, OverlayWindowStyle.ForegroundWindow());
 
             foreach (var state in new[] { Buffering, Buffering with { Recording = RecordingState.Running }, CaptureState.Initial, Buffering })
             {
                 Shift(engine, state);
-                Pump(TimeSpan.FromMilliseconds(100));
+                Sta.Pump(TimeSpan.FromMilliseconds(100));
                 Assert.Equal(hwnd, OverlayWindowStyle.ForegroundWindow());
                 Assert.Same(box, Keyboard.FocusedElement);
             }
@@ -428,7 +427,7 @@ public sealed class OverlayTests
             OverlayWindowStyle.ShowWithoutActivation(
                 new WindowInteropHelper(green).Handle, x - Margin, y - Margin, size + (2 * Margin), size + (2 * Margin));
             Shift(engine, Buffering with { Recording = RecordingState.Running });
-            Pump(TimeSpan.FromMilliseconds(500));
+            Sta.Pump(TimeSpan.FromMilliseconds(500));
             Assert.True(overlay.IsVisible);
 
             using var bitmap = new System.Drawing.Bitmap(size, size);
@@ -536,15 +535,5 @@ public sealed class OverlayTests
                 return ValueTask.CompletedTask;
             }
         }
-    }
-
-    // Runs the dispatcher for a while, so windows show, render and settle.
-    private static void Pump(TimeSpan duration)
-    {
-        var frame = new DispatcherFrame();
-        var timer = new DispatcherTimer(duration, DispatcherPriority.Background, (_, _) => frame.Continue = false, Dispatcher.CurrentDispatcher);
-        timer.Start();
-        Dispatcher.PushFrame(frame);
-        timer.Stop();
     }
 }
