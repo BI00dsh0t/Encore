@@ -13,6 +13,8 @@ namespace ReplayBuffer.Platform.Windows;
 /// </summary>
 public static unsafe class RecycleBin
 {
+    private const int ErrorSharingViolation = unchecked((int)0x80070020);
+
     private const FILEOPERATION_FLAGS Flags =
         FILEOPERATION_FLAGS.FOF_ALLOWUNDO
         | FILEOPERATION_FLAGS.FOF_NOCONFIRMATION
@@ -98,7 +100,7 @@ public static unsafe class RecycleBin
             }
             catch (COMException e)
             {
-                throw new IOException($"The file couldn't be moved to the Recycle Bin: {e.Message}", e.HResult);
+                throw new IOException($"The file couldn't be moved to the Recycle Bin: {e.Message}", Win32Code(e.HResult));
             }
             finally
             {
@@ -132,11 +134,16 @@ public static unsafe class RecycleBin
         return PInvoke.SHQueryRecycleBin(root, ref info).Succeeded;
     }
 
+    // The copy engine's sharing violations (COPYENGINE_E_SHARING_VIOLATION_SRC/_DEST) read as Win32's,
+    // so a file another process holds open (the length read) is tried again like a rename.
+    private static int Win32Code(int hresult) =>
+        hresult is unchecked((int)0x80270027) or unchecked((int)0x80270028) ? ErrorSharingViolation : hresult;
+
     private static void Check(HRESULT result)
     {
         if (result.Failed)
         {
-            throw new IOException("The file couldn't be moved to the Recycle Bin.", result.Value);
+            throw new IOException("The file couldn't be moved to the Recycle Bin.", Win32Code(result.Value));
         }
     }
 }

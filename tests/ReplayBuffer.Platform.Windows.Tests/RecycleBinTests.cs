@@ -15,6 +15,13 @@ public sealed class RecycleBinTests : IDisposable
         var path = Path.Combine(_folder, "clip-" + Guid.NewGuid().ToString("N") + ".mp4");
         File.WriteAllBytes(path, [1, 2, 3]);
 
+        // Held open without delete sharing (FFmpeg's length read): a sharing violation the actor retries.
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.Equal(unchecked((int)0x80070020), Assert.Throws<IOException>(() => RecycleBin.Recycle(path)).HResult);
+        }
+
+        Assert.True(File.Exists(path));
         Assert.True(RecycleBin.Recycle(path));
         Assert.False(File.Exists(path));
 
