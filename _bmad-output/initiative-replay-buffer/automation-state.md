@@ -39,10 +39,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 6.12 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 6.11 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.11 |
@@ -144,7 +144,7 @@ The coordinator logs each QA round in the Log below.
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
 | 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `093df7b`) |
-| 27.12 | 6.12 Refactor sweep | | pending |
+| 27.12 | 6.12 Refactor sweep | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
 | 28 | Slice epic 7 (Library and Cleanup) | slice-epic-7 | done |
@@ -635,3 +635,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.11 READY FOR QA at `7f2e041`, and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; GPU tests paused).
 - 2026-11-04: QA 6.11 passed at `7f2e041` with 0 findings: 0-warning build; App 126, Engine 176, Platform.Capture 3 and Core 146 passed; publish clean; Contracts change additive (`monitors.list`, `DisplayMonitor`, `MonitorList`). Not run: the manual second-monitor check (HITL) and GPU tests (paused). qa-2-1 is back in the pool, and qa-1-14 is merging.
 - 2026-11-04: 6.11 merged into develop (`093df7b`, after syncing develop's 7.10 merge: 0-warning build, App 126, Core 146, Contracts 121 passed) and marked done. Contracts change additive only: the `monitors.list` command in `Recording.cs`. Its Human Check row is queued. No GPU runs skipped: the story wrote no Heavy tests.
+- 2026-11-04: 6.11 merged (`093df7b`, marked done `7218e06`), and its card is Done with labels detached. qa-1-14 is back in the pool. 6.12 (refactor sweep) went to slice-epic-4 (Opus, medium effort; GPU tests paused), with its card In progress. 6.13 waits on 6.12.
