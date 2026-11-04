@@ -15,6 +15,7 @@ namespace ReplayBuffer.App.Status;
 internal sealed class StatusLine(IEngineSession engine) : Observable
 {
     private string _state = "";
+    private StatusDot _dot;
     private IReadOnlyList<StatusWarning> _warnings = [];
     private IReadOnlyList<Warning> _rendered = [];
     private FrameworkElement? _view;
@@ -24,6 +25,13 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
     {
         get => _state;
         private set => Set(ref _state, value);
+    }
+
+    /// <summary>The status header's dot, from the same capture state as <see cref="State"/>.</summary>
+    public StatusDot Dot
+    {
+        get => _dot;
+        private set => Set(ref _dot, value);
     }
 
     /// <summary>The active warnings, newest first.</summary>
@@ -42,6 +50,7 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
         State = connected is not null
             ? CaptureText(connected)
             : ConnectionText(status, problem);
+        Dot = connected is null ? StatusDot.Idle : DotFor(connected.Capture);
 
         // Like the Overlay: a session that isn't connected has no warnings to show or dismiss.
         var warnings = connected?.Warnings ?? [];
@@ -63,6 +72,11 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
         EngineStatus.CrashLoop => problem ?? "The engine keeps crashing, so it isn't being restarted. Restart it from the tray menu.",
         _ => "The engine disconnected. Reconnecting…",
     };
+
+    private static StatusDot DotFor(CaptureState capture) =>
+        capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running ? StatusDot.Recording
+        : capture.Replay == ReplayState.Buffering ? StatusDot.Buffering
+        : StatusDot.Idle;
 
     private static string CaptureText(StateSnapshot state)
     {
@@ -105,6 +119,18 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
             // Already gone, or no engine; the snapshot carries the truth.
         }
     }
+}
+
+/// <summary>The status header's dot (EXPERIENCE.md): <c>record</c>, <c>success</c> or <c>text-disabled</c>.</summary>
+internal enum StatusDot
+{
+    /// <summary>Not connected, or neither buffering nor recording.</summary>
+    Idle,
+
+    Buffering,
+
+    /// <summary>A Recording or a Monitor Recording runs.</summary>
+    Recording,
 }
 
 /// <summary>One warning row of the status line.</summary>
