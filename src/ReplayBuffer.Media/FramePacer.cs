@@ -44,17 +44,24 @@ public sealed class FramePacer
 
     private readonly long _qpcFrequency;
     private readonly long _timeBase;
+    private readonly bool _firstFrameTakesNearestSlot;
     private long _newestQpc = long.MinValue;
     private long _heldQpc;
     private bool _running;
 
-    public FramePacer(long qpcFrequency, int fps, long anchorQpc, long timeBase = 90_000)
+    /// <param name="firstFrameTakesNearestSlot">
+    /// For an encoder chain that starts mid-session (4.9): the first frame offered, with nothing
+    /// emitted or held yet, takes the slot nearest its capture QPC, so no repeats fill the slots
+    /// from the anchor's up to it. Off, the first frame takes slot 0, the anchor frame's.
+    /// </param>
+    public FramePacer(long qpcFrequency, int fps, long anchorQpc, long timeBase = 90_000, bool firstFrameTakesNearestSlot = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(qpcFrequency);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(fps);
         ArgumentOutOfRangeException.ThrowIfLessThan(timeBase, fps);
         _qpcFrequency = qpcFrequency;
         _timeBase = timeBase;
+        _firstFrameTakesNearestSlot = firstFrameTakesNearestSlot;
         Fps = fps;
         AnchorQpc = anchorQpc;
     }
@@ -109,6 +116,11 @@ public sealed class FramePacer
         {
             StaleFrames++;
             return new PacerDecision(PacerAction.Drop, NextSlot, Pts(NextSlot));
+        }
+
+        if (_firstFrameTakesNearestSlot && EmittedSlots == 0 && !HasHeld)
+        {
+            NextSlot = Math.Max(NextSlot, NearestSlot(captureQpc));
         }
 
         _newestQpc = captureQpc;
