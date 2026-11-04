@@ -24,7 +24,8 @@ internal sealed class LibrarySettingsPage : SettingsPage
 
     private readonly IEngineSession _engine;
     private FrameworkElement? _view;
-    private CleanupSettings _cleanup = Keys.Cleanup.Default;
+    private CleanupSettings _cleanup = Keys.Cleanup.Default; // saved
+    private CleanupSettings _shown = Keys.Cleanup.Default;
     private bool _sizeEnabled;
     private bool _ageEnabled;
     private long _sizeDraft = 100 * BytesPerGb;
@@ -78,14 +79,14 @@ internal sealed class LibrarySettingsPage : SettingsPage
                 return;
             }
 
-            _ = ChangeLimitsAsync(_cleanup with { MaxBytes = value ? _sizeDraft : null });
+            _ = ChangeLimitsAsync(_shown with { MaxBytes = value ? _sizeDraft : null });
         }
     }
 
     /// <summary>The size limit in GB (10^9 bytes); the draft while the limit is off.</summary>
     public string SizeLimitText
     {
-        get => FormatGb(_sizeEnabled && _cleanup.MaxBytes is { } bytes ? bytes : _sizeDraft);
+        get => FormatGb(_shown.MaxBytes ?? _sizeDraft);
         set
         {
             if (!TryParseGb(value, out var bytes))
@@ -101,7 +102,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
                 return;
             }
 
-            _ = ChangeLimitsAsync(_cleanup with { MaxBytes = bytes });
+            _ = ChangeLimitsAsync(_shown with { MaxBytes = bytes });
         }
     }
 
@@ -116,14 +117,14 @@ internal sealed class LibrarySettingsPage : SettingsPage
                 return;
             }
 
-            _ = ChangeLimitsAsync(_cleanup with { MaxAgeSeconds = value ? _ageDraft : null });
+            _ = ChangeLimitsAsync(_shown with { MaxAgeSeconds = value ? _ageDraft : null });
         }
     }
 
     /// <summary>The age limit in whole days; the draft while the limit is off.</summary>
     public string AgeLimitText
     {
-        get => FormatDays(_ageEnabled && _cleanup.MaxAgeSeconds is { } seconds ? seconds : _ageDraft);
+        get => FormatDays(_shown.MaxAgeSeconds ?? _ageDraft);
         set
         {
             if (!int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var days) || days is < 1 or > MaxDays)
@@ -140,7 +141,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
                 return;
             }
 
-            _ = ChangeLimitsAsync(_cleanup with { MaxAgeSeconds = seconds });
+            _ = ChangeLimitsAsync(_shown with { MaxAgeSeconds = seconds });
         }
     }
 
@@ -193,8 +194,12 @@ internal sealed class LibrarySettingsPage : SettingsPage
 
     protected override void OnRender(SettingsDocument document)
     {
-        var cleanup = SettingsValues.Global(document, Keys.Cleanup);
-        ShowLimits(cleanup);
+        _cleanup = SettingsValues.Global(document, Keys.Cleanup);
+        if (!_busy)
+        {
+            ShowLimits(_cleanup);
+        }
+
         var folder = SettingsValues.Global(document, Keys.OutputFolder);
         if (folder != _outputFolder)
         {
@@ -248,7 +253,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
     {
         if (_busy)
         {
-            ShowLimits(_cleanup);
+            ShowLimits(_shown);
             return;
         }
 
@@ -260,6 +265,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
 
         if (!Lowers(next.MaxBytes, _cleanup.MaxBytes) && !Lowers(next.MaxAgeSeconds, _cleanup.MaxAgeSeconds))
         {
+            _cleanup = next;
             ShowLimits(next);
             _ = SendAsync([SettingsValues.SetGlobal(Keys.Cleanup, next)]);
             return;
@@ -295,6 +301,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
                 return;
             }
 
+            _cleanup = next;
             ShowLimits(next);
             await SendAsync([SettingsValues.SetGlobal(Keys.Cleanup, next)]);
         }
@@ -307,7 +314,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
     // Shows the limits as the checkboxes and text boxes; a set limit also becomes its draft.
     private void ShowLimits(CleanupSettings cleanup)
     {
-        _cleanup = cleanup;
+        _shown = cleanup;
         _sizeEnabled = cleanup.MaxBytes is not null;
         _ageEnabled = cleanup.MaxAgeSeconds is not null;
         _sizeDraft = cleanup.MaxBytes ?? _sizeDraft;
