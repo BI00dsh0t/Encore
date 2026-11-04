@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UI Look Mockups</title>
+<style>
+:root{--border:rgba(0,0,0,.15);--font-sans:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;--text-secondary:#555;--page:#f4f4f4;--ink:#111}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--border:rgba(255,255,255,.18);--text-secondary:#aaa;--page:#1b1b1b;--ink:#eee}}
+:root[data-theme="dark"]{--border:rgba(255,255,255,.18);--text-secondary:#aaa;--page:#1b1b1b;--ink:#eee}
+body{margin:0;padding:24px 16px;background:var(--page);color:var(--ink);font-family:var(--font-sans)}
+h1{font-size:20px;margin:0 0 4px}p.lede{margin:0 0 20px;color:var(--text-secondary);font-size:14px}
+</style></head><body>
+<h1>ReplayBuffer: two candidate looks</h1>
+<p class="lede">Mockups for the modern UI epic. First: Windows 11 Fluent (Mica, accent colour, rounded corners). Second: gaming dark. Pick one, or let the design pass detail both.</p>
+<h2 class="sr-only">Two mockups of the ReplayBuffer Main App Library page: one in the Windows 11 Fluent style, one in a custom gaming dark style.</h2>
+<style>
+.mw{border-radius:12px;overflow:hidden;font-family:"Segoe UI",var(--font-sans);margin:0 0 1.25rem;border:0.5px solid var(--border)}
+.tb{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;font-size:12px}
+.bd{display:grid;grid-template-columns:150px minmax(0,1fr)}
+.nv{padding:10px 8px;font-size:13px}
+.ni{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;margin-bottom:2px}
+.mn{padding:14px 16px}
+.gr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.th{aspect-ratio:16/9;border-radius:6px;position:relative;display:flex;align-items:flex-end;justify-content:flex-end;padding:4px}
+.du{font-size:11px;padding:1px 5px;border-radius:4px}
+.lb{font-size:12px;margin:5px 0 0}
+.mt{font-size:11px;margin:0}
+.cap{font-size:13px;color:var(--text-secondary);margin:0 0 6px}
+</style>
+
+<p class="cap">Windows 11 Fluent: built-in WPF theme, follows light or dark mode</p>
+<div class="mw" style="background:#F3F3F3;color:#1B1B1B">
+  <div class="tb" style="background:#EBEBEB"><span><i class="ti ti-player-record" style="color:#C42B1C;font-size:13px;vertical-align:-2px" aria-hidden="true"></i> ReplayBuffer</span><span style="color:#5C5C5C">Buffering · Valorant · last 2 min</span></div>
+  <div class="bd">
+    <div class="nv">
+      <div class="ni" style="background:#E5E5E5;color:#0067C0"><i class="ti ti-movie" aria-hidden="true"></i>Library</div>
+      <div class="ni"><i class="ti ti-player-record" aria-hidden="true"></i>Recordings</div>
+      <div class="ni"><i class="ti ti-device-gamepad-2" aria-hidden="true"></i>Game profiles</div>
+      <div class="ni"><i class="ti ti-keyboard" aria-hidden="true"></i>Hotkeys</div>
+      <div class="ni"><i class="ti ti-volume" aria-hidden="true"></i>Audio tracks</div>
+      <div class="ni"><i class="ti ti-settings" aria-hidden="true"></i>Settings</div>
+    </div>
+    <div class="mn" style="background:#FFFFFF;border-top-left-radius:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:18px">Library</span>
+        <span style="display:flex;gap:6px">
+          <span style="font-size:12px;padding:4px 10px;border:1px solid #D1D1D1;border-radius:4px">All games <i class="ti ti-chevron-down" style="font-size:12px" aria-hidden="true"></i></span>
+          <span style="font-size:12px;padding:4px 10px;background:#0067C0;color:#FFFFFF;border-radius:4px"><i class="ti ti-star" style="font-size:12px" aria-hidden="true"></i> Favourites</span>
+        </span>
+      </div>
+      <div class="gr">
+        <div><div class="th" style="background:#C8D6E5"><span class="du" style="background:rgba(0,0,0,.6);color:#FFF">0:30</span></div><p class="lb">Valorant clutch</p><p class="mt" style="color:#5C5C5C">Today 21:14</p></div>
+        <div><div class="th" style="background:#D9CFC1"><span class="du" style="background:rgba(0,0,0,.6);color:#FFF">1:00</span></div><p class="lb">Elden Ring boss</p><p class="mt" style="color:#5C5C5C">Today 19:02</p></div>
+        <div><div class="th" style="background:#C9D9C3"><span class="du" style="background:rgba(0,0,0,.6);color:#FFF">0:30</span></div><p class="lb">Rocket League goal</p><p class="mt" style="color:#5C5C5C">Yesterday</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="cap">Gaming dark: custom dark theme with an accent colour and bigger thumbnails</p>
+<div class="mw" style="background:#0F1115;color:#E6E8EB">
+  <div class="tb" style="background:#0A0B0E"><span style="letter-spacing:.5px"><i class="ti ti-player-record" style="color:#FF4655;font-size:13px;vertical-align:-2px" aria-hidden="true"></i> REPLAYBUFFER</span><span style="color:#2DD4BF"><i class="ti ti-circle" style="font-size:11px;vertical-align:-1px" aria-hidden="true"></i> Buffering · Valorant · 2:00</span></div>
+  <div class="bd">
+    <div class="nv" style="background:#0A0B0E">
+      <div class="ni" style="background:#16202A;color:#2DD4BF;border-left:2px solid #2DD4BF;border-radius:0"><i class="ti ti-movie" aria-hidden="true"></i>Library</div>
+      <div class="ni" style="color:#9AA3AE"><i class="ti ti-player-record" aria-hidden="true"></i>Recordings</div>
+      <div class="ni" style="color:#9AA3AE"><i class="ti ti-device-gamepad-2" aria-hidden="true"></i>Games</div>
+      <div class="ni" style="color:#9AA3AE"><i class="ti ti-keyboard" aria-hidden="true"></i>Hotkeys</div>
+      <div class="ni" style="color:#9AA3AE"><i class="ti ti-volume" aria-hidden="true"></i>Audio</div>
+      <div class="ni" style="color:#9AA3AE"><i class="ti ti-settings" aria-hidden="true"></i>Settings</div>
+    </div>
+    <div class="mn">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:18px">Clips <span style="font-size:12px;color:#9AA3AE">· 128 · 41 GB</span></span>
+        <span style="display:flex;gap:6px">
+          <span style="font-size:12px;padding:4px 10px;background:#1B1F26;border-radius:4px;color:#C9CED4">All games <i class="ti ti-chevron-down" style="font-size:12px" aria-hidden="true"></i></span>
+          <span style="font-size:12px;padding:4px 10px;background:#2DD4BF;color:#04201C;border-radius:4px"><i class="ti ti-star" style="font-size:12px" aria-hidden="true"></i> Favourites</span>
+        </span>
+      </div>
+      <div class="gr">
+        <div style="background:#16191F;border-radius:8px;padding:6px"><div class="th" style="background:#2A3A4D"><span class="du" style="background:#FF4655;color:#FFF">0:30</span></div><p class="lb">Valorant clutch</p><p class="mt" style="color:#7D8590">Today 21:14</p></div>
+        <div style="background:#16191F;border-radius:8px;padding:6px"><div class="th" style="background:#3D3427"><span class="du" style="background:#0A0B0E;color:#E6E8EB">1:00</span></div><p class="lb">Elden Ring boss</p><p class="mt" style="color:#7D8590">Today 19:02</p></div>
+        <div style="background:#16191F;border-radius:8px;padding:6px"><div class="th" style="background:#27392A"><span class="du" style="background:#0A0B0E;color:#E6E8EB">0:30</span></div><p class="lb">Rocket League goal</p><p class="mt" style="color:#7D8590">Yesterday</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+  <button onclick="sendPrompt('Go with the Windows 11 Fluent look for the modern UI epic')">Choose Fluent ↗</button>
+  <button onclick="sendPrompt('Go with the gaming dark look for the modern UI epic')">Choose gaming dark ↗</button>
+  <button onclick="sendPrompt('Have the UX design pass propose both directions in more detail before I choose')">Let the design pass detail both ↗</button>
+</div>
+</body></html>
