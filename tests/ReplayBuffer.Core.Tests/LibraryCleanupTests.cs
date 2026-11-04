@@ -68,7 +68,29 @@ public sealed class LibraryCleanupTests : IDisposable
     public void Dispose()
     {
         _actor?.Dispose();
+
+        // The link alone, so the recursive delete can't reach through it.
+        var junction = Path.Combine(Output, "junc");
+        if (Directory.Exists(junction))
+        {
+            Directory.Delete(junction);
+        }
+
         Directory.Delete(_folder, recursive: true);
+    }
+
+    /// <summary>A directory junction at <paramref name="at"/> to <paramref name="target"/>; needs no admin rights.</summary>
+    private static void Junction(string at, string target)
+    {
+        using var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{at}\" \"{target}\"")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+        })!;
+        mklink.StandardOutput.ReadToEnd();
+        mklink.WaitForExit();
+        Assert.True(Directory.Exists(at), "mklink /J didn't create the junction.");
     }
 
     [Fact]
@@ -225,6 +247,26 @@ public sealed class LibraryCleanupTests : IDisposable
         _time.Advance(StartDelay);
         WaitForPasses(1);
 
+        Assert.Equal(["a.mp4"], Deleted);
+        Assert.True(File.Exists(outside));
+    }
+
+    [Fact]
+    public async Task AFileReachedThroughAJunctionIsNeverDeleted()
+    {
+        var other = Path.Combine(_folder, "other");
+        Directory.CreateDirectory(other);
+        var outside = Path.Combine(other, "outside.mp4");
+        File.WriteAllBytes(outside, LibraryActorTests.Mp4());
+        Junction(Path.Combine(Output, "junc"), other);
+        var through = new LibraryItem(@"junc\outside.mp4", null, 48, _time.GetUtcNow().AddHours(-3), false, Modified: Modified(outside));
+        Start([through, Clip("a.mp4", TimeSpan.FromHours(2))], OneHour);
+
+        var preview = await Actor.PreviewCleanup(new LibraryCleanupPreview(null, 3600));
+        _time.Advance(StartDelay);
+        WaitForPasses(1);
+
+        Assert.Equal(["a.mp4"], preview.Paths);
         Assert.Equal(["a.mp4"], Deleted);
         Assert.True(File.Exists(outside));
     }

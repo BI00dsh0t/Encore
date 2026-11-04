@@ -472,6 +472,33 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     internal static bool IsMp4(string path) => string.Equals(Path.GetExtension(path), Extension, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Whether <paramref name="path"/>, or a folder between <paramref name="folder"/> and it, is a reparse
+    /// point (a junction or symbolic link), so the file may really be outside the folder; true when it
+    /// can't be read, e.g. a missing file.
+    /// </summary>
+    internal static bool ThroughReparsePoint(string folder, string path)
+    {
+        try
+        {
+            // The Output Folder itself may be a junction; the file and each folder below it may not.
+            for (var at = path; at is not null && at.Length > folder.Length; at = Path.GetDirectoryName(at))
+            {
+                if (File.GetAttributes(at).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // Can't tell, so Cleanup doesn't touch it.
+            return true;
+        }
+    }
+
     /// <summary>The key of <paramref name="path"/> under <paramref name="folder"/>; false for a path outside it, or the folder itself.</summary>
     internal static bool TryKey(string folder, string path, out string key)
     {
@@ -1586,6 +1613,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         {
             Pend(full);
             Log($"Cleanup skipped {key}: the file changed on disk.");
+            return false;
+        }
+
+        if (ThroughReparsePoint(_folder, full))
+        {
+            Log($"Cleanup skipped {key}: it is reached through a junction or symbolic link, so it may be outside the Output Folder.");
             return false;
         }
 

@@ -89,6 +89,8 @@ deferred: []
 - `TryKey` and `IsMp4` are internal so `CleanupPlanner` shares them. `EngineHost` raises the warning through a captured `warnTo` set once `Warnings` exists.
 - Tests: `LibraryCleanupTests` (9 tests, the gate as a 3-case theory) on `ManualTime`; `LibraryServeTests.CleanupPreviewOverIpcNamesTheSavedClip`.
 
+- QA round 1 (high): the scan follows junctions, so a junction or symbolic link inside the Output Folder put files from elsewhere in the index, and the lexical guards let Cleanup delete them. `LibraryActor.ThroughReparsePoint` now refuses a file when it, or any folder between the Output Folder and it, is a reparse point (or can't be read). The planner checks this for each item it reaches, so preview and pass agree, and `CleanupDelete` checks it again before the delete. The Output Folder itself may be a junction. Test: `AFileReachedThroughAJunctionIsNeverDeleted` (`mklink /J` in the temp folder).
+
 ## Plan Change Log
 
 ## Review Triage Log

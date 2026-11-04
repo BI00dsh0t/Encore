@@ -57,6 +57,12 @@ internal static class CleanupPlanner
                 break;
             }
 
+            // Checked only for the items reached: a file behind a junction or symlink may live outside the folder.
+            if (LibraryActor.ThroughReparsePoint(folder, Path.GetFullPath(Path.Combine(folder, item.Path))))
+            {
+                continue;
+            }
+
             delete.Add(item);
             bytes += item.Size;
             total -= item.Size;
