@@ -38,12 +38,13 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
     /// <summary>Renders the session. Runs on the UI thread.</summary>
     public void Render(EngineStatus status, string? problem, StateSnapshot? state)
     {
-        State = status == EngineStatus.Connected && state is not null
-            ? CaptureText(state)
+        var connected = EngineSessions.ConnectedState(status, state);
+        State = connected is not null
+            ? CaptureText(connected)
             : ConnectionText(status, problem);
 
         // Like the Overlay: a session that isn't connected has no warnings to show or dismiss.
-        var warnings = status == EngineStatus.Connected ? state?.Warnings ?? [] : [];
+        var warnings = connected?.Warnings ?? [];
         if (warnings.SequenceEqual(_rendered))
         {
             return;

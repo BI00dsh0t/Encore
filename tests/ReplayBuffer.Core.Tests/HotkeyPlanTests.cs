@@ -14,27 +14,29 @@ public sealed class HotkeyPlanTests
     private static readonly HotkeyBinding C = new(VkF24 - 2, CtrlAltShift);
     private static readonly HotkeyBinding D = new(VkF24 - 3, CtrlAltShift);
 
-    private static readonly HotkeySettings All = new(A, B, C, D, new HotkeyBinding(0x41, HotkeyModifiers.Win), new HotkeyBinding(0x42, HotkeyModifiers.Win));
+    private static readonly HotkeySettings All = new(
+        A, B, C, D, new HotkeyBinding(0x41, HotkeyModifiers.Win), new HotkeyBinding(0x42, HotkeyModifiers.Win),
+        new HotkeyBinding(0x43, HotkeyModifiers.Win), new HotkeyBinding(0x44, HotkeyModifiers.Win));
 
     [Fact]
-    public void ToggleModeRegistersRecordToggleAndNotStartOrStop()
+    public void ToggleModeRegistersBothTogglesAndNoStartOrStop()
     {
         var plan = HotkeyPlan.For(All, RecordHotkeyMode.Toggle);
 
         Assert.Equal(HotkeyPlan.Actions, plan.Select(e => e.Action));
         Assert.Equal(
-            [null, null, null, ErrorCodes.HotkeyInactive, ErrorCodes.HotkeyInactive, null],
+            [null, null, null, ErrorCodes.HotkeyInactive, ErrorCodes.HotkeyInactive, null, ErrorCodes.HotkeyInactive, ErrorCodes.HotkeyInactive],
             plan.Select(e => e.SkipCode));
         Assert.Equal(All.RecordStart, plan[3].Binding);
     }
 
     [Fact]
-    public void SeparateModeRegistersStartAndStopAndNotRecordToggle()
+    public void SeparateModeRegistersEveryStartAndStopAndNoToggle()
     {
         var plan = HotkeyPlan.For(All, RecordHotkeyMode.Separate);
 
         Assert.Equal(
-            [null, null, ErrorCodes.HotkeyInactive, null, null, null],
+            [null, null, ErrorCodes.HotkeyInactive, null, null, ErrorCodes.HotkeyInactive, null, null],
             plan.Select(e => e.SkipCode));
     }
 

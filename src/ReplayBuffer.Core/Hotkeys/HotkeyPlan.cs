@@ -76,11 +76,14 @@ public static class HotkeyPlan
         return entries;
     }
 
-    /// <summary>Whether <paramref name="mode"/> uses <paramref name="action"/>: toggle uses recordToggle, separate recordStart and recordStop.</summary>
+    /// <summary>
+    /// Whether <paramref name="mode"/> uses <paramref name="action"/>: toggle uses recordToggle and
+    /// monitorRecordToggle, separate recordStart, recordStop, monitorRecordStart and monitorRecordStop.
+    /// </summary>
     public static bool IsActive(HotkeyAction action, RecordHotkeyMode mode) => action switch
     {
-        HotkeyAction.RecordToggle => mode == RecordHotkeyMode.Toggle,
-        HotkeyAction.RecordStart or HotkeyAction.RecordStop => mode == RecordHotkeyMode.Separate,
+        HotkeyAction.RecordToggle or HotkeyAction.MonitorRecordToggle => mode == RecordHotkeyMode.Toggle,
+        HotkeyAction.RecordStart or HotkeyAction.RecordStop or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop => mode == RecordHotkeyMode.Separate,
         _ => true,
     };
 

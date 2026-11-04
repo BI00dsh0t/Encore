@@ -230,6 +230,13 @@ public static class ErrorCodes
     public const string RecycleBinUnavailable = "recycle-bin-unavailable";
 
     /// <summary>
+    /// A warning (R7): Cleanup can't bring the Output Folder within its size limit because only
+    /// Favourites and files being written are left over it; nothing else is deleted for it. Dismissable,
+    /// source <c>library</c>; raised once until a pass ends within the limit or Cleanup is turned off.
+    /// </summary>
+    public const string CleanupLimitUnreachable = "cleanup-limit-unreachable";
+
+    /// <summary>
     /// A warning: a Track of the active Track Layout mixes the Output Device that Feedback Sounds
     /// play on, so its recordings would hold the sounds. Withdrawn when that is no longer so.
     /// </summary>
@@ -249,6 +256,12 @@ public static class ErrorCodes
     /// Raised once per such switch, with the gap's length.
     /// </summary>
     public const string ResetGap = "reset-gap";
+
+    /// <summary>
+    /// A warning (AD-7): a Monitor Recording was refused because the game session already runs two
+    /// encoder chains, and a third would exceed the encoder budget. Nothing was started.
+    /// </summary>
+    public const string EncoderBudget = "encoder-budget";
 
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
@@ -313,9 +326,11 @@ public static class ErrorCodes
         InvalidFileName,
         FileNameTaken,
         RecycleBinUnavailable,
+        CleanupLimitUnreachable,
         FeedbackDeviceCaptured,
         MemoryMargin,
         ResetGap,
+        EncoderBudget,
         NotDevInstance,
     ];
 }

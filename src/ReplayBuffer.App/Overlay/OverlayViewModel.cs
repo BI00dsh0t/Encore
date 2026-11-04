@@ -24,8 +24,9 @@ internal enum OverlayDot
 /// <c>disk-full</c> Overlay warning is active, whatever the dot (R3).
 /// The dot and the mic-muted icon show always, or only for <see cref="DotOnChangeDuration"/> after each
 /// change of either, as <c>overlayDot</c> says. Its default, <c>auto</c>, shows them always where the Target
-/// Game's monitor reports hardware overlay planes, since only a free plane keeps a borderless game in
-/// independent flip under a topmost window (research for story 5.8; the builder's decision, 2026-11-03).
+/// Game's monitor reports hardware overlay planes, since 5.8 measured a borderless game kept in independent
+/// flip under a topmost window only with a free plane (the builder's decision, 2026-11-03); 5.12 then
+/// measured <c>always</c> without planes with the game still in independent flip.
 /// </summary>
 internal sealed class OverlayViewModel : Observable
 {
@@ -58,7 +59,10 @@ internal sealed class OverlayViewModel : Observable
     private int? _targetProcessId;
 
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
-    /// <param name="time">Times the Save Cooldown's end and each message; <see cref="TimeProvider.System"/> when null.</param>
+    /// <param name="time">
+    /// Times the Save Cooldown's end, each message, the dot's <see cref="DotOnChangeDuration"/> window and
+    /// <see cref="UnknownPlanesRetry"/>; <see cref="TimeProvider.System"/> when null.
+    /// </param>
     /// <param name="overlayPlanes">
     /// Whether the monitor of a process (null: the primary) has hardware overlay planes, or null when unknown;
     /// the App passes <c>Monitors.OverlayPlanes</c>. When null, every monitor is taken to have them.
@@ -168,7 +172,7 @@ internal sealed class OverlayViewModel : Observable
     /// <summary>Reads the session again. Runs on the UI thread.</summary>
     public void Refresh()
     {
-        var state = _engine.Status == EngineStatus.Connected ? _engine.State : null;
+        var state = _engine.ConnectedState();
         var dot = DotFor(state?.Capture);
 
         // The cooldown ends without an event, so a one-shot timer reads the session again then.

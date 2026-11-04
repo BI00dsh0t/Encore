@@ -119,6 +119,23 @@ public sealed partial class KeysTests
         Assert.Equal("""{"codec":"hevc","width":2560,"height":1440,"fps":120,"bitrateKbps":80000,"rateControl":"vbr"}""", normalized.GetRawText());
     }
 
+    [Fact]
+    public void HotkeysWithoutTheMonitorStartAndStopReadThemAsUnboundAndRoundTrip()
+    {
+        using var old = JsonDocument.Parse(
+            """{"save":{"vk":121,"modifiers":1},"micMute":null,"recordToggle":null,"recordStart":null,"recordStop":null,"monitorRecordToggle":{"vk":120,"modifiers":5}}""");
+
+        Assert.True(Keys.Hotkeys.TryRead(old.RootElement, out var read));
+        Assert.Equal(new HotkeyBinding(120, HotkeyModifiers.Alt | HotkeyModifiers.Shift), read.MonitorRecordToggle);
+        Assert.Null(read.MonitorRecordStart);
+        Assert.Null(read.MonitorRecordStop);
+
+        var bound = read with { MonitorRecordStart = new HotkeyBinding(0x41, HotkeyModifiers.Win), MonitorRecordStop = new HotkeyBinding(0x42, HotkeyModifiers.Win) };
+        Assert.True(Keys.Hotkeys.TryRead(Keys.Hotkeys.ToJson(bound), out var again));
+        Assert.Equal(bound, again);
+        Assert.Equal(bound.MonitorRecordStop, again.For(HotkeyAction.MonitorRecordStop));
+    }
+
     [GeneratedRegex("^[a-z][a-zA-Z0-9]*$")]
     private static partial Regex CamelCase();
 }

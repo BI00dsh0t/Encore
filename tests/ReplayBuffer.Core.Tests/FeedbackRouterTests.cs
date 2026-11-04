@@ -107,6 +107,28 @@ public sealed class FeedbackRouterTests
             notices.Active.Values.Select(n => n.Code));
     }
 
+    [Fact]
+    public void AMonitorRecordingRaisesItsOwnNoticesBesideAGameRecordingAndLeavesItsHandoverAlone()
+    {
+        var notices = new FakeNotices();
+        using var router = new FeedbackRouter(notices, new ManualTime());
+
+        router.StateChanged(CaptureState.Initial with { Recording = RecordingState.Running, MonitorRecording = RecordingState.Running });
+        router.MonitorRecordingStarted(new RecordingStarted(@"c:\clips\Monitor Recordings\Monitor.mp4"));
+        router.MonitorRecordingStopped(new RecordingStopped(@"c:\clips\Monitor Recordings\Monitor.mp4", RecordingStopReasons.Stopped));
+
+        // The game Recording's next start is still a new one, not an encoder restart's replacement.
+        router.RecordingStarted(new RecordingStarted(@"c:\clips\Game\Game.mp4"));
+
+        Assert.Equal(
+            [
+                new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, "recordings", "Monitor Recording started", "recordingStarted"),
+                new FeedbackNotice(ErrorCodes.RecordingStopped, WarningSeverity.Info, "recordings", "Monitor Recording stopped", "recordingStopped"),
+                new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, "recordings", "Recording started", "recordingStarted"),
+            ],
+            notices.Active.Values);
+    }
+
     private sealed class FakeNotices : IFeedbackNotices
     {
         public Dictionary<string, FeedbackNotice> Active { get; } = [];

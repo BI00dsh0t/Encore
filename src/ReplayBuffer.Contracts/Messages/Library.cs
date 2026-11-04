@@ -55,7 +55,30 @@ public sealed record LibraryRename(string Path, long Size, DateTimeOffset? Modif
 public sealed record LibraryDelete(string Path, long Size, DateTimeOffset? Modified);
 
 /// <summary><c>library.itemRemoved</c>: the item at <see cref="Path"/> (relative to the Output Folder) left the Library.</summary>
-public sealed record LibraryItemRemoved(string Path);
+/// <param name="Path">The item's path relative to the Output Folder.</param>
+/// <param name="Reason">Why it left, when the engine removed it itself: one of <see cref="LibraryRemovalReasons"/>; <c>null</c> otherwise.</param>
+public sealed record LibraryItemRemoved(string Path, string? Reason = null);
+
+/// <summary>The <see cref="LibraryItemRemoved.Reason"/> values.</summary>
+public static class LibraryRemovalReasons
+{
+    /// <summary>Cleanup (story 7.8) deleted the file permanently to keep the Output Folder within its limits.</summary>
+    public const string Cleanup = "cleanup";
+}
+
+/// <summary>
+/// <c>cleanup.preview</c>'s arguments (story 7.8): the limits to plan with, each null when off, like the
+/// <c>cleanup</c> setting. Nothing is deleted.
+/// </summary>
+/// <param name="MaxBytes">The Output Folder's size limit in bytes, or <c>null</c>.</param>
+/// <param name="MaxAgeSeconds">The age limit in seconds, or <c>null</c>.</param>
+public sealed record LibraryCleanupPreview(long? MaxBytes, long? MaxAgeSeconds);
+
+/// <summary><c>cleanup.preview</c>'s result: what a Cleanup pass with those limits would delete now, oldest first.</summary>
+/// <param name="Count">How many files it would delete.</param>
+/// <param name="Bytes">Their total size in bytes.</param>
+/// <param name="Paths">Their paths relative to the Output Folder, in the order they would be deleted.</param>
+public sealed record LibraryCleanupPlan(int Count, long Bytes, IReadOnlyList<string> Paths);
 
 /// <summary><c>library.reset</c>: the Library is now exactly <see cref="Items"/>, e.g. after the Output Folder changed.</summary>
 public sealed record LibraryReset(IReadOnlyList<LibraryItem> Items);
@@ -136,7 +159,14 @@ public static class LibraryMessages
     public static CommandType<LibraryDelete, Empty> Delete { get; } =
         new("library.delete", LibraryJsonContext.Default.LibraryDelete, LibraryJsonContext.Default.Empty);
 
-    public static IReadOnlyList<CommandType> Commands { get; } = [SetFavourite, Rename, Delete];
+    /// <summary>
+    /// What Cleanup would delete now with the given limits (story 7.8), ignoring whether it may run yet;
+    /// nothing is deleted.
+    /// </summary>
+    public static CommandType<LibraryCleanupPreview, LibraryCleanupPlan> CleanupPreview { get; } =
+        new("cleanup.preview", LibraryJsonContext.Default.LibraryCleanupPreview, LibraryJsonContext.Default.LibraryCleanupPlan);
+
+    public static IReadOnlyList<CommandType> Commands { get; } = [SetFavourite, Rename, Delete, CleanupPreview];
 
     public static IReadOnlyList<EventType> Events { get; } = [ItemAdded, ItemChanged, ItemRemoved, Reset, CleanupBlockedChanged, FolderChanged];
 
@@ -173,5 +203,7 @@ public static class LibraryMessages
 [JsonSerializable(typeof(LibrarySetFavourite))]
 [JsonSerializable(typeof(LibraryRename))]
 [JsonSerializable(typeof(LibraryDelete))]
+[JsonSerializable(typeof(LibraryCleanupPreview))]
+[JsonSerializable(typeof(LibraryCleanupPlan))]
 [JsonSerializable(typeof(Empty))]
 public sealed partial class LibraryJsonContext : JsonSerializerContext;

@@ -161,6 +161,61 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         }
     }
 
+    /// <summary>
+    /// A Monitor Recording started (6.9): the same <c>recording-started</c> notice and sound as a
+    /// Recording's, worded for the Monitor Recording, and every <c>disk-full</c> notice is withdrawn.
+    /// It never touches the game Recording's restart handover.
+    /// </summary>
+    public void MonitorRecordingStarted(RecordingStarted started)
+    {
+        ArgumentNullException.ThrowIfNull(started);
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            WithdrawAll(_diskFulls);
+            RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Monitor Recording started", "recordingStarted"));
+        }
+    }
+
+    /// <summary>
+    /// A Monitor Recording stopped (6.9): the same <c>recording-stopped</c> notice and sound as a
+    /// Recording's (<see cref="MonitorStopMessage"/>), a disk-full stop silent; a writer failure is a
+    /// warning. It never touches the game Recording's restart handover.
+    /// </summary>
+    public void MonitorRecordingStopped(RecordingStopped stopped)
+    {
+        ArgumentNullException.ThrowIfNull(stopped);
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            RaiseInfo(new FeedbackNotice(
+                ErrorCodes.RecordingStopped,
+                IsKnownReason(stopped.Reason) ? WarningSeverity.Info : WarningSeverity.Warning,
+                Recordings,
+                MonitorStopMessage(stopped.Reason),
+                stopped.Reason == RecordingStopReasons.DiskFull ? null : "recordingStopped"));
+        }
+    }
+
+    /// <summary>The message a Monitor Recording's <c>recording-stopped</c> notice uses for <paramref name="reason"/>.</summary>
+    public static string MonitorStopMessage(string reason) => reason switch
+    {
+        RecordingStopReasons.Stopped => "Monitor Recording stopped",
+        RecordingStopReasons.SessionEnded => "Monitor Recording stopped: the monitor capture ended",
+        RecordingStopReasons.Shutdown => "Monitor Recording stopped: ReplayBuffer shut down",
+        RecordingStopReasons.DiskFull => "Monitor Recording stopped: the disk is full",
+        _ when IsKnownReason(reason) => "Monitor Recording stopped",
+        _ => $"Monitor Recording stopped: the write failed ({reason})",
+    };
+
     /// <summary>The message a <c>recording-stopped</c> notice uses for <paramref name="reason"/>.</summary>
     public static string StopMessage(string reason) => reason switch
     {
