@@ -3,14 +3,14 @@ title: 'Settings pages: Track Layout, Game Profiles, and Library and Cleanup'
 type: 'feature'
 ticket: '6'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'ffb9c0ca36844851b0701aa15cee4c411e1f64a9'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md', '{project-root}/_bmad-output/initiative-replay-buffer/tickets/epic-modern-ui/ux-modern-ui/EXPERIENCE.md']
@@ -79,6 +79,12 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-04 — Review pass
+- verdicts: 2 findings — high 0, medium 0, low 2, false 0, maybe-false 0
+- findings:
+  - `[low]` `[reject]` On Game Profiles the embedded Track Layout's "Name" row has its own label scope, so it doesn't line up with the embedded Replay Buffer rows above it — real but cosmetic, and it is 9.5's existing embed behaviour (each embedded `SettingsContent` is its own `IsSharedSizeScope`); the fix means changing `SettingsPage.Embedded`, outside this restyle's bounds. Standalone Track Layout is aligned. "Devices on this Track" is a caption above its list, not a row.
+  - `[low]` `[reject]` The new test doesn't assert the Note/⚠/warning brushes, the peak meter colour or the disabled embeds under Use Global — the epic's lean-tests decision makes the look the builder's check; the styles are one reference each, the PNGs show the danger Note, caution ⚠ and caution peak meter, and the `CanEdit` binding is unchanged.
+
 ## Design Notes
 
 Embedded override views already carry their own section cards (9.5 made Replay Buffer's), so Game Profiles puts them after its "Overrides for" card rather than inside it; a card in a card would double the borders. The "Track Layout" heading above the embedded editor keeps its text as a section header.
@@ -91,3 +97,11 @@ Embedded override views already carry their own section cards (9.5 made Replay B
 
 **Manual checks (if no CLI):**
 - Open the six new `settings-*.png` beside the test binary and compare with the 9.5 renders.
+
+## Auto Run Result
+
+- **Summary:** Track Layout, Game Profiles, and Library and Cleanup restyled onto 9.5's shared settings layout (sections as header + card, label column, help/status/error text), plus one shared `RbSettingsCautionTextStyle`; meters use `RbLevelMeterStyle`. Bindings, commands, handlers and strings are unchanged.
+- **Files:** `Theme/SettingsLayout.xaml` (caution text style); `Settings/TrackLayoutView.xaml` (Devices and Tracks sections, danger Note, caution warning, themed meters, no local button style); `Settings/GameProfilesView.xaml` (Games, Add a game by hand, Overrides for; embedded views after the card); `Settings/LibrarySettingsView.xaml` (Output Folder and Cleanup; key-less styles removed; blocked text in danger, collapsed when empty); `tests/.../SettingsLayoutTests.cs` (the three pages in both themes with fabricated devices, Tracks, levels and profiles, plus six PNGs; source scan over all eight views).
+- **Review:** quick lens, 2 low findings, both rejected (reasons in the triage log); 0 patched, 0 deferred. Follow-up review: false.
+- **Verification:** `dotnet build ReplayBuffer.slnx -c Release` 0 warnings, 0 errors; App tests 169 total, 151 passed, 18 explicit skipped, 0 failed. Renders checked by eye: Track Layout (Gaming dark) and Library and Cleanup (Fluent).
+- **Residual risks:** the embedded Track Layout on Game Profiles has its own label column (as 9.5's Replay Buffer embed does). The PNGs capture only the top of each page. HITL: the builder edits a Track Layout with meters moving, renames and Ignores a profile, and sets a Cleanup limit through its confirmation, in both themes.
