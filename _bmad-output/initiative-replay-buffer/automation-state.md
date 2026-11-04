@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.5 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix flaky-engine-replay-trackmix |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
@@ -752,3 +752,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 9.5 is READY TO MERGE at `83c258f` (both nits in, develop synced; post-sync tests not run because of the pause). An orphan `ReplayBuffer.Engine.exe` (PID 66604, started 14:56 from slice-epic-4's App.Tests bin by the interrupted run) locks the App.Tests output. Auto mode denied the session stopping it, so the coordinator won't either: it's referred to the builder.
 - 2026-11-04: 8.6 fix at `ef0d77f` (tests not run because of the pause). It's a test bug: the pair test planted 64 zero bytes, which `Mp4File.IsComplete` correctly rejects (it needs ftyp, then moov, ending at the file length). The test now plants a minimal ftyp plus moov. The pair test is rerun on the GPU runner when tests resume, then 8.6 merges. 9.5's session is waiting for the builder to end orphan PID 66604.
 - 2026-11-04: **Builder: "resume".** The test pause is lifted, and the "GPU tests resumed" rule applies again (only the GPU runner runs Heavy GPU tests). The 3 held items restart: the 8.6 pair-test rerun on the GPU runner, the trackmix bugfix verify-and-merge, and the 9.5 verify-and-merge.
+- 2026-11-04: Bugfix `flaky-engine-replay-trackmix` merged (`1a75675`). The fixed classes passed 3/3, and the Engine default suite passed 180/180 on the first run with no reruns. slice-epic-5 is back in the pool.
