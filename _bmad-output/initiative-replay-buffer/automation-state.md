@@ -45,7 +45,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.6 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.4 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with bugfix app-theme-test-order |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -736,3 +736,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Bugfix `dd-frame-gaps` merged (`9e0df3f`). Platform.Capture 5 and Engine 180 passed; publish OK. qa-1-14 is back in the pool.
 - 2026-11-04: **Build fix (builder): NuGet audit flagged `Microsoft.DotNet.ILCompiler` 10.0.13 (GHSA-p3jp-9v83-76w9, high), which fails builds under TreatWarningsAsErrors.** SDK 10.0.402 brings 10.0.13; 10.0.403 (installed) brings 10.0.14. `global.json` is pinned to 10.0.403 (`bugfix/sdk-10.0.403` `3e466e8`, merged as the merge commit above). 0-warning Release build, and the NativeAOT publish passes with ILCompiler 10.0.14. Sessions with stale obj restores just need a sync and a restore.
 - 2026-11-04: After the 14:30 usage-limit reset: 9.4 and 9.5 were resumed. Bugfixes `app-theme-test-order` (`4cc2c18`; a product fix: WPF caches `DisableFluentThemeWindowBackdrop` at the first window shown, so it's now set in the runtimeconfig) and `flaky-engine-serve-capture-end` (`8e01aea`; waits on real conditions) were checked by the coordinator and approved to merge. 8.6 READY FOR QA at `f34fa7d`; QA went to qa-1-14 (Sonnet, medium effort), and its 2 Heavy tests went to the GPU runner after a safety read (test-instance processes and Run key only).
+- 2026-11-04: Bugfix `app-theme-test-order` merged (`a953cbb`); App 145 passed twice. story-2-7 is back in the pool.
