@@ -3,14 +3,14 @@ title: 'Open, show in Explorer and copy for Discord'
 type: 'feature'
 ticket: '6'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'f2ff2fe2a20af05401b41727ae43dc7c37a58249'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -66,12 +66,12 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Observable.cs` -- optional canExecute on `RelayCommand` -- Copy disabled while written
-- [ ] `src/ReplayBuffer.Platform.Desktop/NativeMethods.txt`, `ShellFolder.cs` -- Explorer select -- R5
-- [ ] `src/ReplayBuffer.App/Library/LibraryShell.cs` -- port, Windows impl, clipboard data object -- R5, AD-1
-- [ ] `src/ReplayBuffer.App/Library/LibraryPage.cs` -- row commands, existence check, `ActionError` -- R5
-- [ ] `src/ReplayBuffer.App/Library/LibraryView.xaml` -- context menu, double-click, error line -- R5 UI
-- [ ] `tests/ReplayBuffer.App.Tests/LibraryPageTests.cs` (or a new `LibraryActionsTests.cs`) -- with a temp folder and a fake shell: (1) Open, Show and Copy pass the absolute path; while being written Open works and Copy is disabled and makes no call; (2) a missing file sets `ActionError` and calls nothing; (3) `LibraryClipboard.Create` holds exactly the path as FileDrop and Preferred DropEffect bytes `01 00 00 00`; (4) Heavy explicit: `WindowsLibraryShell.Copy` on the real clipboard, read back with `Clipboard.GetFileDropList()` and `"Preferred DropEffect"` -- verify
+- [x] `src/ReplayBuffer.App/Observable.cs` -- optional canExecute on `RelayCommand` -- Copy disabled while written
+- [x] `src/ReplayBuffer.Platform.Desktop/NativeMethods.txt`, `ShellFolder.cs` -- Explorer select -- R5
+- [x] `src/ReplayBuffer.App/Library/LibraryShell.cs` -- port, Windows impl, clipboard data object -- R5, AD-1
+- [x] `src/ReplayBuffer.App/Library/LibraryPage.cs` -- row commands, existence check, `ActionError` -- R5
+- [x] `src/ReplayBuffer.App/Library/LibraryView.xaml` -- context menu, double-click, error line -- R5 UI
+- [x] `tests/ReplayBuffer.App.Tests/LibraryPageTests.cs` (or a new `LibraryActionsTests.cs`) -- with a temp folder and a fake shell: (1) Open, Show and Copy pass the absolute path; while being written Open works and Copy is disabled and makes no call; (2) a missing file sets `ActionError` and calls nothing; (3) `LibraryClipboard.Create` holds exactly the path as FileDrop and Preferred DropEffect bytes `01 00 00 00`; (4) Heavy explicit: `WindowsLibraryShell.Copy` on the real clipboard, read back with `Clipboard.GetFileDropList()` and `"Preferred DropEffect"` -- verify
 
 **Acceptance Criteria:**
 - Given a written item, when Open, Show in Explorer or Copy is chosen, then the shell port gets the item's absolute path.
@@ -81,9 +81,20 @@ deferred: []
 
 ## Implementation Notes
 
+- `RelayCommand.Execute` is now a no-op while `CanExecute` is false, so a disabled Copy sends nothing even when invoked directly.
+- A missing or empty `LibraryFolder` counts as a missing file.
+- Shell-failure handling is covered in the missing-file test (one extra assert pair) rather than a test of its own.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 3 findings — high 0, medium 0, low 2, false 1, maybe-false 0
+- findings:
+  - `[low]` `[patch]` `ActionError`'s doc comment omits that it also clears when the failed row leaves the Library — patched the comment.
+  - `[false]` `[reject]` `Act` doesn't check `IsLocked`, so a future caller could copy a file being written — the only path into `Act` for Copy is `CopyCommand`, whose `Execute` is a no-op while locked; no live path.
+  - `[low]` `[reject]` `Verb = "open"` fails for a handler with no `open` verb — the ticket names ShellExecute open, .mp4 handlers register it, and a failure shows "Couldn't open the file." rather than crashing.
 
 ## Verification
 
@@ -94,3 +105,15 @@ deferred: []
 
 **Manual checks (if no CLI):**
 - Human Check Queue: double-click opens the default player, Show in Explorer selects the file, a copied Clip pastes into Discord as a playable attachment.
+
+## Auto Run Result
+
+**Summary:** Each Library row opens in the default player (double-click or context menu, ShellExecute `open`), shows in Explorer with the file selected (`SHOpenFolderAndSelectItems`), and copies as a file drop (CF_HDROP plus Preferred DropEffect = DROPEFFECT_COPY) that pastes into Discord as an attachment. Copy is disabled until `EndWrite`; Open and Show work while the file is being written. A missing file or a shell failure shows a short red error under the filters, cleared by the next success or when the row leaves the Library. App and Platform.Desktop only: no engine, Core or Contracts change.
+
+**Files:** `Observable.cs` (optional canExecute on `RelayCommand`), `Platform.Desktop/NativeMethods.txt` and `ShellFolder.cs` (Explorer select), `Library/LibraryShell.cs` (port, Windows shell, clipboard data object), `Library/LibraryPage.cs` (row commands, existence check, error), `Library/LibraryView.xaml` (context menu, double-click, error line), `tests/.../LibraryActionsTests.cs` (3 default tests, 1 Heavy real-clipboard test).
+
+**Review:** quick lens, 3 findings: 1 low patched (doc comment), 1 false and 1 low rejected (see the triage log). Follow-up review not recommended (no high or medium patched).
+
+**Verification:** `dotnet build ReplayBuffer.slnx -c Release` 0 warnings, 0 errors. `ReplayBuffer.App.Tests` default run 100 passed, 10 explicit skipped; Heavy `CopyPutsTheFileOnTheRealClipboard` passed alone. `pwsh tools/publish-engine.ps1` no IL warnings (Platform.Desktop is compiled into the engine). Other test projects not run: nothing they cover changed.
+
+**Residual risks:** Show in Explorer and Open were never called for real (Human Check Queue); a Discord paste is unverified by automation.
