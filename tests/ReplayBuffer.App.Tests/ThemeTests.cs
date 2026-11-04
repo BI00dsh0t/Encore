@@ -120,7 +120,7 @@ public sealed partial class ThemeTests
                     Assert.True(page.View.IsLoaded, $"{page.Title} didn't load under {which}");
                 }
 
-                ((TabControl)((DockPanel)main.Content).Children[1]).SelectedIndex = 0;
+                model.SelectedNavItem = model.LibraryNav;
                 Sta.Pump(TimeSpan.FromMilliseconds(50));
                 Assert.True(model.Library.View.IsLoaded, $"The Library didn't load under {which}");
             }

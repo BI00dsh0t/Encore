@@ -33,6 +33,22 @@ public sealed class StatusLineTests
     }
 
     [Fact]
+    public void TheDotIsRecordWhileRecordingSuccessWhileBufferingAndIdleOtherwise()
+    {
+        var line = new StatusLine(_engine);
+
+        Render(line, CaptureState.Initial with { Replay = ReplayState.Buffering });
+        Assert.Equal(StatusDot.Buffering, line.Dot);
+        Render(line, CaptureState.Initial with { Replay = ReplayState.Buffering, MonitorRecording = RecordingState.Running });
+        Assert.Equal(StatusDot.Recording, line.Dot);
+        Render(line, CaptureState.Initial);
+        Assert.Equal(StatusDot.Idle, line.Dot);
+
+        line.Render(EngineStatus.Restarting, null, null);
+        Assert.Equal(StatusDot.Idle, line.Dot);
+    }
+
+    [Fact]
     public void WarningsListNewestFirstWithTheirTimeAndAReconnectReplacesThem()
     {
         var line = new StatusLine(_engine);
