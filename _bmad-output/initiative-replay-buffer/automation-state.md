@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.5 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix flaky-engine-serve-capture-end |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.6 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.6 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.4 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with bugfix app-theme-test-order |
@@ -166,7 +166,7 @@ The coordinator logs each QA round in the Log below.
 | 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8a434c6`) |
 | 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `af6eab8`) |
-| 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
+| 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in QA (qa-1-14) |
 | 29.7 | 8.7 Final conformance run | | pending |
 | 29.8 | 8.8 8-hour soaks in Memory and Disk mode | | pending |
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
@@ -735,3 +735,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Bugfix `flaky-recording-crash-test` merged (`0cc1fd2`). The post-sync Engine run showed 2 more load-induced default-suite flakes (the rerun passed 180/180): `EngineServeTests.TheEngineServesItsSnapshotAndCommandsAndAKillFailsThePendingCommand` (TimeoutException at :81) and `CaptureEndTests.ClosingTheWindowEndsCaptureAndFinalizesTheFile` (expected 0, actual 1 at :112). Bugfix `flaky-engine-serve-capture-end` went to slice-epic-5 (Opus, medium effort). Up to 6 sessions build and test on the PC at once, so wall-clock bounds in default tests are a recurring risk.
 - 2026-11-04: Bugfix `dd-frame-gaps` merged (`9e0df3f`). Platform.Capture 5 and Engine 180 passed; publish OK. qa-1-14 is back in the pool.
 - 2026-11-04: **Build fix (builder): NuGet audit flagged `Microsoft.DotNet.ILCompiler` 10.0.13 (GHSA-p3jp-9v83-76w9, high), which fails builds under TreatWarningsAsErrors.** SDK 10.0.402 brings 10.0.13; 10.0.403 (installed) brings 10.0.14. `global.json` is pinned to 10.0.403 (`bugfix/sdk-10.0.403` `3e466e8`, merged as the merge commit above). 0-warning Release build, and the NativeAOT publish passes with ILCompiler 10.0.14. Sessions with stale obj restores just need a sync and a restore.
+- 2026-11-04: After the 14:30 usage-limit reset: 9.4 and 9.5 were resumed. Bugfixes `app-theme-test-order` (`4cc2c18`; a product fix: WPF caches `DisableFluentThemeWindowBackdrop` at the first window shown, so it's now set in the runtimeconfig) and `flaky-engine-serve-capture-end` (`8e01aea`; waits on real conditions) were checked by the coordinator and approved to merge. 8.6 READY FOR QA at `f34fa7d`; QA went to qa-1-14 (Sonnet, medium effort), and its 2 Heavy tests went to the GPU runner after a safety read (test-instance processes and Run key only).
