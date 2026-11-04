@@ -3,7 +3,7 @@ title: 'Settings pages: Track Layout, Game Profiles, and Library and Cleanup'
 type: 'feature'
 ticket: '6'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: 'ffb9c0ca36844851b0701aa15cee4c411e1f64a9'
 route: 'full'
 route_source: 'auto'
