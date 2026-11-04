@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.1 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.7 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.12 |
@@ -135,7 +135,7 @@ The coordinator logs each QA round in the Log below.
 | 27.3 | 6.3 Record Hotkey modes and the Recordings switch | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `eee32cb`) |
 | 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `e43dda1`) |
 | 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `856bd57`) |
-| 27.6 | 6.6 One file however long, and forced encoder restarts | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
+| 27.6 | 6.6 One file however long, and forced encoder restarts | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `1cfccf0`) |
 | 27.7 | 6.7 Disk full during a Recording | | pending |
 | 27.8 | 6.8 Recording notices and sounds | | pending |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | | pending |
@@ -560,3 +560,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 4.14 merged (`e5bfd26`, marked done `039b4da`), and its card is Done with a release comment. **Epic 4 is complete:** it was marked `status: done` (`0246ef0`) and **`v0.4.0` was released** by the coordinator (master `96ad304`, tag `v0.4.0`, back-merge `e3b0b12`). git flow's default merge messages were reworded to Conventional Commits before anything built on them (same trees and parents). The builder's epic-4 hand checks are in the 4.14 plan's checklist. Epic 4 being done unblocks 8.1 (the soak harness tracer), which went to slice-epic-4 (Opus, medium effort), with its card In progress.
 - 2026-11-04: 6.6 is READY FOR QA at `056befd` (its GPU runs passed earlier: Platform.FFmpeg 37, Engine 168, Heavy restart 3/3; the review fixes are in). QA started on qa-1-14 (Sonnet), and its card is In QA. 8.1 is running (it picked up its brief after a duplicate 4.14 message).
 - 2026-11-04: QA 6.6 at `056befd`: **QA PASS**, 0 findings (the Heavy restart tests pass 3/3). 6.6 has been told to merge (Sonnet) and to note in the epic Notes that no production path triggers a restart yet. qa-1-14 is back in the pool. 6.6's merge unblocks 6.7 (disk full during a Recording).
+- 2026-11-04: 6.6 merged (`1cfccf0`, `feat(engine): merge 6.6-one-file-encoder-restarts`, marked done). `develop` (4.13, 4.14, 5.9, 5.15, v0.4.0) was merged into the branch first. Epic 4's refactor sweep (`15043a9`) had deleted `RingGenerations.Restart`, the per-generation streams and the previous-generation fallback as unused, which 6.6 builds on, so the branch restored those files from before the sweep (`c7d7158`). After that: build 0 warnings, Core 116, Platform.FFmpeg 36 (2 explicit skipped), Engine 168 (28 explicit skipped), Heavy `*Restart*` 3/3 under the GPU lock, publish with no IL warnings. Contracts: two additive constants (`RecordingStopReasons.EncoderRestart`, `ErrorCodes.RecordingRestarted`). **No production path triggers a restart yet** (only `CaptureSession.RestartChain`, called by tests); the epic Notes say a later story wires it. Unblocks 6.7.

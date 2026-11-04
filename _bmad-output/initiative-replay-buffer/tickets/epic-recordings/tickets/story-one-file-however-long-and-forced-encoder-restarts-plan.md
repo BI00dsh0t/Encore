@@ -3,7 +3,7 @@ title: 'One file however long, and forced encoder restarts'
 type: 'feature'
 ticket: '6'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '10a44f7a3b19e987a9bbace8eaec1359e1689e1b'
 route: 'full'
 route_source: 'auto'
