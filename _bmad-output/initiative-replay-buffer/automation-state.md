@@ -121,7 +121,7 @@ The coordinator logs each QA round in the Log below.
 | 26.6 | 5.6 Feedback Sounds in the engine | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ac6a3a2`) |
 | 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `53d83b7`) |
 | 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `67ecdf3`) |
-| 26.9 | 5.9 Capture exclusion for every App window | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
+| 26.9 | 5.9 Capture exclusion for every App window | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `597fe28`) |
 | 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `7e09a01`) |
 | 26.11 | 5.11 Feedback Sounds settings page | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `f1d9334`) |
 | 26.11a | 5.15 Adaptive Overlay dot (added 2026-11-04; 5.12 and 5.13 wait on it) | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `582d863`) |
@@ -554,3 +554,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 4.14 is READY FOR QA at `dcd748f`: 134 checks passed unattended, and 9 items are on the builder's checklist. QA started on story-2-7 (Sonnet), checking coverage of every AC and Done-when line, that the passes really ran, safety, and the checklist's clarity. Its card is In QA.
 - 2026-11-04: QA 5.9 at `614b0b1`: **QA PASS**, 0 findings. 5.9 has been told to merge (Sonnet), keeping both sides of any Overlay conflict with 5.15. qa-1-14 is back in the pool. Its merge plus 5.15's unblocks 5.12 (the benchmark with the Overlay on).
 - 2026-11-04: QA 4.14 at `dcd748f`: **QA PASS**, 0 blocking and 4 advisories. 4.14 has been told to merge (Sonnet) without marking the epic done or releasing. story-2-7 is back in the pool. After the merge, the coordinator marks epic 4 `status: done` and runs the v0.4.0 release.
+- 2026-11-04: 5.9 merged (`597fe28`, `feat(app): merge 5.9-capture-exclusion`, after merging develop in: conflicts in `ShellApp.cs` and `NativeMethods.txt` kept both sides; build 0 warnings, App 113 passed and Platform.Desktop 13 passed). Contracts unchanged.
