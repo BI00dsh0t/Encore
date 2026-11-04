@@ -422,7 +422,12 @@ internal sealed class EngineHost : IAsyncDisposable
                         e => recordingLog.LogWarning("The Recording failed: {Message}", e.Message),
                         libraryActor,
                         message => recordingLog.LogInformation("{Message}", message),
-                        runtime)
+                        runtime,
+                        Restarted: restart =>
+                        {
+                            recordingLog.LogWarning("An encoder restart ended the Recording {Stopped}; it continues in {Started}", restart.StoppedPath, restart.StartedPath);
+                            notices.RecordingRestarted(restart);
+                        })
                     : null);
 
             Volatile.Write(ref settingsTo, sessions);

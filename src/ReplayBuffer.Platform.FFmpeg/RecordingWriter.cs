@@ -101,6 +101,12 @@ public sealed unsafe class RecordingWriter
     /// <summary>The tap it is attached to, set by <see cref="RecordingTap.Attach"/>.</summary>
     internal RecordingTap? Tap { get; set; }
 
+    /// <summary>Whether each fragment is flushed to the disk (R3); false only for tests, which write hours of fragments.</summary>
+    internal bool FlushToDisk { get; init; } = true;
+
+    /// <summary>The packets offered and not yet taken by the writer thread; for tests to pace themselves.</summary>
+    internal int Queued => _queue.Count;
+
     /// <summary>Starts the writer thread, once.</summary>
     public void Start()
     {
@@ -268,7 +274,7 @@ public sealed unsafe class RecordingWriter
         _passed = new bool[streams.Count];
         _reached = new long[streams.Count];
         Array.Fill(_reached, long.MinValue);
-        var muxer = new FragmentedMp4Muxer(_path, _log, durable: true);
+        var muxer = new FragmentedMp4Muxer(_path, _log, durable: true, FlushToDisk);
         try
         {
             for (var i = 0; i < streams.Count; i++)

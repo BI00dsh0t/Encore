@@ -13,6 +13,47 @@ public sealed class RingGenerationsTests
     private const long Second = 1_000_000;
 
     [Fact]
+    public void AClipHoldsOneGenerationAndAPressJustAfterARestartTakesThePreviousOneUpToTheBoundary()
+    {
+        using (var generations = new RingGenerations(NewRing(60)))
+        {
+            Streams(generations);
+            Feed(generations, 0, 10 * Second);
+            Assert.Equal(2, generations.Restart(NewRing(60)));
+            Streams(generations);
+            Feed(generations, 10 * Second, 15 * Second);
+
+            // More than 1 s past the restart: from its first keyframe.
+            var (late, lateGeneration) = generations.Cut(0, 14 * Second)!.Value;
+            using (late)
+            {
+                Assert.Equal(2, lateGeneration);
+                Assert.Equal(10 * Second, late.StartUs);
+                Assert.Equal(14 * Second, late.EndUs);
+            }
+
+            // 0.5 s past it: the previous generation, ending at the boundary.
+            var (early, earlyGeneration) = generations.Cut(0, (10 * Second) + 500_000)!.Value;
+            using (early)
+            {
+                Assert.Equal(1, earlyGeneration);
+                Assert.Equal(10 * Second, early.EndUs);
+                Assert.True(early.EndUs - early.StartUs >= Second);
+                Assert.All(early.Packets, p => Assert.True(p.TimeUs < 10 * Second));
+            }
+        }
+
+        // Generation 1 holds only 0.6 s: a press 0.5 s after the restart has nothing to cut.
+        using var short1 = new RingGenerations(NewRing(60));
+        Streams(short1);
+        Feed(short1, 0, 600_000);
+        short1.Restart(NewRing(60));
+        Streams(short1);
+        Feed(short1, 600_000, 2 * Second);
+        Assert.Null(short1.Cut(0, 1_100_000));
+    }
+
+    [Fact]
     public void AThirtySecondWindowHoldsNoMoreThanThirtySecondsAndATwoHourWindowIsAccepted()
     {
         using (var generations = new RingGenerations(NewRing(30)))
@@ -80,8 +121,8 @@ public sealed class RingGenerationsTests
     }
 
     /// <summary>
-    /// Video (stream 0) at 30 fps with a keyframe each second and on the first frame, and AAC-sized
-    /// audio (stream 1), interleaved, over <c>[fromUs, toUs)</c>.
+    /// Video (stream 0) at 30 fps with a keyframe each second and on the first frame (a restarted
+    /// encoder starts on one), and AAC-sized audio (stream 1), interleaved, over <c>[fromUs, toUs)</c>.
     /// </summary>
     private static void Feed(RingGenerations generations, long fromUs, long toUs)
     {

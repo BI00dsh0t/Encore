@@ -77,6 +77,12 @@ internal sealed record CaptureSessionOptions
     /// </summary>
     public Func<string, Exception?>? ClipWriteFault { get; init; }
 
+    /// <summary>
+    /// For tests: called on a forced restart's thread (<see cref="CaptureSession.RestartChain"/>)
+    /// just before the new chain is built; a non-null result is thrown there, as a failed build.
+    /// </summary>
+    public Func<Exception?>? RestartFault { get; init; }
+
     /// <summary>With no first frame by then, the session posts a <see cref="ErrorCodes.CaptureFailed"/> failure.</summary>
     public TimeSpan FirstFrameTimeout { get; init; } = DefaultFirstFrameTimeout;
 
@@ -146,7 +152,11 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// makes it the current chain, which later saves cut from. The old chain is fed until every save
 /// bound to it has cut, then torn down off the capture and orchestrator threads, so at most two
 /// chains live at once (AD-7). A new chain whose first keyframe comes more than a frame after the
-/// old Clip's end raises <see cref="CaptureSessionOptions.ResetGap"/>.
+/// old Clip's end raises <see cref="CaptureSessionOptions.ResetGap"/>. A forced restart
+/// (<see cref="RestartChain"/>, R4) tears the current chain down on a thread of its own and rebuilds
+/// the same spec into a new generation of the same ring, dropping the frames captured meanwhile;
+/// the Recording on the old chain ends at its last packet once the orchestrator has been told
+/// (<see cref="ISessionEvents.ChainRestarted"/>), and a failed rebuild fails the session.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -208,6 +218,10 @@ internal sealed class CaptureSession : ICaptureSession
     // Chains being torn down after a newer spec replaced them: a build waits for them (AD-7's two chains).
     private int _tearingDown;
     private volatile bool _chainsClosed;
+
+    // A forced restart (R4), under the chain lock: whether one runs, and its thread, which End joins.
+    private bool _restarting;
+    private Thread? _restartThread;
 
     private readonly IVideoEncoderCatalog _encoders;
     private long _anchorQpc;
@@ -342,6 +356,15 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         _firstFrameTimer.Dispose();
+
+        // A forced restart running finishes first: the chain it installs (or the one it failed on) is current.
+        Thread? restart;
+        lock (_chainLock)
+        {
+            restart = _restartThread;
+        }
+
+        restart?.Join();
         EncoderChain? chain;
         lock (_chainLock)
         {
@@ -363,17 +386,21 @@ internal sealed class CaptureSession : ICaptureSession
                 return new SessionOutcome(null, _stopReason, new EngineFailure(_failure is null ? ErrorCodes.CaptureFailed : CodeOf(_failure), message));
             }
 
-            // No frame can arrive now; let the encoder thread offer what is queued before the flush.
-            chain!.CompleteVideo();
+            // A failed restart left nothing to flush: its chain is gone, and the session has failed.
+            if (!chain!.IsDisposed)
+            {
+                // No frame can arrive now; let the encoder thread offer what is queued before the flush.
+                chain.CompleteVideo();
 
-            // Capture is stopped and no frame is in flight; stop audio, then drain everything.
-            chain.StopTaps();
+                // Capture is stopped and no frame is in flight; stop audio, then drain everything.
+                chain.StopTaps();
 
-            // Silent Tracks stop with the device taps, not after the teardown below.
-            chain.StopSilenceClock();
-            chain.ReportAudioFaults();
-            chain.Finish(_lastFrameQpc);
-            WriteStats(chain);
+                // Silent Tracks stop with the device taps, not after the teardown below.
+                chain.StopSilenceClock();
+                chain.ReportAudioFaults();
+                chain.Finish(_lastFrameQpc);
+                WriteStats(chain);
+            }
         }
         finally
         {
@@ -447,11 +474,12 @@ internal sealed class CaptureSession : ICaptureSession
     /// press), then up to as long again for every stream to pass it by an AAC frame (encoding and
     /// the AAC FIFO lag it), cuts <c>[max(key - bufferWindow, last Reset, earlier write's claim), key)</c>
     /// from the first keyframe in it, and writes the Clip. The Buffer Window is the one in effect at
-    /// the press (a resize applies at a Reset), and the cut comes from one ring generation
-    /// (<see cref="RingGenerations.Cut"/>). A chain started mid-session cuts from its first
-    /// keyframe when that is under a frame before the start (<see cref="EncoderChain.SnapStart"/>).
-    /// The claim (<see cref="ClipClaim"/>) keeps a Clip written while an earlier one still writes
-    /// from cutting back over it. A press less than 1 s
+    /// the press (a resize applies at a Reset), and the cut comes from one ring generation: less
+    /// than 1 s past a generation's boundary, the previous one up to the boundary, where the Clip
+    /// then ends and the next one starts (<see cref="RingGenerations.Cut"/>). A chain started
+    /// mid-session cuts from its first keyframe when that is under a frame before the start
+    /// (<see cref="EncoderChain.SnapStart"/>). The claim (<see cref="ClipClaim"/>) keeps a Clip
+    /// written while an earlier one still writes from cutting back over it. A press less than 1 s
     /// after the anchor is refused with <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe
     /// is asked for. Once drained (<see cref="Drain"/>), the encoders are flushed and gone: the
     /// write asks for no keyframe, and the Clip runs to the end of the ring; after
@@ -468,10 +496,13 @@ internal sealed class CaptureSession : ICaptureSession
         EncoderChain? chain;
         lock (_chainLock)
         {
-            chain = _current;
+            // A forced restart is rebuilding the chain: nothing to cut from until it is done.
+            chain = _restarting ? null : _current;
         }
 
-        if (chain?.Ring is null || chain.Video is not { } video)
+        // A chain disposed while the output still runs is one a failed restart left: nothing to cut. A
+        // drained session's is disposed too, but keeps its ring for saves.
+        if (chain is null || (chain.IsDisposed && !_outputFinished) || chain.Ring is null || chain.Video is not { } video)
         {
             return null;
         }
@@ -488,7 +519,8 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>
     /// In Replay mode, once the output is open and while it runs: a Recording from
     /// <paramref name="qpc"/> on the current chain's encoders, through its tap; null once drained or
-    /// released, before the anchor, while a Recording is attached, or while a chain switch is armed.
+    /// released, before the anchor, while a Recording is attached, while a chain switch is armed, or
+    /// while a forced restart rebuilds the chain.
     /// </summary>
     public IRecordingWrite? Record(long qpc)
     {
@@ -501,7 +533,7 @@ internal sealed class CaptureSession : ICaptureSession
         EncoderChain? chain;
         lock (_chainLock)
         {
-            if (_armed is not null)
+            if (_armed is not null || _restarting)
             {
                 return null;
             }
@@ -509,7 +541,7 @@ internal sealed class CaptureSession : ICaptureSession
             chain = _current;
         }
 
-        if (chain?.Tap is not { HasWriter: false } tap || chain.Video is not { } video)
+        if (chain is null || chain.IsDisposed || chain.Tap is not { HasWriter: false } tap || chain.Video is not { } video)
         {
             return null;
         }
@@ -567,6 +599,141 @@ internal sealed class CaptureSession : ICaptureSession
             }
 
             StartBuildLocked();
+        }
+    }
+
+    /// <summary>
+    /// A forced encoder restart (R4), for tests until a production trigger exists: on a thread of its
+    /// own, the current chain is taken out of the capture thread's feed, the saves bound to it are
+    /// waited for (bounded), it is torn down, and the same spec is rebuilt into a new generation of
+    /// the same ring (AD-7: the old chain is gone before the new one is built, and no other build
+    /// starts meanwhile). The new chain becomes current, then the orchestrator is told
+    /// (<see cref="ISessionEvents.ChainRestarted"/>) and only then is the old chain's Recording
+    /// ended, so its post-back always follows. A failed rebuild frees the ring and fails the session
+    /// with <see cref="ErrorCodes.EncodeFailed"/>. Refused, with false, unless in Replay mode, anchored
+    /// and live (not stopping or drained), with no switch armed or retiring and no restart running.
+    /// </summary>
+    /// <param name="reason">Why, for the log.</param>
+    internal bool RestartChain(string reason)
+    {
+        lock (_gate)
+        {
+            lock (_chainLock)
+            {
+                if (!_options.Replay || !Volatile.Read(ref _anchored) || _stopped || _outputFinished || _keepRing || _chainsClosed
+                    || _armed is not null || _retiring is not null || _restarting || _current is not { IsBuilt: true, IsDisposed: false } old)
+                {
+                    _log.LogInformation("The encoder restart ({Reason}) was refused: the session isn't live, or a chain switch or restart is running", reason);
+                    return false;
+                }
+
+                _restarting = true;
+                _restartThread = new Thread(() => Restart(old, reason)) { Name = "Encoder chain restart", IsBackground = true };
+                _restartThread.Start();
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary><see cref="RestartChain"/>'s work, on its own thread.</summary>
+    private void Restart(EncoderChain old, string reason)
+    {
+        var began = Stopwatch.GetTimestamp();
+        lock (_gate)
+        {
+            if (_stopped)
+            {
+                lock (_chainLock)
+                {
+                    _restarting = false;
+                }
+
+                return;
+            }
+
+            old.Fed = false;
+        }
+
+        _log.LogInformation("Encoder restart ({Reason}) at {At:0.000} s after the anchor: the chain is torn down and rebuilt", reason, MicrosAt(began) / 1e6);
+
+        // Kept out of the teardown: closing it ends the Recording, which must post back after the orchestrator hears of the restart.
+        var tap = old.TakeTap();
+        EncoderChain? next = null;
+        var installed = false;
+        try
+        {
+            // Each save bound to it cuts at its press, since its keyframe never comes; the ring's restart needs them done.
+            var deadline = began + (3 * _qpcFrequency);
+            while (true)
+            {
+                lock (_chainLock)
+                {
+                    if (old.Writers == 0)
+                    {
+                        break;
+                    }
+                }
+
+                if (Stopwatch.GetTimestamp() >= deadline)
+                {
+                    _log.LogWarning("A save bound to the restarted encoder chain hadn't cut within 3 s; the chain is torn down anyway");
+                    break;
+                }
+
+                Thread.Sleep(10);
+            }
+
+            old.Dispose(keepRing: true);
+            if (_options.RestartFault?.Invoke() is { } fault)
+            {
+                throw fault;
+            }
+
+            next = new EncoderChain(old.Spec, old.EncoderName, old.Codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
+            next.Subscribe();
+            next.Build(_anchorQpc, first: false, latency: null, restartOf: old.Ring, window: old.WindowSeconds);
+            var now = Stopwatch.GetTimestamp();
+            next.StartAudio(now);
+            lock (_gate)
+            {
+                lock (_chainLock)
+                {
+                    _current = next;
+                    installed = true;
+                    _restarting = false;
+                    StartBuildLocked();
+                }
+            }
+
+            _log.LogInformation("The encoder chain restarted in {Ms:0} ms; the frames captured meanwhile were dropped", (now - began) * 1000.0 / _qpcFrequency);
+            _events.ChainRestarted(now);
+        }
+        catch (Exception e)
+        {
+            // Not yet current: the new chain and the ring go with the session, which fails here.
+            if (!installed)
+            {
+                next?.Dispose();
+                old.Ring?.Dispose();
+            }
+
+            _log.LogError("The encoder restart ({Reason}) failed: {Message}", reason, e.Message);
+
+            // Failed first, so the session is stopped before anything may act on the disposed chain again.
+            Fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "The encoder restart couldn't rebuild the encoder chain: " + e.Message, e));
+            lock (_gate)
+            {
+                lock (_chainLock)
+                {
+                    _restarting = false;
+                }
+            }
+        }
+        finally
+        {
+            // The old chain's Recording ends here, at its last packet, after the orchestrator was told.
+            tap?.Dispose();
         }
     }
 
@@ -640,7 +807,11 @@ internal sealed class CaptureSession : ICaptureSession
                 retiring.Draw(qpc, texture, contentSize);
             }
 
-            _current!.Draw(qpc, texture, contentSize);
+            // A forced restart drops the frames captured while it rebuilds the chain.
+            if (_current is { Fed: true } current)
+            {
+                current.Draw(qpc, texture, contentSize);
+            }
         }
     }
 
@@ -755,7 +926,7 @@ internal sealed class CaptureSession : ICaptureSession
 
             lock (_chainLock)
             {
-                if (_prepared is { } prepared && _armed is null && _retiring is null && ReferenceEquals(chain, _current)
+                if (_prepared is { } prepared && _armed is null && _retiring is null && !_restarting && ReferenceEquals(chain, _current)
                     && chain.Tap is { HasWriter: false } && !_outputFinished && !_keepRing && !_chainsClosed)
                 {
                     _prepared = null;
@@ -883,11 +1054,12 @@ internal sealed class CaptureSession : ICaptureSession
 
     /// <summary>
     /// Starts the build of the spec asked for, when there is one, the session has anchored, it is
-    /// not built yet, and no build, armed chain or retirement is in the way. Under the chain lock.
+    /// not built yet, and no build, armed chain, retirement or forced restart is in the way. Under
+    /// the chain lock.
     /// </summary>
     private void StartBuildLocked()
     {
-        if (_wanted is not { } spec || _chainsClosed || !Volatile.Read(ref _anchored) || _building
+        if (_wanted is not { } spec || _chainsClosed || !Volatile.Read(ref _anchored) || _building || _restarting
             || _prepared is not null || _armed is not null || _retiring is not null || _tearingDown > 0)
         {
             return;
@@ -1218,7 +1390,8 @@ internal sealed class CaptureSession : ICaptureSession
         {
             // An armed chain takes over at the next frame: resizing the outgoing one would be lost,
             // so the incoming one takes the window at the next Reset instead.
-            chain = _armed is null ? _current : null;
+            // A forced restart moves the ring to a generation of its own; the window applies at the next Reset.
+            chain = _armed is null && !_restarting ? _current : null;
         }
 
         if (_keepRing || _outputFinished || chain?.Ring is not { } ring || pending < 1 || pending == chain.WindowSeconds)
@@ -1435,7 +1608,7 @@ internal sealed class CaptureSession : ICaptureSession
 
                 ClipWriter.Write(source, path, log);
 
-                // The cut's end: the press's keyframe.
+                // The cut's end: the press's keyframe, or a ring generation's boundary when the cut came from the one before it.
                 var endUs = source.Cut.EndUs;
                 session._claim.Succeeded(toUs, endUs);
                 claimed = null;

@@ -76,7 +76,11 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// While a Recording runs, a switch of the Target to another game is held, and committed the moment
 /// its writer posts back. On <see cref="Dispose"/>, a running Recording's writer is waited for (up to
 /// <see cref="ShutdownWait"/>) and its result handled before the thread ends; one not done by then is
-/// left open.
+/// left open. A forced encoder restart of the session (<see cref="ISessionEvents.ChainRestarted"/>,
+/// R4) ends its running Recording with <see cref="RecordingStopReasons.EncoderRestart"/> and starts
+/// a new one at once on the new chain, in a new file; once the old one's writer posts back, it is
+/// published as stopped, the new one as started, and <see cref="Recordings.Restarted"/> names both,
+/// while <see cref="CaptureState.Recording"/> stays on throughout.
 /// With <see cref="ReplayClips"/>, the game session's settings
 /// are resolved again for its profile on each <see cref="SettingsUpdated"/> and after each Reset
 /// (R7, R8): when they need another encoder chain (<see cref="ChainKey.SameChain"/>), the session is
@@ -128,6 +132,9 @@ public sealed class SessionOrchestrator : IDisposable
 
     // The Recording started and not yet posted back; null when none runs.
     private RecordingRun? _recording;
+
+    // The Recording a forced encoder restart ended, until its writer posts back; null for none.
+    private RecordingRun? _ending;
 
     private int _disposed;
 
@@ -263,19 +270,40 @@ public sealed class SessionOrchestrator : IDisposable
             EndActive("engine stopping", failure: null, RecordingStopReasons.Shutdown);
         }
 
-        // The channel is complete, so the writer's post-back can't arrive: wait for it here (bounded).
-        if (_recording is { } recording)
+        // The channel is complete, so the writers' post-backs can't arrive: wait for them here (one
+        // bounded wait for both), a restart's ending Recording first.
+        var waited = Stopwatch.StartNew();
+        foreach (var recording in new[] { _ending, _recording })
         {
-            if (recording.Done.Task.Wait(ShutdownWait))
+            if (recording is null)
+            {
+                continue;
+            }
+
+            var left = ShutdownWait - waited.Elapsed;
+            if (recording.Done.Task.Wait(left > TimeSpan.Zero ? left : TimeSpan.Zero))
             {
                 OnRecordingWritten(new RecordingWritten(recording, recording.Done.Task.Result), commitPending: false);
+                continue;
+            }
+
+            // Left open: the next start reports it interrupted.
+            if (ReferenceEquals(_ending, recording))
+            {
+                _ending = null;
             }
             else
             {
-                // Left open: the next start reports it interrupted. The published state no longer claims it runs.
-                SetState(_state with { Recording = RecordingState.Off });
-                _recordings?.Info?.Invoke($"The Recording at {recording.Path} didn't finish within {ShutdownWait.TotalSeconds:0} s of shutdown; it was left open");
+                _recording = null;
             }
+
+            _recordings?.Info?.Invoke($"The Recording at {recording.Path} didn't finish within {ShutdownWait.TotalSeconds:0} s of shutdown; it was left open");
+        }
+
+        // The published state no longer claims a Recording runs.
+        if (_recording is null && _ending is null)
+        {
+            SetState(_state with { Recording = RecordingState.Off });
         }
 
         ReleaseDrain();
@@ -320,7 +348,7 @@ public sealed class SessionOrchestrator : IDisposable
 
             case RecordingRunning recording:
                 // dev.simulate's display state only: a real Recording's state wins, and it never holds the Target.
-                if (_recording is null)
+                if (_recording is null && _ending is null)
                 {
                     SetState(_state with { Recording = recording.Running ? RecordingState.Running : RecordingState.Off });
                 }
@@ -363,6 +391,10 @@ public sealed class SessionOrchestrator : IDisposable
 
             case SessionFailed failed when _active?.Id == failed.SessionId:
                 EndActive("failure: " + failed.Failure.Message, failed.Failure);
+                break;
+
+            case SessionChainRestarted restarted when _active?.Id == restarted.SessionId:
+                OnChainRestarted(_active, restarted.Qpc);
                 break;
 
             default:
@@ -632,7 +664,7 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
-        if (_recording is not null && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
+        if ((_recording is not null || _ending is not null) && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
         {
             _pendingTarget = propose;
             return;
@@ -1069,6 +1101,22 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
+        if (BeginRecording(active, profileId, qpc, document) is { } recording)
+        {
+            SetState(_state with { Recording = RecordingState.Running });
+            recordings.Started(new RecordingStarted(recording.Path));
+        }
+    }
+
+    /// <summary>
+    /// <see cref="StartRecording"/>'s start once the press is allowed, shared with a forced encoder
+    /// restart's new Recording: the session's Recording from <paramref name="qpc"/> at a path
+    /// reserved now, which becomes <see cref="_recording"/>; null, with the Info or the failure
+    /// reported, when none started. Nothing is published here.
+    /// </summary>
+    private RecordingRun? BeginRecording(Active active, string profileId, long qpc, SettingsDocument document)
+    {
+        var recordings = _recordings!;
         IRecordingWrite? write;
         string path;
         try
@@ -1077,7 +1125,7 @@ public sealed class SessionOrchestrator : IDisposable
             if (write is null)
             {
                 recordings.Info?.Invoke("The game session can't record yet; no Recording was started");
-                return;
+                return null;
             }
 
             // AD-5: one snapshot for the press; the Recording shares the session's chain whatever it asks for.
@@ -1093,7 +1141,7 @@ public sealed class SessionOrchestrator : IDisposable
         catch (Exception e)
         {
             recordings.Failed(e);
-            return;
+            return null;
         }
 
         var library = recordings.Library ?? NoLibraryWrites.Instance;
@@ -1116,7 +1164,7 @@ public sealed class SessionOrchestrator : IDisposable
             library.EndWrite(path, WriteOutcome.Failed);
             recordings.Open?.Closed(path);
             recordings.Failed(e);
-            return;
+            return null;
         }
 
         _recording = recording;
@@ -1138,8 +1186,57 @@ public sealed class SessionOrchestrator : IDisposable
 
         active.Deferred = false;
         ApplySettings(active);
-        SetState(_state with { Recording = RecordingState.Running });
-        recordings.Started(new RecordingStarted(path));
+        return recording;
+    }
+
+    /// <summary>
+    /// The session's encoder chain was forcibly rebuilt at <paramref name="qpc"/> (R4): a Recording
+    /// running on it has ended at the old chain's last packet. It becomes <see cref="_ending"/>,
+    /// stopped with <see cref="RecordingStopReasons.EncoderRestart"/>, and a new one starts at once
+    /// on the new chain, in a new file, without reading <c>recordingsEnabled</c> again (it continues
+    /// the running one). Nothing is published until the old one's writer posts back. With no
+    /// Recording, or one already stopping, nothing happens; the Replay Buffer goes on by itself.
+    /// </summary>
+    private void OnChainRestarted(Active active, long qpc)
+    {
+        if (_recordings is not { } recordings || _recording is not { } running || running.SessionId != active.Id || running.Reason is not null)
+        {
+            return;
+        }
+
+        running.Reason = RecordingStopReasons.EncoderRestart;
+        if (_ending is not null)
+        {
+            // The last restart's Recording is still finishing: this one stops without a replacement.
+            recordings.Info?.Invoke("A second encoder restart came while the last one's Recording was still finishing; the Recording stops");
+            return;
+        }
+
+        _ending = running;
+        _recording = null;
+        var profileId = active.Spec.Target.ProfileId;
+        var next = profileId is null ? null : BeginRecording(active, profileId, qpc, _currentDocument());
+        if (next is null)
+        {
+            recordings.Info?.Invoke($"The encoder restart ended the Recording at {running.Path}, and no new one could start");
+            return;
+        }
+
+        next.Follows = running;
+    }
+
+    /// <summary>A restart's new Recording, once the one it replaced is accounted for: published as started, then the handover.</summary>
+    private void Announce(RecordingRun recording)
+    {
+        if (recording.Follows is not { } follows)
+        {
+            return;
+        }
+
+        recording.Follows = null;
+        var recordings = _recordings!;
+        recordings.Started(new RecordingStarted(recording.Path));
+        recordings.Restarted?.Invoke(new RecordingRestart(follows.Path, recording.Path));
     }
 
     /// <summary>
@@ -1157,19 +1254,32 @@ public sealed class SessionOrchestrator : IDisposable
     /// <summary>
     /// A Recording writer's result: the Library is told how it ended (written while its file holds
     /// data), the Recording is published as stopped, with its stop reason or, when the writer
-    /// failed, <see cref="WriteFailures.ReasonOf"/>, and <see cref="CaptureState.Recording"/> goes off.
-    /// Then, with <paramref name="commitPending"/>, a Target switch held while it ran is committed.
-    /// A duplicate (the shutdown wait and the post-back both) is ignored.
+    /// failed, <see cref="WriteFailures.ReasonOf"/>, and <see cref="CaptureState.Recording"/> goes off
+    /// once no Recording is left. A restart's ended Recording (<see cref="_ending"/>) then announces
+    /// its replacement; a replacement that posts back before it is announced first. Then, with
+    /// <paramref name="commitPending"/> and none left, a Target switch held while it ran is
+    /// committed. A duplicate (the shutdown wait and the post-back both) is ignored.
     /// </summary>
     private void OnRecordingWritten(RecordingWritten written, bool commitPending)
     {
         var recording = written.Recording;
-        if (!ReferenceEquals(_recording, recording))
+        var restarted = ReferenceEquals(_ending, recording);
+        if (!restarted && !ReferenceEquals(_recording, recording))
         {
             return;
         }
 
-        _recording = null;
+        if (restarted)
+        {
+            _ending = null;
+        }
+        else
+        {
+            // A restart's replacement that ends before the one it replaced: started before it stopped.
+            Announce(recording);
+            _recording = null;
+        }
+
         var recordings = _recordings!;
         var error = written.Error;
 
@@ -1183,8 +1293,22 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         var reason = error is not null ? WriteFailures.ReasonOf(error) : recording.Reason ?? RecordingStopReasons.SessionEnded;
-        SetState(_state with { Recording = RecordingState.Off });
+        var off = _recording is null && _ending is null;
+        if (off)
+        {
+            SetState(_state with { Recording = RecordingState.Off });
+        }
+
         recordings.Stopped(new RecordingStopped(recording.Path, reason));
+        if (restarted && _recording is { } next && ReferenceEquals(next.Follows, recording))
+        {
+            Announce(next);
+        }
+
+        if (!off)
+        {
+            return;
+        }
 
         // Its session still running, and not about to end for a held Target switch: a change deferred
         // while it ran is prepared now, so the next save switches to it.
@@ -1266,6 +1390,9 @@ public sealed class SessionOrchestrator : IDisposable
 
         /// <summary>Completed by the writer's callback, from its thread, with its error, before it posts back.</summary>
         public TaskCompletionSource<Exception?> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>The Recording a forced encoder restart ended and this one replaced, until this one is announced.</summary>
+        public RecordingRun? Follows { get; set; }
     }
 
     /// <summary>A Recording writer's result, posted from its thread.</summary>
@@ -1276,6 +1403,9 @@ public sealed class SessionOrchestrator : IDisposable
 
     private sealed record SessionFailed(long SessionId, Exception Failure) : SessionMessage;
 
+    /// <summary>Session <paramref name="SessionId"/>'s encoder chain was forcibly rebuilt; its frames from <paramref name="Qpc"/> on are the new chain's.</summary>
+    private sealed record SessionChainRestarted(long SessionId, long Qpc) : SessionMessage;
+
     /// <summary>The drain timer of session <paramref name="SessionId"/> fired; ignored once that drain is gone.</summary>
     private sealed record DrainExpired(long SessionId) : SessionMessage;
 
@@ -1285,5 +1415,7 @@ public sealed class SessionOrchestrator : IDisposable
         public void Closed(string reason) => owner.Post(new SessionClosed(id, reason));
 
         public void Failed(Exception failure) => owner.Post(new SessionFailed(id, failure));
+
+        public void ChainRestarted(long qpc) => owner.Post(new SessionChainRestarted(id, qpc));
     }
 }

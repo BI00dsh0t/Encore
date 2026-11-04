@@ -109,6 +109,10 @@ public sealed record ReplayClips(
 /// told how it ended (FR-12), so a restart can find the Recordings a dead engine left open; null
 /// keeps nothing.
 /// </param>
+/// <param name="Restarted">
+/// Called on the orchestrator thread when a forced encoder restart (R4) ended a Recording and a new
+/// one took over, just after the new one's <paramref name="Started"/>; null ignores it.
+/// </param>
 public sealed record Recordings(
     OutputPathAllocator Paths,
     Func<string> DefaultOutputFolder,
@@ -117,7 +121,11 @@ public sealed record Recordings(
     Action<Exception> Failed,
     ILibraryWrites? Library = null,
     Action<string>? Info = null,
-    IOpenRecordings? Open = null);
+    IOpenRecordings? Open = null,
+    Action<RecordingRestart>? Restarted = null);
+
+/// <summary>A forced encoder restart's handover (R4): the Recording it stopped and the one that took over, by path.</summary>
+public sealed record RecordingRestart(string StoppedPath, string StartedPath);
 
 /// <summary>One audio device of a <see cref="ChainKey"/>: its endpoint, compared ignoring case, and flow.</summary>
 public readonly record struct ChainDevice
