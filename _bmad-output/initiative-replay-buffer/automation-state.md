@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.7 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with QA 4.14 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -553,3 +553,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.9 is READY FOR QA at `614b0b1` (build 0 warnings; App and Desktop pass; the Heavy dialog and screen-copy test passed). QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-04: 4.14 is READY FOR QA at `dcd748f`: 134 checks passed unattended, and 9 items are on the builder's checklist. QA started on story-2-7 (Sonnet), checking coverage of every AC and Done-when line, that the passes really ran, safety, and the checklist's clarity. Its card is In QA.
 - 2026-11-04: QA 5.9 at `614b0b1`: **QA PASS**, 0 findings. 5.9 has been told to merge (Sonnet), keeping both sides of any Overlay conflict with 5.15. qa-1-14 is back in the pool. Its merge plus 5.15's unblocks 5.12 (the benchmark with the Overlay on).
+- 2026-11-04: QA 4.14 at `dcd748f`: **QA PASS**, 0 blocking and 4 advisories. 4.14 has been told to merge (Sonnet) without marking the epic done or releasing. story-2-7 is back in the pool. After the merge, the coordinator marks epic 4 `status: done` and runs the v0.4.0 release.
