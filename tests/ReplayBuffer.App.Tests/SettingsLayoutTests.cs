@@ -12,12 +12,15 @@ using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Tests;
 
-/// <summary>The shared settings layout (story 9.5): sections as cards in both themes, and the page error info bar.</summary>
+/// <summary>The shared settings layout (stories 9.5 and 9.6): sections as cards in both themes, and the page error info bar.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed partial class SettingsLayoutTests
 {
     private static readonly string[] Views =
-        ["GeneralSettingsView", "ReplayBufferSettingsView", "RecordingsSettingsView", "HotkeysView", "FeedbackSoundsView"];
+        [
+            "GeneralSettingsView", "ReplayBufferSettingsView", "RecordingsSettingsView", "HotkeysView", "FeedbackSoundsView",
+            "TrackLayoutView", "GameProfilesView", "LibrarySettingsView",
+        ];
 
     [Fact]
     public void TheFivePagesShowTheirSectionsAsCardsInBothThemes() => Sta.Run(() =>
@@ -49,6 +52,79 @@ public sealed partial class SettingsLayoutTests
                     var found = Descendants<HeaderedContentControl>(page.View).ToList();
                     Assert.Equal(sections, found.Select(s => s.Header as string));
                     Assert.All(found, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
+                    Save(window, $"settings-{slug}-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
+                }
+            }
+        }
+        finally
+        {
+            window.CloseForQuit();
+        }
+    });
+
+    [Fact]
+    public void TheLastThreePagesShowTheirSectionsAsCardsInBothThemes() => Sta.Run(() =>
+    {
+        // Speakers is connected; Headset isn't, so its Note shows. Both outputs on Everything double count.
+        var speakers = new LayoutDevice(Guid.NewGuid(), "{out-1}", "Speakers", "USB DAC", AudioFlow.Output, IsMic: false);
+        var headset = new LayoutDevice(Guid.NewGuid(), "{out-2}", "Headset", "Arctis", AudioFlow.Output, IsMic: false);
+        var layout = new TrackLayout(
+            [speakers, headset],
+            [new Track(Keys.EverythingTrackId, "Everything", [speakers.Key, headset.Key], MuteAffected: true), new Track(Guid.NewGuid(), "Chat", [], MuteAffected: false)]);
+        var engine = new FakeEngineSession { Reply = (_, _) => Empty.Value };
+        engine.State = engine.State! with
+        {
+            Devices = new AudioDeviceList([new AudioDevice("{out-1}", "Speakers", "USB DAC", AudioFlow.Output, true)]),
+            Settings = SettingsDocument.Empty with
+            {
+                Revision = 1,
+                Global = SettingsMaps.EmptyValues.Add(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(layout)),
+                Profiles = SettingsMaps.EmptyProfiles
+                    .Add(@"c:\a\a.exe", new GameProfile { Name = "Alpha", Ignored = true })
+                    .Add(@"c:\b\b.exe", new GameProfile { Name = "Beta" }),
+            },
+        };
+        var model = new MainViewModel(engine, action => action());
+        model.GameProfiles.SelectedProfile = model.GameProfiles.Profiles[0];
+        var window = Offscreen(new MainWindow { DataContext = model });
+        var theme = ThemeService.ForWindow(window);
+        var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
+        {
+            (model.TrackLayout, "track-layout", ["Devices", "Tracks"]),
+            (model.GameProfiles, "game-profiles", ["Games", "Add a game by hand", "Overrides for", "Replay Buffer", "Output", "Devices", "Tracks"]),
+            (model.LibrarySettings, "library-and-cleanup", ["Output Folder", "Cleanup"]),
+        };
+        try
+        {
+            foreach (var which in new[] { AppTheme.Fluent, AppTheme.GamingDark })
+            {
+                theme.Apply(which);
+                window.Show();
+                var card = (Style)window.FindResource("RbCardStyle");
+                var meter = (Style)window.FindResource("RbLevelMeterStyle");
+                foreach (var (page, slug, sections) in expected)
+                {
+                    model.SelectedNavItem = model.NavItems.First(i => i.Page == page);
+                    Sta.Pump(TimeSpan.FromMilliseconds(100));
+                    if (page == model.TrackLayout)
+                    {
+                        model.TrackLayout.Tracks[0].ShowPeak(1f);
+                        model.TrackLayout.Tracks[1].ShowPeak(0.0316f);
+                        model.TrackLayout.SelectedTrack = model.TrackLayout.Tracks[0];
+                        Sta.Pump(TimeSpan.FromMilliseconds(50));
+                        Assert.True(model.TrackLayout.Tracks[0].HasWarning);
+                        var meters = Descendants<ProgressBar>(page.View).ToList();
+                        Assert.Equal(2, meters.Count);
+                        Assert.All(meters, m => Assert.Same(meter, m.Style));
+                    }
+
+                    Assert.True(page.View.IsLoaded, $"{page.Title} didn't load under {which}");
+                    var found = Descendants<HeaderedContentControl>(page.View).ToList();
+                    Assert.Equal(sections, found.Select(s => s.Header as string));
+                    Assert.All(found, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
+
+                    // A keyed local style hid Gaming dark's implicit Button style and showed the default look.
+                    Assert.All(Descendants<Button>(page.View), b => Assert.Equal(DependencyProperty.UnsetValue, b.ReadLocalValue(FrameworkElement.StyleProperty)));
                     Save(window, $"settings-{slug}-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
                 }
             }
@@ -95,7 +171,7 @@ public sealed partial class SettingsLayoutTests
     });
 
     [Fact]
-    public void TheFiveViewsHaveNoLiteralColourAndNoKeylessStyle()
+    public void TheSettingsViewsHaveNoLiteralColourAndNoKeylessStyle()
     {
         foreach (var view in Views)
         {
@@ -165,7 +241,7 @@ public sealed partial class SettingsLayoutTests
         throw new InvalidOperationException("ReplayBuffer.slnx wasn't found above the test.");
     }
 
-    [GeneratedRegex(@"""(Gray|DarkRed)""|#[0-9A-Fa-f]{3,8}\b")]
+    [GeneratedRegex(@"""(Gray|DarkRed|DarkOrange)""|#[0-9A-Fa-f]{3,8}\b")]
     private static partial Regex LiteralColour();
 
     [GeneratedRegex(@"<Style(?![^>]*x:Key)[^>]*TargetType=")]
