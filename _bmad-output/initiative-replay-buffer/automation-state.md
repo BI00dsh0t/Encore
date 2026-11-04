@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.5 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.12 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -483,3 +483,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 4.9 is READY FOR QA at `30b908c` (develop with 4.10, 5.7 and 6.4 merged in; the only Contracts change is the additive `reset-gap` error code). QA started on slice-epic-8 (Sonnet), and its card is In QA. QA was told to wait for 5.8's `.bench-running` to clear before building. 4.9's last publish overlapped 5.8's GPU run, and 5.8 was told to rerun if its numbers look off. 4.12 reported one uncaptured flaky App.Tests failure in five runs.
 - 2026-11-04: QA 4.12 at `2f56fab`: **QA PASS**, 0 blocking and 2 notes (a duplicate of an active binding fires its action; the Human Check row is added at merge). 4.12 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-04: 4.12 merged into `develop` (`29d63b8`, `feat(app): merge 4.12-hotkeys-page`) and marked done, after QA PASS at `2f56fab` with 0 blocking findings. Develop (7.4) was synced in first: build 0 warnings; App 89 passed. App only, no Contracts or engine change. A 4.12 row is in the Human Check Queue. Known limit (QA note 1): a combination an active binding already holds fires its action instead of reaching the page, so the page's duplicate message appears only for inactive or failed bindings; fixing it needs the engine to pause Hotkeys during capture.
+- 2026-11-04: 4.12 merged (`29d63b8`, marked done `e340a9d`). Its card is Done with its label detached, and story-2-7 is back in the pool. Nothing new is ready: 4.11 waits on 4.9, 5.10 on 4.9, and 6.5 on 4.9.
