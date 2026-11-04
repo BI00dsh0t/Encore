@@ -162,7 +162,7 @@
 - source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-modern-ui/tickets/story-refactor-sweep-plan.md`
   summary: The committed `ux-modern-ui/renders/shell-fluent.png` and `shell-gaming-dark.png` (9.3) show the General page before 9.5 restyled it; the tests now render the carded page.
   evidence: Story 9.8's comparison. Develop's tip and the sweep render the same shell (104 px differ, the status clock's seconds only).
-  outcome: Recorded, open (story 9.8). Low. Refresh them from the test output when 9.9 checks the epic, or on the builder's say.
+  outcome: Closed at 9.8's merge: both shell renders were replaced with the tests' current output.
 - source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-modern-ui/tickets/story-refactor-sweep-plan.md`
   summary: Library and Cleanup's blocked message still says "acknowledged on the Library tab"; the Library is a nav page since 9.3.
   evidence: `LibrarySettingsPage.cs:69`. The epic's Boundaries keep every page's wording, so a sweep doesn't change it.
