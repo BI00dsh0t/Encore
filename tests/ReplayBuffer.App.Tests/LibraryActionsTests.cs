@@ -68,6 +68,67 @@ public sealed class LibraryActionsTests : IDisposable
     }
 
     [Fact]
+    public void RenameSendsTheIdentityAndTheBaseNameAndShowsARefusal()
+    {
+        var item = new LibraryItem(Clip, null, 48, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch.AddDays(1));
+        var page = new LibraryPage(_engine, shell: _shell);
+        page.Render(_engine.State! with { LibraryFolder = _folder, Library = [item] });
+        var row = page.Rows[0];
+        _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.FileNameTaken, "taken");
+
+        row.RenameCommand.Execute(null);
+        Assert.Equal((true, "clip"), (row.IsRenaming, row.RenameText));
+        row.RenameText = "  best.MP4 ";
+        row.CommitRenameCommand.Execute(null);
+
+        Assert.Equal(new LibraryRename(Clip, 48, item.Modified, "best"), Assert.Single(_engine.Sent));
+        Assert.False(row.IsRenaming);
+        Assert.Equal("A file with that name already exists.", page.ActionError);
+
+        // Escape sends nothing; a success clears the error.
+        row.RenameCommand.Execute(null);
+        row.CancelRenameCommand.Execute(null);
+        row.CommitRenameCommand.Execute(null);
+        Assert.Single(_engine.Sent);
+        _engine.Reply = (_, _) => Empty.Value;
+        row.RenameCommand.Execute(null);
+        row.CommitRenameCommand.Execute(null);
+        Assert.Equal(2, _engine.Sent.Count);
+        Assert.Null(page.ActionError);
+    }
+
+    [Fact]
+    public void DeleteAsksFirstAndSendsOnlyOnYesAndBothWaitUntilTheItemIsWritten()
+    {
+        var answer = false;
+        var asked = new List<string>();
+        var page = new LibraryPage(_engine, shell: _shell, confirmDelete: name =>
+        {
+            asked.Add(name);
+            return answer;
+        });
+        var writing = new LibraryItem(Clip, null, 0, DateTimeOffset.UnixEpoch, true);
+        var state = _engine.State! with { LibraryFolder = _folder, Library = [writing] };
+        page.Render(state);
+        var row = page.Rows[0];
+        Assert.False(row.RenameCommand.CanExecute(null));
+        Assert.False(row.DeleteCommand.CanExecute(null));
+
+        var written = writing with { Size = 48, BeingWritten = false, Modified = DateTimeOffset.UnixEpoch };
+        page.Render(state with { Library = [written] });
+        Assert.True(row.RenameCommand.CanExecute(null));
+        _engine.Reply = (_, _) => Empty.Value;
+
+        row.DeleteCommand.Execute(null);
+        Assert.Empty(_engine.Sent);
+
+        answer = true;
+        row.DeleteCommand.Execute(null);
+        Assert.Equal(["clip.mp4", "clip.mp4"], asked);
+        Assert.Equal(new LibraryDelete(Clip, 48, written.Modified), Assert.Single(_engine.Sent));
+    }
+
+    [Fact]
     public void TheClipboardDataIsTheOnePathAsAFileDropToCopy() => Sta.Run(() =>
     {
         var path = Path.Combine(_folder, Clip);

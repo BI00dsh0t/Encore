@@ -22,6 +22,8 @@
                         <MenuItem Command="{Binding OpenCommand}" Header="Open" />
                         <MenuItem Command="{Binding ShowInExplorerCommand}" Header="Show in Explorer" />
                         <MenuItem Command="{Binding CopyCommand}" Header="Copy" />
+                        <MenuItem Command="{Binding RenameCommand}" Header="Rename" />
+                        <MenuItem Command="{Binding DeleteCommand}" Header="Delete" />
                     </ContextMenu>
                 </Grid.ContextMenu>
                 <Grid.ColumnDefinitions>
@@ -48,9 +50,31 @@
                     </Grid>
                 </Border>
                 <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                    <TextBlock Text="{Binding Name}"
-                               TextTrimming="CharacterEllipsis"
-                               ToolTip="{Binding Path}" />
+                    <!-- The name, or its inline editor while renaming: Enter or leaving commits, Escape cancels. -->
+                    <Grid>
+                        <TextBlock Text="{Binding Name}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Path}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRenaming}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBox IsVisibleChanged="OnRenameVisibleChanged"
+                                 LostFocus="OnRenameLostFocus"
+                                 Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"
+                                 Visibility="{Binding IsRenaming, Converter={StaticResource Visible}}">
+                            <TextBox.InputBindings>
+                                <KeyBinding Key="Enter" Command="{Binding CommitRenameCommand}" />
+                                <KeyBinding Key="Escape" Command="{Binding CancelRenameCommand}" />
+                            </TextBox.InputBindings>
+                        </TextBox>
+                    </Grid>
                     <TextBlock Margin="0,2,0,0"
                                Foreground="Gray"
                                Text="{Binding Game}"

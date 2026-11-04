@@ -197,6 +197,24 @@ public static class ErrorCodes
     /// </summary>
     public const string LibraryItemChanged = "library-item-changed";
 
+    /// <summary>A Library rename or delete named an item a writer is still writing (a Clip or a Recording); nothing changed.</summary>
+    public const string FileBeingWritten = "file-being-written";
+
+    /// <summary>
+    /// A Library rename's new name can't be a file name: empty, holding a character Windows forbids,
+    /// ending with a dot or a space, or a reserved device name. Nothing changed.
+    /// </summary>
+    public const string InvalidFileName = "invalid-file-name";
+
+    /// <summary>A Library rename's new name is already used by another file or Library item in that folder; nothing changed.</summary>
+    public const string FileNameTaken = "file-name-taken";
+
+    /// <summary>
+    /// A Library delete was refused because the file's volume has no Recycle Bin (or the shell would
+    /// delete it permanently). The file and its item are untouched; nothing is ever deleted permanently.
+    /// </summary>
+    public const string RecycleBinUnavailable = "recycle-bin-unavailable";
+
     /// <summary>
     /// A warning: a Track of the active Track Layout mixes the Output Device that Feedback Sounds
     /// play on, so its recordings would hold the sounds. Withdrawn when that is no longer so.
@@ -274,6 +292,10 @@ public static class ErrorCodes
         RecordingRestarted,
         LibraryCorrupt,
         LibraryItemChanged,
+        FileBeingWritten,
+        InvalidFileName,
+        FileNameTaken,
+        RecycleBinUnavailable,
         FeedbackDeviceCaptured,
         MemoryMargin,
         ResetGap,
