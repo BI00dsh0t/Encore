@@ -9,52 +9,37 @@
                  MinWidth="480"
                  MinHeight="320"
                  WindowStartupLocation="CenterScreen">
-    <TabControl Margin="8" TabStripPlacement="Left">
-        <TabItem Header="Status">
-            <StackPanel Margin="12">
-                <TextBlock FontWeight="SemiBold" Text="{Binding Status}" TextWrapping="Wrap" />
-                <TextBlock Margin="0,8,0,0" Text="{Binding EngineDetails}" />
-                <TextBlock Margin="0,4,0,0" Text="{Binding Capture}" TextWrapping="Wrap" />
-                <TextBlock Margin="0,4,0,0" Text="{Binding TargetGame}" TextWrapping="Wrap" />
-                <TextBlock Margin="0,4,0,0">
-                    <Run Text="Settings revision" />
-                    <Run Text="{Binding SettingsRevision, Mode=OneWay}" />
-                </TextBlock>
-                <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Warnings" />
-                <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding Warnings}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding}" TextWrapping="Wrap" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </TabItem>
-        <TabItem Header="Library">
-            <ContentControl Margin="12" Content="{Binding Library.View}" />
-        </TabItem>
-        <TabItem Header="Settings" IsSelected="{Binding IsSettingsTabSelected, Mode=TwoWay}">
-            <Grid Margin="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="160" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <ListBox DisplayMemberPath="Title"
-                         ItemsSource="{Binding Pages}"
-                         SelectedItem="{Binding SelectedPage}" />
-                <DockPanel Grid.Column="1" Margin="12,0,0,0">
-                    <TextBlock DockPanel.Dock="Top"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               Text="{Binding SelectedPage.Title}" />
-                    <TextBlock Margin="0,12,0,0"
-                               DockPanel.Dock="Bottom"
-                               Foreground="DarkRed"
-                               Text="{Binding SelectedPage.Message}"
-                               TextWrapping="Wrap" />
-                    <ContentControl Margin="0,12,0,0" Content="{Binding SelectedPage.View}" />
-                </DockPanel>
-            </Grid>
-        </TabItem>
-    </TabControl>
+    <DockPanel>
+        <ContentControl Margin="12,8,12,0"
+                        DockPanel.Dock="Top"
+                        Content="{Binding StatusLine.View}" />
+        <TabControl Margin="8" TabStripPlacement="Left">
+            <TabItem Header="Library">
+                <ContentControl Margin="12" Content="{Binding Library.View}" />
+            </TabItem>
+            <TabItem Header="Settings" IsSelected="{Binding IsSettingsTabSelected, Mode=TwoWay}">
+                <Grid Margin="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ListBox DisplayMemberPath="Title"
+                             ItemsSource="{Binding Pages}"
+                             SelectedItem="{Binding SelectedPage}" />
+                    <DockPanel Grid.Column="1" Margin="12,0,0,0">
+                        <TextBlock DockPanel.Dock="Top"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding SelectedPage.Title}" />
+                        <TextBlock Margin="0,12,0,0"
+                                   DockPanel.Dock="Bottom"
+                                   Foreground="DarkRed"
+                                   Text="{Binding SelectedPage.Message}"
+                                   TextWrapping="Wrap" />
+                        <ContentControl Margin="0,12,0,0" Content="{Binding SelectedPage.View}" />
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
 </app:ShellWindow>
