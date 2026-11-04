@@ -309,7 +309,8 @@ internal sealed class EngineHost : IAsyncDisposable
 
                     unreachableWarning = to.Raise(ErrorCodes.CleanupLimitUnreachable, WarningSeverity.Warning, "library", message, overlay: false).Id;
                 },
-                log: message => libraryLog.LogInformation("{Message}", message));
+                log: message => libraryLog.LogInformation("{Message}", message),
+                finalPath: GamePaths.Canonicalize);
 
             // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.
             load.Store.Changed += _ => libraryActor.OutputFolderChanged();

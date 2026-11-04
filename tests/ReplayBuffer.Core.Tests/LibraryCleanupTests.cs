@@ -69,11 +69,17 @@ public sealed class LibraryCleanupTests : IDisposable
     {
         _actor?.Dispose();
 
-        // The link alone, so the recursive delete can't reach through it.
+        // The links alone, so the recursive delete can't reach through them.
         var junction = Path.Combine(Output, "junc");
         if (Directory.Exists(junction))
         {
             Directory.Delete(junction);
+        }
+
+        var link = Path.Combine(Output, "link.mp4");
+        if (File.Exists(link) || new FileInfo(link).LinkTarget is not null)
+        {
+            File.Delete(link);
         }
 
         Directory.Delete(_folder, recursive: true);
@@ -269,6 +275,39 @@ public sealed class LibraryCleanupTests : IDisposable
         Assert.Equal(["a.mp4"], preview.Paths);
         Assert.Equal(["a.mp4"], Deleted);
         Assert.True(File.Exists(outside));
+    }
+
+    [Fact]
+    public void AScannedLibraryWithAJunctionAndALinkNeverLosesTheVictims()
+    {
+        var other = Path.Combine(_folder, "other");
+        Directory.CreateDirectory(other);
+        var victim = Path.Combine(other, "victim.mp4");
+        File.WriteAllBytes(victim, LibraryActorTests.Mp4());
+        Junction(Path.Combine(Output, "junc"), other);
+        var linked = Path.Combine(other, "linked.mp4");
+        File.WriteAllBytes(linked, LibraryActorTests.Mp4());
+        try
+        {
+            File.CreateSymbolicLink(Path.Combine(Output, "link.mp4"), linked);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Symbolic links need Developer Mode or admin rights; the junction alone is checked then.
+        }
+
+        File.WriteAllBytes(Path.Combine(Output, "in.mp4"), LibraryActorTests.Mp4());
+
+        // The engine's own start: a scan, then the actor over what it found.
+        var load = LibraryActor.Load(Output, Path.Combine(_folder, "library.json"), _ => null, _ => { });
+        Start(load.Items, new CleanupSettings(1, null));
+        _time.Advance(StartDelay);
+        WaitForPasses(1);
+
+        Assert.Equal(["in.mp4"], load.Items.Select(i => i.Path));
+        Assert.Equal(["in.mp4"], Deleted);
+        Assert.True(File.Exists(victim));
+        Assert.True(File.Exists(linked));
     }
 
     [Fact]

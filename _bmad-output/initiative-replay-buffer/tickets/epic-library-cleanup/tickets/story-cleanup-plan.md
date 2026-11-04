@@ -91,6 +91,8 @@ deferred: []
 
 - QA round 1 (high): the scan follows junctions, so a junction or symbolic link inside the Output Folder put files from elsewhere in the index, and the lexical guards let Cleanup delete them. `LibraryActor.ThroughReparsePoint` now refuses a file when it, or any folder between the Output Folder and it, is a reparse point (or can't be read). The planner checks this for each item it reaches, so preview and pass agree, and `CleanupDelete` checks it again before the delete. The Output Folder itself may be a junction. Test: `AFileReachedThroughAJunctionIsNeverDeleted` (`mklink /J` in the temp folder).
 
+- Coordinator follow-up to QA round 1: the guard is now layered. (1) The scan's `Recursive` options skip `FileAttributes.ReparsePoint`, so a junction, symbolic link or mount point is neither followed nor indexed, and `Reconcile` drops an item reached through one. (2) Right before a Cleanup delete, and before 7.7's rename and recycle (same hole), `Inside` checks for reparse points below the Output Folder, then compares the file's final path with the Output Folder's own, both resolved by the injected `finalPath` port (`GamePaths.Canonicalize`: `GetFinalPathNameByHandle` on an attributes-only handle), ignoring case, with a trailing separator. A failure refuses: Cleanup skips the file, and rename and delete answer `command-failed`. (3) The planner takes the same check as a predicate, cached per pass, so the preview matches. Test: `AScannedLibraryWithAJunctionAndALinkNeverLosesTheVictims` (a real `Load` scan; the symbolic-link part runs only where links can be created without admin rights).
+
 ## Plan Change Log
 
 ## Review Triage Log

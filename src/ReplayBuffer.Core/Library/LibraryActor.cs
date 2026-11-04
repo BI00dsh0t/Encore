@@ -82,7 +82,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         RecurseSubdirectories = true,
         IgnoreInaccessible = true,
         MatchType = MatchType.Simple,
-        AttributesToSkip = 0,
+        // Hidden and system files are listed; a junction or symbolic link is neither followed nor listed (story 7.8).
+        AttributesToSkip = FileAttributes.ReparsePoint,
     };
 
     private readonly Channel<Message> _channel = Channel.CreateUnbounded<Message>(
@@ -102,6 +103,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private readonly Func<string, double?>? _readLength;
     private readonly Action<LibraryFolderChanged>? _folderChanged;
     private readonly Func<string, bool>? _recycle;
+    private readonly Func<string, string>? _finalPath;
     private readonly Func<CleanupSettings>? _cleanup;
     private readonly Action<string>? _limitUnreachable;
     private readonly Action<string>? _log;
@@ -133,6 +135,9 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     // Actor thread only: the keys the running Cleanup pass couldn't delete; cleared when a pass starts.
     private readonly HashSet<string> _cleanupSkip = new(StringComparer.OrdinalIgnoreCase);
+
+    // Actor thread only: whether the running pass found each key's file inside the Output Folder; the delete checks again.
+    private readonly Dictionary<string, bool> _cleanupInside = new(StringComparer.OrdinalIgnoreCase);
 
     private string _folder = "";
     private FileSystemWatcher? _watcher;
@@ -174,6 +179,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// <param name="cleanup">The current <c>cleanup</c> limits, read on the actor thread; without it Cleanup is off.</param>
     /// <param name="limitUnreachable">Raises <see cref="ErrorCodes.CleanupLimitUnreachable"/> with its message; once until a pass ends within the limit or Cleanup is off.</param>
     /// <param name="log">Logs Cleanup's plans and deletes, on the actor thread.</param>
+    /// <param name="finalPath">A path's final target, every junction and link followed; throws when it can't be read. A delete, rename or Cleanup is refused unless the item's final path is under the Output Folder's. Without it only the path's own folders are checked for reparse points.</param>
     public LibraryActor(
         IReadOnlyList<LibraryItem> items,
         Func<string> outputFolder,
@@ -193,7 +199,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         Func<string, bool>? recycle = null,
         Func<CleanupSettings>? cleanup = null,
         Action<string>? limitUnreachable = null,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        Func<string, string>? finalPath = null)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentException.ThrowIfNullOrEmpty(libraryFile);
@@ -214,6 +221,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _cleanup = cleanup;
         _limitUnreachable = limitUnreachable;
         _log = log;
+        _finalPath = finalPath;
         _cleanupBlocked = cleanupBlocked;
         foreach (var item in items)
         {
@@ -1175,7 +1183,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
 
         var file = new FileInfo(path);
-        if (!file.Exists || !IsMp4(path) || file.Length == 0)
+        if (!file.Exists || !IsMp4(path) || file.Length == 0 || ThroughReparsePoint(_folder, path))
         {
             Remove(key);
             return;
@@ -1364,6 +1372,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
             return;
         }
 
+        if (!Inside(Path.GetFullPath(from)))
+        {
+            RefuseOutside(request.Done, args.Path);
+            return;
+        }
+
         Register(from);
         Register(to);
         if (!Retried(() => File.Move(from, to), request.Done, "The file couldn't be renamed."))
@@ -1389,6 +1403,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
 
         var path = Path.Combine(_folder, key);
+        if (!Inside(Path.GetFullPath(path)))
+        {
+            RefuseOutside(request.Done, args.Path);
+            return;
+        }
+
         var recycled = false;
         if (_recycle is { } recycle)
         {
@@ -1458,12 +1478,21 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         && !_cleanupBlocked
         && _time.GetUtcNow() - _startedAt >= CleanupStartDelay;
 
-    private CleanupPlan PlanCleanup(CleanupSettings limits, IReadOnlySet<string> skip) =>
-        CleanupPlanner.Plan(_time.GetUtcNow(), limits, _items.Values, _folder, skip);
+    private CleanupPlan PlanCleanup(CleanupSettings limits, IReadOnlySet<string> skip, Dictionary<string, bool>? cache) =>
+        CleanupPlanner.Plan(_time.GetUtcNow(), limits, _items.Values, _folder, skip, key =>
+        {
+            if (cache is null || !cache.TryGetValue(key, out var inside))
+            {
+                inside = Inside(Path.GetFullPath(Path.Combine(_folder, key)));
+                cache?.Add(key, inside);
+            }
+
+            return inside;
+        });
 
     private LibraryCleanupPlan Preview(LibraryCleanupPreview args)
     {
-        var plan = PlanCleanup(new CleanupSettings(args.MaxBytes, args.MaxAgeSeconds), new HashSet<string>());
+        var plan = PlanCleanup(new CleanupSettings(args.MaxBytes, args.MaxAgeSeconds), new HashSet<string>(), null);
         return new LibraryCleanupPlan(plan.Items.Count, plan.Bytes, [.. plan.Items.Select(i => i.Path)]);
     }
 
@@ -1502,10 +1531,11 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
 
         _cleanupSkip.Clear();
+        _cleanupInside.Clear();
         _passDeleted = 0;
         _passBytes = 0;
         _passSkipped = 0;
-        var plan = PlanCleanup(limits, _cleanupSkip);
+        var plan = PlanCleanup(limits, _cleanupSkip, _cleanupInside);
         if (plan.Items.Count == 0)
         {
             EndCleanup(plan);
@@ -1536,7 +1566,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
             return;
         }
 
-        var plan = PlanCleanup(limits, _cleanupSkip);
+        var plan = PlanCleanup(limits, _cleanupSkip, _cleanupInside);
         if (plan.Items.Count == 0)
         {
             _passRunning = false;
@@ -1616,9 +1646,9 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
             return false;
         }
 
-        if (ThroughReparsePoint(_folder, full))
+        if (!Inside(full))
         {
-            Log($"Cleanup skipped {key}: it is reached through a junction or symbolic link, so it may be outside the Output Folder.");
+            Log($"Cleanup skipped {key}: it is reached through a junction or symbolic link, or its final path isn't in the Output Folder.");
             return false;
         }
 
@@ -1650,6 +1680,48 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     }
 
     private void Log(string message) => _log?.Invoke(message);
+
+    /// <summary>
+    /// Whether the actor may delete, rename or clean up the file at <paramref name="full"/>: no reparse
+    /// point from below the Output Folder down to the file, and, with the port, its final path (every link
+    /// followed) under the Output Folder's own final path. False when either can't be read.
+    /// </summary>
+    private bool Inside(string full)
+    {
+        if (!TryKey(_folder, full, out _) || ThroughReparsePoint(_folder, full))
+        {
+            return false;
+        }
+
+        if (_finalPath is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            var root = _finalPath(_folder);
+            if (!root.EndsWith(Path.DirectorySeparatorChar))
+            {
+                root += Path.DirectorySeparatorChar;
+            }
+
+            return _finalPath(full).StartsWith(root, StringComparison.OrdinalIgnoreCase);
+        }
+#pragma warning disable CA1031 // Any failure of the injected port means the file isn't touched.
+        catch (Exception e)
+#pragma warning restore CA1031
+        {
+            _failed(e);
+            return false;
+        }
+    }
+
+    // A rename or delete of a file whose real location may be outside the Output Folder.
+    private static void RefuseOutside(TaskCompletionSource done, string? path) =>
+        done.TrySetException(new ErrorCodeException(
+            ErrorCodes.CommandFailed,
+            $"The Library item '{path}' is reached through a junction or symbolic link, so it wasn't changed."));
 
     /// <summary>Queues a read of the item's length at its current size, unless one is already queued at that size.</summary>
     private void QueueLength(string key)
