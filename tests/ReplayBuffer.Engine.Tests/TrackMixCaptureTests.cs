@@ -193,15 +193,29 @@ public sealed class TrackMixCaptureTests : IDisposable
         return left;
     }
 
+    /// <summary>
+    /// The steady level: the median of the RMS over 50 ms windows. A device whose first or last
+    /// blocks land late on a loaded machine leaves a stretch of padding silence at an edge; over the
+    /// whole stream that pulled the Both Track to 0.126 against 0.158 once. The median reads the
+    /// level the Track holds most of the time, so wrong wiring still fails it.
+    /// </summary>
     private static double Rms(float[] samples)
     {
-        double sum = 0;
-        foreach (var s in samples)
+        const int Window = AudioFormat.SampleRate / 20;
+        var levels = new List<double>();
+        for (var start = 0; start + Window <= samples.Length; start += Window)
         {
-            sum += s * s;
+            double sum = 0;
+            for (var i = start; i < start + Window; i++)
+            {
+                sum += samples[i] * samples[i];
+            }
+
+            levels.Add(Math.Sqrt(sum / Window));
         }
 
-        return Math.Sqrt(sum / samples.Length);
+        levels.Sort();
+        return levels[levels.Count / 2];
     }
 
     private static double Peak(float[] samples) => samples.Max(Math.Abs);
