@@ -43,7 +43,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 6.11 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 6.11 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.11 |
 
@@ -143,7 +143,7 @@ The coordinator logs each QA round in the Log below.
 | 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ede89f7`) |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
-| 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA (qa-2-1) |
+| 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
 | 27.12 | 6.12 Refactor sweep | | pending |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
@@ -632,3 +632,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.10 merged (`5fa03c4`, marked done). Develop was merged into the branch first (6.10 and 8.2 included): 0-warning build, Core 145, App 122, Engine 175, Contracts 121 and the engine publish all passed; no GPU tests. Its open items are in deferred-work.md. 7.11 (the epic 7 end-to-end check) is unblocked; the epic is not marked done.
 - 2026-11-04: 7.10 merged (`5fa03c4`, marked done `7e10cd6`), and its card is Done. 7.11 (the epic 7 end-to-end check) went to story-2-7 (Opus, medium effort), with its card In progress. With GPU tests paused, it drives the real App and engine on a throwaway instance against pre-made MP4s, with no capture. After it, the v0.7.0 release. Epic 6 still has 6.11, then 6.12 (the sweep) and 6.13 (end to end), before v0.6.0.
 - 2026-11-04: 6.11 READY FOR QA at `7f2e041`, and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; GPU tests paused).
+- 2026-11-04: QA 6.11 passed at `7f2e041` with 0 findings: 0-warning build; App 126, Engine 176, Platform.Capture 3 and Core 146 passed; publish clean; Contracts change additive (`monitors.list`, `DisplayMonitor`, `MonitorList`). Not run: the manual second-monitor check (HITL) and GPU tests (paused). qa-2-1 is back in the pool, and qa-1-14 is merging.
