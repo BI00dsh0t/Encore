@@ -111,6 +111,15 @@ public sealed class NothingToReselectPairTests : IAsyncDisposable
         }
 
         var expected = await WaitForStateAsync(s => s.Library is [{ Favourite: true }], BackWithin);
+
+        // The engine saves library.json on its own writer after the event: wait for the Favourite on disk.
+        var clock = Stopwatch.StartNew();
+        while (!LibraryEntries().Contains("\"favourite\":true", StringComparison.Ordinal))
+        {
+            Assert.True(clock.Elapsed < BackWithin, "library.json never held the Favourite");
+            await Task.Delay(100, Token);
+        }
+
         var files = Snapshot();
 
         // 1. The App is killed; the engine relaunches it.
@@ -145,13 +154,13 @@ public sealed class NothingToReselectPairTests : IAsyncDisposable
         AssertUnchanged(expected, state, files);
     }
 
-    private static void AssertUnchanged(StateSnapshot expected, StateSnapshot state, IReadOnlyDictionary<string, string> files)
+    private void AssertUnchanged(StateSnapshot expected, StateSnapshot state, IReadOnlyDictionary<string, string> files)
     {
         Assert.Equal(Json(expected.Settings), Json(state.Settings));
         Assert.False(state.Capture.MicMuted);
         Assert.True(Assert.Single(state.Library).Favourite);
         Assert.Contains(state.Hotkeys.Bindings, b => b.Action == HotkeyAction.Save && b.Binding == new HotkeyBinding(0x86, 7));
-        Assert.Equal(files, files.Keys.ToDictionary(f => f, f => Convert.ToBase64String(File.ReadAllBytes(f))));
+        Assert.Equal(files, Snapshot());
     }
 
     /// <summary>
@@ -180,14 +189,50 @@ public sealed class NothingToReselectPairTests : IAsyncDisposable
         process.Kill();
     }
 
-    /// <summary>The bytes of settings.json, runtime.json and library.json.</summary>
-    private Dictionary<string, string> Snapshot() =>
-        new[]
+    /// <summary>
+    /// The bytes of settings.json and runtime.json, and library.json's items. library.json is compared by
+    /// its parsed items, not its bytes: the engine may save it again with the same items (a re-read length,
+    /// its Output Folder), which is no change to anything the user chose.
+    /// </summary>
+    private Dictionary<string, string> Snapshot() => new()
+    {
+        ["settings.json"] = Convert.ToBase64String(ReadShared(Path.Combine(TestInstance.RoamingDataFolder, "settings.json"))),
+        ["runtime.json"] = Convert.ToBase64String(ReadShared(Path.Combine(TestInstance.LocalDataFolder, "runtime.json"))),
+        ["library.json"] = LibraryEntries(),
+    };
+
+    /// <summary>Each saved item's path, Game Profile, size and Favourite, one line per item.</summary>
+    private string LibraryEntries()
+    {
+        using var document = JsonDocument.Parse(ReadShared(Path.Combine(TestInstance.RoamingDataFolder, "library.json")));
+        var items = document.RootElement.GetProperty("items").EnumerateArray().Select(i => string.Join(
+            ",",
+            i.GetProperty("path").GetString(),
+            i.TryGetProperty("profileId", out var profile) ? profile.GetString() : "",
+            i.TryGetProperty("size", out var size) ? size.GetRawText() : "",
+            "\"favourite\":" + (i.TryGetProperty("favourite", out var favourite) && favourite.GetBoolean() ? "true" : "false")));
+        return string.Join(";", items);
+    }
+
+    /// <summary>A file the engine may be replacing right now: read with sharing, retried for up to 2 s.</summary>
+    private static byte[] ReadShared(string path)
+    {
+        var clock = Stopwatch.StartNew();
+        while (true)
         {
-            Path.Combine(TestInstance.RoamingDataFolder, "settings.json"),
-            Path.Combine(TestInstance.LocalDataFolder, "runtime.json"),
-            Path.Combine(TestInstance.RoamingDataFolder, "library.json"),
-        }.ToDictionary(f => f, f => Convert.ToBase64String(File.ReadAllBytes(f)));
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var copy = new MemoryStream();
+                stream.CopyTo(copy);
+                return copy.ToArray();
+            }
+            catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && clock.Elapsed < TimeSpan.FromSeconds(2))
+            {
+                Thread.Sleep(50);
+            }
+        }
+    }
 
     private Process StartApp(params string[] args)
     {
