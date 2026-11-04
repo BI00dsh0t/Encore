@@ -60,7 +60,7 @@ One sitting with the Dev instance. Start `ReplayBuffer.Engine serve` (no `--debu
 1. **Settings > Feedback Sounds (5.11).** Click Play on each of the five rows and listen: Clip saved and Save failed must sound clearly different. Switch Save failed off, pick another Output Device and back, check the page by eye.
 2. **Overlay planes first (5.15, 5.12, part 1).** Read `dxdiag /t` "MPO MaxPlanes" as it is now. It decides what you should see below: with no planes, `overlayDot: auto` shows the dot for 3 s after each change; with planes, always.
 3. **A borderless game (5.1, 5.3, 5.5, 6.8).** Play a borderless game with the Replay Buffer on.
-   - The hollow dot appears top-right of the game's monitor within 1 s, 24 px in, and the game keeps focus (5.1).
+   - The hollow dot appears top-right of the game's monitor within 1 s, 24 px in, and the game keeps focus (5.1). With no overlay planes (step 2), it fades 3 s after each change and comes back on the next; that is the adaptive dot, not a fault.
    - Press Save: the green saving icon shows left of the dot at once and stays through the cooldown; a second press inside it changes nothing (5.3). You hear the saved sound.
    - Cause a failed save (cooldown 0, double press, above): "Clip saved" in green, then "Clip not saved: clip too short" in red, one after the other, 4 s each; check the text reads well (12 px, shade, ellipsis) and the dot doesn't move (5.5). You hear the saved sound, then the failed one.
    - Press the Mic Mute Hotkey: the mic-muted icon goes and comes with it.
