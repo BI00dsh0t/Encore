@@ -19,6 +19,7 @@ using ReplayBuffer.Engine.Sessions;
 using ReplayBuffer.Engine.Settings;
 using ReplayBuffer.Engine.Supervision;
 using ReplayBuffer.Platform.Audio;
+using ReplayBuffer.Platform.Capture;
 using ReplayBuffer.Platform.FFmpeg;
 using ReplayBuffer.Platform.Windows;
 
@@ -497,7 +498,19 @@ internal sealed class EngineHost : IAsyncDisposable
                             recordingLog.LogWarning("{Code}: {Message}", code, message);
                             warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay: true);
                         })
-                    : null);
+                    : null,
+                new DeviceRecovery(
+                    Reset: message =>
+                    {
+                        clipLog.LogWarning("{Code}: {Message}", ErrorCodes.GpuReset, message);
+                        warnings.Raise(ErrorCodes.GpuReset, WarningSeverity.Warning, "replay", message, overlay: false);
+                    },
+                    Failed: message =>
+                    {
+                        clipLog.LogError("{Code}: {Message}", ErrorCodes.GpuResetFailed, message);
+                        warnings.Raise(ErrorCodes.GpuResetFailed, WarningSeverity.Error, "replay", message, overlay: false);
+                    },
+                    Recovered: took => clipLog.LogInformation("Recovered from the GPU reset in {Ms:0} ms; buffering again", took.TotalMilliseconds)));
 
             Volatile.Write(ref settingsTo, sessions);
 
@@ -592,7 +605,8 @@ internal sealed class EngineHost : IAsyncDisposable
                     // A real hang: no heartbeat, and every publish, snapshot and attach blocks on the hub.
                     host._stopHeartbeat.Cancel();
                     hub.Freeze();
-                });
+                },
+                D3D11Device.SimulateReset);
             router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(

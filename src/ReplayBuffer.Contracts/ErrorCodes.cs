@@ -263,6 +263,21 @@ public static class ErrorCodes
     /// </summary>
     public const string EncoderBudget = "encoder-budget";
 
+    /// <summary>
+    /// A warning (R3, PLAN.md T-01): the GPU driver reset or removed the capture device, so the
+    /// Replay Buffer stopped buffering while the session rebuilds its capture and encoder chains.
+    /// Content buffered before the reset stays saveable; a running Recording continues in a new
+    /// file once the session recovers.
+    /// </summary>
+    public const string GpuReset = "gpu-reset";
+
+    /// <summary>
+    /// An error (R3): the session couldn't rebuild its device and chains after a GPU driver reset
+    /// within the give-up time, so the Replay Buffer stays off until the next Target. The engine
+    /// keeps running.
+    /// </summary>
+    public const string GpuResetFailed = "gpu-reset-failed";
+
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
 
@@ -331,6 +346,8 @@ public static class ErrorCodes
         MemoryMargin,
         ResetGap,
         EncoderBudget,
+        GpuReset,
+        GpuResetFailed,
         NotDevInstance,
     ];
 }

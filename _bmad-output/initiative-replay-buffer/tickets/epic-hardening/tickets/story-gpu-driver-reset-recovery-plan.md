@@ -3,16 +3,16 @@ title: 'GPU driver reset recovery'
 type: 'feature'
 ticket: '3'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '0694fb36c64bdc0713e39f184066f7d4eb7a4ce3'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/CLAUDE.md'
 warnings: ['oversized']
@@ -79,13 +79,13 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/{ErrorCodes.cs,Messages/Dev.cs}` -- the two codes and the enum value -- AD-22.
-- [ ] `src/ReplayBuffer.Core/Replay/RingGenerations.cs` -- replace an empty restart generation in `Restart` -- a failed attempt must not retire the pre-reset content.
-- [ ] `src/ReplayBuffer.Core/Sessions/{CaptureSessionPorts,TargetGames,SessionOrchestrator}.cs` -- ports, `DeviceRecovery`, recovery, give-up, Monitor handover -- R3, AD-19.
-- [ ] `src/ReplayBuffer.Platform.Capture/{D3D11Device,FrameScaler}.cs` -- loss detection and the seam.
-- [ ] `src/ReplayBuffer.Engine/Sessions/{CaptureSession,DevSimulator}.cs`, `src/ReplayBuffer.Engine/EngineHost.cs` -- loss handling, `RecoverDevice`, guards, `Save` during the outage, End/DisposeAll, wiring.
-- [ ] Tests, default run: Core -- (1) a loss calls `Reset` once and `RecoverDevice` at once; a failed attempt is retried after `RetryEvery`; `ChainRestarted` then gives `Recovered` and, with a Recording running, 6.6's handover; (2) attempts that keep failing end after `GiveUpAfter` (short values) in `Failed`, the session ended, Replay Off, the same Target's new window not restarted, another Target started; (3) a Monitor session's loss and `ChainRestarted` give `MonitorStopped(A, encoder-restart)`, `MonitorStarted(B)`, `Restarted(A,B)` with MonitorRecording Running throughout; (4) `RingGenerations`: two restarts with no keyframe between keep generation 1 cuttable; (5) `DeviceRecovery` defaults are 2 s and 60 s. Engine -- `RecoverDevice` on a session with nothing lost returns false (no GPU); `dev.simulate gpuReset` reaches its action on a dev instance (extend the existing DevSimulator test).
-- [ ] Engine Heavy in `RecordingCaptureTests.cs`: `AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile` -- rig with clips, `DeviceRecovery` capturing to the events, `RecoveryFault` failing the first attempt only; Recording A running ~3 s; `SimulateDeviceLoss()` (internal, calls `_device.SimulateLoss()`); expect `gpu-reset`; press Save during the outage → a playable Clip of ≥ 2 s; `Recovered` within 5 s of the loss; `Stopped(A, encoder-restart)`, `Started(B)`, `Restarted(A,B)`; 2 s later Save → a playable Clip; stop → `Stopped(B, stopped)`; A and B decode cleanly. Name it so `--filter-method "*GpuReset*"` selects it.
+- [x] `src/ReplayBuffer.Contracts/{ErrorCodes.cs,Messages/Dev.cs}` -- the two codes and the enum value -- AD-22.
+- [x] `src/ReplayBuffer.Core/Replay/RingGenerations.cs` -- replace an empty restart generation in `Restart` -- a failed attempt must not retire the pre-reset content.
+- [x] `src/ReplayBuffer.Core/Sessions/{CaptureSessionPorts,TargetGames,SessionOrchestrator}.cs` -- ports, `DeviceRecovery`, recovery, give-up, Monitor handover -- R3, AD-19.
+- [x] `src/ReplayBuffer.Platform.Capture/{D3D11Device,FrameScaler}.cs` -- loss detection and the seam.
+- [x] `src/ReplayBuffer.Engine/Sessions/{CaptureSession,DevSimulator}.cs`, `src/ReplayBuffer.Engine/EngineHost.cs` -- loss handling, `RecoverDevice`, guards, `Save` during the outage, End/DisposeAll, wiring.
+- [x] Tests, default run: Core -- (1) a loss calls `Reset` once and `RecoverDevice` at once; a failed attempt is retried after `RetryEvery`; `ChainRestarted` then gives `Recovered` and, with a Recording running, 6.6's handover; (2) attempts that keep failing end after `GiveUpAfter` (short values) in `Failed`, the session ended, Replay Off, the same Target's new window not restarted, another Target started; (3) a Monitor session's loss and `ChainRestarted` give `MonitorStopped(A, encoder-restart)`, `MonitorStarted(B)`, `Restarted(A,B)` with MonitorRecording Running throughout; (4) `RingGenerations`: two restarts with no keyframe between keep generation 1 cuttable; (5) `DeviceRecovery` defaults are 2 s and 60 s. Engine -- `RecoverDevice` on a session with nothing lost returns false (no GPU); `dev.simulate gpuReset` reaches its action on a dev instance (extend the existing DevSimulator test).
+- [x] Engine Heavy in `RecordingCaptureTests.cs`: `AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile` -- rig with clips, `DeviceRecovery` capturing to the events, `RecoveryFault` failing the first attempt only; Recording A running ~3 s; `SimulateDeviceLoss()` (internal, calls `_device.SimulateLoss()`); expect `gpu-reset`; press Save during the outage → a playable Clip of ≥ 2 s; `Recovered` within 5 s of the loss; `Stopped(A, encoder-restart)`, `Started(B)`, `Restarted(A,B)`; 2 s later Save → a playable Clip; stop → `Stopped(B, stopped)`; A and B decode cleanly. Name it so `--filter-method "*GpuReset*"` selects it.
 
 **Acceptance Criteria:**
 - Given a running Replay Buffer with a Recording on a synthetic game, when the fault seam makes the device report a reset, then within 5 s the Replay Buffer is buffering again, a press during the outage saves the pre-reset content as a playable Clip, the Recording continues in a second playable file, and `gpu-reset` is raised.
@@ -95,9 +95,21 @@ deferred: []
 
 ## Implementation Notes
 
+- Additions beyond the Code Map, each small: `ReplayRingSink.IsDisposed`, so a recovery after a Monitor-time `SwitchChain` that had already freed the ring builds a fresh ring instead of failing every attempt. A `Retarget` during the outage only records the new window, and an attempt whose window changed before its install fails so the next one captures the new window. A device loss under a 6.6 restart or switch hands over to the recovery (the restart's tap becomes `_lostTap`; no `Fail`). In the orchestrator, `RecoverDevice()` returning false (an attempt still running) is polled again after `RetryEvery`, and the give-up check runs there too, so a hung attempt can't wait forever.
+- The Heavy test uses `RetryEvery: 1 s` to keep the 5 s bound from depending on the 2 s default plus teardown time. It is written and compiles; it was not run (GPU tests paused by the builder).
+
+- Before review (the parent's diff read): a recovery that installed its chain and then threw while closing the old tap no longer posts `DeviceLost`, which would have had the orchestrator treat a healthy session as lost. A Core test for the "Target exits during the outage" row was added (`ATargetExitDuringTheOutageDrainsTheSessionAndStopsItsRetries`), and the two Target tests wait for the session instead of racing `targetChanged`.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 3 findings — high 0, medium 2, low 1, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `TryArm` lacked the `_deviceLost` guard, so a save during the outage could arm a `_prepared` chain built on the lost device. That chain survived the teardown and became current after recovery. Fixed: `TryArm` checks `!_deviceLost`, and a build that finishes while the device is lost is torn down rather than prepared (`_wanted` is kept for the rebuild).
+  - `[low]` `[patch]` A loss during a Monitor-time `SwitchChain` rebuilt the old spec, although the orchestrator had already adopted the new one, so the settings change was silently lost. Fixed: `Restart`'s device-loss catch records `switchTo` as `_rebuildSpec`, and `TearDownLost` keeps it.
+  - `[medium]` `[patch]` A hung recovery attempt never reached the give-up check, and `End`'s unbounded join would freeze the orchestrator on give-up. Fixed: `TryRecover` schedules the retry timer after a started attempt too, so the next retry is refused while the attempt runs and checks `GiveUpAfter`. `End` joins the recovery thread for at most 10 s, with a warning.
 
 ## Design Notes
 
@@ -116,3 +128,42 @@ GPU lock: any run with real capture (Engine.Tests, Platform.FFmpeg.Tests) waits 
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- expected: pass
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*GpuReset*"` (under the lock) -- expected: pass
 - `pwsh tools/publish-engine.ps1` -- expected: no IL or AOT warnings
+
+## Auto Run Result
+
+- **Summary:** a GPU driver reset no longer ends the Replay Buffer.
+  - **Detection:** the session takes `DXGI_ERROR_DEVICE_REMOVED`/`DEVICE_RESET` failures, and a 500 ms removed-reason watchdog, as a device loss. It stops feeding and posts `DeviceLost` once.
+  - **Retries:** the orchestrator raises `gpu-reset` and asks for `RecoverDevice()` at once. It retries every 2 s; after 60 s it gives up, raising `gpu-reset-failed`, and the Replay Buffer stays off until the Target's process changes.
+  - **Recovery:** each attempt tears down WGC, every chain and the device, keeping the ring. It rebuilds them on the Target's adapter into a new ring generation (4.6) and posts `ChainRestarted`, so 6.6's handover continues a Recording in a new file. A Monitor Recording now gets the same handover.
+  - **Saves:** a save during the outage cuts the pre-reset generation to its last packet.
+  - **Fault seam:** `dev.simulate gpuReset` marks every live device lost.
+- **Files:**
+  - Contracts: `ErrorCodes.GpuReset`, `GpuResetFailed` and `SimulatedEvent.GpuReset`, all additive (AD-22).
+  - Core:
+    - `RingGenerations.Restart` replaces an empty restart generation.
+    - Ports: `ISessionEvents.DeviceLost` and `ICaptureSession.RecoverDevice`.
+    - The `DeviceRecovery` record.
+    - The orchestrator's recovery, give-up and Monitor handover.
+  - Platform.Capture: `D3D11Device` gains `RemovedReason`/`IsLost` and the seam; `FrameScaler.Draw` runs the seam check.
+  - Platform.FFmpeg: `ReplayRingSink.IsDisposed`.
+  - Engine: `CaptureSession` loss handling and recovery, the `DevSimulator` case and the `EngineHost` wiring.
+  - Tests:
+    - Core: 4 orchestrator tests, 1 `RingGenerations` test and the defaults test.
+    - Engine (default run): `ARecoveryIsRefusedWhenNothingIsLost` and the `dev.simulate gpuReset` case.
+    - Engine Heavy: `AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile`.
+- **Review:** quick lens, 3 findings, all patched: 2 medium (an arm during the outage; a hung attempt never given up, plus the unbounded join) and 1 low (a switch's spec lost under a loss). None deferred, none rejected.
+- **Follow-up review recommended:** true. Two mediums were patched in the threading between the orchestrator's retry timer, the recovery thread and `End`'s bounded join. That path is unverified: no test drives a hung attempt.
+- **Verification (2026-11-04):**
+  - Release build: 0 warnings.
+  - Default runs:
+    - Contracts: 121/121.
+    - Core: 151/151.
+    - Engine: 176 passed, 33 explicit skipped. `ReplayClipCaptureTests.ASavePressWritesAFaststartClipOfTheBufferWithOneTitledStreamPerTrack` failed once and passed on its rerun; it is an existing real-capture test this diff doesn't touch.
+  - `tools/publish-engine.ps1`: published, no IL warnings.
+  - **Not run (GPU tests paused by the builder):** the Heavy `AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile`.
+- **Matrix audit:** every row has a test. Two rows, "Save during outage" and "Repeated detection", are covered only by that Heavy test, which hasn't run.
+- **Residual risks:**
+  - Nothing has run on a real lost device. This covers the teardown and rebuild, NVENC disposal on a removed device, and the watchdog's `GetDeviceRemovedReason`.
+  - A real `dxcap -forcetdr` (elevated) is a Human Check.
+  - A Record stop pressed during the outage lands when the recovery ends.
+  - A hung attempt that wakes after `End` has gone on may dispose chains at the same time as `End`.
