@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.1 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 6.6 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.7 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.12 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
@@ -559,3 +559,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 4.14 merged (`e5bfd26`, `test(engine): merge 4.14-clips-end-to-end`, after merging develop in cleanly: build 0 warnings, Engine.Tests 167 passed, 26 skipped). QA's advisories 1 and 3 were folded into the plan, 2 and 4 handled at merge. The builder's epic-4 hand checks are one ordered list in 4.14's plan. The epic is not marked done and not released: the coordinator does that next.
 - 2026-11-04: 4.14 merged (`e5bfd26`, marked done `039b4da`), and its card is Done with a release comment. **Epic 4 is complete:** it was marked `status: done` (`0246ef0`) and **`v0.4.0` was released** by the coordinator (master `96ad304`, tag `v0.4.0`, back-merge `e3b0b12`). git flow's default merge messages were reworded to Conventional Commits before anything built on them (same trees and parents). The builder's epic-4 hand checks are in the 4.14 plan's checklist. Epic 4 being done unblocks 8.1 (the soak harness tracer), which went to slice-epic-4 (Opus, medium effort), with its card In progress.
 - 2026-11-04: 6.6 is READY FOR QA at `056befd` (its GPU runs passed earlier: Platform.FFmpeg 37, Engine 168, Heavy restart 3/3; the review fixes are in). QA started on qa-1-14 (Sonnet), and its card is In QA. 8.1 is running (it picked up its brief after a duplicate 4.14 message).
+- 2026-11-04: QA 6.6 at `056befd`: **QA PASS**, 0 findings (the Heavy restart tests pass 3/3). 6.6 has been told to merge (Sonnet) and to note in the epic Notes that no production path triggers a restart yet. qa-1-14 is back in the pool. 6.6's merge unblocks 6.7 (disk full during a Recording).
