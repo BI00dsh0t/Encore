@@ -3,7 +3,7 @@ title: 'Sleep, resume and the secure desktop'
 type: 'feature'
 ticket: '4'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '9815d81fef8d3e8bfc5128b465818da5bee1ca48'
 route: 'full'
 route_source: 'auto'
@@ -193,7 +193,7 @@ deferred: []
     - Platform.Windows: 30/30.
     - Engine: 179 passed, 39 explicit skipped. On the first full run one Engine test failed once; its name wasn't captured. It passed on the rerun and on the run after the patches.
   - `tools/publish-engine.ps1`: published, no IL warnings.
-  - **Not run (GPU tests paused by the builder):** both Heavy tests.
+  - **Heavy: passed on the GPU runner at 7629641:** `ASuspendAndResumeOpenANewGenerationAndEndTheRecordingPlayable` (14 s) and `AFrameStarvedSourceKeepsTheFrameRateWithAudioInSync` (1 min 4 s).
 - **Matrix audit:** every row has a test that ran, except "Save while suspended / after resume". That row is covered only by the Heavy suspend test, which hasn't run. Its while-suspended half is 8.3's lost-save path.
 - **Residual risks:**
   - Nothing has run on a real sleep. The teardown and rebuild after a real resume, the Windows callback and its threading, and the GPU or audio endpoints not being ready at wake are all untested. The resume's retries are meant to cover the last of these.
