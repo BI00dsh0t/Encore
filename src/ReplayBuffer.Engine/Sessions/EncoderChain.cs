@@ -17,7 +17,8 @@ namespace ReplayBuffer.Engine.Sessions;
 /// device taps, each cut by one <see cref="AudioTimeline"/> and fanned out to every Track that holds
 /// it; each Track's <see cref="TrackMixer"/> and <see cref="AacEncoder"/>; the frame pool, scaler
 /// and paced video encoder at the spec's output size; and the Replay Buffer's
-/// <see cref="ReplayRingSink"/> behind a <see cref="RecordingTap"/>, or the file's muxer. Every PTS is
+/// <see cref="ReplayRingSink"/> behind a <see cref="RecordingTap"/>, or the file's muxer, or (the
+/// Monitor session, 6.9) a tap with a <see cref="NullPacketSink"/> behind it. Every PTS is
 /// relative to the one session anchor, so Clips of two chains meet on one timeline. The session's
 /// first chain starts at the anchor, video and audio alike. A later one is built in advance and
 /// stays idle: its audio starts at the save press that switches the session to it
@@ -91,7 +92,7 @@ internal sealed class EncoderChain : IDisposable
         _loggers = loggers;
         _log = log;
         _fail = fail;
-        if (options.Replay && spec.Snapshot.ReplayStorage == Contracts.Settings.ReplayStorage.Disk)
+        if (options.Replay && spec.Kind != SessionKind.Monitor && spec.Snapshot.ReplayStorage == Contracts.Settings.ReplayStorage.Disk)
         {
             _ringFolder = spec.Snapshot.RingPath ?? options.RingFolder;
             if (_ringFolder is null)
@@ -194,7 +195,14 @@ internal sealed class EncoderChain : IDisposable
         _sessionAnchorQpc = sessionAnchorQpc;
         PacketSink packets;
         var video = Spec.Snapshot.Video;
-        if (_options.Replay && restartOf is not null)
+        if (Spec.Kind == SessionKind.Monitor)
+        {
+            // The Monitor session (6.9): no ring and no file of its own, only its Recording.
+            _tap = new RecordingTap(new NullPacketSink());
+            packets = _tap;
+            _log.LogInformation("Monitor capture: the encoders feed only its Recording");
+        }
+        else if (_options.Replay && restartOf is not null)
         {
             WindowSeconds = window;
             var ring = NewRing(window);
@@ -374,7 +382,7 @@ internal sealed class EncoderChain : IDisposable
     /// </summary>
     public void Finish(long lastFrameQpc)
     {
-        if (!IsBuilt || (_muxer is null && _ring is null) || _video is null || _audioEncoders.Count != Spec.Audio.Tracks.Count)
+        if (!IsBuilt || (_muxer is null && _ring is null && _tap is null) || _video is null || _audioEncoders.Count != Spec.Audio.Tracks.Count)
         {
             return;
         }

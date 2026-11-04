@@ -244,6 +244,12 @@ public static class ErrorCodes
     /// </summary>
     public const string ResetGap = "reset-gap";
 
+    /// <summary>
+    /// A warning (AD-7): a Monitor Recording was refused because the game session already runs two
+    /// encoder chains, and a third would exceed the encoder budget. Nothing was started.
+    /// </summary>
+    public const string EncoderBudget = "encoder-budget";
+
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
 
@@ -308,6 +314,7 @@ public static class ErrorCodes
         FeedbackDeviceCaptured,
         MemoryMargin,
         ResetGap,
+        EncoderBudget,
         NotDevInstance,
     ];
 }

@@ -449,6 +449,23 @@ internal sealed class EngineHost : IAsyncDisposable
                                 recordingLog.LogInformation("The wait for room for the Replay Buffer's ring ended");
                                 notices.ReplayResumed();
                             }
+                        },
+                        MonitorStarted: started =>
+                        {
+                            hub.Publish(RecordingMessages.Started, started);
+                            recordingLog.LogInformation("Monitor Recording to {Path}", started.Path);
+                            notices.MonitorRecordingStarted(started);
+                        },
+                        MonitorStopped: stopped =>
+                        {
+                            hub.Publish(RecordingMessages.Stopped, stopped);
+                            recordingLog.LogInformation("Monitor Recording stopped ({Reason}): {Path}", stopped.Reason, stopped.Path);
+                            notices.MonitorRecordingStopped(stopped);
+                        },
+                        Warn: (code, message) =>
+                        {
+                            recordingLog.LogWarning("{Code}: {Message}", code, message);
+                            warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay: true);
                         })
                     : null);
 

@@ -50,6 +50,20 @@ public sealed unsafe class D3D11Device : IDisposable
     /// </summary>
     public static D3D11Device Create(nint hwnd, ILogger logger)
     {
+        var monitor = hwnd == 0
+            ? default
+            : PInvoke.MonitorFromWindow(new HWND((void*)hwnd), MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
+        return Create(monitor, logger);
+    }
+
+    /// <summary>
+    /// Creates the device on the adapter whose output is <paramref name="hmonitor"/> (a Monitor
+    /// Recording's monitor, 6.9), or on adapter 0 when no adapter owns it or it is zero.
+    /// </summary>
+    public static D3D11Device CreateForMonitor(nint hmonitor, ILogger logger) => Create(new HMONITOR((void*)hmonitor), logger);
+
+    private static D3D11Device Create(HMONITOR monitor, ILogger logger)
+    {
         IDXGIFactory1* factory = null;
         IDXGIAdapter1* adapter = null;
         ID3D11Device* device = null;
@@ -58,7 +72,7 @@ public sealed unsafe class D3D11Device : IDisposable
         {
             var factoryIid = IDXGIFactory1.IID_Guid;
             PInvoke.CreateDXGIFactory1(&factoryIid, (void**)&factory).ThrowOnFailure();
-            adapter = PickAdapter(factory, hwnd);
+            adapter = PickAdapter(factory, monitor);
 
             var desc = adapter->GetDesc();
             var adapterName = desc.Description.AsReadOnlySpan().SliceAtNull().ToString();
@@ -245,12 +259,8 @@ public sealed unsafe class D3D11Device : IDisposable
         }
     }
 
-    private static IDXGIAdapter1* PickAdapter(IDXGIFactory1* factory, nint hwnd)
+    private static IDXGIAdapter1* PickAdapter(IDXGIFactory1* factory, HMONITOR monitor)
     {
-        var monitor = hwnd == 0
-            ? default
-            : PInvoke.MonitorFromWindow(new HWND((void*)hwnd), MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
-
         IDXGIAdapter1* first = null;
         for (uint i = 0; ; i++)
         {

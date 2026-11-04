@@ -9,7 +9,7 @@ using ReplayBuffer.Core.Settings;
 
 namespace ReplayBuffer.Core.Tests;
 
-public sealed class SessionOrchestratorTests : IDisposable
+public sealed partial class SessionOrchestratorTests : IDisposable
 {
     private const int Pid = 4242;
     private const string ProfileId = @"c:\games\game.exe";
@@ -2107,6 +2107,20 @@ public sealed class SessionOrchestratorTests : IDisposable
         public ConcurrentQueue<SessionSpec?> Prepares { get; } = new();
 
         public void PrepareChain(SessionSpec? next) => Prepares.Enqueue(next);
+
+        /// <summary>What <c>Chains</c> reports.</summary>
+        public int ChainCount { get; set; } = 1;
+
+        public int Chains => ChainCount;
+
+        /// <summary>Each <c>SwitchChain</c> call's spec, in order; each is taken.</summary>
+        public ConcurrentQueue<SessionSpec> Switches { get; } = new();
+
+        public bool SwitchChain(SessionSpec next)
+        {
+            Switches.Enqueue(next);
+            return true;
+        }
 
         public void SetMicMuted(bool muted, long qpc)
         {
