@@ -78,6 +78,14 @@ public sealed class InstanceTests
         Assert.Equal(@"C:\Users\u\AppData\Local\ReplayBuffer-Dev", instance.LocalDataFolder);
     }
 
+    [Fact]
+    public void MalformedTestNamesAreRejectedButOtherNamesAreNot()
+    {
+        Assert.Throws<ArgumentException>(() => new Instance(Instance.TestPrefix + "a.b", "r", "l"));
+        Assert.Throws<ArgumentException>(() => new Instance(Instance.TestPrefix, "r", "l"));
+        Assert.Equal("Other.name", new Instance("Other.name", "r", "l").Name);
+    }
+
     [Theory]
     [InlineData("ReplayBuffer-Test-abc123", true)]
     [InlineData("ReplayBuffer-Test-a-b-C", true)]

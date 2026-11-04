@@ -30,7 +30,7 @@ public sealed class LibraryServeTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         Directory.CreateDirectory(Path.Combine(Output, "Game"));
-        _instance = new Instance(Instance.TestPrefix + Path.GetFileName(_folder), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
+        _instance = new Instance(Instance.TestPrefix + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
         await StartAsync();
 
         var update = new SettingsUpdate(

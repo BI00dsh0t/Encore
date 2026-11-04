@@ -6,6 +6,10 @@ namespace ReplayBuffer.Contracts;
 /// </summary>
 public sealed record Instance(string Name, string RoamingDataFolder, string LocalDataFolder)
 {
+    /// <summary>The instance name. A name starting with <see cref="TestPrefix"/> must be a valid test name.</summary>
+    /// <exception cref="ArgumentException">The name starts with <see cref="TestPrefix"/> but is not a valid test name.</exception>
+    public string Name { get; init => field = ValidateName(value); } = ValidateName(Name);
+
     public const string InstalledName = "ReplayBuffer";
     public const string DevName = "ReplayBuffer-Dev";
 
@@ -40,6 +44,17 @@ public sealed record Instance(string Name, string RoamingDataFolder, string Loca
         ArgumentNullException.ThrowIfNull(name);
         var suffix = name.StartsWith(TestPrefix, StringComparison.Ordinal) ? name[TestPrefix.Length..] : "";
         return suffix.Length > 0 && suffix.All(c => char.IsAsciiLetterOrDigit(c) || c == '-');
+    }
+
+    private static string ValidateName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (name.StartsWith(TestPrefix, StringComparison.Ordinal) && !IsTestName(name))
+        {
+            throw new ArgumentException($"'{name}' starts with {TestPrefix} but is not {TestPrefix}<letters, digits or dashes>, so it would be treated as a real instance.", nameof(name));
+        }
+
+        return name;
     }
 
     /// <summary>The test instance named <paramref name="name"/>, with its data folders beside the real ones.</summary>
