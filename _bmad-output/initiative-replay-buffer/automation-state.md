@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.10 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 6.5 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 5.10 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 4.11 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with overlay research |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.11 |
 
@@ -496,4 +496,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: The builder was asked about 5.8's Overlay cost (always-on dot vs 3 s dot vs a setting vs re-measure). Their answer: "research more performant options for displaying an overlay". The research went to 2-1-tracer (Opus, high effort) on a branch cut from 5.8's tip, with a doc at `research/overlay-presentation-options.md` and Bench-only prototypes measured under the GPU lock. 5.8 itself changes no Overlay drawing code, so its QA continues and it may merge with AC 3 held for the research outcome.
 - 2026-11-04: 7.5 merged (`ca3aa83`, marked done `143484b`), and its card is Done; 7.6 is now Ready. QA 5.8 round 1 FAILED on 1 finding (the AC 3 decision wasn't in the state file's queues). The story fixed it on develop at `d47a62c`, and the coordinator checked the rows itself as round 2: **PASS**. 5.8 has been told to merge (Sonnet). 4.11 (`2fc9e93`), 5.10 (`c0862ba`) and 6.5 (`7a32c50`) are READY FOR QA, with cards In QA. QA 6.5 is on qa-1-14 and QA 5.10 on qa-2-1. QA 4.11 takes slice-epic-4 once 5.8 merges, and 7.6 takes the next free worker.
 
-- 2026-11-04: 5.8 merged (`67ecdf3`, `feat(bench): merge 5.8-overlay-exclusive-fullscreen`, after merging develop in cleanly: build 0 warnings, Contracts 118, Engine 190, Bench 139, publish clean). QA PASS in round 2. AC 3 (borderless independent flip) stays open for the builder; the overlay-presentation research runs separately.
+- 2026-11-04: 5.8 merged (`67ecdf3`, `feat(bench): merge 5.8-overlay-exclusive-fullscreen`, after merging develop in cleanly: build 0 warnings, Contracts 118, Engine 190, Bench 139, publish clean). QA PASS in round 2. AC 3 (borderless independent flip) stays open for the builder; the overlay-presentation research runs separately.- 2026-11-04: QA 5.10 at `c0862ba`: **QA PASS** with 1 low finding (no Human Check row). 5.10 has been told to add the row at merge and merge (Sonnet). qa-2-1 took QA 4.11.
