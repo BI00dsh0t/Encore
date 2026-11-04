@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.14 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 5.9 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.7 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with QA 4.14 |
@@ -552,3 +552,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.15 merged (`582d863`, log `b03fb5c`) and 4.13 merged (`28fb010`, marked done `2d52f88`). Both cards are Done. 2-1-tracer and story-2-7 are back in the pool. 4.14 (the epic 4 end-to-end check) went to slice-epic-4 (Opus, medium effort): it runs unattended against the real built App and engine on a throwaway instance with the synthetic GPU load under the lock, and gathers epic 4's hand checks into one ordered checklist in its plan. The v0.4.0 release follows its merge.
 - 2026-11-04: 5.9 is READY FOR QA at `614b0b1` (build 0 warnings; App and Desktop pass; the Heavy dialog and screen-copy test passed). QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-04: 4.14 is READY FOR QA at `dcd748f`: 134 checks passed unattended, and 9 items are on the builder's checklist. QA started on story-2-7 (Sonnet), checking coverage of every AC and Done-when line, that the passes really ran, safety, and the checklist's clarity. Its card is In QA.
+- 2026-11-04: QA 5.9 at `614b0b1`: **QA PASS**, 0 findings. 5.9 has been told to merge (Sonnet), keeping both sides of any Overlay conflict with 5.15. qa-1-14 is back in the pool. Its merge plus 5.15's unblocks 5.12 (the benchmark with the Overlay on).
