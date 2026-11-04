@@ -43,7 +43,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.8 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.12 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with QA 5.12 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -574,3 +574,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.7 merged (`7a4d786`, marked done `707c37b`, with its Human Check row). Its card is Done with its label detached, and qa-2-1 is back in the pool. 7.8 Cleanup (high risk) went to qa-1-14 (Opus, high effort), with its card In progress. Its brief puts the deletion guards first: Favourites, files being written, outside the Library, a corrupt or reconciling index, and a dry-run log.
 - 2026-11-04: 6.7 merged (`f144ae9`, `feat(engine): merge 6.7-disk-full-recording`, marked done `50e04f0`). Branch synced with develop first (7.7, 6.6): build 0 warnings; Contracts 118, Core 123, Platform.FFmpeg 37 (2 explicit skipped), Engine 170 (28 explicit skipped) pass; publish clean. Contracts: two additive constants (`ErrorCodes.ReplayStoppedDiskFull`, `RecordingStopReasons.DiskFull`). Disk full is simulated only (a capacity seam throwing the real `ERROR_DISK_FULL` IOException). One medium deferred to Decisions Awaiting Review (the Disk-mode restart loop on a shared drive).
 - 2026-11-04: 6.7 merged (`f144ae9`, marked done `50e04f0`), and its card is Done. slice-epic-5 is back in the pool. 6.8 went to qa-2-1 (Opus, medium effort), with its card In progress.
+- 2026-11-04: QA 5.12 at `f146e8a`: **QA FAIL**, 2 doc-only findings: (1) the epic Decision and plan still quote the superseded "always costs borderless 3.63 %" (the rerun was −3.03 %, which is noise); (2) the plan doesn't say its 2 × 60 s runs aren't like-for-like with 1.14's 3 × 5 min baseline, so "6.7 % against 1.47 %" needs a caveat. 2-1-tracer is fixing both. The investigation was told to compare like for like. story-2-7 is back in the pool.
