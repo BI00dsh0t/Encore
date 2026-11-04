@@ -3,7 +3,7 @@ title: 'Hotkeys page in the Main App'
 type: 'feature'
 ticket: '12'
 created: '2026-11-03'
-status: 'in-review'
+status: 'built'
 baseline_revision: 'cd38af2df1edd7bc8dc77deaba516011c0958400'
 route: 'full'
 route_source: 'auto'
@@ -84,10 +84,20 @@ deferred: []
 - Capture state lives on the rows (`IsCapturing`); `HotkeysPage.CapturingRow` is what the view's `PreviewKeyDown` checks. `BindingText` shows "Press a combination… (Esc cancels)" while capturing.
 - The duplicate check mirrors `HotkeyPlan.SameCombination` privately (App can't reference Core).
 - Clear test uses a document with RecordStop bound, since the catalog default leaves it null (clearing an already-null binding sends nothing).
+- A combination the engine already holds (or another app holds) reaches the engine, not the page, so it can't be captured on another row; the in-page duplicate check covers keys that reach the page and the engine's `hotkey-duplicate` refusal still shows. A fix would need the engine to pause its Hotkeys during capture (an engine change; not done).
 
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 5 findings — high 0, medium 1, low 3, false 1, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `HotkeysPage.Capture`: a combination with no modifier (plain A, Space, Enter) was sent and the engine would register it system-wide — confirmed, `Keys.IsValidHotkeys` accepts modifiers 0. Fixed: no-modifier bindings other than F1–F24 are refused with a message; a test assert covers plain A.
+  - `[low]` `[patch]` `HotkeysView`: capture mode survived leaving the page, so a later key in the view bound a stale row — confirmed. Fixed: `Unloaded` and losing keyboard focus within cancel capture.
+  - `[low]` `[reject]` `FromKey` drops `Key.ImeProcessed` silently — real, but the builder doesn't type Hotkeys through an IME; the fix adds a branch for a case not met in everyday use.
+  - `[low]` `[patch]` `HotkeysPageTests.Status()`: null bindings reported `hotkey-inactive`, which the engine never sends — confirmed against `HotkeyPlan.For`. Fixed: RecordStart bound (Alt+F11) and inactive, RecordStop null and unbound; asserts the inactive binding carries over.
+  - `[false]` `[reject]` a first edit before the first `hotkey.status` could wipe the catalog defaults — `EngineHost` registers the Hotkeys before the pipe accepts connections, so the App's first snapshot already carries the status, and `MainViewModel.Refresh` renders nothing before a snapshot.
 
 ## Design Notes
 
@@ -102,3 +112,16 @@ The page edits the document's `hotkeys` but falls back to `state.Hotkeys`' bindi
 
 **Manual checks (if no CLI):**
 - Human Check row: the builder rebinds the Save Hotkey, is refused a duplicate, saves a Clip with the new binding in a fullscreen game, closes the Main App and saves again; checks the page by eye.
+
+## Auto Run Result
+
+- **Summary:** R9's Hotkeys page. A "Hotkeys" Settings page (after Replay Buffer) lists the six `HotkeyAction`s with their binding and the engine's `hotkey.status` text (failed ones in red), sets a binding by pressing a combination (Esc cancels), clears one, and switches `recordHotkeyMode`. Each change sends one Global op at once. A duplicate, or a plain key other than F1–F24, is refused before sending.
+- **Contracts:** no change. **Engine/Core:** no change.
+- **Files:**
+  - App: new `Settings/HotkeysPage.cs` (page and `HotkeyRow`), `Settings/HotkeysView.xaml(.cs)`; `Settings/SettingsPage.cs` (page order), `MainViewModel.cs` (`Hotkeys`, `ShowStatus`).
+  - Tests: new `HotkeysPageTests` (4); the page order in `TrackLayoutPageTests`.
+- **Review:** quick lens, 5 findings: 3 patched (1 medium, 2 low), 1 low rejected (IME), 1 false.
+- **Follow-up review recommended:** false (one medium patched).
+- **Verification:** after the patches and the develop merge, the Release build has 0 warnings. App.Tests: 88 passed, 7 Heavy skipped. One run of five had a single failure that didn't recur in four reruns and wasn't captured (likely an existing timing-sensitive App test). Before the merge, `HotkeyServeTests` passed 4 (the helper-process `hotkey-taken` check among them; 1 Heavy skipped). Engine was not rerun after the merge, because no engine code changed.
+- **Residual risks:** real key capture with focus is untested (Human Check). A combination the engine or another app already holds can't be captured on the page (see Implementation Notes). `hotkeys-settings.png` is written to the App test output folder for the HITL record.
+
