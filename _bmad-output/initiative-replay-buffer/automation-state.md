@@ -157,7 +157,7 @@ The coordinator logs each QA round in the Log below.
 | 28.7 | 7.7 Rename and delete, locked while being written | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `7a4d786`) |
 | 28.8 | 7.8 Cleanup | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `4b6b22f`) |
 | 28.9 | 7.9 Library and Cleanup settings page | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `63ba0b9`) |
-| 28.10 | 7.10 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
+| 28.10 | 7.10 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `5fa03c4`) |
 | 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
@@ -629,3 +629,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.10 (the epic 7 refactor sweep) is READY FOR QA at `0f66b44`; its own review caught and restored a removed rename-guard assertion. QA started on 2-1-tracer (Sonnet; GPU tests paused), checking every Cleanup and delete guard and its test. Its card is In QA.
 - 2026-11-04: QA 7.10 at `0f66b44`: **QA PASS**, 0 findings (Core 145/145, App 121). 7.10 has been told to merge (Sonnet; no GPU tests). 2-1-tracer is back in the pool. 7.10's merge unblocks 7.11 (the epic 7 end-to-end check).
 - 2026-11-04: **Builder: a modern UI epic.** They chose a new epic (a `bmad-ux` design pass, then stories per area), run after epics 6 and 7 and before epic 8's final conformance. Mockups of the two looks (Windows 11 Fluent and gaming dark) were shown; the builder's pick of look is pending.
+- 2026-11-04: 7.10 merged (`5fa03c4`, marked done). Develop was merged into the branch first (6.10 and 8.2 included): 0-warning build, Core 145, App 122, Engine 175, Contracts 121 and the engine publish all passed; no GPU tests. Its open items are in deferred-work.md. 7.11 (the epic 7 end-to-end check) is unblocked; the epic is not marked done.
