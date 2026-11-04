@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 5.8 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 7.6 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.10 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 6.5 |
@@ -149,7 +149,7 @@ The coordinator logs each QA round in the Log below.
 | 28.3 | 7.3 Length and thumbnails | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `c2508c3`) |
 | 28.4 | 7.4 Favourite | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `bcc45ff`) |
 | 28.5 | 7.5 Group and filter by game, date and Favourite | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ca3aa83`) |
-| 28.6 | 7.6 Open, show in Explorer and copy for Discord | | pending |
+| 28.6 | 7.6 Open, show in Explorer and copy for Discord | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 28.7 | 7.7 Rename and delete, locked while being written | | pending |
 | 28.8 | 7.8 Cleanup | | pending |
 | 28.9 | 7.9 Library and Cleanup settings page | | pending |
@@ -497,3 +497,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.5 merged (`ca3aa83`, marked done `143484b`), and its card is Done; 7.6 is now Ready. QA 5.8 round 1 FAILED on 1 finding (the AC 3 decision wasn't in the state file's queues). The story fixed it on develop at `d47a62c`, and the coordinator checked the rows itself as round 2: **PASS**. 5.8 has been told to merge (Sonnet). 4.11 (`2fc9e93`), 5.10 (`c0862ba`) and 6.5 (`7a32c50`) are READY FOR QA, with cards In QA. QA 6.5 is on qa-1-14 and QA 5.10 on qa-2-1. QA 4.11 takes slice-epic-4 once 5.8 merges, and 7.6 takes the next free worker.
 
 - 2026-11-04: 5.8 merged (`67ecdf3`, `feat(bench): merge 5.8-overlay-exclusive-fullscreen`, after merging develop in cleanly: build 0 warnings, Contracts 118, Engine 190, Bench 139, publish clean). QA PASS in round 2. AC 3 (borderless independent flip) stays open for the builder; the overlay-presentation research runs separately.- 2026-11-04: QA 5.10 at `c0862ba`: **QA PASS** with 1 low finding (no Human Check row). 5.10 has been told to add the row at merge and merge (Sonnet). qa-2-1 took QA 4.11.
+- 2026-11-04: 5.8 merged (`67ecdf3`, marked done `62ff935`). Its card is Done with its labels detached. 5.9 is now Ready and waits for the next free worker (5.10's, after it merges). 7.6 went to slice-epic-4 (Opus, medium effort), with its card In progress. 5.10 added its Human Check row on develop (`54a69b8`), and its merge go-ahead is queued.
