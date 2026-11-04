@@ -27,9 +27,10 @@ namespace ReplayBuffer.App.Library;
 internal sealed class LibraryPage : Observable
 {
     /// <summary>Core's <c>ProfileFolders.MonitorRecordings</c>; the App doesn't reference Core.</summary>
-    internal const string MonitorRecordings = "Monitor Recordings";
+    private const string MonitorRecordings = "Monitor Recordings";
 
     private const string OtherKey = "other";
+    private const string DayFormat = "yyyy-MM-dd";
     private static readonly string MonitorRecordingsKey = FolderKey(MonitorRecordings);
 
     private readonly IEngineSession _engine;
@@ -230,7 +231,7 @@ internal sealed class LibraryPage : Observable
     /// Its profile's live name; else the profile whose folder is the item's top-level folder (scanned
     /// files carry no profile id); else that folder's name; else "Other" at the Output Folder's root.
     /// </remarks>
-    internal static (string Key, string Name) GameKeyOf(LibraryItem item, SettingsDocument settings)
+    private static (string Key, string Name) GameKeyOf(LibraryItem item, SettingsDocument settings)
     {
         if (item.ProfileId is { } id && settings.Profiles.TryGetValue(id, out var profile))
         {
@@ -354,7 +355,7 @@ internal sealed class LibraryPage : Observable
                 if (current != day)
                 {
                     current = day;
-                    wanted.Add(Header("day|" + day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), DayName(day, today)));
+                    wanted.Add(Header("day|" + day.ToString(DayFormat, CultureInfo.InvariantCulture), DayName(day, today)));
                 }
 
                 wanted.Add(row);
@@ -367,7 +368,7 @@ internal sealed class LibraryPage : Observable
     private static string DayName(DateTime day, DateTime today) =>
         day == today ? "Today"
         : day == today.AddDays(-1) ? "Yesterday"
-        : day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        : day.ToString(DayFormat, CultureInfo.InvariantCulture);
 
     private LibraryGroupHeader Header(string key, string name)
     {
@@ -398,7 +399,7 @@ internal sealed class LibraryPage : Observable
     /// Linear: the unwanted are dropped, and when what is left is still in the wanted order (a snapshot
     /// or a filter change) the new items are merged in; a reorder (a grouping change) resets the list.
     /// </remarks>
-    internal static void Sync<T>(ObservableCollection<T> target, IReadOnlyList<T> wanted)
+    private static void Sync<T>(ObservableCollection<T> target, IReadOnlyList<T> wanted)
         where T : class
     {
         var position = new Dictionary<T, int>(wanted.Count, ReferenceEqualityComparer.Instance);
@@ -529,7 +530,7 @@ internal sealed class LibraryPage : Observable
     }
 
     /// <summary>The base name a rename sends: trimmed, without one trailing <c>.mp4</c>.</summary>
-    internal static string BaseName(string text)
+    private static string BaseName(string text)
     {
         var name = text.Trim();
         return name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
@@ -543,15 +544,10 @@ internal sealed class LibraryPage : Observable
             return;
         }
 
-        try
-        {
-            await _engine.SendAsync(LibraryMessages.Rename, new LibraryRename(item.Path, item.Size, item.Modified, BaseName(text)));
-            ClearActionError();
-        }
-        catch (ErrorCodeException e)
-        {
-            Fail(row, RefusalText(e.Code, "Couldn't rename the file."));
-        }
+        await SendActionAsync(
+            row,
+            () => _engine.SendAsync(LibraryMessages.Rename, new LibraryRename(item.Path, item.Size, item.Modified, BaseName(text))),
+            "Couldn't rename the file.");
     }
 
     // Nothing is sent unless the confirmation says yes.
@@ -562,14 +558,23 @@ internal sealed class LibraryPage : Observable
             return;
         }
 
+        await SendActionAsync(
+            row,
+            () => _engine.SendAsync(LibraryMessages.Delete, new LibraryDelete(item.Path, item.Size, item.Modified)),
+            "Couldn't delete the file.");
+    }
+
+    // A row's command through the engine: a success clears the error, a refusal shows its short message.
+    private async Task SendActionAsync(LibraryRow row, Func<Task> send, string otherwise)
+    {
         try
         {
-            await _engine.SendAsync(LibraryMessages.Delete, new LibraryDelete(item.Path, item.Size, item.Modified));
+            await send();
             ClearActionError();
         }
         catch (ErrorCodeException e)
         {
-            Fail(row, RefusalText(e.Code, "Couldn't delete the file."));
+            Fail(row, RefusalText(e.Code, otherwise));
         }
     }
 
@@ -583,15 +588,8 @@ internal sealed class LibraryPage : Observable
         _ => otherwise,
     };
 
-    private bool ConfirmDelete(string name)
-    {
-        var message = $"Move “{name}” to the Recycle Bin?";
-        var owner = _view is null ? null : Window.GetWindow(_view);
-        var answer = owner is null
-            ? MessageBox.Show(message, "Delete", MessageBoxButton.YesNo, MessageBoxImage.Question)
-            : MessageBox.Show(owner, message, "Delete", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        return answer == MessageBoxResult.Yes;
-    }
+    private bool ConfirmDelete(string name) =>
+        Prompts.YesNo(_view, $"Move “{name}” to the Recycle Bin?", "Delete", MessageBoxImage.Question);
 
     private async Task AcknowledgeAsync()
     {

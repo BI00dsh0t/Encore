@@ -1,3 +1,4 @@
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Library;
@@ -283,6 +284,32 @@ public sealed class LibraryCleanupTests : IDisposable
     }
 
     [Fact]
+    public async Task AFileWhoseFinalPathIsOutsideIsNeitherPreviewedCleanedRenamedNorDeleted()
+    {
+        var away = Clip("away.mp4", TimeSpan.FromHours(3));
+        Start(
+            [away, Clip("a.mp4", TimeSpan.FromHours(2))],
+            OneHour,
+            finalPath: path => Path.GetFileName(path) == "away.mp4" ? Path.Combine(_folder, "elsewhere", "away.mp4") : path,
+            recycle: path =>
+            {
+                File.Delete(path);
+                return true;
+            });
+
+        var preview = await Actor.PreviewCleanup(new LibraryCleanupPreview(null, 3600));
+        _time.Advance(StartDelay);
+        WaitForPasses(1);
+        var renamed = await Assert.ThrowsAsync<ErrorCodeException>(() => Actor.Rename(new LibraryRename(away.Path, away.Size, away.Modified, "moved")));
+        var deleted = await Assert.ThrowsAsync<ErrorCodeException>(() => Actor.Delete(new LibraryDelete(away.Path, away.Size, away.Modified)));
+
+        Assert.Equal(["a.mp4"], preview.Paths);
+        Assert.Equal(["a.mp4"], Deleted);
+        Assert.Equal((ErrorCodes.CommandFailed, ErrorCodes.CommandFailed), (renamed.Code, deleted.Code));
+        Assert.Equal(["away.mp4"], OnDisk());
+    }
+
+    [Fact]
     public void AScannedLibraryWithAJunctionAndALinkNeverLosesTheVictims()
     {
         var other = Path.Combine(_folder, "other");
@@ -351,7 +378,8 @@ public sealed class LibraryCleanupTests : IDisposable
         Assert.Equal(["a.mp4"], OnDisk());
     }
 
-    private static DateTimeOffset Modified(string path) => new(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
+    /// <summary>A file's modified time as an item's <see cref="LibraryItem.Modified"/>.</summary>
+    internal static DateTimeOffset Modified(string path) => new(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
 
     /// <summary>A Clip on disk, indexed with a date <paramref name="age"/> before now.</summary>
     private LibraryItem Clip(string name, TimeSpan age, bool favourite = false)
@@ -362,7 +390,7 @@ public sealed class LibraryCleanupTests : IDisposable
     }
 
     /// <summary>Starts the actor and waits until it has started, so the 60 s timer runs from now.</summary>
-    private void Start(IReadOnlyList<LibraryItem> items, CleanupSettings limits, bool blocked = false)
+    private void Start(IReadOnlyList<LibraryItem> items, CleanupSettings limits, bool blocked = false, Func<string, string>? finalPath = null, Func<string, bool>? recycle = null)
     {
         Limits = limits;
         _actor = new LibraryActor(
@@ -379,13 +407,15 @@ public sealed class LibraryCleanupTests : IDisposable
             _time,
             _ => { },
             createMissingFolder: false,
+            recycle: recycle,
             cleanup: () => Limits,
             limitUnreachable: message => Add(_unreachable, message),
             log: line =>
             {
                 Add(_log, line);
                 _onLog?.Invoke(line);
-            });
+            },
+            finalPath: finalPath);
         _time.WaitUntilArmed(StartDelay);
         _time.WaitUntilArmed(TimeSpan.FromMinutes(10));
     }
