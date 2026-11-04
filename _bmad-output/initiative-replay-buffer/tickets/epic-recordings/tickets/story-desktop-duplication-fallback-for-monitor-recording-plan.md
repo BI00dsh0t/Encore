@@ -3,7 +3,7 @@ title: 'Desktop Duplication fallback for Monitor Recording'
 type: 'feature'
 ticket: '10'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '319cac7f750dce44745dc1f46f0472c32c5c98c4'
 route: 'full'
 route_source: 'auto'
