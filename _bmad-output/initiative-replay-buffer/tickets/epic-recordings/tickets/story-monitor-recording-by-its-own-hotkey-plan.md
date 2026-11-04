@@ -3,7 +3,7 @@ title: 'Monitor Recording by its own Hotkey'
 type: 'feature'
 ticket: '9'
 created: '2026-11-04'
-status: 'in-review'
+status: 'built'
 baseline_revision: '4390a0e6adab46146917f7229c6a8af52b186a87'
 route: 'full'
 route_source: 'auto'
@@ -12,7 +12,7 @@ review: 'quick'
 review_source: 'pinned'
 lenses_ran: ['quick']
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/CLAUDE.md'
 warnings: ['oversized']
@@ -137,3 +137,33 @@ deferred:
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- all pass
 - `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build` -- all pass
 - `pwsh tools/publish-engine.ps1` -- 0 IL warnings
+
+## Auto Run Result
+
+- **Summary:** the Monitor Record Hotkeys (`monitorRecordToggle`, and the new `monitorRecordStart`/`monitorRecordStop`, following `recordHotkeyMode`) start and stop a Monitor Recording. It runs on a second orchestrator slot: a `SessionKind.Monitor` session on the Global snapshot and Global Track Layout, capturing `monitorRecordingMonitor` (else the primary monitor) with a WGC monitor item. It writes one `RecordingWriter` file into `<Output Folder>\Monitor Recordings`, runs beside the game session and its Recording, and never holds the Target. Encoder chains are counted across sessions: a third is refused with `encoder-budget`. While a Monitor Recording runs, a Replay Buffer chain change switches at the next Reset, tearing the old chain down first, and raises `reset-gap`.
+- **Files:**
+  - Contracts (`SettingValues.cs`, `Keys.cs`, `ErrorCodes.cs`): additive actions, bindings and `encoder-budget`.
+  - `HotkeyPlan.cs`, `HotkeysPage.cs`: mode gating and labels.
+  - `CaptureSessionPorts.cs`: `Chains`, `SwitchChain`, `Anchored`.
+  - `TargetGames.cs`: `Recordings.MonitorStarted/MonitorStopped/Warn`.
+  - `OutputPathAllocator.cs`: `AllocateForMonitor`.
+  - `SessionOrchestrator.cs`: the Monitor slot.
+  - `FeedbackRouter.cs`: Monitor notices.
+  - Engine: `CaptureSession.cs` (Monitor session, `Chains`, `SwitchChain`) and `EncoderChain.cs` (tap-only Monitor chain).
+  - Platform: `NullPacketSink.cs`, `WindowCapture.ForMonitor`, `D3D11Device.CreateForMonitor` and `MonitorFinder.cs`.
+  - `EngineHost.cs`: wiring.
+  - Tests: Core `SessionOrchestratorMonitorTests.cs` (8), Router, HotkeyPlan and Contracts tests, and Engine `MonitorRecordingCaptureTests.cs` (4, Heavy).
+- **Review:**
+  - Patched: 5 medium (Chains counting a superseded build; a refused press cancelling the prepared chain; the switch gap wait blocking `End`; a missing engine test for AC 4; a press during the last Monitor Recording's post-back).
+  - Deferred: 1 medium (a second D3D11 device against AD-7).
+  - Rejected: 3 low (a restart-thread overwrite in a sub-second window; a single Chains sample in AC 2's heavy test; no kill test for the path-agnostic crash recovery), reasons in the triage log.
+- **Follow-up review:** true. Five medium patches on a first pass. The unverified risk is the patched `Chains` accounting (rebuilds count once the old chain is disposed) under real timing, beyond the one heavy switch test.
+- **Verification:**
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings.
+  - Core 132/132, Contracts 119/119, App 115 (11 explicit skipped), Engine 171 (32 explicit skipped).
+  - Heavy `MonitorRecordingCaptureTests` 4/4 passed.
+  - `pwsh tools/publish-engine.ps1`: no IL warnings.
+- **Residual risks:**
+  - App windows' exclusion is tested only with a test window marked `WDA_EXCLUDEFROMCAPTURE`; the real Main App and Overlay need a builder check.
+  - The second D3D11 device needs a decision.
+  - The Monitor state goes Running at the press, while `recording.started` comes at the first frame.
