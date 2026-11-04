@@ -57,6 +57,7 @@ internal sealed class OverlayViewModel : Observable
     private bool _micMuted;
     private bool _diskFull;
     private int? _targetProcessId;
+    private int _displayChanges;
 
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
     /// <param name="time">
@@ -139,6 +140,16 @@ internal sealed class OverlayViewModel : Observable
         _askOut = false;
         _generation++;
         Refresh();
+
+        // T-03: the window is placed again even when nothing it shows changed.
+        DisplayChanges++;
+    }
+
+    /// <summary>How many display changes there have been; each one places the window again, on the Target Game's monitor at its DPI.</summary>
+    public int DisplayChanges
+    {
+        get => _displayChanges;
+        private set => Set(ref _displayChanges, value);
     }
 
     /// <summary>How long each queued message shows.</summary>

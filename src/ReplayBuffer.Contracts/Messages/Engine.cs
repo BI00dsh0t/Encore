@@ -137,6 +137,13 @@ public sealed record StateSnapshot
     /// <remarks>A snapshot without the field (an engine from before story 7.3) reads as <c>null</c>.</remarks>
     public string? LibraryFolder { get; init; }
 
+    /// <summary>
+    /// The attached monitors as of the last <c>monitors.changed</c> (T-03), the primary first; <c>null</c>
+    /// before any change, when <c>monitors.list</c> gives them.
+    /// </summary>
+    /// <remarks>A snapshot without the field (an engine from before story 8.5) reads as <c>null</c>.</remarks>
+    public MonitorList? Monitors { get; init; }
+
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
     public static IReadOnlyList<string> IdentityFields { get; } = ["engineInstanceId", "pid", "seq"];
 

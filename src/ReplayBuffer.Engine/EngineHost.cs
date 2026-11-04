@@ -76,6 +76,9 @@ internal sealed record EngineHostOptions
     /// <summary>The PC's sleep and resume (T-02); <c>null</c> for Windows' suspend and resume notifications.</summary>
     public IPowerNotifications? Power { get; init; }
 
+    /// <summary>The attached monitors and their changes (T-03); <c>null</c> for Windows' (<c>WM_DISPLAYCHANGE</c>).</summary>
+    public IDisplayMonitors? Displays { get; init; }
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
@@ -134,6 +137,7 @@ internal sealed class EngineHost : IAsyncDisposable
     private readonly CancellationTokenSource _stopProbe = new();
     private Task _heartbeat = Task.CompletedTask;
     private Task _probe = Task.CompletedTask;
+    private IDisposable? _displaysPublished;
     private GameMonitor? _games;
     private LibraryActor _library = null!;
     private FeedbackRouter? _feedback;
@@ -379,6 +383,7 @@ internal sealed class EngineHost : IAsyncDisposable
             }
 
             var defaultOutputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
+            var displays = hostOptions.Displays ?? new DisplayMonitors(loggers.CreateLogger<DisplayMonitors>());
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
                     new CaptureSessionOptions
@@ -504,7 +509,8 @@ internal sealed class EngineHost : IAsyncDisposable
                         })
                     : null,
                 new GpuResetWarnings(warnings, clipLog).Recovery,
-                hostOptions.Power ?? new SuspendResumeNotifications(loggers.CreateLogger<SuspendResumeNotifications>()));
+                hostOptions.Power ?? new SuspendResumeNotifications(loggers.CreateLogger<SuspendResumeNotifications>()),
+                displays);
 
             Volatile.Write(ref settingsTo, sessions);
 
@@ -584,10 +590,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 player.Preview(preview.Sound);
                 return ValueTask.FromResult(Empty.Value);
             });
-            router.Register(RecordingMessages.MonitorsList, (_, _) => ValueTask.FromResult(new MonitorList(
-            [
-                .. MonitorFinder.Describe().Select(m => new DisplayMonitor(m.DeviceName, m.FriendlyName, m.Width, m.Height, m.IsPrimary)),
-            ])));
+            router.Register(RecordingMessages.MonitorsList, (_, _) => ValueTask.FromResult(new MonitorList(displays.List())));
             router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
             SessionOrchestrator simulateTo = sessions;
             var simulator = new DevSimulator(
@@ -678,6 +681,18 @@ internal sealed class EngineHost : IAsyncDisposable
             }
 
             soundCheck.Check();
+
+            // T-03: the picker follows the monitors. Changes come one at a time, on the source's thread.
+            MonitorList? lastMonitors = null;
+            host._displaysPublished = displays.Subscribe(() =>
+            {
+                var monitors = new MonitorList(displays.List());
+                if (lastMonitors is null || !lastMonitors.Monitors.SequenceEqual(monitors.Monitors))
+                {
+                    lastMonitors = monitors;
+                    hub.Publish(RecordingMessages.MonitorsChanged, monitors);
+                }
+            });
             server.Start(hub, router);
             games?.Start();
             if (hostOptions.ProbeEncoders)
@@ -725,6 +740,7 @@ internal sealed class EngineHost : IAsyncDisposable
         await _stopProbe.CancelAsync().ConfigureAwait(false);
         await _probe.ConfigureAwait(false);
         Apps.Dispose();
+        _displaysPublished?.Dispose();
 
         // No more presses or proposals are posted to the orchestrator once these return.
         Hotkeys.Dispose();

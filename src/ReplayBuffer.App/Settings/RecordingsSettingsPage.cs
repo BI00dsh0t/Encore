@@ -24,6 +24,7 @@ internal sealed class RecordingsSettingsPage : SettingsPage
     private IReadOnlyList<DisplayMonitor> _monitors = [];
     private IReadOnlyList<MonitorItem> _items = [new(null, PrimaryLabel)];
     private string? _fetchedInstance;
+    private MonitorList? _changed;
 
     public RecordingsSettingsPage(SettingsSender sender, IEngineSession engine)
         : base(sender)
@@ -61,14 +62,29 @@ internal sealed class RecordingsSettingsPage : SettingsPage
     /// <summary>Lists the monitors again.</summary>
     public ICommand RefreshCommand { get; }
 
-    /// <summary>Fetches the monitors from a newly connected engine run. Called before <see cref="SettingsPage.Render"/>.</summary>
+    /// <summary>
+    /// Fetches the monitors from a newly connected engine run, and shows the list a <c>monitors.changed</c>
+    /// carries (T-03). Called before <see cref="SettingsPage.Render"/>.
+    /// </summary>
     public void ShowState(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);
-        if (EngineSessions.ConnectedState(_engine.Status, state) is { } connected && connected.EngineInstanceId != _fetchedInstance)
+        if (EngineSessions.ConnectedState(_engine.Status, state) is not { } connected)
+        {
+            return;
+        }
+
+        if (connected.EngineInstanceId != _fetchedInstance)
         {
             _fetchedInstance = connected.EngineInstanceId;
+            _changed = connected.Monitors;
             _ = FetchAsync();
+        }
+        else if (connected.Monitors is { } changed && !ReferenceEquals(changed, _changed))
+        {
+            _changed = changed;
+            _monitors = changed.Monitors;
+            ShowMonitors();
         }
     }
 

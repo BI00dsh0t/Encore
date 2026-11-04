@@ -7,6 +7,7 @@ using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Engine.Sessions;
+using ReplayBuffer.Platform.Capture;
 using SettingsFlow = ReplayBuffer.Contracts.Settings.AudioFlow;
 
 namespace ReplayBuffer.Engine.Tests;
@@ -17,7 +18,9 @@ namespace ReplayBuffer.Engine.Tests;
 /// marked <c>WDA_EXCLUDEFROMCAPTURE</c> never shows in it; and beside a game Recording on a synthetic
 /// window, the two sessions run two encoder chains between them. With WGC forced to fail (6.10), the
 /// Monitor session records through Desktop Duplication instead, across a lost duplication, while a
-/// game session fails. On-screen, so each takes the bench lock.
+/// game session fails. A fake display port (8.5, T-03) that drops the captured monitor ends the Monitor
+/// Recording playable with <c>monitor-removed</c>, and a game Recording runs on through display changes.
+/// The displays themselves are never changed. On-screen, so each takes the bench lock.
 /// </summary>
 public sealed class MonitorRecordingCaptureTests : IDisposable
 {
@@ -295,6 +298,68 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         Assert.Empty(fallbacks);
     }
 
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task ARemovedMonitorEndsItsMonitorRecordingPlayableWithMonitorRemoved()
+    {
+        using var bench = BenchLock.Take();
+        var displays = new FakeDisplays(RealDisplays());
+        var warns = new ConcurrentQueue<string>();
+        using var rig = NewRig(displays: displays, warn: warns.Enqueue);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
+        var started = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+        await Task.Delay(TimeSpan.FromSeconds(3), Token);
+
+        // The port reports the captured monitor gone (the real one stays): another becomes the only one.
+        var captured = MonitorSession(rig).MonitorDevice;
+        Assert.False(string.IsNullOrEmpty(captured));
+        displays.Change([new DisplayMonitor(@"\\.\DISPLAY99", "Other", 1920, 1080, true)]);
+
+        Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.MonitorRemoved), await rig.NextAsync());
+        rig.Orchestrator.Dispose();
+        Assert.Equal([Contracts.ErrorCodes.MonitorRemoved], warns);
+        SessionTestKit.AssertDecodesCleanly(started.Path);
+        AssertInStepAt30Fps(started.Path, 2.5);
+        Assert.Equal(RecordingState.Off, rig.Published.Last().MonitorRecording);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AGameRecordingRunsOnThroughEachDisplayChange()
+    {
+        using var bench = BenchLock.Take();
+        var real = RealDisplays();
+        var displays = new FakeDisplays(real);
+        using var rig = NewRig(recordingsEnabled: true, displays: displays);
+        var window = SessionTestKit.OpenWindow(_directory, _processes, GameWindowScript);
+        rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => rig.Factory.Sessions.Count == 1);
+        await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        var game = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+
+        // A monitor is connected, the primary moves to it, then it is removed again.
+        var added = new DisplayMonitor(@"\\.\DISPLAY99", "Added", 1920, 1080, false);
+        displays.Change([.. real, added]);
+        await Task.Delay(TimeSpan.FromSeconds(1), Token);
+        displays.Change([.. real.Select(m => m with { Primary = false }), added with { Primary = true }]);
+        await Task.Delay(TimeSpan.FromSeconds(1), Token);
+        displays.Change(real);
+        await Task.Delay(TimeSpan.FromSeconds(1), Token);
+
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(game.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+        Assert.Single(rig.Factory.Sessions);
+        Assert.Equal(ReplayState.Buffering, rig.Published.Last().Replay);
+        rig.Orchestrator.Dispose();
+        SessionTestKit.AssertDecodesCleanly(game.Path);
+        AssertInStepAt30Fps(game.Path, 3.5);
+    }
+
+    /// <summary>The real attached monitors, as the engine's port lists them; read only.</summary>
+    private static IReadOnlyList<DisplayMonitor> RealDisplays() =>
+        new DisplayMonitors(NullLogger.Instance).List() is { Count: > 0 } list ? list : throw new InvalidOperationException("No monitor is attached.");
+
     private const string WgcOffMessage = "WGC is off (test)";
 
     private static Exception? WgcOff() => new InvalidOperationException(WgcOffMessage);
@@ -374,12 +439,16 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     /// <param name="resetGap">Receives each <c>reset-gap</c> message.</param>
     /// <param name="wgcFault">Thrown before any WGC capture is created, when it returns non-null.</param>
     /// <param name="fallback">Receives each <c>monitor-capture-fallback</c> message.</param>
+    /// <param name="displays">The display port the orchestrator watches; none when null.</param>
+    /// <param name="warn">Receives each Recordings warning's code.</param>
     private Rig NewRig(
         bool recordingsEnabled = false,
         bool clips = false,
         Action<string>? resetGap = null,
         Func<Exception?>? wgcFault = null,
-        Action<string>? fallback = null)
+        Action<string>? fallback = null,
+        IDisplayMonitors? displays = null,
+        Action<string>? warn = null)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)> { ["game"] = (0.1, 440), ["mic"] = (0.2, 1000) });
@@ -422,7 +491,9 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
                 () => _directory,
                 s => events.Writer.TryWrite(s),
                 s => events.Writer.TryWrite(s),
-                e => events.Writer.TryWrite(e)));
+                e => events.Writer.TryWrite(e),
+                Warn: warn is null ? null : (code, _) => warn(code)),
+            displays: displays);
         return new Rig(orchestrator, hub, events, published, factory);
     }
 
