@@ -338,52 +338,131 @@ public sealed class SessionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task ARunningRecordingHoldsASwitchUntilItClearsThenItCommitsAtOnce()
+    public async Task ARunningRecordingHoldsASwitchUntilItsWriterPostsBackThenItCommitsAtOnce()
     {
-        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
-        using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
-        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
-        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
-        var c = new TargetCandidate(Pid + 2, 5, @"c:\games\third.exe", "Third.exe");
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+            var (orchestrator, events, presses, _, published, factory) = NewRecordingOrchestrator(c => changes.Writer.TryWrite(c));
+            using var owned = orchestrator;
+            var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+            var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+            var c = new TargetCandidate(Pid + 2, 5, @"c:\games\third.exe", "Third.exe");
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
 
-        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
-        orchestrator.Post(new RecordingRunning(true));
-        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
-        orchestrator.Post(new ProposeTarget(c, TargetChangeReason.Focus));
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
+            Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc);
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
 
-        // A proposal of the Target itself drops the held switch: clearing the flag then commits nothing.
-        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Focus));
-        orchestrator.Post(new RecordingRunning(false));
-        orchestrator.Post(new RecordingRunning(true));
-        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
-        await HandledAsync(orchestrator);
-        Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
-        Assert.False(changes.Reader.TryRead(out _));
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+            orchestrator.Post(new ProposeTarget(c, TargetChangeReason.Focus));
 
-        orchestrator.Post(new RecordingRunning(false));
+            // A proposal of the Target itself drops the held switch; the dev stub neither holds nor commits.
+            orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Focus));
+            orchestrator.Post(new RecordingRunning(false));
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 1);
+            Assert.False(changes.Reader.TryRead(out _));
+            Assert.Equal(RecordingState.Running, published.Last().Recording);
+            Assert.Single(factory.Sessions);
 
-        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Focus), await NextAsync(changes));
+            orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, qpc + 2));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+            Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Focus), await NextAsync(changes));
+            Assert.Equal("target changed", factory.Sessions[0].EndReason);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
-    [Theory]
-    [InlineData(TargetChangeReason.Exit)]
-    [InlineData(TargetChangeReason.Ignored)]
-    public async Task AnExitOrIgnoredHandoverCommitsThroughARunningRecording(TargetChangeReason reason)
+    [Fact]
+    public async Task ARecordingStopsWithTheReasonOfWhatEndedItsSession()
     {
-        var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
-        using var orchestrator = new SessionOrchestrator(_factory, () => Volatile.Read(ref _document), _ => { }, targetChanged: c => changes.Writer.TryWrite(c));
-        var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
-        var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+            var (orchestrator, events, presses, made, _, factory) = NewRecordingOrchestrator(c => changes.Writer.TryWrite(c), drains: true);
+            using var owned = orchestrator;
+            var a = new TargetCandidate(Pid, 1, ProfileId, "Game.exe");
+            var b = new TargetCandidate(Pid + 1, 3, @"c:\games\other.exe", "Other.exe");
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
 
-        orchestrator.Post(new ProposeTarget(a, TargetChangeReason.Detected));
-        orchestrator.Post(new RecordingRunning(true));
-        orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Focus));
-        orchestrator.Post(new ProposeTarget(b, reason));
-        await HandledAsync(orchestrator);
+            async Task<RecordingStarted> RecordOnA(TargetChangeReason reason)
+            {
+                orchestrator.Post(new ProposeTarget(a, reason));
+                Assert.Equal(a.ToTargetGame(), (await NextAsync(changes)).To);
+                await Press(orchestrator, presses, HotkeyAction.RecordToggle, ++qpc);
+                return Assert.IsType<RecordingStarted>(await NextAsync(events));
+            }
 
-        Assert.Equal(new TargetChanged(null, a.ToTargetGame(), TargetChangeReason.Detected), await NextAsync(changes));
-        Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), reason), await NextAsync(changes));
-        Assert.False(changes.Reader.TryRead(out _));
+            // The Target exits: the session drains (R1), game-exit, and the exit isn't held.
+            var first = await RecordOnA(TargetChangeReason.Detected);
+            orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
+            Assert.Equal(new TargetChanged(a.ToTargetGame(), null, TargetChangeReason.Exit), await NextAsync(changes));
+            made.Last().Finish();
+            Assert.Equal(new RecordingStopped(first.Path, RecordingStopReasons.GameExit), await NextAsync(events));
+            Assert.Equal(1, factory.Sessions[^1].Drains);
+
+            // Ignored hands over to another game at once: ignored.
+            var second = await RecordOnA(TargetChangeReason.Detected);
+            orchestrator.Post(new ProposeTarget(b, TargetChangeReason.Ignored));
+            Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Ignored), await NextAsync(changes));
+            made.Last().Finish();
+            Assert.Equal(new RecordingStopped(second.Path, RecordingStopReasons.Ignored), await NextAsync(events));
+
+            // The session's window closes: it drains too, game-exit.
+            var third = await RecordOnA(TargetChangeReason.Focus);
+            factory.Sessions[^1].Events.Closed("window closed");
+            made.Last().Finish();
+            Assert.Equal(new RecordingStopped(third.Path, RecordingStopReasons.GameExit), await NextAsync(events));
+            Assert.Equal("window closed", factory.Sessions[^1].EndReason);
+            Assert.Equal(1, factory.Sessions[^1].Drains);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DisposeMidRecordingFinishesItAsShutdownBeforeItReturns()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var library = new FakeLibraryWrites();
+            var (orchestrator, events, presses, made, _, factory) = NewRecordingOrchestrator(library: library);
+            using var owned = orchestrator;
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, System.Diagnostics.Stopwatch.GetTimestamp());
+            var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
+
+            // The writer finishes once the session's output ends, after the channel has closed.
+            var session = factory.Sessions[0];
+            var recording = made.Single();
+            _ = session.Ended.Task.ContinueWith(_ => recording.Finish(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            orchestrator.Dispose();
+
+            Assert.Equal("engine stopping", session.EndReason);
+            Assert.True(events.Reader.TryRead(out var stopped));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Shutdown), stopped);
+            Assert.Equal([$"begin {started.Path} {ProfileId}", $"opened {started.Path}", $"end {started.Path} Written", $"closed {started.Path}"], library.Calls);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
     // Every message posted before it has been handled: an End with no session is refused in order.
@@ -1225,7 +1304,7 @@ public sealed class SessionOrchestratorTests : IDisposable
         {
             _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
             SetRecordingsEnabled(true);
-            var (orchestrator, events, presses, made, published) = NewRecordingOrchestrator();
+            var (orchestrator, events, presses, made, published, _) = NewRecordingOrchestrator();
             using var owned = orchestrator;
             await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
             var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -1270,7 +1349,7 @@ public sealed class SessionOrchestratorTests : IDisposable
         try
         {
             _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
-            var (orchestrator, events, presses, made, published) = NewRecordingOrchestrator();
+            var (orchestrator, events, presses, made, published, _) = NewRecordingOrchestrator();
             using var owned = orchestrator;
             var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -1322,7 +1401,13 @@ public sealed class SessionOrchestratorTests : IDisposable
         await NextPress(presses);
     }
 
-    private (SessionOrchestrator Orchestrator, System.Threading.Channels.Channel<object> Events, System.Threading.Channels.Channel<HotkeyPress> Presses, ConcurrentQueue<FakeRecording> Made, ConcurrentQueue<CaptureState> Published) NewRecordingOrchestrator()
+    /// <summary>
+    /// An orchestrator whose sessions record with <see cref="FakeRecording"/>s; with
+    /// <paramref name="targetChanged"/>, it also follows the Target with a game session, and with
+    /// <paramref name="drains"/>, it has Replay Clips, so a game session drains on its Target's exit (R1).
+    /// </summary>
+    private (SessionOrchestrator Orchestrator, System.Threading.Channels.Channel<object> Events, System.Threading.Channels.Channel<HotkeyPress> Presses, ConcurrentQueue<FakeRecording> Made, ConcurrentQueue<CaptureState> Published, FakeFactory Factory) NewRecordingOrchestrator(
+        Action<TargetChanged>? targetChanged = null, FakeLibraryWrites? library = null, bool drains = false)
     {
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
@@ -1342,13 +1427,18 @@ public sealed class SessionOrchestratorTests : IDisposable
             () => Volatile.Read(ref _document),
             published.Enqueue,
             press => presses.Writer.TryWrite(press),
+            targetChanged: targetChanged,
+            targetCapture: targetChanged is null ? null : new TargetCapture(_ => NoAudio, (_, e) => events.Writer.TryWrite(e)),
+            clips: drains ? new ReplayClips(OutputPathAllocator.System, () => throw new InvalidOperationException("the Global folder is set"), _ => { }, e => events.Writer.TryWrite(e)) : null,
             recordings: new Recordings(
                 OutputPathAllocator.System,
                 () => throw new InvalidOperationException("the Global folder is set"),
                 s => events.Writer.TryWrite(s),
                 s => events.Writer.TryWrite(s),
-                e => events.Writer.TryWrite(e)));
-        return (orchestrator, events, presses, made, published);
+                e => events.Writer.TryWrite(e),
+                library,
+                Open: library));
+        return (orchestrator, events, presses, made, published, factory);
     }
 
     private static async Task<HotkeyPress> NextPress(System.Threading.Channels.Channel<HotkeyPress> presses) =>

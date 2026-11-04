@@ -69,7 +69,15 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// profile has <c>recordingsEnabled</c> on (read live, R1) reserves a path beside the game's Clips
 /// and has the session start a Recording there; a later Record press stops it, and the writer posts its
 /// result back before <see cref="CaptureState.Recording"/> goes off. A session that ends mid-Recording
-/// finishes it with everything encoded. With <see cref="ReplayClips"/>, the game session's settings
+/// finishes it with everything encoded, stopped with the reason of what ended it: its Target's exit
+/// or its window closing (<see cref="RecordingStopReasons.GameExit"/>), an Ignored handover
+/// (<see cref="RecordingStopReasons.Ignored"/>), the orchestrator stopping
+/// (<see cref="RecordingStopReasons.Shutdown"/>), else <see cref="RecordingStopReasons.SessionEnded"/>.
+/// While a Recording runs, a switch of the Target to another game is held, and committed the moment
+/// its writer posts back. On <see cref="Dispose"/>, a running Recording's writer is waited for (up to
+/// <see cref="ShutdownWait"/>) and its result handled before the thread ends; one not done by then is
+/// left open.
+/// With <see cref="ReplayClips"/>, the game session's settings
 /// are resolved again for its profile on each <see cref="SettingsUpdated"/> and after each Reset
 /// (R7, R8): when they need another encoder chain (<see cref="ChainKey.SameChain"/>), the session is
 /// asked to prepare it (<see cref="ICaptureSession.PrepareChain"/>), and a later change back drops
@@ -78,6 +86,9 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
+    /// <summary>How long <see cref="Dispose"/> waits for a running Recording's writer, inside the App's 5 s Quit.</summary>
+    internal static readonly TimeSpan ShutdownWait = TimeSpan.FromSeconds(3);
+
     private readonly Channel<SessionMessage> _channel = Channel.CreateUnbounded<SessionMessage>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false, AllowSynchronousContinuations = false });
 
@@ -100,7 +111,6 @@ public sealed class SessionOrchestrator : IDisposable
     private Active? _drain;
     private Timer? _drainTimer;
     private TargetCandidate? _target;
-    private bool _recordingRunning;
     private ProposeTarget? _pendingTarget;
     private CaptureState _state = CaptureState.Initial;
     private long _nextSessionId;
@@ -246,7 +256,22 @@ public sealed class SessionOrchestrator : IDisposable
 
         if (_active is not null)
         {
-            EndActive("engine stopping", failure: null);
+            EndActive("engine stopping", failure: null, RecordingStopReasons.Shutdown);
+        }
+
+        // The channel is complete, so the writer's post-back can't arrive: wait for it here (bounded).
+        if (_recording is { } recording)
+        {
+            if (recording.Done.Task.Wait(ShutdownWait))
+            {
+                OnRecordingWritten(new RecordingWritten(recording, recording.Done.Task.Result), commitPending: false);
+            }
+            else
+            {
+                // Left open: the next start reports it interrupted. The published state no longer claims it runs.
+                SetState(_state with { Recording = RecordingState.Off });
+                _recordings?.Info?.Invoke($"The Recording at {recording.Path} didn't finish within {ShutdownWait.TotalSeconds:0} s of shutdown; it was left open");
+            }
         }
 
         ReleaseDrain();
@@ -290,11 +315,10 @@ public sealed class SessionOrchestrator : IDisposable
                 break;
 
             case RecordingRunning recording:
-                _recordingRunning = recording.Running;
-                SetState(_state with { Recording = recording.Running ? RecordingState.Running : RecordingState.Off });
-                if (!_recordingRunning && _pendingTarget is { } pending)
+                // dev.simulate's display state only: a real Recording's state wins, and it never holds the Target.
+                if (_recording is null)
                 {
-                    CommitTarget(pending);
+                    SetState(_state with { Recording = recording.Running ? RecordingState.Running : RecordingState.Off });
                 }
 
                 break;
@@ -312,18 +336,19 @@ public sealed class SessionOrchestrator : IDisposable
                 break;
 
             case RecordingWritten recorded:
-                OnRecordingWritten(recorded);
+                // Not once Dispose has begun: a held Target must never start a session during Quit.
+                OnRecordingWritten(recorded, commitPending: Volatile.Read(ref _disposed) == 0);
                 break;
 
             case SessionClosed closed when _active?.Id == closed.SessionId:
                 // WGC can see the window close before Game Detection sees the exit: drain here too.
                 if (Drains(_active))
                 {
-                    DrainActive(closed.Reason);
+                    DrainActive(closed.Reason, RecordingStopReasons.GameExit);
                 }
                 else
                 {
-                    EndActive(closed.Reason, failure: null);
+                    EndActive(closed.Reason, failure: null, RecordingStopReasons.GameExit);
                 }
 
                 break;
@@ -427,11 +452,12 @@ public sealed class SessionOrchestrator : IDisposable
         return EndActive(reason, failure: null);
     }
 
-    private SessionOutcome EndActive(string reason, Exception? failure)
+    /// <param name="recordingReason">The stop reason of a Recording running on the session.</param>
+    private SessionOutcome EndActive(string reason, Exception? failure, string recordingReason = RecordingStopReasons.SessionEnded)
     {
         var active = _active!;
         _active = null;
-        MarkSessionEnded(active);
+        MarkSessionEnded(active, recordingReason);
 
         SessionOutcome outcome;
         try
@@ -462,11 +488,12 @@ public sealed class SessionOrchestrator : IDisposable
     /// (R1): it becomes the drain, <see cref="ReplayState.Draining"/> is published, and a timer posts
     /// <see cref="DrainExpired"/>, tagged with its id, after <see cref="ReplayClips.ExitDrain"/>.
     /// </summary>
-    private void DrainActive(string reason)
+    /// <param name="recordingReason">The stop reason of a Recording running on the session.</param>
+    private void DrainActive(string reason, string recordingReason)
     {
         var active = _active!;
         _active = null;
-        MarkSessionEnded(active);
+        MarkSessionEnded(active, recordingReason);
         ReleaseDrain();
 
         SessionOutcome outcome;
@@ -579,9 +606,11 @@ public sealed class SessionOrchestrator : IDisposable
     /// <summary>
     /// Commits a proposed Target Game (AD-19). Another process, or none, becomes the Target and is
     /// published; a new window of the Target's own process only moves the debug capture to it. While
-    /// a Recording runs, a switch from the Target to another game is held as pending, each later one
-    /// replacing it; a proposal of the Target itself drops it. An exit or Ignored handover is never
-    /// held: the Target is gone, or must never be captured (AD-5).
+    /// a Recording runs, until its writer posts back, a switch from the Target to another game is held
+    /// as pending, each later one replacing it; a proposal of the Target itself drops it. An exit or
+    /// Ignored handover is never held: the Target is gone, or must never be captured (AD-5); the
+    /// Recording stops with <see cref="RecordingStopReasons.GameExit"/> or
+    /// <see cref="RecordingStopReasons.Ignored"/>.
     /// </summary>
     private void CommitTarget(ProposeTarget propose)
     {
@@ -599,7 +628,7 @@ public sealed class SessionOrchestrator : IDisposable
             return;
         }
 
-        if (_recordingRunning && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
+        if (_recording is not null && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
         {
             _pendingTarget = propose;
             return;
@@ -627,13 +656,19 @@ public sealed class SessionOrchestrator : IDisposable
         if (_active is { Spec.Kind: SessionKind.Game })
         {
             // Only an exit with no other game drains (R1); a switch or Ignored ends at once (FR-38).
+            var recordingReason = propose.Reason switch
+            {
+                TargetChangeReason.Exit => RecordingStopReasons.GameExit,
+                TargetChangeReason.Ignored => RecordingStopReasons.Ignored,
+                _ => RecordingStopReasons.SessionEnded,
+            };
             if (to is null && propose.Reason == TargetChangeReason.Exit && Drains(_active))
             {
-                DrainActive("target exited");
+                DrainActive("target exited", recordingReason);
             }
             else
             {
-                EndActive("target changed", failure: null);
+                EndActive("target changed", failure: null, recordingReason);
             }
         }
 
@@ -1048,7 +1083,12 @@ public sealed class SessionOrchestrator : IDisposable
         var recording = new RecordingRun(active.Id, path, write);
         try
         {
-            write.Start(path, error => Post(new RecordingWritten(recording, error)));
+            write.Start(path, error =>
+            {
+                // Before the post, so a shutdown that closed the channel still sees the result.
+                recording.Done.TrySetResult(error);
+                Post(new RecordingWritten(recording, error));
+            });
         }
         catch (Exception e)
         {
@@ -1066,14 +1106,14 @@ public sealed class SessionOrchestrator : IDisposable
     }
 
     /// <summary>
-    /// A session ending under its running Recording stops it with
-    /// <see cref="RecordingStopReasons.SessionEnded"/>; the writer finishes as the output ends.
+    /// A session ending under its running Recording stops it with <paramref name="reason"/>, one of
+    /// <see cref="RecordingStopReasons"/>; the writer finishes as the output ends.
     /// </summary>
-    private void MarkSessionEnded(Active active)
+    private void MarkSessionEnded(Active active, string reason)
     {
         if (_recording is { Reason: null } running && running.SessionId == active.Id)
         {
-            running.Reason = RecordingStopReasons.SessionEnded;
+            running.Reason = reason;
         }
     }
 
@@ -1081,8 +1121,10 @@ public sealed class SessionOrchestrator : IDisposable
     /// A Recording writer's result: the Library is told how it ended (written while its file holds
     /// data), the Recording is published as stopped, with its stop reason or, when the writer
     /// failed, <see cref="WriteFailures.ReasonOf"/>, and <see cref="CaptureState.Recording"/> goes off.
+    /// Then, with <paramref name="commitPending"/>, a Target switch held while it ran is committed.
+    /// A duplicate (the shutdown wait and the post-back both) is ignored.
     /// </summary>
-    private void OnRecordingWritten(RecordingWritten written)
+    private void OnRecordingWritten(RecordingWritten written, bool commitPending)
     {
         var recording = written.Recording;
         if (!ReferenceEquals(_recording, recording))
@@ -1106,6 +1148,10 @@ public sealed class SessionOrchestrator : IDisposable
         var reason = error is not null ? WriteFailures.ReasonOf(error) : recording.Reason ?? RecordingStopReasons.SessionEnded;
         SetState(_state with { Recording = RecordingState.Off });
         recordings.Stopped(new RecordingStopped(recording.Path, reason));
+        if (commitPending && _pendingTarget is { } pending)
+        {
+            CommitTarget(pending);
+        }
     }
 
     private static void TryDelete(string path)
@@ -1168,6 +1214,9 @@ public sealed class SessionOrchestrator : IDisposable
 
         /// <summary>Why it is stopping (<see cref="RecordingStopReasons"/>); null while it runs.</summary>
         public string? Reason { get; set; }
+
+        /// <summary>Completed by the writer's callback, from its thread, with its error, before it posts back.</summary>
+        public TaskCompletionSource<Exception?> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     /// <summary>A Recording writer's result, posted from its thread.</summary>

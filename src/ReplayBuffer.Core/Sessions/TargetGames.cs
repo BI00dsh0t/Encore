@@ -22,9 +22,8 @@ public sealed record TargetCandidate(int ProcessId, nint Window, string ProfileI
 public sealed record ProposeTarget(TargetCandidate? To, TargetChangeReason Reason) : SessionMessage;
 
 /// <summary>
-/// Whether a Recording is running (AD-19): while one is, a switch away from the Target is held, and
-/// it is committed the moment the flag clears. It also sets <c>CaptureState.Recording</c>, so it is
-/// the stub Recording state until epic-recordings: only <c>dev.simulate</c> and tests set it.
+/// <c>dev.simulate</c>'s Recording display state: sets <c>CaptureState.Recording</c> while no real
+/// Recording runs, and is ignored while one does. It never holds the Target; only a real Recording does.
 /// </summary>
 public sealed record RecordingRunning(bool Running) : SessionMessage;
 
