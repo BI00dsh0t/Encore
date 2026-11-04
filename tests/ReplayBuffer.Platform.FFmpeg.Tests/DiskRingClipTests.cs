@@ -35,7 +35,8 @@ public sealed class DiskRingClipTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public void AClipFromADiskRingIsByteIdenticalToTheSameClipFromAMemoryRing()
     {
         Assert.SkipUnless(

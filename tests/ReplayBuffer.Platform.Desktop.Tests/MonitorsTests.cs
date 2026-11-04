@@ -22,4 +22,11 @@ public sealed class MonitorsTests
         // A process with no visible window (here, none at all) falls back to the same monitor.
         Assert.Equal(monitor, Monitors.ForProcess(int.MaxValue));
     }
+
+    [Fact]
+    public void DxgiSaysWhetherThePrimaryMonitorHasOverlayPlanes()
+    {
+        // The answer depends on the PC (5.8's research: none on the builder's with two monitors); it is known.
+        Assert.NotNull(Monitors.OverlayPlanes(null));
+    }
 }

@@ -20,13 +20,17 @@ internal sealed unsafe class DurableOutput : IDisposable
     private const int Eio = -5;
 
     private readonly FileStream _file;
+    private readonly bool _flushToDisk;
     private GCHandle _handle;
     private AVIOContext* _context;
     private Exception? _failure;
 
     /// <summary>Creates (or truncates) <paramref name="path"/>, shared for reading only.</summary>
-    public DurableOutput(string path)
+    /// <param name="path">The file.</param>
+    /// <param name="flushToDisk">Whether <see cref="Flush"/> also flushes the file to the disk; false only for tests.</param>
+    public DurableOutput(string path, bool flushToDisk = true)
     {
+        _flushToDisk = flushToDisk;
         // Unbuffered: FFmpeg's own buffer is the only one, so a flush reaches the OS at once.
         _file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, bufferSize: 0);
         try
@@ -80,7 +84,7 @@ internal sealed unsafe class DurableOutput : IDisposable
         ffmpeg.avio_flush(_context);
         ThrowIfFailed();
         FFmpegLibrary.Check(_context->error, "avio_flush");
-        _file.Flush(flushToDisk: true);
+        _file.Flush(_flushToDisk);
     }
 
     public void Dispose()

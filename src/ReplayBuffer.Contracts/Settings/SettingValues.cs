@@ -128,6 +128,25 @@ public sealed record FeedbackSounds(bool ClipSaved, bool SaveFailed, bool Record
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CleanupSettings(long? MaxBytes, long? MaxAgeSeconds);
 
+/// <summary>
+/// The <c>overlayDot</c> key: when the Overlay's dot shows. A topmost window over a borderless game keeps
+/// the game in independent flip only while the game's monitor has a free hardware overlay plane (MPO), so
+/// <see cref="Auto"/> shows the dot always where the monitor reports overlay planes and for a few seconds
+/// after each change where it doesn't.
+/// </summary>
+[JsonConverter(typeof(CamelCaseEnumConverter<OverlayDotMode>))]
+public enum OverlayDotMode
+{
+    /// <summary>Always where the Target Game's monitor reports overlay planes; otherwise on each change.</summary>
+    Auto,
+
+    /// <summary>Always, whatever it costs (FR-6 as written).</summary>
+    Always,
+
+    /// <summary>For a few seconds after each change of the dot or the mic mute.</summary>
+    OnChange,
+}
+
 /// <summary>When a changed key takes effect.</summary>
 [JsonConverter(typeof(CamelCaseEnumConverter<AppliesAt>))]
 public enum AppliesAt

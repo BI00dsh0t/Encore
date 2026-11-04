@@ -465,6 +465,183 @@ public sealed class SessionOrchestratorTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task AnEncoderRestartEndsTheRecordingAndStartsAnotherWithTheStateRunningThroughout()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var library = new FakeLibraryWrites();
+            var (orchestrator, events, presses, made, published, factory) = NewRecordingOrchestrator(library: library);
+            using var owned = orchestrator;
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var session = factory.Sessions[0];
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            // With no Recording, a restart publishes nothing.
+            session.Events.ChainRestarted(qpc);
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 1);
+            Assert.Empty(made);
+            Assert.False(events.Reader.TryRead(out _));
+
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 2);
+            var a = Assert.IsType<RecordingStarted>(await NextAsync(events));
+
+            // B starts at once; nothing is published until A's writer posts back.
+            session.Events.ChainRestarted(qpc + 3);
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 4);
+            Assert.Equal(2, made.Count);
+            Assert.False(events.Reader.TryRead(out _));
+
+            made.First().Finish();
+            Assert.Equal(new RecordingStopped(a.Path, RecordingStopReasons.EncoderRestart), await NextAsync(events));
+            var b = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            Assert.Equal(new RecordingRestart(a.Path, b.Path), await NextAsync(events));
+            Assert.NotEqual(a.Path, b.Path);
+            Assert.Equal(RecordingState.Running, published.Last().Recording);
+
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 5);
+            Assert.Equal(new RecordingStopped(b.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+            Assert.Equal([RecordingState.Off, RecordingState.Running, RecordingState.Off], RecordingStates(published));
+            Assert.Equal(
+                [$"begin {a.Path} {ProfileId}", $"opened {a.Path}", $"begin {b.Path} {ProfileId}", $"opened {b.Path}",
+                 $"end {a.Path} Written", $"closed {a.Path}", $"end {b.Path} Written", $"closed {b.Path}"],
+                library.Calls);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AnEncoderRestartWhoseNewRecordingCantStartStopsTheOldOneAndGoesOff()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var (orchestrator, events, presses, made, published, factory) = NewRecordingOrchestrator(maxRecordings: 1);
+            using var owned = orchestrator;
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc);
+            var a = Assert.IsType<RecordingStarted>(await NextAsync(events));
+
+            factory.Sessions[0].Events.ChainRestarted(qpc + 1);
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 2);
+            made.Single().Finish();
+
+            Assert.Equal(new RecordingStopped(a.Path, RecordingStopReasons.EncoderRestart), await NextAsync(events));
+            Assert.Equal(RecordingState.Off, published.Last().Recording);
+            Assert.False(events.Reader.TryRead(out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ARestartsNewRecordingThatEndsFirstIsAnnouncedBeforeItsStop()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var (orchestrator, events, presses, made, published, factory) = NewRecordingOrchestrator();
+            using var owned = orchestrator;
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc);
+            var a = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            factory.Sessions[0].Events.ChainRestarted(qpc + 1);
+
+            // B is stopped and posts back while A is still finishing.
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 2);
+            var b = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            Assert.Equal(new RecordingRestart(a.Path, b.Path), await NextAsync(events));
+            Assert.Equal(new RecordingStopped(b.Path, RecordingStopReasons.Stopped), await NextAsync(events));
+            Assert.Equal(RecordingState.Running, published.Last().Recording);
+
+            made.First().Finish();
+            Assert.Equal(new RecordingStopped(a.Path, RecordingStopReasons.EncoderRestart), await NextAsync(events));
+            Assert.Equal(RecordingState.Off, published.Last().Recording);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DisposeWhileARestartsOldRecordingFinishesHandlesBoth()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var (orchestrator, events, presses, made, _, factory) = NewRecordingOrchestrator();
+            using var owned = orchestrator;
+            await orchestrator.StartAsync(SessionKind.Game, Target(window: 1), NoAudio).WaitAsync(Timeout, Token);
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+            await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc);
+            var a = Assert.IsType<RecordingStarted>(await NextAsync(events));
+            var session = factory.Sessions[0];
+            session.Events.ChainRestarted(qpc + 1);
+            await Press(orchestrator, presses, HotkeyAction.MicMute, qpc + 2);
+
+            // Both writers finish once the session's output ends, after the channel has closed.
+            _ = session.Ended.Task.ContinueWith(
+                _ =>
+                {
+                    foreach (var recording in made)
+                    {
+                        recording.Finish();
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default);
+            orchestrator.Dispose();
+
+            List<object> published = [];
+            while (events.Reader.TryRead(out var item))
+            {
+                published.Add(item);
+            }
+
+            var b = made.Last().Path!;
+            Assert.Equal(
+                [new RecordingStopped(a.Path, RecordingStopReasons.EncoderRestart), new RecordingStarted(b), new RecordingRestart(a.Path, b), new RecordingStopped(b, RecordingStopReasons.Shutdown)],
+                published);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>The published Recording states, each change once, from the initial Off.</summary>
+    private static List<RecordingState> RecordingStates(IEnumerable<CaptureState> published)
+    {
+        List<RecordingState> states = [RecordingState.Off];
+        foreach (var state in published)
+        {
+            if (state.Recording != states[^1])
+            {
+                states.Add(state.Recording);
+            }
+        }
+
+        return states;
+    }
+
     // Every message posted before it has been handled: an End with no session is refused in order.
     private static async Task HandledAsync(SessionOrchestrator orchestrator) =>
         await Assert.ThrowsAsync<ErrorCodeException>(() => orchestrator.EndAsync().WaitAsync(Timeout, Token));
@@ -1568,7 +1745,7 @@ public sealed class SessionOrchestratorTests : IDisposable
     /// <paramref name="drains"/>, it has Replay Clips, so a game session drains on its Target's exit (R1).
     /// </summary>
     private (SessionOrchestrator Orchestrator, System.Threading.Channels.Channel<object> Events, System.Threading.Channels.Channel<HotkeyPress> Presses, ConcurrentQueue<FakeRecording> Made, ConcurrentQueue<CaptureState> Published, FakeFactory Factory) NewRecordingOrchestrator(
-        Action<TargetChanged>? targetChanged = null, FakeLibraryWrites? library = null, bool drains = false)
+        Action<TargetChanged>? targetChanged = null, FakeLibraryWrites? library = null, bool drains = false, int maxRecordings = int.MaxValue)
     {
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
@@ -1578,6 +1755,11 @@ public sealed class SessionOrchestratorTests : IDisposable
         {
             Record = _ =>
             {
+                if (made.Count >= maxRecordings)
+                {
+                    return null;
+                }
+
                 var recording = new FakeRecording();
                 made.Enqueue(recording);
                 return recording;
@@ -1598,7 +1780,8 @@ public sealed class SessionOrchestratorTests : IDisposable
                 s => events.Writer.TryWrite(s),
                 e => events.Writer.TryWrite(e),
                 library,
-                Open: library));
+                Open: library,
+                Restarted: r => events.Writer.TryWrite(r)));
         return (orchestrator, events, presses, made, published, factory);
     }
 

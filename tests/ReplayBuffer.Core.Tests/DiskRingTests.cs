@@ -81,11 +81,13 @@ public sealed class DiskRingTests : IDisposable
     {
         Directory.CreateDirectory(_folder);
         File.WriteAllBytes(Path.Combine(_folder, "ring-7.bin"), [1, 2, 3]);
+        File.WriteAllBytes(Path.Combine(_folder, "ring-notes.bin"), [1, 2, 3]);
         File.WriteAllBytes(Path.Combine(_folder, "other.bin"), [1, 2, 3]);
 
         Assert.Equal(1, RingFile.RemoveStale(_folder));
 
         Assert.False(File.Exists(Path.Combine(_folder, "ring-7.bin")));
+        Assert.True(File.Exists(Path.Combine(_folder, "ring-notes.bin")));
         Assert.True(File.Exists(Path.Combine(_folder, "other.bin")));
     }
 }
