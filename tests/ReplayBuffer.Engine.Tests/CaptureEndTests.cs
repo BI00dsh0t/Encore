@@ -13,7 +13,7 @@ public sealed class CaptureEndTests : IDisposable
 {
     private const string WindowScript =
         """
-        param([string] $Title, [int] $CloseAfterMs)
+        param([string] $Title, [int] $CloseAfterMs, [string] $CloseFlag)
         Add-Type -AssemblyName System.Windows.Forms
         $form = New-Object System.Windows.Forms.Form
         $form.Text = $Title
@@ -26,6 +26,7 @@ public sealed class CaptureEndTests : IDisposable
             $v = [int](($start.ElapsedMilliseconds / 4) % 255)
             $form.BackColor = [Drawing.Color]::FromArgb($v, 255 - $v, 128)
             if ($CloseAfterMs -gt 0 -and $start.ElapsedMilliseconds -ge $CloseAfterMs) { $form.Close() }
+            if ($CloseFlag -and (Test-Path $CloseFlag)) { $form.Close() }
         })
         $timer.Start()
         $form.Show()
@@ -103,10 +104,22 @@ public sealed class CaptureEndTests : IDisposable
     public void ClosingTheWindowEndsCaptureAndFinalizesTheFile()
     {
         RequireFFmpeg();
-        var title = OpenWindow(closeAfterMs: 2500);
+        // The window closes once the engine is writing the file, not on a fixed timer: a cold engine
+        // start on a loaded machine sometimes outlasted 2.5 s and found the window already gone.
+        var closeFlag = Path.Combine(_directory, "close-now");
+        var title = OpenWindow(closeAfterMs: 0, closeFlag);
         var output = Path.Combine(_directory, "closed.mp4");
 
         var engine = StartEngine(title, output);
+        var deadline = Stopwatch.StartNew();
+        while (!(File.Exists(output) && new FileInfo(output).Length > 0))
+        {
+            Assert.False(engine.HasExited, $"the engine exited with {(engine.HasExited ? engine.ExitCode : 0)} before writing the file");
+            Assert.True(deadline.Elapsed < TimeSpan.FromSeconds(30), "the engine never started writing the file");
+            Thread.Sleep(50);
+        }
+
+        File.WriteAllText(closeFlag, "");
         Assert.True(engine.WaitForExit(TimeSpan.FromSeconds(20)), "the engine did not stop when the window closed");
 
         Assert.Equal(0, engine.ExitCode);
@@ -289,10 +302,10 @@ public sealed class CaptureEndTests : IDisposable
     private static void RequireFFmpeg() =>
         Assert.SkipUnless(File.Exists(Path.Combine(BinFolder, "ffprobe.exe")), "native/ffmpeg is not fetched");
 
-    private string OpenWindow(int closeAfterMs)
+    private string OpenWindow(int closeAfterMs, string closeFlag = "")
     {
         var title = "RB-Test-" + Guid.NewGuid().ToString("N");
-        Pwsh(WindowScript, "window.ps1", "-Title", title, "-CloseAfterMs", closeAfterMs.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Pwsh(WindowScript, "window.ps1", "-Title", title, "-CloseAfterMs", closeAfterMs.ToString(System.Globalization.CultureInfo.InvariantCulture), "-CloseFlag", closeFlag);
 
         var deadline = Stopwatch.StartNew();
         while (deadline.Elapsed < TimeSpan.FromSeconds(15))

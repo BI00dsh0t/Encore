@@ -40,12 +40,12 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.5 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix flaky-recording-crash-test |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix flaky-engine-replay-trackmix |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.6 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 9.5 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.4 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with bugfix app-theme-test-order |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -166,7 +166,7 @@ The coordinator logs each QA round in the Log below.
 | 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8a434c6`) |
 | 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `af6eab8`) |
-| 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
+| 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | QA passed, waiting for its 2 Heavy runs |
 | 29.7 | 8.7 Final conformance run | | pending |
 | 29.8 | 8.8 8-hour soaks in Memory and Disk mode | | pending |
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
@@ -175,8 +175,8 @@ The coordinator logs each QA round in the Log below.
 | 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `247284c`, builder approved) |
 | 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `166e1f3`) |
 | 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `d3dcad3`) |
-| 30.4 | 9.4 Library restyled | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
-| 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 30.4 | 9.4 Library restyled | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | QA passed, merging |
+| 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in QA (qa-1-14) |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | | pending |
@@ -731,3 +731,13 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Bugfix `dd-frame-gaps` READY at `dc882f8`. Root cause: `AcquireNextFrame`'s 100 ms wait held the multithread-protected device's lock, which the encoder thread needs every slot, so on a quiet monitor it stalled the encoder past the pacer's catch-up and left PTS gaps. The fix polls with a zero timeout every half slot, behind a new `IOutputDuplication` seam with a default test (`DesktopDuplicationCaptureTests`). The coordinator read the diff. The GPU runner is running the 3 Desktop Duplication Heavy tests and the whole `MonitorRecordingCaptureTests` class.
 - 2026-11-04: 8.5 merged (`af6eab8`; marked done with 5 Human Check rows in `101f32f`), and its card is Done. 8.6 (nothing to re-select after a reboot, a restart or a mixer restart) went to slice-epic-8 (Opus, medium effort), with its card In progress. No reboot, no service restarts and no default-device changes: a cold start on a Guid instance and a device-enumeration seam stand in; Heavy tests go to the runner.
 - 2026-11-04: 9.3 merged (`d3dcad3`; marked done, renders and its Human Check row in `7b4ad47`), and its card is Done. **App test-order bug** from 9.7: `ThemeTests.MicaIsBehindTheMainAppUnderFluentOnly...` fails after `SurfacesThemeTests.TheDialogAnswersYesNo...` (3 of 3; passes alone). Bugfix `app-theme-test-order` went to story-2-7 (Opus; not cleared, because the builder has it open, but it built the Mica test). 9.4 (Library) went to 2-1-tracer and 9.5 (settings group 1) to slice-epic-4, both Opus at medium effort, running in parallel on separate files.
+- 2026-11-04: Bugfix `dd-frame-gaps` Heavy on `dc882f8` passed on a busy desktop: the 3 Desktop Duplication tests and all 8 `MonitorRecordingCaptureTests`. The coordinator approved it; qa-1-14 is merging. Bugfix `flaky-recording-crash-test` READY at `8c37dd4` (test-only): the kill now waits for the next fragment to land after 3 s instead of exactly 3.000 s, which sat on a 0.5 s fragment boundary; lag went from 0.50 s to 0.13-0.17 s over 3 cold runs. The coordinator approved it; slice-epic-5 is merging. The GPU runner is idle.
+- 2026-11-04: Bugfix `flaky-recording-crash-test` merged (`0cc1fd2`). The post-sync Engine run showed 2 more load-induced default-suite flakes (the rerun passed 180/180): `EngineServeTests.TheEngineServesItsSnapshotAndCommandsAndAKillFailsThePendingCommand` (TimeoutException at :81) and `CaptureEndTests.ClosingTheWindowEndsCaptureAndFinalizesTheFile` (expected 0, actual 1 at :112). Bugfix `flaky-engine-serve-capture-end` went to slice-epic-5 (Opus, medium effort). Up to 6 sessions build and test on the PC at once, so wall-clock bounds in default tests are a recurring risk.
+- 2026-11-04: Bugfix `dd-frame-gaps` merged (`9e0df3f`). Platform.Capture 5 and Engine 180 passed; publish OK. qa-1-14 is back in the pool.
+- 2026-11-04: **Build fix (builder): NuGet audit flagged `Microsoft.DotNet.ILCompiler` 10.0.13 (GHSA-p3jp-9v83-76w9, high), which fails builds under TreatWarningsAsErrors.** SDK 10.0.402 brings 10.0.13; 10.0.403 (installed) brings 10.0.14. `global.json` is pinned to 10.0.403 (`bugfix/sdk-10.0.403` `3e466e8`, merged as the merge commit above). 0-warning Release build, and the NativeAOT publish passes with ILCompiler 10.0.14. Sessions with stale obj restores just need a sync and a restore.
+- 2026-11-04: After the 14:30 usage-limit reset: 9.4 and 9.5 were resumed. Bugfixes `app-theme-test-order` (`4cc2c18`; a product fix: WPF caches `DisableFluentThemeWindowBackdrop` at the first window shown, so it's now set in the runtimeconfig) and `flaky-engine-serve-capture-end` (`8e01aea`; waits on real conditions) were checked by the coordinator and approved to merge. 8.6 READY FOR QA at `f34fa7d`; QA went to qa-1-14 (Sonnet, medium effort), and its 2 Heavy tests went to the GPU runner after a safety read (test-instance processes and Run key only).
+- 2026-11-04: Bugfix `app-theme-test-order` merged (`a953cbb`); App 145 passed twice. story-2-7 is back in the pool.
+- 2026-11-04: Bugfix `flaky-engine-serve-capture-end` merged (`35b6acf`). Its first Engine run showed 2 more load-sensitive default tests (the rerun passed 180/180): `ReplayClipCaptureTests.AKilledTargetIsDrainedSoASaveStillCuts...` (TimeoutException at :296) and `TrackMixCaptureTests.EachTrackCarriesExactlyItsDevicesTones` (RMS 0.126, outside 0.142-0.174, at :98). Bugfix `flaky-engine-replay-trackmix` went to slice-epic-5. The RMS one is checked for a real mix glitch before any bound change. 9.4 READY FOR QA at `6446295`; QA went to story-2-7 (Sonnet, medium effort; cleared this time), and its card is In QA.
+- 2026-11-04: 9.5 READY FOR QA at `8013c3c`, and its card is In QA. Its QA waits for the next free worker: all 7 are busy (3 QA, 1 GPU runner, 1 bugfix, 2 implementers waiting on QA).
+- 2026-11-04: QA 8.6 passed at `f34fa7d` with 0 findings: Platform.Audio 25, Core 159 and Engine 182 passed; publish clean. No Contracts change. Name resolution falls back to the saved id for ambiguous names, an empty ParentName or a failed listing, so it never picks a wrong device. The Heavy pair test only builds the Run-key command string and never writes the registry. Note: the Track Layout page still shows a renumbered device as not connected (display only, in the plan's Design Notes). The merge waits for the 2 Heavy runs. QA 9.5 went to qa-1-14 (Sonnet, medium effort).
+- 2026-11-04: QA 9.4 passed at `6446295` with 0 findings: App 146 passed; no hard-coded colours; every row action kept; the empty-state rule bound to real VM properties; both themes load. 2-1-tracer is merging. story-2-7 is back in the pool.

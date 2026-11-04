@@ -168,6 +168,16 @@ public sealed partial class ThemeTests
         main.CloseForQuit();
     });
 
+    // The bug that bit: a window shown before ThemeService's first use made WPF cache the switch off, and
+    // Mica then landed behind every window. Both processes now set it in their runtimeconfig.
+    [Fact]
+    public void WpfsOwnBackdropIsOffFromProcessStartInTheAppAndTheTestHost()
+    {
+        Assert.True(AppContext.TryGetSwitch(ThemeService.DisableFluentBackdropSwitch, out var off) && off);
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "ReplayBuffer.App.runtimeconfig.json")));
+        Assert.True(config.RootElement.GetProperty("runtimeOptions").GetProperty("configProperties").GetProperty(ThemeService.DisableFluentBackdropSwitch).GetBoolean());
+    }
+
     [Fact]
     public void FluentDimsADisabledTextBoxAndListItem() => Sta.Run(() =>
     {

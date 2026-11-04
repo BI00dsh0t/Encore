@@ -7,6 +7,13 @@
   <ItemGroup>
     <PackageReference Include="H.NotifyIcon.Wpf" />
   </ItemGroup>
+  <!--
+    WPF's Fluent theme puts Mica behind every window unless this switch is on, and caches the switch the
+    first time any window shows, so it is set in the runtimeconfig, from process start (AD-23; ThemeService).
+  -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true" />
+  </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ReplayBuffer.App.Tests" />
   </ItemGroup>
