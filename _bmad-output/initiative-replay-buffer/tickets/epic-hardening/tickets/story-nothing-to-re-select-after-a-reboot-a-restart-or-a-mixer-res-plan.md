@@ -104,5 +104,20 @@ deferred: []
 
 ## Auto Run Result
 
-- **Summary:** the persistence suite and the mixer-restart suite pass in the default run. One fix: a session opened after a mixer gave its endpoints new ids now opens them by their saved names, with no re-select and no settings write.
-- **Verification (2026-11-04):** see the session report: build, test counts and the publish.
+- **Summary:** the persistence suite and the mixer-restart suite pass. Two product fixes:
+  - A session opened after a mixer gave its endpoints new ids opens them by their saved names, with no re-select and no settings write.
+  - **The Library save-retry:** the Heavy pair test found that `LibraryActor.Save` lost a change when `File.Replace` failed. It fails while anything holds `library.json` open without delete sharing: a backup, a virus scanner, or the test's own read. The failure was only logged and never retried, so a new Favourite lived only in memory, and an engine kill lost it. A failed save now keeps the index dirty and is retried every 1 s (`RetrySave`), with one warning per run of failures. `LibraryActorTests.ASaveBlockedByAReaderIsRetriedSoAFavouriteReachesTheDisk` covers it and fails without the retry.
+- **Test fixes in the pair test:**
+  - It plants a complete MP4, an `ftyp` box then a `moov` box: the scan rightly skips zeros.
+  - It waits for the Favourite on disk, reads files with sharing and a retry, and compares `library.json` by its items.
+- **Verification (2026-11-04, after the sync with develop):**
+  - Release build: 0 warnings.
+  - Core: 160/160.
+  - Engine: 182 passed, 42 explicit skipped.
+  - App: 150 passed, 19 explicit skipped.
+  - `tools/publish-engine.ps1`: no IL warnings.
+  - QA passed.
+- **Heavy:**
+  - `ClipsEndToEndTests.TheReplayBufferStartsOnTheGameByItselfAfterEachColdStart` passed on the GPU runner at `f34fa7d` (19 s).
+  - `NothingToReselectPairTests.EveryPersistedValueSurvivesAnAppKillAnEngineKillAndAQuitThenARunKeyLaunch` passed 3 times in a row at `0ba1e53` (about 9 s each), after failing on the test bugs and the save bug above.
+- **Human Checks:** the three in Design Notes, in the Human Check Queue.
