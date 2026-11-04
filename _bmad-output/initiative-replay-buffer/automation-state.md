@@ -44,7 +44,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 6.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 7.10 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.10 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -626,3 +626,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 6.10 at `e42c1bb`: **QA PASS**, 0 findings and 2 notes. Its Heavy `MonitorRecordingCaptureTests` (8/8) ran just before the GPU pause reached it; that's the last GPU run. QA found that pre-creating `.bench-running` makes `BenchLock`-based tests hang, which explains the empty 09:52 file. QA removed it, and the "Who takes `.bench-running`" rule was added. 6.10 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-04: 6.10 merged (`4bf3a8e`, marked done). QA passed at `e42c1bb` with 0 findings and 2 notes (a stale `Failed` doc on `DesktopDuplicationCapture`; a single `DuplicateOutput` at start, so a UAC prompt up at the press fails the session), recorded in the epic Notes. Synced with develop first: 0-warning build, Contracts 121, Core 145, Platform.Capture 3, Engine 211 passed, publish clean; no GPU tests (paused). Contracts change: additive `ErrorCodes.MonitorCaptureFallback`. Unblocks 6.11. Human Check: confirm on the PC that a forced-fallback Monitor Recording of the real Main App and Overlay hides them (6.9's row also covers this path).
 - 2026-11-04: 6.10 merged (`4bf3a8e`, logged `379a084`), and its card is Done. slice-epic-5 is back in the pool. 6.11 went to qa-1-14 (Opus, medium effort; GPU tests paused), with its card In progress.
+- 2026-11-04: 7.10 (the epic 7 refactor sweep) is READY FOR QA at `0f66b44`; its own review caught and restored a removed rename-guard assertion. QA started on 2-1-tracer (Sonnet; GPU tests paused), checking every Cleanup and delete guard and its test. Its card is In QA.
