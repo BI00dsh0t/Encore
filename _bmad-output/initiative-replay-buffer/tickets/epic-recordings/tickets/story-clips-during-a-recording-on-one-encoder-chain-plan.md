@@ -3,7 +3,7 @@ title: 'Clips during a Recording on one encoder chain'
 type: 'feature'
 ticket: '5'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '0795f8f20fab3c554a8340f121fea64791092c83'
 route: 'full'
 route_source: 'auto'

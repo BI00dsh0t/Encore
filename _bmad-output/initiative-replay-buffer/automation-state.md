@@ -133,7 +133,7 @@ The coordinator logs each QA round in the Log below.
 | 27.2 | 6.2 Crash-safe Recordings and recording-interrupted | 6.2 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ee4e90f`) |
 | 27.3 | 6.3 Record Hotkey modes and the Recordings switch | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `eee32cb`) |
 | 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `e43dda1`) |
-| 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
+| 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `856bd57`) |
 | 27.6 | 6.6 One file however long, and forced encoder restarts | | pending |
 | 27.7 | 6.7 Disk full during a Recording | | pending |
 | 27.8 | 6.8 Recording notices and sounds | | pending |
@@ -519,3 +519,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - 5.11 was briefed on qa-1-14 (Opus, medium effort).
   - 2-1-tracer (Opus, medium effort, context kept from the research) parks its prototype on the research branch, adds the new "Adaptive Overlay dot" story to epic-overlay-feedback (after 8; stories 12 and 13 wait on it), then builds it.
 - 2026-11-04: QA 4.11 at `2fc9e93`: **QA FAIL**, 1 finding: the UI never says overrides apply at the next Reset. The build and App.Tests pass. The findings went to story-2-7 to fix; the round-2 re-check runs at low effort.
+- 2026-11-04: 6.5 merged (`856bd57`, marked done below). QA 6.5 PASSED at `7a32c50`; develop was merged into the branch again before the merge, with a 0-warning build, Core 111 and Engine 167 passed, and a clean publish.
