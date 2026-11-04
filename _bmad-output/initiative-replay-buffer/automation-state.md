@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with epic 9 planning |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 6.13 |
@@ -172,6 +172,15 @@ The coordinator logs each QA round in the Log below.
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
 | 29.10 | 8.10 Refactor sweep | | pending |
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
+| 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | | pending |
+| 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | | pending |
+| 30.3 | 9.3 Shell, navigation and status line | | pending |
+| 30.4 | 9.4 Library restyled | | pending |
+| 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
+| 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | | pending |
+| 30.7 | 9.7 Tray menu, dialogs and Overlay messages | | pending |
+| 30.8 | 9.8 Refactor sweep | | pending |
+| 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -669,3 +678,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.3 fixes at `bf38783`, checked by the coordinator and approved. `GpuResetWarnings` withdraws `gpu-reset` on Recovered, and on give-up replaces it with `gpu-reset-failed` (with a default test). `TearDownLost` disposes each step under its own guard. `Retarget` builds the capture under the gate. Core 151 and Engine 178 passed; publish clean. slice-epic-8 is merging.
 - 2026-11-04: 6.13 READY FOR QA at `4c6e5ea` (127 passed, 11 for the builder, 11 not run because GPU tests are paused), and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; it confirms the no-capture guards in the code before its single run).
 - 2026-11-04: 8.3 merged (`f91c32d`) after a sync with develop that resolved the overlap with 6.10's `ICaptureSource` (the recovery rebuilds a Monitor capture through the WGC-then-Desktop-Duplication path) and the `OpenWrite`/`CloseWrite` helpers. Before the merge: 0-warning build; default suites Contracts 122, Core 152, Engine 179 (37 explicit skipped), Platform.Capture 3, Platform.FFmpeg 37 (2 skipped), all passing; the NativeAOT publish clean. Marked done; three Human Check rows added (the Heavy run once GPU tests resume, a real `dxcap -forcetdr` with a Clip save, and one with a Monitor Recording).
+- 2026-11-04: Epic 9 planning reviewed by the coordinator and merged (`68dca7a`). It adds R37, architecture AD-23 (theming: one token set, an `appTheme` Global key with values `fluent` or `gamingDark`, live dictionary swap, dialogs as App windows) and 9 stories, 9.1 to 9.9. 9.1 waits on 6.13 and 7.11, and 8.7 now waits on 9.9. Its 9 Trello cards were created in Backlog with labels (purple on every story except 9.8; red on 9.2), and Queue rows 30.1 to 30.9 added. slice-epic-5 is back in the pool.

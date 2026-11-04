@@ -129,5 +129,14 @@ Label ids take the form `ari:cloud:trello::label/workspace/6ae9f97af5eb2665e5252
 | 8.9 T-01 to T-25 conformance record | `6ae9fbd69a5adf775cd04eaa` |
 | 8.10 Refactor sweep | `6ae9fbd7b25afea35f3d7f08` |
 | 8.11 Hands-off operation on the builder's PC | `6ae9fbd939e972b1b489b2c0` |
+| 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes | `6aeb56781cc628b5e06a81fb` |
+| 9.2 Theme infrastructure, live switching and a control gallery | `6aeb56795700216d33ecb918` |
+| 9.3 Shell, navigation and status line | `6aeb567a2ad4dc996151b288` |
+| 9.4 Library restyled | `6aeb567bc93bbb20384e2b28` |
+| 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | `6aeb567c4c0ca2fc05d39a1c` |
+| 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | `6aeb567dd30e8b465ebc5fff` |
+| 9.7 Tray menu, dialogs and Overlay messages | `6aeb567e724bef294d1f3f3b` |
+| 9.8 Refactor sweep | `6aeb567f4ba1943f56124875` |
+| 9.9 Modern UI end to end on the builder's PC | `6aeb5680f8d5e704797db805` |
 
 The legend card at the top of Backlog is `6ae9fa9bd7f70d53c9518fbf`.
