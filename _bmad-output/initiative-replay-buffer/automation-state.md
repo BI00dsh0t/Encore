@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.4 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.4 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 9.2 |
@@ -164,7 +164,7 @@ The coordinator logs each QA round in the Log below.
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
 | 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
-| 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
+| 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in QA (qa-1-14) |
 | 29.5 | 8.5 Monitor changes | | pending |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
 | 29.7 | 8.7 Final conformance run | | pending |
@@ -687,3 +687,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 9.1 is ready at `44620ec`. The coordinator reviewed it and merged the docs into develop (`247284c`): `ux-modern-ui/DESIGN.md` (625 lines) and `EXPERIENCE.md` (252 lines), plus 9 PNG renders (Fluent dark, Fluent light and gaming dark; Library, settings and surfaces scenes) and their source. Not marked done yet: it's waiting for the builder's approval and two open questions (grow the default window from 720x440 to about 960x600; keep the new empty-Library message). Coordinator note: under gaming dark, the nav's Settings group label looks like a nav item; it should be smaller and muted. 9.2 waits on the approval.
 - 2026-11-04: **Builder approved 9.1's design.** The default window grows to 960x600 (9.3's ticket updated), the empty Library shows "No Clips or Recordings yet.", and under gaming dark the nav's Settings section label is caption-sized and muted (DESIGN.md updated). The Decision is in the epic Notes. 9.1 marked done, and its card is Done. 9.2 (theme infrastructure, high risk) went to story-2-7 (Opus, high effort), with its card In progress.
 - 2026-11-04: **Builder: "gpu tests can resume".** The standing rule is now "GPU tests resumed": Heavy runs are allowed one project at a time, but no TDR, no settings changes and no bench unless an AC needs it. qa-2-1 (Opus, medium effort) is the GPU runner. It runs each project's full Heavy category to catch up on everything skipped during the pause, including 8.3's `*GpuReset*` and the `ClipsEndToEndTests` and `OverlayEndToEndTests` reruns, and reports failing and flaky tests. Story sessions hand their Heavy runs to the coordinator for the runner. 9.2's brief was sent to story-2-7.
+- 2026-11-04: 8.4 READY FOR QA at `fb964b0` (14 files, about 1,000 lines), and its card is In QA. QA went to qa-1-14 (Sonnet, medium effort; no Heavy runs). Its two Heavy tests are queued on the GPU runner after the catch-up: Engine `ASuspendAndResumeOpenANewGenerationAndEndTheRecordingPlayable` and `AFrameStarvedSourceKeepsTheFrameRateWithAudioInSync`. The merge waits for both QA and those runs.
