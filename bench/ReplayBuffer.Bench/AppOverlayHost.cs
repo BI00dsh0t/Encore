@@ -182,7 +182,7 @@ internal sealed class AppOverlayHost : IOverlayHost
     }
 
     /// <summary>Shuts the engine down (the App quits when it ends cleanly), stops what is left, and deletes the instance's folders.</summary>
-    private static void Cleanup(Process app, Instance instance, EngineClient? client, int enginePid)
+    internal static void Cleanup(Process app, Instance instance, EngineClient? client, int enginePid)
     {
         if (client is not null)
         {
@@ -245,7 +245,7 @@ internal sealed class AppOverlayHost : IOverlayHost
         }
     }
 
-    private static void DeleteQuietly(string folder)
+    internal static void DeleteQuietly(string folder)
     {
         for (var attempt = 0; attempt < 10 && Directory.Exists(folder); attempt++)
         {
