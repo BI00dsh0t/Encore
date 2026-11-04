@@ -37,12 +37,12 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 5.8 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.10 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.5 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 5.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.5 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 4.9 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.11 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -107,7 +107,7 @@ The coordinator logs each QA round in the Log below.
 | 25.8 | 4.8 Memory-mode RAM margin | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `2b218ae`) |
 | 25.9 | 4.9 Per-Game-Profile settings at the next Reset | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `2a93e4b`) |
 | 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done |
-| 25.11 | 4.11 Game Profile overrides in the Main App | | pending |
+| 25.11 | 4.11 Game Profile overrides in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 25.12 | 4.12 Hotkeys page in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `29d63b8`) |
 | 25.13 | 4.13 Refactor sweep | | pending |
 | 25.14 | 4.14 Clips end to end on the builder's PC | | pending |
@@ -122,7 +122,7 @@ The coordinator logs each QA round in the Log below.
 | 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `53d83b7`) |
 | 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 26.9 | 5.9 Capture exclusion for every App window | | pending |
-| 26.10 | 5.10 Main App status line | | pending |
+| 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 26.11 | 5.11 Feedback Sounds settings page | | pending |
 | 26.12 | 5.12 Benchmark with the Overlay on | | pending |
 | 26.13 | 5.13 Refactor sweep | | pending |
@@ -133,7 +133,7 @@ The coordinator logs each QA round in the Log below.
 | 27.2 | 6.2 Crash-safe Recordings and recording-interrupted | 6.2 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `ee4e90f`) |
 | 27.3 | 6.3 Record Hotkey modes and the Recordings switch | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `eee32cb`) |
 | 27.4 | 6.4 Recording lifecycle: game exit, Target hold, Ignored and Quit | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `e43dda1`) |
-| 27.5 | 6.5 Clips during a Recording on one encoder chain | | pending |
+| 27.5 | 6.5 Clips during a Recording on one encoder chain | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 27.6 | 6.6 One file however long, and forced encoder restarts | | pending |
 | 27.7 | 6.7 Disk full during a Recording | | pending |
 | 27.8 | 6.8 Recording notices and sounds | | pending |
@@ -489,3 +489,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 7.5 at `a60793d`: **QA PASS**, 0 findings. 7.5 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-04: 4.9 merged into `develop` (`2a93e4b`, `feat(engine): merge 4.9-profile-settings-at-reset`) and marked done, after QA PASS at `30b908c` with 0 blocking findings. Develop (7.4, 4.12) was synced in first: 0-warning build, Contracts 118, Core 109, Media 99, Engine 167 passed, publish clean (11.4 MB). The advisories are in the epic Notes (audio seam, estimate scope, Record while armed). Human Check: none new.
 - 2026-11-04: 7.5 merged into `develop` (`ca3aa83`, `feat(app): merge 7.5-group-and-filter`) and marked done, after QA PASS at `a60793d` with 0 findings. Develop (4.9, 4.12, 5.8 and others) was merged into the branch first without conflicts (Release build 0 warnings, App.Tests 94 passed, 8 explicit skipped). App-only; no Contracts change. No new Human Check rows (the grouped list and filter bar are 7.11's hand check).
+- 2026-11-04: 4.9 merged (`2a93e4b`, marked done `21b9120`). Its card is Done with its label detached, and 2-1-tracer is back in the pool. Newly ready: 4.11 went to story-2-7, 5.10 to slice-epic-5 and 6.5 to slice-epic-8 (all Opus, medium effort), with cards In progress. 5.8 is READY FOR QA at `50cba20`, and QA started on qa-1-14 (Sonnet), with its card In QA. 5.8 raises a builder decision: with the dot shown, the borderless stand-in now drops from Independent Flip to Composed: Flip (about 7.5 % FPS), unlike spike 5.2's run. The likely cause is no free overlay plane, with NVIDIA Overlay, Discord and Steam running and two monitors attached. AC 3 is held for that decision (see Decisions Awaiting Review), not counted as a QA failure.
