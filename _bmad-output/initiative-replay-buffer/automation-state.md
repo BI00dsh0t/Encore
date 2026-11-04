@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.9 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 7.8 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 5.13 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -594,3 +594,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.1 merged (`81261bb`, marked done `bbee196`) and 6.8 merged (`ede89f7`). Both cards are Done, with 6.8's label detached. Newly ready: 6.9 went to qa-2-1 (Opus, medium effort) and 8.2 (high risk) to slice-epic-4 (Opus, high effort), both with cards In progress. 8.2's crash tests only kill the processes they start.
 - 2026-11-04: QA 5.13 at `1407cc8`: **QA PASS**, 0 findings, no forward hooks removed. 5.13 has been told to merge (Sonnet). slice-epic-5 is back in the pool. After 5.13 come 5.14 (the epic 5 end-to-end check) and the v0.5.0 release.
 - 2026-11-04: Capture-cost investigation DONE (`b9b58e2`, `research/capture-cost-regression.md`). **It's the PC, not code:** like for like with 1.14's 3 × 5 min `bench fps`, v0.1.0 costs 6.96 % and develop 6.59 % (inside the noise), so no bisect was needed. The stage split shows WGC alone costs 4.3 % of the 6.4 % (nothing on 2026-11-02), WGC delivers about 52 fps instead of 60, and the load's GPU time per frame grows about 0.8 ms with clocks unchanged. The likeliest cause is Windows cumulative update KB5127936 (26300.9818) at the 2026-11-03 20:00 reboot, the same reboot that lost MPO. Possible contributors: an NVIDIA App update (FrameView tracing), the second monitor. A Human Check row and a Decisions row (the NFR-1 re-baseline) were added. slice-epic-8 is back in the pool.
+- 2026-11-04: 7.8 Cleanup is READY FOR QA at `812c685`. QA started on 2-1-tracer (Sonnet, high effort), checking every deletion guard in code and tests. Its card is In QA. 5.13 is merging.
