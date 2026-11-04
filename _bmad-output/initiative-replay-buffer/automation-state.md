@@ -45,7 +45,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 9.1 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 9.2 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -172,8 +172,8 @@ The coordinator logs each QA round in the Log below.
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
 | 29.10 | 8.10 Refactor sweep | | pending |
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
-| 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | merged (`247284c`), waiting for the builder's approval |
-| 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | | pending |
+| 30.1 | 9.1 Design pass: DESIGN.md and EXPERIENCE.md for both themes (runs before 8.7) | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `247284c`, builder approved) |
+| 30.2 | 9.2 Theme infrastructure, live switching and a control gallery | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 30.3 | 9.3 Shell, navigation and status line | | pending |
 | 30.4 | 9.4 Library restyled | | pending |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | | pending |
@@ -685,3 +685,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.13 merged (`9815d81`; the note on the unexplained failure is in `4a1dc54`). **Epic 6 marked done** (`42c41ca`) and **released as v0.6.0** (master `5f694d4`, back into develop as `c9a7261`, with git flow's merge messages reworded). v0.7.0 (epic 7, held until now) is cut next. story-2-7 is back in the pool.
 - 2026-11-04: **Epic 7 released as v0.7.0** (master `a2683b7`, back into develop as `81d6f6e`, with merge messages reworded); tags now run v0.1.0 to v0.7.0. The 6.13 card is Done. 9.1 (the design pass) went to story-2-7 (Opus, medium effort; `bmad-ux` headless; documents plus optional PNG renders), with its card In progress. The builder is asked to approve before 9.2 starts.
 - 2026-11-04: 9.1 is ready at `44620ec`. The coordinator reviewed it and merged the docs into develop (`247284c`): `ux-modern-ui/DESIGN.md` (625 lines) and `EXPERIENCE.md` (252 lines), plus 9 PNG renders (Fluent dark, Fluent light and gaming dark; Library, settings and surfaces scenes) and their source. Not marked done yet: it's waiting for the builder's approval and two open questions (grow the default window from 720x440 to about 960x600; keep the new empty-Library message). Coordinator note: under gaming dark, the nav's Settings group label looks like a nav item; it should be smaller and muted. 9.2 waits on the approval.
+- 2026-11-04: **Builder approved 9.1's design.** The default window grows to 960x600 (9.3's ticket updated), the empty Library shows "No Clips or Recordings yet.", and under gaming dark the nav's Settings section label is caption-sized and muted (DESIGN.md updated). The Decision is in the epic Notes. 9.1 marked done, and its card is Done. 9.2 (theme infrastructure, high risk) went to story-2-7 (Opus, high effort), with its card In progress.

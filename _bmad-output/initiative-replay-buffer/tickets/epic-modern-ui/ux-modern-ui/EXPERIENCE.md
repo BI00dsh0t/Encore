@@ -85,7 +85,7 @@ Every existing page is one click away, and none is renamed.
   1. the **status header**;
   2. the **page header**: the page title in `{typography.title}`, with the Library's filters on a row beneath it on the Library page;
   3. the **page content**, which fills the rest and scrolls on its own.
-- **Window size:** kept as today, 720×440 by default with a 480×320 minimum, as story 3 requires. [OPEN QUESTION for the builder: the new shell would read better at about 960×600. Grow the default size? It's a one-line change in story 3.]
+- **Window size:** [DECISION, builder 2026-11-04] the default grows to 960×600, so the navigation and the Library rows fit without crowding; the minimum stays 480×320. Story 3 makes the change.
 
 ### Status line's place
 
@@ -144,7 +144,7 @@ Behavioural rules. The visuals are in DESIGN.md's Components section.
 | Connecting, restarting, not running, crash loop | Status header | Today's text, with the dot in `text-disabled`. The pages show their last state, as today. |
 | Buffering, Recording, Monitor Recording, Mic muted | Status header | Today's text with its "·" parts; the dot is `success` or `record`. |
 | Warnings present | Status header | The list under the state line, newest first, scrolling past 120 px; each row's Dismiss where it applies. |
-| Empty Library | Library | [DECISION] A centred `body` line in `text-secondary`: "No Clips or Recordings yet." It shows only when there are no entries and no filter is on, and the filters bar stays. Today's App shows an empty list; this is the one new message. [OPEN QUESTION for the builder: keep it, or show a blank list as today?] |
+| Empty Library | Library | [DECISION] A centred `body` line in `text-secondary`: "No Clips or Recordings yet." It shows only when there are no entries and no filter is on, and the filters bar stays. Today's App shows an empty list; this is the one new message. Kept by the builder (2026-11-04). |
 | Filter matches nothing | Library | The empty list, as today. |
 | Missing thumbnail | Library row | The placeholder with the ▶ glyph. |
 | Being written | Library row | The "Saving…" caution pill. Rename and Delete behave as today. |

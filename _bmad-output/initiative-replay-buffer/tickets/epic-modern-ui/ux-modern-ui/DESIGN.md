@@ -480,7 +480,7 @@ A `ListBox` with its own item style (`RbNavItemStyle`).
 | Focused | focus visual | focus visual |
 | Disabled | — (no nav item is ever disabled) | — |
 
-The **section label** above the settings pages is not selectable. It uses `typography.caption` in `text-secondary` under Fluent, and `typography.section-header` under Gaming dark.
+The **section label** above the settings pages is not selectable. It uses `typography.caption` in `text-secondary` under Fluent. Under Gaming dark it uses `typography.caption`, uppercase, in `text-disabled`, so it never reads as a nav item (coordinator review, 2026-11-04).
 
 ### Context menu, menu item, separator (Library row menu, tray menu)
 
