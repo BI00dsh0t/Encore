@@ -112,6 +112,7 @@ internal sealed class MainViewModel : Observable
 
         TrackLayout.ShowDevices(state.Devices);
         ReplayBuffer.ShowState(state);
+        GameProfiles.ShowState(state);
         Hotkeys.ShowStatus(state.Hotkeys);
         FeedbackSounds.ShowState(state);
         Library.Render(state);
@@ -124,7 +125,24 @@ internal sealed class MainViewModel : Observable
         }
     }
 
-    // The Track Layout page meters only while on screen, so a hidden window doesn't keep the engine metering.
-    private void UpdateOpenPage() =>
-        TrackLayout.IsOpen = IsWindowShown && IsSettingsTabSelected && SelectedPage == TrackLayout;
+    // The Track Layout pages meter only while on screen, so a hidden window doesn't keep the engine metering.
+    // The closing page goes first, so its meters.unwatch doesn't stop the opening page's watch.
+    private void UpdateOpenPage()
+    {
+        var settingsShown = IsWindowShown && IsSettingsTabSelected;
+        var trackLayout = settingsShown && SelectedPage == TrackLayout;
+        var gameProfiles = settingsShown && SelectedPage == GameProfiles;
+        if (!trackLayout)
+        {
+            TrackLayout.IsOpen = false;
+        }
+
+        if (!gameProfiles)
+        {
+            GameProfiles.IsOpen = false;
+        }
+
+        TrackLayout.IsOpen = trackLayout;
+        GameProfiles.IsOpen = gameProfiles;
+    }
 }
