@@ -3,7 +3,7 @@ title: 'Cleanup'
 type: 'feature'
 ticket: '8'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: 'f45ff2fa7e308cc9b0cf0beaebf3e1a06918d486'
 route: 'full'
 route_source: 'auto'

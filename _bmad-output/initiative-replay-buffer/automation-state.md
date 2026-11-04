@@ -153,7 +153,7 @@ The coordinator logs each QA round in the Log below.
 | 28.5 | 7.5 Group and filter by game, date and Favourite | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ca3aa83`) |
 | 28.6 | 7.6 Open, show in Explorer and copy for Discord | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done |
 | 28.7 | 7.7 Rename and delete, locked while being written | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `7a4d786`) |
-| 28.8 | 7.8 Cleanup | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
+| 28.8 | 7.8 Cleanup | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `4b6b22f`) |
 | 28.9 | 7.9 Library and Cleanup settings page | | pending |
 | 28.10 | 7.10 Refactor sweep | | pending |
 | 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
@@ -608,3 +608,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.9 merged (`c525d8e`, marked done). Synced with develop first (5.13, 5.14, v0.5.0): 0-warning build, Core 132, Contracts 119, App 115 (12 skipped), Engine 171 (32 skipped), publish clean. Human Check Queue: confirm the real Main App and Overlay don't appear in a Monitor Recording (the test only uses an excluded test window). Decision awaiting review: the Monitor session opens its own D3D11 device (AD-7 says one); AD-11's action list should gain `monitorRecordStart` and `monitorRecordStop`. Unblocks 6.10 and 6.11.
 - 2026-11-04: 6.9 merged (`c525d8e`, marked done `0208a76`), and its card is Done. qa-2-1 is back in the pool. 6.10 went to slice-epic-5 (Opus, medium effort), with its card In progress. Its brief flags that Desktop Duplication may not honour `WDA_EXCLUDEFROMCAPTURE`, and asks it to note how its cost compares with WGC's.
 - 2026-11-04: QA 7.8 round 2 at `899dd2d`: **PASS**, 0 findings. The junction and symlink escape is fixed in layers, QA's own repro no longer deletes the victim, and 7.7's delete is covered. There are 3 non-blocking notes. 7.8 has been told to merge (Sonnet). 2-1-tracer is back in the pool. 7.8's merge unblocks 7.9 (the Library and Cleanup settings page).
+- 2026-11-04: 7.8 merged (`4b6b22f`, marked done). Synced with develop first (6.9, v0.5.0 and others) with no conflicts: 0-warning build, Contracts 119, Core 145, Engine 172 (32 skipped), App 115 (12 skipped), publish clean. Contracts change was additive (`cleanup.preview`, `LibraryItemRemoved.Reason`, `cleanup-limit-unreachable`). QA's three non-blocking notes are in the epic Notes. Human Check for 7.8 is covered by 7.11.
