@@ -79,6 +79,7 @@ public sealed class DiskFullRecordingTests : IDisposable
         {
             FFmpegLibrary.Check(ffmpeg.av_new_packet(video, 2048), "av_new_packet");
             FFmpegLibrary.Check(ffmpeg.av_new_packet(audio, 64), "av_new_packet");
+            new Span<byte>(audio->data, 64).Clear(); // never an ADTS header by chance
             long nextAudio = 0;
             for (long frame = 0; frame < (long)Seconds * Fps; frame++)
             {
