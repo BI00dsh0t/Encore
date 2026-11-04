@@ -3,7 +3,7 @@ title: 'Group and filter by game, date and Favourite'
 type: 'feature'
 ticket: '5'
 created: '2026-11-03'
-status: 'built'
+status: done
 baseline_revision: '6d4b48f3754c546bae04e11517079dfaac90db05'
 route: 'full'
 route_source: 'auto'

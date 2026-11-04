@@ -148,7 +148,7 @@ The coordinator logs each QA round in the Log below.
 | 28.2 | 7.2 Changes outside the app, reconciliation and a corrupt index | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `a8f4c23`) |
 | 28.3 | 7.3 Length and thumbnails | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `c2508c3`) |
 | 28.4 | 7.4 Favourite | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `bcc45ff`) |
-| 28.5 | 7.5 Group and filter by game, date and Favourite | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
+| 28.5 | 7.5 Group and filter by game, date and Favourite | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ca3aa83`) |
 | 28.6 | 7.6 Open, show in Explorer and copy for Discord | | pending |
 | 28.7 | 7.7 Rename and delete, locked while being written | | pending |
 | 28.8 | 7.8 Cleanup | | pending |
@@ -488,3 +488,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.5 is READY FOR QA at `a60793d`. QA started on qa-1-14 (Sonnet), and its card is In QA.
 - 2026-11-04: QA 7.5 at `a60793d`: **QA PASS**, 0 findings. 7.5 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-04: 4.9 merged into `develop` (`2a93e4b`, `feat(engine): merge 4.9-profile-settings-at-reset`) and marked done, after QA PASS at `30b908c` with 0 blocking findings. Develop (7.4, 4.12) was synced in first: 0-warning build, Contracts 118, Core 109, Media 99, Engine 167 passed, publish clean (11.4 MB). The advisories are in the epic Notes (audio seam, estimate scope, Record while armed). Human Check: none new.
+- 2026-11-04: 7.5 merged into `develop` (`ca3aa83`, `feat(app): merge 7.5-group-and-filter`) and marked done, after QA PASS at `a60793d` with 0 findings. Develop (4.9, 4.12, 5.8 and others) was merged into the branch first without conflicts (Release build 0 warnings, App.Tests 94 passed, 8 explicit skipped). App-only; no Contracts change. No new Human Check rows (the grouped list and filter bar are 7.11's hand check).
