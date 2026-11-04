@@ -66,6 +66,16 @@ public interface IAudioDeviceHub
     /// Throws an <c>audio-device-failed</c> error when the device can't be opened.
     /// </summary>
     IAudioSubscription Subscribe(string endpointId, AudioFlow flow, IAudioPcmSubscriber subscriber);
+
+    /// <summary>
+    /// Subscribes to a session's device. A hub may open it by its saved names when its saved id is
+    /// gone (a mixer restart that renumbered it, story 8.6); by default it is <see cref="Subscribe(string, AudioFlow, IAudioPcmSubscriber)"/>.
+    /// </summary>
+    IAudioSubscription Subscribe(Sessions.SessionAudioDevice device, IAudioPcmSubscriber subscriber)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        return Subscribe(device.EndpointId, device.Flow, subscriber);
+    }
 }
 
 /// <summary>

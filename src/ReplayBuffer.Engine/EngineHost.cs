@@ -40,6 +40,12 @@ internal sealed record EngineHostOptions
     /// <summary>The PC's audio endpoints for the device list; <c>null</c> for the engine's <see cref="AudioDeviceHub"/>.</summary>
     public IAudioEndpointSource? AudioEndpoints { get; init; }
 
+    /// <summary>
+    /// Builds the engine's one <see cref="AudioDeviceHub"/>, which the host then owns; <c>null</c> for the
+    /// PC's endpoints. Tests pass a hub over fake clients and endpoints to restart a mixer (story 8.6).
+    /// </summary>
+    public Func<ILoggerFactory, AudioDeviceHub>? AudioHub { get; init; }
+
     /// <summary>The hub the Track meters subscribe to; <c>null</c> for the engine's <see cref="AudioDeviceHub"/>.</summary>
     public IAudioDeviceHub? MeterAudio { get; init; }
 
@@ -238,7 +244,7 @@ internal sealed class EngineHost : IAsyncDisposable
         FeedbackRouter? feedback = null;
         FeedbackSoundPlayer? sounds = null;
         FeedbackDeviceCheck? feedbackCheck = null;
-        var audio = new AudioDeviceHub(loggers);
+        var audio = hostOptions.AudioHub?.Invoke(loggers) ?? new AudioDeviceHub(loggers);
         try
         {
             var load = SettingsStore.Open(instance.RoamingDataFolder);

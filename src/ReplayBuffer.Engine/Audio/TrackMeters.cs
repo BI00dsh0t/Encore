@@ -131,7 +131,7 @@ internal sealed class TrackMeters : IDisposable
                     var tap = new AudioTimelineTap();
                     try
                     {
-                        _subscriptions.Add(hub.Subscribe(device.EndpointId, device.Flow, tap));
+                        _subscriptions.Add(hub.Subscribe(device, tap));
                         taps[d] = tap;
                     }
                     catch (ErrorCodeException e)
