@@ -3,7 +3,7 @@ title: 'Rename and delete, locked while being written'
 type: 'feature'
 ticket: '7'
 created: '2026-11-04'
-status: 'in-review'
+status: 'built'
 baseline_revision: 'd27ee22eed37256a2d51840ea381316c33c17758'
 route: 'full'
 route_source: 'auto'
@@ -86,10 +86,22 @@ deferred: []
 - The sharing-violation retry (`Retried`) wraps both `File.Move` and the recycle port; it sleeps on the actor thread (at most ~500 ms).
 - `RecycleBin.Recycle` runs on a new thread marked STA and also calls `CoInitializeEx(COINIT_APARTMENTTHREADED)` (S_FALSE is fine); any COM failure is rethrown as an `IOException` carrying its HRESULT.
 - `RecycleBinTests` runs in the default suite (it is fast); it restores its `$R` and deletes its `$I`.
+- Verify (step 3): a probe showed `IFileOperation` reports a file held open without delete sharing as `0x80270027` (the copy engine's sharing violation), so `RecycleBin` maps `0x80270027`/`0x80270028` to `0x80070020` for the actor's retry; `RecycleBinTests` checks it with a held `FileStream` (`83d8ee3`).
+- Review patch (`7893a12`): `FOF_WANTNUKEWARNING` is replaced by a native `IFileOperationProgressSink` whose `PreDeleteItem` aborts a delete that the shell won't recycle (`TSF_DELETE_RECYCLE_IF_POSSIBLE` clear), reported as no Recycle Bin. This deviates from the contract's named flag in order to keep its rule (never delete permanently) without UI or a blocked actor. The refusal path is untested: it needs a drive whose Recycle Bin is turned off.
 
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 6 findings — high 0, medium 1, low 4, false 1, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` A disabled Recycle Bin, or a file over its quota, made `FOF_WANTNUKEWARNING` show an ownerless "permanently delete?" dialog from the engine, which blocked the actor; answering Yes deleted the file permanently. — Replaced by a progress sink whose `PreDeleteItem` aborts when `TSF_DELETE_RECYCLE_IF_POSSIBLE` is clear, returning false (`recycle-bin-unavailable`); no UI.
+  - `[low]` `[patch]` An unchanged commit on `clip.MP4` renamed it to `clip.mp4`, because the engine appended a lowercase `.mp4`. — The new name now keeps the item's own extension.
+  - `[low]` `[patch]` A non-I/O exception from the injected recycle port escaped `Run` and ended the actor thread. — `Retried` now catches any exception, reports it, and refuses with `command-failed`.
+  - `[low]` `[patch]` A failing `RecycleBinTests` run left its file in the user's real Recycle Bin. — The restore now runs in a `finally`.
+  - `[low]` `[reject]` A rename or delete that fails after `Register` hides that path's watcher events for 5 s. — Unlikely in everyday use (it needs an outside same-size rewrite inside that window), and the fix adds unregister logic.
+  - `[false]` `[reject]` The rename test's 500 ms wait doesn't cover the 5 s registration expiry, so extra events could follow. — `Reconcile` at expiry publishes nothing: the source key is no longer indexed, so `Remove` is a no-op, and the target is indexed at the same size, so it returns early.
 
 ## Design Notes
 
@@ -106,3 +118,15 @@ deferred: []
 
 **Manual checks (if no CLI):**
 - Human Check Queue: rename a Clip inline and delete one through the confirmation in the real App, then restore it from the Recycle Bin; check how the prompts look and feel.
+
+## Auto Run Result
+
+**Summary:** The engine's LibraryActor now has `library.rename` (base name only; the folder and the extension's own spelling stay; metadata kept; exactly `itemRemoved` + `itemAdded`) and `library.delete` (Recycle Bin only, through `IFileOperation` + `FOFX_RECYCLEONDELETE` and a sink that refuses any permanent delete). Both register their paths so the watcher echo is ignored. Both are refused with `file-being-written` while a Clip or Recording is being written, with `library-item-changed` on a stale identity, and with `invalid-file-name` / `file-name-taken` / `recycle-bin-unavailable`. A sharing violation (e.g. the length read) is retried for up to about 500 ms. The Library row has an inline Rename and a Delete that asks first; both are disabled while the item is locked, and a refusal shows a short message.
+
+**Files:** Contracts `ErrorCodes.cs` (4 codes) and `Messages/Library.cs` (2 commands and their payloads, additive); Core `LibraryActor.cs` (handlers, `TryMatch`, retry, recycle port); Platform.Windows `RecycleBin.cs` (new) and `NativeMethods.txt`; Engine `EngineHost.cs` (wiring and router); App `LibraryPage.cs`, `LibraryView.xaml(.cs)` (inline rename, confirmed delete); tests in Core (4), App (2), Engine (1) and Platform.Windows (`RecycleBinTests`, real bin, self-restoring).
+
+**Review:** quick lens, 6 findings: 4 patched (1 medium, 3 low), 1 low rejected (register-before-failed-op: unlikely, the fix adds complexity), 1 false rejected (expiry publishes nothing). Nothing deferred. Follow-up review not recommended (no high patched, and only one medium).
+
+**Verification:** `dotnet build ReplayBuffer.slnx -c Release` 0 warnings, 0 errors. Default runs: Contracts 118/118, Core 115/115, Platform.Windows 26/26, Engine 168 passed / 24 explicit skipped, App 104 passed / 10 explicit skipped, 0 failed. `pwsh tools/publish-engine.ps1` clean (no IL/AOT warnings). Heavy not run (no capture, encode, mux or audio change).
+
+**Residual risks:** The sink's refusal path (Recycle Bin off, or a file over its quota) is untested by automation. The inline editor's focus and LostFocus behaviour, and the look of the prompts, are for the builder to check by hand. A locked file blocks the actor for up to about 500 ms.
