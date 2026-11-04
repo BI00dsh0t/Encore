@@ -179,7 +179,7 @@ The coordinator logs each QA round in the Log below.
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `80f3933`) |
 | 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `78d1c6a`) |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
-| 30.8 | 9.8 Refactor sweep | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
+| 30.8 | 9.8 Refactor sweep | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | QA passed, merging |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
@@ -769,3 +769,5 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 9.6 passed at `00e165e` with 0 findings: App 151 passed; the pages reuse the 9.5 layout styles (plus one new caution style); no literal colours; bindings unchanged. 2-1-tracer is merging. qa-1-14 is back in the pool.
 - 2026-11-04: 9.6 merged (`78d1c6a`, after a sync with develop: App 151 passed, 0 failed, 0 warnings; QA passed at `00e165e` with 0 findings). Marked done; its six PNGs and its Human Check row are added.
 - 2026-11-04: 9.6 merged (`78d1c6a`; marked done, PNGs and its Human Check row in `999e6ed`, queue row in `2700189`), and its card is Done. 9.8 (the epic 9 refactor sweep) went to slice-epic-5 (Opus, medium effort; forward hooks kept; renders compared for any visible difference), with its card In progress.
+- 2026-11-04: 9.8 READY FOR QA at `be7a515` (11 files, +96/-56), and its card is In QA. QA went to qa-1-14 (Sonnet, medium effort; renders compared for any visible difference; forward hooks kept).
+- 2026-11-04: QA 9.8 passed at `be7a515`: App 151 passed; 36 of 38 renders byte-identical (the 2 shell renders differ only by the stale 9.3 General page and the clock); no forward hooks deleted; no Contracts change. slice-epic-5 is merging. qa-1-14 is back in the pool.
