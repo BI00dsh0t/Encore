@@ -31,7 +31,25 @@ The epic's closing check. The unattended part runs the epic-5 Heavy tests and on
 
 ## Unattended results
 
-RESULTS-PENDING
+Run on 2026-11-04 in this worktree, Release, holding `.bench-running` for the GPU runs (released after). RTX 5090, 2560×1440 synthetic load. This PC reports no overlay planes (`SupportsOverlays` false), so `overlayDot: auto` behaves as onChange.
+
+| What | Tests | Result |
+|------|-------|--------|
+| The Overlay, status line and sounds on the real engine over the load | `OverlayEndToEndTests` (Heavy, new) | pass, first run: the hollow dot 365 ms after buffering, with the mic-muted icon; DotAlways false, and the onChange dot hid 2.6 s after it showed and came back on the mute change; the saving icon 14 ms after the Save press, held 5.0 s (the cooldown); the press inside it made no Clip; messages `clip-failed` then `disk-full`, one after the other; the red X cleared by the status line's Dismiss; the solid dot and back within 1 s; every visible App window excluded; the load kept the foreground; sounds requested in order ClipSaved, SaveFailed, DiskFull, RecordingStarted, RecordingStopped on the default communications endpoint, none played |
+| The Overlay never takes focus | `OverlayTests.AnotherWindowKeepsTheForegroundAndFocus` (Heavy) | pass |
+| A screen copy shows none of the Overlay | `OverlayTests.AScreenCopyShowsNoneOfTheOverlay` (Heavy) | pass |
+| A dialog is excluded and a screen copy shows none of the App's windows | `CaptureExclusionTests.ADialogIsExcludedAndAScreenCopyShowsNoneOfTheAppsWindows` (Heavy) | pass |
+| The status line renders above the page | `StatusLineRenderTests` (Heavy) | pass |
+| The real `ReplayBuffer.App.exe`'s Overlay keeps the legacy exclusive load in fullscreen | `OverlayBenchmarkTests.TheRealAppsOverlayKeepsTheExclusiveLoadInFullscreen` (Heavy) | pass |
+| `bench fps --overlay` with the real App | `OverlayBenchmarkTests.FpsWithTheOverlayOnRunsTheLoadWithTheAppsOverlay` (Heavy) | pass |
+| App.Tests default suite | `ReplayBuffer.App.Tests` | 114 passed, 12 skipped (explicit), 1 failed then passed on its rerun: `SupervisionTests.AKilledAppIsRelaunchedByTheEngine` (12.97 s against its 10 s relaunch bound, while another session's Engine.Tests ran on the PC) |
+
+Totals: 122 passed (7 Heavy, 115 default), 0 failed after the one rerun.
+
+Not run, with the reason:
+- `FeedbackSoundOutputTests` (Heavy): it plays the five sounds aloud on the real endpoint, and the builder is away. The end-to-end test checks each sound is requested; hearing them is checklist step 1.
+- Engine.Tests, Core.Tests and the other projects: the diff adds one App.Tests file and an `InternalsVisibleTo` line in the engine's csproj, with no engine code, so no NativeAOT publish either. Their epic-5 parts were QA'd in 5.1–5.15.
+- A real game, hearing the sounds, seeing the Overlay, a recorder, a real device dropout and engine kill, exclusive fullscreen, overlay planes and the capture-cost steps: the builder's checklist below.
 
 ## Builder's hand checks for epic 5 (in order)
 
@@ -59,8 +77,12 @@ The automated run covers the dot, saving icon and message timings, the queue, th
 
 ## Findings
 
-FINDINGS-PENDING
+- None failed.
+- Finding (not fixed, not one line): the builder has no way to send `dev.simulate` by hand. It's an IPC command only; nothing on the command line or in the App sends it, and only Bench (`AppOverlayHost`) and tests use it. Queue rows 5.5, 5.8 and 5.11 said "send `dev.simulate saveFailed`". The checklist now causes a real failed save instead (Save Cooldown 0, two presses within a second, refused as "clip too short"). The disk-full red X and the stub Recording still have no hand trigger. A small `ReplayBuffer.Engine simulate <event> [--instance]` verb would close it; it's a product change for a later ticket.
+- Observation: `CaptureExclusionTests.ADialogIsExcludedAndAScreenCopyShowsNoneOfTheAppsWindows` takes `.bench-running` itself and waits while it exists, so a session that holds the lock for its GPU runs (as the brief asks) hangs it. Release the lock for that one test, or run it first.
+- Observation: `SupervisionTests.AKilledAppIsRelaunchedByTheEngine` is a 10 s real-time bound in the default suite. It failed once at 12.97 s with another session's tests on the PC and passed on the rerun. Under the lean-tests rule it could move to Heavy; not changed here.
+- Observation: PresentMon isn't copied into new worktrees. The two Bench Heavy tests failed at once with "PresentMon not found" until `native/presentmon` was copied in from the main folder, like `native/ffmpeg`.
 
 ## Log
 
-- 2026-11-04: branch `feature/5.14-overlay-sounds-end-to-end` cut from `develop` at `ba7dbcd`. Added `OverlayEndToEndTests`. Waited for another session's `bench soak` to release `.bench-running` before the GPU runs.
+- 2026-11-04: branch `feature/5.14-overlay-sounds-end-to-end` cut from `develop` at `ba7dbcd`. Added `OverlayEndToEndTests`. Waited for another session's `bench soak` to release `.bench-running` before the GPU runs. The new test passed first time, and the epic-5 Heavy tests and the App default suite passed (one supervision timing test on its rerun). Pointed the nine epic-5 Human Check Queue rows at the checklist.
