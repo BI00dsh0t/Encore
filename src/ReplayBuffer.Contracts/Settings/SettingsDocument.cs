@@ -134,4 +134,5 @@ public sealed record EffectiveSettings
     public required IReadOnlyList<string> ManualGames { get; init; }
     public required bool StartWithWindows { get; init; }
     public required OverlayDotMode OverlayDot { get; init; }
+    public required AppTheme AppTheme { get; init; }
 }

@@ -36,3 +36,8 @@ IDXGIOutput2
 SHParseDisplayName
 SHOpenFolderAndSelectItems
 ILFree
+DwmSetWindowAttribute
+DwmGetWindowAttribute
+DwmExtendFrameIntoClientArea
+DWMWINDOWATTRIBUTE
+DWM_SYSTEMBACKDROP_TYPE
