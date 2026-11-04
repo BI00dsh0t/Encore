@@ -37,6 +37,12 @@ internal sealed record SoakClipRow(int Press, DateTimeOffset At, double ElapsedS
     private static string Csv(string text) => text.IndexOfAny([',', '"', '\n']) >= 0 ? "\"" + text.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"" : text;
 }
 
+/// <summary>
+/// One recovery the soak checked (story 8.2): <c>kill-engine</c>, <c>hang-engine</c> or <c>kill-app</c>,
+/// <paramref name="AtSeconds"/> into the loop, back after <paramref name="Seconds"/> (or the limit, when it wasn't).
+/// </summary>
+internal sealed record SoakRecovery(string Kind, double AtSeconds, double Seconds, bool Pass, string Detail);
+
 /// <summary><c>soak.json</c>.</summary>
 internal sealed record SoakReport(
     DateTimeOffset Created,
@@ -61,7 +67,9 @@ internal sealed record SoakReport(
     string? Stopped,
     IReadOnlyList<string> Errors,
     IReadOnlyList<string> Leftovers,
-    string Verdict);
+    string Verdict,
+    int ExtraPresses = 0,
+    IReadOnlyList<SoakRecovery>? Recoveries = null);
 
 /// <summary>
 /// <c>bench soak</c> (story 8.1): the real engine (<c>serve --instance … --replay-buffer</c>) and App
@@ -70,7 +78,11 @@ internal sealed record SoakReport(
 /// sampled every <c>--sample-seconds</c>; every Clip is checked with ffprobe and ffmpeg. Writes
 /// <c>soak-samples.csv</c>, <c>soak-clips.csv</c>, <c>soak.json</c> and <c>soak.md</c>. Holds the
 /// <c>.bench-running</c> lock for the whole run. Exit 0 only when every Clip passes, at least one was made,
-/// and every bound is met.
+/// and every bound is met. <c>--kill-engine</c>, <c>--kill-app</c> and <c>--hang-engine</c> (story 8.2) each
+/// kill the engine, kill the App or hang the engine once, that many minutes into the loop, and check the
+/// recovery; every recovery must pass too. Sampling follows the new processes, and the bounds use each
+/// process's first pid only. Kills go only to this instance's processes: the engine serving its pipe, the
+/// App its snapshot names, each checked against the expected image.
 /// </summary>
 internal static class SoakRun
 {
@@ -83,6 +95,12 @@ internal static class SoakRun
     private const string EngineExe = "ReplayBuffer.Engine.exe";
     private static readonly TimeSpan ClipTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>How soon a killed engine, or a killed App, must be back (story 8.2).</summary>
+    private static readonly TimeSpan KillRecovery = TimeSpan.FromSeconds(10);
+
+    /// <summary>How soon a hung engine must be back: up to 6 s of silence before the App kills it, then the relaunch.</summary>
+    private static readonly TimeSpan HangRecovery = TimeSpan.FromSeconds(20);
 
     public static int Run(BenchContext context)
     {
@@ -105,6 +123,10 @@ internal static class SoakRun
         {
             BenchOptions.ParseSize(loadSize, "load-size");
         }
+
+        var killEngineAt = At(options, "kill-engine", minutes);
+        var killAppAt = At(options, "kill-app", minutes);
+        var hangEngineAt = At(options, "hang-engine", minutes);
 
         using var held = BenchLock.Acquire(options.Text("lock") is { } given ? Path.GetFullPath(given) : DefaultLock(context.RepoRoot));
 
@@ -139,7 +161,11 @@ internal static class SoakRun
         var titles = (IReadOnlyList<string>)[];
         var fps = 0.0;
         string? stopped = null;
-        var schedule = new SoakSchedule(TimeSpan.FromMinutes(minutes), TimeSpan.FromSeconds(sampleSeconds), TimeSpan.FromSeconds(pressSeconds), TimeProvider.System);
+        var oneShots = new List<(TimeSpan At, Action Run)>();
+        var recoveries = new List<SoakRecovery>();
+        var extraPresses = 0;
+        var firstPids = new Dictionary<string, int>();
+        var schedule = new SoakSchedule(TimeSpan.FromMinutes(minutes), TimeSpan.FromSeconds(sampleSeconds), TimeSpan.FromSeconds(pressSeconds), TimeProvider.System, events: oneShots);
         Process? engine = null;
         Process? app = null;
         EngineClient? client = null;
@@ -150,19 +176,31 @@ internal static class SoakRun
         try
         {
             engine = HotkeyBenchmark.StartServe(engineExe, instance.Name, Path.Combine(run, "soak"), cancel.Token, "--replay-buffer");
-            client = EngineClient.ConnectAsync(
-                PipeName.ForCurrentUser(instance.Name),
-                new EngineClientOptions
-                {
-                    OnEvent = e =>
+
+            // Every client, the ones after a restart too, feeds the same channel; the pid is the pipe's server.
+            (EngineClient Client, int ServerPid) Connect(TimeSpan timeout)
+            {
+                var server = 0u;
+                var connected = EngineClient.ConnectAsync(
+                    PipeName.ForCurrentUser(instance.Name),
+                    new EngineClientOptions
                     {
-                        if (e.Type == CaptureMessages.Saved.Name || e.Type == CaptureMessages.Failed.Name)
+                        ConnectTimeout = timeout,
+                        VerifyServer = stream => AppOverlayHost.GetNamedPipeServerProcessId(stream.SafePipeHandle, out server),
+                        OnEvent = e =>
                         {
-                            events.Writer.TryWrite(e);
-                        }
+                            if (e.Type == CaptureMessages.Saved.Name || e.Type == CaptureMessages.Failed.Name)
+                            {
+                                events.Writer.TryWrite(e);
+                            }
+                        },
                     },
-                },
-                cancel.Token).WaitAsync(StartTimeout, cancel.Token).GetAwaiter().GetResult();
+                    cancel.Token).WaitAsync(timeout + TimeSpan.FromSeconds(5), cancel.Token).GetAwaiter().GetResult();
+                return (connected, (int)server);
+            }
+
+            (client, var serverPid) = Connect(StartTimeout);
+            var live = client;
 
             Update(client,
                 SettingsOp.SetGlobal(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(clips)),
@@ -180,6 +218,8 @@ internal static class SoakRun
             }
 
             app = StartApp(appExe, instance);
+            firstPids["engine"] = engine.Id;
+            firstPids["app"] = app.Id;
             var appPid = app.Id;
             Until(client, c => c.State.AppPid == appPid, StartTimeout, "the App to attach", cancel.Token, () => app.HasExited ? "the App exited" : null);
             Console.WriteLine($"Engine {engine.Id} and App {app.Id} up.");
@@ -202,6 +242,9 @@ internal static class SoakRun
             samplesCsv.WriteLine(ProcessCounters.CsvHeader);
             var checks = Task.CompletedTask;
             var pressCount = 0;
+
+            // When the Replay Buffer next holds a whole Buffer Window: a save empties it, and a new engine starts empty.
+            var bufferFull = start;
             string? injectFault = null;
             var (engineProcess, appProcess, loadProcess) = (engine, app, load);
             var checkTitles = titles;
@@ -224,8 +267,24 @@ internal static class SoakRun
                 }
             }
 
-            void Press()
+            // A press a recovery delayed must not make a short Clip with the next one.
+            void WaitForFullBuffer()
             {
+                var full = bufferFull - DateTimeOffset.UtcNow;
+                if (full > TimeSpan.Zero)
+                {
+                    cancel.Token.WaitHandle.WaitOne(full);
+                }
+            }
+
+            // Every press first waits for a whole Buffer Window, but the one with the App gone, which waits before the kill.
+            string Press(bool now = false)
+            {
+                if (!now)
+                {
+                    WaitForFullBuffer();
+                }
+
                 var press = ++pressCount;
                 var at = DateTimeOffset.UtcNow;
                 var elapsed = (at - start).TotalSeconds;
@@ -238,7 +297,7 @@ internal static class SoakRun
                 {
                     injectFault = fault;
                     Add(new SoakClipRow(press, at, elapsed, "not-pressed", null, null, false, fault));
-                    return;
+                    return "not-pressed";
                 }
 
                 IpcEvent? result = null;
@@ -256,19 +315,207 @@ internal static class SoakRun
                 if (result is null)
                 {
                     Add(new SoakClipRow(press, at, elapsed, "no-event", null, null, false, $"no clip.saved or clip.failed within {ClipTimeout.TotalSeconds:0} s"));
-                    return;
+                    return "no-event";
                 }
 
                 if (result.Type == CaptureMessages.Failed.Name)
                 {
                     var reason = CaptureMessages.Failed.Read(result.Payload).Reason;
                     Add(new SoakClipRow(press, at, elapsed, "failed", null, null, false, "clip.failed: " + reason));
-                    return;
+                    return "failed";
                 }
 
                 var path = CaptureMessages.Saved.Read(result.Payload).Path;
                 Console.WriteLine($"  press {press} at {elapsed:0} s: {path}");
                 checks = checks.ContinueWith(_ => CheckClip(tools, press, at, elapsed, path, checkTitles, bufferSeconds, checkFps, Add), TaskScheduler.Default);
+                bufferFull = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(bufferSeconds + 2);
+                return "saved";
+            }
+
+            void Recovered(string kind, DateTimeOffset at, Stopwatch clock, bool pass, string detail)
+            {
+                var recovery = new SoakRecovery(kind, Math.Round((at - start).TotalSeconds, 1), Math.Round(clock.Elapsed.TotalSeconds, 1), pass, detail);
+                recoveries.Add(recovery);
+                Console.WriteLine($"  {kind} at {recovery.AtSeconds:0} s: {(pass ? "recovered" : "FAILED")} after {recovery.Seconds:0.#} s; {detail}");
+            }
+
+            // --kill-engine and --hang-engine: the App relaunches the engine; a new client must see it buffering
+            // on the load again, with engine-restarted, within the limit.
+            void RecoverEngine(string kind)
+            {
+                var hang = kind == "hang-engine";
+                var limit = hang ? HangRecovery : KillRecovery;
+                var at = DateTimeOffset.UtcNow;
+                var clock = Stopwatch.StartNew();
+                var old = engineProcess;
+                EngineClient? next = null;
+                var adopted = false;
+                try
+                {
+                    if (old.Id != serverPid || live.State.Pid != serverPid || !HasImage(old, engineExe))
+                    {
+                        Recovered(kind, at, clock, false, $"process {old.Id} is not the {EngineExe} serving the pipe (process {serverPid}); nothing done");
+                        return;
+                    }
+
+                    if (hang)
+                    {
+                        Wait(live.SendAsync(DevMessages.Simulate, new DevSimulate(SimulatedEvent.EngineHang), cancel.Token));
+                    }
+                    else
+                    {
+                        old.Kill();
+                    }
+
+                    if (!old.WaitForExit(Remaining(clock, limit)))
+                    {
+                        Recovered(kind, at, clock, false, $"the engine {old.Id} was still running after {limit.TotalSeconds:0} s");
+                        return;
+                    }
+
+                    live.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+                    var nextPid = 0;
+                    while (clock.Elapsed < limit)
+                    {
+                        if (next is null || !next.IsConnected)
+                        {
+                            next?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+                            next = null;
+                            try
+                            {
+                                (next, nextPid) = Connect(TimeSpan.FromSeconds(1));
+                            }
+                            catch (Exception e) when (e is ErrorCodeException or TimeoutException)
+                            {
+                                Thread.Sleep(200);
+                                continue;
+                            }
+                        }
+
+                        if (Back(next.State))
+                        {
+                            break;
+                        }
+
+                        Thread.Sleep(100);
+                    }
+
+                    if (next is null)
+                    {
+                        Recovered(kind, at, clock, false, $"no engine served the pipe within {limit.TotalSeconds:0} s");
+                        return;
+                    }
+
+                    var server = Process.GetProcessById(nextPid);
+                    if (!HasImage(server, engineExe))
+                    {
+                        Recovered(kind, at, clock, false, $"process {nextPid} serving the pipe is not {engineExe}");
+                        return;
+                    }
+
+                    // Adopted only now: a client of anything but the expected engine is never kept.
+                    live = client = next;
+                    adopted = true;
+                    serverPid = nextPid;
+                    engineProcess = engine = server;
+                    var restarted = next.State.Warnings.FirstOrDefault(w => w.Code == ErrorCodes.EngineRestarted);
+                    var pass = Back(next.State);
+                    Recovered(kind, at, clock, pass, pass
+                        ? $"engine {old.Id} → {nextPid}, buffering on the load; {ErrorCodes.EngineRestarted}: {restarted?.Message}"
+                        : $"engine {old.Id} → {nextPid}, but within {limit.TotalSeconds:0} s: replay {next.State.Capture.Replay}, target {next.State.TargetGame?.ProfileId ?? "none"}, {ErrorCodes.EngineRestarted} {(restarted is null ? "missing" : "active")}");
+
+                    // The new engine starts empty.
+                    bufferFull = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(bufferSeconds + 2);
+
+                    // The warning must give this recovery's reason: a hang comes back as "stopped answering".
+                    bool Back(StateSnapshot state) =>
+                        state.Pid != old.Id
+                        && state.Capture.Replay == ReplayState.Buffering
+                        && state.TargetGame?.ProfileId == profile
+                        && state.Warnings.Any(w => w.Code == ErrorCodes.EngineRestarted
+                            && w.Message.Contains(hang ? "answering" : "unexpectedly", StringComparison.Ordinal));
+                }
+                catch (Exception e) when (e is ErrorCodeException or TimeoutException or InvalidOperationException or Win32Exception or ArgumentException)
+                {
+                    Recovered(kind, at, clock, false, e.Message);
+                }
+                finally
+                {
+                    if (!adopted)
+                    {
+                        next?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+                    }
+                }
+            }
+
+            // --kill-app: a Save press with the App gone must save; the engine relaunches the App, which must
+            // attach, with app-restarted, within the limit.
+            void RecoverApp()
+            {
+                const string kind = "kill-app";
+                WaitForFullBuffer();
+                var at = DateTimeOffset.UtcNow;
+                var clock = Stopwatch.StartNew();
+                try
+                {
+                    var oldPid = live.State.AppPid;
+                    if (oldPid != appProcess.Id || !HasImage(appProcess, appExe))
+                    {
+                        Recovered(kind, at, clock, false, $"the snapshot's App {oldPid?.ToString(CultureInfo.InvariantCulture) ?? "none"} is not the {AppOverlayHost.ExeName} started ({appProcess.Id}); nothing done");
+                        return;
+                    }
+
+                    appProcess.Kill();
+                    appProcess.WaitForExit(TimeSpan.FromSeconds(5));
+                    var goneAtPress = live.State.AppPid == oldPid;
+                    var press = pressCount + 1;
+                    var saved = Press(now: true);
+                    extraPresses++;
+                    while (clock.Elapsed < KillRecovery && !Back(live.State))
+                    {
+                        Thread.Sleep(100);
+                    }
+
+                    var back = Back(live.State);
+                    if (back)
+                    {
+                        var adopted = Process.GetProcessById(live.State.AppPid!.Value);
+                        if (!HasImage(adopted, appExe))
+                        {
+                            Recovered(kind, at, clock, false, $"the relaunched App {adopted.Id} is not {appExe}");
+                            return;
+                        }
+
+                        appProcess = app = adopted;
+                    }
+
+                    var pass = back && saved == "saved" && goneAtPress;
+                    Recovered(kind, at, clock, pass,
+                        $"App {oldPid} → {live.State.AppPid}{(back ? $" with {ErrorCodes.AppRestarted}" : $", not back with {ErrorCodes.AppRestarted} within {KillRecovery.TotalSeconds:0} s")}; "
+                        + $"press {press} {(goneAtPress ? "with the App gone" : "after the new App attached")}: {saved}");
+
+                    bool Back(StateSnapshot state) =>
+                        state.AppPid is { } pid && pid != oldPid && state.Warnings.Any(w => w.Code == ErrorCodes.AppRestarted);
+                }
+                catch (Exception e) when (e is InvalidOperationException or Win32Exception or ArgumentException)
+                {
+                    Recovered(kind, at, clock, false, e.Message);
+                }
+            }
+
+            if (killEngineAt is { } killEngine)
+            {
+                oneShots.Add((TimeSpan.FromMinutes(killEngine), () => RecoverEngine("kill-engine")));
+            }
+
+            if (killAppAt is { } killApp)
+            {
+                oneShots.Add((TimeSpan.FromMinutes(killApp), RecoverApp));
+            }
+
+            if (hangEngineAt is { } hangEngine)
+            {
+                oneShots.Add((TimeSpan.FromMinutes(hangEngine), () => RecoverEngine("hang-engine")));
             }
 
             void Add(SoakClipRow row)
@@ -291,9 +538,9 @@ internal static class SoakRun
                 : injectFault is not null ? "the Save Hotkey could not be injected"
                 : null;
 
-            stopped = schedule.Run(Sample, Press, Stop, cancel.Token);
+            stopped = schedule.Run(Sample, () => Press(), Stop, cancel.Token);
             checks.GetAwaiter().GetResult();
-            Console.WriteLine($"Soak loop done: {schedule.Samples} samples, {schedule.Presses} presses{(stopped is not null ? "; stopped early: " + stopped : "")}.");
+            Console.WriteLine($"Soak loop done: {schedule.Samples} samples, {schedule.Presses} presses{(extraPresses > 0 ? $" and {extraPresses} extra" : "")}{(stopped is not null ? "; stopped early: " + stopped : "")}.");
         }
         catch (Exception e) when (e is BenchFailure or ErrorCodeException or TimeoutException or OperationCanceledException or IOException or Win32Exception)
         {
@@ -310,15 +557,21 @@ internal static class SoakRun
 
         var warmup = TimeSpan.FromMinutes(warmupMinutes);
         var bounds = schedule.Samples > 0
-            ? SoakBounds.Evaluate(samples.ToDictionary(p => p.Key, p => (IReadOnlyList<ProcessCounters>)p.Value), warmup)
+            // Each process's first pid only: a relaunched one starts its own series (story 8.8 kills late).
+            ? SoakBounds.Evaluate(
+                samples.ToDictionary(
+                    p => p.Key,
+                    p => (IReadOnlyList<ProcessCounters>)[.. p.Value.Where(c => !firstPids.TryGetValue(p.Key, out var first) || c.Pid == first)]),
+                warmup)
             : [];
         var ordered = rows.OrderBy(r => r.Press).ToList();
         var pass = stopped is null && errors.Count == 0 && leftovers.Count == 0
-            && ordered.Count > 0 && ordered.Count == schedule.Presses && ordered.All(r => r.Pass) && bounds.Count > 0 && bounds.All(b => b.Pass);
+            && ordered.Count > 0 && ordered.Count == schedule.Presses + extraPresses && ordered.All(r => r.Pass) && bounds.Count > 0 && bounds.All(b => b.Pass)
+            && recoveries.Count == oneShots.Count && recoveries.All(r => r.Pass);
         var report = new SoakReport(
             DateTimeOffset.Now, run, instance.Name, modeText, minutes, warmupMinutes, bufferSeconds, pressSeconds, sampleSeconds, combo.Text,
             appExe, engineExe, loadInfo, titles, fps, schedule.Samples, schedule.Presses, ordered, bounds, stopped, errors, leftovers,
-            pass ? DriftMath.Pass : DriftMath.Miss);
+            pass ? DriftMath.Pass : DriftMath.Miss, extraPresses, recoveries);
 
         File.WriteAllLines(Path.Combine(run, ClipsFile), [SoakClipRow.CsvHeader, .. ordered.Select(r => r.CsvRow())]);
         if (!File.Exists(Path.Combine(run, SamplesFile)))
@@ -328,7 +581,8 @@ internal static class SoakRun
 
         BenchJson.Write(Path.Combine(run, JsonFile), report);
         File.WriteAllText(Path.Combine(run, MarkdownFile), Markdown(report));
-        Console.WriteLine($"Soak {report.Verdict}: {ordered.Count(r => r.Pass)} of {ordered.Count} Clip(s) pass, {bounds.Count(b => b.Pass)} of {bounds.Count} bound(s) met.");
+        Console.WriteLine($"Soak {report.Verdict}: {ordered.Count(r => r.Pass)} of {ordered.Count} Clip(s) pass, {bounds.Count(b => b.Pass)} of {bounds.Count} bound(s) met"
+            + (oneShots.Count > 0 ? $", {recoveries.Count(r => r.Pass)} of {oneShots.Count} recover(ies) pass." : "."));
         Console.WriteLine($"Report: {Path.Combine(run, MarkdownFile)}");
         return pass ? 0 : 1;
     }
@@ -376,10 +630,33 @@ internal static class SoakRun
         }
     }
 
+    /// <summary>A soak option given in minutes into the loop, from 0 up to (not at) the run's length; null when not given.</summary>
+    private static double? At(BenchOptions options, string name, double minutes) =>
+        options.Text(name) is null ? null
+        : options.Double(name, 0, 0, minutes) is var at && at < minutes ? at
+        : throw new BenchUsageException($"--{name} must be less than --minutes ({minutes:0.##}): an event at the end never fires.");
+
+    private static TimeSpan Remaining(Stopwatch clock, TimeSpan limit) => limit - clock.Elapsed is var left && left > TimeSpan.Zero ? left : TimeSpan.Zero;
+
+    /// <summary>Whether <paramref name="process"/> runs <paramref name="exe"/>: the check before any kill or adoption.</summary>
+    private static bool HasImage(Process process, string exe)
+    {
+        try
+        {
+            return process.MainModule?.FileName is { } image
+                && string.Equals(Path.GetFullPath(image), Path.GetFullPath(exe), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The App with <c>--replay-buffer</c>, so the engines it relaunches buffer too, and the Apps they relaunch.</summary>
     private static Process StartApp(string exe, Instance instance)
     {
         var start = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true };
-        foreach (var arg in new[] { "--tray", "--instance", instance.Name })
+        foreach (var arg in new[] { "--tray", "--instance", instance.Name, "--replay-buffer" })
         {
             start.ArgumentList.Add(arg);
         }
@@ -536,9 +813,10 @@ internal static class SoakRun
 
         Line($"# ReplayBuffer soak, {report.Created:yyyy-MM-dd HH:mm}");
         md.AppendLine();
-        Line($"**Verdict: {report.Verdict}.** {report.Clips.Count(c => c.Pass)} of {report.Clips.Count} Clip(s) pass; {report.Bounds.Count(b => b.Pass)} of {report.Bounds.Count} bound(s) met.");
+        var recoveries = report.Recoveries ?? [];
+        Line($"**Verdict: {report.Verdict}.** {report.Clips.Count(c => c.Pass)} of {report.Clips.Count} Clip(s) pass; {report.Bounds.Count(b => b.Pass)} of {report.Bounds.Count} bound(s) met{(recoveries.Count > 0 ? $"; {recoveries.Count(r => r.Pass)} of {recoveries.Count} recover(ies) pass" : "")}.");
         md.AppendLine();
-        Line($"- Run: {report.Minutes:0.##} min in {report.Mode} mode, a {report.WarmupMinutes:0.##}-minute warm-up, {report.Samples} samples (every {report.SampleSeconds} s), {report.Presses} presses of {report.Key} (every {report.PressSeconds} s)");
+        Line($"- Run: {report.Minutes:0.##} min in {report.Mode} mode, a {report.WarmupMinutes:0.##}-minute warm-up, {report.Samples} samples (every {report.SampleSeconds} s), {report.Presses} presses of {report.Key} (every {report.PressSeconds} s){(report.ExtraPresses > 0 ? $" and {report.ExtraPresses} extra" : "")}");
         Line($"- Buffer Window {report.BufferSeconds} s; Tracks {string.Join(", ", report.Tracks)}; {report.Fps:0.##} fps");
         Line($"- Instance `{report.Instance}`; App `{report.App}`; engine `{report.Engine}`");
         if (report.Load is { } load)
@@ -560,6 +838,19 @@ internal static class SoakRun
         foreach (var leftover in report.Leftovers)
         {
             Line($"- **Left behind:** {leftover}");
+        }
+
+        if (recoveries.Count > 0)
+        {
+            md.AppendLine();
+            md.AppendLine("## Recoveries");
+            md.AppendLine();
+            md.AppendLine("| Event | At (s) | Back after (s) | Result | Detail |");
+            md.AppendLine("|---|---|---|---|---|");
+            foreach (var recovery in recoveries)
+            {
+                Line($"| {recovery.Kind} | {recovery.AtSeconds:0} | {recovery.Seconds:0.#} | {(recovery.Pass ? "pass" : "**fail**")} | {recovery.Detail.Replace("|", "\\|", StringComparison.Ordinal)} |");
+            }
         }
 
         md.AppendLine();

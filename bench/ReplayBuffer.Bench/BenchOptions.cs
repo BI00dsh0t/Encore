@@ -40,7 +40,7 @@ internal sealed class BenchOptions
           ReplayBuffer.Bench soak     [--minutes 20] [--mode memory|disk] [--press-seconds 60] [--buffer-seconds 30]
                                       [--sample-seconds 10] [--warmup-minutes min(30, minutes/4)] [--key ctrl+alt+shift+f16]
                                       [--target-fps 80] [--load-size WxH] [--load-exe <exe>] [--app-exe <ReplayBuffer.App.exe>]
-                                      [--lock <.bench-running>]
+                                      [--lock <.bench-running>] [--kill-engine <min>] [--kill-app <min>] [--hang-engine <min>]
           ReplayBuffer.Bench report
 
         Capture options: [--size 1920x1080] [--fps 60] [--bitrate 20000] [--output-device <name or id>]
@@ -79,6 +79,11 @@ internal sealed class BenchOptions
         --sample-seconds, and checks every Clip with ffprobe and ffmpeg. Writes soak-samples.csv, soak-clips.csv,
         soak.json and soak.md; exit 0 only when every Clip passes and every bound is met. Holds the lock file
         (default .bench-running in the main checkout) for the whole run, and refuses to start while it exists.
+        --kill-engine, --kill-app and --hang-engine (story 8.2) each kill the engine, kill the App or hang the
+        engine (dev.simulate engineHang) once, that many minutes into the loop, and check the recovery: the
+        engine is back buffering with engine-restarted within 10 s (20 s for a hang), or a Save press with the
+        App gone saves a passing Clip and the App is back with app-restarted within 10 s. Every other press
+        waits for a whole Buffer Window since the last save or engine restart.
         """;
 
     private static readonly string[] Common = ["out", "repo", "engine", "ffmpeg"];
@@ -96,7 +101,7 @@ internal sealed class BenchOptions
         ["tracks"] = [.. Common, "size", "fps", "bitrate", "input-device", "minutes", "device-a", "device-b", "tone-dbfs", "vlc", "reanalyze"],
         ["overlay"] = [.. Common, "modes", "seconds", "settle", "presentmon", "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe", "overlay-exe", "host", "app-exe", "dot-only", "overlay-dot"],
         ["soak"] = [.. Common, "minutes", "mode", "press-seconds", "buffer-seconds", "sample-seconds", "warmup-minutes", "key",
-            "target-fps", "load-size", "load-exe", "app-exe", "lock"],
+            "target-fps", "load-size", "load-exe", "app-exe", "lock", "kill-engine", "kill-app", "hang-engine"],
         ["report"] = [.. Common],
     };
 

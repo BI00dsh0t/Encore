@@ -3,10 +3,17 @@ namespace ReplayBuffer.Bench;
 /// <summary>
 /// <c>bench soak</c>'s timetable: a sample at the start and every <c>sampleEvery</c>, a press every
 /// <c>pressEvery</c> from the start, until <c>duration</c> has passed, then a last sample. A sample or press
-/// that runs late moves its next one to the following slot rather than bunching up. The clock and the wait
-/// are injected, so a test can run an hour's schedule in no time.
+/// that runs late moves its next one to the following slot rather than bunching up. Each one-shot event in
+/// <paramref name="events"/> runs once, when its time from the start is due. The clock and the wait are
+/// injected, so a test can run an hour's schedule in no time.
 /// </summary>
-internal sealed class SoakSchedule(TimeSpan duration, TimeSpan sampleEvery, TimeSpan pressEvery, TimeProvider time, Action<TimeSpan, CancellationToken>? sleep = null)
+internal sealed class SoakSchedule(
+    TimeSpan duration,
+    TimeSpan sampleEvery,
+    TimeSpan pressEvery,
+    TimeProvider time,
+    Action<TimeSpan, CancellationToken>? sleep = null,
+    IReadOnlyList<(TimeSpan At, Action Run)>? events = null)
 {
     private readonly Action<TimeSpan, CancellationToken> _sleep = sleep ?? ((span, token) => token.WaitHandle.WaitOne(span));
 
@@ -21,6 +28,9 @@ internal sealed class SoakSchedule(TimeSpan duration, TimeSpan sampleEvery, Time
         var end = start + duration;
         var nextSample = start;
         var nextPress = start + pressEvery;
+        // Read at the start of the run, so a caller can fill the list once what the events use exists.
+        List<(TimeSpan At, Action Run)> oneShots = [.. (events ?? []).OrderBy(e => e.At)];
+        var nextEvent = 0;
         while (true)
         {
             if (stop() is { } reason)
@@ -51,6 +61,12 @@ internal sealed class SoakSchedule(TimeSpan duration, TimeSpan sampleEvery, Time
                 continue;
             }
 
+            if (nextEvent < oneShots.Count && now >= start + oneShots[nextEvent].At)
+            {
+                oneShots[nextEvent++].Run();
+                continue;
+            }
+
             if (now >= nextPress)
             {
                 press();
@@ -63,7 +79,7 @@ internal sealed class SoakSchedule(TimeSpan duration, TimeSpan sampleEvery, Time
                 continue;
             }
 
-            var next = new[] { nextSample, nextPress, end }.Min();
+            var next = new[] { nextSample, nextPress, end, nextEvent < oneShots.Count ? start + oneShots[nextEvent].At : end }.Min();
             _sleep(next - now, cancellation);
         }
 

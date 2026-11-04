@@ -3,16 +3,16 @@ title: 'Engine crash recovery and the restart warnings'
 type: 'feature'
 ticket: '2'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '4390a0e6adab46146917f7229c6a8af52b186a87'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: ['{project-root}/CLAUDE.md']
 warnings: ['oversized']
 deferred: []
@@ -71,13 +71,13 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/*` -- guard, constants, codes, `EngineHang` -- one rule for both supervisors.
-- [ ] `src/ReplayBuffer.Engine/*` -- `--restarted`, early warning, dedupe, hang, App crash loop, `--replay-buffer` to the App.
-- [ ] `src/ReplayBuffer.App/*` -- `--restarted` on relaunch, crash-loop status, tray error state and Restart, App log, `--replay-buffer` pass-through.
-- [ ] `bench/ReplayBuffer.Bench/*` -- kill/hang options and recovery checks.
-- [ ] Tests (default, fast): guard (3 in window allowed, 4th refused, allowed again after the window slides, `Reset`); `serve --restarted hung` parses, a bad value fails; an engine started with `Restarted = Crashed` has `engine-restarted` in the first snapshot and an attach with a reason adds no second one; `AppSupervisor` with fakes: 4th App exit within the window isn't relaunched and `app-crash-loop` is raised; `dev.simulate engine-hang` refused on the installed instance; the tray's Restart item is hidden by default; schedule fires a one-shot event once.
-- [ ] `tests/ReplayBuffer.App.Tests/EngineConnectionTests.cs` (Heavy, explicit, real engine on a test instance): a supervising `EngineConnection`; kill its engine (the `State.Pid` it connected to) 4 times, each after it is back → 3 relaunches, then `Status == CrashLoop`, the log action got an `engine-crash-loop` line and no engine serves the pipe; `RestartAfterCrashLoop()` → `Connected`. `tests/ReplayBuffer.App.Tests/SupervisionTests.cs` (Heavy): `dev.simulate engine-hang` on the pair → a new engine within 20 s with "answering".
-- [ ] Run `bench soak --minutes 6 --kill-engine 2 --kill-app 3 --hang-engine 4` holding `.bench-running` when free; record the result here.
+- [x] `src/ReplayBuffer.Contracts/*` -- guard, constants, codes, `EngineHang` -- one rule for both supervisors.
+- [x] `src/ReplayBuffer.Engine/*` -- `--restarted`, early warning, dedupe, hang, App crash loop, `--replay-buffer` to the App.
+- [x] `src/ReplayBuffer.App/*` -- `--restarted` on relaunch, crash-loop status, tray error state and Restart, App log, `--replay-buffer` pass-through.
+- [x] `bench/ReplayBuffer.Bench/*` -- kill/hang options and recovery checks.
+- [x] Tests (default, fast): guard (3 in window allowed, 4th refused, allowed again after the window slides, `Reset`); `serve --restarted hung` parses, a bad value fails; an engine started with `Restarted = Crashed` has `engine-restarted` in the first snapshot and an attach with a reason adds no second one; `AppSupervisor` with fakes: 4th App exit within the window isn't relaunched and `app-crash-loop` is raised; `dev.simulate engine-hang` refused on the installed instance; the tray's Restart item is hidden by default; schedule fires a one-shot event once.
+- [x] `tests/ReplayBuffer.App.Tests/EngineConnectionTests.cs` (Heavy, explicit, real engine on a test instance): a supervising `EngineConnection`; kill its engine (the `State.Pid` it connected to) 4 times, each after it is back → 3 relaunches, then `Status == CrashLoop`, the log action got an `engine-crash-loop` line and no engine serves the pipe; `RestartAfterCrashLoop()` → `Connected`. `tests/ReplayBuffer.App.Tests/SupervisionTests.cs` (Heavy): `dev.simulate engine-hang` on the pair → a new engine within 20 s with "answering".
+- [x] Run `bench soak --minutes 6 --kill-engine 2 --kill-app 3 --hang-engine 4` holding `.bench-running` when free; record the result here.
 
 **Acceptance Criteria:**
 - Given the App supervising an engine, when the engine is killed, then a new engine serves within 10 s and its first snapshot carries one dismissable `engine-restarted`, and the status line shows it.
@@ -89,9 +89,39 @@ deferred: []
 
 ## Implementation Notes
 
+- Contracts: `Supervision.CrashLoopRestarts`/`CrashLoopWindow` and `CrashLoopGuard` (a queue of restart times; one that is 10 min old has left the window), `ErrorCodes.EngineCrashLoop`/`AppCrashLoop` (in `All`), `SimulatedEvent.EngineHang` last (JSON `engineHang`).
+- Engine: `serve --restarted crashed|hung` (`ServeCommand.Restarted`, `EngineHostOptions.Restarted`) raises `engine-restarted` before `server.Start`. `AppSupervisor.RaiseEngineRestarted` is the one raise, skipped while an `engine-restarted` is active, under a static lock. The App's crash-loop guard counts each exit once, however many failed starts its relaunch takes; refused → error log `app-crash-loop: …`, warning `AppCrashLoop` (Error, no overlay), watch ends; a later attach of another pid resets it. `AppLauncher` passes `--replay-buffer` after `--instance` when the test instance's engine buffers. `dev.simulate engineHang` cancels the heartbeat and calls `EventHub.Freeze()` (a background thread holds the hub lock forever; the reply still goes out, as replies skip the hub).
+- App: `EngineStatus.CrashLoop`; every relaunch after a crash or hang goes through `RestartAsync`, which asks the guard, then waits out the backoff; refused → `_problem` names `engine-crash-loop`, `Log` gets a line, status `CrashLoop`, then waits for `RestartAfterCrashLoop()` (resets guard and backoff, relaunches with no reason). `TryLaunch` appends `--restarted crashed|hung`. The App still sends the reason on `app.attach`; the engine's dedupe drops it. `ShellApp`: `--replay-buffer` (test instance only, else `Program` exits 2) goes into `EngineArguments`; `logs\app.log` lines; the tray's hidden `RestartItem` (first in the menu) and the "!" on amber icon with tooltip "The engine keeps crashing; Restart from this menu" while `CrashLoop`. The status line shows the problem text in `CrashLoop`.
+- Bench: `SoakSchedule` takes one-shot `(At, Run)` events, read when `Run` starts. `SoakRun` options `--kill-engine`/`--kill-app`/`--hang-engine` (minutes, 0..`--minutes`); the App starts with `--replay-buffer`; every client feeds one event channel and records the pipe's server pid; kills check the pid and the image first. Recoveries go to `soak.json` (`recoveries`, `extraPresses`) and a `soak.md` table; the verdict needs every recovery to pass and rows = presses + extra presses. Bounds use each process's first pid.
+- Every press but the App-gone one waits until a whole Buffer Window has passed since the last save or engine restart (`bufferFull`); `RecoverApp` waits for it before the kill, then presses at once. Without it, a press delayed by a recovery made a short Clip with the next one (runs 1 and 2 below).
+
 ## Plan Change Log
 
+- 2026-11-04, unattended default: the soak's Clip check allowed each Track one video frame (16.7 ms at 60 fps) off the video, but the audio ends on a whole AAC packet (1024 samples, 21.3 ms at 48 kHz), so a Clip of some frame counts always fails it: 1747 frames (29.117 s) against 1364 packets (29.099 s) is 18 ms. 8.1's 19-Clip runs never hit such a count (max 15 ms); three 8.2 runs did. `SoakClipCheck` now allows max(one frame, one AAC packet), with a test. Not an engine change.
+
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 8 findings — high 1, medium 1, low 6, false 0, maybe-false 0
+- findings:
+  - `[high]` `[patch]` A relaunched engine that crashes before serving skipped the crash-loop guard (relaunched forever) — `ConnectOrLaunchAsync` records `_launchFailure` (Crashed/Hung) and `SuperviseAsync` routes it through `RestartAsync`; Heavy `AnEngineThatCrashesBeforeServingEndsInACrashLoop` added (passes; failed before).
+  - `[low]` `[patch]` A soak event at exactly `--minutes` never fired but was required — `At` refuses a value ≥ `--minutes`.
+  - `[medium]` `[patch]` `RecoverApp` passed a press made after the new App attached — `pass` requires `goneAtPress`.
+  - `[low]` `[reject]` The App-back 10 s limit includes the Save press (≤ 30 s wait) — saves take ~1 s; measuring the return during the press needs extra event plumbing.
+  - `[low]` `[patch]` The soak's hang check accepted any `engine-restarted` message — requires "answering" for hang, "unexpectedly" for kill.
+  - `[low]` `[patch]` `RecoverEngine` leaked replaced clients and adopted before the image check — disposes them; adopts only after `HasImage`.
+  - `[low]` `[patch]` `app-crash-loop` stayed active after a new App attached — its id is kept and withdrawn on reset; test extended.
+  - `[low]` `[reject]` `TheFourthAppExitWithinTheWindowIsACrashLoopAndIsNotRelaunched` waits ~3 s of real backoff — short, and injecting time would change the shared fixture.
+- Also patched before review (matrix audit): `ShellApp.TryParseArguments` and `ShowCrashLoop` with tests for the App's `--replay-buffer` refusal and the tray Restart item.
+
+## Auto Run Result
+
+- **Summary:** engine crash recovery (AD-16): `serve --restarted crashed|hung` raises `engine-restarted` before the pipe serves (deduped with `app.attach`); a shared `CrashLoopGuard` (3 restarts / 10 min) stops the App relaunching the engine (`EngineStatus.CrashLoop`, tray "!" with Restart, `logspp.log` line `engine-crash-loop`) and the engine relaunching the App (`app-crash-loop`); `dev.simulate engineHang` freezes the engine; `--replay-buffer` passes through relaunches on test instances; `bench soak --kill-engine/--kill-app/--hang-engine` checks each recovery.
+- **Contracts (additive, AD-22):** `ErrorCodes.EngineCrashLoop`, `AppCrashLoop`; `Supervision.CrashLoopRestarts`, `CrashLoopWindow`, `CrashLoopGuard`; `SimulatedEvent.EngineHang` (last).
+- **Review:** quick lens, 8 findings: 6 patched (1 high, 1 medium, 4 low), 2 low rejected (above), 0 deferred.
+- **Follow-up review recommended:** true — a high was patched (startup-crash path into the guard); the risk is `SuperviseAsync`'s Failed branch counting a non-crash exit (e.g. an engine refused by the pipe mutex) as a crash.
+- **Verification:** Release build 0 warnings; Contracts 120, Engine 174 (28 skipped), App 117 (14 skipped), Bench 145 (10 skipped) pass; `publish-engine.ps1` 0 IL warnings; Heavy supervision tests pass (agent runs); soak `--minutes 6 --kill-engine 2 --kill-app 3 --hang-engine 4` passed before the review patches (`measurements/bench-20261104-045326`); a rerun after the patches was started but not finished at commit time.
+- **Residual risks:** tray error state never seen on a real desktop; `EventHub.Freeze()` can only be ended by a kill; the App's private-bytes climb (8.1) is unchanged.
 
 ## Design Notes
 
@@ -108,3 +138,9 @@ deferred: []
 - `dotnet test --project tests/ReplayBuffer.Contracts.Tests -c Release --no-build`, same for `Engine.Tests`, `App.Tests`, `Bench.Tests` -- expected: pass
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL warnings
 - the Heavy supervision tests (`--explicit only`, App.Tests filtered to the new ones) and the soak above -- expected: pass
+
+**Results (2026-11-04):**
+- Release build: 0 warnings. `publish-engine.ps1`: published, 0 IL warnings.
+- Default suites: Contracts 120/120; Engine 174 passed, 28 skipped; App 116 passed, 13 skipped; Bench 145 passed, 11 skipped (one earlier Bench run had a single failure that didn't recur in 4 reruns, unidentified, outside this story's tests).
+- Heavy (holding `.bench-running`): `AFourthCrashWithinTenMinutesIsACrashLoopUntilRestart`, `ASimulatedEngineHangIsKilledAndRelaunchedAsStoppedAnswering` and the existing `AHungEngineIsKilledAndRelaunched` pass (37 s).
+- Soak `--minutes 6 --kill-engine 2 --kill-app 3 --hang-engine 4`, memory mode: **pass**, `measurements/bench-20261104-045326`: 6 of 6 Clips (5 presses + 1 extra), 10 of 10 bounds, 3 of 3 recoveries: kill-engine back buffering with `engine-restarted` ("unexpectedly") in 2.1 s; kill-app: the press with the App gone saved a passing Clip, App back with `app-restarted` in 0.7 s; hang-engine back with "stopped answering" in 8.7 s. Earlier runs, all with 3 of 3 recoveries passing: runs 1–2 failed on short Clips from presses bunched after a recovery (fixed by `bufferFull`), runs 3–5 on the 18 ms AAC-packet check (fixed above).

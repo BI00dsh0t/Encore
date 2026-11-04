@@ -59,6 +59,7 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
         EngineStatus.Connected => "Connected to the engine.",
         EngineStatus.Restarting => "Restarting the engine…" + (problem is { } why ? " " + why : ""),
         EngineStatus.NotRunning => "The engine isn't running." + (problem is { } reason ? " " + reason : ""),
+        EngineStatus.CrashLoop => problem ?? "The engine keeps crashing, so it isn't being restarted. Restart it from the tray menu.",
         _ => "The engine disconnected. Reconnecting…",
     };
 

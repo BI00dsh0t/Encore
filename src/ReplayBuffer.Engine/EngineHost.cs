@@ -57,6 +57,12 @@ internal sealed record EngineHostOptions
     /// </summary>
     public bool? ReplayBuffer { get; init; }
 
+    /// <summary>
+    /// <c>serve --restarted</c>: why the App relaunched this engine, if it did. The engine raises
+    /// <c>engine-restarted</c> before its pipe serves, so the first snapshot carries it (AD-16).
+    /// </summary>
+    public EngineRestartReason? Restarted { get; init; }
+
     /// <summary>The time between Game Detection polls.</summary>
     public TimeSpan GameScanInterval { get; init; } = TimeSpan.FromSeconds(1);
 
@@ -94,7 +100,8 @@ internal sealed record EngineHostOptions
 /// capture session writing one file follows the Target instead.
 /// The FeedbackRouter turns Clips saved and not saved, Recording state changes and a disk full into
 /// <c>warning.raised</c> notices, and dismisses the info ones after 10 s. <c>dev.simulate</c> injects a
-/// stub Recording state, a disk full, a save failure or a saved notice; the installed instance refuses it.
+/// stub Recording state, a disk full, a save failure, a saved notice or an engine hang; the installed instance refuses it.
+/// Started with <c>--restarted</c>, it raises <c>engine-restarted</c> before its pipe serves.
 /// Each notice's Feedback Sound, if switched on, plays on a worker on <c>feedbackSoundDevice</c> or
 /// the default communications endpoint; <c>feedback.preview</c> plays one even when it is off. While
 /// a Track of the active Track Layout mixes that endpoint, a <c>feedback-device-captured</c> warning
@@ -323,7 +330,7 @@ internal sealed class EngineHost : IAsyncDisposable
             var apps = new AppSupervisor(
                 hub,
                 warnings,
-                hostOptions.AppLauncher ?? AppLauncher.Beside(instance),
+                hostOptions.AppLauncher ?? AppLauncher.Beside(instance, instance.IsTest && replay ? ["--replay-buffer"] : null),
                 hostOptions.Time,
                 loggers.CreateLogger("Supervision"));
             var encoders = new VideoEncoderCatalog(loggers);
@@ -538,7 +545,13 @@ internal sealed class EngineHost : IAsyncDisposable
                 notices.RecordingStopped,
                 notices.DiskFull,
                 notSaved,
-                () => notices.ClipSaved(new ClipSaved("dev.simulate")));
+                () => notices.ClipSaved(new ClipSaved("dev.simulate")),
+                () =>
+                {
+                    // A real hang: no heartbeat, and every publish, snapshot and attach blocks on the hub.
+                    host._stopHeartbeat.Cancel();
+                    hub.Freeze();
+                });
             router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(
@@ -575,6 +588,11 @@ internal sealed class EngineHost : IAsyncDisposable
                     await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
                     return Empty.Value;
                 });
+            }
+
+            if (hostOptions.Restarted is { } restarted)
+            {
+                AppSupervisor.RaiseEngineRestarted(hub, warnings, restarted);
             }
 
             if (load.LoadCode == ErrorCodes.SettingsUnreadable)

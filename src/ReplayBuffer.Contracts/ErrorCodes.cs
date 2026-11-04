@@ -86,6 +86,12 @@ public static class ErrorCodes
     /// <summary>The engine relaunched an App that exited with no <c>engine.shutdown</c> (AD-16).</summary>
     public const string AppRestarted = "app-restarted";
 
+    /// <summary>The engine crashed or hung again after 3 restarts within 10 minutes; the App stopped relaunching it (AD-16).</summary>
+    public const string EngineCrashLoop = "engine-crash-loop";
+
+    /// <summary>The App exited again after 3 relaunches within 10 minutes; the engine stopped relaunching it (AD-16).</summary>
+    public const string AppCrashLoop = "app-crash-loop";
+
     /// <summary>Another copy of this process already runs for this instance (AD-16).</summary>
     public const string InstanceRunning = "instance-running";
 
@@ -277,6 +283,8 @@ public static class ErrorCodes
         WarningNotDismissable,
         EngineRestarted,
         AppRestarted,
+        EngineCrashLoop,
+        AppCrashLoop,
         InstanceRunning,
         RecordingInterrupted,
         SessionRunning,

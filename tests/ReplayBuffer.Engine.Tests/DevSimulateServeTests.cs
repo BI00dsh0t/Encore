@@ -83,11 +83,14 @@ public sealed class DevSimulateServeTests : IAsyncLifetime
             _ => calls++,
             () => calls++,
             _ => calls++,
+            () => calls++,
             () => calls++);
 
         var refused = Assert.Throws<ErrorCodeException>(() => simulator.Simulate(new DevSimulate(SimulatedEvent.DiskFull)));
+        var hang = Assert.Throws<ErrorCodeException>(() => simulator.Simulate(new DevSimulate(SimulatedEvent.EngineHang)));
 
         Assert.Equal(ErrorCodes.NotDevInstance, refused.Code);
+        Assert.Equal(ErrorCodes.NotDevInstance, hang.Code);
         Assert.Equal(0, calls);
     }
 
