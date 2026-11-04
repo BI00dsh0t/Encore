@@ -53,7 +53,10 @@ internal sealed class ShellApp(Instance instance) : Application
             RunKey.Startup,
             Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ReplayBuffer.App.exe"));
         _engine.Changed += () => Dispatcher.BeginInvoke(SyncStartup);
-        var model = new MainViewModel(_engine, action => Dispatcher.BeginInvoke(action));
+        var model = new MainViewModel(
+            _engine,
+            action => Dispatcher.BeginInvoke(action),
+            Path.Combine(instance.RoamingDataFolder, "library-view.json"));
         _window = new MainWindow { DataContext = model };
         if (instance.Name != Instance.InstalledName)
         {

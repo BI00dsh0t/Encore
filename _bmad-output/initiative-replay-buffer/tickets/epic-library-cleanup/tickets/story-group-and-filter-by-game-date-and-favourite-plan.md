@@ -3,14 +3,14 @@ title: 'Group and filter by game, date and Favourite'
 type: 'feature'
 ticket: '5'
 created: '2026-11-03'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '6d4b48f3754c546bae04e11517079dfaac90db05'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -72,11 +72,11 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Library/LibraryViewState.cs` -- the record, load and save -- remembered per instance
-- [ ] `src/ReplayBuffer.App/Library/LibraryPage.cs` -- game key/name rule, view properties, `Games`, `Entries` built in group order and synced in place, re-apply on change, persistence -- R4
-- [ ] `src/ReplayBuffer.App/Library/LibraryView.xaml` -- filter bar and virtualized grouped list -- R4 UI
-- [ ] `src/ReplayBuffer.App/MainViewModel.cs`, `src/ReplayBuffer.App/ShellApp.cs` -- pass the instance's view-state file -- wiring
-- [ ] `tests/ReplayBuffer.App.Tests/LibraryPageTests.cs` -- fabricated items across three games, Monitor Recordings and the root, fixed clock: (1) by game gives the expected headers and rows, (2) by day gives Today/Yesterday/date, (3) game + date + Favourites combined, (4) a new item lands in its group and a renamed profile renames its group, (5) view state saved to a temp file is restored by a new page, (6) 5 000 items group and filter in under 200 ms (one `Stopwatch` around a `Render` and a filter change, after one warm-up render) -- verify
+- [x] `src/ReplayBuffer.App/Library/LibraryViewState.cs` -- the record, load and save -- remembered per instance
+- [x] `src/ReplayBuffer.App/Library/LibraryPage.cs` -- game key/name rule, view properties, `Games`, `Entries` built in group order and synced in place, re-apply on change, persistence -- R4
+- [x] `src/ReplayBuffer.App/Library/LibraryView.xaml` -- filter bar and virtualized grouped list -- R4 UI
+- [x] `src/ReplayBuffer.App/MainViewModel.cs`, `src/ReplayBuffer.App/ShellApp.cs` -- pass the instance's view-state file -- wiring
+- [x] `tests/ReplayBuffer.App.Tests/LibraryPageTests.cs` -- fabricated items across three games, Monitor Recordings and the root, fixed clock: (1) by game gives the expected headers and rows, (2) by day gives Today/Yesterday/date, (3) game + date + Favourites combined, (4) a new item lands in its group and a renamed profile renames its group, (5) view state saved to a temp file is restored by a new page, (6) 5 000 items group and filter in under 200 ms (one `Stopwatch` around a `Render` and a filter change, after one warm-up render) -- verify
 
 **Acceptance Criteria:**
 - Given items across three games, Monitor Recordings and the root, when grouped by game, then the headers are the three game names, Monitor Recordings and Other, each over its items newest first.
@@ -88,9 +88,28 @@ deferred: []
 
 ## Implementation Notes
 
+- `LibraryGameOption` is a small observable class (`Key` fixed, `Name` settable), not a record, reused per key like the headers: a renamed profile then only changes the option's `Name`, so the combo never loses its selected item (a replaced item would make the ComboBox push null back into the filter).
+- The game combo binds `SelectedItem` to a `SelectedGame` property rather than `SelectedValue`/`SelectedValuePath=Key` to `GameFilter`: "All games" has a null key, and WPF treats a null `SelectedValue` as "no selection". `SelectedGame` ignores null sets (the combo's items churning) and maps to `GameFilter`. The other two combos use `SelectedValue`/`SelectedValuePath="Value"` over `LibraryChoice<T>(Value, Name)` lists (`GroupOptions`, `DateOptions`).
+- Group keys: `profile:<id>`, `folder:<NAME upper-invariant>`, `other`; `GameOf` became `GameKeyOf` returning `(Key, Name)` (the old name-only `GameOf` had no other callers and was removed). Header instances are keyed `game|<key>` / `day|yyyy-MM-dd`.
+- The games list (and the game-filter reset) is built from all items, not the date/Favourite-filtered ones, so the combo is stable while other filters change.
+- `Sync` first removes everything not wanted (backwards, by reference set), then runs the Design Notes loop. Without that first pass a filter that drops the head of the list makes the forward scan quadratic.
+- Dates: "today" is `TimeProvider.GetLocalNow().Date`; an item's day is `TimeZoneInfo.ConvertTime(item.Date, time.LocalTimeZone).Date`. Rows still show `item.Date.ToLocalTime()` (unchanged 7.1 behaviour).
+- View-state file: source-generated `LibraryViewStateJson` context with `UseStringEnumConverter`; unknown numeric enum values also fall back to defaults. Saved on every view-property change via `<file>.tmp` + `File.Move(overwrite)`.
+- The list's `ItemsControl` uses `VirtualizationMode=Recycling` and `ScrollUnit=Pixel` (pixel scrolling keeps tall rows and short headers smooth).
+- Verified: `dotnet build ReplayBuffer.slnx -c Release` 0 warnings, 0 errors; `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build` 91 passed, 7 explicit skipped (incl. `TheViewRendersWithoutBindingErrors` with the new view and the 5 000-item timing test). Not checked by hand in the running app.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 5 findings — high 0, medium 1, low 4, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` `Sync` is quadratic on a grouping change (forward `IndexFrom` + `Move` per row) and on clearing a filter — patched in the main session: `Sync` now maps wanted positions, drops the unwanted, resets when the kept order differs (a grouping change) and otherwise merges inserts, linear; the Heavy timing test now also clears the game filter and switches to Day.
+  - `[low]` `[patch]` the date filter has no upper bound, so a future-dated item passes Today/Last N days — patched: `day <= today` unless the filter is All.
+  - `[low]` `[reject]` `_headers` is never pruned — at most one header per distinct day or game seen in a run; negligible.
+  - `[low]` `[reject]` a reset game filter makes one `Render` apply twice — correct, once per reset only.
+  - `[low]` `[reject]` a failed `File.Move` leaves `library-view.json.tmp` — rare, overwritten by the next save.
 
 ## Design Notes
 
@@ -113,3 +132,15 @@ Use it for both `Rows` and `Entries` (replacing the per-item `Rows.IndexOf`).
 **Commands:**
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors
 - `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build` -- expected: all pass (App-only change: Engine, Core, Contracts and pipeline suites are not touched; no NativeAOT publish since no engine code changes)
+
+## Auto Run Result
+
+**Summary:** The Library page groups by game (profile name, else the profile whose folder holds the file, else the top-level folder, so Monitor Recordings is its own group, else Other) or by day (Today, Yesterday, dates, newest first), and filters by game, date (Today, Last 7/30 days, All) and Favourites only, together. The view state is saved per App instance in `library-view.json` under the instance's roaming folder. The list is one virtualized `ItemsControl` of headers and rows, updated in place. App-only: no engine, Core or Contracts change.
+
+**Files:** `LibraryViewState.cs` (new, view state load/save), `LibraryPage.cs` (grouping, filters, linear in-place sync), `LibraryView.xaml` (filter bar, virtualized list), `MainViewModel.cs` and `ShellApp.cs` (view-state file wiring), `LibraryPageTests.cs` (6 tests; the 5 000-item timing test is opt-in Heavy per CLAUDE.md).
+
+**Review:** quick lens, 5 findings: 2 patched (1 medium, 1 low), 3 low rejected (see the triage log). Follow-up review not recommended (one medium patched).
+
+**Verification:** `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings. `ReplayBuffer.App.Tests` default run: 90 passed, 8 explicit skipped. Heavy `FiveThousandItemsGroupAndFilterInUnder200Milliseconds` run alone: passed. Other projects not run: nothing outside the App changed. No NativeAOT publish: no engine code changed.
+
+**Residual risks:** the grouped list and filter bar haven't been checked by hand in the running App; a persisted game filter leaves the Game combo blank until the Library has items.

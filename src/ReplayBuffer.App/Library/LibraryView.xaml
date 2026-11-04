@@ -1,100 +1,151 @@
 <UserControl x:Class="ReplayBuffer.App.Library.LibraryView"
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:ReplayBuffer.App.Library">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
+        <DataTemplate DataType="{x:Type local:LibraryGroupHeader}">
+            <TextBlock Margin="0,10,0,2"
+                       FontWeight="SemiBold"
+                       Text="{Binding Name}"
+                       TextTrimming="CharacterEllipsis" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type local:LibraryRow}">
+            <Grid Margin="0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Width="96"
+                        Height="54"
+                        Background="#E6E6E6"
+                        ClipToBounds="True">
+                    <Grid>
+                        <!-- The generic video glyph, shown until the shell has a thumbnail. -->
+                        <Path HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Data="M 0,0 L 14,8 L 0,16 Z"
+                              Fill="#A0A0A0" />
+                        <Image Source="{Binding Thumbnail}"
+                               Stretch="Uniform"
+                               Visibility="{Binding HasThumbnail, Converter={StaticResource Visible}}" />
+                    </Grid>
+                </Border>
+                <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                    <TextBlock Text="{Binding Name}"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding Path}" />
+                    <TextBlock Margin="0,2,0,0"
+                               Foreground="Gray"
+                               Text="{Binding Game}"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <TextBlock Grid.Column="2"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Top"
+                           Text="{Binding Date}" />
+                <TextBlock Grid.Column="3"
+                           MinWidth="48"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Top"
+                           Text="{Binding Length}"
+                           TextAlignment="Right" />
+                <TextBlock Grid.Column="4"
+                           MinWidth="64"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Top"
+                           TextAlignment="Right">
+                    <Run Text="{Binding Size, Mode=OneWay}" /><Run FontStyle="Italic" Text="{Binding Lock, Mode=OneWay}" />
+                </TextBlock>
+                <!-- The star follows the snapshot: a click only sends library.setFavourite. -->
+                <Button Grid.Column="5"
+                        Margin="12,0,0,0"
+                        Padding="4,0"
+                        VerticalAlignment="Top"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Command="{Binding FavouriteCommand}"
+                        Content="{Binding Star}"
+                        FontSize="16"
+                        Foreground="#D4A017"
+                        ToolTip="Favourite" />
+            </Grid>
+        </DataTemplate>
     </UserControl.Resources>
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel>
-            <Border Margin="0,0,0,12"
-                    Padding="10,8"
-                    Background="#FFF4E5"
-                    BorderBrush="#E0A040"
-                    BorderThickness="1"
-                    Visibility="{Binding IsCleanupBlocked, Converter={StaticResource Visible}}">
-                <DockPanel>
-                    <Button Command="{Binding AcknowledgeCommand}"
-                            Content="Acknowledge"
-                            DockPanel.Dock="Right"
-                            Margin="12,0,0,0"
-                            Padding="8,2"
-                            VerticalAlignment="Center" />
-                    <TextBlock VerticalAlignment="Center"
-                               Text="The Library index couldn't be read, so it was rebuilt from the Output Folder. Cleanup is off until you acknowledge this."
-                               TextWrapping="Wrap" />
-                </DockPanel>
-            </Border>
-            <TextBlock FontWeight="SemiBold" Text="Library" />
-            <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding Rows}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Margin="0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Border Width="96"
-                                    Height="54"
-                                    Background="#E6E6E6"
-                                    ClipToBounds="True">
-                                <Grid>
-                                    <!-- The generic video glyph, shown until the shell has a thumbnail. -->
-                                    <Path HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Data="M 0,0 L 14,8 L 0,16 Z"
-                                          Fill="#A0A0A0" />
-                                    <Image Source="{Binding Thumbnail}"
-                                           Stretch="Uniform"
-                                           Visibility="{Binding HasThumbnail, Converter={StaticResource Visible}}" />
-                                </Grid>
-                            </Border>
-                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                                <TextBlock Text="{Binding Name}"
-                                           TextTrimming="CharacterEllipsis"
-                                           ToolTip="{Binding Path}" />
-                                <TextBlock Margin="0,2,0,0"
-                                           Foreground="Gray"
-                                           Text="{Binding Game}"
-                                           TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                            <TextBlock Grid.Column="2"
-                                       Margin="12,0,0,0"
-                                       VerticalAlignment="Top"
-                                       Text="{Binding Date}" />
-                            <TextBlock Grid.Column="3"
-                                       MinWidth="48"
-                                       Margin="12,0,0,0"
-                                       VerticalAlignment="Top"
-                                       Text="{Binding Length}"
-                                       TextAlignment="Right" />
-                            <TextBlock Grid.Column="4"
-                                       MinWidth="64"
-                                       Margin="12,0,0,0"
-                                       VerticalAlignment="Top"
-                                       TextAlignment="Right">
-                                <Run Text="{Binding Size, Mode=OneWay}" /><Run FontStyle="Italic" Text="{Binding Lock, Mode=OneWay}" />
-                            </TextBlock>
-                            <!-- The star follows the snapshot: a click only sends library.setFavourite. -->
-                            <Button Grid.Column="5"
-                                    Margin="12,0,0,0"
-                                    Padding="4,0"
-                                    VerticalAlignment="Top"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    Command="{Binding FavouriteCommand}"
-                                    Content="{Binding Star}"
-                                    FontSize="16"
-                                    Foreground="#D4A017"
-                                    ToolTip="Favourite" />
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </StackPanel>
-    </ScrollViewer>
+    <DockPanel>
+        <Border DockPanel.Dock="Top"
+                Margin="0,0,0,12"
+                Padding="10,8"
+                Background="#FFF4E5"
+                BorderBrush="#E0A040"
+                BorderThickness="1"
+                Visibility="{Binding IsCleanupBlocked, Converter={StaticResource Visible}}">
+            <DockPanel>
+                <Button Command="{Binding AcknowledgeCommand}"
+                        Content="Acknowledge"
+                        DockPanel.Dock="Right"
+                        Margin="12,0,0,0"
+                        Padding="8,2"
+                        VerticalAlignment="Center" />
+                <TextBlock VerticalAlignment="Center"
+                           Text="The Library index couldn't be read, so it was rebuilt from the Output Folder. Cleanup is off until you acknowledge this."
+                           TextWrapping="Wrap" />
+            </DockPanel>
+        </Border>
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Library" />
+        <WrapPanel DockPanel.Dock="Top" Margin="0,6,0,0">
+            <TextBlock Margin="0,0,6,0" VerticalAlignment="Center" Text="Group by" />
+            <ComboBox MinWidth="80"
+                      Margin="0,0,12,4"
+                      DisplayMemberPath="Name"
+                      ItemsSource="{Binding GroupOptions}"
+                      SelectedValue="{Binding GroupBy}"
+                      SelectedValuePath="Value" />
+            <TextBlock Margin="0,0,6,0" VerticalAlignment="Center" Text="Game" />
+            <ComboBox MinWidth="140"
+                      Margin="0,0,12,4"
+                      DisplayMemberPath="Name"
+                      ItemsSource="{Binding Games}"
+                      SelectedItem="{Binding SelectedGame}" />
+            <TextBlock Margin="0,0,6,0" VerticalAlignment="Center" Text="Date" />
+            <ComboBox MinWidth="110"
+                      Margin="0,0,12,4"
+                      DisplayMemberPath="Name"
+                      ItemsSource="{Binding DateOptions}"
+                      SelectedValue="{Binding DateFilter}"
+                      SelectedValuePath="Value" />
+            <CheckBox Margin="0,0,0,4"
+                      VerticalAlignment="Center"
+                      Content="Favourites only"
+                      IsChecked="{Binding FavouritesOnly}" />
+        </WrapPanel>
+        <!-- One virtualized list of headers and rows; it scrolls itself, so nothing wraps it in a ScrollViewer. -->
+        <ItemsControl Margin="0,6,0,0"
+                      ItemsSource="{Binding Entries}"
+                      ScrollViewer.CanContentScroll="True"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.ScrollUnit="Pixel"
+                      VirtualizingPanel.VirtualizationMode="Recycling">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.Template>
+                <ControlTemplate TargetType="ItemsControl">
+                    <ScrollViewer CanContentScroll="True"
+                                  Focusable="False"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsPresenter />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </ItemsControl.Template>
+        </ItemsControl>
+    </DockPanel>
 </UserControl>
