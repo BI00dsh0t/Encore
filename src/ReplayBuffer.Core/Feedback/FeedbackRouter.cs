@@ -178,6 +178,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         RecordingStopReasons.SessionEnded => "Monitor Recording stopped: the monitor capture ended",
         RecordingStopReasons.Shutdown => "Monitor Recording stopped: ReplayBuffer shut down",
         RecordingStopReasons.DiskFull => "Monitor Recording stopped: the disk is full",
+        RecordingStopReasons.Suspend => "Monitor Recording stopped: the PC went to sleep",
         _ when IsKnownReason(reason) => "Monitor Recording stopped",
         _ => $"Monitor Recording stopped: the write failed ({reason})",
     };
@@ -192,6 +193,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         RecordingStopReasons.Shutdown => "Recording stopped: ReplayBuffer shut down",
         RecordingStopReasons.EncoderRestart => "Recording stopped: encoder restart",
         RecordingStopReasons.DiskFull => "Recording stopped: the disk is full",
+        RecordingStopReasons.Suspend => "Recording stopped: the PC went to sleep",
         _ => $"Recording stopped: the write failed ({reason})",
     };
 
@@ -201,7 +203,8 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         or RecordingStopReasons.SessionEnded
         or RecordingStopReasons.Shutdown
         or RecordingStopReasons.EncoderRestart
-        or RecordingStopReasons.DiskFull;
+        or RecordingStopReasons.DiskFull
+        or RecordingStopReasons.Suspend;
 
     /// <summary>
     /// A forced encoder restart ended a Recording and started another (R4): a

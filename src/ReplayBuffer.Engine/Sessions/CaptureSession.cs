@@ -91,6 +91,13 @@ internal sealed record CaptureSessionOptions
     /// </summary>
     public Func<Exception?>? RecoveryFault { get; init; }
 
+    /// <summary>
+    /// For tests: called on the capture thread for each frame after the anchor; while it returns
+    /// true the frame is dropped, as on the secure desktop (lock, UAC, Ctrl+Alt+Del, T-04), where
+    /// WGC delivers none and the pacer repeats the last frame.
+    /// </summary>
+    public Func<bool>? StarveFrames { get; init; }
+
     /// <summary>How often a session holding a Replay Buffer, or the Monitor session, checks from its anchor on whether its GPU device was removed or reset.</summary>
     public TimeSpan DeviceWatchInterval { get; init; } = TimeSpan.FromMilliseconds(500);
 
@@ -201,7 +208,9 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// device on the Target's adapter, the chain rebuilt into a new generation of the same ring, and new
 /// capture; it posts <see cref="ISessionEvents.ChainRestarted"/>, then ends the old chain's Recording,
 /// or <see cref="ISessionEvents.DeviceLost"/> again when it failed. Only sessions with a Replay Buffer,
-/// and the Monitor session, recover; a file-mode session fails as before.
+/// and the Monitor session, recover; a file-mode session fails as before. A sleep
+/// (<see cref="Suspend"/>, T-02) takes the same lost state without a loss: the same teardown, the
+/// Recording ended at its last fragment, and the resume's <see cref="RecoverDevice"/> rebuilds.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -278,6 +287,10 @@ internal sealed class CaptureSession : ICaptureSession
     // until the recovery is posted), the spec rebuilt, and the attempt's thread, which End joins.
     private bool _deviceLost;
     private bool _recovering;
+
+    // A sleep (T-02), under the chain lock: from Suspend until the resume's RecoverDevice. An attempt
+    // still running then installs nothing, so no capture or chain built before the sleep runs across it.
+    private bool _suspended;
     private bool _tornDown;
     private RecordingTap? _lostTap;
     private SessionSpec? _rebuildSpec;
@@ -1086,6 +1099,7 @@ internal sealed class CaptureSession : ICaptureSession
                 }
 
                 _recovering = true;
+                _suspended = false;
                 var previous = _recoveryThread;
                 _recoveryThread = new Thread(() => Recover(previous)) { Name = "GPU device recovery", IsBackground = true };
                 _recoveryThread.Start();
@@ -1093,6 +1107,98 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// The PC is going to sleep (T-02): the session takes 8.3's lost state without a loss. It stops
+    /// feeding the chains, then, on a thread of its own (<see cref="_recoveryThread"/>, which the
+    /// next <see cref="Recover"/> joins), tears WGC, every chain (keeping the ring, so a save still
+    /// cuts the old generation) and the device down, and ends the Recording tap at its last
+    /// fragment. No frames until <see cref="RecoverDevice"/> succeeds on resume. Already lost (a GPU
+    /// reset): a recovery attempt still running installs nothing, and the teardown runs once it has
+    /// finished. Already suspended: true, and nothing more. False when it can't: not anchored, no Replay Buffer and not the Monitor
+    /// session, or stopped, finished, draining or closed. Orchestrator thread; never blocks.
+    /// </summary>
+    public bool Suspend()
+    {
+        lock (_gate)
+        {
+            lock (_chainLock)
+            {
+                if (_suspended)
+                {
+                    return true;
+                }
+
+                if (!Volatile.Read(ref _anchored) || !(HasRing || IsMonitor) || _stopped || _outputFinished || _keepRing || _chainsClosed)
+                {
+                    return false;
+                }
+
+                // Already lost (a GPU reset's attempt may be running): it installs nothing now, and
+                // the teardown below runs once it has finished.
+                _suspended = true;
+                _deviceLost = true;
+                foreach (var chain in new[] { _current, _armed, _retiring })
+                {
+                    chain?.Fed = false;
+                }
+
+                _log.LogInformation("The PC is going to sleep: tearing capture, the encoder chains and the device down; the Replay Buffer's ring is kept");
+                var previous = _recoveryThread;
+                _recoveryThread = new Thread(() => SuspendTearDown(previous)) { Name = "Suspend teardown", IsBackground = true };
+                _recoveryThread.Start();
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary><see cref="Suspend"/>'s thread: the last attempt and a forced restart finish, then the teardown, then the Recording tap ends.</summary>
+    private void SuspendTearDown(Thread? previous)
+    {
+        try
+        {
+            previous?.Join();
+            Thread? restart;
+            bool tornDown;
+            lock (_chainLock)
+            {
+                restart = _restartThread;
+            }
+
+            restart?.Join();
+            lock (_chainLock)
+            {
+                tornDown = _tornDown;
+            }
+
+            if (!tornDown && !Volatile.Read(ref _stopped))
+            {
+                TearDownLost();
+            }
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning("Tearing down for sleep failed: {Message}", e.Message);
+        }
+
+        // The Recording ends here, at its last fragment; a resume never continues it.
+        RecordingTap? tap;
+        lock (_chainLock)
+        {
+            tap = _lostTap;
+            _lostTap = null;
+        }
+
+        try
+        {
+            tap?.Dispose();
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning("Ending the Recording for sleep failed: {Message}", e.Message);
+        }
     }
 
     /// <summary>For tests: the fault seam marks this session's device lost, as a driver reset would.</summary>
@@ -1191,10 +1297,21 @@ internal sealed class CaptureSession : ICaptureSession
             }
             var now = Stopwatch.GetTimestamp();
             next.StartAudio(now);
+            var asleep = false;
             lock (_gate)
             {
                 stopped = _stopped;
-                if (!stopped)
+                lock (_chainLock)
+                {
+                    asleep = _suspended;
+                }
+
+                if (asleep && !stopped)
+                {
+                    _log.LogInformation("The PC went to sleep during the recovery attempt: nothing is installed; the resume rebuilds");
+                }
+
+                if (!stopped && !asleep)
                 {
                     if (!ReferenceEquals(_window, window))
                     {
@@ -1218,7 +1335,7 @@ internal sealed class CaptureSession : ICaptureSession
                 }
             }
 
-            if (stopped)
+            if (stopped || asleep)
             {
                 return;
             }
@@ -1678,6 +1795,12 @@ internal sealed class CaptureSession : ICaptureSession
 
             // A lost device takes no frames: the recovery's new capture brings them again.
             if (_deviceLost)
+            {
+                return;
+            }
+
+            // For tests: a secure desktop delivers no frames; the pacer repeats the last one.
+            if (_options.StarveFrames?.Invoke() == true)
             {
                 return;
             }
