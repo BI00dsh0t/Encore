@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.1 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 6.8 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with the capture-cost investigation |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.8 |
@@ -580,3 +580,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.12 merged (`dc1f9b7`, logged `311eb43`). Its card is Done with its label detached, and 2-1-tracer is back in the pool. The epic 5 refactor sweep 5.13 went to story-2-7 (Opus, medium effort), with its card In progress. Its brief cites the forward-hooks rule and keeps it to epic 5's code. After it come 5.14 (the end-to-end check on the builder's PC) and the v0.5.0 release.
 - 2026-11-04: `clear_session` on story-2-7 was refused (live work from its QA 5.12 turn), so the 5.13 brief was sent without a clear. It stands on its own.
 - 2026-11-04: The capture-cost investigation's four 30-minute benchmark runs were holding `.bench-running` for about 2 hours, with 5.13, 6.8, 7.8 and 8.1 waiting. Adjusted: one like-for-like run per build, repeated only if the gap is within ~3 % noise. The lock is released between runs, and the investigation only re-takes it once no `dotnet`, `testhost` or `ilc` process from a worktree is running (15-minute cap, with any overlap noted).
+- 2026-11-04: 6.8 is READY FOR QA at `cdea684` (built in a lock gap; Core and Engine pass; publish done). QA started on slice-epic-5 (Sonnet), and its card is In QA. 8.1's soak holds the lock, and the investigation's develop run follows.
