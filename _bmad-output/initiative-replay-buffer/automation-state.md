@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix recording-first-frame-pts |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.4 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
@@ -165,7 +165,7 @@ The coordinator logs each QA round in the Log below.
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
 | 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `f91c32d`) |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8a434c6`) |
-| 29.5 | 8.5 Monitor changes | | pending |
+| 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
 | 29.7 | 8.7 Final conformance run | | pending |
 | 29.8 | 8.8 8-hour soaks in Memory and Disk mode | | pending |
@@ -697,3 +697,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: Bugfix `recording-first-frame-pts` went to slice-epic-5 (Opus, medium effort). It finds why a Recording's first frame can be stamped off the grid under load, fixes the root cause with a deterministic default test, and leaves Heavy runs to the GPU runner.
 - 2026-11-04: 8.4's Heavy tests passed on the GPU runner at `7629641`: `ASuspendAndResumeOpenANewGenerationAndEndTheRecordingPlayable` (14 s) and `AFrameStarvedSourceKeepsTheFrameRateWithAudioInSync` (1m 04s), each alone under `.bench-running`. slice-epic-8 is merging. The GPU runner is idle.
 - 2026-11-04: 8.4 merged into develop (`8a434c6`) after a docs-only develop sync (0-warning build). Marked done; the plan records both Heavy tests as passed on the GPU runner at `7629641`; three Human Check rows added (real sleep and resume with a Recording, lock and unlock, UAC and Ctrl+Alt+Del).
+- 2026-11-04: 8.4 merged (`8a434c6`, marked done with 3 Human Check rows in `c9afe03`), and its card is Done. 8.5 (monitor changes) went to slice-epic-8 (Opus, medium effort; no display-configuration changes, simulated through a seam; Heavy tests to the GPU runner), with its card In progress.
