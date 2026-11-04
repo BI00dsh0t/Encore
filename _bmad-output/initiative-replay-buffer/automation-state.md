@@ -109,7 +109,7 @@ The coordinator logs each QA round in the Log below.
 | 25.10 | 4.10 Replay Buffer and Output Settings page with the storage estimate | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done |
 | 25.11 | 4.11 Game Profile overrides in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done |
 | 25.12 | 4.12 Hotkeys page in the Main App | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `29d63b8`) |
-| 25.13 | 4.13 Refactor sweep | | pending |
+| 25.13 | 4.13 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 25.14 | 4.14 Clips end to end on the builder's PC | | pending |
 | 25.15 | Release epic 4 (`v0.4.0`) | | pending |
 | 26 | Slice epic 5 (Overlay and Feedback Sounds) | slice-epic-5 | done |
@@ -524,3 +524,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.5 merged (`856bd57`, marked done `00a026c`), and its card is Done. 6.6 (high risk) went to slice-epic-8 (Opus, high effort), with its card In progress. qa-2-1 is free and holds for the 4.11 re-check.
 - 2026-11-04: 4.11 fixed its QA finding at `f2b90d7` (a next-Reset note in `GameProfilesView.xaml`, 4 lines). The coordinator checked the diff itself as the round-2 re-check: **PASS**. 4.11 has been told to merge (Sonnet) and to add its Human Check row.
 - 2026-11-04: 4.11 merged (`90e1040`, `feat(app): merge 4.11-profile-overrides`, after merging develop into the branch with one conflict in `MainViewModel.cs`, resolved by keeping 4.11's `UpdateOpenPage` and develop's removal of `Name<T>`: build 0 warnings, App.Tests 108 total, 99 passed, 9 Heavy skipped). No Contracts change. Its Human Check row is added above.
+- 2026-11-04: 4.11 merged (`90e1040`, marked done `a4ce0d0`). Its card is Done with its label detached. The epic 4 refactor sweep 4.13 went to story-2-7 (Opus, medium effort), scoped to epic 4's code, with its card In progress. After it come 4.14 (the end-to-end check on the builder's PC, HITL) and the v0.4.0 release.
