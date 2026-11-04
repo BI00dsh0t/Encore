@@ -92,9 +92,14 @@ public sealed class RecordingCrashTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// The kill is taken as the first fragment 3 s in reaches the disk, not at a fixed 3.000 s: the
+    /// fragments are cut every 0.5 s, so a kill on the boundary left only 0.5 s for the last one's
+    /// encode and write, and a cold, loaded first run sometimes took longer.
+    /// </summary>
     [Fact]
     public Task ARecordingKilledThreeSecondsInPlaysToItsLastFragmentAndIsReportedAtTheNextStart() =>
-        RecordAndKillAsync([TimeSpan.FromSeconds(3)], TimeSpan.FromSeconds(4));
+        RecordAndKillAsync([TimeSpan.FromSeconds(3)], TimeSpan.FromSeconds(4), onFragment: true);
 
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
@@ -195,7 +200,18 @@ public sealed class RecordingCrashTests : IDisposable
                 double.Parse(p.GetProperty("pts_time").GetString()!, CultureInfo.InvariantCulture)
                 + double.Parse(p.GetProperty("duration_time").GetString()!, CultureInfo.InvariantCulture)))];
 
-    private async Task RecordAndKillAsync(IReadOnlyList<TimeSpan> kills, TimeSpan length)
+    /// <summary>The length of the Recording's whole boxes on disk now (it grows as each fragment lands).</summary>
+    private static long PlayableLength(string file)
+    {
+        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        return Mp4File.PlayableLength(stream);
+    }
+
+    /// <summary>
+    /// Records <paramref name="length"/> and kills at each of <paramref name="kills"/>; with
+    /// <paramref name="onFragment"/>, each kill waits from its time for the next fragment to land.
+    /// </summary>
+    private async Task RecordAndKillAsync(IReadOnlyList<TimeSpan> kills, TimeSpan length, bool onFragment = false)
     {
         SessionTestKit.RequireFFmpeg();
         Directory.CreateDirectory(Output);
@@ -267,6 +283,17 @@ public sealed class RecordingCrashTests : IDisposable
                 if (wait < TimeSpan.Zero)
                 {
                     await Task.Delay(-wait, Token);
+                }
+
+                if (onFragment)
+                {
+                    var landed = PlayableLength(started.Path);
+                    var deadline = Stopwatch.GetTimestamp() + (long)(Timeout.TotalSeconds * Stopwatch.Frequency);
+                    while (PlayableLength(started.Path) == landed)
+                    {
+                        Assert.True(Stopwatch.GetTimestamp() < deadline, "no fragment landed after the kill time");
+                        await Task.Delay(10, Token);
+                    }
                 }
 
                 var at = Stopwatch.GetTimestamp();
