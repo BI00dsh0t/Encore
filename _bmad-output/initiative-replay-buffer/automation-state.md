@@ -160,7 +160,7 @@ The coordinator logs each QA round in the Log below.
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
-| 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
+| 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
 | 29.3 | 8.3 GPU driver reset recovery | | pending |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
 | 29.5 | 8.5 Monitor changes | | pending |
@@ -617,3 +617,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 7.9 merged (`63ba0b9`, `feat(app): merge 7.9-library-cleanup-settings`) and marked done. It adds a Library and Cleanup Settings page (App-only, no Contracts change). Its Human Check row is queued. QA's 2 notes are in the epic Notes.
 - 2026-11-04: 7.9 merged (`63ba0b9`, marked done with its Human Check row at `5602f52`). Its card is Done with its label detached, and qa-2-1 is back in the pool. QA's note that the page doesn't refuse a junction as the Output Folder is covered by 7.8's engine checks against the resolved root. The epic 7 refactor sweep 7.10 went to story-2-7 (Opus, medium effort), with its card In progress. Its brief keeps every Cleanup and delete safety guard and its test.
 - 2026-11-04: QA 8.2 at `0661665`: **QA PASS**, 0 findings and 3 notes. **The flake is identified:** `AKilledAppIsRelaunchedByTheEngine` failed at its 30 s pair-start wait, then passed 5/5 reruns. Per CLAUDE.md, supervision timeouts are Heavy, so 8.2 moves it to Heavy and Explicit (test attribute only) before merging. 8.2 has been told to merge (Sonnet). qa-1-14 is back in the pool. 8.2's merge unblocks 8.3 (GPU driver reset recovery; it also waits on 6.6, done, and 6.9, done).
+- 2026-11-04: 8.2 merged (`fb0ab27`, `feat(engine): merge 8.2-engine-crash-recovery`) and marked done. Contracts change is additive (`EngineCrashLoop`, `AppCrashLoop`, `CrashLoopGuard`, `SimulatedEvent.EngineHang`). `AKilledAppIsRelaunchedByTheEngine` moved to Heavy. QA's 3 notes are in the epic Notes; the tray crash-loop state is a Human Check for 8.11.
