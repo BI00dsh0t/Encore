@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with the capture-cost investigation |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.8 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 8.1 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 5.13 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -581,3 +581,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: `clear_session` on story-2-7 was refused (live work from its QA 5.12 turn), so the 5.13 brief was sent without a clear. It stands on its own.
 - 2026-11-04: The capture-cost investigation's four 30-minute benchmark runs were holding `.bench-running` for about 2 hours, with 5.13, 6.8, 7.8 and 8.1 waiting. Adjusted: one like-for-like run per build, repeated only if the gap is within ~3 % noise. The lock is released between runs, and the investigation only re-takes it once no `dotnet`, `testhost` or `ilc` process from a worktree is running (15-minute cap, with any overlap noted).
 - 2026-11-04: 6.8 is READY FOR QA at `cdea684` (built in a lock gap; Core and Engine pass; publish done). QA started on slice-epic-5 (Sonnet), and its card is In QA. 8.1's soak holds the lock, and the investigation's develop run follows.
+- 2026-11-04: 8.1 is READY FOR QA at `5776aa7`. The 20-minute Memory soak passes: 19/19 Clips (29.0–30.0 s of 30 s), 0 dropped frames, 10/10 bounds, engine +1.1 MB, App +11.4 MB since warm-up, handles flat. The App's ~40 MB/h climb is deferred to 8.8. The engine gained a test-only `serve --replay-buffer`. QA started on 2-1-tracer (Sonnet), with no soak rerun, and its card is In QA.
