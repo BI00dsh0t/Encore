@@ -82,7 +82,7 @@ internal static class SettingsPages
 {
     /// <summary>
     /// Every page. An epic adds its page here, one line each: epic 2 the Track Layout editor,
-    /// epic 3 Game Profiles.
+    /// epic 3 Game Profiles, epic 5 Feedback Sounds.
     /// </summary>
     public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine) =>
     [
@@ -91,5 +91,6 @@ internal static class SettingsPages
         new HotkeysPage(sender),
         new TrackLayoutPage(sender, engine),
         new GameProfilesPage(sender, engine),
+        new FeedbackSoundsPage(sender, engine),
     ];
 }
