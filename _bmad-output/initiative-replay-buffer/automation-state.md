@@ -163,7 +163,7 @@ The coordinator logs each QA round in the Log below.
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
-| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | QA passed, fixing 3 notes |
+| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | fixes checked, merging |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
 | 29.5 | 8.5 Monitor changes | | pending |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
@@ -663,3 +663,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - **Not run (GPU tests paused):** the Heavy `AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile`, and a real forced TDR.
   - **Back in the pool:** qa-1-14.
 - 2026-11-04: **Builder: both looks become selectable themes.** Fluent (WPF `ThemeMode`, which follows Windows light or dark and the accent colour) and gaming dark (a custom dictionary, palette as in `research/ui-gaming-dark-render.png`) switch live and are saved in settings, with Fluent as the default. Real WPF renders of both, and their source, are in `research/` (`71cfc23`, `b2aaae6`). Epic 9 "Modern UI" planning went to slice-epic-5 (Opus, medium effort; `bmad-agent-po`, headless) on `feature/9.0-modern-ui-planning`. Its stories are: a `bmad-ux` design pass, theme infrastructure, one story per UI area, a refactor sweep, and an end-to-end check. It runs after epics 6 and 7, and 8.7 waits on it.
+- 2026-11-04: 8.3 fixes at `bf38783`, checked by the coordinator and approved. `GpuResetWarnings` withdraws `gpu-reset` on Recovered, and on give-up replaces it with `gpu-reset-failed` (with a default test). `TearDownLost` disposes each step under its own guard. `Retarget` builds the capture under the gate. Core 151 and Engine 178 passed; publish clean. slice-epic-8 is merging.
