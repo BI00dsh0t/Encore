@@ -3,14 +3,14 @@ title: 'Clips during a Recording on one encoder chain'
 type: 'feature'
 ticket: '5'
 created: '2026-11-03'
-status: 'ready-for-dev'
-baseline_revision: ''
+status: 'built'
+baseline_revision: '0795f8f20fab3c554a8340f121fea64791092c83'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
@@ -55,9 +55,9 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs` -- defer ChainKey changes while a Recording runs on the active session, drop a pending chain at a Recording's start, resolve again when it stops; log the deferral once via `Recordings.Info` -- AD-7 two-chain budget, FR-10.
-- [ ] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- one test for the matrix: a change mid-Recording prepares nothing and logs once, saves during it prepare nothing, the stop prepares it and the next save switches; one test for a change pending at the Recording's start (dropped, Recording starts, prepared again after the stop).
-- [ ] `tests/ReplayBuffer.Engine.Tests/RecordingCaptureTests.cs` -- give the rig optional `ReplayClips` (saves land in the events channel) and one Heavy test: start a Recording with a profile resolution change already pending (640×480 → 1280×720 committed + `SettingsUpdated` before the press), record 2 minutes with ten saves at seeded random times (respecting the Save Cooldown set to 0 and 2 writers), stop; then two saves. Assert: ten Clips during it, each decoding cleanly at 640×480 with all Tracks; the Recording is 640×480, its video packet PTS step is constant (no gap/duplicate/drop) and each audio Track's packet PTS is contiguous (no discontinuity); the second Clip after the stop is 1280×720.
+- [x] `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs` -- defer ChainKey changes while a Recording runs on the active session, drop a pending chain at a Recording's start, resolve again when it stops; log the deferral once via `Recordings.Info` -- AD-7 two-chain budget, FR-10.
+- [x] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` -- one test for the matrix: a change mid-Recording prepares nothing and logs once, saves during it prepare nothing, the stop prepares it and the next save switches; one test for a change pending at the Recording's start (dropped, Recording starts, prepared again after the stop).
+- [x] `tests/ReplayBuffer.Engine.Tests/RecordingCaptureTests.cs` -- give the rig optional `ReplayClips` (saves land in the events channel) and one Heavy test: start a Recording with a profile resolution change already pending (640×480 → 1280×720 committed + `SettingsUpdated` before the press), record 2 minutes with ten saves at seeded random times (respecting the Save Cooldown set to 0 and 2 writers), stop; then two saves. Assert: ten Clips during it, each decoding cleanly at 640×480 with all Tracks; the Recording is 640×480, its video packet PTS step is constant (no gap/duplicate/drop) and each audio Track's packet PTS is contiguous (no discontinuity); the second Clip after the stop is 1280×720.
 
 **Acceptance Criteria:**
 - Given a 2-minute Recording on the synthetic game window, when ten saves land at random times, then ten Clips decode cleanly and the Recording's frame stamps and audio show no gap, duplicate, drop or discontinuity.
@@ -66,9 +66,24 @@ deferred: []
 
 ## Implementation Notes
 
+- `ApplySettings` gains a Recording branch: a chain change while a Recording runs on the active session drops a prepared chain and logs once per Recording (`Active.Deferred`). `StartRecording` calls it after `write.Start` succeeds; `OnRecordingWritten` calls it again when the Recording's session is still active and no held Target switch is about to end it.
+- Core tests: `AChainChangeDuringARecordingWaitsForItsStopAndTheNextSaveSwitches` and `AChainPendingAtARecordingsStartIsDroppedAndPreparedAgainAfterItsStop`, sharing a small `ChainRecordingRig`.
+- Engine: `StartRecordingAsync(clips, pending)` takes optional `ReplayClips` and a pending document; Heavy `ClipsDuringARecordingLeaveItUnbrokenAndAChainChangeWaitsForItsStop` (2 min, ten saves in 12 s seeded slots, then two saves after the stop). The rig's Save Cooldown is 0.
+- Review fixes: `StartRecording` drops a pending chain directly, so a document that no longer resolves can't keep it alive; the stop doesn't prepare a chain when a held Target switch will end the session.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-03 — Review pass
+- verdicts: 6 findings — high 0, medium 1, low 4, false 0, maybe-false 1
+- findings:
+  - `[medium]` `[patch]` A pending chain isn't dropped at the Recording's start when `ApplySettings` returns early (a document whose Track Layout no longer resolves), so an idle second chain lives through the Recording — fixed: `StartRecording` clears `Pending` and calls `PrepareChain(null)` itself before `ApplySettings`.
+  - `[low]` `[patch]` The stop prepares a chain for a session a held Target switch ends right after — fixed: `OnRecordingWritten` skips the re-resolve while `_pendingTarget` is set.
+  - `[low]` `[reject]` Two Info lines (6.1's mismatch line and the deferral) at a press with a change pending — cosmetic; 6.1's line is still the only one without Replay Clips, so removing it loses information.
+  - `[low]` `[reject]` The Core tests' `SwitchesTo` assertions mirror the fake's `Prepares` — the `Prepares` sequence carries the orchestrator's behaviour, and 4.9's test covers `TakeSwitch`; lean tests.
+  - `[low]` `[reject]` The Heavy test doesn't observe the engine dropping the prepared chain — the Core tests prove the drop call, and `CaptureSession.PrepareChain(null)` is 4.9's tested path; lean tests.
+  - `[maybe-false]` `[reject]` The audio contiguity loop reads `duration` on every packet and could throw if ffprobe omitted it — the test passed twice on real output, so ffprobe emits it here; low if true (a test crash, not a false pass).
 
 ## Design Notes
 
@@ -82,3 +97,12 @@ Preparing again at the stop (not at the first Reset after it) is what makes the 
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- expected: all pass
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*ClipsDuringARecording*"` (under the GPU lock) -- expected: pass
 - `pwsh tools/publish-engine.ps1` -- expected: no IL or AOT warnings
+
+## Auto Run Result
+
+- **Summary:** While a Recording runs on the game session, the Replay Buffer keeps one encoder chain (AD-7): a ChainKey-changing settings change is not prepared, a chain prepared before the Record press is dropped at its start, and the deferral is logged once through `Recordings.Info`. When the Recording's writer posts back with its session still running (and no held Target switch), the settings are resolved again, so the first save after the stop switches to the new chain. A Heavy test proves Clips during a 2-minute Recording leave it unbroken (constant video PTS step, contiguous audio on every Track) and the chain change lands after the stop.
+- **Files:** `src/ReplayBuffer.Core/Sessions/SessionOrchestrator.cs` (deferral, drop at start, re-resolve at stop); `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` (two tests); `tests/ReplayBuffer.Engine.Tests/RecordingCaptureTests.cs` (rig with Replay Clips and a pending document; one Heavy test). No Contracts change.
+- **Review:** 6 findings: 2 patched (1 medium, 1 low), 4 rejected (3 low, 1 maybe-false; reasons in the triage log). None deferred.
+- **Follow-up review recommended:** false. One medium and no high were patched.
+- **Verification:** Release build 0 warnings; Core.Tests 111 passed; Engine.Tests default 167 passed, 24 explicit skipped; Heavy `ClipsDuringARecordingLeaveItUnbrokenAndAChainChangeWaitsForItsStop` passed (2m 13s, under the GPU lock, after the review fixes); `tools/publish-engine.ps1` published with no IL or AOT warnings.
+- **Residual risks:** the Heavy test waits a fixed 2 s after the stop for the new chain's build before the switching save, so a slow GPU could miss the switch. A Monitor Recording beside a game Recording isn't exercised until story 9.
