@@ -1,3 +1,14 @@
+---
+title: 'Tray menu, dialogs and Overlay messages'
+type: 'feature'
+ticket: '7'
+created: '2026-11-04'
+status: done
+baseline_revision: '9d8f588'
+risk: 'medium'
+context: ['{project-root}/CLAUDE.md', 'ux-modern-ui/DESIGN.md', 'ux-modern-ui/EXPERIENCE.md']
+---
+
 # Plan: 9.7 Tray menu, dialogs and Overlay messages
 
 **Ticket:** 9.7 (epic-modern-ui), R5 (tray, dialogs, Overlay) and R6. HITL, risk medium.
