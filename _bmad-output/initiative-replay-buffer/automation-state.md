@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 5.13 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with the capture-cost investigation |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.8 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.9 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 5.13 |
 
@@ -139,7 +139,7 @@ The coordinator logs each QA round in the Log below.
 | 27.6 | 6.6 One file however long, and forced encoder restarts | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `1cfccf0`) |
 | 27.7 | 6.7 Disk full during a Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `f144ae9`) |
 | 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ede89f7`) |
-| 27.9 | 6.9 Monitor Recording by its own Hotkey | | pending |
+| 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | | pending |
 | 27.11 | 6.11 Recordings settings in the Main App | | pending |
 | 27.12 | 6.12 Refactor sweep | | pending |
@@ -160,7 +160,7 @@ The coordinator logs each QA round in the Log below.
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
-| 29.2 | 8.2 Engine crash recovery and the restart warnings | | pending |
+| 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 29.3 | 8.3 GPU driver reset recovery | | pending |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
 | 29.5 | 8.5 Monitor changes | | pending |
@@ -589,3 +589,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.1 merged (`81261bb`, marked done), after one conflict with develop in `BenchOptions.cs` (the soak's usage and options beside 5.12's `--overlay-dot`; both kept). The scoped build (0 warnings), Bench (143) and Engine (171) tests and the publish passed after the sync. Left: the App's ~40 MB/h private-bytes climb, in the epic-hardening Notes for 8.8. slice-epic-4 returns to the pool.
 - 2026-11-04: 6.8 merged (`ede89f7`, marked done), after syncing with develop (clean; build 0 warnings, Core 125/125, Engine 170 passed, publish OK). Its Human Check Queue row and the restart-notice decision are on develop.
 - 2026-11-04: 5.13 (the epic 5 refactor sweep) is READY FOR QA at `1407cc8`. QA started on slice-epic-5 (Sonnet), checking the forward-hooks rule explicitly, and its card is In QA.
+- 2026-11-04: 8.1 merged (`81261bb`, marked done `bbee196`) and 6.8 merged (`ede89f7`). Both cards are Done, with 6.8's label detached. Newly ready: 6.9 went to qa-2-1 (Opus, medium effort) and 8.2 (high risk) to slice-epic-4 (Opus, high effort), both with cards In progress. 8.2's crash tests only kill the processes they start.
