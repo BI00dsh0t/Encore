@@ -39,7 +39,7 @@ internal sealed class OverlayViewModel : Observable
     private ITimer? _dotEnd;
     private DateTimeOffset _dotUntil;
     private (OverlayDot Dot, bool Muted) _steady;
-    private (int? ProcessId, bool? Planes)? _planes;
+    private (int? ProcessId, bool? Planes, DateTimeOffset At)? _planes;
     private ITimer? _messageEnd;
     private Warning? _shown;
     private Warning? _message;
@@ -103,6 +103,9 @@ internal sealed class OverlayViewModel : Observable
 
     /// <summary>How long the dot shows after each change when it doesn't show always.</summary>
     public static TimeSpan DotOnChangeDuration { get; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>How long an unknown answer to the overlay-plane query stands before it is asked again.</summary>
+    public static TimeSpan UnknownPlanesRetry { get; } = TimeSpan.FromSeconds(10);
 
     /// <summary>Whether the dot shows for as long as its state lasts, rather than on each change.</summary>
     public bool DotAlways { get; private set; } = true;
@@ -197,21 +200,36 @@ internal sealed class OverlayViewModel : Observable
             _dotEnd?.Dispose();
             _dotEnd = null;
             _dotUntil = now + DotOnChangeDuration;
-            if (dot != OverlayDot.None)
-            {
-                _dotEnd = _time.CreateTimer(_ => _post(Refresh), null, DotOnChangeDuration, Timeout.InfiniteTimeSpan);
-            }
         }
 
-        return DotAlways || now < _dotUntil ? (dot, muted) : (OverlayDot.None, false);
+        var shown = DotAlways || now < _dotUntil;
+
+        // A timer can fire a little before the clock reaches the end: arm again for what's left, so the dot
+        // never stays up until the next engine change.
+        if (!DotAlways && dot != OverlayDot.None && now < _dotUntil && _dotEnd is null)
+        {
+            _dotEnd = _time.CreateTimer(_ => _post(EndDot), null, _dotUntil - now, Timeout.InfiniteTimeSpan);
+        }
+
+        return shown ? (dot, muted) : (OverlayDot.None, false);
     }
 
-    // Asked once per Target Game, and again when the monitors change.
+    private void EndDot()
+    {
+        _dotEnd?.Dispose();
+        _dotEnd = null;
+        Refresh();
+    }
+
+    // Asked once per Target Game, and again when the monitors change; an unknown answer is asked again after
+    // UnknownPlanesRetry. The query takes about 13 ms cold and 0.4 ms warm on the builder's PC (5.15 QA), so
+    // it runs here on the UI thread, at most once per Target change.
     private bool? Planes(int? processId)
     {
-        if (_planes is not { } known || known.ProcessId != processId)
+        var now = _time.GetUtcNow();
+        if (_planes is not { } known || known.ProcessId != processId || (known.Planes is null && now - known.At >= UnknownPlanesRetry))
         {
-            known = (processId, _overlayPlanes(processId));
+            known = (processId, _overlayPlanes(processId), now);
             _planes = known;
         }
 

@@ -85,3 +85,10 @@ Watch the dot in each `overlayDot` mode over a borderless game, and confirm inde
   - NativeAOT publish: no IL warnings.
 - **Skipped:** Engine, Media, Platform.Audio, Platform.Capture, FFmpeg, Windows and Bench tests. Their code didn't change; Engine only re-resolves one more key through Core, which Core.Tests cover. No GPU run: the presentation-path check is the Human Check and story 5.12.
 - **Review:** no separate review pass in this session; QA reviews next.
+
+## Review Triage Log
+
+### 2026-11-04 — QA round 1 (FAIL, 2 findings)
+- `[patch]` The 3 s timer could leave the dot on if it fired before the clock reached the window's end. Fixed: `Present` re-arms for what's left whenever the window is open and no timer is pending. A test fires the timer 1 ms early.
+- `[patch]` (a) An unknown plane answer (null) was cached until a display or Target change. Fixed: null is asked again after `UnknownPlanesRetry` (10 s), with a test. (b) The query runs on the UI thread. Measured on the builder's PC: 13 ms on the first, cold call, then about 0.4 ms. It runs at most once per Target change, so it stays on the UI thread, as documented at `Planes`.
+- Re-verified: Release build 0 warnings; App.Tests 104 passed, 9 Heavy skipped. Only App code changed, so Contracts, Core, Platform.Desktop and the publish weren't re-run.

@@ -182,7 +182,16 @@ public sealed class OverlayTests
         time.Advance(OverlayViewModel.DotOnChangeDuration);
         Assert.Equal((OverlayDot.None, false), (model.Dot, model.MicMuted));
 
+        // A timer that fires before the clock reaches the end arms again for what's left.
+        Shift(engine, Buffering with { MicMuted = false });
+        time.Advance(OverlayViewModel.DotOnChangeDuration - TimeSpan.FromMilliseconds(1), clockLags: TimeSpan.FromMilliseconds(1));
+        Assert.Equal(OverlayDot.Hollow, model.Dot);
+        time.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.Equal(OverlayDot.None, model.Dot);
+
         // Unmuting is a change too.
+        Shift(engine, Buffering with { MicMuted = true });
+        time.Advance(OverlayViewModel.DotOnChangeDuration);
         Shift(engine, Buffering with { MicMuted = false });
         Assert.Equal(OverlayDot.Hollow, model.Dot);
         time.Advance(OverlayViewModel.DotOnChangeDuration);
@@ -231,6 +240,22 @@ public sealed class OverlayTests
         Assert.Equal(OverlayDot.Solid, model.Dot);
         time.Advance(OverlayViewModel.DotOnChangeDuration);
         Assert.Equal(OverlayDot.None, model.Dot);
+    }
+
+    [Fact]
+    public void AnUnknownPlaneAnswerIsAskedAgain()
+    {
+        var time = new ManualTime();
+        var engine = new FakeEngineSession();
+        bool? planes = null;
+        var model = new OverlayViewModel(engine, action => action(), time, overlayPlanes: _ => planes);
+        Shift(engine, Buffering);
+        Assert.True(model.DotAlways);
+
+        planes = false;
+        time.Advance(OverlayViewModel.UnknownPlanesRetry);
+        engine.RaiseChanged();
+        Assert.False(model.DotAlways);
     }
 
     [Fact]
@@ -465,10 +490,11 @@ public sealed class OverlayTests
             return timer;
         }
 
-        public void Advance(TimeSpan by)
+        /// <param name="clockLags">Fires the timers due by <c>by + clockLags</c>, as a timer that runs a little early does.</param>
+        public void Advance(TimeSpan by, TimeSpan clockLags = default)
         {
             _now += by;
-            foreach (var due in _timers.Where(t => t.DueAt <= _now).ToList())
+            foreach (var due in _timers.Where(t => t.DueAt <= _now + clockLags).ToList())
             {
                 _timers.Remove(due);
                 due.Fire();
