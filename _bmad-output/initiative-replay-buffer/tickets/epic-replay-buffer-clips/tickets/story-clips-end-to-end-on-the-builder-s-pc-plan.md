@@ -37,15 +37,17 @@ Run on 2026-11-04 in this worktree, Release, holding `.bench-running` for the GP
 | Injected Save press reaches the engine | `HotkeyServeTests.AnInjectedPressArrivesPromptlyAndIsLogged` (Heavy) | pass: 20 presses, 0.57–1.37 ms |
 | Disk ring Clip byte-identical to Memory ring Clip | `DiskRingClipTests` (Heavy) | pass |
 | Exact cut, two Clips meet with no frame missing or repeated | `ReplayCutTests` | pass |
-| Save, too-short, failed save and retry, kill drain | `ReplayClipCaptureTests` | pass (2) |
+| Save, too-short, failed save that retries with no Reset, kill drain | `ReplayClipCaptureTests` | pass (2) |
 | Rings, writer queue, clip claim, estimate, memory margin, Hotkey registration and rebind | `ReplayRingsTests`, `WriterQueueTests`, `ClipClaimTests`, `EstimatePublisherTests`, `MemoryMarginReporterTests`, `HotkeyServeTests` (default) | pass (16) |
 | Core (ring generations, cut, estimate, settings resolver, Memory vs Disk identity) | `ReplayBuffer.Core.Tests` | pass (110) |
 
 Totals: 134 passed, 0 failed. The App, Bench and other projects weren't run: the diff touches only `Engine.Tests`, and their epic-4 parts (the Settings pages) are view-model tests, already QA'd in 4.10–4.12.
 
+Covered by earlier stories, not rerun here: two Clips writing at once (4.4) and the file-being-written signal (4.5).
+
 Not run, left to the builder (with the reason):
 - A real game, real key presses, fullscreen focus, and saving with the Main App closed: these need a person at the console.
-- The ticket's ±20% CBR estimate on the live engine: 4.10 measured it on the 5-minute ring, and nothing here changed it.
+- The ticket's ±20% CBR estimate on the live engine: closed by 4.10's 5-minute CBR ring measurement (within 20 %); nothing here changed it, so it isn't on the checklist.
 - A real mic for the per-profile Mic Device and mute (4.11): there's no mic on the test instance.
 - VLC and DaVinci Resolve playback: VLC playback of a Clip is 4.1's queued check, and Resolve isn't installed.
 - The Settings pages by eye (4.10, 4.11, 4.12).
