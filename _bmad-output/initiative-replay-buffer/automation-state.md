@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with QA 4.13 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
@@ -545,3 +545,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 5.15 round 2 at `3569cbd`: **FAIL**. The timer re-arm is fixed, but finding 2 is only half fixed: the story re-asks after 10 s, yet a null answer still shows the dot always on, and the query still runs on the UI thread. **Coordinator ruling:** unknown or null means onChange until a definite true arrives, and the query runs off the UI thread. Round 3 follows.
 - 2026-11-04: 4.13 (the epic 4 refactor sweep) is READY FOR QA at `15043a9`. QA started on slice-epic-4 (Sonnet), and its card is In QA. qa-1-14 is free and holds for the 5.15 round-3 re-check.
 - 2026-11-04: 5.15 round 3 at `5d1a3d5`: the coordinator checked the diff itself: **PASS** (`DotAlways` needs `== true`, the query runs on `Task.Run` and posts back, an exception counts as unknown, a display-change generation drops stale answers, and a test covers it). 5.15 has been told to merge (Sonnet).
+- 2026-11-04: QA 4.13 at `15043a9`: **QA PASS**, 0 findings, behaviour-preserving. 4.13 has been told to merge (Sonnet), and slice-epic-4 is back in the pool. Next for epic 4 come 4.14 (the end-to-end check on the builder's PC, HITL) and then the v0.4.0 release. A 5.15 fix report went to qa-2-1 by mistake, and the sessions sorted it out.
