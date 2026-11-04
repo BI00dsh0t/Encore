@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.2 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 5.13 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with the capture-cost investigation |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.9 |
@@ -590,3 +590,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.8 merged (`ede89f7`, marked done), after syncing with develop (clean; build 0 warnings, Core 125/125, Engine 170 passed, publish OK). Its Human Check Queue row and the restart-notice decision are on develop.
 - 2026-11-04: 5.13 (the epic 5 refactor sweep) is READY FOR QA at `1407cc8`. QA started on slice-epic-5 (Sonnet), checking the forward-hooks rule explicitly, and its card is In QA.
 - 2026-11-04: 8.1 merged (`81261bb`, marked done `bbee196`) and 6.8 merged (`ede89f7`). Both cards are Done, with 6.8's label detached. Newly ready: 6.9 went to qa-2-1 (Opus, medium effort) and 8.2 (high risk) to slice-epic-4 (Opus, high effort), both with cards In progress. 8.2's crash tests only kill the processes they start.
+- 2026-11-04: QA 5.13 at `1407cc8`: **QA PASS**, 0 findings, no forward hooks removed. 5.13 has been told to merge (Sonnet). slice-epic-5 is back in the pool. After 5.13 come 5.14 (the epic 5 end-to-end check) and the v0.5.0 release.
