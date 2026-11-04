@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 8.3 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 6.13 |
@@ -163,7 +163,7 @@ The coordinator logs each QA round in the Log below.
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
-| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in QA (qa-1-14) |
+| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | QA passed, fixing 3 notes |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
 | 29.5 | 8.5 Monitor changes | | pending |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
@@ -650,3 +650,15 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.3 READY FOR QA at `2f5a69a` (18 files, about 1,670 lines; the Heavy simulated-reset test is written but not run because GPU tests are paused), and its card is In QA. QA went to qa-1-14 (Sonnet, high effort because the ticket is high risk; no Heavy runs and no TDR).
 - 2026-11-04: 6.12 merged (`c4a69ca`, marked done). Synced with develop first (7.11, the `e2e-test-instance-names` bugfix): no conflicts, 0-warning build, Contracts 122, Core 146, App 126 (17 skipped), Engine 176 (36 skipped). No Heavy runs. Skipped GPU runs: the Heavy Recording, Clip-during-Recording and Monitor Recording capture tests (to show they still write playable files after the sweep). Open items are in deferred-work.md with owners.
 - 2026-11-04: 6.12 merged (`c4a69ca`, marked done `1ae4c3a`), and its card is Done. slice-epic-4 is back in the pool. 6.13 (the epic 6 end-to-end check) went to story-2-7 (Opus, medium effort), with its card In progress. It does no capture at all: only the capture-free parts with a guarded Guid test instance, and one builder checklist. Once it merges, epic 6 is marked done and v0.6.0, then v0.7.0, are cut.
+- 2026-11-04: QA 8.3 passed at `2f5a69a` with 0 blocking findings.
+  - **Results:** 0-warning build. Contracts 121, Core 151, Engine 177, Platform.Capture 3 and Platform.FFmpeg 37 passed. Publish clean.
+  - **Architecture:** AD-19, AD-22 and AD-7 teardown order hold. Retries are bounded. Give-up is also checked when an attempt hangs.
+  - **Notes sent back to fix before merging:**
+    1. The gpu-reset warning isn't withdrawn after Recovered.
+    2. `TearDownLost` isn't exception-safe.
+    3. `Retarget` uses `_device` after releasing the gate.
+
+    The coordinator checks the fix diff.
+  - **Notes kept:** the Monitor recovery path has no engine-level test, even Heavy. Give-up ends the session and releases the pre-reset buffer, as the ticket says.
+  - **Not run (GPU tests paused):** the Heavy `AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile`, and a real forced TDR.
+  - **Back in the pool:** qa-1-14.
