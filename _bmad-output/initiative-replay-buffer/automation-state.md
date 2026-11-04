@@ -518,3 +518,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - 7.6 and 5.9 are resuming on their cut branches.
   - 5.11 was briefed on qa-1-14 (Opus, medium effort).
   - 2-1-tracer (Opus, medium effort, context kept from the research) parks its prototype on the research branch, adds the new "Adaptive Overlay dot" story to epic-overlay-feedback (after 8; stories 12 and 13 wait on it), then builds it.
+- 2026-11-04: QA 4.11 at `2fc9e93`: **QA FAIL**, 1 finding: the UI never says overrides apply at the next Reset. The build and App.Tests pass. The findings went to story-2-7 to fix; the round-2 re-check runs at low effort.
