@@ -37,9 +37,9 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.2 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.10 |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 6.10 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
@@ -161,7 +161,7 @@ The coordinator logs each QA round in the Log below.
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
 | 29.2 | 8.2 Engine crash recovery and the restart warnings | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `fb0ab27`) |
-| 29.3 | 8.3 GPU driver reset recovery | | pending |
+| 29.3 | 8.3 GPU driver reset recovery | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | in progress |
 | 29.4 | 8.4 Sleep, resume and the secure desktop | | pending |
 | 29.5 | 8.5 Monitor changes | | pending |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | | pending |
@@ -619,3 +619,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 8.2 at `0661665`: **QA PASS**, 0 findings and 3 notes. **The flake is identified:** `AKilledAppIsRelaunchedByTheEngine` failed at its 30 s pair-start wait, then passed 5/5 reruns. Per CLAUDE.md, supervision timeouts are Heavy, so 8.2 moves it to Heavy and Explicit (test attribute only) before merging. 8.2 has been told to merge (Sonnet). qa-1-14 is back in the pool. 8.2's merge unblocks 8.3 (GPU driver reset recovery; it also waits on 6.6, done, and 6.9, done).
 - 2026-11-04: 8.2 merged (`fb0ab27`, `feat(engine): merge 8.2-engine-crash-recovery`) and marked done. Contracts change is additive (`EngineCrashLoop`, `AppCrashLoop`, `CrashLoopGuard`, `SimulatedEvent.EngineHang`). `AKilledAppIsRelaunchedByTheEngine` moved to Heavy. QA's 3 notes are in the epic Notes; the tray crash-loop state is a Human Check for 8.11.
 - 2026-11-04: 6.10 is READY FOR QA at `e42c1bb`. QA started on qa-1-14 (Sonnet), and its card is In QA. 8.2 is merging, with the flake moved to Heavy.
+- 2026-11-04: 8.2 merged (`fb0ab27`, logged `f90fe71`). The flaky `AKilledAppIsRelaunchedByTheEngine` is now Heavy and Explicit, and QA's notes are in the epic Notes. Its card is Done with its label detached, and slice-epic-4 is back in the pool. 8.3 (GPU driver reset recovery, high risk, HITL) went to slice-epic-8 (Opus, high effort), with its card In progress. Device loss is simulated only, never a real TDR; the real reset goes to the Human Check Queue. It may wire 6.6's missing production restart trigger.
