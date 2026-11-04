@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -89,6 +90,12 @@ public sealed class ShellTests
 
                 var label = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromIndex(1);
                 Assert.False(label.IsEnabled || label.Focusable);
+                var peer = UIElementAutomationPeer.CreatePeerForElement(nav);
+                Assert.Equal(model.NavItems.Count - 1, peer.GetChildren().Count);
+                var general = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromIndex(2);
+                NavPress.SetIsPressed(general, true);
+                Assert.Equal(((SolidColorBrush)window.FindResource("SubtleFillColorTertiaryBrush")).Color, ((SolidColorBrush)general.Background).Color);
+                NavPress.SetIsPressed(general, false);
                 Assert.Equal(which == AppTheme.GamingDark ? "GENERAL" : "General", NavText(nav, model.General));
 
                 model.SelectedNavItem = model.NavItems.First(i => i.Page == model.General);

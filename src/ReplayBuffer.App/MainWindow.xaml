@@ -29,7 +29,7 @@
                             Content="{Binding Title, ElementName=Shell}"
                             DockPanel.Dock="Top"
                             Style="{DynamicResource RbBrandStyle}" />
-            <ListBox x:Name="Nav"
+            <app:NavListBox x:Name="Nav"
                      Padding="0"
                      AutomationProperties.Name="Navigation"
                      Background="Transparent"

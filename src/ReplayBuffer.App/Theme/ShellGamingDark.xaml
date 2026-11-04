@@ -51,6 +51,7 @@
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+        <Setter Property="theme:NavPress.Track" Value="True" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
         <Setter Property="FontSize" Value="13" />
@@ -83,6 +84,9 @@
                             <Setter Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" />
                             <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
                             <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="theme:NavPress.IsPressed" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
