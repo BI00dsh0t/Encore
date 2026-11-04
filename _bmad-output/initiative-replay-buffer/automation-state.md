@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with QA 4.11 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with overlay research |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; holds the uncommitted overlay prototype, so do not reuse until the builder decides |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 4.11 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -507,3 +507,8 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   - 7.6 (`feature/7.6-open-explorer-copy`) and 5.9 (`feature/5.9-capture-exclusion`) had just cut their branches, with no code yet.
   - 5.11 is Ready, but no brief was sent (qa-1-14 is cleared and retitled "5.11", unbriefed).
   - On resume: tell 6.5 to merge, rerun QA 4.11, re-send the 7.6 and 5.9 briefs, and brief 5.11.
+- 2026-11-04: Overlay research DONE: `research/overlay-presentation-options.md` on `feature/5.8-overlay-perf-research` at `cf48145` (not merged).
+  - **Finding:** this PC currently has no MPO overlay planes (dxdiag `MPO Caps: Not Supported`; `SupportsOverlays=False` on both outputs, 8 bpc SDR). So no Overlay window type can keep a borderless game in independent flip, and a DirectComposition rewrite wouldn't help.
+  - **Recommendation:** an adaptive dot, always shown where the game's output reports overlay planes and shown for 3 s on change where it doesn't, with an `overlayDot: auto|always|onChange` setting and the tray icon as an always-on cue. The fallback is the 3 s dot everywhere.
+  - Experiments E1 to E5 are proposed, not run. E1 is the builder's: find why MPO is off (second monitor, RTX HDR, VSR or NIS, overlay apps).
+  - A Bench prototype (the probe and the overlay kinds) is left uncommitted in 2-1-tracer's worktree. Still paused, awaiting the builder's decision.
