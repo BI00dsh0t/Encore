@@ -51,6 +51,7 @@ public static class SettingsResolver
             ManualGames = Get(Keys.ManualGames),
             StartWithWindows = Get(Keys.StartWithWindows),
             OverlayDot = Get(Keys.OverlayDot),
+            AppTheme = Get(Keys.AppTheme),
         };
     }
 

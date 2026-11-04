@@ -9,6 +9,7 @@ using System.Windows.Media;
 using H.NotifyIcon;
 using ReplayBuffer.App.Engine;
 using ReplayBuffer.App.Overlay;
+using ReplayBuffer.App.Theme;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Platform.Desktop;
 
@@ -32,6 +33,9 @@ internal sealed class ShellApp(Instance instance) : Application
     /// <summary>The tray menu's Restart item, shown only in <see cref="EngineStatus.CrashLoop"/>.</summary>
     public const string RestartItemName = "RestartItem";
 
+    /// <summary>The tray menu's Control gallery item, which only dev and test instances have.</summary>
+    public const string GalleryItemName = "GalleryItem";
+
     /// <summary>How long Quit waits for the engine to exit, so a pending save can finish (AD-16).</summary>
     private static readonly TimeSpan QuitTimeout = TimeSpan.FromSeconds(5);
 
@@ -39,6 +43,8 @@ internal sealed class ShellApp(Instance instance) : Application
     private StartupRegistration? _startup;
     private MainWindow? _window;
     private OverlayWindow? _overlay;
+    private ControlGallery? _gallery;
+    private ThemeService? _theme;
     private TaskbarIcon? _tray;
     private MenuItem? _restartItem;
     private IDisposable? _captureExclusion;
@@ -54,6 +60,12 @@ internal sealed class ShellApp(Instance instance) : Application
         _captureExclusion = CaptureExclusion.ExcludeNewWindows();
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // AD-23: the theme is in place before the first window shows. The engine's settings come later, so
+        // the start uses the theme last applied, and each settings.changed applies the committed one.
+        _theme = ThemeService.ForApplication(this);
+        ThemeService.Current = _theme;
+        _theme.Apply(ThemeService.ReadLast(ThemeFile));
 
         _engine = new EngineConnection(new EngineConnectionOptions
         {
@@ -74,6 +86,7 @@ internal sealed class ShellApp(Instance instance) : Application
             RunKey.Startup,
             Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ReplayBuffer.App.exe"));
         _engine.Changed += () => Dispatcher.BeginInvoke(SyncStartup);
+        _theme.Follow(_engine, action => Dispatcher.BeginInvoke(action), theme => ThemeService.WriteLast(ThemeFile, theme));
         var model = new MainViewModel(
             _engine,
             action => Dispatcher.BeginInvoke(action),
@@ -147,8 +160,9 @@ internal sealed class ShellApp(Instance instance) : Application
     /// <summary>
     /// The tray's menu: Open, Start with Windows and Quit (epic Decision, 2026-10-25), and a hidden
     /// Restart item, named <see cref="RestartItemName"/>, shown only while the engine is in a crash loop.
+    /// With <paramref name="gallery"/>, which dev and test instances pass, it has a Control gallery item too.
     /// </summary>
-    internal static ContextMenu CreateTrayMenu(MainViewModel model, Action open, Action quit, Action? restart = null)
+    internal static ContextMenu CreateTrayMenu(MainViewModel model, Action open, Action quit, Action? restart = null, Action? gallery = null)
     {
         var restartItem = new MenuItem { Header = "Restart", Name = RestartItemName, Visibility = Visibility.Collapsed };
         restartItem.Click += (_, _) => restart?.Invoke();
@@ -164,7 +178,16 @@ internal sealed class ShellApp(Instance instance) : Application
         var quitItem = new MenuItem { Header = "Quit" };
         quitItem.Click += (_, _) => quit();
 
-        var menu = new ContextMenu { Items = { restartItem, openItem, startWithWindows, new Separator(), quitItem } };
+        var menu = new ContextMenu { Items = { restartItem, openItem, startWithWindows } };
+        if (gallery is not null)
+        {
+            var galleryItem = new MenuItem { Header = "Control gallery", Name = GalleryItemName };
+            galleryItem.Click += (_, _) => gallery();
+            menu.Items.Add(galleryItem);
+        }
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(quitItem);
 
         // The menu is a popup with a window of its own; exclude it as soon as it has one (AD-15).
         PresentationSource.AddSourceChangedHandler(menu, (_, e) =>
@@ -181,6 +204,20 @@ internal sealed class ShellApp(Instance instance) : Application
     internal static void ShowCrashLoop(MenuItem restartItem, bool crashLoop) =>
         restartItem.Visibility = crashLoop ? Visibility.Visible : Visibility.Collapsed;
 
+    private string ThemeFile => Path.Combine(instance.LocalDataFolder, "app-theme.json");
+
+    private void OpenGallery()
+    {
+        if (_gallery is null)
+        {
+            _gallery = new ControlGallery();
+            _gallery.Closed += (_, _) => _gallery = null;
+        }
+
+        _gallery.Show();
+        _gallery.Activate();
+    }
+
     private void SyncStartup()
     {
         if (_engine?.State?.Settings is { } settings)
@@ -191,7 +228,12 @@ internal sealed class ShellApp(Instance instance) : Application
 
     private TaskbarIcon CreateTray(MainViewModel model, string title)
     {
-        var menu = CreateTrayMenu(model, () => _window!.Open(), async () => await QuitAsync(), () => _engine!.RestartAfterCrashLoop());
+        var menu = CreateTrayMenu(
+            model,
+            () => _window!.Open(),
+            async () => await QuitAsync(),
+            () => _engine!.RestartAfterCrashLoop(),
+            instance.Name != Instance.InstalledName ? OpenGallery : null);
         _restartItem = menu.Items.OfType<MenuItem>().Single(i => i.Name == RestartItemName);
         var tray = new TaskbarIcon
         {
@@ -253,6 +295,7 @@ internal sealed class ShellApp(Instance instance) : Application
         await _engine.DisposeAsync();
         _tray!.Dispose();
         _overlay!.Close();
+        _gallery?.Close();
         _window!.CloseForQuit();
         _captureExclusion?.Dispose();
         Shutdown();

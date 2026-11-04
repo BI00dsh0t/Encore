@@ -73,6 +73,9 @@ internal sealed record EngineHostOptions
     /// </summary>
     public IFeedbackSoundOutput? FeedbackSounds { get; init; }
 
+    /// <summary>The PC's sleep and resume (T-02); <c>null</c> for Windows' suspend and resume notifications.</summary>
+    public IPowerNotifications? Power { get; init; }
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
@@ -500,7 +503,8 @@ internal sealed class EngineHost : IAsyncDisposable
                             warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay: true);
                         })
                     : null,
-                new GpuResetWarnings(warnings, clipLog).Recovery);
+                new GpuResetWarnings(warnings, clipLog).Recovery,
+                hostOptions.Power ?? new SuspendResumeNotifications(loggers.CreateLogger<SuspendResumeNotifications>()));
 
             Volatile.Write(ref settingsTo, sessions);
 
