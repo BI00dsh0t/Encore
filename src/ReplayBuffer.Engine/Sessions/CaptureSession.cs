@@ -156,7 +156,14 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// (<see cref="RestartChain"/>, R4) tears the current chain down on a thread of its own and rebuilds
 /// the same spec into a new generation of the same ring, dropping the frames captured meanwhile;
 /// the Recording on the old chain ends at its last packet once the orchestrator has been told
-/// (<see cref="ISessionEvents.ChainRestarted"/>), and a failed rebuild fails the session.
+/// (<see cref="ISessionEvents.ChainRestarted"/>), and a failed rebuild fails the session. A switch
+/// at a Reset (<see cref="SwitchChain"/>, while a Monitor Recording holds the third chain) reuses
+/// that machinery with the new spec, into a fresh ring, and raises the gap as
+/// <see cref="CaptureSessionOptions.ResetGap"/>. A <see cref="SessionKind.Monitor"/> session (6.9)
+/// captures the monitor its snapshot's <c>monitorRecordingMonitor</c> names (else the primary one,
+/// <see cref="MonitorFinder"/>) on a device of that monitor's adapter, holds no Replay Buffer and
+/// writes no file of its own: its chain feeds only the Recording <see cref="Record"/> attaches. Its
+/// anchor is posted (<see cref="ISessionEvents.Anchored"/>) so the orchestrator can start it.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -179,6 +186,7 @@ internal sealed class CaptureSession : ICaptureSession
     private readonly Timer _firstFrameTimer;
 
     private WindowInfo? _window;
+    private MonitorInfo? _monitor;
     private string? _path;
     private D3D11Device? _device;
     private WindowCapture? _capture;
@@ -251,8 +259,17 @@ internal sealed class CaptureSession : ICaptureSession
         // Before anything is opened: the first codec use may run the probe.
         var (encoder, codec) = ResolveEncoder(_spec);
         var target = _spec.Target;
-        _window = WindowFinder.FromHandle(target.Window);
-        if (!_options.Replay)
+        if (IsMonitor)
+        {
+            _monitor = MonitorFinder.Find(_spec.Snapshot.MonitorRecordingMonitor, _log);
+            _log.LogInformation("Monitor capture of {Device}", _monitor.DeviceName);
+        }
+        else
+        {
+            _window = WindowFinder.FromHandle(target.Window);
+        }
+
+        if (!_options.Replay && !IsMonitor)
         {
             _path = _options.OutputPath is { } explicitPath
                 ? Path.GetFullPath(explicitPath)
@@ -260,7 +277,9 @@ internal sealed class CaptureSession : ICaptureSession
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         }
 
-        _device = D3D11Device.Create(target.Window, _loggers.CreateLogger<D3D11Device>());
+        _device = _monitor is { } monitor
+            ? D3D11Device.CreateForMonitor(monitor.Handle, _loggers.CreateLogger<D3D11Device>())
+            : D3D11Device.Create(target.Window, _loggers.CreateLogger<D3D11Device>());
         if (_options.GpuPriority is { } priority)
         {
             SetGpuPriority(priority);
@@ -290,8 +309,19 @@ internal sealed class CaptureSession : ICaptureSession
         capture.Start();
     }
 
+    /// <summary>Whether this is the Monitor session (6.9), not a game window's.</summary>
+    private bool IsMonitor => _spec.Kind == SessionKind.Monitor;
+
+    /// <summary>Whether it holds a Replay Buffer: Replay mode, and not the Monitor session.</summary>
+    private bool HasRing => _options.Replay && !IsMonitor;
+
     public void Retarget(CaptureTarget target)
     {
+        if (IsMonitor)
+        {
+            throw new InvalidOperationException("A Monitor session captures a monitor; it can't be retargeted.");
+        }
+
         // The caller's pid is not trusted: the window itself must belong to the session's process.
         var window = WindowFinder.FromHandle(target.Window);
         if (window is null || (int)window.ProcessId != target.ProcessId)
@@ -414,7 +444,11 @@ internal sealed class CaptureSession : ICaptureSession
         if (_failure is null)
         {
             var seconds = (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency;
-            if (_path is null && _keepRing)
+            if (IsMonitor)
+            {
+                _log.LogInformation("Monitor capture of {Seconds:0.0} s ended", seconds);
+            }
+            else if (_path is null && _keepRing)
             {
                 _log.LogInformation("Draining: buffered {Seconds:0.0} s; the Replay Buffer is kept for saves until the drain is released", seconds);
             }
@@ -437,7 +471,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// </summary>
     public SessionOutcome Drain(string reason)
     {
-        _keepRing = _options.Replay;
+        _keepRing = HasRing;
         return End(reason);
     }
 
@@ -488,7 +522,7 @@ internal sealed class CaptureSession : ICaptureSession
     public IClipWrite? Save(long qpc)
     {
         // The anchor's release write publishes the chain's ring and encoder.
-        if (!_options.Replay || _released || !Volatile.Read(ref _anchored))
+        if (!HasRing || _released || !Volatile.Read(ref _anchored))
         {
             return null;
         }
@@ -517,15 +551,15 @@ internal sealed class CaptureSession : ICaptureSession
     }
 
     /// <summary>
-    /// In Replay mode, once the output is open and while it runs: a Recording from
-    /// <paramref name="qpc"/> on the current chain's encoders, through its tap; null once drained or
-    /// released, before the anchor, while a Recording is attached, while a chain switch is armed, or
-    /// while a forced restart rebuilds the chain.
+    /// In Replay mode, or in the Monitor session, once the output is open and while it runs: a
+    /// Recording from <paramref name="qpc"/> on the current chain's encoders, through its tap; null
+    /// once drained or released, before the anchor, while a Recording is attached, while a chain
+    /// switch is armed, or while a forced restart rebuilds the chain.
     /// </summary>
     public IRecordingWrite? Record(long qpc)
     {
         // The anchor's release write publishes the tap and the encoder.
-        if (!_options.Replay || _released || _outputFinished || !Volatile.Read(ref _anchored))
+        if ((!_options.Replay && !IsMonitor) || _released || _outputFinished || !Volatile.Read(ref _anchored))
         {
             return null;
         }
@@ -559,7 +593,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// </summary>
     public void PrepareChain(SessionSpec? next)
     {
-        if (!_options.Replay)
+        if (!HasRing)
         {
             return;
         }
@@ -620,7 +654,7 @@ internal sealed class CaptureSession : ICaptureSession
         {
             lock (_chainLock)
             {
-                if (!_options.Replay || !Volatile.Read(ref _anchored) || _stopped || _outputFinished || _keepRing || _chainsClosed
+                if (!HasRing || !Volatile.Read(ref _anchored) || _stopped || _outputFinished || _keepRing || _chainsClosed
                     || _armed is not null || _retiring is not null || _restarting || _current is not { IsBuilt: true, IsDisposed: false } old)
                 {
                     _log.LogInformation("The encoder restart ({Reason}) was refused: the session isn't live, or a chain switch or restart is running", reason);
@@ -636,8 +670,76 @@ internal sealed class CaptureSession : ICaptureSession
         return true;
     }
 
-    /// <summary><see cref="RestartChain"/>'s work, on its own thread.</summary>
-    private void Restart(EncoderChain old, string reason)
+    /// <summary>
+    /// The live encoder chains (AD-7): the current one, one armed, one replaced and still fed, one
+    /// prepared, and one being built or rebuilt. Chains already being torn down don't count.
+    /// </summary>
+    public int Chains
+    {
+        get
+        {
+            lock (_chainLock)
+            {
+                var chains = 0;
+                foreach (var chain in new[] { _current, _armed, _retiring, _prepared })
+                {
+                    if (chain is { IsDisposed: false })
+                    {
+                        chains++;
+                    }
+                }
+
+                return chains + (_building || _restarting ? 1 : 0);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Switches to <paramref name="next"/>'s chain at a Reset, tearing the current one down first
+    /// (AD-7, while a Monitor Recording holds a chain): <see cref="RestartChain"/>'s machinery on a
+    /// thread of its own, but the new chain is <paramref name="next"/>'s, into a fresh ring (the old
+    /// one goes with its chain, a save still writing keeping its lease), the frames captured meanwhile
+    /// dropped, no <see cref="ISessionEvents.ChainRestarted"/> posted, and the gap from the Reset to
+    /// its first keyframe raised as <see cref="CaptureSessionOptions.ResetGap"/>. Refused, with false,
+    /// on the same terms as a restart, and also while a chain is prepared, built or torn down, or a
+    /// Recording is attached. Orchestrator thread; never blocks on the build.
+    /// </summary>
+    public bool SwitchChain(SessionSpec next)
+    {
+        ArgumentNullException.ThrowIfNull(next);
+        lock (_gate)
+        {
+            lock (_chainLock)
+            {
+                if (!HasRing || !Volatile.Read(ref _anchored) || _stopped || _outputFinished || _keepRing || _chainsClosed
+                    || _armed is not null || _retiring is not null || _restarting || _prepared is not null || _building || _tearingDown > 0
+                    || _current is not { IsBuilt: true, IsDisposed: false, Tap.HasWriter: false } old)
+                {
+                    _log.LogInformation("The encoder chain switch at the Reset was refused: the session isn't live, or a chain is being built, switched or recorded from; it is retried at the next Reset");
+                    return false;
+                }
+
+                if (ChainKey.SameChain(next, old.Spec))
+                {
+                    return true;
+                }
+
+                _wanted = null;
+                _restarting = true;
+                _restartThread = new Thread(() => Restart(old, "settings changed while a Monitor Recording runs", next)) { Name = "Encoder chain switch", IsBackground = true };
+                _restartThread.Start();
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// <see cref="RestartChain"/>'s work, on its own thread; with <paramref name="switchTo"/>,
+    /// <see cref="SwitchChain"/>'s: that spec's chain in a fresh ring, the old ring disposed with
+    /// its chain, and the gap raised instead of the restart posted.
+    /// </summary>
+    private void Restart(EncoderChain old, string reason, SessionSpec? switchTo = null)
     {
         var began = Stopwatch.GetTimestamp();
         lock (_gate)
@@ -684,15 +786,27 @@ internal sealed class CaptureSession : ICaptureSession
                 Thread.Sleep(10);
             }
 
-            old.Dispose(keepRing: true);
+            // A switch's new chain takes a fresh ring: the old one goes with its chain.
+            old.Dispose(keepRing: switchTo is null);
             if (_options.RestartFault?.Invoke() is { } fault)
             {
                 throw fault;
             }
 
-            next = new EncoderChain(old.Spec, old.EncoderName, old.Codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
-            next.Subscribe();
-            next.Build(_anchorQpc, first: false, latency: null, restartOf: old.Ring, window: old.WindowSeconds);
+            if (switchTo is not null)
+            {
+                var (encoder, codec) = ResolveEncoder(switchTo);
+                next = new EncoderChain(switchTo, encoder, codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
+                next.Subscribe();
+                next.Build(_anchorQpc, first: false, latency: null);
+            }
+            else
+            {
+                next = new EncoderChain(old.Spec, old.EncoderName, old.Codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
+                next.Subscribe();
+                next.Build(_anchorQpc, first: false, latency: null, restartOf: old.Ring, window: old.WindowSeconds);
+            }
+
             var now = Stopwatch.GetTimestamp();
             next.StartAudio(now);
             lock (_gate)
@@ -702,8 +816,21 @@ internal sealed class CaptureSession : ICaptureSession
                     _current = next;
                     installed = true;
                     _restarting = false;
+                    if (next.Fps != old.Fps)
+                    {
+                        _capture?.SetFps(next.Fps);
+                    }
+
                     StartBuildLocked();
                 }
+            }
+
+            if (switchTo is not null)
+            {
+                _log.LogInformation("The encoder chain switched at the Reset in {Ms:0} ms, torn down first: {Size}, {Tracks} Tracks from here on",
+                    (now - began) * 1000.0 / _qpcFrequency, next.OutputSize, switchTo.Audio.Tracks.Count);
+                ReportSwitchGap(next);
+                return;
             }
 
             _log.LogInformation("The encoder chain restarted in {Ms:0} ms; the frames captured meanwhile were dropped", (now - began) * 1000.0 / _qpcFrequency);
@@ -715,7 +842,10 @@ internal sealed class CaptureSession : ICaptureSession
             if (!installed)
             {
                 next?.Dispose();
-                old.Ring?.Dispose();
+                if (switchTo is null)
+                {
+                    old.Ring?.Dispose();
+                }
             }
 
             _log.LogError("The encoder restart ({Reason}) failed: {Message}", reason, e.Message);
@@ -768,7 +898,9 @@ internal sealed class CaptureSession : ICaptureSession
             fps = _current?.Fps ?? _spec.Snapshot.Video.Fps;
         }
 
-        var capture = new WindowCapture(_device!, window, fps, OnFrame, _loggers.CreateLogger<WindowCapture>());
+        var capture = _monitor is { } monitor
+            ? WindowCapture.ForMonitor(_device!, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<WindowCapture>())
+            : new WindowCapture(_device!, window, fps, OnFrame, _loggers.CreateLogger<WindowCapture>());
         capture.Closed += () => OnClosed(capture);
         capture.Failed += Fail;
         return capture;
@@ -878,6 +1010,9 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         _options.Anchored?.Invoke(anchorQpc);
+
+        // Only posts: Record can succeed from here.
+        _events.Anchored(anchorQpc);
     }
 
     /// <summary>
@@ -1048,6 +1183,39 @@ internal sealed class CaptureSession : ICaptureSession
         var message = first == long.MaxValue
             ? $"The Replay Buffer's new encoder chain had no frame {(MicrosAt(Stopwatch.GetTimestamp()) - end) / 1000} ms after the last Clip's end; the next Clip starts at its first frame."
             : $"The Replay Buffer's new encoder chain started {(first - end) / 1000} ms after the last Clip's end; the next Clip starts that much later.";
+        _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
+        _options.ResetGap?.Invoke(message);
+    }
+
+    /// <summary>
+    /// After a switch at a Reset (<see cref="SwitchChain"/>): waits up to <see cref="SaveWait"/> for
+    /// <paramref name="next"/>'s first keyframe, and raises <c>reset-gap</c> with the gap from the
+    /// last Reset to it (the frames captured while the old chain was torn down and the new one built
+    /// are in no Clip).
+    /// </summary>
+    private void ReportSwitchGap(EncoderChain next)
+    {
+        if (next.Ring is not { } ring)
+        {
+            return;
+        }
+
+        var deadline = Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * _qpcFrequency);
+        while (ring.FirstKeyUs == long.MaxValue && !_chainsClosed && !_outputFinished && Stopwatch.GetTimestamp() < deadline)
+        {
+            Thread.Sleep(10);
+        }
+
+        if (_chainsClosed || _outputFinished)
+        {
+            return;
+        }
+
+        var reset = Volatile.Read(ref _resetUs);
+        var first = ring.FirstKeyUs;
+        var message = first == long.MaxValue
+            ? "The Replay Buffer switched to its new encoder chain at the Reset, tearing the old one down first while a Monitor Recording runs; no frame came within 1 s, so the next Clip starts at its first frame."
+            : $"The Replay Buffer switched to its new encoder chain at the Reset, tearing the old one down first while a Monitor Recording runs; the next Clip starts {(reset == long.MinValue ? 0 : Math.Max(0, first - reset)) / 1000} ms after the last Clip's end.";
         _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
         _options.ResetGap?.Invoke(message);
     }

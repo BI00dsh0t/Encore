@@ -129,6 +129,19 @@ public sealed record ReplayClips(
 /// How often a Replay Buffer a full disk stopped checks whether its ring fits again; null is
 /// <see cref="DefaultRingRecheck"/>.
 /// </param>
+/// <param name="MonitorStarted">
+/// Called on the orchestrator thread once a Monitor Recording has started (6.9); null calls
+/// <paramref name="Started"/> instead.
+/// </param>
+/// <param name="MonitorStopped">
+/// Called on the orchestrator thread once a Monitor Recording's writer has finished; null calls
+/// <paramref name="Stopped"/> instead.
+/// </param>
+/// <param name="Warn">
+/// Called on the orchestrator thread with a warning code (<see cref="Contracts.ErrorCodes"/>) and
+/// its message when a press was refused for a reason the user should see, such as
+/// <see cref="Contracts.ErrorCodes.EncoderBudget"/>; null ignores it.
+/// </param>
 public sealed record Recordings(
     OutputPathAllocator Paths,
     Func<string> DefaultOutputFolder,
@@ -142,7 +155,10 @@ public sealed record Recordings(
     Action? DiskFull = null,
     Func<EffectiveSettings, bool>? RingFits = null,
     Action<bool>? ReplayDiskFull = null,
-    TimeSpan? RingRecheck = null)
+    TimeSpan? RingRecheck = null,
+    Action<RecordingStarted>? MonitorStarted = null,
+    Action<RecordingStopped>? MonitorStopped = null,
+    Action<string, string>? Warn = null)
 {
     /// <summary>How often a Replay Buffer a full disk stopped checks for room for its ring by default.</summary>
     public static readonly TimeSpan DefaultRingRecheck = TimeSpan.FromSeconds(30);

@@ -85,6 +85,24 @@ public interface ICaptureSession
     /// orchestrator thread; never blocks.
     /// </summary>
     IRecordingWrite? Record(long qpc) => null;
+
+    /// <summary>
+    /// How many encoder chains the session runs now (AD-7): its current one, one armed or prepared
+    /// for a switch, and one being built; a chain already being torn down doesn't count. Called on
+    /// the orchestrator thread; never blocks.
+    /// </summary>
+    int Chains => 1;
+
+    /// <summary>
+    /// Switches the session to <paramref name="next"/>'s encoder chain at a Reset, tearing the
+    /// current one down before the new one is built, so it never runs two (AD-7, while a Monitor
+    /// Recording holds the third): the Replay Buffer starts empty on the new chain, and the gap
+    /// between the chains is raised as <see cref="Contracts.ErrorCodes.ResetGap"/>. False when the
+    /// session can't switch now (no Replay Buffer, a write or Recording on the chain, or a switch
+    /// already under way); the caller retries at the next Reset. Called on the orchestrator thread
+    /// just after a Reset; never blocks.
+    /// </summary>
+    bool SwitchChain(SessionSpec next) => false;
 }
 
 /// <summary>A Recording a session can write (R2): one fragmented MP4 from the session's encoders.</summary>
@@ -183,6 +201,14 @@ public interface ISessionEvents
     /// are the new chain's. A Recording that ran on the old chain has ended at its last packet.
     /// </summary>
     void ChainRestarted(long qpc)
+    {
+    }
+
+    /// <summary>
+    /// The session's output anchored at its first frame, at <paramref name="qpc"/>: from now on
+    /// <see cref="ICaptureSession.Record"/> can succeed.
+    /// </summary>
+    void Anchored(long qpc)
     {
     }
 }

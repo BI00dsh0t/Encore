@@ -71,14 +71,14 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] Contracts (`SettingValues.cs`, `Keys.cs`, `ErrorCodes.cs`) -- the additive actions, bindings and `encoder-budget`.
-- [ ] `HotkeyPlan.cs`, `HotkeysPage.cs` -- mode gating; labels "Monitor Recording (start)"/"(stop)" and bindings.
-- [ ] `CaptureSessionPorts.cs`, `TargetGames.cs` (`Recordings`), `OutputPathAllocator.cs` -- ports and the Monitor path.
-- [ ] `SessionOrchestrator.cs` -- the Monitor slot per the matrix: press handling (live mode), start (budget check after dropping a prepared chain; Global snapshot; `SessionAudio.FromLayout`; `CaptureTarget(0, 0, null)`), Recording at `Anchored`, stop, post-back, session end, Closed/Failed, mic mute, shutdown; `ApplySettings`/`OnClipWritten` switch-at-Reset while it runs; update the class doc.
-- [ ] `FeedbackRouter.cs` -- Monitor start/stop methods.
-- [ ] Engine: `CaptureSession.cs`, `EncoderChain.cs`, `NullPacketSink`, `WindowCapture.cs` monitor item, `D3D11Device.cs` overload, `MonitorFinder`, `EngineHost.cs` wiring.
-- [ ] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` (+ a small `MonitorRecording…` section or file) -- one test each: toggle with no game writes in `Monitor Recordings` with Global audio and `MonitorRecording` Running→Off; beside a game Recording, a Target switch neither stops nor waits for it; separate mode Start/Stop; third chain refused with `encoder-budget`; ChainKey change during Monitor → `SwitchChain` at the Reset, never `PrepareChain(next)`; disk full stops it with `DiskFull`; Open/Closed called (crash path). `HotkeyPlan` mode test; `FeedbackRouter` Monitor notices test; Contracts round-trip of old `hotkeys` JSON.
-- [ ] `tests/ReplayBuffer.Engine.Tests/MonitorRecordingCaptureTests.cs` -- Heavy/Explicit: a toggle with no game writes a file that ffprobe reads with every Global Track; a monitor capture with a full-screen magenta window marked `WDA_EXCLUDEFROMCAPTURE` has no magenta; a Monitor Recording beside a game Recording on the synthetic window runs two chains.
+- [x] Contracts (`SettingValues.cs`, `Keys.cs`, `ErrorCodes.cs`) -- the additive actions, bindings and `encoder-budget`.
+- [x] `HotkeyPlan.cs`, `HotkeysPage.cs` -- mode gating; labels "Monitor Recording (start)"/"(stop)" and bindings.
+- [x] `CaptureSessionPorts.cs`, `TargetGames.cs` (`Recordings`), `OutputPathAllocator.cs` -- ports and the Monitor path.
+- [x] `SessionOrchestrator.cs` -- the Monitor slot per the matrix: press handling (live mode), start (budget check after dropping a prepared chain; Global snapshot; `SessionAudio.FromLayout`; `CaptureTarget(0, 0, null)`), Recording at `Anchored`, stop, post-back, session end, Closed/Failed, mic mute, shutdown; `ApplySettings`/`OnClipWritten` switch-at-Reset while it runs; update the class doc.
+- [x] `FeedbackRouter.cs` -- Monitor start/stop methods.
+- [x] Engine: `CaptureSession.cs`, `EncoderChain.cs`, `NullPacketSink`, `WindowCapture.cs` monitor item, `D3D11Device.cs` overload, `MonitorFinder`, `EngineHost.cs` wiring.
+- [x] `tests/ReplayBuffer.Core.Tests/SessionOrchestratorTests.cs` (+ a small `MonitorRecording…` section or file) -- one test each: toggle with no game writes in `Monitor Recordings` with Global audio and `MonitorRecording` Running→Off; beside a game Recording, a Target switch neither stops nor waits for it; separate mode Start/Stop; third chain refused with `encoder-budget`; ChainKey change during Monitor → `SwitchChain` at the Reset, never `PrepareChain(next)`; disk full stops it with `DiskFull`; Open/Closed called (crash path). `HotkeyPlan` mode test; `FeedbackRouter` Monitor notices test; Contracts round-trip of old `hotkeys` JSON.
+- [x] `tests/ReplayBuffer.Engine.Tests/MonitorRecordingCaptureTests.cs` -- Heavy/Explicit: a toggle with no game writes a file that ffprobe reads with every Global Track; a monitor capture with a full-screen magenta window marked `WDA_EXCLUDEFROMCAPTURE` has no magenta; a Monitor Recording beside a game Recording on the synthetic window runs two chains.
 
 **Acceptance Criteria:**
 - Given no game, when the Monitor Record toggle is pressed twice, then a playable file in `Monitor Recordings` holds video and every Global Track, and `capture.stateChanged` reported `monitorRecording` running between.
@@ -89,6 +89,12 @@ deferred: []
 - Given the Main App and Overlay open, when the monitor is recorded, then none of their pixels appear (5.9's `WDA_EXCLUDEFROMCAPTURE`; builder check in the Human Check Queue).
 
 ## Implementation Notes
+
+- `CaptureState.MonitorRecording` goes Running at the press (the Monitor session's start), not at the anchor; `recording.started` follows at the anchor. A stop before the anchor ends the session with no file and no events.
+- The encoder budget is `SessionOrchestrator.MaxChains = 2`: a Monitor press is refused when the game session's `Chains + 1` exceeds it, after dropping a prepared chain.
+- `CaptureSession.Chains` counts `_retiring` too (as the plan lists), so a press within the moment after a save switch can be refused; harmless, retryable.
+- `SwitchChain` reuses `Restart` with the new spec into a fresh ring (old ring disposed with its chain) and always raises `reset-gap` with the gap from the last Reset to the new chain's first keyframe. A failed rebuild fails the session, as a failed forced restart does.
+- A failed Monitor session (`Failed`) stops its Recording as `session-ended`; a writer error, if any, gives its own reason.
 
 ## Plan Change Log
 

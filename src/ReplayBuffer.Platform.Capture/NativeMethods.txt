@@ -27,3 +27,7 @@ ID3D11VideoProcessor
 ID3D11VideoProcessorInputView
 ID3D11VideoProcessorOutputView
 D3D11_VIDEO_PROCESSOR_STREAM
+MonitorFromPoint
+EnumDisplayMonitors
+GetMonitorInfo
+MONITORINFOEXW
