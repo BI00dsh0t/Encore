@@ -38,10 +38,10 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.2 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.10 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.9 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 7.8 round 2 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
@@ -140,7 +140,7 @@ The coordinator logs each QA round in the Log below.
 | 27.7 | 6.7 Disk full during a Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `f144ae9`) |
 | 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ede89f7`) |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
-| 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | | pending |
+| 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
 | 27.11 | 6.11 Recordings settings in the Main App | | pending |
 | 27.12 | 6.12 Refactor sweep | | pending |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
@@ -606,3 +606,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 6.9 at `2e97ee9`: **QA PASS**, 0 findings. 6.9 has been told to merge (Sonnet), and slice-epic-5 is back in the pool. 6.9's merge unblocks 6.10 (the Desktop Duplication fallback for Monitor Recording).
 - 2026-11-04: 7.8 fixed the junction finding at `899dd2d`: the scan skips reparse points, reconciliation drops them, and a final-path check runs before Cleanup, rename and delete. 7.7's manual delete had the same hole and is fixed too. The round-2 re-check is on 2-1-tracer (same QA context, Sonnet, high effort): it reruns its own repro, checks the root-prefix comparison, and covers 7.7's guard.
 - 2026-11-04: 6.9 merged (`c525d8e`, marked done). Synced with develop first (5.13, 5.14, v0.5.0): 0-warning build, Core 132, Contracts 119, App 115 (12 skipped), Engine 171 (32 skipped), publish clean. Human Check Queue: confirm the real Main App and Overlay don't appear in a Monitor Recording (the test only uses an excluded test window). Decision awaiting review: the Monitor session opens its own D3D11 device (AD-7 says one); AD-11's action list should gain `monitorRecordStart` and `monitorRecordStop`. Unblocks 6.10 and 6.11.
+- 2026-11-04: 6.9 merged (`c525d8e`, marked done `0208a76`), and its card is Done. qa-2-1 is back in the pool. 6.10 went to slice-epic-5 (Opus, medium effort), with its card In progress. Its brief flags that Desktop Duplication may not honour `WDA_EXCLUDEFROMCAPTURE`, and asks it to note how its cost compares with WGC's.
