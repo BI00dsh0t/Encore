@@ -73,7 +73,7 @@ title = "Final conformance run"
 description = "Story 1.14's benchmark, rerun against the finished, hardened app with everything on (R33, R36 final part, PLAN.md T-15, T-24): bench drift, which ran debug-capture on a marker window in 1.14, is extended to drive the installed App and engine and record a real 60-minute Recording with the Replay Buffer, the Overlay, the Library and Cleanup running and a Track Layout using every Track the builder uses (several BEACN devices on independent clocks), and measures A/V and Track-to-Track drift against one frame; bench fps --overlay (story 5.12) measures FPS loss on the synthetic GPU load with a Recording running too, against the NFR-1 target; bench playback checks an H.264 Clip and Recording in Discord, Chrome, VLC, Windows Media Player and DaVinci Resolve with every Track present, named and in sync, and an HEVC and an AV1 Clip, where the GPU encodes them, in the players that support them. The results go to the epic's Notes; whether the provisional 3% stands (Q-1) goes to the builder. The runs in a real GPU-bound game and the players Bench can't script are Human Checks. R7."
 verify = "The automated runs pass against the installed build: drift under one frame over 60 minutes on every Track, FPS loss on the synthetic load within the target, and every scripted player opening each file with every Track; the report is in the epic's Notes. The builder repeats the FPS run in their GPU-bound game and checks the unscripted players."
 covers = ["R7"]
-after = [6, "2.9", "5.12", "6.13", "7.11"]
+after = [6, "2.9", "5.12", "6.13", "7.11", "9.9"]
 hitl = true
 risk = "medium"
 
