@@ -42,8 +42,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with the capture-cost investigation |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.8 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.12 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 5.13 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -127,7 +127,7 @@ The coordinator logs each QA round in the Log below.
 | 26.11 | 5.11 Feedback Sounds settings page | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `f1d9334`) |
 | 26.11a | 5.15 Adaptive Overlay dot (added 2026-11-04; 5.12 and 5.13 wait on it) | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `582d863`) |
 | 26.12 | 5.12 Benchmark with the Overlay on | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `dc1f9b7`) |
-| 26.13 | 5.13 Refactor sweep | | pending |
+| 26.13 | 5.13 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 26.14 | 5.14 Overlay and Feedback Sounds end to end on the builder's PC | | pending |
 | 26.15 | Release epic 5 (`v0.5.0`) | | pending |
 | 27 | Slice epic 6 (Recordings) | slice-epic-6 | done |
@@ -577,3 +577,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 5.12 at `f146e8a`: **QA FAIL**, 2 doc-only findings: (1) the epic Decision and plan still quote the superseded "always costs borderless 3.63 %" (the rerun was −3.03 %, which is noise); (2) the plan doesn't say its 2 × 60 s runs aren't like-for-like with 1.14's 3 × 5 min baseline, so "6.7 % against 1.47 %" needs a caveat. 2-1-tracer is fixing both. The investigation was told to compare like for like. story-2-7 is back in the pool.
 - 2026-11-04: 5.12 fixed both doc findings at `c3c3381`. The coordinator checked the diff itself as round 2: **PASS** (always/borderless is reworded as noise, the NFR-1 like-for-like caveat is added, the evidence location is in the worktree's gitignored `measurements/bench-5.12`). 5.12 has been told to merge (Sonnet). Its merge unblocks 5.13 (the epic 5 refactor sweep).
 - 2026-11-04: 5.12 Benchmark with the Overlay on merged into develop (`dc1f9b7`) after QA round 2 PASS. It adds `bench fps --overlay` and `bench overlay --overlay-dot`. On this PC (no overlay planes) the Overlay adds no measurable FPS cost, auto matches onChange in borderless, and capture alone misses NFR-1 at about 6.7 % (not like-for-like with 1.14's 1.47 %; a like-for-like re-run is the first step of a separate capture-cost ticket). develop was merged into the branch first with no conflicts; build 0 warnings; Bench.Tests 134 passed, 11 skipped. The GPU benchmarks were not rerun. The Human Check is folded into the 5.15 row.
+- 2026-11-04: 5.12 merged (`dc1f9b7`, logged `311eb43`). Its card is Done with its label detached, and 2-1-tracer is back in the pool. The epic 5 refactor sweep 5.13 went to story-2-7 (Opus, medium effort), with its card In progress. Its brief cites the forward-hooks rule and keeps it to epic 5's code. After it come 5.14 (the end-to-end check on the builder's PC) and the v0.5.0 release.
