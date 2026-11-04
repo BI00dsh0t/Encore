@@ -43,7 +43,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.9 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; holds QA 7.8 context for the re-check |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with QA 5.14 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -599,3 +599,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.13 merged (`5cfddb6`, marked done `fbc6112`), and its card is Done. story-2-7 is back in the pool. 5.14 (the epic 5 end-to-end check) went to slice-epic-5 (Opus, medium effort) on 4.14's pattern, with its card In progress. The v0.5.0 release follows its merge.
 - 2026-11-04: QA 7.8 at `812c685`: **QA FAIL**, 1 high finding, reproduced: a directory junction inside the Output Folder is scanned and indexed, so Cleanup could permanently delete files outside the Library through it. All the other guards are covered. The coordinator asked for a layered fix: skip reparse points in the scan and reconciliation, resolve the final path and require it under a resolved Library root before deleting, a junction "victim survives" test, and the same check on 7.7's manual delete. 2-1-tracer keeps its context for the round-2 re-check.
 - 2026-11-04: 5.14 is READY FOR QA at `300c8d9`: 122 checks passed unattended, and 9 items are on the builder's checklist. QA started on story-2-7 (Sonnet), with no GPU reruns, and its card is In QA.
+- 2026-11-04: QA 5.14 at `300c8d9`: **QA PASS**, 0 blocking and 3 low notes. 5.14 has been told to merge (Sonnet) without marking the epic done or releasing. story-2-7 is back in the pool. After the merge, the coordinator marks epic 5 done and releases v0.5.0.
