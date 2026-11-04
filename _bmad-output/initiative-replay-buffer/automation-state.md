@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.1 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 6.7 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 7.7 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.7 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 5.12 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
@@ -564,3 +564,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.6 merged (`1cfccf0`, `feat(engine): merge 6.6-one-file-encoder-restarts`, marked done). `develop` (4.13, 4.14, 5.9, 5.15, v0.4.0) was merged into the branch first. Epic 4's refactor sweep (`15043a9`) had deleted `RingGenerations.Restart`, the per-generation streams and the previous-generation fallback as unused, which 6.6 builds on, so the branch restored those files from before the sweep (`c7d7158`). After that: build 0 warnings, Core 116, Platform.FFmpeg 36 (2 explicit skipped), Engine 168 (28 explicit skipped), Heavy `*Restart*` 3/3 under the GPU lock, publish with no IL warnings. Contracts: two additive constants (`RecordingStopReasons.EncoderRestart`, `ErrorCodes.RecordingRestarted`). **No production path triggers a restart yet** (only `CaptureSession.RestartChain`, called by tests); the epic Notes say a later story wires it. Unblocks 6.7.
 - 2026-11-04: 6.6 merged (`1cfccf0`, marked done `82a4006`). Its card is Done with its label detached, and slice-epic-8 is back in the pool. During the merge, 6.6 restored `RingGenerations.Restart` and the previous-generation fallback, which the epic 4 sweep had removed as unused (`c7d7158`, the pre-sweep code and its tests). That led to the new standing rule on sweeps keeping forward hooks. 6.7 went to slice-epic-5 (Opus, medium effort), with its card In progress; disk full is simulated only, never filled for real.
 - 2026-11-04: 7.7 is READY FOR QA at `38c4438`. QA started on qa-1-14 (Sonnet, medium effort), and its card is In QA.
+- 2026-11-04: QA 7.7 at `38c4438`: **QA PASS**, 0 findings (the Human Check row is added at merge). 7.7 has been told to merge (Sonnet), and qa-1-14 is back in the pool. 7.7's merge unblocks 7.8 (Cleanup, high risk).
