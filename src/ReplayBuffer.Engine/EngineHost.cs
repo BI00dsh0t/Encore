@@ -499,18 +499,7 @@ internal sealed class EngineHost : IAsyncDisposable
                             warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay: true);
                         })
                     : null,
-                new DeviceRecovery(
-                    Reset: message =>
-                    {
-                        clipLog.LogWarning("{Code}: {Message}", ErrorCodes.GpuReset, message);
-                        warnings.Raise(ErrorCodes.GpuReset, WarningSeverity.Warning, "replay", message, overlay: false);
-                    },
-                    Failed: message =>
-                    {
-                        clipLog.LogError("{Code}: {Message}", ErrorCodes.GpuResetFailed, message);
-                        warnings.Raise(ErrorCodes.GpuResetFailed, WarningSeverity.Error, "replay", message, overlay: false);
-                    },
-                    Recovered: took => clipLog.LogInformation("Recovered from the GPU reset in {Ms:0} ms; buffering again", took.TotalMilliseconds)));
+                new GpuResetWarnings(warnings, clipLog).Recovery);
 
             Volatile.Write(ref settingsTo, sessions);
 

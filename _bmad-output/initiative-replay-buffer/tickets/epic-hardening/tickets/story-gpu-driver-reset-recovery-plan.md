@@ -100,6 +100,12 @@ deferred: []
 
 - Before review (the parent's diff read): a recovery that installed its chain and then threw while closing the old tap no longer posts `DeviceLost`, which would have had the orchestrator treat a healthy session as lost. A Core test for the "Target exits during the outage" row was added (`ATargetExitDuringTheOutageDrainsTheSessionAndStopsItsRetries`), and the two Target tests wait for the session instead of racing `targetChanged`.
 
+- After QA (three non-blocking notes):
+  - `GpuResetWarnings` (Engine) owns the status-line warnings. A recovery withdraws the oldest `gpu-reset` still shown; a give-up withdraws it and raises `gpu-reset-failed`. Test: `GpuResetWarningsTests`.
+  - `TearDownLost` disposes each chain, and the device, in its own guarded step.
+  - `Retarget` builds the new capture under the gate from the `_device` it reads there.
+  - Verified: 0-warning build; Core 151/151 and Engine 178 pass (33 explicit skipped); the publish has no IL warnings. No GPU runs.
+
 ## Plan Change Log
 
 ## Review Triage Log

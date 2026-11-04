@@ -371,7 +371,6 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         WindowCapture? old;
-        D3D11Device device;
         lock (_gate)
         {
             if (_stopped)
@@ -389,28 +388,28 @@ internal sealed class CaptureSession : ICaptureSession
 
             old = _capture;
             _capture = null;
-            device = _device!;
         }
 
         // Disposing waits for a frame in flight, so the two captures never overlap frames.
         old?.Dispose();
-        var next = NewCapture(target.Window, device, CurrentFps());
+        WindowCapture next;
         lock (_gate)
         {
             if (_stopped)
             {
-                next.Dispose();
                 return;
             }
 
-            if (IsDeviceLost())
+            if (IsDeviceLost() || _device is not { } device)
             {
                 // Lost meanwhile: the recovery captures the new window.
-                next.Dispose();
                 _window = window;
                 return;
             }
 
+            // Built under the gate: a recovery's teardown takes the device only under it, so it
+            // can't dispose the device under this capture. No capture runs, so no frame waits here.
+            next = NewCapture(target.Window, device, CurrentFps());
             _capture = next;
             _window = window;
         }
@@ -1314,7 +1313,14 @@ internal sealed class CaptureSession : ICaptureSession
             }
         }
 
-        extra?.Dispose();
+        try
+        {
+            extra?.Dispose();
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning("Closing a second lost Recording tap failed: {Message}", e.Message);
+        }
 
         // Each save bound to it cuts at its press, since its keyframe never comes; the ring's restart needs them done.
         var deadline = began + (3 * _qpcFrequency);
@@ -1337,11 +1343,24 @@ internal sealed class CaptureSession : ICaptureSession
             Thread.Sleep(10);
         }
 
-        current.Dispose(keepRing: true);
-        armed?.Dispose();
-        retiring?.Dispose();
-        prepared?.Dispose();
-        built?.Dispose();
+        // Each in its own step: one that throws on the lost device never leaks the others.
+        void Step(string what, Action dispose)
+        {
+            try
+            {
+                dispose();
+            }
+            catch (Exception e)
+            {
+                _log.LogWarning("Tearing down the lost {What} failed: {Message}", what, e.Message);
+            }
+        }
+
+        Step("encoder chain", () => current.Dispose(keepRing: true));
+        Step("armed encoder chain", () => armed?.Dispose());
+        Step("replaced encoder chain", () => retiring?.Dispose());
+        Step("prepared encoder chain", () => prepared?.Dispose());
+        Step("built encoder chain", () => built?.Dispose());
         D3D11Device? device;
         lock (_gate)
         {
@@ -1349,7 +1368,7 @@ internal sealed class CaptureSession : ICaptureSession
             _device = null;
         }
 
-        device?.Dispose();
+        Step("device", () => device?.Dispose());
         lock (_chainLock)
         {
             _tornDown = true;
