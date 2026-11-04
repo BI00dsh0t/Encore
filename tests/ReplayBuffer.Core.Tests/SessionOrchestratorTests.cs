@@ -1862,7 +1862,8 @@ public sealed partial class SessionOrchestratorTests : IDisposable
         Func<long, IClipWrite?>? save = null,
         Func<Recordings, Recordings>? recordingsWith = null,
         DeviceRecovery? deviceRecovery = null,
-        IPowerNotifications? power = null)
+        IPowerNotifications? power = null,
+        IDisplayMonitors? displays = null)
     {
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
@@ -1901,7 +1902,8 @@ public sealed partial class SessionOrchestratorTests : IDisposable
                 Open: library,
                 Restarted: r => events.Writer.TryWrite(r))),
             deviceRecovery: deviceRecovery,
-            power: power);
+            power: power,
+            displays: displays);
         return (orchestrator, events, presses, made, published, factory);
     }
 
@@ -2162,6 +2164,15 @@ public sealed partial class SessionOrchestratorTests : IDisposable
         {
             Interlocked.Increment(ref _suspends);
             return CanSuspend;
+        }
+
+        private volatile string? _monitorDevice;
+
+        /// <summary>The monitor a Monitor session captures; null as a game session's.</summary>
+        public string? MonitorDevice
+        {
+            get => _monitorDevice;
+            set => _monitorDevice = value;
         }
 
         public void SetMicMuted(bool muted, long qpc)

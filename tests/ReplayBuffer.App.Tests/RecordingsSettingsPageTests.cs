@@ -78,6 +78,21 @@ public sealed class RecordingsSettingsPageTests
     }
 
     [Fact]
+    public void AMonitorsChangedEventUpdatesTheListWithoutAFetch()
+    {
+        SetState(revision: 1, monitor: Lg.DeviceName);
+        var model = Create();
+        var page = model.Recordings;
+        Assert.Equal(3, page.Monitors.Count);
+
+        // The LG is unplugged (T-03): the list follows the event, and the chosen monitor shows as not connected.
+        _engine.State = RecordingMessages.MonitorsChanged.Apply(_engine.State!, new MonitorList([Dell]));
+        model.Refresh();
+        Assert.Equal(["Primary monitor", "DELL — 2560×1440 (primary)", @"\\.\DISPLAY2 (not connected)"], page.Monitors.Select(m => m.Label));
+        Assert.Equal(1, _engine.MonitorFetches);
+    }
+
+    [Fact]
     public void TheSettingsTabListsThePageAndItsViewRendersWithoutBindingErrors() => Sta.Run(() =>
     {
         SetState(revision: 1, monitor: Lg.DeviceName);

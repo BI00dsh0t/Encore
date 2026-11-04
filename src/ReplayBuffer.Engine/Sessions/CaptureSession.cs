@@ -408,6 +408,9 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>Whether this is the Monitor session (6.9), not a game window's.</summary>
     private bool IsMonitor => _spec.Kind == SessionKind.Monitor;
 
+    /// <inheritdoc/>
+    public string? MonitorDevice => _monitor is { DeviceName.Length: > 0 } monitor ? monitor.DeviceName : null;
+
     /// <summary>Whether it holds a Replay Buffer: Replay mode, and not the Monitor session.</summary>
     private bool HasRing => _options.Replay && !IsMonitor;
 

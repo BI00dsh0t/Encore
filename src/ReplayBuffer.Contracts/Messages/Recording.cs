@@ -44,6 +44,12 @@ public static class RecordingStopReasons
 
     /// <summary>The PC went to sleep; the file ends at its last fragment and the Recording isn't restarted.</summary>
     public const string Suspend = "suspend";
+
+    /// <summary>
+    /// The Monitor Recording's monitor was removed (T-03); the file ends at its last frame. Equal to
+    /// <see cref="ErrorCodes.MonitorRemoved"/>.
+    /// </summary>
+    public const string MonitorRemoved = "monitor-removed";
 }
 
 /// <summary>
@@ -86,9 +92,19 @@ public static class RecordingMessages
     public static CommandType<Empty, MonitorList> MonitorsList { get; } =
         new("monitors.list", RecordingJsonContext.Default.Empty, RecordingJsonContext.Default.MonitorList);
 
+    /// <summary>
+    /// The attached monitors changed (T-03): one was connected or removed, the primary moved, or a
+    /// mode changed. Carries the new list, as <c>monitors.list</c> would reply; the snapshot keeps it.
+    /// </summary>
+    public static EventType<MonitorList> MonitorsChanged { get; } = new(
+        "monitors.changed",
+        RecordingJsonContext.Default.MonitorList,
+        "monitors",
+        (snapshot, monitors) => snapshot with { Monitors = monitors });
+
     public static IReadOnlyList<CommandType> Commands { get; } = [MonitorsList];
 
-    public static IReadOnlyList<EventType> Events { get; } = [Started, Stopped];
+    public static IReadOnlyList<EventType> Events { get; } = [Started, Stopped, MonitorsChanged];
 }
 
 [JsonSourceGenerationOptions(

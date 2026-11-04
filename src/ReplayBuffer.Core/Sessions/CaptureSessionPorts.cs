@@ -1,3 +1,5 @@
+using ReplayBuffer.Contracts.Messages;
+
 namespace ReplayBuffer.Core.Sessions;
 
 /// <summary>Starts capture sessions. Called only on the orchestrator thread.</summary>
@@ -121,6 +123,30 @@ public interface ICaptureSession
     /// stopped). Called on the orchestrator thread; never blocks.
     /// </summary>
     bool Suspend() => false;
+
+    /// <summary>
+    /// The GDI device name (such as <c>\\.\DISPLAY2</c>) of the monitor a Monitor session captures,
+    /// resolved when it started; null for a game session, or when the monitor has no name. Called on
+    /// the orchestrator thread; never blocks.
+    /// </summary>
+    string? MonitorDevice => null;
+}
+
+/// <summary>
+/// The attached display monitors and their changes (T-03), AD-19's input: the orchestrator ends a
+/// Monitor Recording whose monitor is gone, and the engine publishes the new list.
+/// </summary>
+public interface IDisplayMonitors
+{
+    /// <summary>Every attached monitor now, the primary first. Never throws; empty when they can't be read.</summary>
+    IReadOnlyList<DisplayMonitor> List();
+
+    /// <summary>
+    /// Calls <paramref name="changed"/> after each change of the displays (a monitor connected or
+    /// removed, the primary moved, a mode changed), on any thread, until the returned subscription is
+    /// disposed. Never throws; a source that can't subscribe does nothing.
+    /// </summary>
+    IDisposable Subscribe(Action changed);
 }
 
 /// <summary>

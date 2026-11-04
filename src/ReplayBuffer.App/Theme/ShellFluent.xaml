@@ -1,0 +1,110 @@
+<!--
+    The shell's styles under Fluent (story 3; DESIGN.md Nav item, Status header, Elevation): the nav pane,
+    its items and section label, the status header's state line and the content layer over Mica. Every
+    colour, corner and type comes from a token key. ShellGamingDark.xaml defines the same keys.
+-->
+<ResourceDictionary x:Class="ReplayBuffer.App.Theme.ShellFluent"
+                    x:ClassModifier="internal"
+                    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:theme="clr-namespace:ReplayBuffer.App.Theme">
+
+    <!-- The nav pane sits on Mica (or bg-base where there is none), with a gutter round the items. -->
+    <Thickness x:Key="RbNavPanePadding">4,0,4,8</Thickness>
+    <Thickness x:Key="RbNavBrandMargin">12,16,12,16</Thickness>
+
+    <!-- The content column's layer: bg-layer over Mica, with a stroke-card top-left edge and corner. -->
+    <Style x:Key="RbShellContentLayerStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1,1,0,0" />
+        <Setter Property="CornerRadius" Value="8,0,0,0" />
+    </Style>
+
+    <!-- The status header's state line: body-strong, sentence case. -->
+    <Style x:Key="RbStatusStateStyle" TargetType="ContentControl">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <TextBlock Text="{TemplateBinding Content}" TextWrapping="Wrap" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The Settings section label: caption, text-secondary, never focusable or selectable. -->
+    <ControlTemplate x:Key="RbNavSectionTemplate" TargetType="ListBoxItem">
+        <TextBlock Margin="12,12,12,4"
+                   FontSize="12"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Text="{Binding Title}" />
+    </ControlTemplate>
+
+    <!-- Nav item: subtle fill, a 3x16 accent pill when selected (WinUI's NavigationView). -->
+    <Style x:Key="RbNavItemStyle" TargetType="ListBoxItem">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+        <Setter Property="theme:NavPress.Track" Value="True" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid>
+                        <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource RbNavItemCornerRadius}" />
+                        <Border x:Name="Pill"
+                                Width="3"
+                                Height="16"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                CornerRadius="{DynamicResource RbSmallCornerRadius}"
+                                Visibility="Collapsed" />
+                        <TextBlock x:Name="Label"
+                                   Margin="{TemplateBinding Padding}"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding Title}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                            <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="theme:NavPress.IsPressed" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsSection}" Value="True">
+                <Setter Property="Template" Value="{StaticResource RbNavSectionTemplate}" />
+                <Setter Property="Height" Value="NaN" />
+                <Setter Property="IsEnabled" Value="False" />
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+            </DataTrigger>
+            <!-- Below 640 px the pane narrows and long titles trim, so the title shows as a tooltip. -->
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="Narrow">
+                <Setter Property="ToolTip" Value="{Binding Title}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+</ResourceDictionary>
