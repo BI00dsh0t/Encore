@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 9.6 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.6 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
@@ -177,7 +177,7 @@ The coordinator logs each QA round in the Log below.
 | 30.3 | 9.3 Shell, navigation and status line | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `d3dcad3`) |
 | 30.4 | 9.4 Library restyled | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (merged `894974a`) |
 | 30.5 | 9.5 Settings pages: General, Replay Buffer, Recordings, Hotkeys and Feedback Sounds | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `80f3933`) |
-| 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in progress |
+| 30.6 | 9.6 Settings pages: Track Layout, Game Profiles, and Library and Cleanup | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | in QA (qa-1-14) |
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | | pending |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | | pending |
@@ -764,3 +764,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: **8.6 found a real product bug.** `LibraryActor.Save` swaps `library.json` in with File.Replace, which throws while anything holds the file open without FILE_SHARE_DELETE (on a real PC, a backup or a virus scanner). The catch only logged, and `_dirty` was already cleared, so the Favourite lived only in memory and an engine kill lost it. Fix (`0ba1e53`): a failed save stays dirty and retries every 1 s, with one warning per run of failures. New Core test `ASaveBlockedByAReaderIsRetriedSoAFavouriteReachesTheDisk`. The test side waits for the save and compares by items. The pair test passed 3 times in a row; Core 160, Engine 182 and App 141 passed; publish clean. The coordinator approved it; slice-epic-8 is merging.
 - 2026-11-04: **8.6 merged** into `develop` (`041a8b6`) after a sync with develop (Core 160/160, Engine 182 + 42 explicit skipped, App 150 + 19 explicit skipped, 0 warnings, NativeAOT publish clean). QA passed; Heavy: cold start passed on `f34fa7d`, the pair test 3 in a row on `0ba1e53`. Product fixes: sessions open a renumbered mixer endpoint by its saved names, and a failed `library.json` save is retried. Three hand checks added to the Human Check Queue.
 - 2026-11-04: 8.6 merged (`041a8b6`; marked done with 3 Human Check rows in `ff8c66f`: a real reboot, a BEACN restart during a game, and a BEACN restart with no game). Core 160, Engine 182 and App 150 passed; publish clean. Its card is Done. Epic 8 now waits on epic 9 (8.7 needs 9.9); epic 9 has 9.6 in progress, then 9.8 and 9.9.
+- 2026-11-04: 9.6 READY FOR QA at `00e165e`, and its card is In QA. QA went to qa-1-14 (Sonnet, medium effort).
