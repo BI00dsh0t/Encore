@@ -253,6 +253,13 @@ public static class ErrorCodes
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
 
+    /// <summary>
+    /// A warning (AD-12): Windows.Graphics.Capture couldn't capture the Monitor Recording's monitor,
+    /// so it is captured through DXGI Desktop Duplication instead; the file is the same. Raised once
+    /// per Monitor session.
+    /// </summary>
+    public const string MonitorCaptureFallback = "monitor-capture-fallback";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -316,5 +323,6 @@ public static class ErrorCodes
         ResetGap,
         EncoderBudget,
         NotDevInstance,
+        MonitorCaptureFallback,
     ];
 }

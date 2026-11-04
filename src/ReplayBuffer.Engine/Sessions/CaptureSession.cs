@@ -83,6 +83,19 @@ internal sealed record CaptureSessionOptions
     /// </summary>
     public Func<Exception?>? RestartFault { get; init; }
 
+    /// <summary>
+    /// For tests: called before any WGC capture is created; a non-null result is thrown there, as
+    /// WGC failing. A Monitor session then falls back to Desktop Duplication (6.10); a game session fails.
+    /// </summary>
+    public Func<Exception?>? WgcFault { get; init; }
+
+    /// <summary>
+    /// Called once, on the opening thread, with the message when a Monitor session's WGC capture
+    /// failed and it captures through Desktop Duplication instead (<see cref="ErrorCodes.MonitorCaptureFallback"/>);
+    /// null ignores it.
+    /// </summary>
+    public Action<string>? CaptureFallback { get; init; }
+
     /// <summary>With no first frame by then, the session posts a <see cref="ErrorCodes.CaptureFailed"/> failure.</summary>
     public TimeSpan FirstFrameTimeout { get; init; } = DefaultFirstFrameTimeout;
 
@@ -163,7 +176,10 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// captures the monitor its snapshot's <c>monitorRecordingMonitor</c> names (else the primary one,
 /// <see cref="MonitorFinder"/>) on a device of that monitor's adapter, holds no Replay Buffer and
 /// writes no file of its own: its chain feeds only the Recording <see cref="Record"/> attaches. Its
-/// anchor is posted (<see cref="ISessionEvents.Anchored"/>) so the orchestrator can start it.
+/// anchor is posted (<see cref="ISessionEvents.Anchored"/>) so the orchestrator can start it. When its
+/// WGC monitor item can't be created or started, it captures the same monitor through DXGI Desktop
+/// Duplication instead (AD-12, 6.10), into the same chain, and raises
+/// <see cref="CaptureSessionOptions.CaptureFallback"/> once; a game session never falls back.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -189,7 +205,7 @@ internal sealed class CaptureSession : ICaptureSession
     private MonitorInfo? _monitor;
     private string? _path;
     private D3D11Device? _device;
-    private WindowCapture? _capture;
+    private ICaptureSource? _capture;
     private volatile bool _outputFinished;
 
     // R1's exit drain, orchestrator thread only: the teardown keeps the ring for saves until Release.
@@ -299,6 +315,14 @@ internal sealed class CaptureSession : ICaptureSession
         _log.LogInformation("Mic {State} at start; mic mute covers {Inputs} Mic Device input(s) in muteAffected Tracks",
             _spec.MicMuted ? "muted" : "unmuted", _spec.Audio.GatedMicInputs().Count());
 
+        if (IsMonitor)
+        {
+            // Started as it is chosen: a WGC item that fails to start falls back to Desktop Duplication.
+            _firstFrameTimer.Change(_options.FirstFrameTimeout, Timeout.InfiniteTimeSpan);
+            StartMonitorCapture();
+            return;
+        }
+
         var capture = NewCapture(target.Window);
         lock (_gate)
         {
@@ -307,6 +331,26 @@ internal sealed class CaptureSession : ICaptureSession
 
         _firstFrameTimer.Change(_options.FirstFrameTimeout, Timeout.InfiniteTimeSpan);
         capture.Start();
+    }
+
+    /// <summary>For tests: which API the session captures through, <c>wgc</c> or <c>desktop-duplication</c>.</summary>
+    internal string CaptureApi { get; private set; } = "wgc";
+
+    /// <summary>For tests: the Desktop Duplication capture's next acquire behaves as <c>DXGI_ERROR_ACCESS_LOST</c>.</summary>
+    internal void SimulateCaptureAccessLost()
+    {
+        ICaptureSource? capture;
+        lock (_gate)
+        {
+            capture = _capture;
+        }
+
+        if (capture is not DesktopDuplicationCapture duplication)
+        {
+            throw new InvalidOperationException("The session doesn't capture through Desktop Duplication.");
+        }
+
+        duplication.SimulateAccessLost();
     }
 
     /// <summary>Whether this is the Monitor session (6.9), not a game window's.</summary>
@@ -331,7 +375,7 @@ internal sealed class CaptureSession : ICaptureSession
                 $"Window 0x{target.Window:X} does not belong to process {target.ProcessId}.");
         }
 
-        WindowCapture? old;
+        ICaptureSource? old;
         lock (_gate)
         {
             if (_stopped)
@@ -374,7 +418,7 @@ internal sealed class CaptureSession : ICaptureSession
     public SessionOutcome End(string reason)
     {
         bool anchored;
-        WindowCapture? capture;
+        ICaptureSource? capture;
 
         // A first frame still opening the encoders holds the gate; let it finish.
         lock (_gate)
@@ -874,7 +918,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>
     public void Abandon()
     {
-        WindowCapture? capture;
+        ICaptureSource? capture;
         lock (_gate)
         {
             _stopped = true;
@@ -894,17 +938,101 @@ internal sealed class CaptureSession : ICaptureSession
         _ => ErrorCodes.EncodeFailed,
     };
 
+    /// <summary>A game window's WGC capture, not started; a WGC failure throws, with no fallback.</summary>
     private WindowCapture NewCapture(nint window)
     {
-        int fps;
-        lock (_chainLock)
+        ThrowWgcFault();
+        return Wire(new WindowCapture(_device!, window, CaptureFps(), OnFrame, _loggers.CreateLogger<WindowCapture>()));
+    }
+
+    /// <summary>
+    /// The Monitor session's capture, started: WGC's monitor item, or, when creating or starting it
+    /// throws, Desktop Duplication of the same monitor on the same device (AD-12), raising
+    /// <see cref="CaptureSessionOptions.CaptureFallback"/> once. Desktop Duplication failing too throws.
+    /// </summary>
+    private void StartMonitorCapture()
+    {
+        var monitor = _monitor!;
+        var fps = CaptureFps();
+        WindowCapture? wgc = null;
+        try
         {
-            fps = _current?.Fps ?? _spec.Snapshot.Video.Fps;
+            ThrowWgcFault();
+            wgc = Wire(WindowCapture.ForMonitor(_device!, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<WindowCapture>()));
+            StartInstalled(wgc);
+            CaptureApi = "wgc";
+            return;
+        }
+        catch (Exception e)
+        {
+            wgc?.Dispose();
+            _log.LogWarning("WGC could not capture monitor {Device} ({Message}); falling back to Desktop Duplication", monitor.DeviceName, e.Message);
         }
 
-        var capture = _monitor is { } monitor
-            ? WindowCapture.ForMonitor(_device!, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<WindowCapture>())
-            : new WindowCapture(_device!, window, fps, OnFrame, _loggers.CreateLogger<WindowCapture>());
+        var duplication = Wire(new DesktopDuplicationCapture(_device!, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<DesktopDuplicationCapture>()));
+        try
+        {
+            StartInstalled(duplication);
+        }
+        catch
+        {
+            duplication.Dispose();
+            throw;
+        }
+
+        CaptureApi = "desktop-duplication";
+        _options.CaptureFallback?.Invoke(
+            $"Windows Graphics Capture couldn't capture monitor {monitor.DeviceName}; the Monitor Recording uses Desktop Duplication instead.");
+    }
+
+    /// <summary>
+    /// Makes <paramref name="capture"/> the session's capture, then starts it, so a <c>Closed</c> it
+    /// raises at once isn't taken for a replaced capture's; a failed start uninstalls it and throws.
+    /// </summary>
+    private void StartInstalled(ICaptureSource capture)
+    {
+        lock (_gate)
+        {
+            _capture = capture;
+        }
+
+        try
+        {
+            capture.Start();
+        }
+        catch
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_capture, capture))
+                {
+                    _capture = null;
+                }
+            }
+
+            throw;
+        }
+    }
+
+    private void ThrowWgcFault()
+    {
+        if (_options.WgcFault?.Invoke() is { } fault)
+        {
+            throw fault;
+        }
+    }
+
+    private int CaptureFps()
+    {
+        lock (_chainLock)
+        {
+            return _current?.Fps ?? _spec.Snapshot.Video.Fps;
+        }
+    }
+
+    private T Wire<T>(T capture)
+        where T : ICaptureSource
+    {
         capture.Closed += () => OnClosed(capture);
         capture.Failed += Fail;
         return capture;
@@ -1489,7 +1617,7 @@ internal sealed class CaptureSession : ICaptureSession
             path, video.FramesEncoded, video.FreshSlots, report.Latency.P99Ms);
     }
 
-    private void OnClosed(WindowCapture capture)
+    private void OnClosed(ICaptureSource capture)
     {
         lock (_gate)
         {

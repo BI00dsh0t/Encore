@@ -3,14 +3,14 @@ title: 'Desktop Duplication fallback for Monitor Recording'
 type: 'feature'
 ticket: '10'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '319cac7f750dce44745dc1f46f0472c32c5c98c4'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
@@ -59,10 +59,10 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- add `MonitorCaptureFallback` -- the one-time warning's code (AD-22 additive).
-- [ ] `src/ReplayBuffer.Platform.Capture/ICaptureSource.cs`, `WindowCapture.cs`, `NativeMethods.txt`, `DesktopDuplicationCapture.cs` -- the port and the DD source per the Code Map.
-- [ ] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs`, `src/ReplayBuffer.Engine/EngineHost.cs` -- fallback selection in the Monitor path only, options, warning wiring, test hooks.
-- [ ] `tests/ReplayBuffer.Engine.Tests/MonitorRecordingCaptureTests.cs` -- Heavy/Explicit, under the bench lock: (1) with `WgcFault` set, a Monitor Recording plays: `CaptureApi == "desktop-duplication"`, one fallback message, every Global Track present with duration within 0.2 s of the video's, video PTS steps all one 30 fps slot, decodes cleanly; (2) the same with `SimulateCaptureAccessLost()` mid-Recording (twice, 1 s apart): one file, decodes cleanly, frames span the whole Recording; (3) `ExcludedWindowScript` magenta window absent from a DD-path Monitor Recording; (4) a game window session started with `WgcFault` set throws from `Start`, and no fallback message is raised. The ErrorCodes registry test (if it enumerates constants) passes with the new code.
+- [x] `src/ReplayBuffer.Contracts/ErrorCodes.cs` -- add `MonitorCaptureFallback` -- the one-time warning's code (AD-22 additive).
+- [x] `src/ReplayBuffer.Platform.Capture/ICaptureSource.cs`, `WindowCapture.cs`, `NativeMethods.txt`, `DesktopDuplicationCapture.cs` -- the port and the DD source per the Code Map.
+- [x] `src/ReplayBuffer.Engine/Sessions/CaptureSession.cs`, `src/ReplayBuffer.Engine/EngineHost.cs` -- fallback selection in the Monitor path only, options, warning wiring, test hooks.
+- [x] `tests/ReplayBuffer.Engine.Tests/MonitorRecordingCaptureTests.cs` -- Heavy/Explicit, under the bench lock: (1) with `WgcFault` set, a Monitor Recording plays: `CaptureApi == "desktop-duplication"`, one fallback message, every Global Track present with duration within 0.2 s of the video's, video PTS steps all one 30 fps slot, decodes cleanly; (2) the same with `SimulateCaptureAccessLost()` mid-Recording (twice, 1 s apart): one file, decodes cleanly, frames span the whole Recording; (3) `ExcludedWindowScript` magenta window absent from a DD-path Monitor Recording; (4) a game window session started with `WgcFault` set throws from `Start`, and no fallback message is raised. The ErrorCodes registry test (if it enumerates constants) passes with the new code.
 
 **Acceptance Criteria:**
 - Given WGC's monitor item forced to fail, when the Monitor Record toggle is pressed twice, then a file in `Monitor Recordings` plays with every Global Track in sync and a constant 30 fps, and `monitor-capture-fallback` was raised once with `overlay: false`.
@@ -72,9 +72,23 @@ deferred: []
 
 ## Implementation Notes
 
+- `DesktopDuplicationCapture` calls `AcquireNextFrame`, `ReleaseFrame`, `DuplicateOutput` and `IDXGIDevice::GetAdapter` through their raw vtable slots (8, 14, 22, 7) for the HRESULTs, since CsWin32's struct methods throw. Its half-slot wait uses a high-resolution waitable timer plus a stop event (as `PacedVideoEncoder`), so `NativeMethods.txt` also gains `CreateEvent`, `SetEvent`, `CreateWaitableTimerEx`, `SetWaitableTimer`, `WaitForMultipleObjects`, `CloseHandle`, `CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`, `SYNCHRONIZATION_ACCESS_RIGHTS`.
+- A duplication's first frame (after creation or a recreate) is always delivered, even with `LastPresentTime == 0`, stamped `max(LastPresentTime, creation QPC)`: on a static desktop the last present may predate the session, which would put the anchor in the past (or, at 0, never deliver a first frame). Frames no newer than the last delivered are skipped, so QPCs stay monotonic.
+- `Platform.Capture` grants `InternalsVisibleTo` to `ReplayBuffer.Engine` for `SimulateAccessLost`.
+- The Monitor path starts its capture inside `StartMonitorCapture` (WGC's `Start` can be what fails), so `Open` arms the first-frame timer before it.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 5 findings — high 0, medium 2, low 2, false 0, maybe-false 0 (one low grouped with a medium: same root cause)
+- findings:
+  - `[medium]` `[patch]` the Monitor capture was started before `_capture` was set, so a `Closed` raised at once (WGC item closed, or the DD output gone on the first acquire) was dropped by `OnClosed`'s identity check and the session ran on with no video — confirmed. Fixed: `StartInstalled` sets `_capture` under the gate before `Start`, uninstalling it if the start throws.
+  - `[medium]` `[patch]` every `AcquireNextFrame` failure, not only `ACCESS_LOST`, went to `Recreate`, which retried forever after a device removal, with no `Closed` or `Failed`; the Recording froze — confirmed. Fixed: only `ACCESS_LOST` (and the simulate flag) recreates; any other failure throws into the thread's catch, raising `Failed` (the session fails); `Recreate` also fails on `DEVICE_REMOVED`/`DEVICE_RESET`.
+  - `[medium]` `[patch]` a failed `ReleaseFrame` had the same unbounded retry — same root cause as the previous row, fixed with it (only `ACCESS_LOST` recreates).
+  - `[low]` `[patch]` `ICaptureSource.Failed`'s doc said capture continues, but DD also raises it when its thread fails and stops — fixed the doc text (and the stale "stalled video" comment).
+  - `[low]` `[reject]` `candidate` leaks if CsWin32's `GetDesc()` throws in `TryDuplicate` — a valid output's `GetDesc` doesn't fail in practice, and the fix adds a try/finally per output for a one-pointer leak on an already-failing path.
 
 ## Design Notes
 
@@ -94,3 +108,31 @@ deferred: []
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build` -- all pass
 - `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-class "*MonitorRecordingCaptureTests"` -- Heavy fallback tests pass
 - `pwsh tools/publish-engine.ps1` -- 0 IL warnings
+
+## Auto Run Result
+
+- **Summary:** a Monitor Recording whose WGC monitor item can't be created or fails to start now captures the same monitor through DXGI Desktop Duplication, behind a new `ICaptureSource` port that `WindowCapture` also implements. Frames are stamped with DXGI's QPC `LastPresentTime` and fed into the same chain, so the scaler, pacer and file are unchanged. It raises `monitor-capture-fallback` once (`overlay: false`). `ACCESS_LOST` recreates the duplication without ending the Recording, and game capture never falls back.
+- **Files:**
+  - `ErrorCodes.cs`: `MonitorCaptureFallback`, additive (AD-22).
+  - `ICaptureSource.cs` (new): the port. `WindowCapture.cs` now implements it.
+  - `DesktopDuplicationCapture.cs` (new): the DD source.
+  - `NativeMethods.txt`: the DXGI and timer names. `Platform.Capture.csproj`: `InternalsVisibleTo` Engine.
+  - `CaptureSession.cs`: the Monitor-only fallback, `WgcFault`/`CaptureFallback` options and test hooks. `EngineHost.cs`: the warning wiring.
+  - `MonitorRecordingCaptureTests.cs`: 4 Heavy/Explicit tests.
+- **Review (quick):**
+  - Patched: 2 medium, a dropped early `Closed` and unbounded retries on non-`ACCESS_LOST` failures, the latter with a grouped `ReleaseFrame` row. Also 1 low, the port doc.
+  - Rejected: 1 low, the `GetDesc` leak, for the reason in the triage log.
+  - Deferred: none.
+- **Follow-up review:** true. Two medium entries were patched on a first pass. The unverified risk is the patched error handling in `DesktopDuplicationCapture`: a real device removal or monitor detach was not exercised, only a simulated `ACCESS_LOST`.
+- **Verification:**
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings.
+  - Contracts 119/119, Platform.Capture 3/3, Platform.FFmpeg 39 (2 skipped), Engine 207 (171 passed, 36 explicit skipped).
+  - Heavy `MonitorRecordingCaptureTests` 8/8, covering 6.9's 4 and 6.10's 4. In the first run after the patches, `WithWgcFailingAMonitorRecordingFallsBackToDesktopDuplication` failed once in 3.8 s. It passed alone on rerun, and in two further full-class runs. The failure message wasn't captured.
+  - `pwsh tools/publish-engine.ps1`: no IL warnings.
+- **Capture exclusion:** `WDA_EXCLUDEFROMCAPTURE` also hides windows from Desktop Duplication on this PC. The magenta test passes on the DD path, so no masking was added. The real Main App and Overlay are still the 6.9 Human Check.
+- **Residual risks:**
+  - The cursor isn't drawn and rotation isn't handled.
+  - A transient `EnumOutputs` miss during a mode change ends the session as closed.
+  - DD's FPS cost against WGC's 4.3 % wasn't measured. It runs only when WGC fails, so it doesn't change game capture's figure.
+  - There's one unexplained Heavy failure that passed on rerun.
+
