@@ -3,7 +3,7 @@ title: 'Rename and delete, locked while being written'
 type: 'feature'
 ticket: '7'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: 'd27ee22eed37256a2d51840ea381316c33c17758'
 route: 'full'
 route_source: 'auto'
