@@ -122,7 +122,7 @@ The coordinator logs each QA round in the Log below.
 | 26.7 | 5.7 Mic-muted icon and the disk-full red X | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `53d83b7`) |
 | 26.8 | 5.8 Overlay over exclusive fullscreen and the presentation path | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `67ecdf3`) |
 | 26.9 | 5.9 Capture exclusion for every App window | | pending |
-| 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress |
+| 26.10 | 5.10 Main App status line | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `7e09a01`) |
 | 26.11 | 5.11 Feedback Sounds settings page | | pending |
 | 26.12 | 5.12 Benchmark with the Overlay on | | pending |
 | 26.13 | 5.13 Refactor sweep | | pending |
@@ -498,3 +498,5 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 
 - 2026-11-04: 5.8 merged (`67ecdf3`, `feat(bench): merge 5.8-overlay-exclusive-fullscreen`, after merging develop in cleanly: build 0 warnings, Contracts 118, Engine 190, Bench 139, publish clean). QA PASS in round 2. AC 3 (borderless independent flip) stays open for the builder; the overlay-presentation research runs separately.- 2026-11-04: QA 5.10 at `c0862ba`: **QA PASS** with 1 low finding (no Human Check row). 5.10 has been told to add the row at merge and merge (Sonnet). qa-2-1 took QA 4.11.
 - 2026-11-04: 5.8 merged (`67ecdf3`, marked done `62ff935`). Its card is Done with its labels detached. 5.9 is now Ready and waits for the next free worker (5.10's, after it merges). 7.6 went to slice-epic-4 (Opus, medium effort), with its card In progress. 5.10 added its Human Check row on develop (`54a69b8`), and its merge go-ahead is queued.
+
+- 2026-11-04: 5.10 merged (`7e09a01`, `feat(app): merge 5.10-status-line`, after merging develop in cleanly: Release build 0 warnings, App.Tests 97 passed with 9 explicit skipped; the run overlapped another session's `.bench-running` marker but passed). QA PASS at `c0862ba`; its one low finding (no Human Check row) was settled by the 5.10 row, committed on develop at `54a69b8`. App-only: no Contracts, Core or Engine changes.
