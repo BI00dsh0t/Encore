@@ -38,6 +38,7 @@
     <!-- A row's label, in the shared label column. -->
     <Style x:Key="RbSettingsLabelStyle" TargetType="TextBlock">
         <Setter Property="Margin" Value="0,0,12,0" />
+        <Setter Property="FontSize" Value="{DynamicResource BodyTextBlockFontSize}" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
     </Style>
