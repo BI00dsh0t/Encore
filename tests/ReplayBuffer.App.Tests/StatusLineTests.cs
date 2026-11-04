@@ -11,7 +11,6 @@ using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Tests;
 
-[Collection(nameof(WpfCollection))]
 public sealed class StatusLineTests
 {
     private static readonly DateTimeOffset Ten = new(2026, 11, 3, 10, 0, 0, TimeSpan.Zero);
@@ -63,6 +62,24 @@ public sealed class StatusLineTests
         line.Render(EngineStatus.Connected, null, snapshot with { Warnings = [] });
         Assert.Empty(line.Warnings);
     }
+
+    private string Render(StatusLine line, CaptureState capture, TargetGame? game = null)
+    {
+        line.Render(EngineStatus.Connected, null, _engine.State! with { Capture = capture, TargetGame = game });
+        return line.State;
+    }
+
+    private StateSnapshot Snapshot(params Warning[] warnings) => _engine.State! with { Warnings = warnings };
+
+    internal static Warning Warning(string id, DateTimeOffset at, string message, WarningSeverity severity = WarningSeverity.Warning, bool dismissable = true) =>
+        new(id, ErrorCodes.SettingsUnreadable, severity, "test", message, at, Overlay: false, Sound: null, dismissable);
+}
+
+/// <summary>The status line's Explicit PNG render: it builds a WPF window, so it takes its turn with the other WPF tests.</summary>
+[Collection(nameof(WpfCollection))]
+public sealed class StatusLineRenderTests
+{
+    private readonly FakeEngineSession _engine = new();
 
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
@@ -116,14 +133,8 @@ public sealed class StatusLineTests
         }
     });
 
-    private string Render(StatusLine line, CaptureState capture, TargetGame? game = null)
-    {
-        line.Render(EngineStatus.Connected, null, _engine.State! with { Capture = capture, TargetGame = game });
-        return line.State;
-    }
-
     private StateSnapshot Snapshot(params Warning[] warnings) => _engine.State! with { Warnings = warnings };
 
     private static Warning Warning(string id, DateTimeOffset at, string message, WarningSeverity severity = WarningSeverity.Warning, bool dismissable = true) =>
-        new(id, ErrorCodes.SettingsUnreadable, severity, "test", message, at, Overlay: false, Sound: null, dismissable);
+        StatusLineTests.Warning(id, at, message, severity, dismissable);
 }

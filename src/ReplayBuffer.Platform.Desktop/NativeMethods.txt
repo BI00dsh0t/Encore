@@ -33,7 +33,6 @@ IDXGIFactory1
 IDXGIAdapter1
 IDXGIOutput
 IDXGIOutput2
-DXGI_ERROR_NOT_FOUND
 SHParseDisplayName
 SHOpenFolderAndSelectItems
 ILFree

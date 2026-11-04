@@ -60,3 +60,28 @@
   summary: Epic 4 (4.1–4.12) left three items for its sweep: the unused encoder-restart path, the stale ring-file match and a GPU test in the default suite.
   evidence: 4.6's `RingGenerations.Restart`, `ReplayRingSink.Restart` and the previous-generation fallback in `Cut` had no caller after 4.9 moved to a ring sink per chain; `RingFile.RemoveStale` matched every `ring-*.bin` (4.7 QA); `DiskRingClipTests` ran an NVENC encode by default (4.7 QA).
   outcome: Closed by story 4.13: the restart path is removed, `RemoveStale` deletes only `ring-<digits>.bin`, and `DiskRingClipTests` is Heavy/Explicit.
+
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-memory-mode-ram-margin-plan.md`
+  summary: The `memory-margin` warnings still aren't withdrawn when the margin is left; the item named epic 5's status line as its owner.
+  evidence: Story 5.10's status line shows the warnings as the snapshot carries them, and dismisses them by `warning.dismiss`; withdrawing them changes the warnings' lifecycle in the engine, which a behaviour-preserving sweep can't do.
+  outcome: Recorded, open (story 5.13). Owner changed from epic 5's status line to epic 8's hardening.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-overlay-feedback/tickets/story-refactor-sweep-plan.md`
+  summary: FeedbackRouter repeats its disposed guard, names sounds as strings and the `"replay"` source inline; the feedback tests carry two fake notice sinks, and the serve tests no shared harness.
+  evidence: Found by story 5.13's sweep. `FeedbackRouter.cs`, `FeedbackRouterTests.cs`, `FeedbackSoundsTests.cs`, `DevSimulateServeTests.cs` and `FeedbackSoundServeTests.cs` are being changed by story 6.8, so the sweep left them.
+  outcome: Recorded, open (story 5.13). Owned by epic 6's sweep, after 6.8.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-overlay-feedback/tickets/story-refactor-sweep-plan.md`
+  summary: `FeedbackSounds`' per-sound `IsOn` and `With` are written twice, in the App's `FeedbackSoundsPage` and Core's `FeedbackSoundPlayer`.
+  evidence: Found by story 5.13's sweep. One shared copy belongs on `FeedbackSounds` in Contracts, which a sweep doesn't change (AD-22).
+  outcome: Recorded, open (story 5.13). Owned by epic 6's sweep.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-overlay-feedback/tickets/story-refactor-sweep-plan.md`
+  summary: Bench repeats the pipe-server P/Invoke, the Overlay's style mask, the dot-mode names and the load-option parsing.
+  evidence: Found by story 5.13's sweep. They sit in `AppOverlayHost.cs`, `BenchOptions.cs` and `FpsBenchmark.cs`, which story 8.1 and the capture-cost investigation are changing, and the copies' timeout rules differ, so merging them isn't behaviour-preserving.
+  outcome: Recorded, open (story 5.13). Owned by epic 8's sweep.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-overlay-feedback/tickets/story-refactor-sweep-plan.md`
+  summary: `ManualTime` is copied across test projects, and the Explicit screen-copy helpers are duplicated.
+  evidence: Found by story 5.13's sweep. Sharing them across projects needs a shared test assembly, for little gain.
+  outcome: Recorded, open (story 5.13). Low value. Owned by epic 8's sweep.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-overlay-feedback/tickets/story-refactor-sweep-plan.md`
+  summary: Epic 5 (5.1–5.12, 5.15) deferred no review findings, but left small duplicates and stale docs for its sweep.
+  evidence: Bench re-declared `GetForegroundWindow`; Platform.Desktop's `NativeMethods.txt` listed an unused `DXGI_ERROR_NOT_FOUND`; the App wrote the "connected or nothing" rule four times and `Monitors` its monitor lookup twice; the General page hard-coded the 3 s dot window; the Overlay's and `Monitors`' docs predated 5.12 and 5.15; `OverlayWindow`'s layout constants were public and `Place` re-picked `Update`'s size; App tests copied `Pump`; and the status-line tests sat in the serial WPF collection for one Explicit test.
+  outcome: Closed by story 5.13: Bench uses `OverlayWindowStyle.ForegroundWindow`, `OverlayHostProcess` folds `ShowDot`/`HideDot` into `On`/`Off`, `EngineSessions.ConnectedState` holds the rule, `Monitors.MonitorOf` the lookup, the OnChange label is built from `OverlayViewModel.DotOnChangeDuration`, the docs credit 5.8's and 5.12's measurements, `OverlayWindow.ExtentDip` picks the size, `Sta.Pump` is shared, and the PNG test moved to `StatusLineRenderTests`.

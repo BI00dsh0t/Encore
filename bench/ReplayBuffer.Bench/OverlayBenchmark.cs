@@ -200,13 +200,13 @@ internal static class OverlayBenchmark
                     Console.WriteLine($"[{mode}/{phase}] settling {settle} s, then PresentMon {seconds} s ...");
                     Thread.Sleep(TimeSpan.FromSeconds(settle));
                     var state = NotificationState();
-                    var inFrontBefore = GetForegroundWindow() == load.Hwnd;
+                    var inFrontBefore = ReplayBuffer.Platform.Desktop.OverlayWindowStyle.ForegroundWindow() == load.Hwnd;
                     var visible = overlay.WindowVisible();
                     var csv = Path.Combine(folder, $"{mode}-{phase}-presentmon.csv");
                     var error = RecordPresents(presentMon, load.Info.Process + ".exe", csv, seconds, folder, $"{mode}-{phase}");
 
                     // In front for the whole phase: before and after PresentMon's window.
-                    var foreground = inFrontBefore && GetForegroundWindow() == load.Hwnd;
+                    var foreground = inFrontBefore && ReplayBuffer.Platform.Desktop.OverlayWindowStyle.ForegroundWindow() == load.Hwnd;
                     if (load.HasExited)
                     {
                         error = $"the GPU load exited ({load.ExitDescription()})";
@@ -383,7 +383,7 @@ internal static class OverlayBenchmark
     /// </summary>
     private static void BringToFront(nint hwnd)
     {
-        var foreground = GetForegroundWindow();
+        var foreground = ReplayBuffer.Platform.Desktop.OverlayWindowStyle.ForegroundWindow();
         if (foreground == hwnd)
         {
             return;
@@ -436,9 +436,6 @@ internal static class OverlayBenchmark
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);
-
-    [DllImport("user32.dll")]
-    private static extern nint GetForegroundWindow();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -22,18 +22,10 @@ public static unsafe class Monitors
     /// when <paramref name="processId"/> is <c>null</c> or has no visible window.
     /// </summary>
     /// <exception cref="Win32Exception">Not even the primary monitor could be read.</exception>
-    public static MonitorArea ForProcess(int? processId)
-    {
-        if (processId is { } pid && LargestWindow(pid) is { } window
-            && TryRead(PInvoke.MonitorFromWindow(window, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST), out var area))
-        {
-            return area;
-        }
-
-        return TryRead(PInvoke.MonitorFromPoint(default, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY), out var primary)
-            ? primary
+    public static MonitorArea ForProcess(int? processId) =>
+        TryRead(MonitorOf(processId), out var area) || TryRead(PrimaryMonitor(), out area)
+            ? area
             : throw new Win32Exception();
-    }
 
     /// <summary>
     /// A square of <paramref name="sizeDip"/> in the top-right corner of <paramref name="monitor"/>,
@@ -51,14 +43,13 @@ public static unsafe class Monitors
     /// <summary>
     /// Whether the monitor holding the process's largest visible window (else the primary monitor) has
     /// hardware overlay planes (<c>IDXGIOutput2::SupportsOverlays</c>), or <c>null</c> when DXGI can't say.
-    /// A topmost window over a borderless flip-model game keeps the game in independent flip only with a
-    /// free plane; without one, DWM composes the game, which cost 5.8's load about 7.5 % FPS.
+    /// 5.8 measured that a topmost window over a borderless flip-model game kept the game in independent
+    /// flip only with a free plane, and that without one DWM composed the game for about 7.5 % FPS lost;
+    /// 5.12 then measured the <c>always</c> dot without planes with the game still in independent flip.
     /// </summary>
     public static bool? OverlayPlanes(int? processId)
     {
-        var monitor = processId is { } pid && LargestWindow(pid) is { } window
-            ? PInvoke.MonitorFromWindow(window, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST)
-            : PInvoke.MonitorFromPoint(default, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);
+        var monitor = MonitorOf(processId);
         if (monitor.IsNull)
         {
             return null;
@@ -141,6 +132,15 @@ public static unsafe class Monitors
             output2->Release();
         }
     }
+
+    // The monitor nearest the process's largest visible window, else the primary monitor.
+    private static HMONITOR MonitorOf(int? processId) =>
+        processId is { } pid && LargestWindow(pid) is { } window
+            ? PInvoke.MonitorFromWindow(window, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST)
+            : PrimaryMonitor();
+
+    private static HMONITOR PrimaryMonitor() =>
+        PInvoke.MonitorFromPoint(default, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);
 
     // Top-level windows in Z order, without a callback (no EnumWindows).
     private static HWND? LargestWindow(int processId)
