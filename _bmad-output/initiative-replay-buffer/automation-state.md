@@ -36,7 +36,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 7.6 |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with QA 5.11 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 5.11 |
@@ -534,3 +534,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.15 is READY FOR QA at `fb3849f` on `feature/5.15-adaptive-overlay-dot` (build 0 warnings; App, Contracts, Core and Desktop pass; publish clean; one additive `overlayDot` key; Human Check row at `4752a08`; no separate review lens, so QA is the first review). Its card is In QA. **QA is queued** for the next free worker: none is free, and slice-epic-4 stays reserved for 7.6's QA findings.
 - 2026-11-04: QA 7.6 at `d730418`: **QA PASS**, 0 blocking and 2 notes (the Human Check row is added at merge; the real Open and Explorer calls are HITL). QA skipped Platform.Desktop tests that the diff touches, so 7.6 was told to run them before merging. 7.6 is merging (Sonnet). QA 5.15 started on qa-2-1. 5.11 is READY FOR QA at `e51d26a`, with its card In QA, and its QA is queued for slice-epic-4 once 7.6 merges.
 - 2026-11-04: 7.6 merged into `develop` (`bc8787d`, `feat(app): merge 7.6-open-explorer-copy`) and marked done, after QA PASS at `d730418`. Develop was merged into the branch first (4.11, 5.10, 6.5 code): build 0 warnings, App.Tests 102 passed, Platform.Desktop.Tests 11 passed. Contracts unchanged; engine code untouched. Human Check row added.
+- 2026-11-04: 7.6 merged (`bc8787d`, marked done `e165dc9`; App and Platform.Desktop tests pass). Its card is Done with its label detached. QA 5.11 started on slice-epic-4 (Sonnet). 7.7 is now Ready and waits for the next free worker.
