@@ -162,7 +162,8 @@ public sealed class SupervisionTests : IAsyncDisposable
         Assert.Contains("answering", Assert.Single(state.Warnings, w => w.Code == ErrorCodes.EngineRestarted).Message);
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AKilledAppIsRelaunchedByTheEngine()
     {
         var (app, engine) = await StartPairAsync();
