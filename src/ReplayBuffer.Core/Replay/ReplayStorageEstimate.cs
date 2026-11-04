@@ -1,3 +1,4 @@
+using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.Core.Replay;
@@ -28,5 +29,20 @@ public static class ReplayStorageEstimate
 
         var bitsPerSecond = videoBits + ((long)tracks * AacBitsPerSecond);
         return (bitsPerSecond / 8 * (windowSeconds + ExtraSeconds)) + (2L * PacketRing.DefaultSlabBytes);
+    }
+
+    /// <summary>The estimate of the Global settings <paramref name="global"/> (R2), against <paramref name="freeBytes"/>.</summary>
+    /// <param name="global">The Global effective settings.</param>
+    /// <param name="freeBytes">The free RAM for Memory, the ring drive's free space for Disk; null when unknown, which warns of nothing.</param>
+    public static StorageEstimate For(EffectiveSettings global, long? freeBytes)
+    {
+        ArgumentNullException.ThrowIfNull(global);
+        var bytes = Bytes(global.Video, global.TrackLayout.Tracks.Count, global.BufferWindow);
+        return new StorageEstimate(
+            global.ReplayStorage,
+            bytes,
+            WorstCase: global.Video.RateControl == RateControl.Vbr,
+            freeBytes,
+            ExceedsFree: freeBytes is { } free && bytes > free);
     }
 }

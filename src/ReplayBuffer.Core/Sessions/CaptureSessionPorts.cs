@@ -153,6 +153,20 @@ public interface IMicMuteStore
 }
 
 /// <summary>
+/// Where the orchestrator keeps the paths of the Recordings being written (FR-12, AD-5: runtime
+/// state), so the next start can trim the ones a dead engine left open and say they were cut short.
+/// Called on the orchestrator thread; neither call throws.
+/// </summary>
+public interface IOpenRecordings
+{
+    /// <summary>A Recording at <paramref name="path"/> is about to be written.</summary>
+    void Opened(string path);
+
+    /// <summary>The Recording at <paramref name="path"/> is no longer being written, however it ended.</summary>
+    void Closed(string path);
+}
+
+/// <summary>
 /// How a session posts back to the orchestrator from its media threads (AD-19). Both calls only
 /// post a message and return; the orchestrator ends the session.
 /// </summary>

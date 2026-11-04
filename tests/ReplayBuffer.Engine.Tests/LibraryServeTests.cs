@@ -38,7 +38,9 @@ public sealed class LibraryServeTests : IAsyncLifetime
             [SettingsOp.SetGlobal(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(Output))]);
         await _client.SendAsync(SettingsMessages.Update, update, Token);
         await NextAsync("settings.changed");
+        await NextAsync("library.folderChanged");
         await NextAsync("library.reset");
+        Assert.Equal(Output, _client.State.LibraryFolder);
     }
 
     public async ValueTask DisposeAsync()

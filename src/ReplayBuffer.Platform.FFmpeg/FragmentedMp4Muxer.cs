@@ -6,7 +6,9 @@ namespace ReplayBuffer.Platform.FFmpeg;
 /// <summary>
 /// Fragmented MP4 (AD-9): an empty moov, then a fragment at every keyframe and at least
 /// every second. Encoders hand it packets in their own time base; it converts them to
-/// stream time and writes them under one lock.
+/// stream time and writes them under one lock. A durable muxer (a Recording's, R3) instead
+/// writes through a <see cref="DurableOutput"/>, cuts a fragment only at
+/// <see cref="CutFragment"/>, and flushes the header and every fragment to the disk.
 /// </summary>
 public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 {
@@ -15,14 +17,29 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
+    private readonly bool _durable;
     private AVFormatContext* _context;
+    private DurableOutput? _output;
     private bool _started;
     private bool _finished;
 
     public FragmentedMp4Muxer(string path, ILogger logger)
+        : this(path, logger, durable: false)
+    {
+    }
+
+    /// <param name="path">The file to write.</param>
+    /// <param name="logger">The muxer's log.</param>
+    /// <param name="durable">
+    /// Write through a <see cref="DurableOutput"/>: packets go straight in (<c>av_write_frame</c>),
+    /// a fragment ends only at <see cref="CutFragment"/>, and the header and each fragment are
+    /// flushed to the disk before the call returns. A write failure is rethrown as it was thrown.
+    /// </param>
+    internal FragmentedMp4Muxer(string path, ILogger logger, bool durable)
     {
         Path = path;
         _logger = logger;
+        _durable = durable;
         AVFormatContext* context = null;
         FFmpegLibrary.Check(ffmpeg.avformat_alloc_output_context2(&context, null, "mp4", path), "avformat_alloc_output_context2");
         _context = context;
@@ -91,15 +108,25 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     /// <summary>Opens the file and writes the header.</summary>
     public void Start()
     {
-        FFmpegLibrary.Check(ffmpeg.avio_open(&_context->pb, Path, ffmpeg.AVIO_FLAG_WRITE), $"avio_open({Path})");
-        _context->max_interleave_delta = 500_000; // µs
-
         AVDictionary* options = null;
-        ffmpeg.av_dict_set(&options, "movflags", "frag_keyframe+empty_moov+default_base_moof", 0);
-        ffmpeg.av_dict_set(&options, "frag_duration", "1000000", 0); // µs
+        if (_durable)
+        {
+            _output = new DurableOutput(Path);
+            _context->pb = _output.Context;
+            _context->flags |= ffmpeg.AVFMT_FLAG_CUSTOM_IO;
+            ffmpeg.av_dict_set(&options, "movflags", "frag_custom+empty_moov+default_base_moof", 0);
+        }
+        else
+        {
+            FFmpegLibrary.Check(ffmpeg.avio_open(&_context->pb, Path, ffmpeg.AVIO_FLAG_WRITE), $"avio_open({Path})");
+            _context->max_interleave_delta = 500_000; // µs
+            ffmpeg.av_dict_set(&options, "movflags", "frag_keyframe+empty_moov+default_base_moof", 0);
+            ffmpeg.av_dict_set(&options, "frag_duration", "1000000", 0); // µs
+        }
+
         try
         {
-            FFmpegLibrary.Check(ffmpeg.avformat_write_header(_context, &options), "avformat_write_header");
+            Check(ffmpeg.avformat_write_header(_context, &options), "avformat_write_header");
             AVDictionaryEntry* unused = null;
             while ((unused = ffmpeg.av_dict_get(options, "", unused, ffmpeg.AV_DICT_IGNORE_SUFFIX)) is not null)
             {
@@ -111,6 +138,8 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             ffmpeg.av_dict_free(&options);
         }
 
+        // The empty moov is on the disk before the first fragment.
+        _output?.Flush();
         _started = true;
         _logger.LogInformation("Writing {Path}", Path);
     }
@@ -130,7 +159,45 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 
             packet->stream_index = streamIndex;
             ffmpeg.av_packet_rescale_ts(packet, timeBase, _context->streams[streamIndex]->time_base);
-            FFmpegLibrary.Check(ffmpeg.av_interleaved_write_frame(_context, packet), "av_interleaved_write_frame");
+            if (_durable)
+            {
+                // av_write_frame keeps its own reference; this one is the caller's to drop.
+                try
+                {
+                    Check(ffmpeg.av_write_frame(_context, packet), "av_write_frame");
+                }
+                finally
+                {
+                    ffmpeg.av_packet_unref(packet);
+                }
+            }
+            else
+            {
+                FFmpegLibrary.Check(ffmpeg.av_interleaved_write_frame(_context, packet), "av_interleaved_write_frame");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A durable muxer's fragment ends here: every packet written since the last cut goes out as one
+    /// <c>moof</c> + <c>mdat</c>, flushed to the disk before this returns.
+    /// </summary>
+    internal void CutFragment()
+    {
+        lock (_lock)
+        {
+            if (!_durable)
+            {
+                throw new InvalidOperationException("Only a durable muxer cuts its own fragments.");
+            }
+
+            if (!_started || _finished)
+            {
+                return;
+            }
+
+            Check(ffmpeg.av_write_frame(_context, null), "av_write_frame(flush)");
+            _output!.Flush();
         }
     }
 
@@ -145,9 +212,20 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             }
 
             _finished = true;
-            FFmpegLibrary.Check(ffmpeg.av_interleaved_write_frame(_context, null), "av_interleaved_write_frame(flush)");
-            FFmpegLibrary.Check(ffmpeg.av_write_trailer(_context), "av_write_trailer");
-            ffmpeg.avio_closep(&_context->pb);
+            if (_durable)
+            {
+                // The trailer writes the last fragment and the mfra.
+                Check(ffmpeg.av_write_trailer(_context), "av_write_trailer");
+                _output!.Flush();
+                CloseOutput();
+            }
+            else
+            {
+                FFmpegLibrary.Check(ffmpeg.av_interleaved_write_frame(_context, null), "av_interleaved_write_frame(flush)");
+                FFmpegLibrary.Check(ffmpeg.av_write_trailer(_context), "av_write_trailer");
+                ffmpeg.avio_closep(&_context->pb);
+            }
+
             _logger.LogInformation("Finished {Path}", Path);
         }
     }
@@ -161,7 +239,12 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
                 return;
             }
 
-            if (_context->pb is not null)
+            if (_output is not null)
+            {
+                // A custom pb is the DurableOutput's to free, never avio_closep's.
+                CloseOutput();
+            }
+            else if (_context->pb is not null)
             {
                 ffmpeg.avio_closep(&_context->pb);
             }
@@ -169,5 +252,26 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             ffmpeg.avformat_free_context(_context);
             _context = null;
         }
+    }
+
+    private void CloseOutput()
+    {
+        _context->pb = null;
+        _output?.Dispose();
+        _output = null;
+    }
+
+    /// <summary>
+    /// <see cref="FFmpegLibrary.Check"/>, except that a durable muxer whose write failed rethrows that
+    /// failure as it was thrown (a full disk's <see cref="IOException"/>, for 6.7).
+    /// </summary>
+    private int Check(int result, string operation)
+    {
+        if (result < 0)
+        {
+            _output?.ThrowIfFailed();
+        }
+
+        return FFmpegLibrary.Check(result, operation);
     }
 }

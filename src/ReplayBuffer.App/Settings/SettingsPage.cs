@@ -87,6 +87,7 @@ internal static class SettingsPages
     public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine) =>
     [
         new GeneralSettingsPage(sender),
+        new ReplayBufferSettingsPage(sender),
         new TrackLayoutPage(sender, engine),
         new GameProfilesPage(sender, engine),
     ];

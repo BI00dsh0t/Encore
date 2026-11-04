@@ -93,7 +93,8 @@ public static class ErrorCodes
     /// A Recording was running when the engine restarted, and was not resumed (AD-16).
     /// The resume rule, for epic-recordings: after an engine restart only the Replay Buffer
     /// resumes, never a Recording or Monitor Recording, and this warning is raised for each one
-    /// that was running. Nothing raises it yet.
+    /// that was running. The engine raises it at start, once per Recording the last instance left
+    /// open, after trimming that file to its last whole fragment; its message names the path.
     /// </summary>
     public const string RecordingInterrupted = "recording-interrupted";
 
