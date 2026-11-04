@@ -56,6 +56,9 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     // How long watcher events gather before their paths are reconciled, and the retry of a busy file.
     private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>How soon a failed save of the index is tried again (story 8.6).</summary>
+    internal static readonly TimeSpan SaveRetryDelay = TimeSpan.FromSeconds(1);
+
     // An incomplete file written this recently may still be growing, so it is checked again.
     private static readonly TimeSpan RecentWrite = TimeSpan.FromSeconds(2);
 
@@ -144,6 +147,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private string _folder = "";
     private FileSystemWatcher? _watcher;
     private ITimer? _settle;
+    private ITimer? _saveRetry;
+    private bool _saveFailing;
     private bool _settleArmed;
     private bool _rescanPending;
     private bool _cleanupBlocked;
@@ -706,6 +711,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
         StopWatcher();
         _settle?.Dispose();
+        _saveRetry?.Dispose();
         _cleanupFirst?.Dispose();
         _cleanupPeriodic?.Dispose();
         DisposeRegistrations();
@@ -782,6 +788,10 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
             case Acknowledge:
                 OnAcknowledge();
+                break;
+
+            case RetrySave:
+                _dirty = true;
                 break;
 
             case Watch watch:
@@ -1952,6 +1962,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private void OnError(object sender, ErrorEventArgs e) => OnWatcherError(e.GetException());
 
     // Atomic: a temp file flushed to disk, then swapped in, keeping the previous file as library.json.bak.
+    // A save that fails (library.json held open by a backup or a scanner) is tried again until it
+    // lands, so a Favourite never lives only in memory until the next change (story 8.6).
     private void Save()
     {
         var temp = _libraryFile + ".tmp";
@@ -1981,6 +1993,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
             {
                 File.Move(temp, _libraryFile);
             }
+
+            if (_saveFailing)
+            {
+                _saveFailing = false;
+                _log?.Invoke("library.json saved after an earlier save failed.");
+            }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -1993,7 +2011,15 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
                 // The next save overwrites it.
             }
 
-            _failed(e);
+            // One warning per run of failures; the retry keeps going quietly.
+            if (!_saveFailing)
+            {
+                _failed(e);
+            }
+
+            _saveFailing = true;
+            _saveRetry ??= _time.CreateTimer(_ => _channel.Writer.TryWrite(new RetrySave()), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _saveRetry.Change(SaveRetryDelay, Timeout.InfiniteTimeSpan);
         }
     }
 
@@ -2031,6 +2057,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private sealed record FolderChanged : Message;
 
     private sealed record Acknowledge : Message;
+
+    private sealed record RetrySave : Message;
 
     private sealed record Watch(bool On, TaskCompletionSource Done) : Message;
 

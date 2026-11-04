@@ -26,7 +26,7 @@ public sealed class SessionAudioTests
         Assert.Equal(["Game", "Chat", "Mic"], audio.Tracks.Select(t => t.Name));
         Assert.Equal(["Speakers", "Chat", "Mic"], audio.Devices.Select(d => d.FriendlyName));
         Assert.Equal([[0], [1], [2]], audio.Tracks.Select(t => t.DeviceIndexes.ToArray()));
-        Assert.Equal(new SessionAudioDevice(Mic.EndpointId, AudioFlow.Input, "Mic", IsMic: true), audio.Devices[2]);
+        Assert.Equal(new SessionAudioDevice(Mic.EndpointId, AudioFlow.Input, "Mic", IsMic: true, Mic.ParentName), audio.Devices[2]);
     }
 
     [Fact]
