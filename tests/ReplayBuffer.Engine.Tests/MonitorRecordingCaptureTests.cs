@@ -345,7 +345,9 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         displays.Change([.. real.Select(m => m with { Primary = false }), added with { Primary = true }]);
         await Task.Delay(TimeSpan.FromSeconds(1), Token);
         displays.Change(real);
-        await Task.Delay(TimeSpan.FromSeconds(1), Token);
+
+        // Past the 3.5 s the file is checked for: the three changes took about 3 s.
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
 
         Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
         Assert.Equal(new RecordingStopped(game.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
