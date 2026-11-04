@@ -39,6 +39,17 @@ internal interface IEngineSession
     Task<TResult> SendAsync<TArgs, TResult>(CommandType<TArgs, TResult> command, TArgs args, CancellationToken cancellationToken = default);
 }
 
+/// <summary>The views' one rule for a session's state: connected, or nothing.</summary>
+internal static class EngineSessions
+{
+    /// <summary>The session's state while it is <see cref="EngineStatus.Connected"/>, else <c>null</c>.</summary>
+    public static StateSnapshot? ConnectedState(this IEngineSession engine) => ConnectedState(engine.Status, engine.State);
+
+    /// <summary><paramref name="state"/> when <paramref name="status"/> is <see cref="EngineStatus.Connected"/>, else <c>null</c>.</summary>
+    public static StateSnapshot? ConnectedState(EngineStatus status, StateSnapshot? state) =>
+        status == EngineStatus.Connected ? state : null;
+}
+
 internal sealed record EngineConnectionOptions
 {
     /// <summary>The engine's file name; the App trusts only this image, in its own folder (AD-3).</summary>

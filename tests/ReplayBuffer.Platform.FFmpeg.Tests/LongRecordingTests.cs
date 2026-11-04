@@ -14,13 +14,13 @@ namespace ReplayBuffer.Platform.FFmpeg.Tests;
 /// </summary>
 public sealed class LongRecordingTests : IDisposable
 {
-    private const int Fps = 30;
+    internal const int Fps = 30;
     private const int Hours = 4;
-    private const int KeyEvery = 60;
-    private const int VideoTicks = 90_000 / Fps;
-    private const int AacSamples = 1024;
-    private const int SampleRate = 48_000;
-    private const int Tracks = 3;
+    internal const int KeyEvery = 60;
+    internal const int VideoTicks = 90_000 / Fps;
+    internal const int AacSamples = 1024;
+    internal const int SampleRate = 48_000;
+    internal const int Tracks = 3;
 
     private readonly string _directory = Directory.CreateTempSubdirectory("rb-long-").FullName;
 
@@ -65,7 +65,7 @@ public sealed class LongRecordingTests : IDisposable
     }
 
     /// <summary>The video's parameters (MPEG-4 Part 2, 320x240, 90 kHz) and three AAC-LC 48 kHz stereo Tracks.</summary>
-    private static unsafe RecordingStreams Streams()
+    internal static unsafe RecordingStreams Streams()
     {
         var streams = new RecordingStreams();
         var video = ffmpeg.avcodec_parameters_alloc();
@@ -146,7 +146,7 @@ public sealed class LongRecordingTests : IDisposable
         }
     }
 
-    private static unsafe void Offer(RecordingWriter writer, AVPacket* packet, int stream, long pts, long duration, bool key)
+    internal static unsafe void Offer(RecordingWriter writer, AVPacket* packet, int stream, long pts, long duration, bool key)
     {
         packet->pts = pts;
         packet->dts = pts;

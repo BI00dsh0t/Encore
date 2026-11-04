@@ -66,6 +66,69 @@ public sealed class FeedbackRouterTests
         Assert.Empty(notices.Active);
     }
 
+    [Fact]
+    public void ADiskFullStaysUntilTheNextRecordingAndAStoppedReplayBufferUntilItResumes()
+    {
+        var notices = new FakeNotices();
+        var time = new ManualTime();
+        using var router = new FeedbackRouter(notices, time);
+
+        router.DiskFull();
+        router.ReplayStoppedDiskFull();
+
+        Assert.Equal(2, notices.Active.Count);
+        var stopped = Assert.Single(notices.Active.Values, n => n.Code == ErrorCodes.ReplayStoppedDiskFull);
+        Assert.Equal(WarningSeverity.Warning, stopped.Severity);
+        Assert.Null(stopped.Sound);
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(2, notices.Active.Count);
+
+        router.ReplayResumed();
+        Assert.Equal(ErrorCodes.DiskFull, Assert.Single(notices.Active).Value.Code);
+
+        router.RecordingStarted(new RecordingStarted(@"c:\clips\Game\a.mp4"));
+        Assert.Equal(ErrorCodes.RecordingStarted, Assert.Single(notices.Active).Value.Code);
+    }
+
+    [Fact]
+    public void ADiskFullOnARecordingAnEncoderRestartReplacedKeepsItsNoticeAndRaisesNoStart()
+    {
+        var notices = new FakeNotices();
+        using var router = new FeedbackRouter(notices, new ManualTime());
+
+        router.StateChanged(CaptureState.Initial with { Recording = RecordingState.Running });
+        router.RecordingStopped(new RecordingStopped(@"c:\clips\Game.mp4", RecordingStopReasons.DiskFull));
+        router.DiskFull();
+        router.RecordingStarted(new RecordingStarted(@"c:\clips\Game.mp4"));
+        router.RecordingRestarted(new RecordingRestart(@"c:\clips\Game.mp4", @"c:\clips\Game.mp4"));
+
+        Assert.Equal(
+            [ErrorCodes.RecordingStopped, ErrorCodes.DiskFull, ErrorCodes.RecordingRestarted],
+            notices.Active.Values.Select(n => n.Code));
+    }
+
+    [Fact]
+    public void AMonitorRecordingRaisesItsOwnNoticesBesideAGameRecordingAndLeavesItsHandoverAlone()
+    {
+        var notices = new FakeNotices();
+        using var router = new FeedbackRouter(notices, new ManualTime());
+
+        router.StateChanged(CaptureState.Initial with { Recording = RecordingState.Running, MonitorRecording = RecordingState.Running });
+        router.MonitorRecordingStarted(new RecordingStarted(@"c:\clips\Monitor Recordings\Monitor.mp4"));
+        router.MonitorRecordingStopped(new RecordingStopped(@"c:\clips\Monitor Recordings\Monitor.mp4", RecordingStopReasons.Stopped));
+
+        // The game Recording's next start is still a new one, not an encoder restart's replacement.
+        router.RecordingStarted(new RecordingStarted(@"c:\clips\Game\Game.mp4"));
+
+        Assert.Equal(
+            [
+                new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, "recordings", "Monitor Recording started", "recordingStarted"),
+                new FeedbackNotice(ErrorCodes.RecordingStopped, WarningSeverity.Info, "recordings", "Monitor Recording stopped", "recordingStopped"),
+                new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, "recordings", "Recording started", "recordingStarted"),
+            ],
+            notices.Active.Values);
+    }
+
     private sealed class FakeNotices : IFeedbackNotices
     {
         public Dictionary<string, FeedbackNotice> Active { get; } = [];

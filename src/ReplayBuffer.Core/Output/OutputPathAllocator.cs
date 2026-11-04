@@ -54,6 +54,17 @@ public sealed class OutputPathAllocator(TimeProvider time)
     }
 
     /// <summary>
+    /// Reserves a Monitor Recording's path (6.9):
+    /// <c>&lt;Output Folder&gt;\Monitor Recordings\Monitor_&lt;yyyy-MM-dd_HH-mm-ss&gt;.mp4</c>, from
+    /// the local time of <paramref name="qpc"/>.
+    /// </summary>
+    public string AllocateForMonitor(string outputFolder, long qpc)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputFolder);
+        return Reserve(Path.Combine(outputFolder, ProfileFolders.MonitorRecordings), "Monitor", LocalTimeOf(qpc));
+    }
+
+    /// <summary>
     /// Creates <paramref name="folder"/> and an empty <c>&lt;name&gt;_&lt;localTime&gt;.mp4</c> in it,
     /// adding <c>_2</c>, <c>_3</c>… while the path is taken, and returns the path created.
     /// </summary>

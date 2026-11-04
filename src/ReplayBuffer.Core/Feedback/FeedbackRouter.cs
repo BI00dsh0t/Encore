@@ -25,10 +25,12 @@ public interface IFeedbackNotices
 
 /// <summary>
 /// Turns outcomes into notices (FR-6): Clip saved, Clip not saved, Recording started and stopped
-/// (from <see cref="CaptureState.Recording"/> transitions), Recording restarted and disk full. Info
+/// (from the real <c>recording.started</c> and <c>recording.stopped</c> events, the stop naming its
+/// reason), Recording restarted and disk full. Info
 /// notices, and the restart's, are withdrawn after <see cref="InfoLifetime"/>; a Clip not saved
 /// stays until the next saved Clip, a disk full
-/// until the next Recording starts, or until the user dismisses either. With a
+/// until the next Recording starts, a Replay Buffer stopped by a full disk (R5) until it restarts,
+/// or until the user dismisses any of them. With a
 /// <see cref="FeedbackSoundPlayer"/>, each notice's sound is queued as it is raised; a sound that is
 /// switched off isn't played, and its notice carries no <see cref="FeedbackNotice.Sound"/>. Thread-safe.
 /// </summary>
@@ -44,7 +46,9 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     private readonly Dictionary<string, ITimer> _timers = new(StringComparer.Ordinal);
     private readonly List<string> _clipFailures = [];
     private readonly List<string> _diskFulls = [];
+    private readonly List<string> _replayStops = [];
     private RecordingState _recording = RecordingState.Off;
+    private bool _replacing;
     private bool _disposed;
 
     /// <summary>A Clip was saved: a <c>clip-saved</c> notice, and every <c>clip-failed</c> one is withdrawn.</summary>
@@ -80,37 +84,164 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     }
 
     /// <summary>
-    /// The capture state changed: a Recording turning on raises <c>recording-started</c> and
-    /// withdraws every <c>disk-full</c> notice; turning off raises <c>recording-stopped</c>.
+    /// The capture state changed. It raises nothing; the router keeps the Recording state only to
+    /// tell an encoder restart's replacement from a new Recording.
     /// </summary>
     public void StateChanged(CaptureState state)
     {
         ArgumentNullException.ThrowIfNull(state);
         lock (_lock)
         {
-            if (_disposed || state.Recording == _recording)
+            if (_disposed)
             {
                 return;
             }
 
             _recording = state.Recording;
-            if (_recording == RecordingState.Running)
+            if (_recording != RecordingState.Running)
             {
-                WithdrawAll(_diskFulls);
-                RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Recording started", "recordingStarted"));
-            }
-            else
-            {
-                RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStopped, WarningSeverity.Info, Recordings, "Recording stopped", "recordingStopped"));
+                _replacing = false;
             }
         }
     }
 
     /// <summary>
+    /// A Recording started (<c>recording.started</c>): a <c>recording-started</c> notice with the
+    /// <c>recordingStarted</c> sound, and every <c>disk-full</c> notice is withdrawn. An encoder
+    /// restart's replacement (a start after a stop that left the state Running) raises and withdraws
+    /// nothing; its <see cref="RecordingRestarted"/> notice follows.
+    /// </summary>
+    public void RecordingStarted(RecordingStarted started)
+    {
+        ArgumentNullException.ThrowIfNull(started);
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (_replacing)
+            {
+                _replacing = false;
+                return;
+            }
+
+            WithdrawAll(_diskFulls);
+            RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Recording started", "recordingStarted"));
+        }
+    }
+
+    /// <summary>
+    /// A Recording stopped (<c>recording.stopped</c>): a <c>recording-stopped</c> notice whose message
+    /// names the reason (<see cref="StopMessage"/>), with the <c>recordingStopped</c> sound. A disk-full
+    /// or encoder-restart stop is silent, as the <see cref="DiskFull"/> or
+    /// <see cref="RecordingRestarted"/> notice that follows plays its own sound; a writer failure is a warning.
+    /// </summary>
+    public void RecordingStopped(RecordingStopped stopped)
+    {
+        ArgumentNullException.ThrowIfNull(stopped);
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            // The orchestrator turns the state Off before a stop unless an encoder restart's replacement
+            // follows, whatever the stop's reason (the old writer may still fail or fill the disk).
+            var silent = stopped.Reason is RecordingStopReasons.DiskFull or RecordingStopReasons.EncoderRestart;
+            _replacing = _recording == RecordingState.Running;
+            RaiseInfo(new FeedbackNotice(
+                ErrorCodes.RecordingStopped,
+                IsKnownReason(stopped.Reason) ? WarningSeverity.Info : WarningSeverity.Warning,
+                Recordings,
+                StopMessage(stopped.Reason),
+                silent ? null : "recordingStopped"));
+        }
+    }
+
+    /// <summary>
+    /// A Monitor Recording started (6.9): the same <c>recording-started</c> notice and sound as a
+    /// Recording's, worded for the Monitor Recording, and every <c>disk-full</c> notice is withdrawn.
+    /// It never touches the game Recording's restart handover.
+    /// </summary>
+    public void MonitorRecordingStarted(RecordingStarted started)
+    {
+        ArgumentNullException.ThrowIfNull(started);
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            WithdrawAll(_diskFulls);
+            RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Monitor Recording started", "recordingStarted"));
+        }
+    }
+
+    /// <summary>
+    /// A Monitor Recording stopped (6.9): the same <c>recording-stopped</c> notice and sound as a
+    /// Recording's (<see cref="MonitorStopMessage"/>), a disk-full stop silent; a writer failure is a
+    /// warning. It never touches the game Recording's restart handover.
+    /// </summary>
+    public void MonitorRecordingStopped(RecordingStopped stopped)
+    {
+        ArgumentNullException.ThrowIfNull(stopped);
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            RaiseInfo(new FeedbackNotice(
+                ErrorCodes.RecordingStopped,
+                IsKnownReason(stopped.Reason) ? WarningSeverity.Info : WarningSeverity.Warning,
+                Recordings,
+                MonitorStopMessage(stopped.Reason),
+                stopped.Reason == RecordingStopReasons.DiskFull ? null : "recordingStopped"));
+        }
+    }
+
+    /// <summary>The message a Monitor Recording's <c>recording-stopped</c> notice uses for <paramref name="reason"/>.</summary>
+    public static string MonitorStopMessage(string reason) => reason switch
+    {
+        RecordingStopReasons.Stopped => "Monitor Recording stopped",
+        RecordingStopReasons.SessionEnded => "Monitor Recording stopped: the monitor capture ended",
+        RecordingStopReasons.Shutdown => "Monitor Recording stopped: ReplayBuffer shut down",
+        RecordingStopReasons.DiskFull => "Monitor Recording stopped: the disk is full",
+        _ when IsKnownReason(reason) => "Monitor Recording stopped",
+        _ => $"Monitor Recording stopped: the write failed ({reason})",
+    };
+
+    /// <summary>The message a <c>recording-stopped</c> notice uses for <paramref name="reason"/>.</summary>
+    public static string StopMessage(string reason) => reason switch
+    {
+        RecordingStopReasons.Stopped => "Recording stopped",
+        RecordingStopReasons.GameExit => "Recording stopped: the game exited",
+        RecordingStopReasons.Ignored => "Recording stopped: the game was set Ignored",
+        RecordingStopReasons.SessionEnded => "Recording stopped: the game session ended",
+        RecordingStopReasons.Shutdown => "Recording stopped: ReplayBuffer shut down",
+        RecordingStopReasons.EncoderRestart => "Recording stopped: encoder restart",
+        RecordingStopReasons.DiskFull => "Recording stopped: the disk is full",
+        _ => $"Recording stopped: the write failed ({reason})",
+    };
+
+    private static bool IsKnownReason(string reason) => reason is RecordingStopReasons.Stopped
+        or RecordingStopReasons.GameExit
+        or RecordingStopReasons.Ignored
+        or RecordingStopReasons.SessionEnded
+        or RecordingStopReasons.Shutdown
+        or RecordingStopReasons.EncoderRestart
+        or RecordingStopReasons.DiskFull;
+
+    /// <summary>
     /// A forced encoder restart ended a Recording and started another (R4): a
     /// <c>recording-restarted</c> warning naming both files, with the <c>recordingStarted</c> sound,
-    /// withdrawn after <see cref="InfoLifetime"/>. The Recording state never left Running, so no
-    /// started or stopped notice comes with it.
+    /// withdrawn after <see cref="InfoLifetime"/>. The stop before it is silent and its replacement
+    /// raises no started notice, so this notice plays the only sound.
     /// </summary>
     public void RecordingRestarted(RecordingRestart restart)
     {
@@ -143,6 +274,40 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
 
             _diskFulls.Add(Raise(new FeedbackNotice(
                 ErrorCodes.DiskFull, WarningSeverity.Error, Recordings, "The disk is full", "diskFull")));
+        }
+    }
+
+    /// <summary>A full disk stopped a Disk-mode Replay Buffer (R5): a <c>replay-stopped-disk-full</c> warning, with no sound.</summary>
+    public void ReplayStoppedDiskFull()
+    {
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            // The disk-full notice already played its sound.
+            _replayStops.Add(notices.Raise(new FeedbackNotice(
+                ErrorCodes.ReplayStoppedDiskFull,
+                WarningSeverity.Warning,
+                "replay",
+                "The Replay Buffer stopped: its disk is full. It restarts once there is room.",
+                null)));
+        }
+    }
+
+    /// <summary>The wait after a full disk ended: every <c>replay-stopped-disk-full</c> notice is withdrawn.</summary>
+    public void ReplayResumed()
+    {
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            WithdrawAll(_replayStops);
         }
     }
 

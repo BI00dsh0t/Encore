@@ -150,6 +150,14 @@ public static class ErrorCodes
     public const string DiskFull = "disk-full";
 
     /// <summary>
+    /// A warning (R5): a Recording's disk filled while the Replay Buffer kept its ring on disk, so the
+    /// Replay Buffer stopped. Shown on the overlay; it stays until the wait for room ends (the
+    /// Replay Buffer restarts once a recheck finds room for its ring, or another session starts, or
+    /// the Target changes or exits), or it is dismissed.
+    /// </summary>
+    public const string ReplayStoppedDiskFull = "replay-stopped-disk-full";
+
+    /// <summary>
     /// A save failed (R6) because the Output Folder or the file could not be written. Raised by the
     /// Clip writer now, and by the Recording writer later. No file is left and nothing is Reset.
     /// </summary>
@@ -243,6 +251,12 @@ public static class ErrorCodes
     /// </summary>
     public const string ResetGap = "reset-gap";
 
+    /// <summary>
+    /// A warning (AD-7): a Monitor Recording was refused because the game session already runs two
+    /// encoder chains, and a third would exceed the encoder budget. Nothing was started.
+    /// </summary>
+    public const string EncoderBudget = "encoder-budget";
+
     /// <summary><c>dev.simulate</c> was sent to the installed instance, which refuses it.</summary>
     public const string NotDevInstance = "not-dev-instance";
 
@@ -290,6 +304,7 @@ public static class ErrorCodes
         ClipTooShort,
         SaveBusy,
         DiskFull,
+        ReplayStoppedDiskFull,
         AccessDenied,
         SaveFailed,
         ClipSaved,
@@ -307,6 +322,7 @@ public static class ErrorCodes
         FeedbackDeviceCaptured,
         MemoryMargin,
         ResetGap,
+        EncoderBudget,
         NotDevInstance,
     ];
 }

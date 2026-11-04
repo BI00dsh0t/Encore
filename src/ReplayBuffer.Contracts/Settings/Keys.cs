@@ -268,7 +268,7 @@ public static class Keys
     }
 
     private static bool IsValidHotkeys(HotkeySettings hotkeys) =>
-        new[] { hotkeys.Save, hotkeys.MicMute, hotkeys.RecordToggle, hotkeys.RecordStart, hotkeys.RecordStop, hotkeys.MonitorRecordToggle }
+        new[] { hotkeys.Save, hotkeys.MicMute, hotkeys.RecordToggle, hotkeys.RecordStart, hotkeys.RecordStop, hotkeys.MonitorRecordToggle, hotkeys.MonitorRecordStart, hotkeys.MonitorRecordStop }
             .All(b => b is null || (b.Vk is >= 1 and <= 254 && (b.Modifiers & ~HotkeyModifiers.All) == 0));
 
     private static bool IsValidManualGames(IReadOnlyList<string> paths) =>

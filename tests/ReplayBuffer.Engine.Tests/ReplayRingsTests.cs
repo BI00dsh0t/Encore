@@ -1,4 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Replay;
+using ReplayBuffer.Core.Settings;
 using ReplayBuffer.Engine.Sessions;
 
 namespace ReplayBuffer.Engine.Tests;
@@ -20,5 +23,22 @@ public sealed class ReplayRingsTests
         {
             File.Delete(blocker);
         }
+    }
+
+    [Fact]
+    public void ARingFitsWhenItsDriveHasRoomForItsEstimateOrTheRoomIsUnknown()
+    {
+        var snapshot = SettingsResolver.Resolve(SettingsDocument.Empty, null);
+        var bytes = ReplayStorageEstimate.Bytes(snapshot.Video, snapshot.TrackLayout.Tracks.Count, snapshot.BufferWindow);
+        var asked = new List<string>();
+
+        Assert.True(ReplayRings.Fits(snapshot, "default", folder =>
+        {
+            asked.Add(folder);
+            return bytes;
+        }));
+        Assert.False(ReplayRings.Fits(snapshot, "default", _ => bytes - 1));
+        Assert.True(ReplayRings.Fits(snapshot, "default", _ => null));
+        Assert.Equal(["default"], asked);
     }
 }

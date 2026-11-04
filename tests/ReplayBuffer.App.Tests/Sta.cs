@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using System.Windows.Threading;
 
 namespace ReplayBuffer.App.Tests;
 
@@ -30,5 +31,15 @@ internal static class Sta
         thread.Start();
         thread.Join();
         failure?.Throw();
+    }
+
+    /// <summary>Runs the current thread's dispatcher for <paramref name="duration"/>, so windows show, render and settle.</summary>
+    public static void Pump(TimeSpan duration)
+    {
+        var frame = new DispatcherFrame();
+        var timer = new DispatcherTimer(duration, DispatcherPriority.Background, (_, _) => frame.Continue = false, Dispatcher.CurrentDispatcher);
+        timer.Start();
+        Dispatcher.PushFrame(frame);
+        timer.Stop();
     }
 }

@@ -437,11 +437,13 @@ internal sealed class EngineHost : IAsyncDisposable
                         {
                             hub.Publish(RecordingMessages.Started, started);
                             recordingLog.LogInformation("Recording to {Path}", started.Path);
+                            notices.RecordingStarted(started);
                         },
                         stopped =>
                         {
                             hub.Publish(RecordingMessages.Stopped, stopped);
                             recordingLog.LogInformation("Recording stopped ({Reason}): {Path}", stopped.Reason, stopped.Path);
+                            notices.RecordingStopped(stopped);
                         },
                         e => recordingLog.LogWarning("The Recording failed: {Message}", e.Message),
                         libraryActor,
@@ -451,6 +453,42 @@ internal sealed class EngineHost : IAsyncDisposable
                         {
                             recordingLog.LogWarning("An encoder restart ended the Recording {Stopped}; it continues in {Started}", restart.StoppedPath, restart.StartedPath);
                             notices.RecordingRestarted(restart);
+                        },
+                        DiskFull: () =>
+                        {
+                            recordingLog.LogWarning("The Recording's disk is full; the Recording stopped");
+                            notices.DiskFull();
+                        },
+                        RingFits: snapshot => ReplayRings.Fits(snapshot, ringFolder, EstimatePublisher.FreeDiskBytes),
+                        ReplayDiskFull: stopped =>
+                        {
+                            if (stopped)
+                            {
+                                recordingLog.LogWarning("The disk is full: the Disk-mode Replay Buffer stopped until its ring fits again");
+                                notices.ReplayStoppedDiskFull();
+                            }
+                            else
+                            {
+                                recordingLog.LogInformation("The wait for room for the Replay Buffer's ring ended");
+                                notices.ReplayResumed();
+                            }
+                        },
+                        MonitorStarted: started =>
+                        {
+                            hub.Publish(RecordingMessages.Started, started);
+                            recordingLog.LogInformation("Monitor Recording to {Path}", started.Path);
+                            notices.MonitorRecordingStarted(started);
+                        },
+                        MonitorStopped: stopped =>
+                        {
+                            hub.Publish(RecordingMessages.Stopped, stopped);
+                            recordingLog.LogInformation("Monitor Recording stopped ({Reason}): {Path}", stopped.Reason, stopped.Path);
+                            notices.MonitorRecordingStopped(stopped);
+                        },
+                        Warn: (code, message) =>
+                        {
+                            recordingLog.LogWarning("{Code}: {Message}", code, message);
+                            warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay: true);
                         })
                     : null);
 
@@ -534,7 +572,14 @@ internal sealed class EngineHost : IAsyncDisposable
             });
             router.Register(GameMessages.Add, (add, _) => ValueTask.FromResult(ManualGames.Add(load.Store, add)));
             SessionOrchestrator simulateTo = sessions;
-            var simulator = new DevSimulator(instance, running => simulateTo.Post(new RecordingRunning(running)), notices.DiskFull, notSaved, () => notices.ClipSaved(new ClipSaved("dev.simulate")));
+            var simulator = new DevSimulator(
+                instance,
+                running => simulateTo.Post(new RecordingRunning(running)),
+                notices.RecordingStarted,
+                notices.RecordingStopped,
+                notices.DiskFull,
+                notSaved,
+                () => notices.ClipSaved(new ClipSaved("dev.simulate")));
             router.Register(DevMessages.Simulate, (simulate, _) => ValueTask.FromResult(simulator.Simulate(simulate)));
             router.Register(EngineMessages.Attach, (attach, _) => ValueTask.FromResult(apps.Attach(attach)));
             router.Register(

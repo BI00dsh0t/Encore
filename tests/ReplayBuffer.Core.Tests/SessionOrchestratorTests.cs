@@ -9,7 +9,7 @@ using ReplayBuffer.Core.Settings;
 
 namespace ReplayBuffer.Core.Tests;
 
-public sealed class SessionOrchestratorTests : IDisposable
+public sealed partial class SessionOrchestratorTests : IDisposable
 {
     private const int Pid = 4242;
     private const string ProfileId = @"c:\games\game.exe";
@@ -626,6 +626,116 @@ public sealed class SessionOrchestratorTests : IDisposable
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task AFullDiskStopsTheRecordingAndAMemoryReplayBufferGoesOn()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with { Global = InFolder(folder, cooldown: 0) };
+            SetRecordingsEnabled(true);
+            var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+            var saves = new ConcurrentQueue<long>();
+            var diskFulls = 0;
+            var replayDiskFull = new ConcurrentQueue<bool>();
+            var (orchestrator, events, presses, made, published, factory) = NewRecordingOrchestrator(
+                c => changes.Writer.TryWrite(c),
+                drains: true,
+                save: qpc =>
+                {
+                    saves.Enqueue(qpc);
+                    return null;
+                },
+                recordingsWith: r => r with
+                {
+                    DiskFull = () => Interlocked.Increment(ref diskFulls),
+                    ReplayDiskFull = replayDiskFull.Enqueue,
+                });
+            using var owned = orchestrator;
+            var started = await RecordOnTarget(orchestrator, changes, events, presses);
+
+            made.Last().Finish(DiskFullError());
+
+            Assert.IsType<IOException>(await NextAsync(events));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.DiskFull), await NextAsync(events));
+            await WaitUntil(() => Volatile.Read(ref diskFulls) == 1);
+            Assert.Equal(RecordingState.Off, published.Last().Recording);
+            Assert.Equal(ReplayState.Buffering, published.Last().Replay);
+
+            var qpc = System.Diagnostics.Stopwatch.GetTimestamp();
+            await Press(orchestrator, presses, HotkeyAction.Save, qpc);
+            Assert.Equal([qpc], saves);
+            Assert.Single(factory.Sessions);
+            Assert.Null(factory.Sessions[0].EndReason);
+            Assert.Equal(1, Volatile.Read(ref diskFulls));
+            Assert.Empty(replayDiskFull);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AFullDiskStopsADiskReplayBufferUntilItsRingFitsAgain()
+    {
+        var folder = Directory.CreateTempSubdirectory("rb-recordings-").FullName;
+        try
+        {
+            _document = Revision(3) with
+            {
+                Global = InFolder(folder, cooldown: 0).SetItem(Keys.ReplayStorage.Name, Keys.ReplayStorage.ToJson(ReplayStorage.Disk)),
+            };
+            SetRecordingsEnabled(true);
+            var changes = System.Threading.Channels.Channel.CreateUnbounded<TargetChanged>();
+            var fits = new ConcurrentQueue<bool>([false]);
+            var replayDiskFull = new ConcurrentQueue<bool>();
+            var (orchestrator, events, presses, made, published, factory) = NewRecordingOrchestrator(
+                c => changes.Writer.TryWrite(c),
+                drains: true,
+                recordingsWith: r => r with
+                {
+                    RingFits = snapshot => snapshot.ReplayStorage == ReplayStorage.Disk && (!fits.TryDequeue(out var fit) || fit),
+                    ReplayDiskFull = replayDiskFull.Enqueue,
+                    RingRecheck = TimeSpan.FromMilliseconds(50),
+                });
+            using var owned = orchestrator;
+            var started = await RecordOnTarget(orchestrator, changes, events, presses);
+
+            made.Last().Finish(DiskFullError());
+
+            Assert.IsType<IOException>(await NextAsync(events));
+            Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.DiskFull), await NextAsync(events));
+            await WaitUntil(() => factory.Sessions.Count == 2);
+            Assert.Equal("disk full", factory.Sessions[0].EndReason);
+            Assert.Equal([true, false], replayDiskFull);
+            Assert.True(fits.IsEmpty);
+            Assert.Equal(Pid, factory.Sessions[1].Spec.Target.ProcessId);
+            Assert.Contains(published, state => state.Replay == ReplayState.Off);
+            Assert.Equal(ReplayState.Buffering, published.Last().Replay);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>The Target becomes Game.exe, its session starts, and a Record press starts a Recording.</summary>
+    private static async Task<RecordingStarted> RecordOnTarget(
+        SessionOrchestrator orchestrator,
+        System.Threading.Channels.Channel<TargetChanged> changes,
+        System.Threading.Channels.Channel<object> events,
+        System.Threading.Channels.Channel<HotkeyPress> presses)
+    {
+        orchestrator.Post(new ProposeTarget(new TargetCandidate(Pid, 1, ProfileId, "Game.exe"), TargetChangeReason.Detected));
+        await NextAsync(changes);
+        await Press(orchestrator, presses, HotkeyAction.RecordToggle, System.Diagnostics.Stopwatch.GetTimestamp());
+        return Assert.IsType<RecordingStarted>(await NextAsync(events));
+    }
+
+    /// <summary>A write failure as a full disk throws it (<c>ERROR_DISK_FULL</c>).</summary>
+    private static IOException DiskFullError() => new("There is not enough space on the disk.", unchecked((int)0x80070070));
 
     /// <summary>The published Recording states, each change once, from the initial Off.</summary>
     private static List<RecordingState> RecordingStates(IEnumerable<CaptureState> published)
@@ -1745,7 +1855,12 @@ public sealed class SessionOrchestratorTests : IDisposable
     /// <paramref name="drains"/>, it has Replay Clips, so a game session drains on its Target's exit (R1).
     /// </summary>
     private (SessionOrchestrator Orchestrator, System.Threading.Channels.Channel<object> Events, System.Threading.Channels.Channel<HotkeyPress> Presses, ConcurrentQueue<FakeRecording> Made, ConcurrentQueue<CaptureState> Published, FakeFactory Factory) NewRecordingOrchestrator(
-        Action<TargetChanged>? targetChanged = null, FakeLibraryWrites? library = null, bool drains = false, int maxRecordings = int.MaxValue)
+        Action<TargetChanged>? targetChanged = null,
+        FakeLibraryWrites? library = null,
+        bool drains = false,
+        int maxRecordings = int.MaxValue,
+        Func<long, IClipWrite?>? save = null,
+        Func<Recordings, Recordings>? recordingsWith = null)
     {
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
@@ -1753,6 +1868,7 @@ public sealed class SessionOrchestratorTests : IDisposable
         var published = new ConcurrentQueue<CaptureState>();
         var factory = new FakeFactory
         {
+            Save = save,
             Record = _ =>
             {
                 if (made.Count >= maxRecordings)
@@ -1773,7 +1889,7 @@ public sealed class SessionOrchestratorTests : IDisposable
             targetChanged: targetChanged,
             targetCapture: targetChanged is null ? null : new TargetCapture(_ => NoAudio, (_, e) => events.Writer.TryWrite(e)),
             clips: drains ? new ReplayClips(OutputPathAllocator.System, () => throw new InvalidOperationException("the Global folder is set"), _ => { }, e => events.Writer.TryWrite(e)) : null,
-            recordings: new Recordings(
+            recordings: (recordingsWith ?? (r => r))(new Recordings(
                 OutputPathAllocator.System,
                 () => throw new InvalidOperationException("the Global folder is set"),
                 s => events.Writer.TryWrite(s),
@@ -1781,7 +1897,7 @@ public sealed class SessionOrchestratorTests : IDisposable
                 e => events.Writer.TryWrite(e),
                 library,
                 Open: library,
-                Restarted: r => events.Writer.TryWrite(r)));
+                Restarted: r => events.Writer.TryWrite(r))));
         return (orchestrator, events, presses, made, published, factory);
     }
 
@@ -1904,11 +2020,11 @@ public sealed class SessionOrchestratorTests : IDisposable
             Finish();
         }
 
-        /// <summary>Finishes as the session's output ending would, from another thread.</summary>
-        public void Finish()
+        /// <summary>Finishes as the session's output ending would, from another thread, with <paramref name="error"/> as the writer's.</summary>
+        public void Finish(Exception? error = null)
         {
             var done = _done!;
-            Task.Run(() => done(null), CancellationToken.None);
+            Task.Run(() => done(error), CancellationToken.None);
         }
     }
 
@@ -1991,6 +2107,20 @@ public sealed class SessionOrchestratorTests : IDisposable
         public ConcurrentQueue<SessionSpec?> Prepares { get; } = new();
 
         public void PrepareChain(SessionSpec? next) => Prepares.Enqueue(next);
+
+        /// <summary>What <c>Chains</c> reports.</summary>
+        public int ChainCount { get; set; } = 1;
+
+        public int Chains => ChainCount;
+
+        /// <summary>Each <c>SwitchChain</c> call's spec, in order; each is taken.</summary>
+        public ConcurrentQueue<SessionSpec> Switches { get; } = new();
+
+        public bool SwitchChain(SessionSpec next)
+        {
+            Switches.Enqueue(next);
+            return true;
+        }
 
         public void SetMicMuted(bool muted, long qpc)
         {

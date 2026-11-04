@@ -225,6 +225,8 @@ internal sealed class HotkeysPage : SettingsPage
         HotkeyAction.RecordStart => "Record start",
         HotkeyAction.RecordStop => "Record stop",
         HotkeyAction.MonitorRecordToggle => "Monitor Recording (toggle)",
+        HotkeyAction.MonitorRecordStart => "Monitor Recording (start)",
+        HotkeyAction.MonitorRecordStop => "Monitor Recording (stop)",
         _ => action.ToString(),
     };
 
@@ -255,6 +257,8 @@ internal sealed class HotkeysPage : SettingsPage
         HotkeyAction.RecordStart => hotkeys with { RecordStart = binding },
         HotkeyAction.RecordStop => hotkeys with { RecordStop = binding },
         HotkeyAction.MonitorRecordToggle => hotkeys with { MonitorRecordToggle = binding },
+        HotkeyAction.MonitorRecordStart => hotkeys with { MonitorRecordStart = binding },
+        HotkeyAction.MonitorRecordStop => hotkeys with { MonitorRecordStop = binding },
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
     };
 

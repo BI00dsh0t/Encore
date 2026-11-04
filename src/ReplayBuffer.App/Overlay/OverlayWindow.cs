@@ -27,19 +27,19 @@ internal sealed class OverlayWindow : ShellWindow
     public const double InsetDip = 24;
 
     /// <summary>Each icon's width and height: the mic, the saving icon and the X.</summary>
-    public const double IconSizeDip = 16;
+    private const double IconSizeDip = 16;
 
     /// <summary>The space after each icon, toward the dot.</summary>
-    public const double GapDip = 6;
+    private const double GapDip = 6;
 
     /// <summary>The message's width at most, right-aligned to the dot.</summary>
-    public const double MessageWidthDip = 260;
+    private const double MessageWidthDip = 260;
 
     /// <summary>The message's height.</summary>
-    public const double MessageHeightDip = 22;
+    private const double MessageHeightDip = 22;
 
     /// <summary>The space between the strip and the message.</summary>
-    public const double MessageGapDip = 6;
+    private const double MessageGapDip = 6;
 
     private const double WidthDip = (3 * (IconSizeDip + GapDip)) + DotSizeDip;
 
@@ -187,16 +187,13 @@ internal sealed class OverlayWindow : ShellWindow
             _text.Text = message.Message;
             _text.Foreground = message.Severity == WarningSeverity.Error ? Red : Green;
             _message.Visibility = Visibility.Visible;
-            _root.Width = MessageWidthDip;
-            _root.Height = MessageAreaHeightDip;
         }
         else
         {
             _message.Visibility = Visibility.Collapsed;
-            _root.Width = WidthDip;
-            _root.Height = DotSizeDip;
         }
 
+        (_root.Width, _root.Height) = ExtentDip;
         Place();
 
         // WPF's own state follows the window; ShowActivated is false, so this shows with SW_SHOWNA.
@@ -207,6 +204,10 @@ internal sealed class OverlayWindow : ShellWindow
     }
 
     private bool Showing => _model.Dot != OverlayDot.None || _model.Saving || _model.Message is not null || _model.DiskFull;
+
+    // The window's size: the strip alone, or the message area while a message shows.
+    private (double Width, double Height) ExtentDip =>
+        _model.Message is null ? (WidthDip, DotSizeDip) : (MessageWidthDip, MessageAreaHeightDip);
 
     // In physical pixels, so WPF's DIP conversion across mixed-DPI monitors doesn't matter. The dot
     // sits where Monitors.TopRight puts it; the icons and the gaps extend the window to its left, and
@@ -220,7 +221,7 @@ internal sealed class OverlayWindow : ShellWindow
 
         var (x, y, size) = Monitors.TopRight(Monitors.ForProcess(_model.TargetProcessId), DotSizeDip, InsetDip);
         var scale = size / DotSizeDip;
-        var (width, height) = _model.Message is null ? (WidthDip, DotSizeDip) : (MessageWidthDip, MessageAreaHeightDip);
+        var (width, height) = ExtentDip;
         var left = (int)Math.Round((width - DotSizeDip) * scale);
         var bottom = (int)Math.Round((height - DotSizeDip) * scale);
         OverlayWindowStyle.ShowWithoutActivation(Handle, x - left, y, left + size, size + bottom);

@@ -21,6 +21,16 @@ public sealed class CommandLineTests
         Assert.False(Assert.IsType<ServeCommand>(CommandLine.Parse(["serve"]).Command).DebugCapture);
     }
 
+    [Fact]
+    public void ServeTakesTheReplayBufferSwitchOnlyWithATestInstance()
+    {
+        Assert.Equal(
+            new ServeCommand("ReplayBuffer-Test-soak1", ReplayBuffer: true),
+            CommandLine.Parse(["serve", "--instance", "ReplayBuffer-Test-soak1", "--replay-buffer"]).Command);
+        Assert.Contains("--instance", CommandLine.Parse(["serve", "--replay-buffer"]).Error);
+        Assert.NotNull(CommandLine.Parse(["serve", "--instance", "ReplayBuffer-Test-soak1", "--replay-buffer", "--debug-capture"]).Error);
+    }
+
     [Theory]
     [InlineData("serve", "--instance", "ReplayBuffer")]
     [InlineData("serve", "--instance", "ReplayBuffer-Dev")]

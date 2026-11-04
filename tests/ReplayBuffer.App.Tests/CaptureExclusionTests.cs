@@ -61,7 +61,7 @@ public sealed class CaptureExclusionTests
             menu.IsOpen = true;
             plain.Show();
             popup.IsOpen = true;
-            Pump(TimeSpan.FromMilliseconds(300));
+            Sta.Pump(TimeSpan.FromMilliseconds(300));
             Assert.True(overlay.IsVisible);
 
             var windows = CaptureExclusion.VisibleWindows();
@@ -96,14 +96,14 @@ public sealed class CaptureExclusionTests
             lime.Show();
             var limeHwnd = new WindowInteropHelper(lime).Handle;
             OverlayWindowStyle.ShowWithoutActivation(limeHwnd, 100, 100, 400, 300);
-            Pump(TimeSpan.FromMilliseconds(300));
+            Sta.Pump(TimeSpan.FromMilliseconds(300));
 
             hook = CaptureExclusion.ExcludeNewWindows();
             red = Helper(Brushes.Red);
             red.Show();
             const int X = 150, Y = 150, Width = 200, Height = 150;
             OverlayWindowStyle.ShowWithoutActivation(new WindowInteropHelper(red).Handle, X, Y, Width, Height);
-            Pump(TimeSpan.FromMilliseconds(500));
+            Sta.Pump(TimeSpan.FromMilliseconds(500));
             Assert.False(CaptureExclusion.IsApplied(limeHwnd));
 
             Exception? failure = null;
@@ -228,16 +228,6 @@ public sealed class CaptureExclusionTests
         var name = new char[256];
         var length = GetClassNameW(hwnd, name, name.Length);
         return new string(name, 0, Math.Max(length, 0));
-    }
-
-    // Runs the dispatcher for a while, so windows show and the hook's events arrive.
-    private static void Pump(TimeSpan duration)
-    {
-        var frame = new DispatcherFrame();
-        var timer = new DispatcherTimer(duration, DispatcherPriority.Background, (_, _) => frame.Continue = false, Dispatcher.CurrentDispatcher);
-        timer.Start();
-        Dispatcher.PushFrame(frame);
-        timer.Stop();
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
