@@ -1,3 +1,8 @@
+<!--
+    The Library (story 4): filters, the corrupt-index banner, the last action's failure, then one virtualized
+    list of group headers and rows. Every colour, corner and type comes from LibraryTheme.xaml and the token
+    keys; the shell's page title is the heading.
+-->
 <UserControl x:Class="ReplayBuffer.App.Library.LibraryView"
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -5,19 +10,17 @@
              xmlns:local="clr-namespace:ReplayBuffer.App.Library">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
+        <local:LibraryMetaConverter x:Key="Meta" />
         <DataTemplate DataType="{x:Type local:LibraryGroupHeader}">
-            <TextBlock Margin="0,10,0,2"
-                       FontWeight="SemiBold"
-                       Text="{Binding Name}"
-                       TextTrimming="CharacterEllipsis" />
+            <ContentControl Content="{Binding Name}" Style="{DynamicResource RbLibraryGroupHeaderStyle}" />
         </DataTemplate>
         <DataTemplate DataType="{x:Type local:LibraryRow}">
-            <!-- Transparent so the whole row takes the double-click and the right-click. -->
-            <Grid Margin="0,4" Background="Transparent">
-                <Grid.InputBindings>
+            <!-- The card takes the double-click and the right-click everywhere on the row. -->
+            <Border Style="{DynamicResource RbLibraryRowStyle}">
+                <Border.InputBindings>
                     <MouseBinding Command="{Binding OpenCommand}" Gesture="LeftDoubleClick" />
-                </Grid.InputBindings>
-                <Grid.ContextMenu>
+                </Border.InputBindings>
+                <Border.ContextMenu>
                     <ContextMenu>
                         <MenuItem Command="{Binding OpenCommand}" Header="Open" />
                         <MenuItem Command="{Binding ShowInExplorerCommand}" Header="Show in Explorer" />
@@ -25,168 +28,176 @@
                         <MenuItem Command="{Binding RenameCommand}" Header="Rename" />
                         <MenuItem Command="{Binding DeleteCommand}" Header="Delete" />
                     </ContextMenu>
-                </Grid.ContextMenu>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Border Width="96"
-                        Height="54"
-                        Background="#E6E6E6"
-                        ClipToBounds="True">
+                </Border.ContextMenu>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <!-- The thumbnail, or the generic video glyph until the shell has one; the length on it. -->
                     <Grid>
-                        <!-- The generic video glyph, shown until the shell has a thumbnail. -->
-                        <Path HorizontalAlignment="Center"
-                              VerticalAlignment="Center"
-                              Data="M 0,0 L 14,8 L 0,16 Z"
-                              Fill="#A0A0A0" />
-                        <Image Source="{Binding Thumbnail}"
-                               Stretch="Uniform"
-                               Visibility="{Binding HasThumbnail, Converter={StaticResource Visible}}" />
+                        <Border Style="{DynamicResource RbLibraryThumbnailStyle}">
+                            <Path Style="{DynamicResource RbLibraryPlaceholderGlyphStyle}" />
+                        </Border>
+                        <Border Style="{DynamicResource RbLibraryThumbnailImageStyle}"
+                                Visibility="{Binding HasThumbnail, Converter={StaticResource Visible}}">
+                            <Border.Background>
+                                <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
+                            </Border.Background>
+                        </Border>
+                        <Border Style="{DynamicResource RbLibraryLengthBadgeStyle}">
+                            <TextBlock Style="{DynamicResource RbLibraryLengthTextStyle}" Text="{Binding Length}" />
+                        </Border>
                     </Grid>
-                </Border>
-                <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                    <!-- The name, or its inline editor while renaming: Enter or leaving commits, Escape cancels. -->
-                    <Grid>
-                        <TextBlock Text="{Binding Name}"
-                                   TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding Path}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsRenaming}" Value="True">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
+                    <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                        <!-- The name, or its inline editor while renaming: Enter or leaving commits, Escape cancels. -->
+                        <Grid>
+                            <Border>
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsRenaming}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Style="{DynamicResource RbLibraryNameStyle}" Text="{Binding Name}" ToolTip="{Binding Path}" />
+                            </Border>
+                            <TextBox IsVisibleChanged="OnRenameVisibleChanged"
+                                     LostFocus="OnRenameLostFocus"
+                                     Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"
+                                     Visibility="{Binding IsRenaming, Converter={StaticResource Visible}}">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Enter" Command="{Binding CommitRenameCommand}" />
+                                    <KeyBinding Key="Escape" Command="{Binding CancelRenameCommand}" />
+                                </TextBox.InputBindings>
+                            </TextBox>
+                        </Grid>
+                        <TextBlock Style="{DynamicResource RbLibraryMetaStyle}">
+                            <TextBlock.Text>
+                                <MultiBinding Converter="{StaticResource Meta}">
+                                    <Binding Path="Game" />
+                                    <Binding Path="Date" />
+                                    <Binding Path="Size" />
+                                </MultiBinding>
+                            </TextBlock.Text>
                         </TextBlock>
-                        <TextBox IsVisibleChanged="OnRenameVisibleChanged"
-                                 LostFocus="OnRenameLostFocus"
-                                 Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"
-                                 Visibility="{Binding IsRenaming, Converter={StaticResource Visible}}">
-                            <TextBox.InputBindings>
-                                <KeyBinding Key="Enter" Command="{Binding CommitRenameCommand}" />
-                                <KeyBinding Key="Escape" Command="{Binding CancelRenameCommand}" />
-                            </TextBox.InputBindings>
-                        </TextBox>
-                    </Grid>
-                    <TextBlock Margin="0,2,0,0"
-                               Foreground="Gray"
-                               Text="{Binding Game}"
-                               TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-                <TextBlock Grid.Column="2"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Top"
-                           Text="{Binding Date}" />
-                <TextBlock Grid.Column="3"
-                           MinWidth="48"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Top"
-                           Text="{Binding Length}"
-                           TextAlignment="Right" />
-                <TextBlock Grid.Column="4"
-                           MinWidth="64"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Top"
-                           TextAlignment="Right">
-                    <Run Text="{Binding Size, Mode=OneWay}" /><Run FontStyle="Italic" Text="{Binding Lock, Mode=OneWay}" />
-                </TextBlock>
-                <!-- The star follows the snapshot: a click only sends library.setFavourite. -->
-                <Button Grid.Column="5"
-                        Margin="12,0,0,0"
-                        Padding="4,0"
-                        VerticalAlignment="Top"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Command="{Binding FavouriteCommand}"
-                        Content="{Binding Star}"
-                        FontSize="16"
-                        Foreground="#D4A017"
-                        ToolTip="Favourite" />
-            </Grid>
+                        <Border Style="{DynamicResource RbLibraryLockPillStyle}"
+                                Visibility="{Binding IsLocked, Converter={StaticResource Visible}}">
+                            <TextBlock Style="{DynamicResource RbLibraryLockTextStyle}" Text="{Binding Lock, Mode=OneWay}" />
+                        </Border>
+                    </StackPanel>
+                    <!-- The star follows the snapshot: a click only sends library.setFavourite. -->
+                    <local:StarToggle Grid.Column="2"
+                                      AutomationProperties.Name="Favourite"
+                                      Command="{Binding FavouriteCommand}"
+                                      IsChecked="{Binding IsFavourite, Mode=OneWay}"
+                                      Style="{DynamicResource RbStarToggleStyle}"
+                                      ToolTip="Favourite" />
+                </Grid>
+            </Border>
         </DataTemplate>
     </UserControl.Resources>
     <DockPanel>
-        <Border DockPanel.Dock="Top"
-                Margin="0,0,0,12"
-                Padding="10,8"
-                Background="#FFF4E5"
-                BorderBrush="#E0A040"
-                BorderThickness="1"
-                Visibility="{Binding IsCleanupBlocked, Converter={StaticResource Visible}}">
-            <DockPanel>
-                <Button Command="{Binding AcknowledgeCommand}"
-                        Content="Acknowledge"
-                        DockPanel.Dock="Right"
-                        Margin="12,0,0,0"
-                        Padding="8,2"
-                        VerticalAlignment="Center" />
-                <TextBlock VerticalAlignment="Center"
-                           Text="The Library index couldn't be read, so it was rebuilt from the Output Folder. Cleanup is off until you acknowledge this."
-                           TextWrapping="Wrap" />
-            </DockPanel>
-        </Border>
-        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Library" />
-        <WrapPanel DockPanel.Dock="Top" Margin="0,6,0,0">
-            <TextBlock Margin="0,0,6,0" VerticalAlignment="Center" Text="Group by" />
+        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <TextBlock Style="{DynamicResource RbLibraryFilterCaptionStyle}" Text="Group by" />
             <ComboBox MinWidth="80"
                       Margin="0,0,12,4"
                       DisplayMemberPath="Name"
                       ItemsSource="{Binding GroupOptions}"
                       SelectedValue="{Binding GroupBy}"
                       SelectedValuePath="Value" />
-            <TextBlock Margin="0,0,6,0" VerticalAlignment="Center" Text="Game" />
+            <TextBlock Style="{DynamicResource RbLibraryFilterCaptionStyle}" Text="Game" />
             <ComboBox MinWidth="140"
                       Margin="0,0,12,4"
                       DisplayMemberPath="Name"
                       ItemsSource="{Binding Games}"
                       SelectedItem="{Binding SelectedGame}" />
-            <TextBlock Margin="0,0,6,0" VerticalAlignment="Center" Text="Date" />
+            <TextBlock Style="{DynamicResource RbLibraryFilterCaptionStyle}" Text="Date" />
             <ComboBox MinWidth="110"
                       Margin="0,0,12,4"
                       DisplayMemberPath="Name"
                       ItemsSource="{Binding DateOptions}"
                       SelectedValue="{Binding DateFilter}"
                       SelectedValuePath="Value" />
-            <CheckBox Margin="0,0,0,4"
-                      VerticalAlignment="Center"
-                      Content="Favourites only"
-                      IsChecked="{Binding FavouritesOnly}" />
+            <ToggleButton Margin="0,0,0,4"
+                          VerticalAlignment="Center"
+                          AutomationProperties.Name="Favourites only"
+                          Content="★ Favourites only"
+                          IsChecked="{Binding FavouritesOnly, Mode=TwoWay}" />
         </WrapPanel>
+        <ContentControl x:Name="Banner"
+                        DockPanel.Dock="Top"
+                        Margin="0,0,0,8"
+                        Style="{DynamicResource RbInfoBarCautionStyle}"
+                        Visibility="{Binding IsCleanupBlocked, Converter={StaticResource Visible}}">
+            <DockPanel>
+                <Button Margin="12,0,0,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding AcknowledgeCommand}"
+                        Content="Acknowledge"
+                        DockPanel.Dock="Right" />
+                <TextBlock VerticalAlignment="Center"
+                           Text="The Library index couldn't be read, so it was rebuilt from the Output Folder. Cleanup is off until you acknowledge this."
+                           TextWrapping="Wrap" />
+            </DockPanel>
+        </ContentControl>
         <TextBlock DockPanel.Dock="Top"
-                   Margin="0,4,0,0"
-                   Foreground="#C42B1C"
+                   Style="{DynamicResource RbLibraryActionErrorStyle}"
                    Text="{Binding ActionError}"
-                   TextWrapping="Wrap"
                    Visibility="{Binding HasActionError, Converter={StaticResource Visible}}" />
-        <!-- One virtualized list of headers and rows; it scrolls itself, so nothing wraps it in a ScrollViewer. -->
-        <ItemsControl Margin="0,6,0,0"
-                      ItemsSource="{Binding Entries}"
-                      ScrollViewer.CanContentScroll="True"
-                      VirtualizingPanel.IsVirtualizing="True"
-                      VirtualizingPanel.ScrollUnit="Pixel"
-                      VirtualizingPanel.VirtualizationMode="Recycling">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <VirtualizingStackPanel />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.Template>
-                <ControlTemplate TargetType="ItemsControl">
-                    <ScrollViewer CanContentScroll="True"
-                                  Focusable="False"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  VerticalScrollBarVisibility="Auto">
-                        <ItemsPresenter />
-                    </ScrollViewer>
-                </ControlTemplate>
-            </ItemsControl.Template>
-        </ItemsControl>
+        <Grid>
+            <!-- One virtualized list of headers and rows; it scrolls itself, so nothing wraps it in a ScrollViewer. -->
+            <ItemsControl x:Name="List"
+                          ItemsSource="{Binding Entries}"
+                          ScrollViewer.CanContentScroll="True"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.ScrollUnit="Pixel"
+                          VirtualizingPanel.VirtualizationMode="Recycling">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.Template>
+                    <ControlTemplate TargetType="ItemsControl">
+                        <ScrollViewer CanContentScroll="True"
+                                      Focusable="False"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsPresenter />
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ItemsControl.Template>
+            </ItemsControl>
+            <!-- Only for a Library with nothing in it; a filter that matches nothing shows an empty list. -->
+            <TextBlock x:Name="EmptyMessage"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       FontSize="14"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="No Clips or Recordings yet."
+                       TextAlignment="Center"
+                       TextWrapping="Wrap">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding Entries.Count}" Value="0" />
+                                    <Condition Binding="{Binding GameFilter}" Value="{x:Null}" />
+                                    <Condition Binding="{Binding DateFilter}" Value="{x:Static local:LibraryDateFilter.All}" />
+                                    <Condition Binding="{Binding FavouritesOnly}" Value="False" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
     </DockPanel>
 </UserControl>
