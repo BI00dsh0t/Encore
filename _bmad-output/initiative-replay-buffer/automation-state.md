@@ -38,7 +38,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 8.1 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 6.8 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with the capture-cost investigation |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 7.8 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 6.8 |
@@ -583,3 +583,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 6.8 is READY FOR QA at `cdea684` (built in a lock gap; Core and Engine pass; publish done). QA started on slice-epic-5 (Sonnet), and its card is In QA. 8.1's soak holds the lock, and the investigation's develop run follows.
 - 2026-11-04: 8.1 is READY FOR QA at `5776aa7`. The 20-minute Memory soak passes: 19/19 Clips (29.0–30.0 s of 30 s), 0 dropped frames, 10/10 bounds, engine +1.1 MB, App +11.4 MB since warm-up, handles flat. The App's ~40 MB/h climb is deferred to 8.8. The engine gained a test-only `serve --replay-buffer`. QA started on 2-1-tracer (Sonnet), with no soak rerun, and its card is In QA.
 - 2026-11-04: QA 8.1 at `5776aa7`: **QA PASS**, with 1 should-fix: record the App's ~40 MB/h climb in the epic-hardening Notes for 8.8. 8.1 has been told to do that and merge (Sonnet). 2-1-tracer is back in the pool. 7.8 checkpointed at `9ab2453` and is waiting for the lock to build. The capture-cost investigation has moved on to a stage-split run.
+- 2026-11-04: QA 6.8 at `cdea684`: **QA PASS**, 0 findings. 6.8 has been told to merge (Sonnet). 8.1 did its should-fix (docs only, `c6e18c9`) and was given the go to merge. slice-epic-5 is back in the pool. **Flake watch:** one unidentified Engine test failed on its first run again (the 4th one-off today: two App, two Engine). Merges now rerun once and must report the test name if it fails twice. If it keeps happening, a small bugfix to find and fix the flaky test is worth it.
