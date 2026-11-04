@@ -13,9 +13,9 @@ public enum WriteOutcome
 /// <summary>
 /// The "file being written" signal (R6): a writer tells the Library which file it is about to write,
 /// and how that ended, so the Library can show it as in progress and ignore its partial data.
-/// Clips use it now; epic-recordings reuses the port, and epic-library-cleanup's LibraryActor
-/// replaces <see cref="NoLibraryWrites"/>. Neither call blocks or throws, and any thread may call
-/// them (the LibraryActor posts to its own queue).
+/// Clips and Recordings use it; the LibraryActor implements it, and <see cref="NoLibraryWrites"/> is
+/// the no-op port for a host or test with no Library. Neither call blocks or throws, and any thread may
+/// call them (the LibraryActor posts to its own queue).
 /// </summary>
 public interface ILibraryWrites
 {
@@ -33,7 +33,7 @@ public interface ILibraryWrites
     void EndWrite(string path, WriteOutcome outcome);
 }
 
-/// <summary>The stand-in until the LibraryActor exists: it ignores every call.</summary>
+/// <summary>The no-op port for a host or test with no Library (<c>SessionOrchestrator</c>'s default): it ignores every call.</summary>
 public sealed class NoLibraryWrites : ILibraryWrites
 {
     /// <summary>The one instance.</summary>

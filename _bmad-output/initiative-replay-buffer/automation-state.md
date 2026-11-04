@@ -45,7 +45,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 6.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.10 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 7.11 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -143,7 +143,7 @@ The coordinator logs each QA round in the Log below.
 | 27.8 | 6.8 Recording notices and sounds | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `ede89f7`) |
 | 27.9 | 6.9 Monitor Recording by its own Hotkey | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `c525d8e`) |
 | 27.10 | 6.10 Desktop Duplication fallback for Monitor Recording | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `4bf3a8e`) |
-| 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
+| 27.11 | 6.11 Recordings settings in the Main App | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
 | 27.12 | 6.12 Refactor sweep | | pending |
 | 27.13 | 6.13 Recordings end to end on the builder's PC | | pending |
 | 27.14 | Release epic 6 (`v0.6.0`) | | pending |
@@ -157,8 +157,8 @@ The coordinator logs each QA round in the Log below.
 | 28.7 | 7.7 Rename and delete, locked while being written | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `7a4d786`) |
 | 28.8 | 7.8 Cleanup | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged `4b6b22f`) |
 | 28.9 | 7.9 Library and Cleanup settings page | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `63ba0b9`) |
-| 28.10 | 7.10 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
-| 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | | pending |
+| 28.10 | 7.10 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `5fa03c4`) |
+| 28.11 | 7.11 Library and Cleanup end to end on the builder's PC | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 28.12 | Release epic 7 (`v0.7.0`) | | pending |
 | 29 | Slice epic 8 (Hardening) | slice-epic-8 | done |
 | 29.1 | 8.1 Tracer: a soak harness and a 20-minute soak report | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `81261bb`) |
@@ -626,3 +626,10 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 6.10 at `e42c1bb`: **QA PASS**, 0 findings and 2 notes. Its Heavy `MonitorRecordingCaptureTests` (8/8) ran just before the GPU pause reached it; that's the last GPU run. QA found that pre-creating `.bench-running` makes `BenchLock`-based tests hang, which explains the empty 09:52 file. QA removed it, and the "Who takes `.bench-running`" rule was added. 6.10 has been told to merge (Sonnet), and qa-1-14 is back in the pool.
 - 2026-11-04: 6.10 merged (`4bf3a8e`, marked done). QA passed at `e42c1bb` with 0 findings and 2 notes (a stale `Failed` doc on `DesktopDuplicationCapture`; a single `DuplicateOutput` at start, so a UAC prompt up at the press fails the session), recorded in the epic Notes. Synced with develop first: 0-warning build, Contracts 121, Core 145, Platform.Capture 3, Engine 211 passed, publish clean; no GPU tests (paused). Contracts change: additive `ErrorCodes.MonitorCaptureFallback`. Unblocks 6.11. Human Check: confirm on the PC that a forced-fallback Monitor Recording of the real Main App and Overlay hides them (6.9's row also covers this path).
 - 2026-11-04: 6.10 merged (`4bf3a8e`, logged `379a084`), and its card is Done. slice-epic-5 is back in the pool. 6.11 went to qa-1-14 (Opus, medium effort; GPU tests paused), with its card In progress.
+- 2026-11-04: 7.10 (the epic 7 refactor sweep) is READY FOR QA at `0f66b44`; its own review caught and restored a removed rename-guard assertion. QA started on 2-1-tracer (Sonnet; GPU tests paused), checking every Cleanup and delete guard and its test. Its card is In QA.
+- 2026-11-04: QA 7.10 at `0f66b44`: **QA PASS**, 0 findings (Core 145/145, App 121). 7.10 has been told to merge (Sonnet; no GPU tests). 2-1-tracer is back in the pool. 7.10's merge unblocks 7.11 (the epic 7 end-to-end check).
+- 2026-11-04: **Builder: a modern UI epic.** They chose a new epic (a `bmad-ux` design pass, then stories per area), run after epics 6 and 7 and before epic 8's final conformance. Mockups of the two looks (Windows 11 Fluent and gaming dark) were shown; the builder's pick of look is pending.
+- 2026-11-04: 7.10 merged (`5fa03c4`, marked done). Develop was merged into the branch first (6.10 and 8.2 included): 0-warning build, Core 145, App 122, Engine 175, Contracts 121 and the engine publish all passed; no GPU tests. Its open items are in deferred-work.md. 7.11 (the epic 7 end-to-end check) is unblocked; the epic is not marked done.
+- 2026-11-04: 7.10 merged (`5fa03c4`, marked done `7e10cd6`), and its card is Done. 7.11 (the epic 7 end-to-end check) went to story-2-7 (Opus, medium effort), with its card In progress. With GPU tests paused, it drives the real App and engine on a throwaway instance against pre-made MP4s, with no capture. After it, the v0.7.0 release. Epic 6 still has 6.11, then 6.12 (the sweep) and 6.13 (end to end), before v0.6.0.
+- 2026-11-04: 6.11 READY FOR QA at `7f2e041`, and its card is In QA. QA went to qa-2-1 (Sonnet, medium effort; GPU tests paused).
+- 2026-11-04: QA 6.11 passed at `7f2e041` with 0 findings: 0-warning build; App 126, Engine 176, Platform.Capture 3 and Core 146 passed; publish clean; Contracts change additive (`monitors.list`, `DisplayMonitor`, `MonitorList`). Not run: the manual second-monitor check (HITL) and GPU tests (paused). qa-2-1 is back in the pool, and qa-1-14 is merging.
