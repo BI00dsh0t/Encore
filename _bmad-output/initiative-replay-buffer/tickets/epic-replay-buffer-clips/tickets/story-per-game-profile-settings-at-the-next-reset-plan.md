@@ -246,3 +246,7 @@ Untested by design (lean tests; engine-internal timing), but required behaviour:
   - A pending chain holds an idle NVENC session and, in Disk mode, a second preallocated ring file until the next save.
   - A failed switching write can't retry the old chain's span: a Clip holds one chain.
   - The switching Clip runs to the arm QPC rather than the press, a few ms on the orchestrator thread.
+- From QA (PASS at `30b908c`, advisories only):
+  - **The audio seam at a switch.** The new chain's AAC grid starts at the press QPC and the old one's at the anchor. The two Clips meeting at a switch are therefore cut at different AAC boundaries, which can leave up to about half a packet (~10.7 ms) of audio gap or overlap at the seam. This is unmeasured; the Heavy test checks the video seam only.
+  - **The estimate.** The Replay Buffer page's storage estimate (4.10) still covers the Global settings only. A profile's `video`, `trackLayout` or `bufferWindow` overrides, which 4.9 now applies, aren't in it. 4.11, which brings per-profile settings to the App, should say so or extend it.
+  - **Record while a switch is armed.** `Record` returns null while a switch is armed. With a static window that lasts until the next captured frame, so a Record press in that window starts no Recording.
