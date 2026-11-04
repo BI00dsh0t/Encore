@@ -3,7 +3,7 @@ title: 'Recordings settings in the Main App'
 type: 'feature'
 ticket: '11'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '20e6b640214d6c766cbaef652e0ebb6e7eeb2b26'
 route: 'full'
 route_source: 'auto'
