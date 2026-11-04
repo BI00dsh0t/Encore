@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 9.7 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix recording-first-frame-pts |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 8.5 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with bugfix dd-frame-gaps |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with 9.3 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
@@ -707,3 +707,8 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 9.2 passed at `ecc4508` (round 2). Both findings are fixed: Fluent's disabled TextBox and ListBoxItem dim (#5DFFFFFF), and the dead `CaptionColor` is deleted, with a Mica test added. App 135 passed. QA's non-blocking note (Fluent's disabled TabItem isn't dimmed) is folded in as a one-line fix before the merge. story-2-7 is merging. qa-1-14 is back in the pool.
 - 2026-11-04: QA 8.5 passed at `49130c4` with 0 findings. `WM_DISPLAYCHANGE` goes through a hidden window with a 300 ms debounce. `EndMonitorIfRemoved` ends with `monitor-removed` and leaves the game session alone. Contracts changes are additive. The Overlay re-places on each change. Residual risk (noted): Desktop Duplication can fail before enumeration drops the monitor, so the Recording ends `session-ended`; real hot-plug is a Human Check. Note: plain `--report-trx` fails the testing-platform handshake here; the GPU runner found the working flag, so briefs shouldn't ask for it blindly. The merge waits for the 2 Heavy runs.
 - 2026-11-04: 9.2 merged (`166e1f3`; the TabItem dimming was folded in at `4dab533`; marked done, gallery renders and its Human Check row added in `9d8f588`). Its card is Done with labels detached. 9.3 (shell and navigation) went to 2-1-tracer and 9.7 (tray, dialogs and Overlay) to slice-epic-4 (both Opus, medium effort), running in parallel on separate files; they share only one line each in the dictionary merge list. story-2-7 couldn't be cleared (the builder has it open), so it was left as is.
+- 2026-11-04: PTS fix Heavy runs on `1f1f9a5` passed: `ClipsDuringARecording...` 4 of 4 and `*.RecordingCaptureTests` 7 of 7. slice-epic-5 is merging the bugfix.
+  - **New:** 2 Desktop Duplication tests fail on develop, with and without the fix. `WithWgcFailingAMonitorRecordingFallsBackToDesktopDuplication` and `ALostDuplicationIsRecreatedIntoTheSameRecording` show PTS gaps of 6 to 25 frames. They passed this morning on an idle desktop; now the builder is using the PC (browser video, GitKraken).
+  - **Suspected:** the Desktop Duplication path may not fill its gaps with repeated frames at 30 fps. Bugfix `dd-frame-gaps` went to qa-1-14 (Opus, medium effort).
+  - **Filter gotcha:** `--filter-class "*RecordingCaptureTests"` also matches `MonitorRecordingCaptureTests`, so use `*.RecordingCaptureTests` or full method names.
+  - The GPU runner is now on 8.5's 2 Heavy tests.
