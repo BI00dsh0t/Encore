@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off; busy with 4.14 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 5.9 |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with 6.6 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with QA 5.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 7.7 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
@@ -550,3 +550,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 5.15 Adaptive Overlay dot merged into develop (`582d863`) after QA round 3 PASS (round 1 found the 3 s timer could stick and an unknown plane answer was cached; round 2 moved the DXGI query off the UI thread and made unknown mean no planes). It adds the additive `overlayDot` key and the tray capture-state icon. develop was merged into the branch first (one append conflict in `Platform.Desktop/NativeMethods.txt`). Build 0 warnings; App 112, Contracts 118, Core 111, Platform.Desktop 12 passed; publish clean. 5.12 and 5.13 are unblocked by it. `feature/5.8-overlay-perf-research` stays unmerged, holding the parked prototype.
 - 2026-11-04: 4.13 merged (`28fb010`, `refactor(engine): merge 4.13-refactor-sweep`) and marked done, after merging develop in cleanly: build 0 warnings, Core 110, Platform.FFmpeg 35 (2 skipped), Engine 167 (24 skipped) pass, publish 0 IL warnings. Removed the unused ring restart path, narrowed `RemoveStale` to `ring-<digits>.bin`, made `DiskRingClipTests` Heavy; epic 4 deferrals recorded in `deferred-work.md`. Next: 4.14 (HITL) and the v0.4.0 release.
 - 2026-11-04: 5.15 merged (`582d863`, log `b03fb5c`) and 4.13 merged (`28fb010`, marked done `2d52f88`). Both cards are Done. 2-1-tracer and story-2-7 are back in the pool. 4.14 (the epic 4 end-to-end check) went to slice-epic-4 (Opus, medium effort): it runs unattended against the real built App and engine on a throwaway instance with the synthetic GPU load under the lock, and gathers epic 4's hand checks into one ordered checklist in its plan. The v0.4.0 release follows its merge.
+- 2026-11-04: 5.9 is READY FOR QA at `614b0b1` (build 0 warnings; App and Desktop pass; the Heavy dialog and screen-copy test passed). QA started on qa-1-14 (Sonnet), and its card is In QA.
