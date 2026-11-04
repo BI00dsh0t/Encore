@@ -1536,11 +1536,12 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>A pass ended with nothing left to delete: raises <c>cleanup-limit-unreachable</c> once, or re-arms it.</summary>
     private void EndCleanup(CleanupPlan plan)
     {
-        if (!plan.Unreachable)
+        // Re-armed only once the folder is back within the size limit, not by a pass that merely skipped a file.
+        if (CleanupLimits().MaxBytes is not { } maxBytes || plan.Remaining <= maxBytes)
         {
             _unreachableRaised = false;
         }
-        else if (!_unreachableRaised)
+        else if (plan.Unreachable && !_unreachableRaised)
         {
             _unreachableRaised = true;
             _limitUnreachable?.Invoke(

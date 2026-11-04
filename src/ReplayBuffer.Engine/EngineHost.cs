@@ -275,6 +275,7 @@ internal sealed class EngineHost : IAsyncDisposable
 
             // cleanup-limit-unreachable is raised once the warnings exist; Cleanup never runs before 60 s.
             Warnings? warnTo = null;
+            string? unreachableWarning = null;
             var libraryActor = library = new LibraryActor(
                 libraryLoad.Items,
                 OutputFolder,
@@ -293,7 +294,21 @@ internal sealed class EngineHost : IAsyncDisposable
                 folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed),
                 recycle: RecycleBin.Recycle,
                 cleanup: () => SettingsResolver.Resolve(load.Store.Current, null).Cleanup,
-                limitUnreachable: message => Volatile.Read(ref warnTo)?.Raise(ErrorCodes.CleanupLimitUnreachable, WarningSeverity.Warning, "library", message, overlay: false),
+                limitUnreachable: message =>
+                {
+                    // A new crossing replaces the last one's warning rather than stacking beside it.
+                    if (Volatile.Read(ref warnTo) is not { } to)
+                    {
+                        return;
+                    }
+
+                    if (unreachableWarning is { } last)
+                    {
+                        to.Withdraw(last);
+                    }
+
+                    unreachableWarning = to.Raise(ErrorCodes.CleanupLimitUnreachable, WarningSeverity.Warning, "library", message, overlay: false).Id;
+                },
                 log: message => libraryLog.LogInformation("{Message}", message));
 
             // Runs on the updating thread, so it only posts; the actor ignores a change that keeps the folder.

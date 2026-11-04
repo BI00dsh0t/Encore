@@ -3,14 +3,14 @@ title: 'Cleanup'
 type: 'feature'
 ticket: '8'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'f45ff2fa7e308cc9b0cf0beaebf3e1a06918d486'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -93,6 +93,14 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-04 — Review pass
+- verdicts: 4 findings — high 0, medium 1, low 3, false 0, maybe-false 0
+- findings:
+  - `[low]` `[patch]` `EndCleanup` re-armed `cleanup-limit-unreachable` on a pass that skipped a locked file while still over `maxBytes`, so the next pass raised it again with no crossing in between. — Re-armed only when `maxBytes` is off or the remaining size is within it.
+  - `[low]` `[patch]` A re-armed crossing raised a second warning beside an undismissed first (`Warnings.Raise` makes a new id each time). — `EngineHost` keeps the last warning's id and withdraws it before raising the next.
+  - `[medium]` `[patch]` `AFileBeingWrittenIsKept` passed with the being-written guard removed: the size walk stopped before reaching the newest, 0-byte written item. — The test now uses a 30 s age limit (below the 60 s start delay), so the walk reaches the written item.
+  - `[low]` `[patch]` `Start` returned once the 60 s timer was armed, before the 10 min timer existed, so an early `Advance` could arm it 11 min out and the periodic tests could flake. — `Start` also waits for the 10 min timer.
+
 ## Design Notes
 
 - Stepwise passes keep the actor responsive and make "re-checked immediately before each delete" real: a command posted after the plan is handled before the next delete.
@@ -107,3 +115,46 @@ deferred: []
 - `dotnet build ReplayBuffer.slnx -c Release` -- expected: 0 warnings, 0 errors
 - `dotnet test --project tests/ReplayBuffer.<X>.Tests -c Release --no-build` for Contracts, Core, Engine -- expected: all pass
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL/AOT warnings
+
+## Auto Run Result
+
+**Summary:** Cleanup runs in the LibraryActor. A pure `CleanupPlanner.Plan` picks the oldest non-Favourite, not-being-written `.mp4` items under the Output Folder, until the folder is within `maxBytes` and nothing is older than `maxAgeSeconds`. A pass logs its plan, then deletes one item per actor message. Each step plans again and re-checks the item right before `File.Delete`: still indexed, not being written, not a Favourite, under the folder, and on disk at its indexed size and time. So a Favourite set after the plan is honoured. Each delete is registered, published as `library.itemRemoved { reason: "cleanup" }` and logged with its path and size. A file that can't be deleted is skipped until the next pass.
+
+Cleanup is gated:
+- Never in the first 60 s after start, while a rescan is pending, or while `cleanupBlocked` is set.
+- It runs after an `EndWrite`, a `cleanup` change, a rescan or an acknowledged rebuild, at 60 s, and every 10 min.
+
+When only Favourites and files being written keep the folder over `maxBytes`, it raises `cleanup-limit-unreachable` once per crossing, and a new crossing replaces the old warning. `cleanup.preview` returns the same plan without deleting.
+
+**Files:**
+- Contracts (additive, AD-22):
+  - `ErrorCodes.CleanupLimitUnreachable`.
+  - `Library.cs`: `LibraryItemRemoved.Reason`, `LibraryRemovalReasons`, `LibraryCleanupPreview`/`LibraryCleanupPlan` and the `cleanup.preview` command.
+- Core: `CleanupPlanner.cs` (new); `LibraryActor.cs` (gate, triggers, stepwise pass, re-check, preview, warning latch).
+- Engine: `EngineHost.cs` (settings, warning, log, router).
+- Tests:
+  - Core: `LibraryCleanupTests.cs` and `ManualTime.cs` (new).
+  - Engine: `LibraryServeTests.cs` (+1).
+
+**Review:** quick lens, 4 findings, all patched (1 medium, 3 low):
+- re-arming on a skipped pass
+- stacked duplicate warnings
+- a being-written test that didn't reach the guard
+- a timer race in the test setup
+
+Nothing deferred or rejected. A follow-up review isn't recommended: no high was patched, and only one medium.
+
+**Verification:**
+- `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+- Contracts: 118/118.
+- Core: 131/131.
+- Engine: 170 passed, 28 explicit skipped.
+- `pwsh tools/publish-engine.ps1`: clean, no IL or AOT warnings.
+- Heavy tests not run (no capture, encode, mux or audio change).
+- Platform.Windows and App untouched, so not run.
+
+**Residual risks:**
+- Cleanup is permanent by design (no Recycle Bin), and it is untried on the builder's real Output Folder (7.11).
+- The unreachable warning covers the size limit only: an old Favourite under an age limit is kept silently. This is an unattended default, for Decisions Awaiting Review.
+- A pass saves `library.json` once per delete.
+

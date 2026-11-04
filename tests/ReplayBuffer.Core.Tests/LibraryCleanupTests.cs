@@ -121,7 +121,8 @@ public sealed class LibraryCleanupTests : IDisposable
     [Fact]
     public void AFileBeingWrittenIsKept()
     {
-        Start([Clip("a.mp4", TimeSpan.FromHours(2)), Clip("b.mp4", TimeSpan.FromHours(2))], new CleanupSettings(1, null));
+        // 30 s is under the start delay, so the written item is old enough to be walked to.
+        Start([Clip("a.mp4", TimeSpan.FromHours(2)), Clip("b.mp4", TimeSpan.FromHours(2))], new CleanupSettings(null, 30));
         var written = Path.Combine(Output, "w.mp4");
         Actor.BeginWrite(written, null);
         File.WriteAllBytes(written, LibraryActorTests.Mp4());
@@ -300,6 +301,7 @@ public sealed class LibraryCleanupTests : IDisposable
                 _onLog?.Invoke(line);
             });
         _time.WaitUntilArmed(StartDelay);
+        _time.WaitUntilArmed(TimeSpan.FromMinutes(10));
     }
 
     private void Add<T>(List<T> list, T value)
