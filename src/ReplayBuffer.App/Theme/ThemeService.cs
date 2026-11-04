@@ -84,11 +84,8 @@ internal sealed class ThemeService
     /// <summary>The theme in use; null until the first <see cref="Apply"/>.</summary>
     public AppTheme? Theme { get; private set; }
 
-    /// <summary>The theme's own dictionary, merged after <see cref="Shared"/>.</summary>
+    /// <summary>The theme's own dictionary, merged after <see cref="SharedTheme"/>.</summary>
     public ResourceDictionary ThemeDictionary => Theme == AppTheme.GamingDark ? _gaming : _fluent;
-
-    /// <summary>Spacing and the App's generic styles, merged after Fluent's dictionary in both themes.</summary>
-    public ResourceDictionary Shared => _shared;
 
     /// <summary>Gaming dark's dictionary, whichever theme is in use.</summary>
     public ResourceDictionary GamingDark => _gaming;
@@ -139,8 +136,8 @@ internal sealed class ThemeService
         }
 
         ShellTheme.Place(merged, theme);
-        SettingsLayout.Place(merged);
-        LibraryTheme.Place(merged);
+        AddOnce<SettingsLayout>(merged);
+        AddOnce<LibraryTheme>(merged);
         Theme = theme;
         foreach (var window in _windows())
         {
@@ -229,6 +226,21 @@ internal sealed class ThemeService
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // The engine's settings stay the record; this only saves a restyle at the next start.
+        }
+    }
+
+    /// <summary>
+    /// Adds one <typeparamref name="T"/> to <paramref name="merged"/> unless it has one. The area dictionaries
+    /// (settings layout, Library) serve both themes: their keys are their own and they name the theme's only
+    /// through DynamicResource, so where they sit doesn't matter. Each goes before the last entry so the
+    /// theme's dictionary stays last.
+    /// </summary>
+    private static void AddOnce<T>(IList<ResourceDictionary> merged)
+        where T : ResourceDictionary, new()
+    {
+        if (!merged.Any(d => d is T))
+        {
+            merged.Insert(Math.Max(0, merged.Count - 1), new T());
         }
     }
 

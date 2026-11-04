@@ -155,3 +155,15 @@
   summary: Epic 6 (6.1–6.11) left duplicated Recording write handling in the orchestrator and stale docs.
   evidence: Story 6.12's sweep. Behaviour, IPC, events, log and UI text are unchanged. 6.7's Disk-mode restart margin is in the Decisions Awaiting Review.
   outcome: Closed by story 6.12: the game and Monitor Recordings share `SessionOrchestrator.OpenWrite` (begin, start, undo on a failed start) and `CloseWrite` (end the write, report, pick the reason); `MonitorFinder`'s and `OutputNaming`'s docs cover 6.11 and the debug path.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-modern-ui/tickets/story-refactor-sweep-plan.md`
+  summary: Epic 9 (9.1–9.7) left a duplicated area-dictionary placement helper, an unused `ThemeService.Shared`, Gaming's `WindowBackground` and `WindowForeground` repeating palette hex, a hard-coded `Transparent` on the nav list, and stale "tab" and `MessageBox` names.
+  evidence: Story 9.8's sweep. No look or behaviour change: every App render the tests write is byte-identical to develop's except the shell's status clock.
+  outcome: Closed by story 9.8.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-modern-ui/tickets/story-refactor-sweep-plan.md`
+  summary: The committed `ux-modern-ui/renders/shell-fluent.png` and `shell-gaming-dark.png` (9.3) show the General page before 9.5 restyled it; the tests now render the carded page.
+  evidence: Story 9.8's comparison. Develop's tip and the sweep render the same shell (104 px differ, the status clock's seconds only).
+  outcome: Recorded, open (story 9.8). Low. Refresh them from the test output when 9.9 checks the epic, or on the builder's say.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-modern-ui/tickets/story-refactor-sweep-plan.md`
+  summary: Library and Cleanup's blocked message still says "acknowledged on the Library tab"; the Library is a nav page since 9.3.
+  evidence: `LibrarySettingsPage.cs:69`. The epic's Boundaries keep every page's wording, so a sweep doesn't change it.
+  outcome: Recorded, open (story 9.8). Low. Awaiting the builder's review (a one-word wording change).

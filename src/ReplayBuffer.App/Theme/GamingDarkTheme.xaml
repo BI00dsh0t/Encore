@@ -54,8 +54,8 @@
     <SolidColorBrush x:Key="RbOverlayCardBrush" Color="#E61E222A" />
 
     <!-- Fluent's Window style paints these: bg-base and text-primary. -->
-    <SolidColorBrush x:Key="WindowBackground" Color="#0A0B0E" />
-    <SolidColorBrush x:Key="WindowForeground" Color="#E6E8EB" />
+    <StaticResource x:Key="WindowBackground" ResourceKey="SolidBackgroundFillColorBaseBrush" />
+    <StaticResource x:Key="WindowForeground" ResourceKey="TextFillColorPrimaryBrush" />
 
     <!-- Shapes -->
     <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
