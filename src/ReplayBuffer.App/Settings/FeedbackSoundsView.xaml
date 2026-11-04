@@ -35,7 +35,7 @@
                                             Command="{Binding PlayCommand}"
                                             Content="Play"
                                             DockPanel.Dock="Right" />
-                                    <CheckBox VerticalAlignment="Center"
+                                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" VerticalAlignment="Center"
                                               Content="{Binding Label}"
                                               IsChecked="{Binding IsOn}" />
                                 </DockPanel>

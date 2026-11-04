@@ -11,7 +11,7 @@
                         <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Theme" />
+                    <TextBlock Margin="0,6,12,0" VerticalAlignment="Top" Style="{DynamicResource RbSettingsLabelStyle}" Text="Theme" />
                     <StackPanel Grid.Column="1">
                         <ComboBox ItemsSource="{Binding AppThemeChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Theme"
                                   SelectedValue="{Binding AppTheme}" HorizontalAlignment="Left" MinWidth="320" />
@@ -21,7 +21,7 @@
             </HeaderedContentControl>
             <HeaderedContentControl Header="Startup and Overlay" Style="{DynamicResource RbSettingsSectionStyle}">
                 <StackPanel>
-                    <CheckBox Content="Start with Windows, in the tray" IsChecked="{Binding StartWithWindows}" />
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Content="Start with Windows, in the tray" IsChecked="{Binding StartWithWindows}" />
                     <TextBlock Margin="0,12,0,4" Style="{DynamicResource RbSettingsLabelStyle}" Text="Show the Overlay's dot" />
                     <ComboBox ItemsSource="{Binding OverlayDotChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Mode"
                               SelectedValue="{Binding OverlayDot}" HorizontalAlignment="Left" MinWidth="320" />

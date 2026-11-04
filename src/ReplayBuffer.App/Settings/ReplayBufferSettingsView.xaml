@@ -11,7 +11,7 @@
         <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
             <HeaderedContentControl Header="Replay Buffer" Style="{DynamicResource RbSettingsSectionStyle}">
                 <StackPanel>
-                    <CheckBox Margin="0,0,0,4"
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Margin="0,0,0,4"
                               Content="Use Global Buffer Window"
                               IsChecked="{Binding BufferWindowUsesGlobal}"
                               Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
@@ -57,7 +57,7 @@
 
             <HeaderedContentControl Header="Output" Style="{DynamicResource RbSettingsSectionStyle}">
                 <StackPanel>
-                    <CheckBox Margin="0,0,0,4"
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Margin="0,0,0,4"
                               Content="Use Global Output Settings"
                               IsChecked="{Binding VideoUsesGlobal}"
                               Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
@@ -97,7 +97,7 @@
                         </DockPanel>
                         <TextBlock Grid.Row="3" Style="{DynamicResource RbSettingsLabelStyle}" Text="Bitrate (kbps)" />
                         <TextBox Grid.Row="3" Grid.Column="1" Margin="0,4" Text="{Binding BitrateText}" />
-                        <CheckBox Grid.Row="4"
+                        <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Grid.Row="4"
                                   Grid.Column="1"
                                   Margin="0,4"
                                   Content="Variable bitrate (VBR)"
