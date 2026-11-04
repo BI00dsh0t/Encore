@@ -3,14 +3,14 @@ title: 'Refactor sweep'
 type: 'refactor'
 ticket: '10'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '8c0aa70f53583ef521bd72e8ef81e6ab3b6076eb'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 followup_review_recommended: false
 context: ['{project-root}/CLAUDE.md']
@@ -91,11 +91,11 @@ LA = `src/ReplayBuffer.Core/Library/LibraryActor.cs` (2105 lines; read each part
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] LA -- the generic `Post<T>`, `DisposeRegistrations`, the rescan helper, one timer callback, one log helper, the single limits read; remove `ThreadId` and the `Move` path; make `ValidName` private; doc updates -- duplicates, dead code, stale docs
-- [ ] `LibraryWrites.cs`, `Contracts/Messages/Library.cs` -- doc rewording -- stale docs
-- [ ] `App/Library/LibraryPage.cs`, `LibraryThumbnails.cs`, `LibraryViewState.cs`, `Settings/LibrarySettingsPage.cs`, new `App/Prompts.cs` -- the shared send helper, the date const, the shared Yes/No prompt, the prompt-text const, private members -- duplicates, over-public members
-- [ ] `tests/ReplayBuffer.Core.Tests/LibraryActorTests.cs`, `LibraryCleanupTests.cs` -- remove the Move test, trim the duplicate stale-identity check, share `Modified`/`Box`, add the final-path guard test -- lean tests, guard coverage
-- [ ] `_bmad-output/deferred-work.md` -- the epic 7 group, one entry each:
+- [x] LA -- the generic `Post<T>`, `DisposeRegistrations`, the rescan helper, one timer callback, one log helper, the single limits read; remove `ThreadId` and the `Move` path; make `ValidName` private; doc updates -- duplicates, dead code, stale docs
+- [x] `LibraryWrites.cs`, `Contracts/Messages/Library.cs` -- doc rewording -- stale docs
+- [x] `App/Library/LibraryPage.cs`, `LibraryThumbnails.cs`, `LibraryViewState.cs`, `Settings/LibrarySettingsPage.cs`, new `App/Prompts.cs` -- the shared send helper, the date const, the shared Yes/No prompt, the prompt-text const, private members -- duplicates, over-public members
+- [x] `tests/ReplayBuffer.Core.Tests/LibraryActorTests.cs`, `LibraryCleanupTests.cs` -- remove the Move test (the stale-identity check is kept, see Implementation Notes), share `Modified`/`Box`, add the final-path guard test -- lean tests, guard coverage
+- [x] `_bmad-output/deferred-work.md` -- the epic 7 group, one entry each:
   - (a) A write in flight at shutdown never gets `EndWrite` (4.13, owned by epic 7). Still open: it changes dispose behaviour. Owner: epic 8's hardening (crash recovery).
   - (b) Serve's `OutputNaming` (3.7 named epics 4 and 7). Epic 7 writes no files; Recordings are epic 6's. Owner changed to epic 6's sweep.
   - (c) 7.3's deferred finding, that a length read may block a rename or delete. Mitigated: 7.7's sharing-violation retry (`Retried`, about 500 ms) covers a short hold. Open (unverified); owner epic 8's hardening.
@@ -118,9 +118,22 @@ LA = `src/ReplayBuffer.Core/Library/LibraryActor.cs` (2105 lines; read each part
 
 ## Implementation Notes
 
+- `Post<T>` sits beside the non-generic `Post`; both share `ShutDown()` (the same `engine-disconnected` text). `EndCleanup` reads the limits once: the delegate is read on the actor thread, and the message now names the `maxBytes` that the check just used.
+- `ConfirmDelete` and `ConfirmWithMessageBox` differ in caption and icon (Question vs Warning) as well as text, so `Prompts.YesNo` takes both as arguments.
+- The new guard test is `LibraryCleanupTests.AFileWhoseFinalPathIsOutsideIsNeitherPreviewedCleanedRenamedNorDeleted`; `Start` gained optional `finalPath` and `recycle` ports. It also checks rename (`command-failed`).
+- `ABadNameATakenNameAndAStaleIdentityAreRefused` keeps its stale-identity Rename check and its name: it is rename's only stale-identity (`library-item-changed`) test, as `AStaleIdentityIsRefusedAndAFileChangedOnDiskIsRefreshed` covers only SetFavourite.
+- AC 3's grep: plain `grep "ThreadId"` still matches `Environment.CurrentManagedThreadId`/`Thread.ManagedThreadId` (BCL names, three lines). `grep -w "MoveFile\|ThreadId"` matches nothing; the `ThreadId` member and the `MoveFile` path are gone.
+- Verified: build 0 warnings; Core 145/145, App 121 passed (12 explicit skipped), Engine 172 passed (32 explicit skipped), Contracts 119/119; `tools/publish-engine.ps1` clean.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 2 findings — high 0, medium 1, low 1, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` Dropping the stale-identity part of `ABadNameATakenNameAndAStaleIdentityAreRefused` left rename's `library-item-changed` refusal (7.7's verify) untested: `AStaleIdentityIsRefusedAndAFileChangedOnDiskIsRefreshed` calls only SetFavourite. — The plan's duplicate claim was wrong. Restored the assertion and the test's name; the rest of the diff is kept as is, so it is patched in place rather than re-derived. Core 145/145.
+  - `[low]` `[reject]` AC 3's plain grep still matches the BCL's `ManagedThreadId`/`CurrentManagedThreadId`. — The intent (the `ThreadId` member and the `MoveFile` path gone) is met, as `grep -w` shows; the fix would be an edit to this build's plan.
 
 ## Design Notes
 
@@ -134,3 +147,44 @@ Ticket verify: "a saved Clip still appears in the Library within 2 s, every acti
 - `pwsh tools/publish-engine.ps1` -- expected: 0 IL warnings
 
 Before any build or test, check that `%USERPROFILE%\Documents\repos\ReplayBuffer\.bench-running` doesn't exist (another session's GPU run); if it does, wait until it's gone. Rerun a failing test once before treating it as failed. Run test projects one at a time.
+
+## Auto Run Result
+
+Status: built
+
+**Summary:** A behaviour-preserving sweep of epic 7's code.
+- `LibraryActor` gained shared helpers: `Post<T>`/`ShutDown`, `DisposeRegistrations`, `RescanNow`, one Cleanup timer callback, `LogChangedOnDisk`, and a single limits read in `EndCleanup`.
+- Removed the unused `ThreadId` and the test-only `Move` path; `ValidName` is now private.
+- Docs are current: the actor's class doc, `Reconcile`, `ILibraryWrites`/`NoLibraryWrites` and `LibraryItem`.
+- In the App, rename and delete share `SendActionAsync`. A new `Prompts.YesNo` serves the delete and settings prompts. The day format and the folder-change note are consts. The members used only inside their own classes are now private.
+- Tests:
+  - removed the duplicate Move test;
+  - `Box` and `Modified` are shared;
+  - one new guard test, `AFileWhoseFinalPathIsOutsideIsNeitherPreviewedCleanedRenamedNorDeleted`, closes 7.8 QA note 1.
+- `deferred-work.md` has the epic 7 group (a)–(i), each with an owner.
+
+**Files:**
+- `src/ReplayBuffer.Core/Library/LibraryActor.cs`: the helpers, the removals and the docs.
+- `LibraryWrites.cs`, `Contracts/Messages/Library.cs`: doc comments only.
+- `App/Library/LibraryPage.cs`, `LibraryThumbnails.cs`, `LibraryViewState.cs`, `Settings/LibrarySettingsPage.cs`, new `App/Prompts.cs`: the shared send and prompt, the consts, and the private members.
+- `tests/ReplayBuffer.Core.Tests/LibraryActorTests.cs`, `LibraryCleanupTests.cs`: the test changes.
+- `_bmad-output/deferred-work.md`: the epic 7 group.
+
+**Review:** quick lens, 2 findings.
+- 1 medium, patched: the stale-identity rename check is restored.
+- 1 low, rejected: the AC grep wording.
+- Nothing deferred.
+
+**Follow-up review recommended:** false (one medium and no high patched).
+
+**Verification:**
+- `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors (run again after the patch).
+- `ReplayBuffer.Core.Tests`: 145 passed (run again after the patch).
+- `ReplayBuffer.App.Tests`: 121 passed, 12 skipped (Explicit).
+- `ReplayBuffer.Engine.Tests`: 172 passed, 32 skipped (Explicit); this includes `LibraryServeTests`.
+- `ReplayBuffer.Contracts.Tests`: 119 passed.
+- `tools/publish-engine.ps1`: no warnings.
+- The patch touched only a Core test file, so App, Engine and Contracts weren't run again.
+- No Heavy or GPU tests: none cover this code, and the builder has paused GPU tests.
+
+**Residual risks:** None known. The open items wait in `deferred-work.md`: shutdown mid-write, the planner's skip count, the junction picker, OneDrive placeholders (7.11), and the thumbnail cache.

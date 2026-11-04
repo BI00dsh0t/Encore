@@ -29,7 +29,7 @@
 - source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-engine-baseline/tickets/story-sessionorchestrator-and-the-capture-session-api-plan.md`
   summary: Serve still names a session's output with `OutputNaming.Allocate` (a `File.Exists` probe), not AD-21's `OutputPathAllocator`; the item named story 3.5 as its owner.
   evidence: Story 3.5 added `OutputPathAllocator` and made `OutputNaming.Sanitize` delegate to `PathNames.Sanitize`, but left the rewiring of serve's output path to the epics that write recordings from serve.
-  outcome: Recorded, open (story 3.7). Owner changed from story 3.5 to epics 4 (Replay Buffer saves) and 7 (recordings), which retire `OutputNaming`.
+  outcome: Recorded, open (story 3.7). Owner changed from story 3.5 to epics 4 (Replay Buffer saves) and 7 (recordings), which retire `OutputNaming`. Story 7.10 moved it to epic 6's sweep (entry below).
 
 - source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-game-detection-profiles/tickets/story-refactor-sweep-plan.md`
   summary: Epic 3 (3.1–3.6, 3.8) deferred nothing beyond the two items above; of its plans only 3.5's `deferred:` is non-empty.
@@ -39,7 +39,7 @@
 - source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-failed-saves-retry-and-the-file-being-written-signal-plan.md`
   summary: A Clip still writing when the engine shuts down is not published, and its write gets `BeginWrite` but never `EndWrite`.
   evidence: Deferred from 4.1 (the writer posts ClipWritten to an orchestrator that may already be disposed; nothing joins it) and 4.5 (Dispose completes the channel, so OnClipWritten, which calls EndWrite, never runs). Shutdown only; AD-17 has `.rbpart` ignored and deleted at start. The fix needs new dispose handling: end in-flight writes as Failed, or rebuild being-written state at start.
-  outcome: Recorded, open (story 4.13). Owned by epic 7's LibraryActor.
+  outcome: Recorded, open (story 4.13). Owned by epic 7's LibraryActor. Story 7.10 moved it to epic 8's hardening (entry below).
 - source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-disk-mode-ring-plan.md`
   summary: In Disk mode, while a long Clip writes, its pins hold trimmed ring blocks, so new slabs spill to native memory, silently.
   evidence: 4.7's review rejected it as the planned fallback (the disk stays within the estimate; RAM grows only during the write) and left pin headroom to stories 4.8 and 4.10, which did not add it. Nothing tells the user RAM is in use in Disk mode.
@@ -85,3 +85,40 @@
   summary: Epic 5 (5.1–5.12, 5.15) deferred no review findings, but left small duplicates and stale docs for its sweep.
   evidence: Bench re-declared `GetForegroundWindow`; Platform.Desktop's `NativeMethods.txt` listed an unused `DXGI_ERROR_NOT_FOUND`; the App wrote the "connected or nothing" rule four times and `Monitors` its monitor lookup twice; the General page hard-coded the 3 s dot window; the Overlay's and `Monitors`' docs predated 5.12 and 5.15; `OverlayWindow`'s layout constants were public and `Place` re-picked `Update`'s size; App tests copied `Pump`; and the status-line tests sat in the serial WPF collection for one Explicit test.
   outcome: Closed by story 5.13: Bench uses `OverlayWindowStyle.ForegroundWindow`, `OverlayHostProcess` folds `ShowDot`/`HideDot` into `On`/`Off`, `EngineSessions.ConnectedState` holds the rule, `Monitors.MonitorOf` the lookup, the OnChange label is built from `OverlayViewModel.DotOnChangeDuration`, the docs credit 5.8's and 5.12's measurements, `OverlayWindow.ExtentDip` picks the size, `Sta.Pump` is shared, and the PNG test moved to `StatusLineRenderTests`.
+
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-replay-buffer-clips/tickets/story-failed-saves-retry-and-the-file-being-written-signal-plan.md`
+  summary: A Clip or Recording still writing when the engine shuts down gets `BeginWrite` but never `EndWrite`; the item named epic 7's LibraryActor as its owner.
+  evidence: The LibraryActor never persists an item being written and deletes the `.rbpart` at the next start, so nothing stale survives a restart. Ending in-flight writes changes the orchestrator's and the actor's dispose behaviour, which a behaviour-preserving sweep can't do.
+  outcome: Recorded, open (story 7.10). Owner changed from epic 7 to epic 8's hardening (crash recovery).
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-engine-baseline/tickets/story-sessionorchestrator-and-the-capture-session-api-plan.md`
+  summary: Serve still names a session's output with `OutputNaming.Allocate`; story 3.7 named epics 4 and 7 as its owners.
+  evidence: Epic 7 writes no capture files: it indexes what the writers produce. Recordings are epic 6's, so retiring `OutputNaming` belongs there.
+  outcome: Recorded, open (story 7.10). Owner changed from epic 7 to epic 6's sweep.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-library-cleanup/tickets/story-length-and-thumbnails-plan.md`
+  summary: The length worker's read of a file may hold it open while the App renames or deletes it (story 7.3's deferred review finding).
+  evidence: Mitigated by story 7.7: `LibraryActor.Retried` tries a sharing or lock violation again up to 10 times 50 ms apart (about 500 ms), which covers a short read. A read held longer than that (a slow or network drive) is unverified.
+  outcome: Recorded, open (story 7.10). Unverified. Owned by epic 8's hardening.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-library-cleanup/tickets/story-length-and-thumbnails-plan.md`
+  summary: The App's thumbnail cache is never pruned, and a shell "no thumbnail" is not retried until the item's path or size changes (story 7.3 QA).
+  evidence: `LibraryThumbnails` caches in memory by absolute path and size (about 150 KB each), so a moved or deleted item's entry stays, and an outside rewrite at the same size keeps a stale thumbnail. Low cost for a personal Library.
+  outcome: Recorded, open (story 7.10). Low. Owned by epic 8's sweep.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-library-cleanup/tickets/story-cleanup-plan.md`
+  summary: OneDrive placeholders (cloud-only files) aren't listed in the Library (story 7.8 QA note 2).
+  evidence: The scan skips every reparse point (`AttributesToSkip = ReparsePoint`) so Cleanup never reaches through a junction or link, and a cloud placeholder is one, so an Output Folder inside OneDrive may show fewer items. Listing them safely needs a reparse-tag check.
+  outcome: Recorded, open (story 7.10). Checked in story 7.11.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-library-cleanup/tickets/story-cleanup-plan.md`
+  summary: `CleanupPlanner` doesn't count an item that isn't inside the Output Folder as skipped (story 7.8 QA note 3).
+  evidence: The planner passes over such an item without counting it, so in that stale case (a folder swapped for a junction after the scan) `cleanup-limit-unreachable`'s message could blame Favourites. Counting it changes the warning, which a behaviour-preserving sweep can't do.
+  outcome: Recorded, open (story 7.10). Changes the warning, so owned by epic 8's hardening.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-library-cleanup/tickets/story-library-and-cleanup-settings-page-plan.md`
+  summary: The Output Folder picker doesn't refuse a junction or symbolic link (story 7.9 QA note 1).
+  evidence: The engine's guards cover it: the Output Folder itself may be a junction, `ThroughReparsePoint` checks every folder below it, and the `finalPath` port refuses a delete, rename or Cleanup whose final path leaves the folder's own final path.
+  outcome: Recorded, open (story 7.10). Owned by epic 8's hardening.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-library-cleanup/tickets/story-refactor-sweep-plan.md`
+  summary: The `Mp4`/`Box` test helpers are copied across the Core and Engine test projects, and the binding-error trace block across the App test classes.
+  evidence: Found by story 7.10's sweep. Sharing them across projects needs a shared test assembly, for little gain.
+  outcome: Recorded, open (story 7.10). Low. Owned by epic 8's sweep.
+- source_plan: `_bmad-output/initiative-replay-buffer/tickets/epic-library-cleanup/tickets/story-refactor-sweep-plan.md`
+  summary: Epic 7 (7.1–7.9) left small duplicates, dead members, over-public members and stale docs, and no test of the final-path guard on rename, delete and Cleanup (story 7.8 QA note 1).
+  evidence: Story 7.10's sweep. Behaviour, IPC, events, `library.json`, log and UI text are unchanged.
+  outcome: Closed by story 7.10: `LibraryActor` shares its request posting (`Post<T>`), its registration-timer disposal, its rescan-and-clean, its Cleanup timer callback, its changed-on-disk log line and one limits read in `EndCleanup`; the unused `ThreadId` and the test-only `Move` path are removed and `ValidName` is private; the class, `Reconcile`, `ILibraryWrites`/`NoLibraryWrites` and `LibraryItem` docs are current. The App shares its rename/delete send (`LibraryPage.SendActionAsync`), its Yes/No prompt (`Prompts.YesNo`), the day format and the folder-change note, and narrows `LibraryPage`, `LibraryThumbnails.Size` and `LibraryViewState.Default`. The tests drop the test-only Move test, share `Modified` and `Box`, and add `AFileWhoseFinalPathIsOutsideIsNeitherPreviewedCleanedRenamedNorDeleted`, which closes 7.8 QA note 1.

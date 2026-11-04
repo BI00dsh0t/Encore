@@ -13,7 +13,7 @@ namespace ReplayBuffer.App.Library;
 internal sealed class LibraryThumbnails
 {
     /// <summary>The thumbnails' side in pixels: 96×54 rows at up to 200 % scale.</summary>
-    internal const int Size = 192;
+    private const int Size = 192;
 
     private readonly Func<string, ImageSource?> _source;
     private readonly Action<Action> _background;

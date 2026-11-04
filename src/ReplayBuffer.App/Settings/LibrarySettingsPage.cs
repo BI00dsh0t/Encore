@@ -21,6 +21,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
     private const long SecondsPerDay = 86_400;
     private const double MaxGb = 1_000_000;
     private const int MaxDays = 36_500;
+    private const string FolderChangeNote = "The Library will list only the new folder. Existing files aren't moved.";
 
     private readonly IEngineSession _engine;
     private FrameworkElement? _view;
@@ -184,7 +185,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
             return;
         }
 
-        if (Confirm($"Use {path} as the Output Folder?\n\nThe Library will list only the new folder. Existing files aren't moved."))
+        if (Confirm($"Use {path} as the Output Folder?\n\n{FolderChangeNote}"))
         {
             _ = SendAsync([SettingsValues.SetGlobal(Keys.OutputFolder, path)]);
         }
@@ -340,7 +341,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
             return;
         }
 
-        if (Confirm("Use the default folder under Videos as the Output Folder?\n\nThe Library will list only the new folder. Existing files aren't moved."))
+        if (Confirm("Use the default folder under Videos as the Output Folder?\n\n" + FolderChangeNote))
         {
             _ = SendAsync([SettingsValues.SetGlobal(Keys.OutputFolder, (string?)null)]);
         }
@@ -353,12 +354,5 @@ internal sealed class LibrarySettingsPage : SettingsPage
         OnPropertyChanged(property);
     }
 
-    private bool ConfirmWithMessageBox(string message)
-    {
-        var owner = _view is null ? null : Window.GetWindow(_view);
-        var answer = owner is null
-            ? MessageBox.Show(message, Title, MessageBoxButton.YesNo, MessageBoxImage.Warning)
-            : MessageBox.Show(owner, message, Title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        return answer == MessageBoxResult.Yes;
-    }
+    private bool ConfirmWithMessageBox(string message) => Prompts.YesNo(_view, message, Title, MessageBoxImage.Warning);
 }

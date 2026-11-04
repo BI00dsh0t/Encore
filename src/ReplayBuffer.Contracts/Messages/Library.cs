@@ -5,7 +5,7 @@ using ReplayBuffer.Contracts.Ipc;
 namespace ReplayBuffer.Contracts.Messages;
 
 /// <summary>
-/// One file in the Library: a Clip (later a Recording) in the Output Folder.
+/// One file in the Library: a Clip or a Recording in the Output Folder.
 /// </summary>
 /// <param name="Path">The file's path relative to the Output Folder; the item's key (compared ordinal ignore-case).</param>
 /// <param name="ProfileId">The Game Profile it was saved for, or <c>null</c> when unknown (a file the start scan found).</param>
