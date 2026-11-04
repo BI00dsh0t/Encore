@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using ReplayBuffer.Contracts;
 
 namespace ReplayBuffer.Bench;
 
@@ -21,7 +22,15 @@ internal sealed record FpsRun(
     double? LatencyP99Ms,
     double? CpuPercentOneCore,
     double? AllocBytesPerSecond,
-    string? GcSteady);
+    string? GcSteady,
+    string? PresentMode = null);
+
+/// <summary>
+/// <c>bench fps --overlay</c> (story 5.12): the App's Overlay was on for the capture runs, with this <c>overlayDot</c>
+/// mode and a message every <paramref name="MessageSeconds"/>; <paramref name="OverlayPlanes"/> is
+/// <c>SupportsOverlays</c> for the load's monitor (null when DXGI couldn't say).
+/// </summary>
+internal sealed record FpsOverlay(string Dot, bool? OverlayPlanes, int MessageSeconds);
 
 /// <summary>The capture condition's means over its runs.</summary>
 internal sealed record FpsCapture(
@@ -52,7 +61,8 @@ internal sealed record FpsReport(
     IReadOnlyList<FpsRun> Runs,
     double TargetLossPercent,
     string Verdict,
-    GpuLoadInfo? Load = null);
+    GpuLoadInfo? Load = null,
+    FpsOverlay? Overlay = null);
 
 /// <summary>
 /// <c>bench fps</c>: <c>tools/measure-path-a.ps1</c> runs baseline against capture in balanced passes, at
@@ -65,12 +75,31 @@ internal static class FpsBenchmark
     public const string FileName = "fps.json";
     public const double TargetLossPercent = 3;
 
+    /// <summary>With <c>--overlay</c>, the App shows a message this often while its dot is on.</summary>
+    public const int MessageSeconds = 10;
+
     /// <summary>The options of the synthetic load, refused with <c>--game</c>.</summary>
     private static readonly string[] LoadOptionNames = ["target-fps", "load-size", "load-timeout", "load-warmup", "load-exe"];
+
+    /// <summary>The script's line as a run starts settling: <c>[02-capture-1] settling 20 s ...</c>.</summary>
+    private static readonly System.Text.RegularExpressions.Regex SettlingLine =
+        new(@"^\[\d+-(?<condition>[A-Za-z]+)-[^\]]+\] settling\b", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     public static int Run(BenchContext context, TextWriter? errors = null)
     {
         var options = context.Options;
+        var withOverlay = options.Flag("overlay");
+        if (!withOverlay && options.Has("overlay-dot"))
+        {
+            throw new BenchUsageException("--overlay-dot is for --overlay.");
+        }
+
+        if (!withOverlay && options.Has("app-exe"))
+        {
+            throw new BenchUsageException("--app-exe is for --overlay.");
+        }
+
+        var dot = AppOverlayHost.ParseDot(options);
         var realGame = options.Text("game");
         if (realGame is not null && LoadOptionNames.FirstOrDefault(options.Has) is { } loadOption)
         {
@@ -101,6 +130,7 @@ internal static class FpsBenchmark
         var presentMon = context.ResolvePresentMon();
         var engine = context.ResolveEngine();
         var loadExe = realGame is null ? GpuLoadProcess.Resolve(context) : null;
+        var appExe = withOverlay ? AppOverlayHost.Resolve(context) : null;
         var folder = Path.Combine(context.RunFolder, "fps");
         var script = Path.Combine(context.RepoRoot, "tools", "measure-path-a.ps1");
 
@@ -134,9 +164,14 @@ internal static class FpsBenchmark
             args.Add("-NoGpuSampler");
         }
 
-        errors ??= Console.Error;
+        // The script's stderr is relayed from another thread, and the message timer may report too.
+        errors = TextWriter.Synchronized(errors ?? Console.Error);
         GpuLoadInfo loadInfo;
         GpuLoadProcess? load = null;
+        AppOverlayHost? appHost = null;
+        Timer? messages = null;
+        OverlaySwitch? overlay = null;
+        FpsOverlay? overlayInfo = null;
         var loadDied = false;
         try
         {
@@ -166,24 +201,80 @@ internal static class FpsBenchmark
                 loadInfo = GpuLoadInfo.RealGame(game);
             }
 
+            if (appExe is not null)
+            {
+                // The App's Game Detection must not capture the load: its profile is set Ignored by its exe path.
+                var (ignoredExe, pid) = load is not null ? (loadExe!, load.Id) : GameExe(game);
+                try
+                {
+                    appHost = AppOverlayHost.Start(appExe, ignoredExe, messages: false, dot);
+                }
+                catch (BenchFailure e)
+                {
+                    errors.WriteLine(e.Message);
+                    return 1;
+                }
+
+                overlayInfo = new FpsOverlay(AppOverlayHost.DotName(dot), ReplayBuffer.Platform.Desktop.Monitors.OverlayPlanes(pid), MessageSeconds);
+                Console.WriteLine($"Overlay: the App's dot ({overlayInfo.Dot}) and a message every {MessageSeconds} s in the capture runs; overlay planes on the load's monitor: {YesNo(overlayInfo.OverlayPlanes)}.");
+                var overlaySwitch = overlay = new OverlaySwitch(appHost, errors);
+                messages = new Timer(_ => overlaySwitch.Message());
+            }
+
             Console.WriteLine($"FPS: {pwsh} {string.Join(' ', args)}");
 
-            // The script's stdout streams to the console; its stderr (where its refusals go) is relayed line by
-            // line to errors, so the message reaches whoever runs Bench.
-            var start = new ProcessStartInfo(pwsh) { UseShellExecute = false, RedirectStandardError = true };
+            // The script's stderr (where its refusals go) is relayed line by line to errors, so the message reaches
+            // whoever runs Bench. Its stdout streams to the console; with --overlay Bench reads it to follow the
+            // runs, and echoes every line.
+            var start = new ProcessStartInfo(pwsh) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = appHost is not null };
             foreach (var arg in args)
             {
                 start.ArgumentList.Add(arg);
             }
 
             using var process = Process.Start(start) ?? throw new BenchFailure($"Could not start {pwsh}.");
-            string? line;
-            while ((line = process.StandardError.ReadLine()) is not null)
+            process.ErrorDataReceived += (_, e) =>
             {
-                errors.WriteLine(line);
-            }
+                if (e.Data is not null)
+                {
+                    errors.WriteLine(e.Data);
+                }
+            };
+            process.BeginErrorReadLine();
+            try
+            {
+                if (overlay is not null)
+                {
+                    string? line;
+                    while ((line = process.StandardOutput.ReadLine()) is not null)
+                    {
+                        Console.WriteLine(line);
+                        if (OverlayFor(line) is { } next)
+                        {
+                            overlay.Set(next);
+                            if (next)
+                            {
+                                messages!.Change(TimeSpan.FromSeconds(MessageSeconds), TimeSpan.FromSeconds(MessageSeconds));
+                            }
+                            else
+                            {
+                                messages!.Change(Timeout.Infinite, Timeout.Infinite);
+                            }
+                        }
+                    }
+                }
 
-            process.WaitForExit();
+                process.WaitForExit();
+            }
+            finally
+            {
+                // Leaving early (an exception) must not leave the script, its engine or PresentMon running.
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(10_000);
+                }
+            }
             if (load is { HasExited: true })
             {
                 loadDied = true;
@@ -198,7 +289,17 @@ internal static class FpsBenchmark
         }
         finally
         {
-            // Never leave the load running, whatever happened.
+            // Never leave the load, the App or its engine running, whatever happened; the timer first, so it sends no more.
+            if (messages is not null)
+            {
+                using var stopped = new ManualResetEvent(false);
+                if (messages.Dispose(stopped))
+                {
+                    stopped.WaitOne(TimeSpan.FromSeconds(15));
+                }
+            }
+
+            appHost?.Dispose();
             load?.Dispose();
         }
 
@@ -208,7 +309,7 @@ internal static class FpsBenchmark
             throw new BenchFailure($"measure-path-a.ps1 wrote no {summary}.");
         }
 
-        var report = Map(File.ReadAllText(summary), summary, folder, game, settings, seconds, passes, loadInfo);
+        var report = Map(File.ReadAllText(summary), summary, folder, game, settings, seconds, passes, loadInfo, overlayInfo);
         BenchJson.Write(Path.Combine(context.RunFolder, FileName), report);
         Console.WriteLine($"FPS loss {Format(report.CaptureMeans?.FpsLossPercent)} % against {TargetLossPercent} % ({report.Verdict}).");
 
@@ -219,7 +320,7 @@ internal static class FpsBenchmark
             return 1;
         }
 
-        return loadDied ? 1 : 0;
+        return loadDied || overlay is { Failed: true } ? 1 : 0;
     }
 
     /// <summary>Why <paramref name="report"/> is not a measurement: the script aborted, or no capture run has a frame rate.</summary>
@@ -228,9 +329,20 @@ internal static class FpsBenchmark
         : !report.Runs.Any(r => r.Condition != "baseline" && r.AvgFps is not null) ? "No capture run has a frame rate; nothing was measured."
         : null;
 
-    /// <summary>Maps the script's <c>summary.json</c> (and the capture runs' stats files beside it) into the report.</summary>
+    /// <summary>
+    /// The Overlay's state from one line of the script's stdout: on as a capture run starts settling, off as a
+    /// baseline run does, and null (no change) for any other line.
+    /// </summary>
+    internal static bool? OverlayFor(string line) =>
+        SettlingLine.Match(line) is { Success: true } match ? match.Groups["condition"].Value != "baseline" : null;
+
+    /// <summary>
+    /// Maps the script's <c>summary.json</c> (and the capture runs' stats files and every run's PresentMon CSV
+    /// beside it) into the report.
+    /// </summary>
     internal static FpsReport Map(
-        string summaryJson, string summaryPath, string folder, string game, CaptureSettings settings, int seconds, int passes, GpuLoadInfo? load = null)
+        string summaryJson, string summaryPath, string folder, string game, CaptureSettings settings, int seconds, int passes,
+        GpuLoadInfo? load = null, FpsOverlay? overlay = null)
     {
         using var document = JsonDocument.Parse(summaryJson);
         var root = document.RootElement;
@@ -259,6 +371,9 @@ internal static class FpsBenchmark
                 }
             }
 
+            var presents = Path.Combine(folder, tag + "-presentmon.csv");
+            var presentMode = tag.Length > 0 && File.Exists(presents) ? PresentMonCsv.Analyze(presents).DominantMode : null;
+
             runs.Add(new FpsRun(
                 tag,
                 condition,
@@ -275,7 +390,8 @@ internal static class FpsBenchmark
                 Number(row, "latencyP99Ms"),
                 Number(row, "cpuPercentOneCore"),
                 Number(row, "allocBytesPerSecond"),
-                Text(row, "gcSteady")));
+                Text(row, "gcSteady"),
+                presentMode));
         }
 
         var interleaved = runs.Where(r => r.Pass != "final").ToList();
@@ -304,8 +420,85 @@ internal static class FpsBenchmark
         var verdict = loss is null ? DriftMath.Inconclusive : loss < TargetLossPercent ? DriftMath.Pass : DriftMath.Miss;
         var aborted = root.TryGetProperty("aborted", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString() : null;
         return new FpsReport(
-            DateTimeOffset.Now, game, settings, seconds, passes, summaryPath, aborted, baselineFps, baselineLow, means, runs, TargetLossPercent, verdict, load);
+            DateTimeOffset.Now, game, settings, seconds, passes, summaryPath, aborted, baselineFps, baselineLow, means, runs, TargetLossPercent, verdict, load, overlay);
     }
+
+    /// <summary>The running game's exe (its profile id) and process id.</summary>
+    private static (string Exe, int Pid) GameExe(string game)
+    {
+        var processes = Process.GetProcessesByName(game);
+        try
+        {
+            var process = processes.FirstOrDefault(p => p.MainWindowHandle != 0)
+                ?? throw new BenchFailure($"The game process '{game}' is not running (or has no main window); --overlay sets its profile Ignored by its exe.");
+            var exe = process.MainModule?.FileName ?? throw new BenchFailure($"The exe of '{game}' (pid {process.Id}) couldn't be read.");
+            return (exe, process.Id);
+        }
+        catch (System.ComponentModel.Win32Exception e)
+        {
+            throw new BenchFailure($"The exe of '{game}' couldn't be read: {e.Message}");
+        }
+        finally
+        {
+            foreach (var p in processes)
+            {
+                p.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The App's Overlay during <c>bench fps --overlay</c>: on and off as the runs change, and the timer's
+    /// messages. One lock serializes them, so no message is sent once the dot is off. A failure from the App's
+    /// engine is reported, never thrown (on the timer's thread it would end Bench), and fails the run.
+    /// </summary>
+    private sealed class OverlaySwitch(AppOverlayHost host, TextWriter errors)
+    {
+        private readonly Lock _lock = new();
+        private bool? _on;
+
+        public bool Failed { get; private set; }
+
+        public void Set(bool on)
+        {
+            lock (_lock)
+            {
+                if (_on == on)
+                {
+                    return;
+                }
+
+                _on = on;
+                Send(on ? host.On : host.Off, on ? "on" : "off");
+            }
+        }
+
+        public void Message()
+        {
+            lock (_lock)
+            {
+                if (_on == true)
+                {
+                    Send(host.Message, "message");
+                }
+            }
+        }
+
+        private void Send(Action send, string what)
+        {
+            try
+            {
+                send();
+            }
+            catch (Exception e) when (e is ErrorCodeException or TimeoutException or ObjectDisposedException or InvalidOperationException)
+            {
+                Failed = true;
+                errors.WriteLine($"The App's Overlay {what} failed: {e.Message}");
+            }
+        }
+    }
+
+    private static string YesNo(bool? value) => value switch { true => "yes", false => "no", null => "unknown" };
 
     /// <summary>The Gen2 collections over the runs that report them; null when none does.</summary>
     private static long? Gen2Sum(IEnumerable<FpsRun> runs)

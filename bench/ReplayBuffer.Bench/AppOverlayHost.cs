@@ -43,6 +43,7 @@ internal sealed class AppOverlayHost : IOverlayHost
     private readonly EngineClient _client;
     private readonly int _enginePid;
     private readonly bool _messages;
+    private readonly Lock _sendLock = new();
     private bool _disposed;
 
     private AppOverlayHost(Process app, Instance instance, EngineClient client, int enginePid, bool messages)
@@ -55,7 +56,8 @@ internal sealed class AppOverlayHost : IOverlayHost
     }
 
     /// <exception cref="BenchFailure">The App or its engine never answered: both are stopped and the instance's folders deleted.</exception>
-    public static AppOverlayHost Start(string exe, string ignoredExe, bool messages)
+    /// <param name="overlayDot">Global <c>overlayDot</c> for the instance (story 5.12), set with the Ignored profile; null leaves the default.</param>
+    public static AppOverlayHost Start(string exe, string ignoredExe, bool messages, OverlayDotMode? overlayDot = null)
     {
         var instance = Instance.ForTest(Instance.TestPrefix + "bench-overlay-" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(4)).ToLowerInvariant());
         var start = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true };
@@ -71,13 +73,18 @@ internal sealed class AppOverlayHost : IOverlayHost
         {
             (client, enginePid) = Connect(instance, app);
             var id = Canonicalize(ignoredExe);
-            var ops = new[]
+            var ops = new List<SettingsOp>
             {
                 SettingsOp.SetProfile(id, ProfileAttributes.Name, JsonSerializer.SerializeToElement("GPU load")),
                 SettingsOp.SetProfile(id, ProfileAttributes.Ignored, JsonSerializer.SerializeToElement(true)),
             };
+            if (overlayDot is { } dot)
+            {
+                ops.Add(SettingsOp.SetGlobal(Keys.OverlayDot.Name, Keys.OverlayDot.ToJson(dot)));
+            }
+
             Wait(client.SendAsync(SettingsMessages.Update, new SettingsUpdate(client.State.Settings.Revision, ops)));
-            Console.WriteLine($"App host ready: {instance.Name}, App process {app.Id}, the load's profile Ignored.");
+            Console.WriteLine($"App host ready: {instance.Name}, App process {app.Id}, the load's profile Ignored{(overlayDot is { } d ? $", overlayDot {DotName(d)}" : "")}.");
             return new AppOverlayHost(app, instance, client, enginePid, messages);
         }
         catch (Exception e)
@@ -125,6 +132,26 @@ internal sealed class AppOverlayHost : IOverlayHost
 
     public void Off() => Simulate(SimulatedEvent.RecordingStopped);
 
+    /// <summary>One Overlay message (a saved notice): <c>bench fps --overlay</c> sends one every 10 s while the dot is on.</summary>
+    public void Message() => Simulate(SimulatedEvent.ClipSaved);
+
+    /// <summary>The <c>overlayDot</c> modes as <c>--overlay-dot</c> names them (the setting's own JSON names).</summary>
+    public static readonly IReadOnlyDictionary<string, OverlayDotMode> DotModes = new Dictionary<string, OverlayDotMode>(StringComparer.Ordinal)
+    {
+        ["auto"] = OverlayDotMode.Auto,
+        ["always"] = OverlayDotMode.Always,
+        ["onChange"] = OverlayDotMode.OnChange,
+    };
+
+    public static string DotName(OverlayDotMode mode) => DotModes.First(m => m.Value == mode).Key;
+
+    /// <summary><c>--overlay-dot</c>, or <see cref="OverlayDotMode.Auto"/>.</summary>
+    /// <exception cref="BenchUsageException">Not one of <see cref="DotModes"/>.</exception>
+    public static OverlayDotMode ParseDot(BenchOptions options) =>
+        options.Text("overlay-dot") is not { } text ? OverlayDotMode.Auto
+        : DotModes.TryGetValue(text, out var mode) ? mode
+        : throw new BenchUsageException($"--overlay-dot '{text}' is not one of {string.Join(", ", DotModes.Keys)}.");
+
     /// <summary>Whether the App has a visible Overlay window. It has no handle until it is first shown, so this looks each time.</summary>
     public bool WindowVisible()
     {
@@ -152,10 +179,20 @@ internal sealed class AppOverlayHost : IOverlayHost
         }
 
         _disposed = true;
-        Cleanup(_app, _instance, _client, _enginePid);
+        lock (_sendLock)
+        {
+            Cleanup(_app, _instance, _client, _enginePid);
+        }
     }
 
-    private void Simulate(SimulatedEvent simulated) => Wait(_client.SendAsync(DevMessages.Simulate, new DevSimulate(simulated)));
+    /// <summary>Serialized: <c>bench fps --overlay</c> sends messages from a timer beside the dot's on and off.</summary>
+    private void Simulate(SimulatedEvent simulated)
+    {
+        lock (_sendLock)
+        {
+            Wait(_client.SendAsync(DevMessages.Simulate, new DevSimulate(simulated)));
+        }
+    }
 
     /// <summary>Connects once the App has started the engine; returns the client and the engine's process id (the pipe's server).</summary>
     private static (EngineClient Client, int EnginePid) Connect(Instance instance, Process app)

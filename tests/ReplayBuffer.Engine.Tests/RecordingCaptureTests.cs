@@ -1,7 +1,11 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Library;
@@ -19,6 +23,7 @@ namespace ReplayBuffer.Engine.Tests;
 /// proposed as the Target on a pwsh window. Two <c>recordToggle</c> presses some seconds apart make
 /// one fragmented MP4 of the time between them beside the Replay Buffer, which keeps buffering.
 /// Killing the game, or disposing the orchestrator, mid-Recording still finishes it (story 6.4).
+/// A window resize keeps it one file, and a forced encoder restart splits it in two (story 6.6).
 /// </summary>
 public sealed class RecordingCaptureTests : IDisposable
 {
@@ -255,6 +260,98 @@ public sealed class RecordingCaptureTests : IDisposable
         SessionTestKit.AssertDecodesCleanly(file);
     }
 
+    [Fact]
+    public void ARestartIsRefusedBeforeTheSessionHasAnchored()
+    {
+        using var hub = new ToneHub(new Dictionary<string, (double, double)>());
+        var spec = new SessionSpec(SessionKind.Game, new CaptureTarget(1, 0, null), Core.Settings.SettingsResolver.Resolve(SettingsDocument.Empty, null), SessionAudio.None, MicMuted: true);
+        var session = new CaptureSession(spec, new NoEvents(), new CaptureSessionOptions { OutputFolder = _directory, Replay = true }, hub, new NoEncoders(), NullLoggerFactory.Instance);
+        try
+        {
+            Assert.False(session.RestartChain("test"));
+        }
+        finally
+        {
+            session.Abandon();
+        }
+    }
+
+    /// <summary>
+    /// Story 6.6: a Recording runs through a window resize (one file, still 640x480), then a forced
+    /// encoder restart ends it as <c>encoder-restart</c> and starts a second one at once; the two
+    /// play, and they meet with no gap longer than the restart took.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AWindowResizeKeepsOneFileAndAnEncoderRestartStartsASecond()
+    {
+        var logs = new ListLoggerProvider();
+        using var loggers = LoggerFactory.Create(builder => builder.AddProvider(logs));
+        using var rig = await StartRecordingAsync(loggers: loggers);
+
+        // A runs five seconds: the window grows to 1000x700 and goes back while it runs.
+        await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+        Resize(rig.Window, 1000, 700);
+        await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+        Resize(rig.Window, 641, 481);
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+
+        Assert.True(rig.Factory.Session!.RestartChain("simulated"));
+        var a = rig.Started.Path;
+        Assert.Equal(new RecordingStopped(a, RecordingStopReasons.EncoderRestart), await rig.NextAsync());
+        var b = Assert.IsType<RecordingStarted>(await rig.NextAsync()).Path;
+        Assert.Equal(new RecordingRestart(a, b), await rig.NextAsync());
+
+        await Task.Delay(TimeSpan.FromSeconds(4), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(b, RecordingStopReasons.Stopped), await rig.NextAsync());
+        rig.Orchestrator.Dispose();
+
+        Assert.Equal([a, b], Directory.GetFiles(Path.Combine(_directory, "Test Game"), "*.mp4").Order(StringComparer.Ordinal));
+        Assert.Equal([$"begin {a} {ProfileId}", $"begin {b} {ProfileId}", $"end {a} Written", $"end {b} Written"], rig.Library.Calls);
+        var (_, width, height, _) = SessionTestKit.VideoStream(a);
+        Assert.Equal((640, 480), (width, height));
+        SessionTestKit.AssertDecodesCleanly(a);
+        SessionTestKit.AssertDecodesCleanly(b);
+
+        // Each Recording's start in anchor time, from its writer's log: A's end meets B's start.
+        var starts = logs.Entries
+            .Select(e => Regex.Match(e.Message, @"The Recording starts on the keyframe (\d+\.\d+) s after the anchor"))
+            .Where(m => m.Success)
+            .Select(m => double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture))
+            .ToList();
+        Assert.Equal(2, starts.Count);
+        var rebuild = logs.Entries
+            .Select(e => Regex.Match(e.Message, @"The encoder chain restarted in (\d+) ms"))
+            .Single(m => m.Success);
+        var rebuilt = double.Parse(rebuild.Groups[1].Value, CultureInfo.InvariantCulture) / 1000;
+        var video = SessionTestKit.Probe(a, "-select_streams", "v:0", "-show_streams").GetProperty("streams")[0];
+        var aEnd = starts[0] + double.Parse(video.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture);
+        var gap = starts[1] - aEnd;
+        Assert.InRange(gap, -2.0 / 30, rebuilt + (2.0 / 30));
+    }
+
+    /// <summary>Resizes the game's window from outside its process, keeping its place.</summary>
+    private static void Resize(nint window, int width, int height) =>
+        Assert.True(Native.SetWindowPos(window, 0, 0, 0, width, height, Native.NoMoveNoZOrderNoActivate), $"SetWindowPos failed: {Marshal.GetLastPInvokeError()}");
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AFailedRestartRebuildFailsTheSessionWithEncodeFailed()
+    {
+        using var rig = await StartRecordingAsync(restartFault: () => new InvalidOperationException("simulated rebuild failure"));
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+
+        Assert.True(rig.Factory.Session!.RestartChain("simulated"));
+        var failure = Assert.IsType<ErrorCodeException>(await rig.Factory.Failed.WaitAsync(Timeout, Token));
+        Assert.Equal(ErrorCodes.EncodeFailed, failure.Code);
+
+        // The Recording ends with its session, its file kept.
+        Assert.IsType<RecordingStopped>(await rig.NextAsync());
+        rig.Orchestrator.Dispose();
+        AssertFinished(rig.Started.Path, atLeast: 1);
+    }
+
     private static List<string?> AudioTitles(string file) =>
         [.. SessionTestKit.Probe(file, "-select_streams", "a", "-show_streams").GetProperty("streams").EnumerateArray()
             .Select(s => s.TryGetProperty("tags", out var tags) && tags.TryGetProperty("name", out var title) ? title.GetString() : null)];
@@ -332,7 +429,11 @@ public sealed class RecordingCaptureTests : IDisposable
     /// with <paramref name="pending"/>, that document is committed and <see cref="SettingsUpdated"/>
     /// posted before the press.
     /// </summary>
-    private async Task<Rig> StartRecordingAsync(bool clips = false, Func<SettingsDocument, SettingsDocument>? pending = null)
+    private async Task<Rig> StartRecordingAsync(
+        bool clips = false,
+        Func<SettingsDocument, SettingsDocument>? pending = null,
+        Func<Exception?>? restartFault = null,
+        ILoggerFactory? loggers = null)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)>
@@ -371,11 +472,18 @@ public sealed class RecordingCaptureTests : IDisposable
             var window = SessionTestKit.OpenWindow(_directory, _processes, WindowScript);
             var anchored = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
             var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
-            var options = new CaptureSessionOptions { OutputFolder = _directory, Replay = true, Anchored = qpc => anchored.TrySetResult(qpc) };
+            var options = new CaptureSessionOptions
+            {
+                OutputFolder = _directory,
+                Replay = true,
+                Anchored = qpc => anchored.TrySetResult(qpc),
+                RestartFault = restartFault,
+            };
             var published = new ConcurrentQueue<CaptureState>();
             var library = new LibraryCalls();
+            var factory = new CapturingFactory(new CaptureSessionFactory(options, loggers ?? NullLoggerFactory.Instance, hub));
             orchestrator = new SessionOrchestrator(
-                new CaptureSessionFactory(options, NullLoggerFactory.Instance, hub),
+                factory,
                 () => Volatile.Read(ref document),
                 published.Enqueue,
                 targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, e) => events.Writer.TryComplete(e)),
@@ -388,7 +496,8 @@ public sealed class RecordingCaptureTests : IDisposable
                     s => events.Writer.TryWrite(s),
                     s => events.Writer.TryWrite(s),
                     e => events.Writer.TryWrite(e),
-                    library));
+                    library,
+                    Restarted: r => events.Writer.TryWrite(r)));
 
             orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
             await anchored.Task.WaitAsync(Timeout, Token);
@@ -404,7 +513,7 @@ public sealed class RecordingCaptureTests : IDisposable
             var start = Stopwatch.GetTimestamp();
             Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, start)));
             var started = Assert.IsType<RecordingStarted>(await events.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token));
-            return new Rig(orchestrator, hub, events, published, library, start, started);
+            return new Rig(orchestrator, hub, events, published, library, start, started) { Factory = factory, Window = window.Handle };
         }
         catch
         {
@@ -438,6 +547,12 @@ public sealed class RecordingCaptureTests : IDisposable
 
         public RecordingStarted Started { get; } = started;
 
+        /// <summary>The session factory, which keeps the session it started and its first failure.</summary>
+        public required CapturingFactory Factory { get; init; }
+
+        /// <summary>The game's window.</summary>
+        public nint Window { get; init; }
+
         public async Task<object> NextAsync() => await Events.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
         public void Dispose()
@@ -445,6 +560,85 @@ public sealed class RecordingCaptureTests : IDisposable
             Orchestrator.Dispose();
             hub.Dispose();
         }
+    }
+
+    /// <summary>Starts sessions with <paramref name="inner"/>, keeping the last one and the first failure any of them posted.</summary>
+    private sealed class CapturingFactory(ICaptureSessionFactory inner) : ICaptureSessionFactory
+    {
+        private readonly TaskCompletionSource<Exception> _failed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private CaptureSession? _session;
+
+        public CaptureSession? Session => Volatile.Read(ref _session);
+
+        public Task<Exception> Failed => _failed.Task;
+
+        public ICaptureSession Start(SessionSpec spec, ISessionEvents events)
+        {
+            var session = inner.Start(spec, new Events(events, _failed));
+            Volatile.Write(ref _session, (CaptureSession)session);
+            return session;
+        }
+
+        private sealed class Events(ISessionEvents inner, TaskCompletionSource<Exception> failed) : ISessionEvents
+        {
+            public void Closed(string reason) => inner.Closed(reason);
+
+            public void Failed(Exception failure)
+            {
+                failed.TrySetResult(failure);
+                inner.Failed(failure);
+            }
+
+            public void ChainRestarted(long qpc) => inner.ChainRestarted(qpc);
+        }
+    }
+
+    private sealed class NoEvents : ISessionEvents
+    {
+        public void Closed(string reason)
+        {
+        }
+
+        public void Failed(Exception failure)
+        {
+        }
+    }
+
+    /// <summary>A catalog a session that never opens must not consult.</summary>
+    private sealed class NoEncoders : IVideoEncoderCatalog
+    {
+        public string? EncoderFor(VideoCodec codec) => throw new InvalidOperationException("The catalog was consulted.");
+    }
+
+    private sealed class ListLoggerProvider : ILoggerProvider
+    {
+        public ConcurrentQueue<(LogLevel Level, string Message)> Entries { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new ListLogger(Entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class ListLogger(ConcurrentQueue<(LogLevel Level, string Message)> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                entries.Enqueue((logLevel, formatter(state, exception)));
+        }
+    }
+
+    private static class Native
+    {
+        // SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE.
+        public const uint NoMoveNoZOrderNoActivate = 0x0002 | 0x0004 | 0x0010;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     }
 
     /// <summary>Records each Library call, in order.</summary>

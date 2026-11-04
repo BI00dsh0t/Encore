@@ -70,6 +70,27 @@ public sealed class OptionsTests
     public void TracksRefusesOptionsItDoesNotTake(params string[] args) =>
         Assert.Throws<BenchUsageException>(() => BenchOptions.Parse(args));
 
+    [Theory]
+    [InlineData("--overlay-dot", "always")]
+    [InlineData("--overlay", "--overlay-dot", "foo")]
+    public void ABadOverlayDotIsAUsageError(params string[] args)
+    {
+        using var run = new BenchRun();
+
+        var error = Assert.Throws<BenchUsageException>(() => FpsBenchmark.Run(run.Context(["fps", .. args])));
+        Assert.Contains("--overlay-dot", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheOverlayFollowsTheScriptsRuns()
+    {
+        Assert.False(FpsBenchmark.OverlayFor("[01-baseline-1] settling 20 s ..."));
+        Assert.True(FpsBenchmark.OverlayFor("[02-capture-1] settling 20 s ..."));
+        Assert.True(FpsBenchmark.OverlayFor("[05-capture-final] settling 20 s ..."));
+        Assert.Null(FpsBenchmark.OverlayFor("[02-capture-1] PresentMon 300 s on load.exe ..."));
+        Assert.Null(FpsBenchmark.OverlayFor(@"Runs:       4, output in C:\fps"));
+    }
+
     [Fact]
     public void ANoDeviceTracksRunIsAUsageError()
     {

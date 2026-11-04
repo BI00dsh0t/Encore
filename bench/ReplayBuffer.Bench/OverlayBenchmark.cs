@@ -38,6 +38,8 @@ internal sealed record OverlayModeSummary(
     bool ExclusiveKept);
 
 /// <summary><c>overlay.json</c>.</summary>
+/// <param name="OverlayDot">The App's <c>overlayDot</c> mode (<c>--host app</c>, story 5.12); null for the stand-in.</param>
+/// <param name="OverlayPlanes">Per entry of <c>Loads</c>: <c>SupportsOverlays</c> for the load's monitor, null when DXGI couldn't say.</param>
 internal sealed record OverlayReport(
     DateTimeOffset Created,
     string Host,
@@ -48,7 +50,9 @@ internal sealed record OverlayReport(
     OverlayHostReady? Overlay,
     IReadOnlyList<OverlayPhase> Phases,
     IReadOnlyList<OverlayModeSummary> Summaries,
-    string? Aborted);
+    string? Aborted,
+    string? OverlayDot = null,
+    IReadOnlyList<bool?>? OverlayPlanes = null);
 
 /// <summary>
 /// <c>bench overlay</c> (story 5.2, PRD Q-4): for each <c>--modes</c> entry it starts the synthetic GPU load in that
@@ -109,6 +113,13 @@ internal static class OverlayBenchmark
             throw new BenchUsageException("--app-exe is for --host app.");
         }
 
+        if (!app && options.Has("overlay-dot"))
+        {
+            throw new BenchUsageException("--overlay-dot is for --host app; the stand-in has no overlayDot setting.");
+        }
+
+        var dot = app ? AppOverlayHost.ParseDot(options) : (Contracts.Settings.OverlayDotMode?)null;
+
         // Three phases of 5 s settling and 15 s of presents: a minute per mode.
         var seconds = options.Int("seconds", 15, 5, 600);
         var settle = options.Int("settle", 5, 0, 120);
@@ -139,11 +150,12 @@ internal static class OverlayBenchmark
         var phases = new List<OverlayPhase>();
         var summaries = new List<OverlayModeSummary>();
         var loads = new List<GpuLoadInfo>();
+        var planes = new List<bool?>();
         OverlayHostReady? overlayReady = null;
         string? aborted = null;
 
         // The App and its engine outlive the loads; the stand-in is started beside each load.
-        using var appHost = app ? AppOverlayHost.Start(overlayExe, loadExe, messages: !options.Flag("dot-only")) : null;
+        using var appHost = app ? AppOverlayHost.Start(overlayExe, loadExe, messages: !options.Flag("dot-only"), dot) : null;
         foreach (var mode in modes)
         {
             if (GpuLoadProcess.Running() is { Count: > 0 } running)
@@ -167,6 +179,7 @@ internal static class OverlayBenchmark
             using (load)
             {
                 loads.Add(load.Info);
+                planes.Add(ReplayBuffer.Platform.Desktop.Monitors.OverlayPlanes(load.Id));
                 using var standIn = app ? null : OverlayHostProcess.Start(overlayExe, load.Id);
                 overlayReady ??= standIn?.Ready;
                 IOverlayHost overlay = (IOverlayHost?)appHost ?? standIn!;
@@ -224,7 +237,8 @@ internal static class OverlayBenchmark
             }
         }
 
-        var report = new OverlayReport(DateTimeOffset.Now, host, remote, seconds, settle, loads, overlayReady, phases, summaries, aborted);
+        var report = new OverlayReport(DateTimeOffset.Now, host, remote, seconds, settle, loads, overlayReady, phases, summaries, aborted,
+            dot is { } d ? AppOverlayHost.DotName(d) : null, planes);
         BenchJson.Write(Path.Combine(context.RunFolder, FileName), report);
         File.WriteAllText(Path.Combine(context.RunFolder, MarkdownName), Markdown(report));
         Console.WriteLine($"Overlay report: {Path.Combine(context.RunFolder, MarkdownName)}");
@@ -268,13 +282,15 @@ internal static class OverlayBenchmark
         var md = new StringBuilder();
         md.AppendLine("# Overlay over the GPU load (story 5.2, PRD Q-4)");
         md.AppendLine();
-        md.AppendLine(CultureInfo.InvariantCulture, $"Created {report.Created:yyyy-MM-dd HH:mm:ss zzz}. Overlay host: {report.Host}. PresentMon {report.Seconds} s per phase after {report.Settle} s settling.");
+        md.AppendLine(CultureInfo.InvariantCulture, $"Created {report.Created:yyyy-MM-dd HH:mm:ss zzz}. Overlay host: {report.Host}.{(report.OverlayDot is { } dot ? $" Dot mode: {dot}." : "")} PresentMon {report.Seconds} s per phase after {report.Settle} s settling.");
         md.AppendLine(report.RemoteSession
             ? $"**Remote Desktop session: every figure here is {RemoteLabel}.**"
             : "Console session (not Remote Desktop).");
-        foreach (var load in report.Loads)
+        for (var i = 0; i < report.Loads.Count; i++)
         {
-            md.AppendLine(CultureInfo.InvariantCulture, $"- Load `{load.Mode}`: {load.Width}x{load.Height} on {load.Adapter}, calibrated {Num(load.CalibratedFps)} fps (target {Num(load.TargetFps)}), tearing {load.Tearing}, DXGI fullscreen at ready {load.Fullscreen}.");
+            var load = report.Loads[i];
+            var planes = report.OverlayPlanes is { } p && i < p.Count ? p[i] switch { true => "yes", false => "no", null => "unknown" } : "not recorded";
+            md.AppendLine(CultureInfo.InvariantCulture, $"- Load `{load.Mode}`: {load.Width}x{load.Height} on {load.Adapter}, calibrated {Num(load.CalibratedFps)} fps (target {Num(load.TargetFps)}), tearing {load.Tearing}, DXGI fullscreen at ready {load.Fullscreen}, overlay planes on its monitor (SupportsOverlays) {planes}.");
         }
 
         if (report.Overlay is { } overlay)

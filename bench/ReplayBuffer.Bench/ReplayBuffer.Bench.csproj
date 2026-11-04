@@ -16,6 +16,8 @@
     <ProjectReference Include="..\..\src\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj" />
     <ProjectReference Include="..\..\src\ReplayBuffer.Media\ReplayBuffer.Media.csproj" />
     <ProjectReference Include="..\..\src\ReplayBuffer.Platform.Audio\ReplayBuffer.Platform.Audio.csproj" />
+    <!-- Monitors.OverlayPlanes: whether the load's monitor has hardware overlay planes (story 5.12). Not the App (AD-2). -->
+    <ProjectReference Include="..\..\src\ReplayBuffer.Platform.Desktop\ReplayBuffer.Platform.Desktop.csproj" />
     <!-- Built first, not referenced: bench fps starts its exe from its own output folder. -->
     <ProjectReference Include="..\ReplayBuffer.Bench.GpuLoad\ReplayBuffer.Bench.GpuLoad.csproj" ReferenceOutputAssembly="false" />
     <!-- Built first, not referenced: bench overlay starts its exe from its own output folder. -->
