@@ -1,45 +1,80 @@
+<!--
+    The Main App's shell (EXPERIENCE.md Shell layout): the nav pane with the brand, then the content
+    column with the status header, the page header and the page. The theme's shell dictionary
+    (ShellFluent or ShellGamingDark) supplies the nav and layer styles; every colour is a token.
+-->
 <app:ShellWindow x:Class="ReplayBuffer.App.MainWindow"
                  x:ClassModifier="internal"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:app="clr-namespace:ReplayBuffer.App"
+                 x:Name="Shell"
                  Title="ReplayBuffer"
-                 Width="720"
-                 Height="440"
+                 Width="960"
+                 Height="600"
                  MinWidth="480"
                  MinHeight="320"
+                 KeyDown="OnKeyDown"
+                 SizeChanged="OnSizeChanged"
                  WindowStartupLocation="CenterScreen">
-    <DockPanel>
-        <ContentControl Margin="12,8,12,0"
-                        DockPanel.Dock="Top"
-                        Content="{Binding StatusLine.View}" />
-        <TabControl Margin="8" TabStripPlacement="Left">
-            <TabItem Header="Library">
-                <ContentControl Margin="12" Content="{Binding Library.View}" />
-            </TabItem>
-            <TabItem Header="Settings" IsSelected="{Binding IsSettingsTabSelected, Mode=TwoWay}">
-                <Grid Margin="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="160" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <ListBox DisplayMemberPath="Title"
-                             ItemsSource="{Binding Pages}"
-                             SelectedItem="{Binding SelectedPage}" />
-                    <DockPanel Grid.Column="1" Margin="12,0,0,0">
-                        <TextBlock DockPanel.Dock="Top"
-                                   FontSize="16"
-                                   FontWeight="SemiBold"
-                                   Text="{Binding SelectedPage.Title}" />
-                        <TextBlock Margin="0,12,0,0"
-                                   DockPanel.Dock="Bottom"
-                                   Foreground="DarkRed"
-                                   Text="{Binding SelectedPage.Message}"
-                                   TextWrapping="Wrap" />
-                        <ContentControl Margin="0,12,0,0" Content="{Binding SelectedPage.View}" />
-                    </DockPanel>
-                </Grid>
-            </TabItem>
-        </TabControl>
-    </DockPanel>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="NavColumn" Width="200" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <DockPanel Margin="{DynamicResource RbNavPanePadding}">
+            <ContentControl x:Name="Brand"
+                            Margin="{DynamicResource RbNavBrandMargin}"
+                            Content="{Binding Title, ElementName=Shell}"
+                            DockPanel.Dock="Top"
+                            Style="{DynamicResource RbBrandStyle}" />
+            <app:NavListBox x:Name="Nav"
+                     Padding="0"
+                     AutomationProperties.Name="Navigation"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     FocusVisualStyle="{x:Null}"
+                     ItemContainerStyle="{DynamicResource RbNavItemStyle}"
+                     ItemsSource="{Binding NavItems, Mode=OneTime}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     SelectedItem="{Binding SelectedNavItem, Mode=TwoWay}"
+                     SelectionMode="Single"
+                     TextSearch.TextPath="Title" />
+        </DockPanel>
+
+        <Border Grid.Column="1" Style="{DynamicResource RbShellContentLayerStyle}">
+            <DockPanel Margin="{DynamicResource RbPagePadding}">
+                <ContentControl x:Name="StatusHeader"
+                                Content="{Binding StatusLine.View}"
+                                DockPanel.Dock="Top"
+                                Focusable="False" />
+                <ContentControl x:Name="PageTitle"
+                                Margin="0,16,0,0"
+                                Content="{Binding CurrentTitle}"
+                                DockPanel.Dock="Top"
+                                Style="{DynamicResource RbPageTitleStyle}" />
+                <!-- The wrapper hides the bar off the settings pages; the bar's own style hides it while empty. -->
+                <Border DockPanel.Dock="Bottom">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSettingsTabSelected}" Value="False">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <ContentControl x:Name="PageMessage"
+                                    Margin="0,12,0,0"
+                                    Content="{Binding SelectedPage.Message}"
+                                    Style="{DynamicResource RbSettingsPageMessageStyle}" />
+                </Border>
+                <ContentControl x:Name="Page"
+                                Margin="0,12,0,0"
+                                Content="{Binding CurrentView}"
+                                Focusable="False" />
+            </DockPanel>
+        </Border>
+    </Grid>
 </app:ShellWindow>

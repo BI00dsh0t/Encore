@@ -15,32 +15,25 @@ namespace ReplayBuffer.Platform.Capture;
 /// DXGI Desktop Duplication of one monitor (AD-12's monitor-only fallback, 6.10), for a Monitor
 /// Recording whose WGC item can't be created or started; never for game capture. Frames come only
 /// when the desktop changes, stamped with DXGI's <c>LastPresentTime</c> (a QPC, AD-6), on a thread
-/// of its own, one at a time, at most twice a slot of the fps: the thread waits half a slot after
-/// each delivered frame before it acquires the next, so DXGI accumulates the updates meanwhile and
-/// the latest image is never lost. <c>DXGI_ERROR_ACCESS_LOST</c> (a desktop switch, a mode change)
-/// recreates the duplication, retrying every 100 ms; the monitor's output leaving the adapter
-/// raises <see cref="Closed"/>, and any other failure (a removed device) raises <see cref="Failed"/>
-/// and ends the thread. Windows marked <c>WDA_EXCLUDEFROMCAPTURE</c> don't appear in it. The
-/// pointer is not drawn, and a rotated output's frames are its unrotated surface.
+/// of its own, one at a time, at most twice a slot of the fps: the thread polls the duplication
+/// every half slot, so DXGI accumulates the updates meanwhile and the latest image is never lost.
+/// It never waits inside <c>AcquireNextFrame</c>: that wait holds the multithread-protected
+/// device's lock, which the encoder thread needs for every slot, so on a quiet monitor it stalled
+/// the encoder past the pacer's catch-up and left PTS gaps in the Recording.
+/// <c>DXGI_ERROR_ACCESS_LOST</c> (a desktop switch, a mode change) recreates the duplication,
+/// retrying every 100 ms; the monitor's output leaving the adapter raises <see cref="Closed"/>, and
+/// any other failure (a removed device) raises <see cref="Failed"/> and ends the thread. Windows
+/// marked <c>WDA_EXCLUDEFROMCAPTURE</c> don't appear in it. The pointer is not drawn, and a rotated
+/// output's frames are its unrotated surface.
 /// </summary>
 public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
 {
-    private const uint AcquireTimeoutMs = 100;
     private const uint RetryMs = 100;
     private const uint Infinite = 0xFFFFFFFF;
     private const uint WaitObject0 = 0;
     private const long HundredNanosecondsPerSecond = 10_000_000;
-    private static readonly HRESULT DeviceRemoved = new(unchecked((int)0x887A0005)); // DXGI_ERROR_DEVICE_REMOVED
-    private static readonly HRESULT DeviceReset = new(unchecked((int)0x887A0007));   // DXGI_ERROR_DEVICE_RESET
 
-    // The raw vtable slots, for their HRESULTs: CsWin32's struct methods throw on failure.
-    private const int GetAdapterSlot = 7;        // IDXGIDevice: IDXGIObject's four, then GetAdapter
-    private const int DuplicateOutputSlot = 22;  // IDXGIOutput1
-    private const int AcquireNextFrameSlot = 8;  // IDXGIOutputDuplication
-    private const int ReleaseFrameSlot = 14;
-
-    private readonly D3D11Device _device;
-    private readonly HMONITOR _monitor;
+    private readonly IOutputDuplication _duplication;
     private readonly CapturedFrameHandler _onFrame;
     private readonly ILogger _logger;
     private readonly long _qpcFrequency = Stopwatch.Frequency;
@@ -48,7 +41,6 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
     private readonly Thread _thread;
     private HANDLE _stopEvent;
     private HANDLE _timer;
-    private IDXGIOutputDuplication* _duplication;
     private long _intervalQpc;
     private long _createdQpc;
     private int _simulateLost;
@@ -62,27 +54,27 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
     /// <exception cref="InvalidOperationException">The monitor isn't an output of the device's adapter.</exception>
     /// <exception cref="Exception">The duplication couldn't be created (its HRESULT).</exception>
     public DesktopDuplicationCapture(D3D11Device device, nint hmonitor, int fps, CapturedFrameHandler onFrame, ILogger logger)
+        : this(new DxgiOutputDuplication(device ?? throw new ArgumentNullException(nameof(device)), ValidMonitor(hmonitor)), fps, onFrame, logger)
     {
-        ArgumentNullException.ThrowIfNull(device);
-        ArgumentOutOfRangeException.ThrowIfLessThan(fps, 1);
-        if (hmonitor == 0)
-        {
-            throw new ArgumentException("No monitor was given.", nameof(hmonitor));
-        }
+    }
 
-        _device = device;
-        _monitor = new HMONITOR((void*)hmonitor);
+    /// <summary>For tests: captures through <paramref name="duplication"/>, a fake of DXGI's.</summary>
+    internal DesktopDuplicationCapture(IOutputDuplication duplication, int fps, CapturedFrameHandler onFrame, ILogger logger)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(fps, 1);
+        _duplication = duplication;
         _onFrame = onFrame;
         _logger = logger;
         _intervalQpc = HalfSlot(fps);
 
-        var hr = TryDuplicate(out _duplication);
+        var hr = duplication.Duplicate();
         if (hr == HRESULT.DXGI_ERROR_NOT_FOUND)
         {
             throw new InvalidOperationException("The monitor is not an output of the capture device's adapter.");
         }
 
         hr.ThrowOnFailure();
+        _createdQpc = Stopwatch.GetTimestamp();
 
         _stopEvent = PInvoke.CreateEvent(null, true, false, default(PCWSTR));
         _timer = PInvoke.CreateWaitableTimerEx(
@@ -92,15 +84,15 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
             (uint)(SYNCHRONIZATION_ACCESS_RIGHTS.TIMER_MODIFY_STATE | SYNCHRONIZATION_ACCESS_RIGHTS.SYNCHRONIZATION_SYNCHRONIZE));
         if (_stopEvent.IsNull || _timer.IsNull)
         {
-            ReleaseDuplication();
+            duplication.Release();
             CloseHandles();
             throw new InvalidOperationException("Could not create the Desktop Duplication thread's event or high-resolution timer.");
         }
 
-        _duplication->GetDesc(out var desc);
+        var size = duplication.ModeSize;
         _thread = new Thread(Run) { Name = "Desktop Duplication", IsBackground = true };
         logger.LogInformation("Capturing monitor through Desktop Duplication at {Width}x{Height}, at most {Fps} fps",
-            desc.ModeDesc.Width, desc.ModeDesc.Height, 2 * fps);
+            size.Width, size.Height, 2 * fps);
     }
 
     /// <summary>The monitor's output left the adapter; no more frames will arrive.</summary>
@@ -162,7 +154,7 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
 
         if (!started)
         {
-            ReleaseDuplication();
+            _duplication.Release();
             CloseHandles();
         }
         else if (Thread.CurrentThread != _thread)
@@ -179,7 +171,7 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
     {
         try
         {
-            long lastDelivered = 0;
+            long nextPoll = 0;
             long lastQpc = 0;
 
             // The first frame of a duplication is the whole desktop, delivered even when static.
@@ -198,16 +190,14 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
                     continue;
                 }
 
-                if (lastDelivered != 0 && !WaitUntil(lastDelivered + Interlocked.Read(ref _intervalQpc)))
+                if (!WaitUntil(nextPoll))
                 {
                     return;
                 }
 
-                DXGI_OUTDUPL_FRAME_INFO info;
-                IDXGIResource* resource = null;
-                var duplication = _duplication;
-                var hr = ((delegate* unmanaged[Stdcall]<IDXGIOutputDuplication*, uint, DXGI_OUTDUPL_FRAME_INFO*, IDXGIResource**, HRESULT>)
-                    (*(void***)duplication)[AcquireNextFrameSlot])(duplication, AcquireTimeoutMs, &info, &resource);
+                // Whatever the poll finds, the next one is half a slot on: never a busy loop.
+                var hr = _duplication.TryAcquire(out var frame);
+                nextPoll = Stopwatch.GetTimestamp() + Interlocked.Read(ref _intervalQpc);
                 if (hr == HRESULT.DXGI_ERROR_WAIT_TIMEOUT)
                 {
                     continue;
@@ -227,27 +217,19 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
 
                 // Any other failure (a removed device, say) can't be recreated: it fails the source.
                 hr.ThrowOnFailure();
-                try
-                {
-                    // A pointer-only update (no LastPresentTime) carries no new desktop image; nor does
-                    // one no newer than the last. A duplication's first image may have been presented
-                    // long before it was created: it is stamped no earlier than the creation.
-                    var qpc = fresh ? Math.Max(info.LastPresentTime, _createdQpc) : info.LastPresentTime;
-                    if (resource is not null && (fresh || info.LastPresentTime != 0) && qpc > lastQpc)
-                    {
-                        Deliver(qpc, resource);
-                        lastQpc = qpc;
-                        lastDelivered = Stopwatch.GetTimestamp();
-                    }
 
-                    fresh = false;
-                }
-                finally
+                // A pointer-only update (no LastPresentTime) carries no new desktop image; nor does
+                // one no newer than the last. A duplication's first image may have been presented
+                // long before it was created: it is stamped no earlier than the creation.
+                var qpc = fresh ? Math.Max(frame.LastPresentTime, _createdQpc) : frame.LastPresentTime;
+                if (frame.Texture != 0 && (fresh || frame.LastPresentTime != 0) && qpc > lastQpc)
                 {
-                    if (resource is not null) resource->Release();
+                    Deliver(qpc, frame);
+                    lastQpc = qpc;
                 }
 
-                hr = ((delegate* unmanaged[Stdcall]<IDXGIOutputDuplication*, HRESULT>)(*(void***)duplication)[ReleaseFrameSlot])(duplication);
+                fresh = false;
+                hr = _duplication.ReleaseFrame();
                 if (hr == HRESULT.DXGI_ERROR_ACCESS_LOST && !_stopping)
                 {
                     _logger.LogInformation("Desktop Duplication access lost at a frame release; recreating it");
@@ -272,7 +254,7 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
         }
         finally
         {
-            ReleaseDuplication();
+            _duplication.Release();
             lock (_gate)
             {
                 _exited = true;
@@ -284,24 +266,16 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
         }
     }
 
-    private void Deliver(long qpc, IDXGIResource* resource)
+    private void Deliver(long qpc, DuplicatedFrame frame)
     {
-        ID3D11Texture2D* texture = null;
-        var textureIid = ID3D11Texture2D.IID_Guid;
-        ((IUnknown*)resource)->QueryInterface(&textureIid, (void**)&texture).ThrowOnFailure();
         try
         {
-            texture->GetDesc(out var desc);
-            _onFrame(qpc, (nint)texture, new VideoSize((int)desc.Width, (int)desc.Height));
+            _onFrame(qpc, frame.Texture, frame.Size);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Frame handler failed");
             Failed?.Invoke(e);
-        }
-        finally
-        {
-            texture->Release();
         }
     }
 
@@ -311,14 +285,14 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
     /// </summary>
     private bool Recreate()
     {
-        ReleaseDuplication();
+        _duplication.Release();
         var logged = false;
         while (!_stopping)
         {
-            var hr = TryDuplicate(out var duplication);
+            var hr = _duplication.Duplicate();
             if (hr.Succeeded)
             {
-                _duplication = duplication;
+                _createdQpc = Stopwatch.GetTimestamp();
                 _logger.LogInformation("Desktop Duplication recreated");
                 return true;
             }
@@ -335,7 +309,7 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
             }
 
             // A removed or reset device never duplicates again: it fails the source.
-            if (hr == DeviceRemoved || hr == DeviceReset)
+            if (hr == DxgiOutputDuplication.DeviceRemoved || hr == DxgiOutputDuplication.DeviceReset)
             {
                 hr.ThrowOnFailure();
             }
@@ -356,20 +330,162 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
         return false;
     }
 
-    /// <summary>
-    /// Duplicates the device adapter's output that shows the monitor; <c>DXGI_ERROR_NOT_FOUND</c>
-    /// when the adapter has no such output, else the failure's HRESULT.
-    /// </summary>
-    private HRESULT TryDuplicate(out IDXGIOutputDuplication* duplication)
+    private static nint ValidMonitor(nint hmonitor) =>
+        hmonitor == 0 ? throw new ArgumentException("No monitor was given.", nameof(hmonitor)) : hmonitor;
+
+    /// <summary>Sleeps until <paramref name="deadline"/> (QPC); false when stopping.</summary>
+    private bool WaitUntil(long deadline)
     {
-        duplication = null;
+        var remaining = deadline - Stopwatch.GetTimestamp();
+        if (remaining <= 0)
+        {
+            return !_stopping;
+        }
+
+        // A negative due time is relative, in 100 ns.
+        var due = -Math.Max(1, (long)((Int128)remaining * HundredNanosecondsPerSecond / _qpcFrequency));
+        var handles = stackalloc HANDLE[2] { _stopEvent, _timer };
+        var woke = PInvoke.SetWaitableTimer(_timer, &due, 0, null, null, false)
+            ? PInvoke.WaitForMultipleObjects(2, handles, false, Infinite)
+            : PInvoke.WaitForMultipleObjects(1, handles, false, (uint)Math.Max(1, remaining * 1000 / _qpcFrequency));
+        return woke != (WAIT_EVENT)WaitObject0 && !_stopping;
+    }
+
+    private long HalfSlot(int fps) => _qpcFrequency / (2L * fps);
+
+    private void CloseHandles()
+    {
+        if (!_timer.IsNull)
+        {
+            PInvoke.CloseHandle(_timer);
+            _timer = default;
+        }
+
+        if (!_stopEvent.IsNull)
+        {
+            PInvoke.CloseHandle(_stopEvent);
+            _stopEvent = default;
+        }
+    }
+}
+
+/// <summary>A frame acquired from a duplication, valid until its <see cref="IOutputDuplication.ReleaseFrame"/>.</summary>
+/// <param name="LastPresentTime">DXGI's QPC of the image's last present; 0 for a pointer-only update.</param>
+/// <param name="Texture">The desktop image, an <c>ID3D11Texture2D*</c>; 0 when the update carries none.</param>
+/// <param name="Size">The image's size.</param>
+internal readonly record struct DuplicatedFrame(long LastPresentTime, nint Texture, VideoSize Size);
+
+/// <summary>
+/// One monitor's output duplication, the seam <see cref="DesktopDuplicationCapture"/>'s thread
+/// drives (a fake in tests). <see cref="TryAcquire"/> never waits: DXGI holds the device lock while
+/// <c>AcquireNextFrame</c> does.
+/// </summary>
+internal interface IOutputDuplication
+{
+    /// <summary>The output's mode size.</summary>
+    VideoSize ModeSize { get; }
+
+    /// <summary>Creates the duplication: S_OK, <c>DXGI_ERROR_NOT_FOUND</c> when the monitor isn't an output of the adapter, else the failure.</summary>
+    HRESULT Duplicate();
+
+    /// <summary>Releases the duplication, if any.</summary>
+    void Release();
+
+    /// <summary>
+    /// Acquires the next frame without waiting: S_OK with a frame to release,
+    /// <c>DXGI_ERROR_WAIT_TIMEOUT</c> when the desktop hasn't changed, <c>DXGI_ERROR_ACCESS_LOST</c>,
+    /// or another failure.
+    /// </summary>
+    HRESULT TryAcquire(out DuplicatedFrame frame);
+
+    /// <summary>Releases the frame <see cref="TryAcquire"/> acquired.</summary>
+    HRESULT ReleaseFrame();
+}
+
+/// <summary>DXGI's <c>IDXGIOutputDuplication</c> of the device adapter's output that shows a monitor.</summary>
+internal sealed unsafe class DxgiOutputDuplication(D3D11Device device, nint hmonitor) : IOutputDuplication
+{
+    public static readonly HRESULT DeviceRemoved = new(unchecked((int)0x887A0005)); // DXGI_ERROR_DEVICE_REMOVED
+    public static readonly HRESULT DeviceReset = new(unchecked((int)0x887A0007));   // DXGI_ERROR_DEVICE_RESET
+
+    // The raw vtable slots, for their HRESULTs: CsWin32's struct methods throw on failure.
+    private const int GetAdapterSlot = 7;        // IDXGIDevice: IDXGIObject's four, then GetAdapter
+    private const int DuplicateOutputSlot = 22;  // IDXGIOutput1
+    private const int AcquireNextFrameSlot = 8;  // IDXGIOutputDuplication
+    private const int ReleaseFrameSlot = 14;
+
+    private readonly HMONITOR _monitor = new((void*)hmonitor);
+    private IDXGIOutputDuplication* _duplication;
+    private IDXGIResource* _resource;
+    private ID3D11Texture2D* _texture;
+
+    public VideoSize ModeSize
+    {
+        get
+        {
+            _duplication->GetDesc(out var desc);
+            return new VideoSize((int)desc.ModeDesc.Width, (int)desc.ModeDesc.Height);
+        }
+    }
+
+    public HRESULT TryAcquire(out DuplicatedFrame frame)
+    {
+        frame = default;
+        DXGI_OUTDUPL_FRAME_INFO info;
+        IDXGIResource* resource = null;
+        var duplication = _duplication;
+
+        // A zero timeout: while AcquireNextFrame waits it holds the device lock the encoder needs.
+        var hr = ((delegate* unmanaged[Stdcall]<IDXGIOutputDuplication*, uint, DXGI_OUTDUPL_FRAME_INFO*, IDXGIResource**, HRESULT>)
+            (*(void***)duplication)[AcquireNextFrameSlot])(duplication, 0, &info, &resource);
+        if (hr.Failed)
+        {
+            return hr;
+        }
+
+        _resource = resource;
+        if (resource is null)
+        {
+            frame = new DuplicatedFrame(info.LastPresentTime, 0, default);
+            return hr;
+        }
+
+        ID3D11Texture2D* texture = null;
+        var textureIid = ID3D11Texture2D.IID_Guid;
+        ((IUnknown*)resource)->QueryInterface(&textureIid, (void**)&texture).ThrowOnFailure();
+        _texture = texture;
+        texture->GetDesc(out var desc);
+        frame = new DuplicatedFrame(info.LastPresentTime, (nint)texture, new VideoSize((int)desc.Width, (int)desc.Height));
+        return hr;
+    }
+
+    public HRESULT ReleaseFrame()
+    {
+        ReleaseResource();
+        var duplication = _duplication;
+        return ((delegate* unmanaged[Stdcall]<IDXGIOutputDuplication*, HRESULT>)(*(void***)duplication)[ReleaseFrameSlot])(duplication);
+    }
+
+    public void Release()
+    {
+        ReleaseResource();
+        if (_duplication is not null)
+        {
+            _duplication->Release();
+            _duplication = null;
+        }
+    }
+
+    /// <summary>Duplicates the device adapter's output that shows the monitor.</summary>
+    public HRESULT Duplicate()
+    {
         IDXGIDevice* dxgiDevice = null;
         IDXGIAdapter* adapter = null;
         IDXGIOutput1* output = null;
         try
         {
             var dxgiIid = IDXGIDevice.IID_Guid;
-            var hr = ((IUnknown*)_device.Device)->QueryInterface(&dxgiIid, (void**)&dxgiDevice);
+            var hr = ((IUnknown*)device.Device)->QueryInterface(&dxgiIid, (void**)&dxgiDevice);
             if (hr.Failed)
             {
                 return hr;
@@ -408,11 +524,10 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
 
             IDXGIOutputDuplication* created = null;
             hr = ((delegate* unmanaged[Stdcall]<IDXGIOutput1*, IUnknown*, IDXGIOutputDuplication**, HRESULT>)(*(void***)output)[DuplicateOutputSlot])(
-                output, (IUnknown*)_device.Device, &created);
+                output, (IUnknown*)device.Device, &created);
             if (hr.Succeeded)
             {
-                duplication = created;
-                _createdQpc = Stopwatch.GetTimestamp();
+                _duplication = created;
             }
 
             return hr;
@@ -425,47 +540,18 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
         }
     }
 
-    /// <summary>Sleeps until <paramref name="deadline"/> (QPC); false when stopping.</summary>
-    private bool WaitUntil(long deadline)
+    private void ReleaseResource()
     {
-        var remaining = deadline - Stopwatch.GetTimestamp();
-        if (remaining <= 0)
+        if (_texture is not null)
         {
-            return !_stopping;
+            _texture->Release();
+            _texture = null;
         }
 
-        // A negative due time is relative, in 100 ns.
-        var due = -Math.Max(1, (long)((Int128)remaining * HundredNanosecondsPerSecond / _qpcFrequency));
-        var handles = stackalloc HANDLE[2] { _stopEvent, _timer };
-        var woke = PInvoke.SetWaitableTimer(_timer, &due, 0, null, null, false)
-            ? PInvoke.WaitForMultipleObjects(2, handles, false, Infinite)
-            : PInvoke.WaitForMultipleObjects(1, handles, false, (uint)Math.Max(1, remaining * 1000 / _qpcFrequency));
-        return woke != (WAIT_EVENT)WaitObject0 && !_stopping;
-    }
-
-    private long HalfSlot(int fps) => _qpcFrequency / (2L * fps);
-
-    private void ReleaseDuplication()
-    {
-        if (_duplication is not null)
+        if (_resource is not null)
         {
-            _duplication->Release();
-            _duplication = null;
-        }
-    }
-
-    private void CloseHandles()
-    {
-        if (!_timer.IsNull)
-        {
-            PInvoke.CloseHandle(_timer);
-            _timer = default;
-        }
-
-        if (!_stopEvent.IsNull)
-        {
-            PInvoke.CloseHandle(_stopEvent);
-            _stopEvent = default;
+            _resource->Release();
+            _resource = null;
         }
     }
 }

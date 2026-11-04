@@ -1,3 +1,4 @@
+using System.Windows;
 using ReplayBuffer.App.Engine;
 using ReplayBuffer.App.Library;
 using ReplayBuffer.App.Settings;
@@ -12,6 +13,9 @@ namespace ReplayBuffer.App;
 /// </summary>
 internal sealed class MainViewModel : Observable
 {
+    public const string LibraryTitle = "Library";
+    public const string SettingsLabel = "Settings";
+
     private readonly IEngineSession _engine;
     private SettingsPage _selectedPage;
     private bool _isWindowShown;
@@ -34,6 +38,8 @@ internal sealed class MainViewModel : Observable
         LibrarySettings = Pages.OfType<LibrarySettingsPage>().Single();
         _selectedPage = Pages[0];
         Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile);
+        LibraryNav = new NavItem(LibraryTitle, null, isSection: false);
+        NavItems = [LibraryNav, new NavItem(SettingsLabel, null, isSection: true), .. Pages.Select(p => new NavItem(p.Title, p, isSection: false))];
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -67,8 +73,51 @@ internal sealed class MainViewModel : Observable
     /// <summary>The Library and Cleanup page, which takes the snapshot's Library folder, items and Cleanup block as well as its settings.</summary>
     public LibrarySettingsPage LibrarySettings { get; }
 
-    /// <summary>The Library tab.</summary>
+    /// <summary>The Library page.</summary>
     public LibraryPage Library { get; }
+
+    /// <summary>
+    /// The shell's navigation (EXPERIENCE.md): Library, the Settings section label, then every settings
+    /// page in <see cref="Pages"/>' order. Only the label isn't selectable.
+    /// </summary>
+    public IReadOnlyList<NavItem> NavItems { get; }
+
+    /// <summary>The navigation's Library item.</summary>
+    public NavItem LibraryNav { get; }
+
+    /// <summary>
+    /// The selected navigation item: Library unless <see cref="IsSettingsTabSelected"/>, else the item of
+    /// <see cref="SelectedPage"/>. Setting it sets those two, so every path that sets them selects its item.
+    /// </summary>
+    public NavItem SelectedNavItem
+    {
+        get => IsSettingsTabSelected ? NavItems.First(i => i.Page == SelectedPage) : LibraryNav;
+        set
+        {
+            if (value is null || value.IsSection)
+            {
+                // Never empty, and the section label can't be chosen: keep the item shown.
+                OnPropertyChanged();
+                return;
+            }
+
+            if (value.Page is { } page)
+            {
+                SelectedPage = page;
+                IsSettingsTabSelected = true;
+            }
+            else
+            {
+                IsSettingsTabSelected = false;
+            }
+        }
+    }
+
+    /// <summary>The page header's title: "Library" or the settings page's.</summary>
+    public string CurrentTitle => SelectedNavItem.Title;
+
+    /// <summary>The page on screen: the Library's view or the settings page's.</summary>
+    public FrameworkElement CurrentView => IsSettingsTabSelected ? SelectedPage.View : Library.View;
 
     public SettingsPage SelectedPage
     {
@@ -77,6 +126,7 @@ internal sealed class MainViewModel : Observable
         {
             if (Set(ref _selectedPage, value))
             {
+                NavigationChanged();
                 UpdateOpenPage();
             }
         }
@@ -95,7 +145,7 @@ internal sealed class MainViewModel : Observable
         }
     }
 
-    /// <summary>Whether the window's Settings tab is selected.</summary>
+    /// <summary>Whether a settings page is selected, rather than the Library; the tray's open-Settings path sets it.</summary>
     public bool IsSettingsTabSelected
     {
         get => _isSettingsTabSelected;
@@ -103,9 +153,21 @@ internal sealed class MainViewModel : Observable
         {
             if (Set(ref _isSettingsTabSelected, value))
             {
+                NavigationChanged();
                 UpdateOpenPage();
             }
         }
+    }
+
+    /// <summary>
+    /// Selects the next (<paramref name="step"/> 1) or previous (-1) selectable navigation item, wrapping
+    /// round: Ctrl+Tab and Ctrl+Shift+Tab.
+    /// </summary>
+    public void NavigateBy(int step)
+    {
+        var items = NavItems.Where(i => !i.IsSection).ToList();
+        var at = items.IndexOf(SelectedNavItem);
+        SelectedNavItem = items[(((at + step) % items.Count) + items.Count) % items.Count];
     }
 
     /// <summary>Reads the session again. Runs on the UI thread.</summary>
@@ -135,6 +197,13 @@ internal sealed class MainViewModel : Observable
         }
     }
 
+    private void NavigationChanged()
+    {
+        OnPropertyChanged(nameof(SelectedNavItem));
+        OnPropertyChanged(nameof(CurrentTitle));
+        OnPropertyChanged(nameof(CurrentView));
+    }
+
     // The Track Layout pages meter only while on screen, so a hidden window doesn't keep the engine metering.
     // The closing page goes first, so its meters.unwatch doesn't stop the opening page's watch.
     private void UpdateOpenPage()
@@ -155,4 +224,19 @@ internal sealed class MainViewModel : Observable
         TrackLayout.IsOpen = trackLayout;
         GameProfiles.IsOpen = gameProfiles;
     }
+}
+
+/// <summary>One item of the shell's navigation: the Library, the Settings section label, or a settings page.</summary>
+internal sealed class NavItem(string title, SettingsPage? page, bool isSection)
+{
+    /// <summary>The page's title, in sentence case; Gaming dark uppercases it in its template only.</summary>
+    public string Title { get; } = title;
+
+    /// <summary>The settings page it opens; null for the Library and the section label.</summary>
+    public SettingsPage? Page { get; } = page;
+
+    /// <summary>The non-selectable Settings label above the settings pages.</summary>
+    public bool IsSection { get; } = isSection;
+
+    public override string ToString() => Title;
 }
