@@ -23,7 +23,8 @@ namespace ReplayBuffer.Engine.Tests;
 /// proposed as the Target on a pwsh window. Two <c>recordToggle</c> presses some seconds apart make
 /// one fragmented MP4 of the time between them beside the Replay Buffer, which keeps buffering.
 /// Killing the game, or disposing the orchestrator, mid-Recording still finishes it (story 6.4).
-/// A window resize keeps it one file, and a forced encoder restart splits it in two (story 6.6).
+/// A window resize keeps it one file, and a forced encoder restart splits it in two (story 6.6), as
+/// does a simulated GPU driver reset, which the session recovers from (story 8.3).
 /// </summary>
 public sealed class RecordingCaptureTests : IDisposable
 {
@@ -331,6 +332,85 @@ public sealed class RecordingCaptureTests : IDisposable
         Assert.InRange(gap, -2.0 / 30, rebuilt + (2.0 / 30));
     }
 
+    [Fact]
+    public void ARecoveryIsRefusedWhenNothingIsLost()
+    {
+        using var hub = new ToneHub(new Dictionary<string, (double, double)>());
+        var spec = new SessionSpec(SessionKind.Game, new CaptureTarget(1, 0, null), Core.Settings.SettingsResolver.Resolve(SettingsDocument.Empty, null), SessionAudio.None, MicMuted: true);
+        var session = new CaptureSession(spec, new NoEvents(), new CaptureSessionOptions { OutputFolder = _directory, Replay = true }, hub, new NoEncoders(), NullLoggerFactory.Instance);
+        try
+        {
+            Assert.False(session.RecoverDevice());
+        }
+        finally
+        {
+            session.Abandon();
+        }
+    }
+
+    /// <summary>
+    /// Story 8.3: the fault seam resets the device under a running Recording. <c>gpu-reset</c> is
+    /// raised, a save during the outage cuts what was buffered before it, the first recovery attempt
+    /// fails and the next rebuilds the session, the Recording continues in a second file, and the
+    /// Replay Buffer saves again.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile()
+    {
+        var attempts = 0;
+        using var rig = await StartRecordingAsync(
+            clips: true,
+            recoveryFault: () => Interlocked.Increment(ref attempts) == 1 ? new InvalidOperationException("simulated failed recovery attempt") : null,
+            recovery: true);
+        await Task.Delay(TimeSpan.FromSeconds(3), Token);
+
+        var lost = Stopwatch.StartNew();
+        rig.Factory.Session!.SimulateDeviceLoss();
+        Assert.IsType<GpuResetRaised>(await rig.NextAsync());
+
+        // During the outage: the pre-reset content, cut to its last packet.
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var seen = new List<object>();
+        var a = rig.Started.Path;
+        while (!(seen.OfType<ClipSaved>().Any() && seen.OfType<DeviceRecovered>().Any() && seen.OfType<RecordingRestart>().Any()))
+        {
+            var next = await rig.NextAsync();
+            if (next is DeviceRecovered)
+            {
+                Assert.True(lost.Elapsed < TimeSpan.FromSeconds(5), $"recovered {lost.Elapsed} after the loss");
+            }
+
+            seen.Add(next);
+        }
+
+        var outage = Assert.Single(seen.OfType<ClipSaved>()).Path;
+        var b = Assert.Single(seen.OfType<RecordingStarted>()).Path;
+        Assert.Equal(
+            [new RecordingStopped(a, RecordingStopReasons.EncoderRestart), new RecordingStarted(b), new RecordingRestart(a, b)],
+            seen.Where(e => e is RecordingStopped or RecordingStarted or RecordingRestart));
+        Assert.Equal(2, Volatile.Read(ref attempts));
+
+        // The Replay Buffer stayed on, and the Recording state Running, through the reset.
+        var states = rig.Published.ToList();
+        var on = states.FindIndex(s => s.Recording == RecordingState.Running);
+        Assert.All(states[on..], s => Assert.Equal((ReplayState.Buffering, RecordingState.Running), (s.Replay, s.Recording)));
+
+        // Buffering again on the new device.
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var after = Assert.IsType<ClipSaved>(await rig.NextAsync()).Path;
+
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(b, RecordingStopReasons.Stopped), await rig.NextAsync());
+        rig.Orchestrator.Dispose();
+
+        AssertFinished(outage, atLeast: 2);
+        AssertFinished(after, atLeast: 1);
+        AssertFinished(a, atLeast: 2);
+        AssertFinished(b, atLeast: 1);
+    }
+
     /// <summary>Resizes the game's window from outside its process, keeping its place.</summary>
     private static void Resize(nint window, int width, int height) =>
         Assert.True(Native.SetWindowPos(window, 0, 0, 0, width, height, Native.NoMoveNoZOrderNoActivate), $"SetWindowPos failed: {Marshal.GetLastPInvokeError()}");
@@ -433,7 +513,9 @@ public sealed class RecordingCaptureTests : IDisposable
         bool clips = false,
         Func<SettingsDocument, SettingsDocument>? pending = null,
         Func<Exception?>? restartFault = null,
-        ILoggerFactory? loggers = null)
+        ILoggerFactory? loggers = null,
+        Func<Exception?>? recoveryFault = null,
+        bool recovery = false)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)>
@@ -478,6 +560,7 @@ public sealed class RecordingCaptureTests : IDisposable
                 Replay = true,
                 Anchored = qpc => anchored.TrySetResult(qpc),
                 RestartFault = restartFault,
+                RecoveryFault = recoveryFault,
             };
             var published = new ConcurrentQueue<CaptureState>();
             var library = new LibraryCalls();
@@ -497,7 +580,14 @@ public sealed class RecordingCaptureTests : IDisposable
                     s => events.Writer.TryWrite(s),
                     e => events.Writer.TryWrite(e),
                     library,
-                    Restarted: r => events.Writer.TryWrite(r)));
+                    Restarted: r => events.Writer.TryWrite(r)),
+                deviceRecovery: recovery
+                    ? new DeviceRecovery(
+                        Reset: m => events.Writer.TryWrite(new GpuResetRaised(m)),
+                        Failed: m => events.Writer.TryWrite(new GpuResetFailed(m)),
+                        Recovered: t => events.Writer.TryWrite(new DeviceRecovered(t)),
+                        RetryEvery: TimeSpan.FromSeconds(1))
+                    : null);
 
             orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
             await anchored.Task.WaitAsync(Timeout, Token);
@@ -590,8 +680,21 @@ public sealed class RecordingCaptureTests : IDisposable
             }
 
             public void ChainRestarted(long qpc) => inner.ChainRestarted(qpc);
+
+            public void Anchored(long qpc) => inner.Anchored(qpc);
+
+            public void DeviceLost(Exception failure) => inner.DeviceLost(failure);
         }
     }
+
+    /// <summary><see cref="DeviceRecovery.Reset"/>: <c>gpu-reset</c> would be raised.</summary>
+    private sealed record GpuResetRaised(string Message);
+
+    /// <summary><see cref="DeviceRecovery.Failed"/>: <c>gpu-reset-failed</c> would be raised.</summary>
+    private sealed record GpuResetFailed(string Message);
+
+    /// <summary><see cref="DeviceRecovery.Recovered"/>, with the time since the loss.</summary>
+    private sealed record DeviceRecovered(TimeSpan After);
 
     private sealed class NoEvents : ISessionEvents
     {

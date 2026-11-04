@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Core.Audio;
@@ -82,6 +83,16 @@ internal sealed record CaptureSessionOptions
     /// just before the new chain is built; a non-null result is thrown there, as a failed build.
     /// </summary>
     public Func<Exception?>? RestartFault { get; init; }
+
+    /// <summary>
+    /// For tests: called at the start of each GPU-reset recovery attempt
+    /// (<see cref="CaptureSession.RecoverDevice"/>), once the lost device and chains are torn down; a
+    /// non-null result is thrown there, as a failed attempt.
+    /// </summary>
+    public Func<Exception?>? RecoveryFault { get; init; }
+
+    /// <summary>How often a session holding a Replay Buffer, or the Monitor session, checks from its anchor on whether its GPU device was removed or reset.</summary>
+    public TimeSpan DeviceWatchInterval { get; init; } = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
     /// For tests: called before any WGC capture is created; a non-null result is thrown there, as
@@ -180,6 +191,17 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// WGC monitor item can't be created or started, it captures the same monitor through DXGI Desktop
 /// Duplication instead (AD-12, 6.10), into the same chain, and raises
 /// <see cref="CaptureSessionOptions.CaptureFallback"/> once; a game session never falls back.
+/// A GPU driver reset (R3): a failure carrying <see cref="D3D11Device.DeviceRemoved"/> or
+/// <see cref="D3D11Device.DeviceReset"/>, or a device that reports itself lost (checked every
+/// <see cref="CaptureSessionOptions.DeviceWatchInterval"/> from the anchor on), stops feeding the
+/// chains and posts <see cref="ISessionEvents.DeviceLost"/> once, swallowing later failures. Nothing
+/// is built, armed, switched, resized or recorded while the device is lost, and a save cuts the ring
+/// as it is, with no keyframe asked for. Each <see cref="RecoverDevice"/> is one attempt, on a thread
+/// of its own: the first tears WGC, every chain (keeping the ring) and the device down; then a new
+/// device on the Target's adapter, the chain rebuilt into a new generation of the same ring, and new
+/// capture; it posts <see cref="ISessionEvents.ChainRestarted"/>, then ends the old chain's Recording,
+/// or <see cref="ISessionEvents.DeviceLost"/> again when it failed. Only sessions with a Replay Buffer,
+/// and the Monitor session, recover; a file-mode session fails as before.
 /// </summary>
 internal sealed class CaptureSession : ICaptureSession
 {
@@ -188,6 +210,9 @@ internal sealed class CaptureSession : ICaptureSession
 
     /// <summary>How long a save waits for every stream to pass the press before it cuts.</summary>
     private static readonly TimeSpan SaveWait = TimeSpan.FromSeconds(1);
+
+    /// <summary>How long <see cref="End"/> waits for a running GPU device recovery attempt.</summary>
+    private static readonly TimeSpan RecoveryJoinWait = TimeSpan.FromSeconds(10);
 
     private readonly SessionSpec _spec;
     private readonly ISessionEvents _events;
@@ -246,6 +271,20 @@ internal sealed class CaptureSession : ICaptureSession
     // A forced restart (R4), under the chain lock: whether one runs, and its thread, which End joins.
     private bool _restarting;
     private Thread? _restartThread;
+
+    // A GPU device loss (R3), under the chain lock; _deviceLost is written under the gate too, so the
+    // capture thread reads it there. Whether the device is lost, whether a recovery attempt runs,
+    // whether the lost device and chains are torn down yet, the lost chain's Recording tap (open
+    // until the recovery is posted), the spec rebuilt, and the attempt's thread, which End joins.
+    private bool _deviceLost;
+    private bool _recovering;
+    private bool _tornDown;
+    private RecordingTap? _lostTap;
+    private SessionSpec? _rebuildSpec;
+    private Thread? _recoveryThread;
+
+    // Checks the device from the anchor on; under the gate.
+    private Timer? _deviceWatch;
 
     private readonly IVideoEncoderCatalog _encoders;
     private long _anchorQpc;
@@ -319,11 +358,11 @@ internal sealed class CaptureSession : ICaptureSession
         {
             // Started as it is chosen: a WGC item that fails to start falls back to Desktop Duplication.
             _firstFrameTimer.Change(_options.FirstFrameTimeout, Timeout.InfiniteTimeSpan);
-            StartMonitorCapture();
+            StartMonitorCapture(_device, first.Fps, StartInstalled);
             return;
         }
 
-        var capture = NewCapture(target.Window);
+        var capture = NewCapture(target.Window, _device, first.Fps);
         lock (_gate)
         {
             _capture = capture;
@@ -383,21 +422,38 @@ internal sealed class CaptureSession : ICaptureSession
                 throw new ErrorCodeException(ErrorCodes.SessionNotRunning, "The session has already stopped.");
             }
 
+            if (IsDeviceLost())
+            {
+                // No capture runs on a lost device: the recovery captures the new window.
+                _window = window;
+                _log.LogInformation("Retargeted to window 0x{Handle:X} while the GPU device is lost; the recovery captures it", target.Window);
+                return;
+            }
+
             old = _capture;
             _capture = null;
         }
 
         // Disposing waits for a frame in flight, so the two captures never overlap frames.
         old?.Dispose();
-        var next = NewCapture(target.Window);
+        ICaptureSource next;
         lock (_gate)
         {
             if (_stopped)
             {
-                next.Dispose();
                 return;
             }
 
+            if (IsDeviceLost() || _device is not { } device)
+            {
+                // Lost meanwhile: the recovery captures the new window.
+                _window = window;
+                return;
+            }
+
+            // Built under the gate: a recovery's teardown takes the device only under it, so it
+            // can't dispose the device under this capture. No capture runs, so no frame waits here.
+            next = NewCapture(target.Window, device, CaptureFps());
             _capture = next;
             _window = window;
         }
@@ -419,6 +475,7 @@ internal sealed class CaptureSession : ICaptureSession
     {
         bool anchored;
         ICaptureSource? capture;
+        Timer? watch;
 
         // A first frame still opening the encoders holds the gate; let it finish.
         lock (_gate)
@@ -427,22 +484,38 @@ internal sealed class CaptureSession : ICaptureSession
             anchored = _anchored;
             capture = _capture;
             _capture = null;
+            watch = _deviceWatch;
+            _deviceWatch = null;
         }
 
         _firstFrameTimer.Dispose();
+        watch?.Dispose();
 
-        // A forced restart running finishes first: the chain it installs (or the one it failed on) is current.
+        // A forced restart or a recovery running finishes first: the chain it installs (or the one it
+        // failed on) is current. A recovery sees the stop and installs nothing.
         Thread? restart;
+        Thread? recovery;
         lock (_chainLock)
         {
             restart = _restartThread;
+            recovery = _recoveryThread;
         }
 
         restart?.Join();
+
+        // Bounded: an attempt hung on the driver must not freeze the orchestrator. It checks the stop
+        // before installing and frees what it built.
+        if (recovery is not null && !recovery.Join(RecoveryJoinWait))
+        {
+            _log.LogWarning("The GPU device recovery hadn't finished within {Seconds:0} s of the stop; the session ends without it", RecoveryJoinWait.TotalSeconds);
+        }
+
         EncoderChain? chain;
+        bool lost;
         lock (_chainLock)
         {
             chain = _current;
+            lost = _deviceLost;
         }
 
         try
@@ -460,8 +533,9 @@ internal sealed class CaptureSession : ICaptureSession
                 return new SessionOutcome(null, _stopReason, new EngineFailure(_failure is null ? ErrorCodes.CaptureFailed : CodeOf(_failure), message));
             }
 
-            // A failed restart left nothing to flush: its chain is gone, and the session has failed.
-            if (!chain!.IsDisposed)
+            // A failed restart left nothing to flush: its chain is gone, and the session has failed. A
+            // lost device's chain can't be flushed: what its ring and Recording hold is all there is.
+            if (!chain!.IsDisposed && !lost)
             {
                 // No frame can arrive now; let the encoder thread offer what is queued before the flush.
                 chain.CompleteVideo();
@@ -483,6 +557,14 @@ internal sealed class CaptureSession : ICaptureSession
             chain?.Tap?.Close();
             CloseChains();
             DisposeAll();
+            RecordingTap? lostTap;
+            lock (_chainLock)
+            {
+                lostTap = _lostTap;
+                _lostTap = null;
+            }
+
+            lostTap?.Dispose();
         }
 
         if (_failure is null)
@@ -572,10 +654,29 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         EncoderChain? chain;
+        bool lost;
         lock (_chainLock)
         {
-            // A forced restart is rebuilding the chain: nothing to cut from until it is done.
-            chain = _restarting ? null : _current;
+            // A forced restart is rebuilding the chain: nothing to cut from until it is done. A lost
+            // device's chain is cut as it is, torn down or not: its ring is kept (R3).
+            lost = _deviceLost;
+            chain = _restarting && !lost ? null : _current;
+        }
+
+        if (lost)
+        {
+            if (chain?.Ring is null)
+            {
+                return null;
+            }
+
+            if (qpc - _anchorQpc < _qpcFrequency)
+            {
+                throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The Replay Buffer holds less than 1 s; there is nothing to save yet.");
+            }
+
+            // No encoder runs to ask for a keyframe: the Clip ends at the ring's last packet before the press.
+            return new ClipWrite(this, chain, null, qpc, chain.WindowSeconds);
         }
 
         // A chain disposed while the output still runs is one a failed restart left: nothing to cut. A
@@ -598,7 +699,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// In Replay mode, or in the Monitor session, once the output is open and while it runs: a
     /// Recording from <paramref name="qpc"/> on the current chain's encoders, through its tap; null
     /// once drained or released, before the anchor, while a Recording is attached, while a chain
-    /// switch is armed, or while a forced restart rebuilds the chain.
+    /// switch is armed, while a forced restart rebuilds the chain, or while the GPU device is lost.
     /// </summary>
     public IRecordingWrite? Record(long qpc)
     {
@@ -611,7 +712,7 @@ internal sealed class CaptureSession : ICaptureSession
         EncoderChain? chain;
         lock (_chainLock)
         {
-            if (_armed is not null || _restarting)
+            if (_armed is not null || _restarting || _deviceLost)
             {
                 return null;
             }
@@ -646,6 +747,14 @@ internal sealed class CaptureSession : ICaptureSession
         {
             if (_chainsClosed || _keepRing || _outputFinished || Volatile.Read(ref _stopped))
             {
+                return;
+            }
+
+            if (_deviceLost)
+            {
+                // Only remembered: the recovery builds it once the new device is up.
+                var rebuilt = _rebuildSpec ?? (_armed ?? _current)?.Spec ?? _spec;
+                _wanted = next is null || ChainKey.SameChain(next, rebuilt) ? null : next;
                 return;
             }
 
@@ -698,7 +807,7 @@ internal sealed class CaptureSession : ICaptureSession
         {
             lock (_chainLock)
             {
-                if (!HasRing || !Volatile.Read(ref _anchored) || _stopped || _outputFinished || _keepRing || _chainsClosed
+                if (!HasRing || !Volatile.Read(ref _anchored) || _stopped || _outputFinished || _keepRing || _chainsClosed || _deviceLost
                     || _armed is not null || _retiring is not null || _restarting || _current is not { IsBuilt: true, IsDisposed: false } old)
                 {
                     _log.LogInformation("The encoder restart ({Reason}) was refused: the session isn't live, or a chain switch or restart is running", reason);
@@ -724,6 +833,12 @@ internal sealed class CaptureSession : ICaptureSession
         {
             lock (_chainLock)
             {
+                // A lost device's chains are torn down and rebuilt as one.
+                if (_deviceLost)
+                {
+                    return 1;
+                }
+
                 var chains = 0;
                 foreach (var chain in new[] { _current, _armed, _retiring, _prepared })
                 {
@@ -759,7 +874,7 @@ internal sealed class CaptureSession : ICaptureSession
         {
             lock (_chainLock)
             {
-                if (!HasRing || !Volatile.Read(ref _anchored) || _stopped || _outputFinished || _keepRing || _chainsClosed
+                if (!HasRing || !Volatile.Read(ref _anchored) || _stopped || _outputFinished || _keepRing || _chainsClosed || _deviceLost
                     || _armed is not null || _retiring is not null || _restarting || _prepared is not null || _building || _tearingDown > 0
                     || _current is not { IsBuilt: true, IsDisposed: false, Tap.HasWriter: false } old)
                 {
@@ -792,7 +907,8 @@ internal sealed class CaptureSession : ICaptureSession
         var began = Stopwatch.GetTimestamp();
         lock (_gate)
         {
-            if (_stopped)
+            // A lost device is the recovery's: it tears this chain down and rebuilds it.
+            if (_stopped || IsDeviceLost())
             {
                 lock (_chainLock)
                 {
@@ -861,6 +977,12 @@ internal sealed class CaptureSession : ICaptureSession
             {
                 lock (_chainLock)
                 {
+                    if (_deviceLost)
+                    {
+                        // Built on the lost device: the recovery rebuilds from the old chain's ring.
+                        throw new InvalidOperationException("The GPU device was lost during the encoder restart.");
+                    }
+
                     _current = next;
                     installed = true;
                     _restarting = false;
@@ -883,6 +1005,37 @@ internal sealed class CaptureSession : ICaptureSession
 
             _log.LogInformation("The encoder chain restarted in {Ms:0} ms; the frames captured meanwhile were dropped", (now - began) * 1000.0 / _qpcFrequency);
             _events.ChainRestarted(now);
+        }
+        catch (Exception e) when (IsDeviceLostNow() || TakeDeviceLoss(e))
+        {
+            // The device was lost under the restart: the recovery takes it from here (R3). The ring
+            // stays for its pre-reset content, a switch's fresh one goes with its chain, and the old
+            // chain's Recording stays open until the recovery is posted.
+            if (!installed)
+            {
+                next?.Dispose(keepRing: switchTo is null);
+            }
+
+            _log.LogWarning("The encoder restart ({Reason}) stopped: the GPU device was lost ({Message}); the session recovers instead", reason, e.Message);
+            lock (_gate)
+            {
+                lock (_chainLock)
+                {
+                    _restarting = false;
+
+                    // The orchestrator already took the switch's spec: the recovery rebuilds it.
+                    if (switchTo is not null)
+                    {
+                        _rebuildSpec = switchTo;
+                    }
+
+                    if (_lostTap is null)
+                    {
+                        _lostTap = tap;
+                        tap = null;
+                    }
+                }
+            }
         }
         catch (Exception e)
         {
@@ -915,18 +1068,486 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
+    /// <summary>
+    /// Starts one attempt to recover from a GPU device loss (R3), on a thread of its own: the first
+    /// tears the lost capture, chains and device down (<see cref="TearDownLost"/>), then each builds a
+    /// new device, chain and capture (<see cref="Recover"/>). False when nothing is lost, an attempt
+    /// already runs, or the session has stopped. Orchestrator thread; never blocks.
+    /// </summary>
+    public bool RecoverDevice()
+    {
+        lock (_gate)
+        {
+            lock (_chainLock)
+            {
+                if (!_deviceLost || _recovering || _stopped || _chainsClosed)
+                {
+                    return false;
+                }
+
+                _recovering = true;
+                var previous = _recoveryThread;
+                _recoveryThread = new Thread(() => Recover(previous)) { Name = "GPU device recovery", IsBackground = true };
+                _recoveryThread.Start();
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>For tests: the fault seam marks this session's device lost, as a driver reset would.</summary>
+    internal void SimulateDeviceLoss()
+    {
+        lock (_gate)
+        {
+            _device?.SimulateLoss();
+        }
+    }
+
+    /// <summary>
+    /// One recovery attempt, on its own thread (<see cref="RecoverDevice"/>): a running forced
+    /// restart and the last attempt finish first; the first attempt tears down what was lost; then
+    /// <see cref="CaptureSessionOptions.RecoveryFault"/>, a new device on the Target's adapter (the
+    /// Monitor's for the Monitor session), the spec rebuilt into a new generation of the same ring
+    /// (AD-7: the lost chain is already gone), and new capture at its fps. Installed unless the
+    /// session stopped meanwhile; then <see cref="ISessionEvents.ChainRestarted"/>, and only then is
+    /// the lost chain's Recording ended, so its post-back follows. A failure frees what the attempt
+    /// built (the ring kept) and posts <see cref="ISessionEvents.DeviceLost"/>; a stop posts nothing.
+    /// </summary>
+    private void Recover(Thread? previous)
+    {
+        previous?.Join();
+        var began = Stopwatch.GetTimestamp();
+        Thread? restart;
+        lock (_chainLock)
+        {
+            restart = _restartThread;
+        }
+
+        restart?.Join();
+        D3D11Device? device = null;
+        ICaptureSource? capture = null;
+        EncoderChain? next = null;
+        var installed = false;
+        var stopped = false;
+        Exception? failure = null;
+        try
+        {
+            bool tornDown;
+            lock (_chainLock)
+            {
+                tornDown = _tornDown;
+            }
+
+            if (!tornDown)
+            {
+                TearDownLost();
+            }
+
+            EncoderChain lost;
+            SessionSpec spec;
+            WindowInfo? window;
+            lock (_gate)
+            {
+                stopped = _stopped;
+                window = _window;
+                lock (_chainLock)
+                {
+                    lost = _current!;
+                    spec = _rebuildSpec ?? lost.Spec;
+                }
+            }
+
+            if (stopped)
+            {
+                return;
+            }
+
+            if (_options.RecoveryFault?.Invoke() is { } fault)
+            {
+                throw fault;
+            }
+
+            device = _monitor is { } monitor
+                ? D3D11Device.CreateForMonitor(monitor.Handle, _loggers.CreateLogger<D3D11Device>())
+                : D3D11Device.Create(window!.Handle, _loggers.CreateLogger<D3D11Device>());
+            var (encoder, codec) = ReferenceEquals(spec, lost.Spec) ? (lost.EncoderName, lost.Codec) : ResolveEncoder(spec);
+            next = new EncoderChain(spec, encoder, codec, null, _options, device, _audio, _micMute, _loggers, _log, Fail);
+            next.Subscribe();
+
+            // The same ring, in a new generation: what it held before the reset stays saveable. One a
+            // switch under way had already freed is replaced by a fresh one.
+            var ring = HasRing && lost.Ring is { IsDisposed: false } kept ? kept : null;
+            next.Build(_anchorQpc, first: false, latency: null, restartOf: ring, window: ring is null ? 0 : lost.WindowSeconds);
+            if (IsMonitor)
+            {
+                // WGC, else Desktop Duplication, as at Open; started here and installed below.
+                capture = StartMonitorCapture(device, next.Fps, c => c.Start());
+            }
+            else
+            {
+                capture = NewCapture(window!.Handle, device, next.Fps);
+                capture.Start();
+            }
+            var now = Stopwatch.GetTimestamp();
+            next.StartAudio(now);
+            lock (_gate)
+            {
+                stopped = _stopped;
+                if (!stopped)
+                {
+                    if (!ReferenceEquals(_window, window))
+                    {
+                        throw new InvalidOperationException("The Target's window changed during the recovery; the next attempt captures the new one.");
+                    }
+
+                    lock (_chainLock)
+                    {
+                        _device = device;
+                        _capture = capture;
+                        _current = next;
+                        _deviceLost = false;
+                        _tornDown = false;
+                        _recovering = false;
+                        _rebuildSpec = null;
+                        installed = true;
+
+                        // A chain the profile asked for meanwhile is built on the new device.
+                        StartBuildLocked();
+                    }
+                }
+            }
+
+            if (stopped)
+            {
+                return;
+            }
+
+            var adapter = device.AdapterName;
+            device = null;
+            capture = null;
+            next = null;
+            if (_options.GpuPriority is { } priority)
+            {
+                SetGpuPriority(priority);
+            }
+
+            _log.LogInformation("Recovered from the GPU device loss in {Ms:0} ms: a new device on {Adapter}, the encoder chain rebuilt; the frames captured meanwhile were dropped",
+                (now - began) * 1000.0 / _qpcFrequency, adapter);
+            _events.ChainRestarted(now);
+
+            // The lost chain's Recording ends here, at its last packet, after the orchestrator was told.
+            RecordingTap? tap;
+            lock (_chainLock)
+            {
+                tap = _lostTap;
+                _lostTap = null;
+            }
+
+            tap?.Dispose();
+        }
+        catch (Exception e)
+        {
+            failure = e;
+        }
+        finally
+        {
+            // What this attempt built and didn't install; the ring stays for the next attempt.
+            capture?.Dispose();
+            next?.Dispose(keepRing: true);
+            device?.Dispose();
+            if (!installed)
+            {
+                lock (_chainLock)
+                {
+                    _recovering = false;
+                }
+            }
+        }
+
+        if (failure is null)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            stopped = _stopped;
+        }
+
+        // Installed already (only closing the old Recording threw): the session has recovered.
+        if (installed)
+        {
+            _log.LogWarning("Ending the lost chain's Recording after the GPU recovery failed: {Message}", failure.Message);
+            return;
+        }
+
+        _log.LogWarning("The recovery from the GPU device loss failed: {Message}", failure.Message);
+        if (!stopped)
+        {
+            _events.DeviceLost(failure);
+        }
+    }
+
+    /// <summary>
+    /// The first recovery attempt's teardown, AD-7's order: WGC, then every chain (builds and
+    /// teardowns running on the lost device finish first; the current one keeps its ring, and its
+    /// Recording tap is kept open), then the device. The spec rebuilt is an armed chain's, whose
+    /// switch the orchestrator already took, else the current one's.
+    /// </summary>
+    private void TearDownLost()
+    {
+        var began = Stopwatch.GetTimestamp();
+        ICaptureSource? capture;
+        lock (_gate)
+        {
+            capture = _capture;
+            _capture = null;
+        }
+
+        // Disposing waits for a frame in flight, which takes the gate: never under it.
+        capture?.Dispose();
+        EncoderChain? armed;
+        EncoderChain? retiring;
+        EncoderChain? prepared;
+        lock (_gate)
+        {
+            lock (_chainLock)
+            {
+                armed = _armed;
+                _armed = null;
+                retiring = _retiring;
+                _retiring = null;
+                prepared = _prepared;
+                _prepared = null;
+                _rebuildSpec = armed?.Spec ?? _rebuildSpec ?? _current!.Spec;
+            }
+        }
+
+        // Builds, teardowns and retirements already running finish; none starts while the device is lost.
+        while (true)
+        {
+            List<Thread> workers;
+            lock (_chainLock)
+            {
+                workers = [.. _workers];
+                _workers.Clear();
+            }
+
+            if (workers.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var worker in workers)
+            {
+                worker.Join();
+            }
+        }
+
+        EncoderChain current;
+        RecordingTap? extra = null;
+        EncoderChain? built;
+        lock (_chainLock)
+        {
+            // A build that finished meanwhile.
+            built = _prepared;
+            _prepared = null;
+            current = _current!;
+            var tap = current.TakeTap();
+            if (_lostTap is null)
+            {
+                _lostTap = tap;
+            }
+            else
+            {
+                extra = tap;
+            }
+        }
+
+        try
+        {
+            extra?.Dispose();
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning("Closing a second lost Recording tap failed: {Message}", e.Message);
+        }
+
+        // Each save bound to it cuts at its press, since its keyframe never comes; the ring's restart needs them done.
+        var deadline = began + (3 * _qpcFrequency);
+        while (!Volatile.Read(ref _stopped))
+        {
+            lock (_chainLock)
+            {
+                if (current.Writers == 0)
+                {
+                    break;
+                }
+            }
+
+            if (Stopwatch.GetTimestamp() >= deadline)
+            {
+                _log.LogWarning("A save bound to the lost encoder chain hadn't cut within 3 s; the chain is torn down anyway");
+                break;
+            }
+
+            Thread.Sleep(10);
+        }
+
+        // Each in its own step: one that throws on the lost device never leaks the others.
+        void Step(string what, Action dispose)
+        {
+            try
+            {
+                dispose();
+            }
+            catch (Exception e)
+            {
+                _log.LogWarning("Tearing down the lost {What} failed: {Message}", what, e.Message);
+            }
+        }
+
+        Step("encoder chain", () => current.Dispose(keepRing: true));
+        Step("armed encoder chain", () => armed?.Dispose());
+        Step("replaced encoder chain", () => retiring?.Dispose());
+        Step("prepared encoder chain", () => prepared?.Dispose());
+        Step("built encoder chain", () => built?.Dispose());
+        D3D11Device? device;
+        lock (_gate)
+        {
+            device = _device;
+            _device = null;
+        }
+
+        Step("device", () => device?.Dispose());
+        lock (_chainLock)
+        {
+            _tornDown = true;
+        }
+
+        _log.LogInformation("The lost GPU device, its capture and its encoder chains were torn down in {Ms:0} ms; the Replay Buffer's ring is kept",
+            (Stopwatch.GetTimestamp() - began) * 1000.0 / _qpcFrequency);
+    }
+
+    /// <summary>Whether the device is lost; under the gate.</summary>
+    private bool IsDeviceLost()
+    {
+        lock (_chainLock)
+        {
+            return _deviceLost;
+        }
+    }
+
+    /// <summary>Whether the device is lost; takes the gate.</summary>
+    private bool IsDeviceLostNow()
+    {
+        lock (_gate)
+        {
+            return IsDeviceLost();
+        }
+    }
+
+
+    /// <summary>
+    /// The device watchdog's tick: a device that reports itself removed or reset is a loss, as a
+    /// failure carrying the reason would be. Skipped once stopped, lost or torn down.
+    /// </summary>
+    private void WatchDevice()
+    {
+        int reason;
+        lock (_gate)
+        {
+            if (_stopped || _device is not { } device || IsDeviceLost())
+            {
+                return;
+            }
+
+            reason = device.RemovedReason;
+        }
+
+        if (reason < 0)
+        {
+            Fail(new COMException($"The GPU device was removed or reset (0x{reason:X8}).", reason));
+        }
+    }
+
+    /// <summary>
+    /// Takes <paramref name="e"/> as a GPU device loss when it is one: a later failure while the
+    /// device is lost is swallowed; a first one carrying <see cref="D3D11Device.DeviceRemoved"/> or
+    /// <see cref="D3D11Device.DeviceReset"/> in its chain, or with the device reporting itself lost,
+    /// stops feeding the chains and posts <see cref="ISessionEvents.DeviceLost"/>, when the session
+    /// can recover: anchored, holding a Replay Buffer or the Monitor session's, and live. False
+    /// leaves it to <see cref="Fail"/>.
+    /// </summary>
+    private bool TakeDeviceLoss(Exception e)
+    {
+        lock (_gate)
+        {
+            lock (_chainLock)
+            {
+                if (_deviceLost)
+                {
+                    _log.LogInformation("A failure on the lost GPU device was ignored: {Message}", e.Message);
+                    return true;
+                }
+
+                if (!Volatile.Read(ref _anchored) || !(HasRing || IsMonitor) || _stopped || _outputFinished || _keepRing || _chainsClosed)
+                {
+                    return false;
+                }
+            }
+
+            if (!IsDeviceLoss(e))
+            {
+                return false;
+            }
+
+            lock (_chainLock)
+            {
+                _deviceLost = true;
+                foreach (var chain in new[] { _current, _armed, _retiring })
+                {
+                    chain?.Fed = false;
+                }
+            }
+        }
+
+        _log.LogWarning("{Code}: the GPU device was lost ({Message}); nothing is encoded until the session recovers", ErrorCodes.GpuReset, e.Message);
+        _events.DeviceLost(e);
+        return true;
+    }
+
+    /// <summary>Whether <paramref name="e"/> is a device loss: a removed or reset HRESULT in its chain, or the device reporting itself lost. Under the gate.</summary>
+    private bool IsDeviceLoss(Exception e)
+    {
+        for (var inner = e; inner is not null; inner = inner.InnerException)
+        {
+            if (inner.HResult is D3D11Device.DeviceRemoved or D3D11Device.DeviceReset)
+            {
+                return true;
+            }
+        }
+
+        return _device?.IsLost ?? false;
+    }
+
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>
     public void Abandon()
     {
         ICaptureSource? capture;
+        Timer? watch;
         lock (_gate)
         {
             _stopped = true;
             capture = _capture;
             _capture = null;
+            watch = _deviceWatch;
+            _deviceWatch = null;
         }
 
         _firstFrameTimer.Dispose();
+        watch?.Dispose();
         capture?.Dispose();
         DisposeAll();
     }
@@ -938,30 +1559,32 @@ internal sealed class CaptureSession : ICaptureSession
         _ => ErrorCodes.EncodeFailed,
     };
 
-    /// <summary>A game window's WGC capture, not started; a WGC failure throws, with no fallback.</summary>
-    private WindowCapture NewCapture(nint window)
+    /// <summary>A game window's WGC capture on <paramref name="device"/> at <paramref name="fps"/>, not started; a WGC failure throws, with no fallback.</summary>
+    private WindowCapture NewCapture(nint window, D3D11Device device, int fps)
     {
         ThrowWgcFault();
-        return Wire(new WindowCapture(_device!, window, CaptureFps(), OnFrame, _loggers.CreateLogger<WindowCapture>()));
+        return Wire(new WindowCapture(device, window, fps, OnFrame, _loggers.CreateLogger<WindowCapture>()));
     }
 
     /// <summary>
-    /// The Monitor session's capture, started: WGC's monitor item, or, when creating or starting it
-    /// throws, Desktop Duplication of the same monitor on the same device (AD-12), raising
-    /// <see cref="CaptureSessionOptions.CaptureFallback"/> once. Desktop Duplication failing too throws.
+    /// The Monitor session's capture on <paramref name="device"/>, started by <paramref name="start"/>
+    /// (<see cref="StartInstalled"/> at Open; a plain start in a GPU-reset recovery, which installs it
+    /// afterwards): WGC's monitor item, or, when creating or starting it throws, Desktop Duplication
+    /// of the same monitor on the same device (AD-12), raising
+    /// <see cref="CaptureSessionOptions.CaptureFallback"/> once per capture. Desktop Duplication
+    /// failing too throws.
     /// </summary>
-    private void StartMonitorCapture()
+    private ICaptureSource StartMonitorCapture(D3D11Device device, int fps, Action<ICaptureSource> start)
     {
         var monitor = _monitor!;
-        var fps = CaptureFps();
         WindowCapture? wgc = null;
         try
         {
             ThrowWgcFault();
-            wgc = Wire(WindowCapture.ForMonitor(_device!, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<WindowCapture>()));
-            StartInstalled(wgc);
+            wgc = Wire(WindowCapture.ForMonitor(device, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<WindowCapture>()));
+            start(wgc);
             CaptureApi = "wgc";
-            return;
+            return wgc;
         }
         catch (Exception e)
         {
@@ -969,10 +1592,10 @@ internal sealed class CaptureSession : ICaptureSession
             _log.LogWarning("WGC could not capture monitor {Device} ({Message}); falling back to Desktop Duplication", monitor.DeviceName, e.Message);
         }
 
-        var duplication = Wire(new DesktopDuplicationCapture(_device!, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<DesktopDuplicationCapture>()));
+        var duplication = Wire(new DesktopDuplicationCapture(device, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<DesktopDuplicationCapture>()));
         try
         {
-            StartInstalled(duplication);
+            start(duplication);
         }
         catch
         {
@@ -983,6 +1606,7 @@ internal sealed class CaptureSession : ICaptureSession
         CaptureApi = "desktop-duplication";
         _options.CaptureFallback?.Invoke(
             $"Windows Graphics Capture couldn't capture monitor {monitor.DeviceName}; the Monitor Recording uses Desktop Duplication instead.");
+        return duplication;
     }
 
     /// <summary>
@@ -1050,6 +1674,12 @@ internal sealed class CaptureSession : ICaptureSession
             if (!_anchored)
             {
                 StartOutput(qpc, contentSize);
+            }
+
+            // A lost device takes no frames: the recovery's new capture brings them again.
+            if (_deviceLost)
+            {
+                return;
             }
 
             _stats?.Cadence.Record(qpc);
@@ -1135,6 +1765,12 @@ internal sealed class CaptureSession : ICaptureSession
         // A release write: SetMicMuted, Save and Record read the anchor without the gate.
         Volatile.Write(ref _anchored, true);
 
+        // Only a session that can recover watches its device (R3).
+        if (HasRing || IsMonitor)
+        {
+            _deviceWatch = new Timer(_ => WatchDevice(), null, _options.DeviceWatchInterval, _options.DeviceWatchInterval);
+        }
+
         // A chain asked for before the anchor is built from here.
         lock (_chainLock)
         {
@@ -1193,7 +1829,7 @@ internal sealed class CaptureSession : ICaptureSession
 
             lock (_chainLock)
             {
-                if (_prepared is { } prepared && _armed is null && _retiring is null && !_restarting && ReferenceEquals(chain, _current)
+                if (_prepared is { } prepared && _armed is null && _retiring is null && !_restarting && !_deviceLost && ReferenceEquals(chain, _current)
                     && chain.Tap is { HasWriter: false } && !_outputFinished && !_keepRing && !_chainsClosed)
                 {
                     _prepared = null;
@@ -1360,7 +1996,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// </summary>
     private void StartBuildLocked()
     {
-        if (_wanted is not { } spec || _chainsClosed || !Volatile.Read(ref _anchored) || _building || _restarting
+        if (_wanted is not { } spec || _chainsClosed || !Volatile.Read(ref _anchored) || _building || _restarting || _deviceLost
             || _prepared is not null || _armed is not null || _retiring is not null || _tearingDown > 0)
         {
             return;
@@ -1397,7 +2033,8 @@ internal sealed class CaptureSession : ICaptureSession
         lock (_chainLock)
         {
             _building = false;
-            if (chain is not null && !_chainsClosed && !_outputFinished && !Volatile.Read(ref _stopped)
+            // One built on a device lost meanwhile is torn down; the recovery builds it again.
+            if (chain is not null && !_chainsClosed && !_outputFinished && !Volatile.Read(ref _stopped) && !_deviceLost
                 && _wanted is { } wanted && ChainKey.SameChain(wanted, spec))
             {
                 _prepared = chain;
@@ -1647,9 +2284,17 @@ internal sealed class CaptureSession : ICaptureSession
             $"No frame arrived from the window within {_options.FirstFrameTimeout.TotalSeconds:0} s."));
     }
 
-    /// <summary>Records the first failure and stops; the orchestrator is told, and ends the session.</summary>
+    /// <summary>
+    /// Records the first failure and stops; the orchestrator is told, and ends the session. A GPU
+    /// device loss the session can recover from is posted as one instead (<see cref="TakeDeviceLoss"/>).
+    /// </summary>
     private void Fail(Exception e)
     {
+        if (TakeDeviceLoss(e))
+        {
+            return;
+        }
+
         lock (_gate)
         {
             _failure ??= e;
@@ -1691,8 +2336,9 @@ internal sealed class CaptureSession : ICaptureSession
         {
             // An armed chain takes over at the next frame: resizing the outgoing one would be lost,
             // so the incoming one takes the window at the next Reset instead.
-            // A forced restart moves the ring to a generation of its own; the window applies at the next Reset.
-            chain = _armed is null && !_restarting ? _current : null;
+            // A forced restart moves the ring to a generation of its own; the window applies at the next
+            // Reset. So does a recovery from a lost device.
+            chain = _armed is null && !_restarting && !_deviceLost ? _current : null;
         }
 
         if (_keepRing || _outputFinished || chain?.Ring is not { } ring || pending < 1 || pending == chain.WindowSeconds)
@@ -1748,6 +2394,12 @@ internal sealed class CaptureSession : ICaptureSession
         retiring?.Dispose();
 
         // A save still writing holds its own lease and pins; the ring goes when the last is released.
+        // A chain a GPU reset tore down kept its ring: it goes here unless drained.
+        if (current is { IsDisposed: true } && !_keepRing)
+        {
+            current.Ring?.Dispose();
+        }
+
         current?.Dispose(keepRing: _keepRing);
         _device?.Dispose();
     }

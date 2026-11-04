@@ -1860,7 +1860,8 @@ public sealed partial class SessionOrchestratorTests : IDisposable
         bool drains = false,
         int maxRecordings = int.MaxValue,
         Func<long, IClipWrite?>? save = null,
-        Func<Recordings, Recordings>? recordingsWith = null)
+        Func<Recordings, Recordings>? recordingsWith = null,
+        DeviceRecovery? deviceRecovery = null)
     {
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var presses = System.Threading.Channels.Channel.CreateUnbounded<HotkeyPress>();
@@ -1897,7 +1898,8 @@ public sealed partial class SessionOrchestratorTests : IDisposable
                 e => events.Writer.TryWrite(e),
                 library,
                 Open: library,
-                Restarted: r => events.Writer.TryWrite(r))));
+                Restarted: r => events.Writer.TryWrite(r))),
+            deviceRecovery: deviceRecovery);
         return (orchestrator, events, presses, made, published, factory);
     }
 
@@ -2119,6 +2121,30 @@ public sealed partial class SessionOrchestratorTests : IDisposable
         public bool SwitchChain(SessionSpec next)
         {
             Switches.Enqueue(next);
+            return true;
+        }
+
+        private int _recovers;
+        private volatile bool _failRecovery;
+
+        /// <summary>How many recovery attempts were asked for.</summary>
+        public int Recovers => Volatile.Read(ref _recovers);
+
+        /// <summary>When set, each recovery attempt fails: it posts <c>DeviceLost</c> again, from another thread.</summary>
+        public bool FailRecovery
+        {
+            get => _failRecovery;
+            set => _failRecovery = value;
+        }
+
+        public bool RecoverDevice()
+        {
+            Interlocked.Increment(ref _recovers);
+            if (FailRecovery)
+            {
+                Task.Run(() => Events.DeviceLost(new InvalidOperationException("the recovery attempt failed")), CancellationToken.None);
+            }
+
             return true;
         }
 

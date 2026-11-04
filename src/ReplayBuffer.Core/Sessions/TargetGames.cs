@@ -164,6 +164,39 @@ public sealed record Recordings(
     public static readonly TimeSpan DefaultRingRecheck = TimeSpan.FromSeconds(30);
 }
 
+/// <summary>
+/// How the orchestrator recovers a session whose GPU device was lost (R3, PLAN.md T-01, AD-19): it
+/// asks the session to rebuild at once, then every <paramref name="RetryEvery"/> after a failed
+/// attempt, and gives up <paramref name="GiveUpAfter"/> after the loss, ending the session.
+/// </summary>
+/// <param name="Reset">
+/// Called on the orchestrator thread with a message when a session's device is first lost; null
+/// ignores it.
+/// </param>
+/// <param name="Failed">
+/// Called on the orchestrator thread with a message when the orchestrator gave up and ended the
+/// session; null ignores it.
+/// </param>
+/// <param name="Recovered">
+/// Called on the orchestrator thread with the time since the loss when a session rebuilt; null
+/// ignores it.
+/// </param>
+/// <param name="RetryEvery">How long after a failed attempt the next starts; null is <see cref="DefaultRetryEvery"/>.</param>
+/// <param name="GiveUpAfter">How long after the loss a failed attempt ends the session; null is <see cref="DefaultGiveUpAfter"/>.</param>
+public sealed record DeviceRecovery(
+    Action<string>? Reset = null,
+    Action<string>? Failed = null,
+    Action<TimeSpan>? Recovered = null,
+    TimeSpan? RetryEvery = null,
+    TimeSpan? GiveUpAfter = null)
+{
+    /// <summary>The wait between recovery attempts by default: 2 s.</summary>
+    public static readonly TimeSpan DefaultRetryEvery = TimeSpan.FromSeconds(2);
+
+    /// <summary>How long after a loss recovery is given up by default: 60 s.</summary>
+    public static readonly TimeSpan DefaultGiveUpAfter = TimeSpan.FromSeconds(60);
+}
+
 /// <summary>A forced encoder restart's handover (R4): the Recording it stopped and the one that took over, by path.</summary>
 public sealed record RecordingRestart(string StoppedPath, string StartedPath);
 

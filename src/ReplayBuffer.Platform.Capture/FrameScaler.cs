@@ -77,6 +77,8 @@ public sealed unsafe class FrameScaler : IDisposable
     /// </summary>
     public void Draw(nint source, VideoSize contentSize, nint target, uint slice)
     {
+        // A simulated reset: the next device call fails, as on a real one.
+        _device.ThrowIfSimulatedLoss();
         var src = (ID3D11Texture2D*)source;
         src->GetDesc(out var srcDesc);
         var content = contentSize.Intersect(new VideoSize((int)srcDesc.Width, (int)srcDesc.Height));

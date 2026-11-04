@@ -51,6 +51,9 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
     /// <summary>The current ring generation, counting from 1.</summary>
     public int Generation => _generations.Current;
 
+    /// <summary>Whether <see cref="Dispose"/> has run: it takes no more packets, and can't open a generation.</summary>
+    public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
     /// <summary>
     /// The first video keyframe ever written, in µs since the anchor; <see cref="long.MaxValue"/>
     /// until then. An encoder chain started mid-session (4.9) begins its Clips there.
