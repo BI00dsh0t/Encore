@@ -150,6 +150,14 @@ public static class ErrorCodes
     public const string DiskFull = "disk-full";
 
     /// <summary>
+    /// A warning (R5): a Recording's disk filled while the Replay Buffer kept its ring on disk, so the
+    /// Replay Buffer stopped. Shown on the overlay; it stays until the wait for room ends (the
+    /// Replay Buffer restarts once a recheck finds room for its ring, or another session starts, or
+    /// the Target changes or exits), or it is dismissed.
+    /// </summary>
+    public const string ReplayStoppedDiskFull = "replay-stopped-disk-full";
+
+    /// <summary>
     /// A save failed (R6) because the Output Folder or the file could not be written. Raised by the
     /// Clip writer now, and by the Recording writer later. No file is left and nothing is Reset.
     /// </summary>
@@ -283,6 +291,7 @@ public static class ErrorCodes
         ClipTooShort,
         SaveBusy,
         DiskFull,
+        ReplayStoppedDiskFull,
         AccessDenied,
         SaveFailed,
         ClipSaved,

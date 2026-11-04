@@ -66,6 +66,30 @@ public sealed class FeedbackRouterTests
         Assert.Empty(notices.Active);
     }
 
+    [Fact]
+    public void ADiskFullStaysUntilTheNextRecordingAndAStoppedReplayBufferUntilItResumes()
+    {
+        var notices = new FakeNotices();
+        var time = new ManualTime();
+        using var router = new FeedbackRouter(notices, time);
+
+        router.DiskFull();
+        router.ReplayStoppedDiskFull();
+
+        Assert.Equal(2, notices.Active.Count);
+        var stopped = Assert.Single(notices.Active.Values, n => n.Code == ErrorCodes.ReplayStoppedDiskFull);
+        Assert.Equal(WarningSeverity.Warning, stopped.Severity);
+        Assert.Null(stopped.Sound);
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(2, notices.Active.Count);
+
+        router.ReplayResumed();
+        Assert.Equal(ErrorCodes.DiskFull, Assert.Single(notices.Active).Value.Code);
+
+        router.StateChanged(CaptureState.Initial with { Recording = RecordingState.Running });
+        Assert.Equal(ErrorCodes.RecordingStarted, Assert.Single(notices.Active).Value.Code);
+    }
+
     private sealed class FakeNotices : IFeedbackNotices
     {
         public Dictionary<string, FeedbackNotice> Active { get; } = [];

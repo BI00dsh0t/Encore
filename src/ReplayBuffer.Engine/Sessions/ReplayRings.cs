@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Replay;
 using ReplayBuffer.Platform.Windows;
 
@@ -30,5 +31,20 @@ internal static class ReplayRings
             log.LogWarning(e, "The Replay Buffer's ring file couldn't be made in '{Folder}'; buffering in memory", diskFolder);
             return new PacketRing(windowUs, capacity, margin: margin);
         }
+    }
+
+    /// <summary>
+    /// Whether a Disk-mode ring of <paramref name="snapshot"/> fits its drive now (R5): its
+    /// <see cref="ReplayStorageEstimate"/> against the free bytes of its folder's drive
+    /// (<see cref="EffectiveSettings.RingPath"/>, else <paramref name="defaultFolder"/>). Unknown free
+    /// space counts as fits.
+    /// </summary>
+    public static bool Fits(EffectiveSettings snapshot, string defaultFolder, Func<string, long?> freeDisk)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(freeDisk);
+        var free = freeDisk(snapshot.RingPath ?? defaultFolder);
+        return free is not { } bytes
+            || ReplayStorageEstimate.Bytes(snapshot.Video, snapshot.TrackLayout.Tracks.Count, snapshot.BufferWindow) <= bytes;
     }
 }

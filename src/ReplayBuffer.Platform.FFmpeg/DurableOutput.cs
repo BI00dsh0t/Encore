@@ -21,6 +21,7 @@ internal sealed unsafe class DurableOutput : IDisposable
 
     private readonly FileStream _file;
     private readonly bool _flushToDisk;
+    private readonly long? _capacity;
     private GCHandle _handle;
     private AVIOContext* _context;
     private Exception? _failure;
@@ -28,9 +29,14 @@ internal sealed unsafe class DurableOutput : IDisposable
     /// <summary>Creates (or truncates) <paramref name="path"/>, shared for reading only.</summary>
     /// <param name="path">The file.</param>
     /// <param name="flushToDisk">Whether <see cref="Flush"/> also flushes the file to the disk; false only for tests.</param>
-    public DurableOutput(string path, bool flushToDisk = true)
+    /// <param name="capacity">
+    /// A test seam: the file's room in bytes, past which a write fills it up to that and fails as a
+    /// full disk does (<c>ERROR_DISK_FULL</c>); null for none.
+    /// </param>
+    public DurableOutput(string path, bool flushToDisk = true, long? capacity = null)
     {
         _flushToDisk = flushToDisk;
+        _capacity = capacity;
         // Unbuffered: FFmpeg's own buffer is the only one, so a flush reaches the OS at once.
         _file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, bufferSize: 0);
         try
@@ -119,7 +125,14 @@ internal sealed unsafe class DurableOutput : IDisposable
 
         try
         {
-            output._file.Write(new ReadOnlySpan<byte>(buffer, size));
+            var bytes = new ReadOnlySpan<byte>(buffer, size);
+            if (output._capacity is { } capacity && output._file.Position + size > capacity)
+            {
+                output._file.Write(bytes[..(int)Math.Max(0, capacity - output._file.Position)]);
+                throw new IOException("There is not enough space on the disk.", unchecked((int)0x80070070));
+            }
+
+            output._file.Write(bytes);
             return size;
         }
         catch (Exception e)
