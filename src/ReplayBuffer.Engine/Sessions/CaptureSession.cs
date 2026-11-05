@@ -114,6 +114,13 @@ internal sealed record CaptureSessionOptions
     /// </summary>
     public Action<string>? CaptureFallback { get; init; }
 
+    /// <summary>
+    /// When set, a game session whose window closes keeps running with no capture, the pacer
+    /// repeating its last frame, and posts <c>Closed</c>: the orchestrator retargets it to the
+    /// process's next window (keeping its Replay Buffer) or ends it. When not set, it stops.
+    /// </summary>
+    public bool FollowWindow { get; init; }
+
     /// <summary>With no first frame by then, the session posts a <see cref="ErrorCodes.CaptureFailed"/> failure.</summary>
     public TimeSpan FirstFrameTimeout { get; init; } = DefaultFirstFrameTimeout;
 
@@ -2390,7 +2397,15 @@ internal sealed class CaptureSession : ICaptureSession
                 return;
             }
 
-            RequestStop("window closed");
+            if (_options.FollowWindow && !IsMonitor)
+            {
+                // The closed capture stays until a retarget or the end disposes it.
+                _log.LogInformation("Window 0x{Handle:X} closed; the session waits for a retarget", _window?.Handle ?? 0);
+            }
+            else
+            {
+                RequestStop("window closed");
+            }
         }
 
         _events.Closed("window closed");

@@ -4,6 +4,7 @@ using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Dwm;
 using Windows.Win32.System.Threading;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace ReplayBuffer.Platform.Windows;
 
@@ -101,6 +102,63 @@ public static unsafe class WindowFinder
         return width < minWidth || height < minHeight
             ? $"the window is {width}x{height}, under {minWidth}x{minHeight}"
             : null;
+    }
+
+    /// <summary>
+    /// The window of process <paramref name="processId"/> to capture: <paramref name="preferred"/>
+    /// when it is the process's, titled and <see cref="NotCapturable"/> accepts it; else the
+    /// process's largest titled, non-tool top-level window that it accepts (a splash and a main
+    /// window: the main one). Null, with why, when none can be captured.
+    /// </summary>
+    public static (nint Window, string? Why) CaptureWindowOf(int processId, nint preferred, int minWidth, int minHeight)
+    {
+        string? preferredWhy = null;
+        if (preferred != 0 && FromHandle(preferred) is { } window && (int)window.ProcessId == processId)
+        {
+            preferredWhy = NotCapturable(preferred, minWidth, minHeight);
+            if (preferredWhy is null)
+            {
+                return (preferred, null);
+            }
+        }
+
+        var handles = new List<HWND>();
+        var gc = GCHandle.Alloc(handles);
+        try
+        {
+            PInvoke.EnumWindows(&Collect, new LPARAM(GCHandle.ToIntPtr(gc)));
+        }
+        finally
+        {
+            gc.Free();
+        }
+
+        nint best = 0;
+        long bestArea = 0;
+        foreach (var hwnd in handles)
+        {
+            uint pid;
+            PInvoke.GetWindowThreadProcessId(hwnd, &pid);
+            if ((int)pid != processId
+                || PInvoke.GetWindowTextLength(hwnd) <= 0
+                || ((WINDOW_EX_STYLE)(uint)PInvoke.GetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE) & WINDOW_EX_STYLE.WS_EX_TOOLWINDOW) != 0
+                || NotCapturable((nint)hwnd.Value, minWidth, minHeight) is not null
+                || !PInvoke.GetClientRect(hwnd, out var client))
+            {
+                continue;
+            }
+
+            var area = (long)(client.right - client.left) * (client.bottom - client.top);
+            if (area > bestArea)
+            {
+                best = (nint)hwnd.Value;
+                bestArea = area;
+            }
+        }
+
+        return best != 0
+            ? (best, null)
+            : (0, preferredWhy ?? "no window of the process can be captured");
     }
 
     /// <summary>

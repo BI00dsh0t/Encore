@@ -397,6 +397,7 @@ internal sealed class EngineHost : IAsyncDisposable
                     {
                         OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"),
                         Replay = replay,
+                        FollowWindow = true,
                         RingFolder = ringFolder,
                         Margin = margin,
                         ResetGap = message => warnings.Raise(ErrorCodes.ResetGap, WarningSeverity.Warning, "replay", message, overlay: false),

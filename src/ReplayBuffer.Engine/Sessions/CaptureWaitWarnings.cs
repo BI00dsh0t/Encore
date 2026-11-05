@@ -8,11 +8,11 @@ using ReplayBuffer.Platform.Windows;
 namespace ReplayBuffer.Engine.Sessions;
 
 /// <summary>
-/// The engine's side of the wait for a Target Game's window (<see cref="CaptureWait"/>): a window is
-/// ready once it is visible, not minimized or cloaked, and at least <see cref="MinWidth"/> ×
-/// <see cref="MinHeight"/>. Each run of waits is logged once and shown on the status line as a
-/// <c>capture-failed</c> Warning saying capture is waiting, withdrawn when the run ends. Called on the
-/// orchestrator thread only.
+/// The engine's side of following a Target Game's process (<see cref="CaptureWait"/>): its window
+/// to capture is the one it was given while that can be captured (visible, titled, not minimized or
+/// cloaked, at least <see cref="MinWidth"/> × <see cref="MinHeight"/>), else its largest that can.
+/// Each run of waits is logged once and shown on the status line as a <c>capture-failed</c> Warning
+/// saying capture is waiting, withdrawn when the run ends. Called on the orchestrator thread only.
 /// </summary>
 internal sealed class CaptureWaitWarnings(Warnings warnings, ILogger log)
 {
@@ -25,7 +25,9 @@ internal sealed class CaptureWaitWarnings(Warnings warnings, ILogger log)
 
     /// <summary>The orchestrator's wait, wired to this.</summary>
     public CaptureWait Wait => new(
-        target => WindowFinder.NotCapturable(target.Window, MinWidth, MinHeight),
+        target => WindowFinder.CaptureWindowOf(target.ProcessId, target.Window, MinWidth, MinHeight) is var (window, why) && window != 0
+            ? CaptureWindow.Of(window)
+            : CaptureWindow.None(why ?? "no window of the process can be captured"),
         Waiting,
         Ended,
         e => CaptureSession.CodeOf(e) == ErrorCodes.CaptureFailed);
@@ -40,7 +42,7 @@ internal sealed class CaptureWaitWarnings(Warnings warnings, ILogger log)
             ErrorCodes.CaptureFailed,
             WarningSeverity.Warning,
             "replay",
-            $"Waiting for {target.Name}'s window before capturing; retrying every few seconds.",
+            $"Waiting for {target.Name}'s window… Capture resumes once it can be captured.",
             overlay: false).Id;
     }
 
@@ -48,7 +50,7 @@ internal sealed class CaptureWaitWarnings(Warnings warnings, ILogger log)
     {
         if (captured)
         {
-            log.LogInformation("Capturing {Name} (process {Pid}) after waiting for its window", target.Name, target.ProcessId);
+            log.LogInformation("Capturing {Name} (process {Pid}) again after waiting for its window", target.Name, target.ProcessId);
         }
         else
         {

@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Output;
@@ -14,31 +16,52 @@ namespace ReplayBuffer.Engine.Tests;
 /// <summary>
 /// Bugfix tiny-startup-window-capture, on a real window: a game proposed while its window is a
 /// 156×27 startup placeholder (as Rocket League's is) isn't captured until the window grows, and
-/// then is, so a save works.
+/// then is, so a save works. When that window is then replaced by another of the same process, the
+/// session follows it and keeps its ring.
 /// </summary>
 public sealed class TinyStartupWindowCaptureTests : IDisposable
 {
+    // A placeholder window that starts at 156x27; once the signal file appears it closes, and 1.5 s
+    // later the process shows its real window (a new handle). The message loop isn't tied to a form,
+    // so the process outlives its first window.
     private const string WindowScript =
         """
-        param([string] $Title)
+        param([string] $Title, [string] $Signal)
         Add-Type -AssemblyName System.Windows.Forms
-        $form = New-Object System.Windows.Forms.Form
-        $form.Text = $Title
-        $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
-        $form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
-        $form.Location = New-Object System.Drawing.Point(100, 100)
-        $form.ClientSize = New-Object System.Drawing.Size(156, 27)
+        function New-GameForm([string] $text, [int] $width, [int] $height) {
+            $form = New-Object System.Windows.Forms.Form
+            $form.Text = $text
+            $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+            $form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+            $form.Location = New-Object System.Drawing.Point(100, 100)
+            $form.ClientSize = New-Object System.Drawing.Size($width, $height)
+            $form
+        }
+        $script:first = New-GameForm $Title 156 27
+        $script:second = $null
+        $script:closedAt = 0
         $start = [Diagnostics.Stopwatch]::StartNew()
         $timer = New-Object System.Windows.Forms.Timer
         $timer.Interval = 16
         $timer.Add_Tick({
             $v = [int](($start.ElapsedMilliseconds / 4) % 255)
-            $form.BackColor = [Drawing.Color]::FromArgb($v, 255 - $v, 128)
+            $color = [Drawing.Color]::FromArgb($v, 255 - $v, 128)
+            if ($null -ne $script:first) {
+                $script:first.BackColor = $color
+                if (Test-Path $Signal) {
+                    $script:first.Close()
+                    $script:first = $null
+                    $script:closedAt = $start.ElapsedMilliseconds
+                }
+            } elseif ($null -eq $script:second -and $start.ElapsedMilliseconds - $script:closedAt -gt 1500) {
+                $script:second = New-GameForm ($Title + ' main') 640 480
+                $script:second.Show()
+            }
+            if ($null -ne $script:second) { $script:second.BackColor = $color }
         })
         $timer.Start()
-        $form.Show()
-        $form.Hide()
-        [void] $form.ShowDialog()
+        $script:first.Show()
+        [System.Windows.Forms.Application]::Run((New-Object System.Windows.Forms.ApplicationContext))
         """;
 
     private const string ProfileId = @"c:\games\tiny\tinygame.exe";
@@ -99,17 +122,22 @@ public sealed class TinyStartupWindowCaptureTests : IDisposable
             }),
         };
 
-        var window = SessionTestKit.OpenWindow(_directory, _processes, WindowScript);
+        var signal = Path.Combine(_directory, "replace-window.signal");
+        var window = SessionTestKit.OpenWindow(_directory, _processes, WindowScript, "-Signal", signal);
         var anchored = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var waiting = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var waiting = System.Threading.Channels.Channel.CreateUnbounded<string>();
+        var ended = System.Threading.Channels.Channel.CreateUnbounded<bool>();
         var saved = System.Threading.Channels.Channel.CreateUnbounded<ClipSaved>();
-        var options = new CaptureSessionOptions { OutputFolder = _directory, Replay = true, Anchored = qpc => anchored.TrySetResult(qpc) };
+        var options = new CaptureSessionOptions { OutputFolder = _directory, Replay = true, FollowWindow = true, Anchored = qpc => anchored.TrySetResult(qpc) };
+
+        // The engine's window choice, its waits reported to the test instead of the status line.
         var wait = new CaptureWait(
-            target => WindowFinder.NotCapturable(target.Window, CaptureWaitWarnings.MinWidth, CaptureWaitWarnings.MinHeight),
-            (_, why) => waiting.TrySetResult(why),
-            (_, captured) => ended.TrySetResult(captured),
-            e => CaptureSession.CodeOf(e) == ReplayBuffer.Contracts.ErrorCodes.CaptureFailed)
+            target => WindowFinder.CaptureWindowOf(target.ProcessId, target.Window, CaptureWaitWarnings.MinWidth, CaptureWaitWarnings.MinHeight) is var (handle, why) && handle != 0
+                ? CaptureWindow.Of(handle)
+                : CaptureWindow.None(why ?? "no window"),
+            (_, why) => waiting.Writer.TryWrite(why),
+            (_, captured) => ended.Writer.TryWrite(captured),
+            e => CaptureSession.CodeOf(e) == ErrorCodes.CaptureFailed)
         {
             Poll = TimeSpan.FromMilliseconds(200),
         };
@@ -123,20 +151,40 @@ public sealed class TinyStartupWindowCaptureTests : IDisposable
         orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "tinygame.exe"), TargetChangeReason.Detected));
 
         // The placeholder is waited for, not captured.
-        Assert.Contains("156x27", await waiting.Task.WaitAsync(Timeout, Token), StringComparison.Ordinal);
+        Assert.Contains("156x27", await NextAsync(waiting), StringComparison.Ordinal);
         await Task.Delay(TimeSpan.FromSeconds(2), Token);
         Assert.False(anchored.Task.IsCompleted);
 
         // The game grows its window: capture starts, and a save some seconds later writes a Clip.
         Assert.True(Native.SetWindowPos(window.Handle, 0, 0, 0, 640, 480, Native.NoMoveNoZOrderNoActivate), $"SetWindowPos failed: {Marshal.GetLastPInvokeError()}");
-        await anchored.Task.WaitAsync(Timeout, Token);
-        Assert.True(await ended.Task.WaitAsync(Timeout, Token));
+        var anchor = await anchored.Task.WaitAsync(Timeout, Token);
+        Assert.True(await NextAsync(ended));
         await Task.Delay(TimeSpan.FromSeconds(3), Token);
         Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
-        var clip = await saved.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
+        var before = await NextAsync(saved);
+        Assert.True(new FileInfo(before.Path).Length > 0, before.Path);
 
-        Assert.True(new FileInfo(clip.Path).Length > 0, clip.Path);
+        // The window is replaced by a second one of the same process: the session waits for it and
+        // moves to it, keeping its ring, so a save then covers the time before the swap too.
+        File.WriteAllText(signal, "");
+        await NextAsync(waiting);
+        Assert.True(await NextAsync(ended));
+        var swapped = Stopwatch.GetTimestamp();
+        await Task.Delay(TimeSpan.FromSeconds(3), Token);
+        var press = Stopwatch.GetTimestamp();
+        Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press)));
+        var after = await NextAsync(saved);
+
+        var duration = double.Parse(
+            SessionTestKit.Probe(after.Path, "-show_streams").GetProperty("streams")[0].GetProperty("duration").GetString()!,
+            CultureInfo.InvariantCulture);
+        var sinceSwap = (double)(press - swapped) / Stopwatch.Frequency;
+        var sinceAnchor = (double)(press - anchor) / Stopwatch.Frequency;
+        Assert.True(duration > sinceSwap + 2, $"the Clip is {duration:0.0} s; the swap was {sinceSwap:0.0} s and the anchor {sinceAnchor:0.0} s before the press");
     }
+
+    private static async Task<T> NextAsync<T>(System.Threading.Channels.Channel<T> channel) =>
+        await channel.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);
 
     private static class Native
     {
