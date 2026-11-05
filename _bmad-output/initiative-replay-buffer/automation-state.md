@@ -42,9 +42,9 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 12.1 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; 12.1 in QA; 11.5 and 12.1 Heavy tonight |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with the 12.1 fix and merge; 11.5 and 12.1 Heavy tonight |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
@@ -199,7 +199,7 @@ The coordinator logs each QA round in the Log below.
 | 32.4 | 11.4 Screens to record: the picker on Hotkeys | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
 | 32.5 | 11.5 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | merged (`ae8ad66`); open until the Heavy MonitorRecordingCaptureTests rerun passes after 8.8 |
 | 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
-| 33.1 | 12.1 Tracer: the matchSource key and a game chain at the source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA; Heavy tonight |
+| 33.1 | 12.1 Tracer: the matchSource key and a game chain at the source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | QA: Heavy-test gap being fixed, then merge with the ticket open; Heavy tonight |
 | 33.2 | 12.6 Architecture: AD-26, the source output size | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 33.3 | 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | | pending |
 | 33.4 | 12.3 Source in the Video quality section | | pending |
@@ -963,3 +963,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: **Builder: "for 12, I accept the recommended answers."** 12.6 (AD-26 spine edit, docs only; the coordinator reviews and merges it) went to story-2-7. 12.1 (match-source tracer) went to qa-2-1 for the day part (default tests); its Heavy check joins tonight's queue after the Disk soak and 11.5's rerun. 11.5's code is already in develop, so 12.1 builds on it. Cards In progress.
 - 2026-11-05: 12.6 (AD-26, "Source output size: the chain follows the source, a file never changes size") was reviewed by the coordinator and merged, then marked done. It covers: matchSource means resolution only; a game's size is set at its first frame and fitted to the codec's largest side, with no codec switch for games; a size change held 3 s moves the chain through AD-7's build-ahead switch, started by the engine and never during a Recording; one screen goes through AD-25's `Plan`. AD-7 and AD-25 point to it, and epic 12's Notes mark the defaults as the builder's decisions. The coordinator also added the R41 capability-map row and binds entry the plan flagged. 12.2 waits on 12.1.
 - 2026-11-05: 12.1 READY FOR QA at `1098794`: an optional `VideoSettings.MatchSource` (left out of the JSON when false); Core's `SourceOutputSize.For`; `EncoderChain.SizeTo` before `Build`, with the first game chain sized from its first frame and later chains keeping that size; nothing changes when off, for Monitor sessions or under 640×360; `debug-capture --match-source`. Contracts 137, Core 170, Media 102, Platform.Capture 8, Engine 201 and App 197 passed; publish clean. QA went to slice-epic-8 (Sonnet, high effort). **Tonight's queue adds:** `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*ARealCaptureOfA2560By1440WindowWithMatchSourceRecordsAt2560By1440"` (qa-2-1, after 11.5's rerun).
+- 2026-11-05: QA 12.1 at `1098794`: the code is fine (AD-26, AD-22 and the off-path hold; a whole-solution default run had 0 failures). One gap: the Heavy test doesn't check the Output frame rate or the about-30 s duration. qa-2-1 adds both (not run until tonight) and fixes a doc nit. The coordinator checks the diff with no new QA round; it merges with the ticket open until tonight's Heavy check, so 12.3 can start.
