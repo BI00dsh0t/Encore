@@ -119,6 +119,46 @@ public sealed class PlayerTransportTests : IDisposable
         Assert.Equal("1:02:03", PlayerPage.Format(TimeSpan.FromSeconds(3723), TimeSpan.FromHours(2)));
     }
 
+    // QA 14.5: a view file from before 14.5 has no player keys and loads full and unmuted.
+    [Fact]
+    public void AViewFileFromBeforeThePlayerLoadsFullAndUnmuted()
+    {
+        var file = Path.Combine(_folder, "old-view.json");
+        File.WriteAllText(file, """{ "GroupBy": "Day", "Game": null, "Date": "All", "FavouritesOnly": true, "Sort": "Name" }""");
+
+        var state = LibraryViewState.Load(file);
+
+        Assert.Equal((LibraryGrouping.Day, true, LibrarySort.Name), (state.GroupBy, state.FavouritesOnly, state.Sort));
+        Assert.Equal((1.0, false), (state.PlayerVolume, state.PlayerMuted));
+    }
+
+    // QA 14.5: the volume steps by whole hundredths with no drift, and any change unmutes, the slider's included.
+    [Fact]
+    public void TheVolumeStepsWithoutDriftAndAnyChangeUnmutes()
+    {
+        var player = new FakePlayer();
+        var page = Open(player);
+
+        page.Volume = 0.333333;
+        Assert.Equal(0.33, page.Volume);
+        page.Volume = 0.1;
+        page.ChangeVolume(-PlayerPage.VolumeStep);
+        page.ChangeVolume(-PlayerPage.VolumeStep);
+        Assert.Equal(0.0, page.Volume);
+        for (var i = 0; i < 25; i++)
+        {
+            page.ChangeVolume(PlayerPage.VolumeStep);
+        }
+
+        Assert.Equal(1.0, page.Volume);
+
+        // The slider, dragged while muted, unmutes, as the keys do.
+        page.MuteCommand.Execute(null);
+        Assert.True(player.IsMuted);
+        page.Volume = 0.5;
+        Assert.Equal((0.5, false, false), (player.Volume, player.IsMuted, page.IsMuted));
+    }
+
     private static PlayerMedia Media(TimeSpan? duration) => new(1280, 720, duration, ["Game", "Mic", "Discord", "Desktop"], true);
 
     private PlayerPage Open(FakePlayer player, string? viewFile = null) => Open(player, viewFile, out _);

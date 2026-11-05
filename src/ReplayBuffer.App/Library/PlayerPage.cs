@@ -232,17 +232,31 @@ internal sealed class PlayerPage : Observable, IDisposable
         }
     }
 
-    /// <summary>The volume, 0 to 1, as the slider shows it.</summary>
+    /// <summary>
+    /// The volume, 0 to 1, as the slider shows it, rounded to 2 dp so steps don't drift. Changing it unmutes,
+    /// whether by the slider or the keys (QA 14.5), and raises <see cref="VolumeChanged"/> once.
+    /// </summary>
     public double Volume
     {
         get => _volume;
         set
         {
-            if (Set(ref _volume, Math.Clamp(value, 0, 1)))
+            if (!Set(ref _volume, Math.Round(Math.Clamp(value, 0, 1), 2)))
             {
-                Player.Volume = _volume;
-                VolumeChanged?.Invoke(_volume, _isMuted);
+                return;
             }
+
+            Player.Volume = _volume;
+            if (_isMuted)
+            {
+                _isMuted = false;
+                Player.IsMuted = false;
+                OnPropertyChanged(nameof(IsMuted));
+                OnPropertyChanged(nameof(MuteGlyph));
+                OnPropertyChanged(nameof(MuteName));
+            }
+
+            VolumeChanged?.Invoke(_volume, _isMuted);
         }
     }
 
@@ -383,11 +397,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     public void SeekBy(TimeSpan delta) => SeekTo(Position + delta);
 
     /// <summary>Up and Down: <see cref="VolumeStep"/> up or down; a change unmutes.</summary>
-    public void ChangeVolume(double delta)
-    {
-        Volume += delta;
-        IsMuted = false;
-    }
+    public void ChangeVolume(double delta) => Volume += delta;
 
     /// <summary>Seeks to the drag's latest position, if it moved since the last; the view calls it once a rendered frame while dragging.</summary>
     public void ApplyPendingScrub()

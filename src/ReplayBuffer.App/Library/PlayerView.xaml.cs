@@ -48,6 +48,9 @@ internal partial class PlayerView
     // Frames the player itself has delivered since the page opened: what the no-picture timer waits for.
     private int _playerFrames;
 
+    // Whether the no-picture timer is due: started when the media arrives, paused while the front buffer is gone.
+    private bool _noPictureWaiting;
+
     public PlayerView()
     {
         InitializeComponent();
@@ -104,11 +107,13 @@ internal partial class PlayerView
             old.PropertyChanged -= OnPagePropertyChanged;
         }
 
+        // The scrub stops while its page is still known, so the page's IsScrubbing is cleared (QA 14.5).
+        StopScrub();
         _page = null;
         _settle.Stop();
         _position.Stop();
         _noPicture.Stop();
-        StopScrub();
+        _noPictureWaiting = false;
         ReleaseSurface();
         if (page is not null && IsLoaded)
         {
@@ -249,6 +254,7 @@ internal partial class PlayerView
     private void OnNoPicture(object? sender, EventArgs e)
     {
         _noPicture.Stop();
+        _noPictureWaiting = false;
         if (Volatile.Read(ref _playerFrames) == 0 && _page is { IsClosed: false, IsFailed: false } page)
         {
             page.ShowFailure();
@@ -268,7 +274,11 @@ internal partial class PlayerView
         if (e.PropertyName == nameof(PlayerPage.Media))
         {
             _noPicture.Interval = NoPictureTimeout;
-            _noPicture.Start();
+            _noPictureWaiting = true;
+            if (_image.IsFrontBufferAvailable)
+            {
+                _noPicture.Start();
+            }
             OnFrameAvailable();
         }
         else if (e.PropertyName == nameof(PlayerPage.IsPlaying) && _page is { } page)
@@ -335,11 +345,30 @@ internal partial class PlayerView
 
     // A lock screen or display change loses the D3D9 device: remake the surface on new devices when it's
     // back, and redraw the current frame, paused or playing.
-    private void OnFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e)
+    private void OnFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e) => FrontBufferChanged(e.NewValue is true);
+
+    /// <summary>
+    /// The front buffer went (<paramref name="available"/> false: a lock screen, a display change) or came back.
+    /// While it's gone no frame can be shown, so the no-picture timer pauses, and it restarts in full when it's
+    /// back (QA 14.6). On its return the surface is remade on new devices and the current frame redrawn.
+    /// </summary>
+    internal void FrontBufferChanged(bool available)
     {
-        if (e.NewValue is not true || _page is not { IsClosed: false })
+        if (!available)
+        {
+            _noPicture.Stop();
+            return;
+        }
+
+        if (_page is not { IsClosed: false })
         {
             return;
+        }
+
+        if (_noPictureWaiting && Volatile.Read(ref _playerFrames) == 0)
+        {
+            _noPicture.Stop();
+            _noPicture.Start();
         }
 
         ReleaseSurface();
