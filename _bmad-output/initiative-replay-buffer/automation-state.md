@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | busy with 11.4 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy with bugfix full-run-flaky-tests (8.8 held at e3822aa) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 10.10 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.10 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
@@ -187,7 +187,7 @@ The coordinator logs each QA round in the Log below.
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.7 | 10.10 Games list and a page per game | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA |
+| 31.7 | 10.10 Games list and a page per game | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed; minor fixes, then merging |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
 | 31.10 | 10.7 Refactor sweep | | pending |
@@ -871,3 +871,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: Bugfix `load-sensitive-tests` merged (`05a89ec`, `test: merge load-sensitive-tests`) after QA passed at `a0768d0`: the Library theme test waits for realised row containers, and the reselect test reads persisted files with sharing and a 2 s retry (it replaces 11.2's `ReadWhenFree`). The loaded full runs had leaked one `ReplayBuffer-Test-*` engine per run from the App tests (11 stopped, all from slice-epic-5's worktree); that is followed up in bugfix `full-run-flaky-tests`, which slice-epic-5 has started.
 - 2026-11-05: load-sensitive-tests merged (`05a89ec`) and logged by slice-epic-5. Synced first: 11.2's `ReadWhenFree` duplicated the fix, so `ReadShared` was kept and that helper dropped. App 181 and Engine 193 passed. bugfix full-run-flaky-tests has started. First lead: each loaded full run leaks one `ReplayBuffer-Test-*` engine from App.Tests' bin.
 - 2026-11-05: 10.10 READY FOR QA at `e348991` (from develop `a098561`): a reusable `SettingsPage.DrillIn` with a breadcrumb header; the Games list (grouped, shell icons through the additive `ShellThumbnail.TryGetIcon`, pills, Add a game… through the 10.9 file picker); a game's page (rename, Capture, the Clips, Video quality and Audio tracks inheritance sections, Recordings, read-only Files, Stop detecting); the Use Global boxes gone. 10.9's follow-up was judged unneeded: there's no per-game folder override, and a game's folder sits inside the Clips folder. 0-warning build; Contracts 128, Core 161, Platform.Desktop 13 and App 185 passed. QA went to slice-epic-8 (Sonnet, high effort). Human Check on merge: the builder walks their real games, changes one game's Clips and resets it, Ignores one, and adds one by hand.
+- 2026-11-05: QA 10.10 passed at `e348991` with 3 minor findings, to fix before the merge with no new QA round: (1) the game page header shows a letter tile, not the program's icon; (2) reselecting the Games nav item by keyboard doesn't close the page; (3) double spaces in the source and program caption. AD-22 and AD-4 hold, the keyboard paths and drafts work, and the 10.9 follow-up reasoning was agreed. Core 161, Contracts 128, Platform.Desktop 13 and App 185 passed (one load flake, which passed alone). qa-1-14 is fixing, then merging.
