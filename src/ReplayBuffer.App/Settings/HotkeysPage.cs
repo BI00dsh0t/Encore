@@ -13,7 +13,8 @@ namespace ReplayBuffer.App.Settings;
 /// op at once. A combination another action has is refused before sending, by the engine's rule (same key,
 /// same modifiers ignoring NoRepeat, whatever the mode). Story 10.9 groups the rows into Clips,
 /// Recordings, Monitor Recording (with the screen picker moved here from the removed Recordings page)
-/// and Microphone, each with its plain sentence. Members run on the UI thread.
+/// and Microphone, each with its plain sentence. Story 11.4's <see cref="MonitorPicker"/> chooses the
+/// screens a Monitor Recording composites. Members run on the UI thread.
 /// </summary>
 internal sealed class HotkeysPage : SettingsPage
 {
@@ -48,7 +49,7 @@ internal sealed class HotkeysPage : SettingsPage
     /// <summary>Microphone: Mic mute.</summary>
     public IReadOnlyList<HotkeyRow> MicRows => [.. Rows.Where(r => r.Action == HotkeyAction.MicMute)];
 
-    /// <summary>The screen a Monitor Recording captures, beside its key.</summary>
+    /// <summary>The screens a Monitor Recording captures, beside its key.</summary>
     public MonitorPicker Monitor { get; }
 
     /// <summary>The Clip sentence (EXPERIENCE.md "Clips and Recordings, explained").</summary>
@@ -61,7 +62,7 @@ internal sealed class HotkeysPage : SettingsPage
 
     /// <summary>The Monitor Recording sentence.</summary>
     public string MonitorHelp =>
-        $"A Recording of a whole screen instead of a game, for anything that isn't detected as a game. Start and stop it with {KeyName(_mode == RecordHotkeyMode.Toggle ? HotkeyAction.MonitorRecordToggle : HotkeyAction.MonitorRecordStart, "the Monitor Recording key")}.";
+        $"A Recording of your screens instead of a game, for anything that isn't detected as a game. Start and stop it with {KeyName(_mode == RecordHotkeyMode.Toggle ? HotkeyAction.MonitorRecordToggle : HotkeyAction.MonitorRecordStart, "the Monitor Recording key")}.";
 
     public string MicHelp => "Silences your microphone on the tracks you choose in Audio Tracks.";
 
@@ -73,7 +74,7 @@ internal sealed class HotkeysPage : SettingsPage
         _ => $"{seconds / 60} min {seconds % 60} s",
     };
 
-    /// <summary>Shows the screens a newly connected engine run lists. Called before <see cref="SettingsPage.Render"/>.</summary>
+    /// <summary>Shows the screens a newly connected engine run lists, and the probe's codecs. Called before <see cref="SettingsPage.Render"/>.</summary>
     public void ShowMonitors(StateSnapshot state) => Monitor.ShowState(state);
 
     /// <summary>The row waiting for a combination, or null.</summary>
