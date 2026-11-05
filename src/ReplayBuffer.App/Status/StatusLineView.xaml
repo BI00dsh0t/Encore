@@ -36,6 +36,13 @@
                                 VerticalAlignment="Center"
                                 Content="{Binding State}"
                                 Style="{DynamicResource RbStatusStateStyle}" />
+                <!-- Story 10.6: which key saves and how much, while capturing. -->
+                <TextBlock x:Name="HintLine"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="{Binding Hint}"
+                           TextTrimming="CharacterEllipsis" />
             </DockPanel>
             <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding Warnings}" Focusable="False">

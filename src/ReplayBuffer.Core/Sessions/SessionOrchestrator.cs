@@ -1348,7 +1348,7 @@ public sealed class SessionOrchestrator : IDisposable
 
         var sessionId = active.Id;
         var library = _clips.Library ?? NoLibraryWrites.Instance;
-        library.BeginWrite(path, active.Spec.Target.ProfileId);
+        library.BeginWrite(path, active.Spec.Target.ProfileId, LibraryItemKinds.Clip);
         try
         {
             write.Write(path, error => Post(new ClipWritten(sessionId, qpc, write, path, error)));
@@ -2424,7 +2424,7 @@ public sealed class SessionOrchestrator : IDisposable
     {
         var path = recording.Path;
         var library = recordings.Library ?? NoLibraryWrites.Instance;
-        library.BeginWrite(path, profileId);
+        library.BeginWrite(path, profileId, recording.Monitor ? LibraryItemKinds.MonitorRecording : LibraryItemKinds.Recording);
         recordings.Open?.Opened(path);
         try
         {

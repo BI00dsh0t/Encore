@@ -261,6 +261,35 @@ public sealed class LibraryActorTests : IDisposable
     }
 
     [Fact]
+    public void KindsAreKeptThroughTheIndexAndARestartAndAScannedFileHasNoneOutsideMonitorRecordings()
+    {
+        // Story 10.6 (AD-22): the writer says what it writes; the scan can't tell, except in Monitor Recordings.
+        var clip = Path.Combine(Output, "Game", "clip.mp4");
+        var recording = Path.Combine(Output, "Game", "match.mp4");
+        Directory.CreateDirectory(Path.Combine(Output, "Monitor Recordings"));
+        Directory.CreateDirectory(Path.Combine(Output, "Game"));
+        File.WriteAllBytes(Path.Combine(Output, "Monitor Recordings", "desk.mp4"), Mp4());
+        File.WriteAllBytes(Path.Combine(Output, "Game", "found.mp4"), Mp4());
+        using (var library = new Harness(this, LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items))
+        {
+            library.Actor.Watching = true;
+            library.Actor.BeginWrite(clip, ProfileId, LibraryItemKinds.Clip);
+            library.Actor.BeginWrite(recording, ProfileId, LibraryItemKinds.Recording);
+            File.WriteAllBytes(clip, Mp4());
+            File.WriteAllBytes(recording, Mp4());
+            library.Actor.EndWrite(clip, WriteOutcome.Written);
+            library.Actor.EndWrite(recording, WriteOutcome.Written);
+            library.WaitFor(index => index.TryGetValue(@"Game\match.mp4", out var r) && !r.BeingWritten && index.TryGetValue(@"Game\clip.mp4", out var c) && !c.BeingWritten);
+        }
+
+        var kinds = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items.ToDictionary(i => i.Path, i => i.Kind);
+        Assert.Equal(LibraryItemKinds.Clip, kinds[@"Game\clip.mp4"]);
+        Assert.Equal(LibraryItemKinds.Recording, kinds[@"Game\match.mp4"]);
+        Assert.Null(kinds[@"Game\found.mp4"]);
+        Assert.Equal(LibraryItemKinds.MonitorRecording, kinds[@"Monitor Recordings\desk.mp4"]);
+    }
+
+    [Fact]
     public async Task AFavouriteIsSavedAndMovesWithAnOutsideRename()
     {
         File.WriteAllBytes(Path.Combine(Output, "Game", "clip.mp4"), Mp4());

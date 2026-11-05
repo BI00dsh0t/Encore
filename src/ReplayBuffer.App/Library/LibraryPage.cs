@@ -84,6 +84,7 @@ internal sealed class LibraryPage : Observable
     private string _searchText = "";
     private RelayCommand? _clearSearchCommand;
     private string? _libraryFolder;
+    private int _itemCount;
     private string? _actionError;
     private string? _actionErrorPath;
 
@@ -103,6 +104,14 @@ internal sealed class LibraryPage : Observable
         Func<string?>? pickFolder = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        PropertyChanged += (_, e) =>
+        {
+            // The welcome card follows the filters and search (story 10.6).
+            if (e.PropertyName is nameof(GameFilter) or nameof(DateFilter) or nameof(FavouritesOnly) or nameof(SearchText))
+            {
+                OnPropertyChanged(nameof(ShowsWelcome));
+            }
+        };
         _thumbnails = thumbnails;
         _viewStateFile = viewStateFile;
         _time = time ?? TimeProvider.System;
@@ -319,6 +328,13 @@ internal sealed class LibraryPage : Observable
 
     public bool IsSearching => SearchText.Trim().Length > 0;
 
+    /// <summary>The empty Library's welcome card (story 10.6).</summary>
+    public LibraryWelcome Welcome { get; } = new();
+
+    /// <summary>Whether the welcome card shows: the Library holds nothing, with no filter or search.</summary>
+    public bool ShowsWelcome =>
+        _itemCount == 0 && GameFilter is null && DateFilter == LibraryDateFilter.All && !FavouritesOnly && !IsSearching;
+
     /// <summary>The list area's message when a search matches nothing; null otherwise.</summary>
     public string? NoResultsText => IsSearching && _hasSnapshot && _shownRows.Count == 0 ? $"No items match “{SearchText.Trim()}”." : null;
 
@@ -331,6 +347,13 @@ internal sealed class LibraryPage : Observable
     public void Render(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);
+        Welcome.Show(state);
+        if (_itemCount != state.Library.Count)
+        {
+            _itemCount = state.Library.Count;
+            OnPropertyChanged(nameof(ShowsWelcome));
+        }
+
         IsCleanupBlocked = state.CleanupBlocked;
         _libraryFolder = state.LibraryFolder;
         _corruptWarningId = state.Warnings.FirstOrDefault(w => w.Code == ErrorCodes.LibraryCorrupt)?.Id;
@@ -1287,6 +1310,7 @@ internal sealed class LibraryRow(
     private RelayCommand? _cancelRenameCommand;
     private bool _isRenaming;
     private string _renameText = "";
+    private string _badge = "";
 
     /// <summary>The item's key: its path relative to the Output Folder.</summary>
     public string Path { get; } = path;
@@ -1431,6 +1455,21 @@ internal sealed class LibraryRow(
     /// <summary>Ends the edit, sending nothing.</summary>
     public ICommand CancelRenameCommand => _cancelRenameCommand ??= new RelayCommand(() => IsRenaming = false);
 
+    /// <summary>The kind badge on the thumbnail: "Recording" or "Monitor Recording"; empty for a Clip or an unknown file (story 10.6).</summary>
+    public string Badge
+    {
+        get => _badge;
+        private set
+        {
+            if (Set(ref _badge, value))
+            {
+                OnPropertyChanged(nameof(HasBadge));
+            }
+        }
+    }
+
+    public bool HasBadge => _badge.Length > 0;
+
     /// <summary>The item last shown, whose identity (path, size, modified time) a command sends.</summary>
     internal LibraryItem? Item { get; private set; }
 
@@ -1443,6 +1482,12 @@ internal sealed class LibraryRow(
         Size = item.BeingWritten ? "" : LibraryPage.SizeText(item.Size);
         Length = item.BeingWritten ? "" : LibraryPage.LengthText(item.LengthSeconds);
         IsLocked = item.BeingWritten;
+        Badge = item.Kind switch
+        {
+            LibraryItemKinds.Recording => "Recording",
+            LibraryItemKinds.MonitorRecording => "Monitor Recording",
+            _ => "",
+        };
     }
 }
 

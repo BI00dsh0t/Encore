@@ -312,4 +312,45 @@ public sealed class LibraryPageTests
 
         public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
     }
+
+    [Fact]
+    public void TheWelcomeCardShowsOnlyOnAnEmptyUnfilteredLibraryAndFollowsTheSettings()
+    {
+        // Story 10.6.
+        var page = new MainViewModel(_engine, action => action()).Library;
+        Assert.True(page.ShowsWelcome);
+        Assert.Equal("Audio: none yet — your Clips will be silent", page.Welcome.Audio);
+        Assert.True(page.Welcome.IsSilent);
+
+        var mic = new LayoutDevice(Guid.NewGuid(), "{in}", "Microphone", "Yeti", AudioFlow.Input, IsMic: true);
+        _engine.State = _engine.State! with
+        {
+            LibraryFolder = @"D:\Clips",
+            Settings = SettingsDocument.Empty with
+            {
+                Revision = 2,
+                Global = SettingsMaps.EmptyValues
+                    .Add(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(90))
+                    .Add(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(new HotkeySettings(new HotkeyBinding(0x77, HotkeyModifiers.Control), null, null, null, null, null)))
+                    .Add(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(new TrackLayout([mic], [new Track(Keys.EverythingTrackId, "Everything", [mic.Key], true)]))),
+            },
+        };
+        _engine.RaiseChanged();
+
+        Assert.Equal(("Ctrl+F8", "to save the last 1 min 30 s as a Clip"), (page.Welcome.SaveKey, page.Welcome.LeadTail));
+        Assert.Equal(("Audio: Microphone", "Change"), (page.Welcome.Audio, page.Welcome.AudioLink));
+        Assert.Equal(@"Clips are saved in D:\Clips", page.Welcome.Folder);
+
+        page.FavouritesOnly = true;
+        Assert.False(page.ShowsWelcome);
+        page.FavouritesOnly = false;
+        _engine.State = _engine.State with { Seq = 3, Library = [new LibraryItem("Game\\match.mp4", null, 10, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch, Kind: LibraryItemKinds.Recording), new LibraryItem("Game\\clip.mp4", null, 10, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch, Kind: LibraryItemKinds.Clip)] };
+        _engine.RaiseChanged();
+        Assert.False(page.ShowsWelcome);
+
+        // The kind badge: a Recording's only.
+        var rows = page.Entries.OfType<LibraryRow>().ToDictionary(r => r.Name, r => r.Badge);
+        Assert.Equal("Recording", rows["match.mp4"]);
+        Assert.Equal("", rows["clip.mp4"]);
+    }
 }

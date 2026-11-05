@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Core.Output;
 using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.Core.Library;
@@ -325,7 +326,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
                         ? seconds
                         : (double?)null;
                 items.Add(entry is not null
-                    ? new LibraryItem(key, entry.ProfileId, file.Length, entry.Date, false, length, entry.Favourite, Utc(file.LastWriteTimeUtc))
+                    ? new LibraryItem(key, entry.ProfileId, file.Length, entry.Date, false, length, entry.Favourite, Utc(file.LastWriteTimeUtc), entry.Kind ?? ScannedKind(key))
                     : Scanned(file, key, profileForFolder));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -338,11 +339,14 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     }
 
     /// <inheritdoc/>
-    public void BeginWrite(string path, string? profileId)
+    public void BeginWrite(string path, string? profileId) => BeginWrite(path, profileId, null);
+
+    /// <inheritdoc/>
+    public void BeginWrite(string path, string? profileId, string? kind)
     {
         if (path is not null)
         {
-            _channel.Writer.TryWrite(new Begin(path, profileId));
+            _channel.Writer.TryWrite(new Begin(path, profileId, kind));
         }
     }
 
@@ -507,8 +511,17 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     {
         var separator = key.IndexOf(Path.DirectorySeparatorChar, StringComparison.Ordinal);
         var profileId = separator > 0 ? profileForFolder(key[..separator]) : null;
-        return new LibraryItem(key, profileId, file.Length, new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero), false, Modified: Utc(file.LastWriteTimeUtc));
+        return new LibraryItem(key, profileId, file.Length, new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero), false, Modified: Utc(file.LastWriteTimeUtc), Kind: ScannedKind(key));
     }
+
+    /// <summary>
+    /// A scanned file's kind (story 10.6): a Monitor Recording when it's in the Monitor Recordings folder;
+    /// otherwise unknown, since the scan can't tell a Clip from a Recording.
+    /// </summary>
+    private static string? ScannedKind(string key) =>
+        key.StartsWith(ProfileFolders.MonitorRecordings + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            ? LibraryItemKinds.MonitorRecording
+            : null;
 
     /// <summary>A file's <see cref="FileSystemInfo.LastWriteTimeUtc"/> as an item's <see cref="LibraryItem.Modified"/>.</summary>
     private static DateTimeOffset Utc(DateTime lastWriteUtc) => new(lastWriteUtc, TimeSpan.Zero);
@@ -927,7 +940,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         // A write over an indexed file: a length read still queued for the old file is the old file's.
         _modified.Remove(key);
         _queued.Remove(key);
-        var item = new LibraryItem(key, begin.ProfileId, 0, _time.GetUtcNow(), true);
+        var item = new LibraryItem(key, begin.ProfileId, 0, _time.GetUtcNow(), true, Kind: begin.Kind);
         _items[key] = item;
         _added(item);
     }
@@ -2026,8 +2039,8 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     // A length is saved with the modified time it was read at, so a restart can tell it still holds.
     private LibraryFileEntry Entry(LibraryItem item) =>
         item.LengthSeconds is { } length && _modified.TryGetValue(item.Path, out var modified)
-            ? new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, length, modified, item.Favourite)
-            : new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, Favourite: item.Favourite);
+            ? new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, length, modified, item.Favourite, item.Kind)
+            : new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, Favourite: item.Favourite, Kind: item.Kind);
 
     private enum ReadResult
     {
@@ -2042,7 +2055,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     private sealed record Start : Message;
 
-    private sealed record Begin(string Path, string? ProfileId) : Message;
+    private sealed record Begin(string Path, string? ProfileId, string? Kind = null) : Message;
 
     private sealed record End(string Path, WriteOutcome Outcome) : Message;
 
@@ -2093,7 +2106,7 @@ internal sealed record LibraryFile(int Version, IReadOnlyList<LibraryFileEntry> 
 /// read (or in a file from before story 7.3); the length is reused only while size and time match.
 /// Whether it is a Favourite (story 7.4); kept through a size change while the engine was off.
 /// </summary>
-internal sealed record LibraryFileEntry(string Path, string? ProfileId, DateTimeOffset Date, long? Size = null, double? LengthSeconds = null, DateTime? Modified = null, bool Favourite = false);
+internal sealed record LibraryFileEntry(string Path, string? ProfileId, DateTimeOffset Date, long? Size = null, double? LengthSeconds = null, DateTime? Modified = null, bool Favourite = false, string? Kind = null);
 
 [JsonSourceGenerationOptions(
     JsonSerializerDefaults.General,
