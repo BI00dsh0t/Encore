@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off (8.8 is held on its branch at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (holds 8.7 for its pending fps run) |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.4 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.5 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.2 |
@@ -185,7 +185,7 @@ The coordinator logs each QA round in the Log below.
 | 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 31.3 | 10.3 Library sort and search | | pending |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.5 | 10.5 Audio Tracks editor | | pending |
+| 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | | pending |
 | 31.7 | 10.10 Games list and a page per game | | pending |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
@@ -825,3 +825,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 10.4 round 1 failed with 2 findings at `77345d0`, sent to qa-1-14: (1) the seed writes a permanent empty layout when the first device listing fails or is empty; (2) the meter watch isn't unwatched on App disconnect, so the probes hold every device open (11 mics). Heavy meter cost passed: 30 devices, +0.036 core (limit 0.1), 16.0 levels/s (floor 15), so the probe-Track decision stands.
 - 2026-11-05: QA 10.4 passed at `c569ab9` (round 2): no empty seed is written, and the meter watch stops on the last disconnect and resumes on reconnect. Engine 189 and App 155 passed; publish clean; Heavy meter cost within the decision. QA's non-blocking race note (re-check for a new client before the queued Unwatch) is folded in before the merge. qa-1-14 is merging.
 - 2026-11-05: 10.4 merged (`3bec10b`, `feat(engine): merge 10.4-audio-defaults-presets`), after QA's race note was folded in (`6773990`: the disconnect's queued unwatch keeps a newer watch) and develop was synced: 0-warning build, Contracts 128, Core 161, Engine 190, Platform.Audio 26 and App 155 passed, 0 failed; publish clean. Heavy meter cost (QA): 30 devices probed, +0.036 core, 16.0 levels/s; probes kept. Marked done. qa-1-14 is back in the pool.
+- 2026-11-05: 10.4 merged (`3bec10b`, marked done `4606533`; race fix `6773990` with `MeterServeTests.ALateDisconnectUnwatchKeepsANewerWatch`), and its card is Done. 10.5 (the Audio Tracks editor) went to qa-1-14, which built 10.4 (Opus, medium effort; context kept), with its card In progress.
