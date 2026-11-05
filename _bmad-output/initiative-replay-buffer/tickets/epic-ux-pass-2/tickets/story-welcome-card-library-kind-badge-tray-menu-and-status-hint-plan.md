@@ -1,7 +1,7 @@
 ---
 title: "Welcome card, Library kind badge, tray menu and status hint"
 ticket: 6
-status: review
+status: done
 ---
 
 # Plan: 10.6 Welcome card, Library kind badge, tray menu and status hint
