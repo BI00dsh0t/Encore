@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | busy with 11.4 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy merging load-sensitive-tests, then bugfix full-run-flaky-tests (8.8 held at e3822aa) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy with bugfix full-run-flaky-tests (8.8 held at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.10 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
@@ -869,3 +869,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA passed for gaming-textbox-padding at `c53e348` with no findings: only the TextBox template has a content host; Padding is applied once; Fluent is untouched; App 182 passed; the after PNGs look right. story-2-7 is merging.
 - 2026-11-05: Bugfix `gaming-textbox-padding` merged (`e614da8`, `fix(app): merge gaming-textbox-padding`) after QA passed at `c53e348`: Gaming dark's TextBox content host takes its Padding once (it was a margin plus the ScrollViewer's padding, so every Gaming text box sat 2x inset). Develop synced first with no conflicts: 0-warning build; App 182 passed. `GamingTextBoxPaddingTests` guards it; before/after PNGs beside the App test binary.
 - 2026-11-05: Bugfix `load-sensitive-tests` merged (`05a89ec`, `test: merge load-sensitive-tests`) after QA passed at `a0768d0`: the Library theme test waits for realised row containers, and the reselect test reads persisted files with sharing and a 2 s retry (it replaces 11.2's `ReadWhenFree`). The loaded full runs had leaked one `ReplayBuffer-Test-*` engine per run from the App tests (11 stopped, all from slice-epic-5's worktree); that is followed up in bugfix `full-run-flaky-tests`, which slice-epic-5 has started.
+- 2026-11-05: load-sensitive-tests merged (`05a89ec`) and logged by slice-epic-5. Synced first: 11.2's `ReadWhenFree` duplicated the fix, so `ReadShared` was kept and that helper dropped. App 181 and Engine 193 passed. bugfix full-run-flaky-tests has started. First lead: each loaded full run leaks one `ReplayBuffer-Test-*` engine from App.Tests' bin.
