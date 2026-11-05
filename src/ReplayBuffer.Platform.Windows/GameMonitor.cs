@@ -623,6 +623,15 @@ public sealed class GameMonitor : IDisposable
         var candidate = game.Candidate = new TargetCandidate(game.Pid, window, game.ProfileId!, Path.GetFileName(game.Process.ImagePath));
         _log.LogInformation("Detected {Name} (process {Pid}, window 0x{Window:X}) at {ProfileId}", candidate.Name, game.Pid, window, candidate.ProfileId);
         _detected?.Invoke(ToDetectedGame(candidate));
+
+        // The detected callback may have just created its Game Profile Ignored (captureNewGames off,
+        // story 13.1): forget it at once, so it is never proposed in this poll.
+        if (Ignored(game))
+        {
+            game.Candidate = null;
+            _log.LogInformation("{Name} (process {Pid}) is Ignored", candidate.Name, game.Pid);
+            _exited?.Invoke(ToDetectedGame(candidate));
+        }
     }
 
     // Forgets each exited process. When the committed Target exited, hands over to the best other game

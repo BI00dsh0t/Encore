@@ -14,9 +14,17 @@ public sealed partial class KeysTests
                 "video", "trackLayout", "bufferWindow", "replayStorage", "ringPath", "saveCooldown", "outputFolder",
                 "hotkeys", "recordHotkeyMode", "monitorRecordingMonitor", "feedbackSounds", "feedbackSoundDevice",
                 "cleanup", "manualGames", "startWithWindows", "overlayDot", "appTheme",
-                "monitorRecordingScreens",
+                "monitorRecordingScreens", "captureNewGames",
             ],
             Keys.All.Select(k => k.Name));
+    }
+
+    [Fact]
+    public void CaptureNewGamesIsGlobalOnlyAndOnByDefault()
+    {
+        // Story 13.1: today's behaviour unless the builder turns it off.
+        Assert.True(Keys.CaptureNewGames.Default);
+        Assert.False(Keys.CaptureNewGames.Overridable);
     }
 
     [Fact]

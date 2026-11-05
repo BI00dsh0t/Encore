@@ -251,6 +251,72 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         Assert.Equal(0, mklink.ExitCode);
     }
 
+    [Fact]
+    public async Task WithCaptureNewGamesOffANewGameIsIgnoredNeverProposedAndAnnouncedOnce()
+    {
+        await SetCaptureNewGamesAsync(false);
+        _probe.Add(GamePid, GamePath);
+        _probe.Foreground = new GameWindow(0x10, GamePid);
+
+        // Story 13.1: the profile is created Ignored, the notice goes out, and the game is forgotten in the same poll.
+        var found = await NextOfAsync("settings.changed", "warning.raised", "game.detected", "game.exited");
+        var notice = FeedbackMessages.Raised.Read(found["warning.raised"].Payload);
+        Assert.Equal((ErrorCodes.NewGameNotCaptured, true), (notice.Code, notice.Overlay));
+        Assert.Equal("Game was found but isn't captured. Turn it on in Games.", notice.Message);
+        Assert.True(_client.State!.Settings.Profiles[GamePaths.Canonicalize(GamePath)].Ignored);
+
+        await _probe.PolledAsync(3);
+        Assert.False(_events.Reader.TryRead(out _));
+        Assert.Null(_client.State!.TargetGame);
+    }
+
+    [Fact]
+    public async Task WithCaptureNewGamesOffAHandAddedGameIsStillCaptured()
+    {
+        var update = new SettingsUpdate(0, [
+            SettingsOp.SetGlobal("captureNewGames", JsonSerializer.SerializeToElement(false, SettingsJsonContext.Default.Boolean)),
+            SettingsOp.SetGlobal("manualGames", JsonSerializer.SerializeToElement<IReadOnlyList<string>>([GamePath], SettingsJsonContext.Default.IReadOnlyListString)),
+        ]);
+        await _client.SendAsync(SettingsMessages.Update, update, Token);
+        await NextAsync("settings.changed");
+
+        _probe.Add(GamePid, GamePath);
+        _probe.AddWindow(new GameWindow(0x40, GamePid));
+
+        await NextAsync("settings.changed");
+        await NextAsync("game.detected");
+        await NextAsync("target.changed");
+        Assert.False(_client.State!.Settings.Profiles[GamePaths.Canonicalize(GamePath)].Ignored);
+    }
+
+    [Fact]
+    public async Task TurningCaptureNewGamesOffLeavesAnExistingGameCaptured()
+    {
+        var first = _probe.Add(GamePid, GamePath);
+        _probe.Foreground = new GameWindow(0x10, GamePid);
+        await NextAsync("settings.changed");
+        await NextAsync("game.detected");
+        await NextAsync("target.changed");
+        first.HasExited = true;
+        await NextOfAsync("game.exited", "target.changed");
+
+        await SetCaptureNewGamesAsync(false);
+        _probe.Add(GamePid + 1, GamePath);
+        _probe.Foreground = new GameWindow(0x11, GamePid + 1);
+
+        await NextAsync("game.detected");
+        var target = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload);
+        Assert.Equal(GamePid + 1, target.To!.ProcessId);
+        Assert.False(_client.State!.Settings.Profiles[GamePaths.Canonicalize(GamePath)].Ignored);
+    }
+
+    private async Task SetCaptureNewGamesAsync(bool on)
+    {
+        var value = JsonSerializer.SerializeToElement(on, SettingsJsonContext.Default.Boolean);
+        await _client.SendAsync(SettingsMessages.Update, new SettingsUpdate(_client.State!.Settings.Revision, [SettingsOp.SetGlobal("captureNewGames", value)]), Token);
+        await NextAsync("settings.changed");
+    }
+
     private async Task SetIgnoredAsync(string profileId, bool ignored)
     {
         var value = JsonSerializer.SerializeToElement(ignored, SettingsJsonContext.Default.Boolean);

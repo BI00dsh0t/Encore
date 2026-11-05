@@ -10,6 +10,7 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
     private bool _startWithWindows;
     private OverlayDotMode _overlayDot = Keys.OverlayDot.Default;
     private AppTheme _appTheme = Keys.AppTheme.Default;
+    private bool _captureNewGames = Keys.CaptureNewGames.Default;
 
     private static readonly IReadOnlyList<OverlayDotChoice> Choices =
     [
@@ -77,6 +78,22 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
         }
     }
 
+    /// <summary>
+    /// <c>captureNewGames</c> (story 13.1): whether a game found for the first time is captured.
+    /// Setting it sends the change; existing games keep their own Capture this game.
+    /// </summary>
+    public bool CaptureNewGames
+    {
+        get => _captureNewGames;
+        set
+        {
+            if (Set(ref _captureNewGames, value))
+            {
+                _ = SendAsync([SettingsValues.SetGlobal(Keys.CaptureNewGames, value)]);
+            }
+        }
+    }
+
     protected override FrameworkElement CreateView() => new GeneralSettingsView { DataContext = this };
 
     protected override void OnRender(SettingsDocument document)
@@ -87,6 +104,8 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
         OnPropertyChanged(nameof(OverlayDot));
         _appTheme = SettingsValues.Global(document, Keys.AppTheme);
         OnPropertyChanged(nameof(AppTheme));
+        _captureNewGames = SettingsValues.Global(document, Keys.CaptureNewGames);
+        OnPropertyChanged(nameof(CaptureNewGames));
     }
 }
 

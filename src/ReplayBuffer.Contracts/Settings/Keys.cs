@@ -218,6 +218,13 @@ public static class Keys
     public static SettingKey<AppTheme> AppTheme { get; } = new(
         "appTheme", Json.AppTheme, Settings.AppTheme.Fluent, overridable: false, AppliesAt.Immediate, Enum.IsDefined);
 
+    /// <summary>
+    /// Whether a game the engine detects for the first time is captured (R41, story 13.1): false creates
+    /// its Game Profile Ignored. Hand-added games and existing profiles are never affected.
+    /// </summary>
+    public static SettingKey<bool> CaptureNewGames { get; } = new(
+        "captureNewGames", Json.Boolean, true, overridable: false, AppliesAt.Immediate);
+
     /// <summary>Every key, in catalog order.</summary>
     public static IReadOnlyList<SettingKey> All { get; } =
     [
@@ -239,6 +246,7 @@ public static class Keys
         OverlayDot,
         AppTheme,
         MonitorRecordingScreens,
+        CaptureNewGames,
     ];
 
     private static readonly Dictionary<string, SettingKey> ByName = All.ToDictionary(k => k.Name, StringComparer.Ordinal);

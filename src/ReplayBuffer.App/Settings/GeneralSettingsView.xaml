@@ -28,6 +28,13 @@
                     <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="The small on-screen indicator that shows ReplayBuffer is capturing." />
                 </StackPanel>
             </HeaderedContentControl>
+            <HeaderedContentControl Header="Games" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Content="Capture new games" IsChecked="{Binding CaptureNewGames}" />
+                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}"
+                               Text="When off, a game ReplayBuffer finds for the first time is added to Games as Not captured. Games you add by hand are always captured." />
+                </StackPanel>
+            </HeaderedContentControl>
         </theme:SettingsContent>
     </ScrollViewer>
 </UserControl>

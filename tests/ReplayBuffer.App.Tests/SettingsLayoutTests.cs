@@ -30,7 +30,7 @@ public sealed partial class SettingsLayoutTests
         var theme = ThemeService.ForWindow(window);
         var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
         {
-            (model.General, "general", ["Appearance", "Startup and Overlay"]),
+            (model.General, "general", ["Appearance", "Startup and Overlay", "Games"]),
             (model.ReplayBuffer, "clips", ["Clip length", "Where recent gameplay is kept", "Video quality — for Clips and Recordings"]),
             (model.Hotkeys, "hotkeys", ["Clips", "Recordings", "Monitor Recording", "Microphone"]),
             (model.FeedbackSounds, "sounds", ["Sounds"]),

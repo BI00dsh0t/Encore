@@ -331,6 +331,12 @@ public static class ErrorCodes
     /// </summary>
     public const string MonitorRecordingScaled = "monitor-recording-scaled";
 
+    /// <summary>
+    /// A notice (R41, story 13.1): a game was detected for the first time while <c>captureNewGames</c>
+    /// is off, so its Game Profile was created Ignored. Raised once per game, with an Overlay message.
+    /// </summary>
+    public const string NewGameNotCaptured = "new-game-not-captured";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -407,5 +413,6 @@ public static class ErrorCodes
         MonitorRecordingNoScreens,
         MonitorAddedNextRecording,
         MonitorRecordingScaled,
+        NewGameNotCaptured,
     ];
 }

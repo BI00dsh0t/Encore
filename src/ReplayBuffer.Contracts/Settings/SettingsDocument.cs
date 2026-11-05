@@ -138,4 +138,7 @@ public sealed record EffectiveSettings
     public required bool StartWithWindows { get; init; }
     public required OverlayDotMode OverlayDot { get; init; }
     public required AppTheme AppTheme { get; init; }
+
+    /// <summary>Whether a newly detected game is captured (story 13.1); defaults to true.</summary>
+    public bool CaptureNewGames { get; init; } = true;
 }
