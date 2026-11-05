@@ -1,7 +1,7 @@
 ---
 title: "Refactor sweep"
 ticket: 7
-status: review
+status: done
 ---
 
 # Plan: 10.7 Refactor sweep
@@ -37,3 +37,4 @@ status: review
 ## Log
 
 - 2026-11-05: swept and verified; READY FOR QA.
+- 2026-11-05: QA passed. Its two fixes to the glossary test: skip only real logger calls, not any line holding "Log", and scan `Library/LibraryPage.cs` and `ShellApp.cs`. After the develop sync, the scan flagged `ShellApp`'s on-disk cache folder name ("ring" in a `Path.Combine`), so path-building lines are skipped too. Synced with develop: 0-warning build, every default suite passed but Bench, publish ok. Bench not rerun after sync: the soak held the lock; unaffected (no Bench change in 10.7; it passed at `500157f`, 161).
