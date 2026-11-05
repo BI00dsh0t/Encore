@@ -3,7 +3,7 @@ title: 'Screen selection: the monitorRecordingScreens key and richer monitor lis
 type: 'feature'
 ticket: '2'
 created: '2026-11-04'
-status: built
+status: done
 baseline_revision: 'ea10553'
 route: 'quick'
 risk: 'low'
