@@ -21,6 +21,11 @@ namespace ReplayBuffer.App.Library;
 /// instance. Rows rename inline through the engine by the row's identity (story 7.7), disabled while
 /// locked; a refusal shows its short message.
 /// <para>
+/// Story 10.3 sorts the rows within each group (or in one flat list under Group by None) and searches
+/// them by file name, on top of the filters; the sort is remembered with the view choices, the search
+/// isn't. Both only change what is shown, so the selection keeps a searched-out item.
+/// </para>
+/// <para>
 /// Story 10.2 makes the list selectable with Explorer's rules. The selection is this page's set of item
 /// paths, with an anchor and a focused path, never the list control's: a filter hides selected items but
 /// keeps them, a snapshot drops the ones that left the Library, and the App's own rename carries them to
@@ -75,6 +80,9 @@ internal sealed class LibraryPage : Observable
     private string? _gameFilter;
     private LibraryDateFilter _dateFilter;
     private bool _favouritesOnly;
+    private LibrarySort _sort;
+    private string _searchText = "";
+    private RelayCommand? _clearSearchCommand;
     private string? _libraryFolder;
     private string? _actionError;
     private string? _actionErrorPath;
@@ -113,7 +121,7 @@ internal sealed class LibraryPage : Observable
         Games.Add(_allGames);
 
         var view = LibraryViewState.Load(viewStateFile);
-        (_groupBy, _gameFilter, _dateFilter, _favouritesOnly) = (view.GroupBy, view.Game, view.Date, view.FavouritesOnly);
+        (_groupBy, _gameFilter, _dateFilter, _favouritesOnly, _sort) = (view.GroupBy, view.Game, view.Date, view.FavouritesOnly, view.Sort);
     }
 
     /// <summary>Whether the banner shows: the index was rebuilt and Cleanup is off until acknowledged.</summary>
@@ -219,6 +227,17 @@ internal sealed class LibraryPage : Observable
     [
         new(LibraryGrouping.Game, "Game"),
         new(LibraryGrouping.Day, "Day"),
+        new(LibraryGrouping.None, "None"),
+    ];
+
+    public IReadOnlyList<LibraryChoice<LibrarySort>> SortOptions { get; } =
+    [
+        new(LibrarySort.NewestFirst, "Newest first"),
+        new(LibrarySort.OldestFirst, "Oldest first"),
+        new(LibrarySort.Name, "Name"),
+        new(LibrarySort.LargestFirst, "Largest first"),
+        new(LibrarySort.LongestFirst, "Longest first"),
+        new(LibrarySort.Game, "Game"),
     ];
 
     public IReadOnlyList<LibraryChoice<LibraryDateFilter>> DateOptions { get; } =
@@ -272,6 +291,39 @@ internal sealed class LibraryPage : Observable
         get => _favouritesOnly;
         set => SetView(ref _favouritesOnly, value);
     }
+
+    /// <summary>How rows are ordered within each group; remembered with the other view choices.</summary>
+    public LibrarySort Sort
+    {
+        get => _sort;
+        set => SetView(ref _sort, value);
+    }
+
+    /// <summary>
+    /// The search: rows whose file name contains it, ignoring case, on top of the other filters. Never
+    /// remembered; the view's binding delays it so it applies at most every 150 ms while typing.
+    /// </summary>
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (Set(ref _searchText, value ?? ""))
+            {
+                OnPropertyChanged(nameof(IsSearching));
+                _clearSearchCommand?.RaiseCanExecuteChanged();
+                Apply();
+            }
+        }
+    }
+
+    public bool IsSearching => SearchText.Trim().Length > 0;
+
+    /// <summary>The list area's message when a search matches nothing; null otherwise.</summary>
+    public string? NoResultsText => IsSearching && _hasSnapshot && _shownRows.Count == 0 ? $"No items match “{SearchText.Trim()}”." : null;
+
+    /// <summary>Clears the search. (The view clears its box directly, so Esc and its clear button work within the binding delay.)</summary>
+    public ICommand ClearSearchCommand => _clearSearchCommand ??= new RelayCommand(() => SearchText = "", () => SearchText.Length > 0);
 
     public FrameworkElement View => _view ??= new LibraryView { DataContext = this };
 
@@ -490,23 +542,29 @@ internal sealed class LibraryPage : Observable
             _ => DateTime.MinValue,
         };
 
-        var filtered = new List<(LibraryRow Row, string Key, DateTime Day)>(_shown.Count);
+        var search = SearchText.Trim();
+        var filtered = new List<(LibraryRow Row, LibraryItem Item, string Key, DateTime Day)>(_shown.Count);
         foreach (var (row, item, key) in _shown)
         {
             var day = TimeZoneInfo.ConvertTime(item.Date, zone).Date;
             if ((_gameFilter is null || key == _gameFilter)
                 && day >= from
                 && (_dateFilter == LibraryDateFilter.All || day <= today)
-                && (!_favouritesOnly || item.Favourite))
+                && (!_favouritesOnly || item.Favourite)
+                && (search.Length == 0 || row.Name.Contains(search, StringComparison.OrdinalIgnoreCase)))
             {
-                filtered.Add((row, key, day));
+                filtered.Add((row, item, key, day));
             }
         }
+
+        // The sort orders rows within each group; GroupBy keeps that order inside each group.
+        var comparer = new LibraryRowComparer(_sort, key => _gameOptions.TryGetValue(key, out var o) ? o.Name : key);
+        filtered.Sort((a, b) => comparer.Compare((a.Item, a.Key), (b.Item, b.Key)));
 
         var wanted = new List<object>(filtered.Count + 16);
         if (_groupBy == LibraryGrouping.Game)
         {
-            // Games in the combo's order; rows stay newest first within each.
+            // Games in the combo's order.
             var order = new Dictionary<string, int>(StringComparer.Ordinal);
             for (var i = 1; i < Games.Count; i++)
             {
@@ -519,20 +577,19 @@ internal sealed class LibraryPage : Observable
                 wanted.AddRange(group.Select(f => f.Row));
             }
         }
+        else if (_groupBy == LibraryGrouping.Day)
+        {
+            // Days newest first, or oldest first under Oldest first.
+            var days = filtered.GroupBy(f => f.Day);
+            foreach (var group in _sort == LibrarySort.OldestFirst ? days.OrderBy(g => g.Key) : days.OrderByDescending(g => g.Key))
+            {
+                wanted.Add(Header("day|" + group.Key.ToString(DayFormat, CultureInfo.InvariantCulture), DayName(group.Key, today)));
+                wanted.AddRange(group.Select(f => f.Row));
+            }
+        }
         else
         {
-            // Rows are newest first, so each day's rows are contiguous and the days come newest first.
-            DateTime? current = null;
-            foreach (var (row, _, day) in filtered)
-            {
-                if (current != day)
-                {
-                    current = day;
-                    wanted.Add(Header("day|" + day.ToString(DayFormat, CultureInfo.InvariantCulture), DayName(day, today)));
-                }
-
-                wanted.Add(row);
-            }
+            wanted.AddRange(filtered.Select(f => f.Row));
         }
 
         Sync(Entries, wanted);
@@ -543,6 +600,7 @@ internal sealed class LibraryPage : Observable
             _shownIndex[_shownRows[i].Path] = i;
         }
 
+        OnPropertyChanged(nameof(NoResultsText));
         RefreshSelection();
     }
 
@@ -571,7 +629,7 @@ internal sealed class LibraryPage : Observable
         }
 
         Apply();
-        new LibraryViewState(_groupBy, _gameFilter, _dateFilter, _favouritesOnly).Save(_viewStateFile);
+        new LibraryViewState(_groupBy, _gameFilter, _dateFilter, _favouritesOnly, _sort).Save(_viewStateFile);
         return true;
     }
 
@@ -1428,6 +1486,84 @@ internal sealed class LibraryGameOption(string? key) : Observable
     {
         get => _name;
         set => Set(ref _name, value);
+    }
+}
+
+/// <summary>
+/// The Library's row order for a <see cref="LibrarySort"/> (story 10.3): Newest and Oldest first by date then
+/// path; Name in natural order ignoring case; Largest and Longest first (an unknown length last) and Game
+/// by name, each tied by date (newest first) then path.
+/// </summary>
+/// <param name="gameName">The game name a row's group key shows.</param>
+internal sealed class LibraryRowComparer(LibrarySort sort, Func<string, string> gameName) : IComparer<(LibraryItem Item, string Key)>
+{
+    public int Compare((LibraryItem Item, string Key) x, (LibraryItem Item, string Key) y)
+    {
+        var (a, b) = (x.Item, y.Item);
+        var order = sort switch
+        {
+            LibrarySort.OldestFirst => a.Date.CompareTo(b.Date),
+            LibrarySort.Name => NaturalCompare(System.IO.Path.GetFileName(a.Path), System.IO.Path.GetFileName(b.Path)),
+            LibrarySort.LargestFirst => b.Size.CompareTo(a.Size),
+            LibrarySort.LongestFirst => (a.LengthSeconds, b.LengthSeconds) switch
+            {
+                (null, null) => 0,
+                (null, _) => 1,
+                (_, null) => -1,
+                var (la, lb) => lb!.Value.CompareTo(la!.Value),
+            },
+            LibrarySort.Game => string.Compare(gameName(x.Key), gameName(y.Key), StringComparison.OrdinalIgnoreCase),
+            _ => 0,
+        };
+
+        if (order == 0 && sort != LibrarySort.OldestFirst)
+        {
+            order = b.Date.CompareTo(a.Date);
+        }
+
+        return order != 0 ? order : StringComparer.OrdinalIgnoreCase.Compare(a.Path, b.Path);
+    }
+
+    /// <summary>Compares ignoring case, with each run of digits compared as a number ("Clip 2" before "Clip 10").</summary>
+    internal static int NaturalCompare(string a, string b)
+    {
+        int i = 0, j = 0;
+        while (i < a.Length && j < b.Length)
+        {
+            if (char.IsAsciiDigit(a[i]) && char.IsAsciiDigit(b[j]))
+            {
+                var (si, sj) = (i, j);
+                while (i < a.Length && char.IsAsciiDigit(a[i]))
+                {
+                    i++;
+                }
+
+                while (j < b.Length && char.IsAsciiDigit(b[j]))
+                {
+                    j++;
+                }
+
+                var (da, db) = (a[si..i].TrimStart('0'), b[sj..j].TrimStart('0'));
+                var number = da.Length != db.Length ? da.Length.CompareTo(db.Length) : string.CompareOrdinal(da, db);
+                if (number != 0)
+                {
+                    return number;
+                }
+
+                continue;
+            }
+
+            var letter = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
+            if (letter != 0)
+            {
+                return letter;
+            }
+
+            i++;
+            j++;
+        }
+
+        return (a.Length - i).CompareTo(b.Length - j);
     }
 }
 
