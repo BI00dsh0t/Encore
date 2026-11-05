@@ -131,7 +131,20 @@ internal sealed class IpcServer : IAsyncDisposable
             while (true)
             {
                 var connected = _listener!;
-                await connected.WaitForConnectionAsync(stop.Token).ConfigureAwait(false);
+                try
+                {
+                    await connected.WaitForConnectionAsync(stop.Token).ConfigureAwait(false);
+                }
+                catch (IOException e) when (!stop.IsCancellationRequested)
+                {
+                    // A client connected and closed before the wait took it (ERROR_NO_DATA): an App whose
+                    // connect attempt timed out on a loaded machine. Only this instance is spent; a new
+                    // one takes its place, created first so the name is never free.
+                    _log.LogWarning("A client left before its connection was accepted: {Message}", e.Message);
+                    _listener = Create(first: false);
+                    await connected.DisposeAsync().ConfigureAwait(false);
+                    continue;
+                }
 
                 // The next listener exists before this one is handed off, so the name is never free.
                 _listener = Create(first: false);
