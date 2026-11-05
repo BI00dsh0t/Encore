@@ -170,6 +170,11 @@ public static class Mp4File
 
             if (child.Type == Mvhd)
             {
+                if (child.HeaderSize != 8)
+                {
+                    return null;
+                }
+
                 mvhd ??= (child.Start, child.End);
             }
             else if (child.Type == Mvex)

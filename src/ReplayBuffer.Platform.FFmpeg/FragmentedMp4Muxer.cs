@@ -332,7 +332,15 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
         {
             _output.Overwrite(patch.MehdOffset, patch.MehdAndFree);
             _output.Overwrite(patch.MvexOffset, patch.MvexSize);
-            _logger.LogInformation("Wrote {Path}'s mehd: {Duration} at {Timescale} Hz ({Seconds:0.000} s)", Path, patch.Duration, patch.Timescale, (double)patch.Duration / patch.Timescale);
+            // A first write across a 512-byte sector is the only one a power cut can tear; FFmpeg fixes its offset.
+            var straddles = patch.MehdOffset / 512 != (patch.MehdOffset + patch.MehdAndFree.Length - 1) / 512;
+            _logger.LogInformation(
+                "Wrote {Path}'s mehd: {Duration} at {Timescale} Hz ({Seconds:0.000} s); straddles a sector: {Straddles}",
+                Path,
+                patch.Duration,
+                patch.Timescale,
+                (double)patch.Duration / patch.Timescale,
+                straddles);
         }
         catch (IOException e)
         {
