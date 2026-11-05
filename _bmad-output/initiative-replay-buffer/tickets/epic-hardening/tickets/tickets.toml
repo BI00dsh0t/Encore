@@ -117,6 +117,6 @@ title = "Hands-off operation on the builder's PC"
 description = "The closing end-to-end check of the epic's Done when, integrated: an automated suite against the installed build kills the engine and the App during a synthetic game and checks the restart notices and an injected save after each, runs the persistence suite, a 20-minute soak, and the simulated driver reset, sleep and monitor change, and confirms the conformance record has no open row. The builder then works through the epic's Human Check rows: reboots and plays with nothing to re-select, restarts the BEACN app mid-game, kills the engine in a game and sees the status line report it, forces a driver reset, sleeps and wakes, unplugs a monitor, and repeats the FPS run in their game. Finally they uninstall ShadowPlay and the month of use begins."
 verify = "The automated suite passes against the installed build, and the builder's session confirms each Done-when line and that ShadowPlay is uninstalled."
 covers = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"]
-after = [10, "10.8", "11.6"]
+after = [10, "10.8", "11.6", "12.5", "13.1"]
 hitl = true
 risk = "low"
