@@ -91,6 +91,9 @@ internal sealed record EngineHostOptions
     /// <summary>The attached monitors and their changes (T-03); <c>null</c> for Windows' (<c>WM_DISPLAYCHANGE</c>).</summary>
     public IDisplayMonitors? Displays { get; init; }
 
+    /// <summary>Moves a Library file to the Recycle Bin; <c>null</c> for the Windows Recycle Bin. Tests delete their temp files instead.</summary>
+    public Func<string, bool>? Recycle { get; init; }
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
@@ -326,7 +329,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 createMissingFolder: !instance.IsTest,
                 readLength: path => MediaLength.Read(path, ffmpegLog),
                 folderChanged: changed => hub.Publish(LibraryMessages.FolderChanged, changed),
-                recycle: RecycleBin.Recycle,
+                recycle: hostOptions.Recycle ?? RecycleBin.Recycle,
                 cleanup: () => SettingsResolver.Resolve(load.Store.Current, null).Cleanup,
                 limitUnreachable: message =>
                 {
