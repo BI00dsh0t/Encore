@@ -31,8 +31,8 @@ internal partial class PlayerView
     // How long the picture's size must hold before the texture is remade at it.
     private static readonly TimeSpan ResizeSettle = TimeSpan.FromMilliseconds(150);
 
-    // How long the page waits for its first picture before saying the file can't be played (story 14.6).
-    private static readonly TimeSpan NoPictureTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>How long the page waits for its first picture before saying the file can't be played (story 14.6); tests shorten it.</summary>
+    internal static TimeSpan NoPictureTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
     // How often the seek bar and time follow the player while it plays.
     private static readonly TimeSpan PositionInterval = TimeSpan.FromMilliseconds(100);
@@ -45,6 +45,16 @@ internal partial class PlayerView
     private VideoSurface? _surface;
     private int _presentPending;
 
+    // Frames the player itself has delivered since the page opened: what the no-picture timer waits for.
+    private int _playerFrames;
+
+    // Whether the no-picture timer is due: started when the media is there, paused while the front buffer is gone.
+    private bool _noPictureWaiting;
+
+    // Whether D3DImage has its front buffer: the one signal the present, the no-picture timer and
+    // FrontBufferChanged all read (QA 14.7).
+    private bool _frontBufferAvailable = true;
+
     public PlayerView()
     {
         InitializeComponent();
@@ -54,6 +64,7 @@ internal partial class PlayerView
         _noPicture = new DispatcherTimer(NoPictureTimeout, DispatcherPriority.Background, OnNoPicture, Dispatcher) { IsEnabled = false };
         SeekBar.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnScrubStarted));
         SeekBar.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnScrubCompleted));
+        _frontBufferAvailable = _image.IsFrontBufferAvailable;
         _image.IsFrontBufferAvailableChanged += OnFrontBufferAvailableChanged;
         ((FrameworkElement)Picture.Parent).SizeChanged += (_, _) =>
         {
@@ -97,23 +108,51 @@ internal partial class PlayerView
 
         if (_page is { } old)
         {
-            old.Player.FrameAvailable -= OnFrameAvailable;
+            old.Player.FrameAvailable -= OnPlayerFrame;
             old.PropertyChanged -= OnPagePropertyChanged;
         }
 
+        // The scrub stops while its page is still known, so the page's IsScrubbing is cleared (QA 14.5).
+        StopScrub();
         _page = null;
         _settle.Stop();
         _position.Stop();
         _noPicture.Stop();
-        StopScrub();
+        _noPictureWaiting = false;
         ReleaseSurface();
         if (page is not null && IsLoaded)
         {
             _page = page;
-            page.Player.FrameAvailable += OnFrameAvailable;
+            Interlocked.Exchange(ref _playerFrames, 0);
+            page.Player.FrameAvailable += OnPlayerFrame;
             page.PropertyChanged += OnPagePropertyChanged;
             _position.IsEnabled = page.IsPlaying;
+
+            // A page that opened before this view attached (a fast open) has its media already: wait for its
+            // picture from now, as the Media change would have started (QA 14.7).
+            if (page.Media is not null && !page.IsFailed)
+            {
+                StartNoPictureWait();
+            }
         }
+    }
+
+    private void StartNoPictureWait()
+    {
+        _noPicture.Stop();
+        _noPicture.Interval = NoPictureTimeout;
+        _noPictureWaiting = true;
+        if (_frontBufferAvailable)
+        {
+            _noPicture.Start();
+        }
+    }
+
+    // Any thread: a frame from the player itself.
+    private void OnPlayerFrame()
+    {
+        Interlocked.Increment(ref _playerFrames);
+        OnFrameAvailable();
     }
 
     // Any thread: at most one present waits on the UI thread at a time.
@@ -128,7 +167,7 @@ internal partial class PlayerView
     private void Present()
     {
         Interlocked.Exchange(ref _presentPending, 0);
-        if (_page is not { IsClosed: false, IsFailed: false, Media: { } media } page || !_image.IsFrontBufferAvailable)
+        if (_page is not { IsClosed: false, IsFailed: false, Media: { } media } page || !_frontBufferAvailable)
         {
             return;
         }
@@ -183,7 +222,6 @@ internal partial class PlayerView
 
     private void Show(VideoSurface surface)
     {
-        _noPicture.Stop();
         surface.Flush();
         _image.Lock();
         _image.AddDirtyRect(new Int32Rect(0, 0, surface.Width, surface.Height));
@@ -234,11 +272,13 @@ internal partial class PlayerView
         _surface = null;
     }
 
-    // No picture since the file opened (a truncated file, say): the page says it can't be played (story 14.6).
+    // No frame from the player since the file opened (a truncated file, say): the page says it can't be played
+    // (story 14.6). The view's own presents (a resize, the media arriving) don't count.
     private void OnNoPicture(object? sender, EventArgs e)
     {
         _noPicture.Stop();
-        if (_page is { IsClosed: false, IsFailed: false } page)
+        _noPictureWaiting = false;
+        if (Volatile.Read(ref _playerFrames) == 0 && _page is { IsClosed: false, IsFailed: false } page)
         {
             page.ShowFailure();
         }
@@ -256,7 +296,7 @@ internal partial class PlayerView
     {
         if (e.PropertyName == nameof(PlayerPage.Media))
         {
-            _noPicture.Start();
+            StartNoPictureWait();
             OnFrameAvailable();
         }
         else if (e.PropertyName == nameof(PlayerPage.IsPlaying) && _page is { } page)
@@ -323,11 +363,31 @@ internal partial class PlayerView
 
     // A lock screen or display change loses the D3D9 device: remake the surface on new devices when it's
     // back, and redraw the current frame, paused or playing.
-    private void OnFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e)
+    private void OnFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e) => FrontBufferChanged(e.NewValue is true);
+
+    /// <summary>
+    /// The front buffer went (<paramref name="available"/> false: a lock screen, a display change) or came back.
+    /// While it's gone no frame can be shown, so the no-picture timer pauses, and it restarts in full when it's
+    /// back (QA 14.6). On its return the surface is remade on new devices and the current frame redrawn.
+    /// </summary>
+    internal void FrontBufferChanged(bool available)
     {
-        if (e.NewValue is not true || _page is not { IsClosed: false })
+        _frontBufferAvailable = available;
+        if (!available)
+        {
+            _noPicture.Stop();
+            return;
+        }
+
+        if (_page is not { IsClosed: false })
         {
             return;
+        }
+
+        if (_noPictureWaiting && Volatile.Read(ref _playerFrames) == 0)
+        {
+            _noPicture.Stop();
+            _noPicture.Start();
         }
 
         ReleaseSurface();

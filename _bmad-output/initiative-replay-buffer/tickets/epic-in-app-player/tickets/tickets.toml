@@ -87,6 +87,7 @@ type = "story"
 title = "The in-app player end to end on the builder's PC"
 description = "The closing end-to-end check of the epic's Done when, integrated. An automated suite against the installed build on a dev instance opens a fixture Clip, a Recording and a 6400×2160 Monitor Recording from the Library, then for each: checks a frame and the full length, switches Track mid-play, seeks, plays the last second, goes back and deletes the file. It also runs an open-and-close loop of 200 for memory, and shows the missing-codec page through 14.6's dev-instance switch. GPU parts are Heavy and run at night. The builder then plays real Clips and Recordings in both looks, switches to the Mic Track and back while it plays, and opens one in the default player."
 verify = "The automated suite passes against the installed build, and the builder's session confirms each Done-when line."
+notes = ["QA 14.5, 2026-11-05: under Fluent the seek bar and its thumb take the Windows accent, which is grey on this PC (#4C4A48), so the thumb reads grey on grey. That's by design (R37: Fluent follows the Windows accent). Builder's check: is it visible enough here, or should the player's seek bar use a fixed colour under Fluent?"]
 covers = ["R1", "R2", "R3", "R4", "R5", "R6", "R7"]
 after = [7]
 hitl = true

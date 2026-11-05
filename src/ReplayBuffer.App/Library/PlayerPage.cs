@@ -102,6 +102,9 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>The item's name.</summary>
     public string Title { get; }
 
+    /// <summary>The file's name, for the log.</summary>
+    private string FileName => System.IO.Path.GetFileName(Path);
+
     /// <summary>The player; the view copies its frames.</summary>
     public IPlayer Player { get; }
 
@@ -229,15 +232,41 @@ internal sealed class PlayerPage : Observable, IDisposable
         }
     }
 
-    /// <summary>The volume, 0 to 1, as the slider shows it.</summary>
+    /// <summary>
+    /// The volume, 0 to 1, as the slider shows it, rounded to 2 dp so steps don't drift.
+    /// <list type="bullet">
+    /// <item>A set always raises PropertyChanged, so a slider at 0.333 snaps to the 0.33 kept (QA 14.7).</item>
+    /// <item>Any request while muted unmutes, by the slider or the keys, even one that leaves the value as it is
+    /// (Up at 1.0, Down at 0).</item>
+    /// <item><see cref="VolumeChanged"/> is raised once, when the volume or the mute changed.</item>
+    /// </list>
+    /// </summary>
     public double Volume
     {
         get => _volume;
         set
         {
-            if (Set(ref _volume, Math.Clamp(value, 0, 1)))
+            var rounded = Math.Round(Math.Clamp(value, 0, 1), 2);
+            var changed = rounded != _volume;
+            _volume = rounded;
+            OnPropertyChanged();
+            if (changed)
             {
                 Player.Volume = _volume;
+            }
+
+            var unmuted = _isMuted;
+            if (unmuted)
+            {
+                _isMuted = false;
+                Player.IsMuted = false;
+                OnPropertyChanged(nameof(IsMuted));
+                OnPropertyChanged(nameof(MuteGlyph));
+                OnPropertyChanged(nameof(MuteName));
+            }
+
+            if (changed || unmuted)
+            {
                 VolumeChanged?.Invoke(_volume, _isMuted);
             }
         }
@@ -318,7 +347,7 @@ internal sealed class PlayerPage : Observable, IDisposable
                 return;
             }
 
-            _log($"player: opened {System.IO.Path.GetFileName(Path)}: video {Describe(media.VideoCodec)} {(media.VideoDecodable ? "decodable" : "NOT decodable")}, "
+            _log($"player: opened {FileName}: video {Describe(media.VideoCodec)} {(media.VideoDecodable ? "decodable" : "NOT decodable")}, "
                 + $"{media.TrackNames.Count} tracks, {media.TracksPlayable?.Count(p => !p) ?? 0} not decodable");
             if (!media.VideoDecodable)
             {
@@ -352,7 +381,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         catch (Exception e) when (!IsClosed)
 #pragma warning restore CA1031
         {
-            _log($"player: couldn't open {System.IO.Path.GetFileName(Path)}: {e.GetType().Name}: {e.Message}");
+            _log($"player: couldn't open {FileName}: {e.GetType().Name}: {e.Message}");
             Fail((FailedText, null));
         }
 #pragma warning disable CA1031 // A failure after the page closed has nothing to show.
@@ -379,12 +408,8 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>Left and Right: <see cref="SeekStep"/> back or forward.</summary>
     public void SeekBy(TimeSpan delta) => SeekTo(Position + delta);
 
-    /// <summary>Up and Down: <see cref="VolumeStep"/> up or down; a change unmutes.</summary>
-    public void ChangeVolume(double delta)
-    {
-        Volume += delta;
-        IsMuted = false;
-    }
+    /// <summary>Up and Down: <see cref="VolumeStep"/> up or down; while muted it unmutes, even at the end of the range.</summary>
+    public void ChangeVolume(double delta) => Volume += delta;
 
     /// <summary>Seeks to the drag's latest position, if it moved since the last; the view calls it once a rendered frame while dragging.</summary>
     public void ApplyPendingScrub()
@@ -424,7 +449,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         }
 
         Player.Pause();
-        _log($"player: no picture for {System.IO.Path.GetFileName(Path)}");
+        _log($"player: no picture for {FileName}");
         Fail((FailedText, null));
     }
 
@@ -452,11 +477,9 @@ internal sealed class PlayerPage : Observable, IDisposable
 
     private void Fail((string Text, CodecExtension? Missing) why)
     {
+        // Set before the state, whose change raises Message and the Store link's properties.
         (_failure, _missing) = why;
         State = PlayerState.Failed;
-        OnPropertyChanged(nameof(Message));
-        OnPropertyChanged(nameof(StoreLinkText));
-        OnPropertyChanged(nameof(HasStoreLink));
     }
 
     // Marks the Track that plays, in the list and on each item.
