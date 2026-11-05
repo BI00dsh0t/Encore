@@ -9,6 +9,7 @@ companions: [_bmad-output/initiative-replay-buffer/tickets/epic-ux-pass-2/ux-pas
 after: []
 refined: true
 risk: high
+status: done
 ---
 
 # UX pass 2
