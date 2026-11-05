@@ -380,21 +380,23 @@ internal partial class PlayerView
 
         CloseSettingsMenu();
         var menu = new ContextMenu { PlacementTarget = Gear, Placement = PlacementMode.Top };
+        var itemStyle = (Style)FindResource("RbPlayerMenuItemStyle");
         menu.Items.Add(new MenuItem
         {
             Header = new TextBlock { Text = "Audio track", Style = (Style)FindResource("RbPlayerMenuHeadingStyle") },
+            Style = itemStyle,
             Focusable = false,
             IsHitTestVisible = false,
         });
         foreach (var track in page.Tracks)
         {
-            var item = new MenuItem { Header = track.Name, IsChecked = track.IsPlaying, IsEnabled = track.IsAvailable };
+            var item = new MenuItem { Header = track.Name, Style = itemStyle, IsCheckable = true, IsChecked = track.IsPlaying, IsEnabled = track.IsAvailable };
             item.Click += (_, _) => page.SelectedTrack = track;
             menu.Items.Add(item);
         }
 
         menu.Items.Add(new Separator());
-        menu.Items.Add(new MenuItem { Header = "Open in default player", Command = page.OpenInDefaultPlayerCommand });
+        menu.Items.Add(new MenuItem { Header = "Open in default player", Style = itemStyle, Command = page.OpenInDefaultPlayerCommand });
         menu.Closed += (_, _) => Gear.IsChecked = false;
         _menu = menu;
         menu.IsOpen = true;

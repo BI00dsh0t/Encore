@@ -26,6 +26,72 @@ public sealed class PlayerViewThemeTests : IDisposable
 
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
+    // The one focused render allowed for the blank-controls bug; no media, engine or GPU surface is used.
+    [Fact]
+    public void ThePlayerIconsRenderInBothLooks() => Sta.Run(() =>
+    {
+        using var page = new PlayerPage("clip.mp4", "clip", new FakePlayer(), openRead: _ => new MemoryStream([0]));
+        page.OpenAsync().GetAwaiter().GetResult();
+        var player = new PlayerView { DataContext = page };
+        player.FrontBufferChanged(false);
+        var window = new Window
+        {
+            Content = player, Width = 720, Height = 400,
+            WindowStartupLocation = WindowStartupLocation.Manual, Left = -30000, Top = -30000,
+            ShowActivated = false, ShowInTaskbar = false,
+        };
+        var looks = ThemeService.ForWindow(window);
+        try
+        {
+            foreach (var (theme, file) in new[] { (AppTheme.Fluent, "player-icons-fluent.png"), (AppTheme.GamingDark, "player-icons-gaming.png") })
+            {
+                looks.Apply(theme);
+                // Reproduce an app-level text style overriding inherited button typography in either look.
+                var textStyle = new Style(typeof(TextBlock));
+                textStyle.Setters.Add(new Setter(TextBlock.FontFamilyProperty, new FontFamily("Segoe UI")));
+                window.Resources[typeof(TextBlock)] = textStyle;
+                window.Show();
+                window.UpdateLayout();
+                Sta.Pump(TimeSpan.FromMilliseconds(100));
+                CheckIcons(theme);
+                Save(window, file);
+
+                page.PlayPauseCommand.Execute(null);
+                page.MuteCommand.Execute(null);
+                page.FullScreenCommand.Execute(null);
+                window.UpdateLayout();
+                CheckIcons(theme);
+                page.PlayPauseCommand.Execute(null);
+                page.MuteCommand.Execute(null);
+                page.FullScreenCommand.Execute(null);
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+
+        void CheckIcons(AppTheme theme)
+        {
+            foreach (var name in new[] { "PlayPause", "Mute", "Gear", "FullScreen" })
+            {
+                var button = (ButtonBase)player.FindName(name);
+                Assert.True(button.IsVisible);
+                var glyph = Assert.IsType<TextBlock>(button.Template.FindName("Glyph", button));
+                Assert.Equal(button.Content, glyph.Text);
+                Assert.Equal(button.FontFamily, glyph.FontFamily);
+                Assert.Equal(button.FontSize, glyph.FontSize);
+                Assert.Equal(button.Foreground, glyph.Foreground);
+                Assert.True(new Typeface(new FontFamily(glyph.FontFamily.Source.Split(',')[0]), glyph.FontStyle, glyph.FontWeight, glyph.FontStretch)
+                    .TryGetGlyphTypeface(out var face));
+                Assert.True(face.CharacterToGlyphMap.TryGetValue(glyph.Text[0], out var index) && index != 0,
+                    $"{theme}: {name} must draw a real icon, not a missing-glyph rectangle.");
+                Assert.True(Assert.IsType<SolidColorBrush>(glyph.Foreground).Color.A > 0);
+                Assert.True(glyph.ActualWidth > 0 && glyph.ActualHeight > 0);
+            }
+        }
+    });
+
     [Fact]
     public void ThePlayerPageShowsInBothLooksAndTheHiddenListIgnoresItsKeys() => Sta.Run(() =>
     {
@@ -125,12 +191,17 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.True(((ToggleButton)player.FindName("Gear")).IsChecked);
                 var items = menu.Items.OfType<MenuItem>().ToList();
                 Assert.Equal("Audio track", ((TextBlock)items[0].Header).Text);
+                Assert.Equal(TextAlignment.Center, ((TextBlock)items[0].Header).TextAlignment);
                 Assert.False(items[0].Focusable);
                 Assert.Equal(["Game", "Mic", "Discord", "Desktop"], items.Skip(1).Take(4).Select(i => (string)i.Header));
                 Assert.Equal([true, false, false, false], items.Skip(1).Take(4).Select(i => i.IsChecked));
                 Assert.Single(menu.Items.OfType<Separator>());
                 Assert.Equal("Open in default player", items[^1].Header);
                 Assert.All(items.Skip(1), i => Assert.True(i.Focusable));
+                var check = Assert.IsType<System.Windows.Shapes.Path>(items[1].Template.FindName("Check", items[1]));
+                Assert.True(check.IsVisible);
+                Assert.Equal(1, Grid.GetColumn(check));
+                Assert.Same(items[1].FindResource("AccentTextFillColorPrimaryBrush"), check.Stroke);
                 SaveMenu(menu, file.Replace("player-", "player-menu-", StringComparison.Ordinal));
 
                 // A choice switches Track and closes the menu.
@@ -152,6 +223,9 @@ public sealed class PlayerViewThemeTests : IDisposable
 
                 // Story 14.9, full screen: F enters it (the window loses its frame, nav and headers), Esc leaves it
                 // with the page still open, the button enters it again, and closing the page leaves it.
+                var pageHost = (FrameworkElement)window.FindName("Page");
+                var margin = new Thickness(3, 15, 7, 9);
+                pageHost.Margin = margin;
                 player.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.F) { RoutedEvent = Keyboard.KeyDownEvent });
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 Assert.True(page.Player!.IsFullScreen);
@@ -160,10 +234,22 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Save(window, file.Replace("player-", "player-fullscreen-", StringComparison.Ordinal));
                 player.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
                 Assert.False(window.IsFullScreen);
+                Assert.Equal(margin, pageHost.Margin);
                 Assert.True(model.IsDrilledIn);
                 ((IInvokeProvider)new ButtonAutomationPeer((Button)player.FindName("FullScreen"))).Invoke();
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
                 Assert.True(window.IsFullScreen);
+
+                // Alt+F4 uses the same close-to-tray path. Reopening keeps the page, with the frame restored.
+                window.Close();
+                Assert.False(window.IsVisible);
+                Assert.False(window.IsFullScreen);
+                Assert.False(page.Player.IsFullScreen);
+                Assert.Equal(margin, pageHost.Margin);
+                window.Show();
+                Assert.True(model.IsDrilledIn);
+                Assert.False(window.IsFullScreen);
+                page.Player.FullScreenCommand.Execute(null);
 
                 model.CurrentDrillIn!.Close();
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
