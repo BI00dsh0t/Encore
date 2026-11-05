@@ -40,11 +40,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; full-run-flaky-tests in QA round 2 (8.8 held at e3822aa) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy merging full-run-flaky-tests (8.8 held at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | busy with QA round 2 of full-run-flaky-tests |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -885,3 +885,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.11 READY FOR QA at `2967259` (feature `ac8ca44`, then develop with 11.4): text only (keys, codes, message names, Contracts, logs and automation ids unchanged). It rewrites the status header and engine-state texts, the tray, the engine warnings and notices, and the General help, and adds `GlossaryTests` over the App's XAML (11.4's picker included). Contracts 135, Core 165, Engine 193 and App 190 passed; publish clean. 11.3's monitor warnings aren't covered yet; 11.3 must use the glossary when it merges. QA went to slice-epic-8 (Sonnet, medium effort).
 - 2026-11-05: full-run-flaky-tests round 2 at `ae7287a`: the regression test goes through an internal `MediaLength.Read(…, whileOpen)` seam (it passes alone and fails with the file protocol restored); IpcServer disposes the spent instance in a finally. The TrackMix ceiling was kept at captured + 0.5 s (a loaded run had correct audio 1.05 s past short video), and the coordinator accepted that. FFmpeg 40, Engine 194 and App 182 passed. QA round 2 went to 2-1-tracer.
 - 2026-11-05: QA 10.11 passed at `2967259`: text only, about 25 rewordings match the glossary, and the test catches the fabricated view. App 190, Core 165, Contracts 135 and Engine passed. Gap noted for 10.7: the glossary test checks XAML only, so C#-set user strings (`warning.raised`, view models) need the sweep to extend it. qa-1-14 is merging.
+- 2026-11-05: QA round 2 passed for full-run-flaky-tests at `ae7287a`: the regression test passes alone and fails with the file protocol restored; the seam is harmless; IpcServer disposes in a finally. FFmpeg 42, Engine 194 and App 182 passed. slice-epic-5 is merging.
