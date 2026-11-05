@@ -83,13 +83,16 @@ public interface IAudioDeviceHub
 /// </summary>
 public interface IAudioEndpointSource
 {
-    /// <summary>Every active Output and Input endpoint, each <see cref="AudioDevice.Available"/>.</summary>
+    /// <summary>
+    /// Every active Output and Input endpoint, each <see cref="AudioDevice.Available"/>, with each
+    /// flow's Windows default (console role) marked <see cref="AudioDevice.IsDefault"/>.
+    /// </summary>
     /// <exception cref="Exception">The platform couldn't list them; callers log it and keep their last list.</exception>
     IReadOnlyList<AudioDevice> ListPresent();
 
     /// <summary>
-    /// An endpoint was added, removed, enabled, disabled or renamed, or the default communications
-    /// render endpoint changed. Raised on any thread, coalesced
+    /// An endpoint was added, removed, enabled, disabled or renamed, a flow's default (console role)
+    /// changed, or the default communications render endpoint changed. Raised on any thread, coalesced
     /// (a burst raises once); handlers must not block. Carries nothing: re-list with <see cref="ListPresent"/>.
     /// </summary>
     event Action? EndpointsChanged;

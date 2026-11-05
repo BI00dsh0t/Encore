@@ -434,6 +434,23 @@ public sealed class TrackLayoutPageTests
     }
 
     [Fact]
+    public void AnOpenPageWatchesAgainAfterAReconnectToTheSameEngineRun()
+    {
+        // Story 10.4: the engine stops a watch when its last client leaves.
+        var model = CreateMetered(out _);
+        Open(model);
+        Assert.Single(_engine.Sent);
+
+        _engine.Status = EngineStatus.Disconnected;
+        _engine.RaiseChanged();
+        _engine.Status = EngineStatus.Connected;
+        _engine.RaiseChanged();
+
+        Assert.Equal(2, _engine.Sent.Count);
+        Assert.IsType<MetersWatch>(_engine.Sent[^1]);
+    }
+
+    [Fact]
     public void ClosingThePageUnwatchesAndZeroesTheLevels()
     {
         var model = CreateMetered(out var saved);

@@ -181,10 +181,10 @@ internal sealed unsafe class EndpointWatcher : IDisposable
 
         public HRESULT OnDeviceRemoved(PCWSTR pwstrDeviceId) => Signal();
 
-        // The default device isn't in the list, but the default communications render endpoint is
-        // where Feedback Sounds play, so the capture check re-runs.
+        // The list marks each flow's console default (story 10.4), and the default communications
+        // render endpoint is where Feedback Sounds play, so the capture check re-runs.
         public HRESULT OnDefaultDeviceChanged(EDataFlow flow, ERole role, PCWSTR pwstrDefaultDeviceId) =>
-            flow == EDataFlow.eRender && role == ERole.eCommunications ? Signal() : Ok;
+            role == ERole.eConsole || (flow == EDataFlow.eRender && role == ERole.eCommunications) ? Signal() : Ok;
 
         // Only the two names the list shows; the store raises many other keys.
         public HRESULT OnPropertyValueChanged(PCWSTR pwstrDeviceId, PROPERTYKEY key) =>
