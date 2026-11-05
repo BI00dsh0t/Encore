@@ -44,7 +44,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (holds 8.7 for its pending fps run) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.4 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy planning multi-monitor Monitor Recording |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.2 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -192,6 +192,12 @@ The coordinator logs each QA round in the Log below.
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
+| 32.1 | 11.1 Spike: composite several monitors into one encoded video | | pending |
+| 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | | pending |
+| 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | | pending |
+| 32.4 | 11.4 Screens to record: the picker on Hotkeys | | pending |
+| 32.5 | 11.5 Refactor sweep | | pending |
+| 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -813,3 +819,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: **Builder: "begin epic 10".** 10.1 (the design pass: renders in both themes and a decision sheet for the builder) went to 2-1-tracer, which planned epic 10 (Opus, medium effort; context kept, not cleared), with its card In progress. 8.7's fps and the 8.8 soaks stay paused.
 - 2026-11-05: 10.1 is ready at `0179dd9`. The coordinator merged the docs into develop: 20 renders (10 scenes × 2 themes) and `DECISIONS-FOR-BUILDER.md` (7 questions with recommendations). Rendering found 3 adjustments, now in the DESIGN addendum: a "More ⋯" menu on the Library's action bar under gaming dark, the folder-picker buttons on a row under the path, and a stronger selected fill under Fluent's grey accent. Waiting for the builder's answers.
 - 2026-11-05: **Builder: "I approve the recommended decisions in the design docs."** Every 10.1 recommendation is approved (Decision in the epic Notes), and 10.1 is marked done. 10.2 (Library selection and bulk actions, high risk) went to story-2-7 and 10.4 (Audio Tracks defaults, seed, presets and meters, high risk) to qa-1-14, both Opus at high effort, in parallel on separate files. **Builder: "monitor recording needs to allow selecting which monitors to record, or capture all monitors. Plan that feature out."** Planning went to 2-1-tracer. 8.7's fps and 8.8 stay paused.
+- 2026-11-05: **Epic 11 "Multi-monitor recording" planned and merged** (`a6fd176`; R39 and AD-25, which also settles AD-7's open Monitor-device question as an explicit exception). Recommendation (b): one composited file, with the selected monitors blitted into one canvas laid out as Windows arranges them, scaled to the codec max and a 4K-area budget, through the existing pacer, encoder chain and writer. (a) one file per monitor is parked (it breaks AD-7's 2-chain budget). 6 stories: 11.1 spike (GPU, ready now but paused), 11.2 settings (`monitorRecordingScreens`), 11.3 engine compositor, 11.4 picker on Hotkeys (after 10.9), 11.5 sweep, 11.6 end to end. 8.11 waits on 11.6. Cards and Queue rows 32.x added. The PC has 2 monitors, both 2560x1440 side by side, on one RTX 5090 (plus a Meta Virtual Monitor adapter). Builder question pending: is a scaled side-by-side video OK? 5120x1440 exceeds H.264's 4096 px, so it would be scaled, or use HEVC or AV1 at full width.
