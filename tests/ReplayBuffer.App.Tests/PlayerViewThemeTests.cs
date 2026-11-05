@@ -158,6 +158,44 @@ public sealed class PlayerViewThemeTests : IDisposable
         }
     });
 
+    // Story 14.6, deferred to the 14.7 sweep: a page that gets no picture in time says the file can't be played.
+    [Fact]
+    public void APageWithNoPictureInTimeSaysTheFileCantBePlayed() => Sta.Run(() =>
+    {
+        var absolute = Path.Combine(_folder, Clip);
+        Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
+        File.WriteAllBytes(absolute, [0]);
+        var engine = new FakeEngineSession();
+        engine.State = engine.State! with
+        {
+            LibraryFolder = _folder,
+            Library = [new LibraryItem(Clip, null, 1, DateTimeOffset.UnixEpoch, false)],
+        };
+        var player = new FakePlayer();
+        var model = new MainViewModel(engine, action => action(), player: () => player);
+        var window = new MainWindow { DataContext = model, WindowStartupLocation = WindowStartupLocation.Manual, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
+        var timeout = PlayerView.NoPictureTimeout;
+        PlayerView.NoPictureTimeout = TimeSpan.FromMilliseconds(300);
+        try
+        {
+            window.Show();
+            var view = (LibraryView)model.Library.View;
+            Sta.PumpUntil(() => view.IsLoaded, "the Library to load");
+            model.Library.Click(model.Library.Rows.Single(), ctrl: false, shift: false);
+            model.Library.OpenFocused();
+
+            // The fake never raises a frame.
+            Sta.PumpUntil(() => model.Library.Player!.IsFailed, "the no-picture timeout");
+            Assert.Equal(PlayerPage.FailedText, model.Library.Player!.Message);
+            Assert.False(player.IsPlaying);
+        }
+        finally
+        {
+            PlayerView.NoPictureTimeout = timeout;
+            window.CloseForQuit();
+        }
+    });
+
     private static List<T> Descendants<T>(DependencyObject root)
         where T : DependencyObject
     {

@@ -699,17 +699,9 @@ internal sealed class LibraryPage : Observable
     private void SaveView() =>
         new LibraryViewState(_groupBy, _gameFilter, _dateFilter, _favouritesOnly, _sort, _playerVolume, _playerMuted).Save(_viewStateFile);
 
-    // The player's volume and mute, kept with the view choices (story 14.5).
-    private void OnPlayerVolumeChanged(double volume, bool muted)
-    {
-        if ((volume, muted) == (_playerVolume, _playerMuted))
-        {
-            return;
-        }
-
-        (_playerVolume, _playerMuted) = (volume, muted);
-        SaveView();
-    }
+    // The player's volume and mute (story 14.5), held as they change and written with the view choices when
+    // the player page closes, not once a slider step (14.7 sweep).
+    private void OnPlayerVolumeChanged(double volume, bool muted) => (_playerVolume, _playerMuted) = (volume, muted);
 
     /// <summary>Makes <paramref name="target"/> equal <paramref name="wanted"/> in place, keeping the items both share.</summary>
     /// <remarks>
@@ -1079,7 +1071,14 @@ internal sealed class LibraryPage : Observable
     {
         var page = Player;
         Player = null;
-        page?.Dispose();
+        if (page is null)
+        {
+            return;
+        }
+
+        page.VolumeChanged -= OnPlayerVolumeChanged;
+        page.Dispose();
+        SaveView();
     }
 
     private void CopySelection()

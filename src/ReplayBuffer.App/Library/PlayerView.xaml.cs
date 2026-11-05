@@ -31,8 +31,8 @@ internal partial class PlayerView
     // How long the picture's size must hold before the texture is remade at it.
     private static readonly TimeSpan ResizeSettle = TimeSpan.FromMilliseconds(150);
 
-    // How long the page waits for its first picture before saying the file can't be played (story 14.6).
-    private static readonly TimeSpan NoPictureTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>How long the page waits for its first picture before saying the file can't be played (story 14.6); tests shorten it.</summary>
+    internal static TimeSpan NoPictureTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
     // How often the seek bar and time follow the player while it plays.
     private static readonly TimeSpan PositionInterval = TimeSpan.FromMilliseconds(100);
@@ -44,6 +44,9 @@ internal partial class PlayerView
     private PlayerPage? _page;
     private VideoSurface? _surface;
     private int _presentPending;
+
+    // Frames the player itself has delivered since the page opened: what the no-picture timer waits for.
+    private int _playerFrames;
 
     public PlayerView()
     {
@@ -97,7 +100,7 @@ internal partial class PlayerView
 
         if (_page is { } old)
         {
-            old.Player.FrameAvailable -= OnFrameAvailable;
+            old.Player.FrameAvailable -= OnPlayerFrame;
             old.PropertyChanged -= OnPagePropertyChanged;
         }
 
@@ -110,10 +113,18 @@ internal partial class PlayerView
         if (page is not null && IsLoaded)
         {
             _page = page;
-            page.Player.FrameAvailable += OnFrameAvailable;
+            Interlocked.Exchange(ref _playerFrames, 0);
+            page.Player.FrameAvailable += OnPlayerFrame;
             page.PropertyChanged += OnPagePropertyChanged;
             _position.IsEnabled = page.IsPlaying;
         }
+    }
+
+    // Any thread: a frame from the player itself.
+    private void OnPlayerFrame()
+    {
+        Interlocked.Increment(ref _playerFrames);
+        OnFrameAvailable();
     }
 
     // Any thread: at most one present waits on the UI thread at a time.
@@ -183,7 +194,6 @@ internal partial class PlayerView
 
     private void Show(VideoSurface surface)
     {
-        _noPicture.Stop();
         surface.Flush();
         _image.Lock();
         _image.AddDirtyRect(new Int32Rect(0, 0, surface.Width, surface.Height));
@@ -234,11 +244,12 @@ internal partial class PlayerView
         _surface = null;
     }
 
-    // No picture since the file opened (a truncated file, say): the page says it can't be played (story 14.6).
+    // No frame from the player since the file opened (a truncated file, say): the page says it can't be played
+    // (story 14.6). The view's own presents (a resize, the media arriving) don't count.
     private void OnNoPicture(object? sender, EventArgs e)
     {
         _noPicture.Stop();
-        if (_page is { IsClosed: false, IsFailed: false } page)
+        if (Volatile.Read(ref _playerFrames) == 0 && _page is { IsClosed: false, IsFailed: false } page)
         {
             page.ShowFailure();
         }
@@ -256,6 +267,7 @@ internal partial class PlayerView
     {
         if (e.PropertyName == nameof(PlayerPage.Media))
         {
+            _noPicture.Interval = NoPictureTimeout;
             _noPicture.Start();
             OnFrameAvailable();
         }

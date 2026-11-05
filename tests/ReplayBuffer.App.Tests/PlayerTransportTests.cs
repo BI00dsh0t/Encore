@@ -81,11 +81,14 @@ public sealed class PlayerTransportTests : IDisposable
     {
         var viewFile = Path.Combine(_folder, "library-view.json");
         var first = new FakePlayer();
-        var page = Open(first, viewFile);
+        var page = Open(first, viewFile, out var library);
 
         page.Volume = 0.4;
         page.MuteCommand.Execute(null);
         Assert.Equal((0.4, true), (first.Volume, first.IsMuted));
+
+        // Written when the page closes (14.7), not once a slider step.
+        library.DrillIn.Close();
 
         var second = new FakePlayer();
         var again = Open(second, viewFile);
@@ -118,7 +121,9 @@ public sealed class PlayerTransportTests : IDisposable
 
     private static PlayerMedia Media(TimeSpan? duration) => new(1280, 720, duration, ["Game", "Mic", "Discord", "Desktop"], true);
 
-    private PlayerPage Open(FakePlayer player, string? viewFile = null)
+    private PlayerPage Open(FakePlayer player, string? viewFile = null) => Open(player, viewFile, out _);
+
+    private PlayerPage Open(FakePlayer player, string? viewFile, out LibraryPage opened)
     {
         _engine.State = _engine.State! with
         {
@@ -129,6 +134,7 @@ public sealed class PlayerTransportTests : IDisposable
         library.Render(_engine.State);
         library.Click(library.Rows.Single(), ctrl: false, shift: false);
         library.OpenFocused();
+        opened = library;
         return library.Player!;
     }
 }

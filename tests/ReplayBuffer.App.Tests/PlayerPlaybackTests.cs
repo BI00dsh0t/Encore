@@ -134,6 +134,25 @@ public sealed class PlayerPlaybackTests : IDisposable
         });
     }
 
+    // Story 14.7 (the sweep's check): a Recording, fragmented as AD-9 writes it, plays, seeks and switches Track.
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public void ARecordingFixturePlaysSeeksAndSwitchesTrack()
+    {
+        var absolute = MakeFixture("-f lavfi -i testsrc2=size=1280x720:rate=60:duration=10", "-c:v libx264 -preset ultrafast -g 60 -pix_fmt yuv420p", "-movflags frag_keyframe+empty_moov+default_base_moof -frag_duration 1000000", seconds: 10);
+        Run(absolute, (model, view) =>
+        {
+            var page = model.Library.Player!;
+            page.SeekTo(TimeSpan.FromSeconds(5));
+            page.SelectedTrack = page.Tracks[2];
+            page.PlayPauseCommand.Execute(null);
+            Sta.Pump(TimeSpan.FromMilliseconds(800));
+            Assert.Equal(2, page.Player.SelectedTrack);
+            Assert.True(page.Player.Position > TimeSpan.FromSeconds(5), $"played on from 5 s: {page.Player.Position}");
+            Assert.True(PictureShare(view) > 0.5, "the picture is mostly video");
+        });
+    }
+
     // Opens the fixture's row in the Main App window, muted, paused on its first frame, then runs the checks and goes back.
     private void Run(string absolute, Action<MainViewModel, PlayerView> check) => Sta.Run(() =>
     {
