@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix bench-videoencode-count (8.8 held at e3822aa) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off (8.8 is held on its branch at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.2 |
@@ -848,3 +848,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 11.1 merged (`3fd6ed4`; done and state in `6a2aeba`, with the NFR-1 row added under capture cost), and its card is Done. 11.2 (the `monitorRecordingScreens` key, the richer monitor list and the canvas rule; no App UI) went to qa-2-1 (Opus, medium effort; context kept), with its card In progress.
 - 2026-11-05: Bugfix `bench-videoencode-count` ready at `be7c2cb`. The coordinator checked it and approved the merge: per sample, the max over a process's instances of a type, summed over processes (the RTX 5090 gives each process 3 identical VideoEncode instances). The reduction moved to `tools/measure-gpu.ps1`, with `MeasureGpuSamplesTests`; correction notes were added to 1.2, epic 1, 1.14, capture-cost research, 5.12, 8.7 and 11.1; Bench 151 passed; no GPU runs.
 - 2026-11-05: 10.9 READY FOR QA at `d8c9b64`: Contracts 128, Core 161 and App 170 passed; App only. One shared FolderPicker (with a file variant for 10.10); Clips, Hotkeys regrouped (a `MonitorPicker` ready for 11.4), Storage and Cleanup, Sounds; Recordings removed. Deviation: no engine `ring-path-invalid` code exists, so the App checks before sending. QA went to 2-1-tracer (Sonnet, medium effort).
+- 2026-11-05: Bugfix `bench-videoencode-count` merged (`4dc66d8`); Bench 151 passed. slice-epic-5 is back in the pool.
