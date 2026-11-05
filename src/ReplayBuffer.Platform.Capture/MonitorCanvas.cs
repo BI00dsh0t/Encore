@@ -15,19 +15,16 @@ public sealed record MonitorPlacement(MonitorInfo Monitor, int X, int Y, int Wid
 /// <summary>
 /// The canvas rule of a multi-monitor Monitor Recording (AD-25, design-multi-monitor.md), from spike
 /// 11.1: the canvas is the bounding box of the recorded monitors in virtual-desktop pixels, and the
-/// encoded size is that box scaled down, aspect kept, to fit the codec's largest side and a pixel
-/// budget, with even sides.
+/// encoded size is that box scaled down, aspect kept, only to fit the codec's largest side, with even
+/// sides. There is no pixel budget: the builder chose full width with HEVC or AV1 (2026-11-05).
 /// </summary>
 public static class MonitorCanvas
 {
-    /// <summary>NVENC's largest H.264 side (the 4096 px level limit the probe reports).</summary>
+    /// <summary>NVENC's largest H.264 side, measured in spike 11.1 (the encoder probe reports no limit).</summary>
     public const int H264MaxSide = 4096;
 
-    /// <summary>NVENC's largest HEVC and AV1 side.</summary>
+    /// <summary>NVENC's largest HEVC and AV1 side, measured in spike 11.1.</summary>
     public const int HevcAv1MaxSide = 8192;
-
-    /// <summary>The pixel budget when the Output resolution's area is smaller: 3840×2160.</summary>
-    public const long DefaultPixelBudget = 3840L * 2160;
 
     /// <summary>
     /// Every attached monitor named in <paramref name="deviceNames"/> (ignoring case), or every one when
@@ -67,13 +64,12 @@ public static class MonitorCanvas
 
     /// <summary>
     /// <paramref name="native"/> scaled down, aspect kept, so neither side exceeds
-    /// <paramref name="maxSide"/> and its area doesn't exceed <paramref name="pixelBudget"/>; never
-    /// scaled up; both sides rounded down to even.
+    /// <paramref name="maxSide"/> (the codec's largest side); never scaled up; both sides rounded
+    /// down to even.
     /// </summary>
-    public static VideoSize Fit(VideoSize native, int maxSide, long pixelBudget)
+    public static VideoSize Fit(VideoSize native, int maxSide)
     {
         var scale = Math.Min(1.0, Math.Min((double)maxSide / native.Width, (double)maxSide / native.Height));
-        scale = Math.Min(scale, Math.Sqrt((double)pixelBudget / ((long)native.Width * native.Height)));
         // The epsilon keeps an exact fit (5120 × 0.8 = 4096) from flooring to 4095.
         return VideoSize.EvenFloor((int)Math.Floor((native.Width * scale) + 1e-6), (int)Math.Floor((native.Height * scale) + 1e-6));
     }

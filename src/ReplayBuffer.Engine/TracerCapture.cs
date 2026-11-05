@@ -208,7 +208,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         }
         else if (window is null)
         {
-            // Spike 11.1: the canvas rule (AD-25) with the codec's largest side and the 4K budget.
+            // Spike 11.1: the canvas rule, fitted to the codec's largest side only (no pixel budget).
             var placements = MonitorCanvas.Place(command.Monitors!);
             if (placements.Count == 0)
             {
@@ -217,7 +217,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
 
             var native = MonitorCanvas.Bounds(placements).Size;
             var maxSide = command.Codec == VideoCodec.H264 ? MonitorCanvas.H264MaxSide : MonitorCanvas.HevcAv1MaxSide;
-            var fitted = MonitorCanvas.Fit(native, maxSide, MonitorCanvas.DefaultPixelBudget);
+            var fitted = MonitorCanvas.Fit(native, maxSide);
             (width, height) = (fitted.Width, fitted.Height);
             _log.LogInformation("Monitors {Monitors}: canvas {Native}, encoded at {Fitted}", string.Join("; ", placements), native, fitted);
         }

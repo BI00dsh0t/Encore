@@ -6,7 +6,7 @@ namespace ReplayBuffer.Platform.Capture.Tests;
 public sealed class MonitorCanvasTests
 {
     [Fact]
-    public void TheCanvasIsTheMonitorsBoundingBoxFittedToTheCodecAndTheBudget()
+    public void TheCanvasIsTheMonitorsBoundingBoxFittedToTheCodecsLargestSide()
     {
         // The builder's PC: 2560x1440 primary at (0,0), 3840x2160 at (2560,0).
         var monitor = new MonitorInfo(1, @"\\.\DISPLAY1", true);
@@ -19,10 +19,9 @@ public sealed class MonitorCanvasTests
         var (native, left, top) = MonitorCanvas.Bounds(placements);
 
         Assert.Equal((new VideoSize(6400, 2160), 0, 0), (native, left, top));
-        Assert.Equal(new VideoSize(6400, 2160), MonitorCanvas.Fit(native, MonitorCanvas.HevcAv1MaxSide, long.MaxValue));
-        Assert.Equal(new VideoSize(4096, 1382), MonitorCanvas.Fit(native, MonitorCanvas.H264MaxSide, long.MaxValue));
-        Assert.Equal(new VideoSize(4956, 1672), MonitorCanvas.Fit(native, MonitorCanvas.HevcAv1MaxSide, MonitorCanvas.DefaultPixelBudget));
-        Assert.Equal(new VideoSize(4096, 1152), MonitorCanvas.Fit(new VideoSize(5120, 1440), MonitorCanvas.H264MaxSide, MonitorCanvas.DefaultPixelBudget));
+        Assert.Equal(new VideoSize(6400, 2160), MonitorCanvas.Fit(native, MonitorCanvas.HevcAv1MaxSide));
+        Assert.Equal(new VideoSize(4096, 1382), MonitorCanvas.Fit(native, MonitorCanvas.H264MaxSide));
+        Assert.Equal(new VideoSize(4096, 1152), MonitorCanvas.Fit(new VideoSize(5120, 1440), MonitorCanvas.H264MaxSide));
     }
 
     /// <summary>The blit's GPU time, written to the test output; a measurement, so it's Heavy.</summary>

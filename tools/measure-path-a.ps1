@@ -27,7 +27,6 @@
                      debug-capture --monitors, for the same span, at -Fps; <mode> is one of
                        one     the primary monitor alone, H.264 at its size (today's Monitor Recording)
                        hevc    every monitor composited, HEVC at the full canvas size
-                       hevcfit every monitor composited, HEVC fitted to the 3840x2160 pixel budget
                        av1     every monitor composited, AV1 at the full canvas size
                        h264    every monitor composited, H.264 fitted to 4096 px a side
                        dd      as hevc, every monitor through Desktop Duplication
@@ -132,11 +131,10 @@ function Resolve-MonitorOptions([string] $Mode, [string] $Name) {
     switch ($Mode) {
         'one' { return @('--monitors', $all.Primary, '--codec', 'h264') }
         'hevc' { return @('--monitors', 'all', '--codec', 'hevc', '--size', $all.Size) + $bitrate }
-        'hevcfit' { return @('--monitors', 'all', '--codec', 'hevc') + $bitrate }
         'av1' { return @('--monitors', 'all', '--codec', 'av1', '--size', $all.Size) + $bitrate }
         'h264' { return @('--monitors', 'all', '--codec', 'h264') + $bitrate }
         'dd' { return @('--monitors', 'all', '--monitor-api', 'dd', '--codec', 'hevc', '--size', $all.Size) + $bitrate }
-        default { Fail "Unknown monitor mode '$Mode' in condition '$Name'. Use -monone, -monhevc, -monhevcfit, -monav1, -monh264 or -mondd." }
+        default { Fail "Unknown monitor mode '$Mode' in condition '$Name'. Use -monone, -monhevc, -monav1, -monh264 or -mondd." }
     }
 }
 

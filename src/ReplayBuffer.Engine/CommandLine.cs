@@ -121,7 +121,7 @@ public static class CommandLine
                               [--instance ReplayBuffer-Test-<suffix>]
           ReplayBuffer.Engine debug-capture --monitors all|<device name>[,...] [--monitor-api wgc|dd] [the options above]
                               (spike 11.1, dev only: the monitors composited into one canvas instead of a window;
-                              no --size: the canvas fitted to the codec's largest side and a 3840x2160 pixel budget)
+                              no --size: the canvas, fitted only to the codec's largest side: 4096 px for H.264, 8192 for HEVC and AV1)
         """;
 
     public static ParseResult Parse(IReadOnlyList<string> args)

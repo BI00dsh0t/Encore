@@ -44,7 +44,7 @@ The builder's words (2026-11-05): "monitor recording needs to allow selecting wh
 - **Scaling:** it's scaled down, keeping its aspect ratio, only to fit **the codec's maximum frame size**:
   - Spike 11.1 measured NVENC on the RTX 5090: H.264 encodes up to **4096 px a side**, and HEVC and AV1 up to **8192 px a side**. Above that, the open fails with "No capable devices found".
   - Story 1.13's probe doesn't report a limit (it opens each encoder at 1280×720), so the limits are constants per codec.
-  - The pixel budget (the Output area, or 3840×2160) is **dropped**, by the builder's 2026-11-05 decision that several screens are recorded at full width with HEVC or AV1. Spike 11.1 measured 6400×2160 HEVC and AV1 at 60 fps: 89 % and 76 % NVENC video-encode use, and about 3.7 points more FPS loss than one monitor.
+  - The pixel budget (the Output area, or 3840×2160) is **dropped**, by the builder's 2026-11-05 decision that several screens are recorded at full width with HEVC or AV1. Spike 11.1 measured 6400×2160 HEVC and AV1 at 60 fps: about 24 % and 19 % NVENC use for the Monitor engine, and about 2.5 to 4.8 points more FPS loss than one monitor. The cause of that extra loss isn't the encode or the blits, and isn't measured yet.
 - **Even sizes:** both sides are rounded down to even numbers (4:2:0, Keys' rule).
 - **Examples:**
   - One monitor is recorded exactly as today.
