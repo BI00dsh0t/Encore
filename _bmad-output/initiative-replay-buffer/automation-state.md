@@ -43,11 +43,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle; 14.3 in QA; its Heavy tonight |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 14.6 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.6 (stacked on 14.4); the player Heavy run tonight |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.7 (stacked on 14.6); the player Heavy run tonight |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -212,7 +212,7 @@ The coordinator logs each QA round in the Log below.
 | 35.3 | 14.3 Recordings play to the end: mehd at finalize | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | code QA passed at `e0ad4c0`; Heavy tonight, then merge |
 | 35.4 | 14.4 Track picker | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed at `7c22d82`; merges after 14.2 |
 | 35.5 | 14.5 Transport: seek bar, time, volume and keys | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed at `1e67196` (tip `7322dd2`); merges after 14.2 and 14.4 |
-| 35.6 | 14.6 When Windows can't play the file | | pending |
+| 35.6 | 14.6 When Windows can't play the file | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (stacked on 14.4) |
 | 35.7 | 14.7 Refactor sweep | | pending |
 | 35.8 | 14.8 The in-app player end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
@@ -1017,3 +1017,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 14.5's tip is now `c7257a3`, a test-only fix accepted by the coordinator: `PlayerPlaybackTests` mute through the page after it opens, since 14.5's page volume overrode the test player's mute and the night run would have played tones aloud. App and Desktop code are unchanged. 14.4 is rebased onto it.
 - 2026-11-05: 14.4 READY FOR QA at `7c22d82`, stacked on 14.5 (`c7257a3`). An "Audio track" ComboBox lists Tracks by name in file order (the first at open and on reopen; "track n" when unnamed); a switch mid-play keeps the position; a paused switch resumes in place. A Heavy test uses a new process-loopback helper (Goertzel tones at inaudible volume) to check the Track heard. Platform.Desktop 15 and App 243 passed. QA went to slice-epic-8. **Tonight's player run changes:** run `*PlayerPlaybackTests` once, on the stack's top tip (14.4 or later), which covers 14.2, 14.5 and 14.4.
 - 2026-11-05: QA 14.4 passed at `7c22d82`: the list, first Track at open and refusals match the ticket; the process-loopback helper captures only the test process (Mode 0, its own pid), at volume 0.001; legible in both looks. App 243 and Platform.Desktop 15 passed. Added to 14.7: Left and Right while the ComboBox has focus, and render the open drop-down in both looks.
+- 2026-11-05: 14.6 READY FOR QA at `c20c1a4`, stacked on 14.4. Missing HEVC or AV1 shows a message with a Microsoft Store button; another codec, `MediaFailed`, or no picture within 5 s show plain messages, each with Open in default player; an undecodable Track shows "(unavailable)"; log lines; a `--player-unsupported` dev switch. It also fixes the theme test harness to reuse one `ThemeService`. Platform.Desktop 15 and App 248 passed. QA went to slice-epic-8, asked to confirm the HEVC Store ID (paid `9NMZLZ57R3T7` or the free device-maker version `9N4WGH0Z6VHQ`). story-2-7 is on 14.7.
