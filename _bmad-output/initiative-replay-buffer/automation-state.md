@@ -167,8 +167,8 @@ The coordinator logs each QA round in the Log below.
 | 29.4 | 8.4 Sleep, resume and the secure desktop | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `8a434c6`) |
 | 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `af6eab8`) |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `041a8b6`) |
-| 29.7 | 8.7 Final conformance run | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | merged `1400c42`; ticket open, fps run pending (the builder must close the Dev App) |
-| 29.8 | 8.8 8-hour soaks in Memory and Disk mode | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | stopped by the builder at `e3822aa`; 2 smoke reruns, then 2 × 8 h soaks, wait for the go-ahead |
+| 29.7 | 8.7 Final conformance run | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `1400c42`; fps run merged `5c61cfe`: 4.47 %, NFR-1 miss for the builder) |
+| 29.8 | 8.8 8-hour soaks in Memory and Disk mode | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress: smoke reruns, then 2 × 8 h soaks (builder's go 2026-11-05) |
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
 | 29.10 | 8.10 Refactor sweep | | pending |
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
