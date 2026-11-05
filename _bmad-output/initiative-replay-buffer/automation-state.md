@@ -46,7 +46,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; runs 11.5's Heavy rerun after 8.8's soaks |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy merging 13.1 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -959,3 +959,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 13.1 READY FOR QA at `9c30e1a`: the `captureNewGames` key and `new-game-not-captured` code (additive); `EnsureProfile` writes name plus `ignored:true` in one update when the key is off (not for hand-added games; existing profiles untouched); a one-time notice once the write commits. Beyond the ticket, `GameMonitor.Detect` re-checks Ignored so a new Ignored game isn't proposed for one poll. A Games section on General. Contracts 136, Core 169, Engine 199, App 197 and Platform.Windows 32 passed; publish clean. QA went to slice-epic-8 (Sonnet, medium effort).
 - 2026-11-05: QA 13.1 passed at `9c30e1a` with no findings: AD-22 and AD-4 hold; the notice is raised once; the `GameMonitor.Detect` re-check belongs in the story (R2: never the Target Game for a moment). Contracts 136, Core 169, Engine 185 and Platform.Windows 32 passed; App passed after one known `LibraryThemeTests` load flake (it passed alone). story-2-7 is merging and will mark epic 13 done.
 - 2026-11-05: 13.1 merged into develop (`4f06c58`, `feat(engine): merge 13.1-capture-new-games`) after QA passed at `9c30e1a` with no findings, and marked done. **Epic 13 (New games captured by default, or not) is done** (its only story). Synced develop (`5a0a987`) first: 0-warning build; Contracts 136, Core 169, Engine 199 (47 explicit skipped), App 197 (20 skipped) and Platform.Windows 32 passed, 0 failed; publish clean (12.1 MB). No Heavy, GPU or bench runs. One Human Check row added (turn the setting off, run a new game, see the notice and Not captured, turn it on and save a Clip).
+- 2026-11-05: 13.1 merged (`4f06c58`). **Epic 13 is marked done** (`41cb5e1`), with one Human Check row. Card moved to Done. After the sync: 0-warning build; Contracts 136, Core 169, Engine 199, App 197 and Platform.Windows 32 passed; publish clean.
