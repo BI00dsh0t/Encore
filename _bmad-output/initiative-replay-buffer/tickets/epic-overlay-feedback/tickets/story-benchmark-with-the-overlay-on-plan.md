@@ -160,3 +160,4 @@ deferred: []
 - Fixed: the NFR-1 comparison caveat (run lengths and passes differ from 1.14; no 5 min x 3 re-run).
 - Noted: the 5.8 contradiction is worded as unexplained; the evidence location and lock times are recorded above.
 
+**Correction (bugfix `bench-videoencode-count`, 2026-11-04):** `measure-path-a.ps1` summed the three identical `engtype_VideoEncode` counter instances each process gets on this GPU, so every `gpu_videoencode` figure was **3× over-counted**. This plan quotes no video-encode figure, but the `gpu_videoencode_meanPercent` column in its `bench fps --overlay` summaries is 3× too high. FPS loss, 1 % lows, engine CPU and 3D use are unaffected (the sampler only reads counters, and 3D has one instance), so the overlay's NFR-1 result stands.

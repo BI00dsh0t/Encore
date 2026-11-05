@@ -50,6 +50,8 @@ Investigation for the coordinator, 2026-11-04. No code was changed.
 | Engine 3D / video-encode use | – | 1.3 % / 18.9 % | |
 | Load's 3D engine use | 94.4 % | 92.6 % | −1.8 points |
 
+**Correction (bugfix `bench-videoencode-count`, 2026-11-04):** `measure-path-a.ps1` summed the three identical `engtype_VideoEncode` counter instances each process gets on this GPU, so every `gpu_videoencode` figure was **3× over-counted**. The engine's video-encode use above is about 6.3 %, not 18.9 %. FPS loss, 1 % lows, engine CPU and 3D use are unaffected (the sampler only reads counters, and 3D has one instance), so this research's conclusions stand.
+
 **Reading:**
 - The FPS loss is exactly the growth in the load's per-frame GPU time: 6.6 % more GPU time per frame, 6.6 % fewer frames. Nothing in our process holds the game's CPU, and the game's presentation path doesn't change.
 - The GPU doesn't slow down (same clock, no power or thermal cap). It does less work per second while capture runs: power drops 15 W, and the load's share of the 3D engine drops only 1.8 points while its frames take 6.6 % longer. The extra time isn't other work running in its place. dwm and the engine together add only about 2 points of 3D work. It is idle time and switching overhead: the load's long full-screen draw (about 12 ms per frame) is interrupted for DWM's capture copy (once per WGC frame) and the engine's scale and convert (once per slot), each a small job from another context.

@@ -105,7 +105,7 @@ Can the Monitor session capture several monitors, blit them into one canvas laid
 
   `src\ReplayBuffer.Engine\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Engine.exe debug-capture --monitors all --codec hevc --size 6400x2160 --seconds 10 --output %TEMP%\mm.mp4`
 - **Architecture:** AD-25's Canvas rule is replaced by the pixel-budget decision line above. The coordinator schedules that AD-25 spine edit (an architecture update session, AD-22) before 11.3 starts; this spike doesn't touch the architecture file. The design's "the probe reports the real limit" is wrong: the limits are per-codec constants.
-- **Follow-up (not fixed here):** `measure-path-a.ps1`'s `Measure-GpuSamples` sums every instance of an engine type. Video-encode has three identical instances per process on this GPU, so every earlier `gpu_videoencode` figure (1.2, 1.14, 8.7 and the rest) is 3× too high. 3D has one instance, so it's unaffected. The fix is to take the maximum over a process's instances of one type, then sum over processes.
+- **Follow-up (not fixed here):** `measure-path-a.ps1`'s `Measure-GpuSamples` sums every instance of an engine type. Video-encode has three identical instances per process on this GPU, so every earlier `gpu_videoencode` figure (1.2, 1.14, 8.7 and the rest) is 3× too high. 3D has one instance, so it's unaffected. The fix is to take the maximum over a process's instances of one type, then sum over processes. **Fixed (bugfix `bench-videoencode-count`, 2026-11-04):** `Measure-GpuSamples` (now in `tools/measure-gpu.ps1`) takes that per-process maximum. This plan's NVENC column was already corrected by hand; its raw `summary` files keep the old 3× figures.
 
 ## Verification
 
