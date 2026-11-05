@@ -26,13 +26,13 @@ public enum RateControl
 }
 
 /// <summary>The <c>video</c> key: codec, output resolution, fps, bitrate and rate control.</summary>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 /// <param name="MatchSource">
 /// Story 12.1 (R40), optional: the game capture chain takes its size from the game's own captured
 /// size at its first frame (scaled only to fit the codec's largest side) instead of
 /// <paramref name="Width"/> × <paramref name="Height"/>, which stay as the size to fall back to.
 /// False by default, and left out of the JSON when false, so every existing value reads and writes as before.
 /// </param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record VideoSettings(
     VideoCodec Codec,
     int Width,

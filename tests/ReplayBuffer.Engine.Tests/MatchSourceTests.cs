@@ -82,7 +82,7 @@ public sealed class MatchSourceTests : IAsyncLifetime
     /// <summary>
     /// The real path (at night only): <c>debug-capture --match-source</c> of a borderless 2560×1440
     /// window for 30 s records a 2560×1440 file at the Output frame rate that plays to the end, and the
-    /// anchor line reads <c>output 2560x1440</c>. The window is on the primary screen, which must be
+    /// anchor line reads <c>output 2560x1440</c>, at 60 fps for about 30 s. The window is on the primary screen, which must be
     /// at least 2560×1440.
     /// </summary>
     [Fact(Explicit = true)]
@@ -111,6 +111,12 @@ public sealed class MatchSourceTests : IAsyncLifetime
             Assert.Contains("output 2560x1440", await log, StringComparison.Ordinal);
             var video = SessionTestKit.VideoStream(output);
             Assert.Equal((2560, 1440), (video.Width, video.Height));
+
+            // The Output frame rate (60), for the whole 30 s: not 30 fps, and not a file cut short.
+            var pts = SessionTestKit.VideoPts(output);
+            var seconds = pts[^1] - pts[0];
+            Assert.InRange(seconds, 29, 31);
+            Assert.InRange((pts.Count - 1) / seconds, 59, 61);
             SessionTestKit.AssertDecodesCleanly(output);
         }
         finally
