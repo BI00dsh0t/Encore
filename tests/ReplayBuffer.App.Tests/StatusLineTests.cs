@@ -153,4 +153,32 @@ public sealed class StatusLineRenderTests
 
     private static Warning Warning(string id, DateTimeOffset at, string message, WarningSeverity severity = WarningSeverity.Warning, bool dismissable = true) =>
         StatusLineTests.Warning(id, at, message, severity, dismissable);
+
+    [Fact]
+    public void TheHintSaysWhichKeySavesHowMuchWhileCapturingOnly()
+    {
+        // Story 10.6: hidden during a Recording and when the Save Hotkey failed to register.
+        var engine = new FakeEngineSession();
+        var line = new StatusLine(engine);
+        var settings = Contracts.Settings.SettingsDocument.Empty with
+        {
+            Global = Contracts.Settings.SettingsMaps.EmptyValues
+                .Add(Contracts.Settings.Keys.BufferWindow.Name, Contracts.Settings.Keys.BufferWindow.ToJson(30))
+                .Add(Contracts.Settings.Keys.Hotkeys.Name, Contracts.Settings.Keys.Hotkeys.ToJson(new Contracts.Settings.HotkeySettings(new Contracts.Settings.HotkeyBinding(0x79, Contracts.Settings.HotkeyModifiers.Alt), null, null, null, null, null))),
+        };
+        var buffering = engine.State! with { Settings = settings, Capture = CaptureState.Initial with { Replay = ReplayState.Buffering, MicMuted = false } };
+
+        line.Render(EngineStatus.Connected, null, buffering);
+        Assert.Equal("· Alt+F10 saves the last 30 s", line.Hint);
+
+        line.Render(EngineStatus.Connected, null, buffering with { Capture = buffering.Capture with { Recording = RecordingState.Running } });
+        Assert.Equal("", line.Hint);
+
+        var failed = new HotkeyStatus([new HotkeyBindingStatus(Contracts.Settings.HotkeyAction.Save, new Contracts.Settings.HotkeyBinding(0x79, Contracts.Settings.HotkeyModifiers.Alt), false, Contracts.ErrorCodes.HotkeyTaken)]);
+        line.Render(EngineStatus.Connected, null, buffering with { Hotkeys = failed });
+        Assert.Equal("", line.Hint);
+
+        line.Render(EngineStatus.Connected, null, buffering with { Capture = CaptureState.Initial });
+        Assert.Equal("", line.Hint);
+    }
 }

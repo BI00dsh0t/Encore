@@ -15,6 +15,7 @@ namespace ReplayBuffer.Contracts.Messages;
 /// <param name="LengthSeconds">Its length in seconds, read by FFmpeg's demuxer (story 7.3); <c>null</c> until read, or when it can't be read.</param>
 /// <param name="Favourite">Whether it is a Favourite (story 7.4), set by <c>library.setFavourite</c>.</param>
 /// <param name="Modified">The file's last write time (UTC) at <see cref="Size"/>; with the path and size it is the item's identity (AD-3). <c>null</c> while being written.</param>
+/// <param name="Kind">A <see cref="LibraryItemKinds"/> value, or <c>null</c> when unknown (story 10.6; optional, AD-22).</param>
 public sealed record LibraryItem(
     string Path,
     string? ProfileId,
@@ -23,7 +24,19 @@ public sealed record LibraryItem(
     bool BeingWritten,
     double? LengthSeconds = null,
     bool Favourite = false,
-    DateTimeOffset? Modified = null);
+    DateTimeOffset? Modified = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kind = null);
+
+/// <summary>
+/// The <see cref="LibraryItem.Kind"/> values (story 10.6, AD-22): set by the engine when a writer begins.
+/// A file the folder scan finds has none, except one in the Monitor Recordings folder.
+/// </summary>
+public static class LibraryItemKinds
+{
+    public const string Clip = "clip";
+    public const string Recording = "recording";
+    public const string MonitorRecording = "monitorRecording";
+}
 
 /// <summary>
 /// <c>library.setFavourite</c>'s arguments: the item's identity as the App saw it (AD-3) and the

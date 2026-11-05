@@ -76,9 +76,23 @@ public sealed class TrayTests
         var model = new MainViewModel(engine, action => action());
         var opened = 0;
         var quit = 0;
-        var menu = ShellApp.CreateTrayMenu(model, () => opened++, () => quit++);
-        var items = menu.Items.OfType<MenuItem>().Where(i => i.Visibility == Visibility.Visible).ToList();
-        Assert.Equal(["Open", "Start with Windows", "Quit"], items.Select(i => (string)i.Header));
+        var folders = new List<string>();
+        var menu = ShellApp.CreateTrayMenu(model, () => opened++, () => quit++, openFolder: folders.Add);
+        var all = menu.Items.OfType<MenuItem>().Where(i => i.Visibility == Visibility.Visible).ToList();
+
+        // Story 10.6: the live status first, then Open, Open Library and Open the Clips folder.
+        Assert.Equal(["Waiting for a game · Mic muted", "Open", "Open Library", "Open the Clips folder", "Start with Windows", "Quit"], all.Select(i => (string)i.Header));
+        Assert.False(all[0].IsEnabled);
+        engine.State = engine.State! with { Capture = engine.State.Capture with { Replay = Contracts.Messages.ReplayState.Buffering, MicMuted = false }, LibraryFolder = @"C:\Clips" };
+        engine.RaiseChanged();
+        Assert.Equal("Ready to save Clips", (string)all[0].Header);
+        model.SelectedNavItem = model.NavItems.First(i => i.Page == model.General);
+        all[2].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Same(model.LibraryNav, model.SelectedNavItem);
+        all[3].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal([@"C:\Clips"], folders);
+        opened = 0;
+        var items = all.Where(i => (string)i.Header is "Open" or "Start with Windows" or "Quit").ToList();
 
         menu.Placement = PlacementMode.AbsolutePoint;
         menu.HorizontalOffset = -32000;

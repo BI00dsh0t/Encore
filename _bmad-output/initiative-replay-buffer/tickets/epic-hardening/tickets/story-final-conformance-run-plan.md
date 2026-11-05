@@ -1,3 +1,11 @@
+---
+title: 'Final conformance run'
+type: 'feature'
+ticket: '7'
+created: '2026-11-04'
+status: done
+route: 'full'
+---
 # Story 8.7 plan: Final conformance run
 
 **Ticket:** 8.7 (epic-hardening, R7; risk medium; HITL). Halved by the builder (2026-11-04): a 30-minute drift Recording, and `bench fps --overlay` at 3 balanced passes of about 2.5 minutes. The bounds are unchanged: drift under one frame, and FPS loss within NFR-1's target.
@@ -37,7 +45,28 @@
 - 2026-11-04: **full run (phase 2), into `measurements/bench-8.7`**, at `7f46995`, with the builder's Visual Studio debug Dev App (pid 59732) open throughout. It never detected the marker window, so drift and playback are unaffected.
   - `drift --app` (30 min, 17:54–18:24): **pass.** A/V drift 0.831 ms (Game) and 0.818 ms (Chat), against 16.667 ms. The constant offset is about −19.9 ms and the slope about −0.003 ms/min. Track-to-Track drift is at most 0.882 ms (Game against Chat), and 0.01–0.02 ms between Everything and its own single-device Tracks. Markers matched: 1801/1801 flashes and 1800–1801/1800–1801 bursts on every series. All four Tracks (Everything, Game, Chat, Mic) are named, and each is −20.67 ms against the video, within the 38 ms tolerance. 5 of 5 Saves made Clips, and the Recording was stopped by the Record press.
   - `playback --auto` (30 s clips, plus the drift Recording): H.264, HEVC and AV1 all encode on NVENC. Chrome (headless) plays all four files. Windows Media Player plays H.264, HEVC and the Recording, and refuses AV1. The Recording has its 4 named Tracks.
-  - **Pending: the builder closes their VS Dev App, then about 18 min with the command below.** `fps --overlay --recording`. The Dev App must be closed first: it captures the GPU load in every fps run. Before any attempt, check that pid 59732, and any other Dev-instance `ReplayBuffer.App`, is gone. Command (worktree root, about 18 min, lock created and deleted by hand): `bench/ReplayBuffer.Bench/bin/Release/net10.0-windows10.0.26100.0/ReplayBuffer.Bench.exe fps --overlay --recording --presentmon %USERPROFILE%/Documents/repos/ReplayBuffer/native/presentmon/PresentMon-2.6.0-x64.exe --out measurements/bench-8.7`.
+  - **Done 2026-11-05; see the fps run entry below.** Was pending: the builder closes their VS Dev App, then about 18 min with the command below. `fps --overlay --recording`. The Dev App must be closed first: it captures the GPU load in every fps run. Before any attempt, check that pid 59732, and any other Dev-instance `ReplayBuffer.App`, is gone. Command (worktree root, about 18 min, lock created and deleted by hand): `bench/ReplayBuffer.Bench/bin/Release/net10.0-windows10.0.26100.0/ReplayBuffer.Bench.exe fps --overlay --recording --presentmon %USERPROFILE%/Documents/repos/ReplayBuffer/native/presentmon/PresentMon-2.6.0-x64.exe --out measurements/bench-8.7`.
 - Human Checks for the builder: the FPS run in their GPU-bound game; the unscripted players (Discord, VLC, DaVinci Resolve) with every Track, and A/V sync by eye in all five; Windows Media Player and AV1 (install the AV1 Video Extension, or accept it as a player that doesn't support AV1); and whether NFR-1's provisional 3 % stands (capture cost about 7 % on this PC since 2026-11-03, `research/capture-cost-regression.md`).
 - 2026-11-04: QA passed. Merged into develop (`1400c42`), with 8.7 left open for the pending fps run. Its Human Check Queue rows are in `automation-state.md`, and `feature/8.7-final-conformance` is kept for the fps results.
 - Correction (bugfix `bench-videoencode-count`, 2026-11-04): `measure-path-a.ps1` summed the three identical `engtype_VideoEncode` counter instances each process gets on this GPU, so every `gpu_videoencode` figure was **3× over-counted**. This plan quotes no video-encode figure, but any `gpu_videoencode_meanPercent` in its `bench fps` summaries is 3× too high; the pending fps run uses the fixed script. FPS loss, 1 % lows, engine CPU and 3D use are unaffected (the sampler only reads counters, and 3D has one instance).
+- 2026-11-05: **fps run (phase 2).** Develop (with the video-encode fix) was merged in, the Release build has 0 warnings, and the App came from the worktree's Release build. `fps --overlay --recording`: 3 balanced passes of 150 s with 20 s settles (B A | A B | B A), PresentMode Hardware Composed: Independent Flip in every run, and no overlay planes. `.bench-running` was held by hand each time. No `ReplayBuffer.App` other than the test instance ran: the VS Dev App (pid 59732) was gone, and Visual Studio was open with nothing debugging. NVIDIA FrameView's own `PresentMon_x64.exe` service process ran throughout, as in the 2026-11-04 runs. Three attempts:
+  - **Run 1, 02:01–02:18, `measurements/bench-8.7`: invalid (contaminated).** Other sessions' `dotnet` commands ran during baseline-1 (02:02:26–02:03:55). An FFmpeg test run (`EncoderProbeTests` and `LongRecordingTests`, NVENC encodes) ran during app-1 (02:04:39–45). Its 4.47 % loss, first recorded here and merged (`5c61cfe`), is withdrawn. Its baseline also drifted, 80.2 → 86.1 fps.
+  - **Run 2, 02:22–02:32, `measurements/bench-8.7-rerun`: invalid, stopped by hand after 3 passes.** Despite the lock, three other worktrees ran solution builds, NativeAOT publishes (`ilc`), and the App, Engine and Core test suites from 02:22 to 02:27, with App.Tests launching real `ReplayBuffer.App` test instances. app-1 fell to 72.8 fps. Bench's own processes and its leftover `ReplayBuffer-PathA-16624` ETW session were cleaned up.
+  - **Run 3, 02:33–02:50, `measurements/bench-8.7-rerun2`: valid.** A CIM overlap log, polling every 10 s for builds, publishes, test hosts and other Apps, recorded nothing for the whole run. The load was calibrated to 80.66 fps at 2560×1440 on the RTX 5090. The test App's engine captured the load only in the app passes, with a Recording in each (02:36:16–02:41:55 for app-1 and app-2, and from 02:47:40 for app-3; each first press got "can't record yet" and the 2 s repeat started it). Baselines 2 and 3 ran with no session, the engine log has no warnings or errors, and the load ran all six passes.
+
+  | Run 3 | Avg FPS | 1 % low | Loss against the in-run baseline mean (81.90) | Loss against its paired baseline | Loss against the calibration (80.66) |
+  |---|---|---|---|---|---|
+  | 01 baseline | 81.76 | 74.07 | | | |
+  | 02 app | 77.43 | 71.67 | 5.46 % | 5.30 % (B1) | 4.00 % |
+  | 03 app | 77.38 | 71.35 | 5.52 % | 5.28 % (B2) | 4.07 % |
+  | 04 baseline | 81.69 | 73.95 | | | |
+  | 05 baseline | 82.26 | 74.71 | | | |
+  | 06 app | 77.47 | 71.83 | 5.41 % | 5.82 % (B3) | 3.95 % |
+  | **Mean** | app 77.43, baseline 81.90 | app 71.62, baseline 74.24 | **5.46 %** | 5.47 % | 4.00 % |
+
+  - **FPS loss is 5.46 % against NFR-1's provisional 3 %: a miss** (Bench's own verdict). The 1 % lows fall 3.53 %. The run is steady: the baselines span 81.7–82.3 fps and the app passes 77.4–77.5, so every pass agrees within 0.6 points.
+  - **Against the capture-cost figures** (`research/capture-cost-regression.md`): 1.47 % (1.14, 2026-11-02), 6.59 % (develop, capture only, 2026-11-04), 6.96 % (v0.1.0) and 6.66 % (5.12 control). The full App, with the Replay Buffer, a Recording, the Overlay dot and a message every 10 s, costs 5.46 %. That is about a point under the 2026-11-04 capture-only figures (inside their run-to-run spread), and still nearly 4 points over 1.14's.
+  - WGC: the first session filled 19,114 slots with new frames and repeated 1,372 (6.7 %), against 12–15 % on 2026-11-04 and 3.5 % in 1.14.
+  - Data: `measurements/bench-8.7-rerun2/report.md`, `fps/summary.{md,json,csv}` and `fps/app-logs/`. The contaminated runs are kept in `measurements/bench-8.7` and `measurements/bench-8.7-rerun`.
+  - **Finding for the builder:** NFR-1's 3 % is missed at 5.46 % on this PC. NFR-1 is unchanged here: whether 3 % stands, or is re-baselined, is the builder's decision (Human Check). The FPS run in their own game is still a Human Check.
+  - Process finding: `.bench-running` didn't keep other sessions' builds and test suites off the machine during run 2. Only the coordinator's hold kept run 3 clean.

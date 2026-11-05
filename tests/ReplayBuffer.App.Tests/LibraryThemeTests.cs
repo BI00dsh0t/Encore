@@ -129,7 +129,7 @@ public sealed class LibraryThemeTests
         var page = new LibraryPage(engine);
         var view = (LibraryView)page.View;
         Layout(view);
-        var empty = (TextBlock)view.FindName("EmptyMessage");
+        var empty = (FrameworkElement)view.FindName("EmptyMessage");
 
         Assert.Equal(Visibility.Visible, empty.Visibility);
         page.FavouritesOnly = true;
@@ -163,6 +163,57 @@ public sealed class LibraryThemeTests
         Assert.False(star.IsChecked);
         page.Render(engine.State! with { Library = [new LibraryItem("clip.mp4", null, 1024, Day, false, 10, Favourite: true, Modified: Day)] });
         Assert.True(star.IsChecked);
+    });
+
+    [Fact]
+    public void TheWelcomeCardABadgedRowAndTheStatusHintLoadInBothThemes() => Sta.Run(() =>
+    {
+        // Story 10.6: the welcome card on an empty Library, then a Recording's badge and the header's hint.
+        var engine = new FakeEngineSession { Reply = (_, _) => Empty.Value };
+        var settings = SettingsDocument.Empty with
+        {
+            Global = SettingsMaps.EmptyValues
+                .Add(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(30))
+                .Add(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(new HotkeySettings(new HotkeyBinding(0x79, HotkeyModifiers.Alt), null, null, null, null, null))),
+        };
+        engine.State = engine.State! with { Settings = settings, LibraryFolder = @"C:\Users\sam\Videos\ReplayBuffer" };
+        var model = new MainViewModel(engine, action => action());
+        var window = new MainWindow { DataContext = model, WindowStartupLocation = WindowStartupLocation.Manual, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
+        var theme = ThemeService.ForWindow(window);
+        try
+        {
+            foreach (var which in new[] { AppTheme.Fluent, AppTheme.GamingDark })
+            {
+                var name = which == AppTheme.Fluent ? "fluent" : "gaming-dark";
+                engine.State = engine.State! with { Library = [], Capture = CaptureState.Initial };
+                engine.RaiseChanged();
+                theme.Apply(which);
+                window.Show();
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+                var view = (LibraryView)model.Library.View;
+                Sta.PumpUntil(() => view.IsLoaded, $"the Library to load under {which}");
+                Assert.True(((FrameworkElement)view.FindName("EmptyMessage")).IsVisible);
+                Save(window, $"library-welcome-{name}.png");
+
+                engine.State = engine.State with
+                {
+                    Seq = engine.State.Seq + 1,
+                    TargetGame = new TargetGame(@"c:\g\valorant.exe", "Valorant", 7),
+                    Capture = CaptureState.Initial with { Replay = ReplayState.Buffering, MicMuted = false },
+                    Library = [new LibraryItem(@"Valorant\match.mp4", null, 48L << 20, Day, false, 1800, Modified: Day, Kind: LibraryItemKinds.Recording)],
+                };
+                engine.RaiseChanged();
+                Sta.Pump(TimeSpan.FromMilliseconds(100));
+                Assert.False(((FrameworkElement)view.FindName("EmptyMessage")).IsVisible);
+                Assert.Equal("· Alt+F10 saves the last 30 s", model.StatusLine.Hint);
+                Assert.Contains(Descendants<TextBlock>(view), t => t.Text == "Recording" && t.IsVisible);
+                Save(window, $"library-badge-hint-{name}.png");
+            }
+        }
+        finally
+        {
+            window.CloseForQuit();
+        }
     });
 
     private static void Layout(FrameworkElement view)

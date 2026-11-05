@@ -52,6 +52,13 @@ internal sealed class MainViewModel : Observable
             };
         }
 
+        // The welcome card's links (story 10.6).
+        Library.Welcome.Navigate = link => SelectedNavItem = NavItems.First(i => i.Page == link switch
+        {
+            WelcomeLink.AudioTracks => (SettingsPage)TrackLayout,
+            _ => LibrarySettings,
+        });
+
         // Edit the main setting, from a game's page: the page that holds the key.
         GameProfiles.EditMain = key => SelectedNavItem = NavItems.First(i => i.Page == (key == Keys.TrackLayout ? TrackLayout : (SettingsPage)ReplayBuffer));
         engine.Changed += () => post(Refresh);
@@ -123,6 +130,9 @@ internal sealed class MainViewModel : Observable
             }
         }
     }
+
+    /// <summary>The Clips folder the engine uses, or null before it says: the tray's Open the Clips folder.</summary>
+    public string? ClipsFolder => _engine.State?.LibraryFolder;
 
     /// <summary>The shown page's drill-in (story 10.10), or null: the shell's breadcrumb binds to it.</summary>
     public DrillIn? CurrentDrillIn => IsSettingsTabSelected ? SelectedPage.DrillIn : null;

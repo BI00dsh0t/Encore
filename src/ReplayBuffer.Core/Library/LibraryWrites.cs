@@ -27,6 +27,12 @@ public interface ILibraryWrites
     void BeginWrite(string path, string? profileId);
 
     /// <summary>
+    /// <see cref="BeginWrite(string, string?)"/> with the file's kind, a <c>LibraryItemKinds</c> value (story
+    /// 10.6), which the Library keeps with the item. By default the kind is dropped.
+    /// </summary>
+    void BeginWrite(string path, string? profileId, string? kind) => BeginWrite(path, profileId);
+
+    /// <summary>
     /// The write at <paramref name="path"/> has ended: after the rename or final flush for
     /// <see cref="WriteOutcome.Written"/>, or after the failure's cleanup for <see cref="WriteOutcome.Failed"/>.
     /// </summary>
