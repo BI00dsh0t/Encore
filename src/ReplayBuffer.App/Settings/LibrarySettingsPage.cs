@@ -32,22 +32,25 @@ internal sealed class LibrarySettingsPage : SettingsPage
     private long _sizeDraft = 100 * BytesPerGb;
     private long _ageDraft = 30 * SecondsPerDay;
     private string? _outputFolder;
+    private string? _ringPath;
     private string? _libraryFolder;
     private long _folderBytes;
     private int _folderCount;
     private bool _cleanupBlocked;
     private bool _busy;
 
-    public LibrarySettingsPage(SettingsSender sender, IEngineSession engine)
+    /// <param name="defaultCacheFolder">The engine's default cache folder, which the Clips folder may not contain.</param>
+    public LibrarySettingsPage(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null)
         : base(sender)
     {
         _engine = engine;
+        DefaultCacheFolder = defaultCacheFolder;
         Confirm = ConfirmWithPrompt;
         ClipsFolder = new FolderPicker(Keys.OutputFolder, ops => SendAsync(ops))
         {
             DialogTitle = "Choose the Clips folder",
             Help = "Where Clips and Recordings are saved. Each game gets its own folder, and Monitor Recordings have theirs.",
-            Validate = path => FolderPicker.CanWrite(path) ? null : ReplayBufferSettingsPage.CantWrite,
+            Validate = ValidateClipsFolder,
             Confirm = path => Confirm(path is null
                 ? "Use the default folder under Videos as the Clips folder?\n\n" + FolderChangeNote
                 : $"Use {path} as the Clips folder?\n\n{FolderChangeNote}"),
@@ -55,6 +58,9 @@ internal sealed class LibrarySettingsPage : SettingsPage
     }
 
     public override string Title => "Storage and Cleanup";
+
+    /// <summary>The engine's default cache folder, used while <c>ringPath</c> is unset.</summary>
+    public string? DefaultCacheFolder { get; }
 
     /// <summary>The Clips folder (<c>outputFolder</c>), story 10.9's folder picker.</summary>
     public FolderPicker ClipsFolder { get; }
@@ -184,6 +190,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
             ShowLimits(_cleanup);
         }
 
+        _ringPath = SettingsValues.Global(document, Keys.RingPath);
         var folder = SettingsValues.Global(document, Keys.OutputFolder);
         _outputFolder = folder;
         ClipsFolder.Show(folder, _libraryFolder ?? "");
@@ -311,6 +318,17 @@ internal sealed class LibrarySettingsPage : SettingsPage
         {
             OnPropertyChanged(name);
         }
+    }
+
+    /// <summary>The Clips folder's refusals: it contains the cache folder (AD-17's rule, from this side), or isn't writable.</summary>
+    private string? ValidateClipsFolder(string path)
+    {
+        if ((_ringPath ?? DefaultCacheFolder) is { Length: > 0 } cache && ReplayBufferSettingsPage.IsInside(cache, path))
+        {
+            return ReplayBufferSettingsPage.ClipsContainsCache;
+        }
+
+        return FolderPicker.CanWrite(path) ? null : ReplayBufferSettingsPage.CantWrite;
     }
 
     // Shows the rendered value again, with why the entry wasn't sent.

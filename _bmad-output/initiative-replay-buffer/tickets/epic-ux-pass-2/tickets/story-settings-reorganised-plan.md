@@ -53,3 +53,4 @@ status: review
 ## Log
 
 - 2026-11-05: built and verified; READY FOR QA.
+- 2026-11-05: QA round 1, 1 finding fixed: the Clips folder is refused when it contains the cache folder (its ringPath, else the engine default), "The Clips folder can't contain the cache folder." The containment check also handled a drive root wrongly (D: never matched), now fixed for both directions.

@@ -26,6 +26,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
 {
     public const string CacheInsideClips = "The cache folder can't be inside the Clips folder.";
     public const string CantWrite = "ReplayBuffer can't write to that folder.";
+    public const string ClipsContainsCache = "The Clips folder can't contain the cache folder.";
 
     private int _bufferWindow = Keys.BufferWindow.Default;
     private ReplayStorage _storage = Keys.ReplayStorage.Default;
@@ -355,11 +356,12 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
         return FolderPicker.CanWrite(path) ? null : CantWrite;
     }
 
-    private static bool IsInside(string path, string folder)
+    /// <summary>Whether <paramref name="path"/> is <paramref name="folder"/> or inside it, ignoring case.</summary>
+    internal static bool IsInside(string path, string folder)
     {
-        var a = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) + Path.DirectorySeparatorChar;
-        var b = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar;
-        return a.StartsWith(b, StringComparison.OrdinalIgnoreCase);
+        // A drive root keeps its separator, so add one only where it's missing.
+        static string WithSeparator(string p) => Path.EndsInDirectorySeparator(p) ? p : p + Path.DirectorySeparatorChar;
+        return WithSeparator(Path.GetFullPath(path)).StartsWith(WithSeparator(Path.GetFullPath(folder)), StringComparison.OrdinalIgnoreCase);
     }
 
     private static ResolutionItem Resolution(int width, int height) =>

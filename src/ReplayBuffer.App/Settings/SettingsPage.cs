@@ -118,6 +118,6 @@ internal static class SettingsPages
         new TrackLayoutPage(sender, engine),
         new GameProfilesPage(sender, engine),
         new FeedbackSoundsPage(sender, engine),
-        new LibrarySettingsPage(sender, engine),
+        new LibrarySettingsPage(sender, engine, defaultCacheFolder),
     ];
 }

@@ -204,6 +204,27 @@ public sealed class LibrarySettingsPageTests
         Assert.NotNull(page.Message);
     }
 
+    [Fact]
+    public void AClipsFolderContainingTheCacheFolderIsRefused()
+    {
+        // QA 10.9: the cache folder can't be inside the Clips folder, from this side too.
+        var global = SettingsDocument.Empty.Global.Add(Keys.RingPath.Name, Keys.RingPath.ToJson(@"D:\ReplayBuffer Cache"));
+        _engine.State = _engine.State! with { Settings = SettingsDocument.Empty with { Revision = 1, Global = global } };
+        var page = Create();
+        _answer = true;
+
+        page.ClipsFolder.Choose(@"D:\");
+
+        Assert.Equal("The Clips folder can't contain the cache folder.", page.ClipsFolder.Problem);
+        Assert.Empty(_updates);
+
+        // With no ringPath, the engine's default cache folder counts.
+        _engine.State = _engine.State with { Settings = SettingsDocument.Empty with { Revision = 2 } };
+        var clips = new MainViewModel(_engine, action => action(), defaultCacheFolder: @"C:\Users\sam\AppData\Local\ReplayBuffer\ring").LibrarySettings.ClipsFolder;
+        clips.Choose(@"C:\Users\sam\AppData");
+        Assert.Equal("The Clips folder can't contain the cache folder.", clips.Problem);
+    }
+
     private LibrarySettingsPage Create(CleanupSettings? cleanup = null)
     {
         if (cleanup is not null)
