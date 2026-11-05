@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 10.4 (8.8 is held on its branch at e3822aa) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off (8.8 is held on its branch at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (holds 8.7 for its pending fps run) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.4 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
@@ -184,7 +184,7 @@ The coordinator logs each QA round in the Log below.
 | 31.1 | 10.1 Design pass: renders and the builder's approval of ux-pass-2 | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (builder approved all recommendations) |
 | 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 31.3 | 10.3 Library sort and search | | pending |
-| 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA (slice-epic-5) |
+| 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
 | 31.5 | 10.5 Audio Tracks editor | | pending |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | | pending |
 | 31.7 | 10.10 Games list and a page per game | | pending |
@@ -823,3 +823,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: **Builder: HEVC or AV1 at full width for several screens; run spike 11.1 now.** The decision is in epic 11's Notes (`0f00410`). 11.1 went to qa-2-1 (Opus, high effort) with short GPU runs allowed under the lock rule; captures go to temp files and are deleted. 8.7's fps and the 8.8 soaks stay paused.
 - 2026-11-05: 10.4 READY FOR QA at `77345d0`: Contracts 128, Core 161, Engine 187, Platform.Audio 26 and App 154 passed; publish clean. Meter-cost decision: keep the probe Tracks, with no fallback unless the Heavy `MeterProbeCostTests` shows more than 0.1 of a core or fewer than 15 levels/s. QA went to slice-epic-5 (Sonnet, high effort); it may run that read-only Heavy test once `.bench-running` is free of spike 11.1.
 - 2026-11-05: QA 10.4 round 1 failed with 2 findings at `77345d0`, sent to qa-1-14: (1) the seed writes a permanent empty layout when the first device listing fails or is empty; (2) the meter watch isn't unwatched on App disconnect, so the probes hold every device open (11 mics). Heavy meter cost passed: 30 devices, +0.036 core (limit 0.1), 16.0 levels/s (floor 15), so the probe-Track decision stands.
+- 2026-11-05: QA 10.4 passed at `c569ab9` (round 2): no empty seed is written, and the meter watch stops on the last disconnect and resumes on reconnect. Engine 189 and App 155 passed; publish clean; Heavy meter cost within the decision. QA's non-blocking race note (re-check for a new client before the queued Unwatch) is folded in before the merge. qa-1-14 is merging.
