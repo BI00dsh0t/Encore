@@ -1508,7 +1508,7 @@ public sealed class SessionOrchestrator : IDisposable
                 if (!active.Deferred)
                 {
                     active.Deferred = true;
-                    _recordings?.Info?.Invoke("The profile's video or Tracks changed while a Recording runs; the game session keeps its encoder chain until the Recording stops");
+                    _recordings?.Info?.Invoke("This game's video quality or audio tracks changed during a Recording; the change applies once the Recording stops");
                 }
             }
             else if (_monitor is not null)
@@ -1621,7 +1621,7 @@ public sealed class SessionOrchestrator : IDisposable
         var profileId = active.Spec.Target.ProfileId;
         if (profileId is null || !document.Profiles.TryGetValue(profileId, out var profile))
         {
-            recordings.Info?.Invoke("The Record press came for a game with no Game Profile; no Recording was started");
+            recordings.Info?.Invoke("The Record key was pressed before ReplayBuffer knew the game; no Recording was started");
             return;
         }
 
@@ -1942,7 +1942,7 @@ public sealed class SessionOrchestrator : IDisposable
             {
                 recordings.Warn?.Invoke(
                     ErrorCodes.EncoderBudget,
-                    $"The Monitor Recording didn't start: the game session already runs {chains} encoder chains, and another would exceed the encoder budget.");
+                    $"The Monitor Recording didn't start: your graphics card's video encoder is already busy with this game ({chains} videos).");
 
                 // The chain dropped above is asked for again: nothing runs beside the game session.
                 ApplySettings(game);
@@ -2127,7 +2127,7 @@ public sealed class SessionOrchestrator : IDisposable
             session.ResetRaised = true;
             _deviceRecovery.Reset?.Invoke(monitor
                 ? $"The GPU driver reset; the Monitor Recording is rebuilding its capture and encoder ({failure.Message})"
-                : $"The GPU driver reset; the Replay Buffer is rebuilding its capture and encoders ({failure.Message})");
+                : $"The graphics driver reset; ReplayBuffer is restarting its capture ({failure.Message})");
             TryRecover(session, monitor);
             return;
         }
@@ -2208,8 +2208,8 @@ public sealed class SessionOrchestrator : IDisposable
         else
         {
             message = session.Resuming
-                ? $"The Replay Buffer couldn't restart capture after the PC woke within {after:0} s; it stays off until the next game ({failure.Message})"
-                : $"The Replay Buffer couldn't recover from a GPU driver reset within {after:0} s; it stays off until the next game ({failure.Message})";
+                ? $"ReplayBuffer couldn't restart capture within {after:0} s of the PC waking; Clips are off until your next game ({failure.Message})"
+                : $"ReplayBuffer couldn't recover from a graphics driver reset within {after:0} s; Clips are off until your next game ({failure.Message})";
             _gpuStoppedPid = session.Spec.Target.ProcessId;
             EndActive("gpu reset failed", new ErrorCodeException(ErrorCodes.GpuResetFailed, message, failure));
         }
@@ -2571,7 +2571,7 @@ public sealed class SessionOrchestrator : IDisposable
         var every = recordings.RingRecheck ?? Recordings.DefaultRingRecheck;
         _ringTimer = new Timer(_ => Post(new RingRecheck()), null, every, every);
         recordings.ReplayDiskFull?.Invoke(true);
-        recordings.Info?.Invoke($"The disk filled under the Recording at {recording.Path}; the Disk-mode Replay Buffer stopped and restarts once its ring fits again");
+        recordings.Info?.Invoke($"The disk filled during the Recording at {recording.Path}; Clips stopped and start again once the cache folder fits");
     }
 
     /// <summary>A recheck after a full disk: the Replay Buffer restarts on the Target once its ring fits, or the wait ends when the Target has gone.</summary>

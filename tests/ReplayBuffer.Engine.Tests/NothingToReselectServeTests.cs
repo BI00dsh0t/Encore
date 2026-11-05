@@ -108,7 +108,7 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
         var item = client.State.Library[0];
         await client.SendAsync(LibraryMessages.SetFavourite, new LibrarySetFavourite(item.Path, item.Size, item.Modified, true), Token);
         await UntilAsync(() => client.State.Library[0].Favourite, "the Favourite");
-        await UntilAsync(() => ReadWhenFree(LibraryFile)?.Contains("true", StringComparison.Ordinal) == true, "library.json written");
+        await UntilAsync(() => File.Exists(LibraryFile) && System.Text.Encoding.UTF8.GetString(ReadShared(LibraryFile)).Contains("true", StringComparison.Ordinal), "library.json written");
 
         var settings = client.State.Settings;
         var files = Snapshot();
@@ -145,7 +145,7 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
         AudioDeviceHub? hub = null;
         var (_, client) = await StartAsync(new EngineHostOptions { AudioHub = loggers => hub = new AudioDeviceHub(loggers, bank.Create, source) });
         await UpdateAsync(client, SettingsOp.SetGlobal(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(Layout)));
-        var settings = File.ReadAllBytes(SettingsFile);
+        var settings = ReadShared(SettingsFile);
 
         // The Track meters hold both devices open, as a session would; neither Track is mute-affected.
         await client.SendAsync(AudioMessages.Watch, new MetersWatch(Layout), Token);
@@ -185,7 +185,7 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
         await UntilAsync(() => hub.OpenDeviceCount == 2 && BothLoud(client), "the saved layout metered on the new ids");
 
         // Nothing was written: the Track Layout on disk still names the ids the user chose.
-        Assert.Equal(settings, File.ReadAllBytes(SettingsFile));
+        Assert.Equal(settings, ReadShared(SettingsFile));
         Assert.True(Keys.TrackLayout.TryRead(client.State.Settings.Global[Keys.TrackLayout.Name], out var saved));
         Assert.Equal(Json(Layout), Json(saved));
         Assert.DoesNotContain(client.State.Warnings, w => w.Code == ErrorCodes.AudioDeviceFailed);
@@ -212,26 +212,32 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
         await UntilAsync(() => client.State.Settings.Revision >= result.Revision, "settings.changed");
     }
 
-    /// <summary>
-    /// The file's text, or null while it is missing or the engine still has it open to write: the bug
-    /// that bit (story 11.2's runs) was this poll reading library.json mid-write and failing on the
-    /// sharing violation.
-    /// </summary>
-    private static string? ReadWhenFree(string path)
-    {
-        try
-        {
-            return File.Exists(path) ? File.ReadAllText(path) : null;
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-    }
-
     /// <summary>Every persisted file's bytes.</summary>
     private Dictionary<string, string> Snapshot() =>
-        new[] { SettingsFile, RuntimeFile, LibraryFile }.ToDictionary(f => Path.GetFileName(f), f => Convert.ToBase64String(File.ReadAllBytes(f)));
+        new[] { SettingsFile, RuntimeFile, LibraryFile }.ToDictionary(f => Path.GetFileName(f), f => Convert.ToBase64String(ReadShared(f)));
+
+    /// <summary>
+    /// A file the engine may be replacing right now: read with sharing, so the read never blocks the
+    /// engine's swap, and retried for up to 2 s while the swap holds it (a loaded machine widens that window).
+    /// </summary>
+    private static byte[] ReadShared(string path)
+    {
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var copy = new MemoryStream();
+                stream.CopyTo(copy);
+                return copy.ToArray();
+            }
+            catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && clock.Elapsed < TimeSpan.FromSeconds(2))
+            {
+                Thread.Sleep(20);
+            }
+        }
+    }
 
     private async Task<(EngineHost Host, EngineClient Client)> StartAsync(EngineHostOptions options)
     {

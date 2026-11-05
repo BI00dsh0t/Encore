@@ -76,7 +76,7 @@ public sealed partial class SessionOrchestratorTests
         power.Raise(PowerChange.Suspending);
         power.Raise(PowerChange.Resumed);
         await WaitUntil(() => !failures.IsEmpty);
-        Assert.Contains("after the PC woke", Assert.Single(failures), StringComparison.Ordinal);
+        Assert.Contains("of the PC waking", Assert.Single(failures), StringComparison.Ordinal);
         Assert.Equal("gpu reset failed", session.EndReason);
         Assert.True(session.Recovers >= 2, $"{session.Recovers} attempts");
         await Press(orchestrator, presses, HotkeyAction.MicMute, Stopwatch.GetTimestamp());

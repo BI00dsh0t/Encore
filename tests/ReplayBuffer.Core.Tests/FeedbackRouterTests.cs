@@ -60,8 +60,7 @@ public sealed class FeedbackRouterTests
         Assert.Equal(ErrorCodes.RecordingRestarted, notice.Code);
         Assert.Equal(WarningSeverity.Warning, notice.Severity);
         Assert.Equal("recordingStarted", notice.Sound);
-        Assert.Contains("a.mp4", notice.Message, StringComparison.Ordinal);
-        Assert.Contains("b.mp4", notice.Message, StringComparison.Ordinal);
+        Assert.Equal("The Recording continues in a new file after its video restarted: a.mp4 → b.mp4", notice.Message);
         time.Advance(FeedbackRouter.InfoLifetime);
         Assert.Empty(notices.Active);
     }

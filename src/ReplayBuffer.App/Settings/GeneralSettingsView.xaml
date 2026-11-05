@@ -25,6 +25,7 @@
                     <TextBlock Margin="0,12,0,4" Style="{DynamicResource RbSettingsLabelStyle}" Text="Show the Overlay's dot" />
                     <ComboBox ItemsSource="{Binding OverlayDotChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Mode"
                               SelectedValue="{Binding OverlayDot}" HorizontalAlignment="Left" MinWidth="320" />
+                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="The small on-screen indicator that shows ReplayBuffer is capturing." />
                 </StackPanel>
             </HeaderedContentControl>
         </theme:SettingsContent>

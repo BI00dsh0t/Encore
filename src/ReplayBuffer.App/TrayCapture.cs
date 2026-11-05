@@ -15,7 +15,7 @@ namespace ReplayBuffer.App;
 internal static class TrayCapture
 {
     /// <summary>The tooltip's state while the engine is in a crash loop.</summary>
-    public const string CrashLoopText = "The engine keeps crashing; Restart from this menu";
+    public const string CrashLoopText = "ReplayBuffer's background service keeps crashing; Restart from this menu";
 
     private static readonly Color Off = Color.FromRgb(0x61, 0x61, 0x61);
     private static readonly Color On = Color.FromRgb(0xC6, 0x28, 0x28);
@@ -28,7 +28,7 @@ internal static class TrayCapture
     public static string Describe(OverlayDot dot) => dot switch
     {
         OverlayDot.Solid => "Recording",
-        OverlayDot.Hollow => "Replay Buffer on",
+        OverlayDot.Hollow => "Ready to save Clips",
         _ => "Not capturing",
     };
 

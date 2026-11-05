@@ -18,7 +18,15 @@ public static unsafe class ShellThumbnail
     /// The shell's thumbnail of <paramref name="path"/>, at most <paramref name="size"/> pixels square
     /// (<c>SIIGBF_THUMBNAILONLY</c>, so never the file type's icon); null when the shell has none.
     /// </summary>
-    public static ShellImage? TryGet(string path, int size)
+    public static ShellImage? TryGet(string path, int size) => Get(path, size, SIIGBF.SIIGBF_THUMBNAILONLY);
+
+    /// <summary>
+    /// The icon the shell shows for <paramref name="path"/>, such as a program's (story 10.10's game rows),
+    /// at most <paramref name="size"/> pixels square (<c>SIIGBF_ICONONLY</c>); null when it has none.
+    /// </summary>
+    public static ShellImage? TryGetIcon(string path, int size) => Get(path, size, SIIGBF.SIIGBF_ICONONLY);
+
+    private static ShellImage? Get(string path, int size, SIIGBF flags)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
@@ -42,7 +50,7 @@ public static unsafe class ShellThumbnail
             // The vtable call, not the wrapper, so a failing HRESULT is a null rather than an exception.
             var vtable = *(void***)factory;
             var getImage = (delegate* unmanaged[Stdcall]<IShellItemImageFactory*, SIZE, SIIGBF, HBITMAP*, HRESULT>)vtable[3];
-            if (getImage(factory, new SIZE(size, size), SIIGBF.SIIGBF_THUMBNAILONLY, &bitmap).Failed || bitmap.IsNull)
+            if (getImage(factory, new SIZE(size, size), flags, &bitmap).Failed || bitmap.IsNull)
             {
                 return null;
             }

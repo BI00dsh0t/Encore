@@ -8,7 +8,8 @@ namespace ReplayBuffer.Core.Tests;
 public sealed class LibraryActorTests : IDisposable
 {
     private const string ProfileId = @"c:\games\a.exe";
-    private static readonly TimeSpan Within = TimeSpan.FromSeconds(2);
+    // A ceiling, not a wait: lengths are read on a lowest-priority thread, which a loaded machine can starve for seconds.
+    private static readonly TimeSpan Within = TimeSpan.FromSeconds(10);
 
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "rb-library-" + Guid.NewGuid().ToString("N"));
 
@@ -549,7 +550,7 @@ public sealed class LibraryActorTests : IDisposable
 
         public void Dispose() => Actor.Dispose();
 
-        /// <summary>The index once <paramref name="done"/> holds, within 2 s.</summary>
+        /// <summary>The index once <paramref name="done"/> holds, within <see cref="Within"/>.</summary>
         public Dictionary<string, LibraryItem> WaitFor(Func<Dictionary<string, LibraryItem>, bool> done)
         {
             var until = DateTime.UtcNow + Within;
@@ -563,7 +564,7 @@ public sealed class LibraryActorTests : IDisposable
                     }
                 }
 
-                Assert.True(DateTime.UtcNow < until, "The index didn't reach the expected state within 2 s.");
+                Assert.True(DateTime.UtcNow < until, $"The index didn't reach the expected state within {Within.TotalSeconds:0} s.");
                 Thread.Sleep(20);
             }
         }
@@ -578,7 +579,7 @@ public sealed class LibraryActorTests : IDisposable
                     return found;
                 }
 
-                Assert.True(DateTime.UtcNow < until, "The event didn't arrive within 2 s.");
+                Assert.True(DateTime.UtcNow < until, $"The event didn't arrive within {Within.TotalSeconds:0} s.");
                 Thread.Sleep(20);
             }
         }

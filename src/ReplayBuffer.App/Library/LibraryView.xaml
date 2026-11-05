@@ -195,7 +195,7 @@
                         Content="Acknowledge"
                         DockPanel.Dock="Right" />
                 <TextBlock VerticalAlignment="Center"
-                           Text="The Library index couldn't be read, so it was rebuilt from the Output Folder. Cleanup is off until you acknowledge this."
+                           Text="The Library index couldn't be read, so it was rebuilt from the Clips folder. Cleanup is off until you acknowledge this."
                            TextWrapping="Wrap" />
             </DockPanel>
         </ContentControl>

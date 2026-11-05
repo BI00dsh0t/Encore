@@ -722,7 +722,7 @@ internal sealed class EngineHost : IAsyncDisposable
                     ErrorCodes.LibraryCorrupt,
                     WarningSeverity.Warning,
                     "library",
-                    "The Library index was unreadable and was rebuilt from the Output Folder; Favourites may be lost. Cleanup stays off until this is acknowledged.",
+                    "The Library index couldn't be read, so it was rebuilt from the Clips folder; Favourites may be lost. Cleanup stays off until you acknowledge this.",
                     overlay: false).Id;
             }
 

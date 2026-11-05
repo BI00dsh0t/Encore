@@ -119,7 +119,7 @@ Code, settings keys, error codes, Contracts, logs and automation ids keep the in
 | encoder | "your graphics card's video encoder", only where a warning needs it |
 | engine | "ReplayBuffer's background service" |
 | Feedback Sounds | **Sounds** |
-| Monitor Recording | stays: "a Recording of a whole screen" |
+| Monitor Recording | stays: "a Recording of your screens" |
 | Clip, Recording | stay, and are [explained](#clips-and-recordings-explained) where Sam meets them |
 | Overlay | stays: "the small on-screen indicator" in help text |
 | Cleanup, Favourite, Library, Hotkey | stay |
@@ -454,7 +454,7 @@ Sam meets three kinds of file. Each one gets one plain sentence, the same one, w
 |---|---|
 | **Clip** | "The last {Clip length} of your game, saved when you press {Save Hotkey}. ReplayBuffer keeps that much ready all the time, so you never miss a moment." |
 | **Recording** | "One long video of your game that you start and stop yourself with {Record Hotkey}, alongside Clips. Allow it per game, on the game's page." |
-| **Monitor Recording** | "A Recording of a whole screen instead of a game, for anything that isn't detected as a game. Start and stop it with {Monitor Recording Hotkey}." |
+| **Monitor Recording** | "A Recording of your screens instead of a game, for anything that isn't detected as a game. Start and stop it with {Monitor Recording Hotkey}." |
 
 **Where they appear:**
 
@@ -511,7 +511,7 @@ The rows are grouped by what they do, each section with its sentence from [the e
 |---|---|
 | **Clips** | Save Clip |
 | **Recordings** | Record mode ("One key starts and stops" / "Separate start and stop keys"), then Record, or Record start and Record stop |
-| **Monitor Recording** | Monitor Recording (the key), then **Screen to record** [monitor ▾] [Refresh], moved here from the removed Recordings page with its behaviour unchanged |
+| **Monitor Recording** | Monitor Recording (the key), then **Screens to record**: the multi-monitor picker (story 11.4, [design-multi-monitor.md](../../epic-multi-monitor-recording/design-multi-monitor.md#the-picker)). All screens or Chosen screens, a check box per screen, a clickable layout preview, the output size, and [Refresh]. It replaced 10.9's one-screen combo box. |
 | **Microphone** | Mic mute, with "Silences your microphone on the tracks you choose in Audio Tracks." |
 
 - Key capture, the duplicate refusal, and the failed-registration and status texts keep their behaviour.
@@ -531,7 +531,7 @@ The rows are grouped by what they do, each section with its sentence from [the e
 
 - The page and its nav item go.
 - The `RecordingsSettingsPage` view model's monitor list and Refresh move into the Hotkeys page.
-- The `monitorRecordingMonitor` key is unchanged.
+- The `monitorRecordingMonitor` key is unchanged. Since story 11.4 the picker writes `monitorRecordingScreens` instead, and the old key is only read while the new one is null.
 
 ## Folder picker
 

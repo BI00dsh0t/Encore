@@ -1574,7 +1574,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         {
             _unreachableRaised = true;
             _limitUnreachable?.Invoke(
-                $"Cleanup can't keep the Output Folder within its size limit of {maxBytes} bytes: the {plan.Remaining} bytes left are Favourites or files being written.");
+                $"Cleanup can't keep the Clips folder within its size limit of {maxBytes / 1e9:0.#} GB: the {plan.Remaining / 1e9:0.#} GB left are Favourites or files being saved.");
         }
 
         Log($"Cleanup finished: {_passDeleted} files deleted ({_passBytes} bytes), {_passSkipped} skipped; the Library holds {plan.Remaining} bytes.");

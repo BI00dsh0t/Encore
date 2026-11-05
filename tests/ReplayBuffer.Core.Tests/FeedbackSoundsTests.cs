@@ -72,7 +72,7 @@ public sealed class FeedbackSoundsTests
             notices.Raised.Select(n => n.Code));
         var stops = notices.Raised.Where(n => n.Code == ErrorCodes.RecordingStopped).ToList();
         Assert.Equal(
-            ["Recording stopped", "Recording stopped: the game exited", "Recording stopped: the game was set Ignored", "Recording stopped: the game session ended", "Recording stopped: ReplayBuffer shut down", $"Recording stopped: the write failed ({ErrorCodes.EncodeFailed})", "Recording stopped: the disk is full", "Recording stopped: encoder restart"],
+            ["Recording stopped", "Recording stopped: the game exited", "Recording stopped: capture was switched off for the game", "Recording stopped: the game stopped being captured", "Recording stopped: ReplayBuffer shut down", $"Recording stopped: the write failed ({ErrorCodes.EncodeFailed})", "Recording stopped: the disk is full", "Recording stopped: its video restarted"],
             stops.Select(n => n.Message));
         Assert.Equal(WarningSeverity.Warning, stops[5].Severity);
         Assert.Null(stops[6].Sound);
