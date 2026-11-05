@@ -1,4 +1,3 @@
-using System.Windows;
 using System.Windows.Input;
 using ReplayBuffer.App.Engine;
 using ReplayBuffer.Contracts;
@@ -8,32 +7,37 @@ using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Settings;
 
-/// <summary>A monitor the Recordings page offers; a null device name is whichever monitor is primary.</summary>
+/// <summary>A screen the Monitor Recording picker offers; a null device name is whichever monitor is primary.</summary>
 internal sealed record MonitorItem(string? DeviceName, string Label);
 
 /// <summary>
-/// The Recordings page (story 6.11): the monitor a Monitor Recording captures, from the engine's
-/// <c>monitors.list</c>. A choice is one Global <c>monitorRecordingMonitor</c> op. Members run on the UI thread.
+/// The screen a Monitor Recording captures (story 6.11's Recordings page, moved beside the Monitor
+/// Recording key on Hotkeys by story 10.9), from the engine's <c>monitors.list</c>. A choice is one
+/// Global <c>monitorRecordingMonitor</c> op, sent through the hosting page. Its own component, so story
+/// 11.4's choice of several screens can replace it in one place. Members run on the UI thread.
 /// </summary>
-internal sealed class RecordingsSettingsPage : SettingsPage
+internal sealed class MonitorPicker : Observable
 {
     private const string PrimaryLabel = "Primary monitor";
 
     private readonly IEngineSession _engine;
+    private readonly Func<IReadOnlyList<SettingsOp>, Task> _send;
+    private readonly Action<string?> _message;
     private string? _monitor = Keys.MonitorRecordingMonitor.Default;
     private IReadOnlyList<DisplayMonitor> _monitors = [];
     private IReadOnlyList<MonitorItem> _items = [new(null, PrimaryLabel)];
     private string? _fetchedInstance;
     private MonitorList? _changed;
 
-    public RecordingsSettingsPage(SettingsSender sender, IEngineSession engine)
-        : base(sender)
+    /// <param name="send">Sends the ops, as the hosting page's <c>SendAsync</c>.</param>
+    /// <param name="message">Shows a note on the hosting page's error bar; null clears it.</param>
+    public MonitorPicker(IEngineSession engine, Func<IReadOnlyList<SettingsOp>, Task> send, Action<string?> message)
     {
         _engine = engine;
+        _send = send;
+        _message = message;
         RefreshCommand = new RelayCommand(() => _ = FetchAsync());
     }
-
-    public override string Title => "Recordings";
 
     /// <summary>Primary monitor first, then the attached monitors, then the set monitor if it isn't attached.</summary>
     public IReadOnlyList<MonitorItem> Monitors
@@ -55,7 +59,7 @@ internal sealed class RecordingsSettingsPage : SettingsPage
 
             _monitor = value.DeviceName;
             OnPropertyChanged();
-            _ = SendAsync([SettingsValues.SetGlobal(Keys.MonitorRecordingMonitor, value.DeviceName)]);
+            _ = _send([SettingsValues.SetGlobal(Keys.MonitorRecordingMonitor, value.DeviceName)]);
         }
     }
 
@@ -64,7 +68,7 @@ internal sealed class RecordingsSettingsPage : SettingsPage
 
     /// <summary>
     /// Fetches the monitors from a newly connected engine run, and shows the list a <c>monitors.changed</c>
-    /// carries (T-03). Called before <see cref="SettingsPage.Render"/>.
+    /// carries (T-03). Called before the hosting page renders.
     /// </summary>
     public void ShowState(StateSnapshot state)
     {
@@ -88,9 +92,8 @@ internal sealed class RecordingsSettingsPage : SettingsPage
         }
     }
 
-    protected override FrameworkElement CreateView() => new RecordingsSettingsView { DataContext = this };
-
-    protected override void OnRender(SettingsDocument document)
+    /// <summary>Shows the document's <c>monitorRecordingMonitor</c>.</summary>
+    public void Render(SettingsDocument document)
     {
         _monitor = SettingsValues.Global(document, Keys.MonitorRecordingMonitor);
         ShowMonitors();
@@ -106,12 +109,12 @@ internal sealed class RecordingsSettingsPage : SettingsPage
         try
         {
             _monitors = (await _engine.SendAsync(RecordingMessages.MonitorsList, Empty.Value)).Monitors;
-            Message = null;
+            _message(null);
             ShowMonitors();
         }
         catch (ErrorCodeException e)
         {
-            Message = $"Couldn't list monitors ({e.Code}): {e.Message}";
+            _message($"Couldn't list screens ({e.Code}): {e.Message}");
         }
     }
 

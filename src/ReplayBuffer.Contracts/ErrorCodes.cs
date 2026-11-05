@@ -53,6 +53,12 @@ public static class ErrorCodes
     /// <summary>A settings update names a Game Profile that does not exist.</summary>
     public const string ProfileNotFound = "profile-not-found";
 
+    /// <summary>
+    /// A settings update would leave the cache folder (<c>ringPath</c>, or its default) inside the Clips
+    /// folder (<c>outputFolder</c>, or its default), or the Clips folder inside the cache folder (AD-17, story 10.9); nothing changed.
+    /// </summary>
+    public const string RingPathInvalid = "ring-path-invalid";
+
     /// <summary>The settings file could not be written; nothing changed.</summary>
     public const string SettingsWriteFailed = "settings-write-failed";
 
@@ -372,5 +378,6 @@ public static class ErrorCodes
         NotDevInstance,
         MonitorCaptureFallback,
         MonitorRemoved,
+        RingPathInvalid,
     ];
 }

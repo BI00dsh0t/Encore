@@ -46,6 +46,13 @@ public sealed class SettingsStore
     /// <summary>The last committed document.</summary>
     public SettingsDocument Current => Volatile.Read(ref _current);
 
+    /// <summary>
+    /// The folder rule (AD-17, story 10.9): given the cache folder's and the Clips folder's defaults, an
+    /// update that sets or removes <c>ringPath</c> or <c>outputFolder</c> and leaves them nested is refused
+    /// with <see cref="ErrorCodes.RingPathInvalid"/>. Null (the default) checks nothing; the engine host sets it.
+    /// </summary>
+    public (string Cache, string Clips)? FolderDefaults { get; set; }
+
     /// <summary>Test seam: runs after the temp file is written and before it replaces the settings file.</summary>
     internal Action? BeforeReplace { get; set; }
 
@@ -132,6 +139,13 @@ public sealed class SettingsStore
             }
 
             var next = Apply(current, update.Ops) with { Revision = current.Revision + 1 };
+            if (FolderDefaults is { } defaults
+                && update.Ops.Any(op => op.Scope == SettingsScope.Global && (op.Key == Keys.RingPath.Name || op.Key == Keys.OutputFolder.Name))
+                && RingPathRule.Nests(next, defaults.Cache, defaults.Clips))
+            {
+                throw new ErrorCodeException(ErrorCodes.RingPathInvalid, RingPathRule.Refusal);
+            }
+
             Write(next);
             Volatile.Write(ref _current, next);
             Changed?.Invoke(next);

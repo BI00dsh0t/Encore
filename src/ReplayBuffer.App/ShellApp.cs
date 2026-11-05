@@ -90,7 +90,8 @@ internal sealed class ShellApp(Instance instance) : Application
         var model = new MainViewModel(
             _engine,
             action => Dispatcher.BeginInvoke(action),
-            Path.Combine(instance.RoamingDataFolder, "library-view.json"));
+            Path.Combine(instance.RoamingDataFolder, "library-view.json"),
+            Path.Combine(instance.LocalDataFolder, "ring"));
         _window = new MainWindow { DataContext = model };
         if (instance.Name != Instance.InstalledName)
         {

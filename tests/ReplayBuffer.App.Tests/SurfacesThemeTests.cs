@@ -151,7 +151,7 @@ public sealed class SurfacesThemeTests
             Directory.Delete(folder, recursive: true);
         }
 
-        Assert.Equal([("Delete", "Move “clip.mp4” to the Recycle Bin?", null), ("Library and Cleanup", "Delete 3 Clips?", null)], asked);
+        Assert.Equal([("Delete", "Move “clip.mp4” to the Recycle Bin?", null), ("Storage and Cleanup", "Delete 3 Clips?", null)], asked);
     });
 
     [Fact]
