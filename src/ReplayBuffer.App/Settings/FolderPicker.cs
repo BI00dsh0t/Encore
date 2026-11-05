@@ -56,6 +56,12 @@ internal sealed class FolderPicker : Observable
     /// <summary>Why a chosen folder can't be used, in plain words, or null when it can. Checked before anything is sent.</summary>
     public Func<string, string?> Validate { get; set; } = _ => null;
 
+    /// <summary>
+    /// What a chosen path does instead of setting the key, such as Add a game…'s <c>game.add</c> (story 10.10);
+    /// null sets the key. Returns a refusal's error code, or null.
+    /// </summary>
+    public Func<string, Task<string?>>? Pick { get; init; }
+
     /// <summary>The plain words for an engine refusal's error code, or null to leave it to the page's error bar.</summary>
     public Func<string, string?> RefusalText { get; set; } = _ => null;
 
@@ -177,7 +183,7 @@ internal sealed class FolderPicker : Observable
             return;
         }
 
-        path = Path.TrimEndingDirectorySeparator(path);
+        path = IsFile ? path : Path.TrimEndingDirectorySeparator(path);
         if (Validate(path) is { } refusal)
         {
             Problem = refusal;
@@ -185,6 +191,12 @@ internal sealed class FolderPicker : Observable
         }
 
         Problem = null;
+        if (Pick is { } pick)
+        {
+            _ = pick(path);
+            return;
+        }
+
         if (string.Equals(path, _value, StringComparison.OrdinalIgnoreCase) || !Confirm(path))
         {
             return;

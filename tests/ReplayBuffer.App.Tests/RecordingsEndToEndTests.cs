@@ -84,7 +84,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId), "the profile on the Game Profiles page");
 
             // R9: Recordings are off by default; the Game Profiles page switches them on.
-            var profile = main.GameProfiles.Profiles.Single(p => p.ProfileId == ProfileId);
+            var profile = main.GameProfiles.Page(ProfileId);
             Assert.False(profile.RecordingsEnabled);
             profile.RecordingsEnabled = true;
             Until(() => engine.State!.Settings.Profiles[ProfileId].RecordingsEnabled, "recordingsEnabled saved");
@@ -130,7 +130,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             var engine = second.Engine;
             var main = second.Main;
             Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId) && main.Hotkeys.Monitor.IsAllScreens, "the pages after a restart");
-            Assert.True(main.GameProfiles.Profiles.Single(p => p.ProfileId == ProfileId).RecordingsEnabled);
+            Assert.True(main.GameProfiles.Page(ProfileId).RecordingsEnabled);
             Assert.True(main.Hotkeys.IsSeparateMode);
             Assert.Equal("Ctrl+Alt+Shift+F20", Row(main.Hotkeys, HotkeyAction.RecordStart).BindingText);
             Assert.Equal("Ctrl+Alt+Shift+F21", Row(main.Hotkeys, HotkeyAction.RecordStop).BindingText);

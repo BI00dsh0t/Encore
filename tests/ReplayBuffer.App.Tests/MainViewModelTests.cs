@@ -16,11 +16,11 @@ public sealed class MainViewModelTests
     [Fact]
     public void TheNavListsTheEightPagesInOrderWithNoRecordingsPage()
     {
-        // Story 10.9: the builder's approved order; the Games page keeps its old title until story 10.10.
+        // Story 10.9: the builder's approved order; Games has its own title since story 10.10.
         var model = Create();
 
         Assert.Equal(
-            ["Library", "Settings", "General", "Clips", "Hotkeys", "Audio Tracks", "Game Profiles", "Sounds", "Storage and Cleanup"],
+            ["Library", "Settings", "General", "Clips", "Hotkeys", "Audio Tracks", "Games", "Sounds", "Storage and Cleanup"],
             model.NavItems.Select(i => i.Title));
         Assert.Equal(8, model.NavItems.Count(i => !i.IsSection));
         Assert.DoesNotContain(model.NavItems, i => i.Title == "Recordings");

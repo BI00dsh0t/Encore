@@ -18,10 +18,6 @@
 
             <HeaderedContentControl Header="Clip length" Style="{DynamicResource RbSettingsSectionStyle}">
                 <StackPanel>
-                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Margin="0,0,0,4"
-                              Content="Use the main Clip length"
-                              IsChecked="{Binding BufferWindowUsesGlobal}"
-                              Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
                     <Grid IsEnabled="{Binding CanEditBufferWindow}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
@@ -89,10 +85,6 @@
 
             <HeaderedContentControl Header="Video quality — for Clips and Recordings" Style="{DynamicResource RbSettingsSectionStyle}">
                 <StackPanel>
-                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Margin="0,0,0,4"
-                              Content="Use the main video quality"
-                              IsChecked="{Binding VideoUsesGlobal}"
-                              Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
                     <Grid IsEnabled="{Binding CanEditVideo}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />

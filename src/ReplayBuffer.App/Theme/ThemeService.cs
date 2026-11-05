@@ -139,6 +139,7 @@ internal sealed class ThemeService
         AddOnce<SettingsLayout>(merged);
         AddOnce<LibraryTheme>(merged);
         AddOnce<AudioTracksTheme>(merged);
+        AddOnce<GamesTheme>(merged);
         Theme = theme;
         foreach (var window in _windows())
         {
