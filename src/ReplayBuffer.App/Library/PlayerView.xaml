@@ -1,13 +1,15 @@
 <!--
-    The in-app player's page (story 14.2, AD-27): the video fills the page under the breadcrumb, letterboxed with
-    its aspect kept, and a bar over its bottom edge holds the controls. The picture is a WPF D3DImage, so the bar
-    and the looks draw over it. 14.4 adds the Track list and 14.5 the transport to the bar.
+    The in-app player's page (stories 14.2 and 14.5, AD-27): the video fills the page under the breadcrumb, letterboxed
+    with its aspect kept, and the transport bar runs over its bottom edge: play and pause, the elapsed and total time,
+    the seek bar, mute and volume. The picture is a WPF D3DImage, so the bar and the looks draw over it. Keys bubble
+    to the page (KeyDown, not PreviewKeyDown), so a focused control's own keys win. 14.4 adds the Track list.
 -->
 <UserControl x:Class="ReplayBuffer.App.Library.PlayerView"
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:theme="clr-namespace:ReplayBuffer.App.Theme">
+             xmlns:theme="clr-namespace:ReplayBuffer.App.Theme"
+             KeyDown="OnKeyDown">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
         <theme:EmptyToCollapsedConverter x:Key="NotEmpty" />
@@ -20,19 +22,67 @@
                        Style="{DynamicResource RbPlayerMessageStyle}"
                        Text="{Binding Message}"
                        Visibility="{Binding Message, Converter={StaticResource NotEmpty}}" />
-            <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Style="{DynamicResource RbPlayerBarStyle}">
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="PlayPause"
-                            MinWidth="88"
+            <Border x:Name="Bar" VerticalAlignment="Bottom" Style="{DynamicResource RbPlayerBarStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="PlayPause"
+                                MinWidth="88"
+                                VerticalAlignment="Center"
+                                Command="{Binding PlayPauseCommand}"
+                                Content="{Binding PlayPauseLabel}" />
+                        <Button Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Command="{Binding OpenInDefaultPlayerCommand}"
+                                Content="Open in default player"
+                                Visibility="{Binding IsFailed, Converter={StaticResource Visible}}" />
+                    </StackPanel>
+                    <TextBlock x:Name="Time"
+                               Grid.Column="1"
+                               Margin="12,0"
+                               Style="{DynamicResource RbPlayerTimeStyle}"
+                               Text="{Binding TimeText}"
+                               Visibility="{Binding HasControls, Converter={StaticResource Visible}}" />
+                    <Slider x:Name="SeekBar"
+                            Grid.Column="2"
                             VerticalAlignment="Center"
-                            Command="{Binding PlayPauseCommand}"
-                            Content="{Binding PlayPauseLabel}" />
-                    <Button Margin="8,0,0,0"
+                            AutomationProperties.Name="Seek"
+                            IsMoveToPointEnabled="True"
+                            LargeChange="30"
+                            Maximum="{Binding DurationSeconds}"
+                            Minimum="0"
+                            SmallChange="5"
+                            Value="{Binding PositionSeconds, Mode=TwoWay}"
+                            Visibility="{Binding CanSeek, Converter={StaticResource Visible}}" />
+                    <Button x:Name="Mute"
+                            Grid.Column="3"
+                            Margin="12,0,4,0"
                             VerticalAlignment="Center"
-                            Command="{Binding OpenInDefaultPlayerCommand}"
-                            Content="Open in default player"
-                            Visibility="{Binding IsFailed, Converter={StaticResource Visible}}" />
-                </StackPanel>
+                            AutomationProperties.Name="{Binding MuteName}"
+                            Command="{Binding MuteCommand}"
+                            Content="{Binding MuteGlyph}"
+                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                            ToolTip="{Binding MuteName}"
+                            Visibility="{Binding HasControls, Converter={StaticResource Visible}}" />
+                    <Slider x:Name="VolumeBar"
+                            Grid.Column="4"
+                            Width="96"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Volume"
+                            IsMoveToPointEnabled="True"
+                            LargeChange="0.2"
+                            Maximum="1"
+                            Minimum="0"
+                            SmallChange="0.05"
+                            Value="{Binding Volume, Mode=TwoWay}"
+                            Visibility="{Binding HasControls, Converter={StaticResource Visible}}" />
+                </Grid>
             </Border>
         </Grid>
     </Border>

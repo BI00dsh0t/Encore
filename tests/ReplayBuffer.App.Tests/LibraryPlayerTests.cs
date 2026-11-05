@@ -216,7 +216,20 @@ internal sealed class FakePlayer : IPlayer
 
     public bool IsPlaying { get; private set; }
 
-    public TimeSpan Position => TimeSpan.Zero;
+    public TimeSpan Position { get; set; }
+
+    public double Volume { get; set; } = 1.0;
+
+    public bool IsMuted { get; set; }
+
+    /// <summary>Every seek the page asked for, in order.</summary>
+    public List<TimeSpan> Seeks { get; } = [];
+
+    public void Seek(TimeSpan position)
+    {
+        Seeks.Add(position);
+        Position = position;
+    }
 
     // Windows picks the last Track at open (AD-27).
     public int SelectedTrack { get; set; } = 3;

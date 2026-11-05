@@ -60,6 +60,8 @@ internal sealed class LibraryPage : Observable
     private readonly Func<IPlayer> _newPlayer;
     private readonly Func<string, Stream>? _openRead;
     private PlayerPage? _player;
+    private double _playerVolume = 1.0;
+    private bool _playerMuted;
     private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
     // The App's own renames in flight: old path → the path the item gets once the snapshot shows it.
     private readonly Dictionary<string, string> _renames = new(StringComparer.OrdinalIgnoreCase);
@@ -145,6 +147,7 @@ internal sealed class LibraryPage : Observable
 
         var view = LibraryViewState.Load(viewStateFile);
         (_groupBy, _gameFilter, _dateFilter, _favouritesOnly, _sort) = (view.GroupBy, view.Game, view.Date, view.FavouritesOnly, view.Sort);
+        (_playerVolume, _playerMuted) = (view.PlayerVolume, view.PlayerMuted);
     }
 
     /// <summary>Whether the banner shows: the index was rebuilt and Cleanup is off until acknowledged.</summary>
@@ -685,8 +688,23 @@ internal sealed class LibraryPage : Observable
         }
 
         Apply();
-        new LibraryViewState(_groupBy, _gameFilter, _dateFilter, _favouritesOnly, _sort).Save(_viewStateFile);
+        SaveView();
         return true;
+    }
+
+    private void SaveView() =>
+        new LibraryViewState(_groupBy, _gameFilter, _dateFilter, _favouritesOnly, _sort, _playerVolume, _playerMuted).Save(_viewStateFile);
+
+    // The player's volume and mute, kept with the view choices (story 14.5).
+    private void OnPlayerVolumeChanged(double volume, bool muted)
+    {
+        if ((volume, muted) == (_playerVolume, _playerMuted))
+        {
+            return;
+        }
+
+        (_playerVolume, _playerMuted) = (volume, muted);
+        SaveView();
     }
 
     /// <summary>Makes <paramref name="target"/> equal <paramref name="wanted"/> in place, keeping the items both share.</summary>
@@ -1035,7 +1053,12 @@ internal sealed class LibraryPage : Observable
 
         DrillIn.Close();
         ClearActionError();
-        var page = new PlayerPage(path, row.Name, _newPlayer(), _openRead, p => Shell(row.Path, () => _shell.Open(p), "Couldn't open the file."));
+        var page = new PlayerPage(path, row.Name, _newPlayer(), _openRead, p => Shell(row.Path, () => _shell.Open(p), "Couldn't open the file."))
+        {
+            Volume = _playerVolume,
+            IsMuted = _playerMuted,
+        };
+        page.VolumeChanged += OnPlayerVolumeChanged;
         Player = page;
         DrillIn.Open(row.Path, row.Name);
         _ = page.OpenAsync();

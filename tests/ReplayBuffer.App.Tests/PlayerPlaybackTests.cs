@@ -103,7 +103,7 @@ public sealed class PlayerPlaybackTests : IDisposable
             LibraryFolder = _folder,
             Library = [new LibraryItem(Clip, null, new FileInfo(absolute).Length, DateTimeOffset.UnixEpoch, false)],
         };
-        var model = new MainViewModel(engine, action => action(), player: () => new WindowsMediaPlayer { IsMuted = true });
+        var model = new MainViewModel(engine, action => action(), player: () => new WindowsMediaPlayer());
         var window = new MainWindow
         {
             DataContext = model,
@@ -123,6 +123,9 @@ public sealed class PlayerPlaybackTests : IDisposable
             model.Library.Click(model.Library.Rows.Single(), ctrl: false, shift: false);
             model.Library.OpenFocused();
             Sta.PumpUntil(() => model.Library.Player?.State == PlayerState.Paused, "the player to open");
+
+            // Muted through the page: it applies its own volume and mute to the player as it opens (story 14.5).
+            model.Library.Player!.IsMuted = true;
             var player = (PlayerView)view.FindName("PlayerContent");
             Sta.PumpUntil(() => player.SurfaceSize is not null, "the first frame");
 
@@ -169,13 +172,13 @@ public sealed class PlayerPlaybackTests : IDisposable
 
     // The research's fixture: the video, four AAC Tracks of different tones named Game, Mic, Discord and Desktop,
     // only the first marked default, written where the Library item points.
-    private string MakeFixture(string video, string encode, string mux)
+    private string MakeFixture(string video, string encode, string mux, int seconds = 2)
     {
         var ffmpeg = FindFFmpeg();
         Assert.SkipWhen(ffmpeg is null, "native/ffmpeg/ffmpeg.exe isn't there.");
         var absolute = Path.Combine(_folder, Clip);
         Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
-        var tones = string.Join(' ', new[] { 300, 600, 900, 1200 }.Select(f => $"-f lavfi -i sine=frequency={f}:duration=2"));
+        var tones = string.Join(' ', new[] { 300, 600, 900, 1200 }.Select(f => $"-f lavfi -i sine=frequency={f}:duration={seconds}"));
         var names = string.Join(' ', new[] { "Game", "Mic", "Discord", "Desktop" }.Select((n, i) => $"-metadata:s:a:{i} title={n} -metadata:s:a:{i} handler_name={n} -disposition:a:{i} {(i == 0 ? "default" : "0")}"));
         var arguments = $"-hide_banner -loglevel error -y {video} {tones} -map 0:v -map 1:a -map 2:a -map 3:a -map 4:a -shortest {encode} -c:a aac -ac 2 {names} {mux} \"{absolute}\"";
         using var process = Process.Start(new ProcessStartInfo(ffmpeg!, arguments) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true })!;

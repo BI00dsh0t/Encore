@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -18,6 +20,9 @@ namespace ReplayBuffer.App.Library;
 /// <item>A GPU failure building the surface puts the page in its Failed state rather than leaving a blank picture.</item>
 /// <item>After a lost front buffer (a lock screen, a display change) the surface is remade and the current frame redrawn.</item>
 /// <item>Leaving the page drops its frames before the back buffer goes (the proof's close order).</item>
+/// <item>The transport (story 14.5): the position is read for the seek bar about ten times a second while playing,
+/// a drag of the seek bar's thumb seeks about once a rendered frame, and the keys bubble here, so a focused
+/// control's own keys win.</item>
 /// </list>
 /// </summary>
 internal partial class PlayerView
@@ -25,8 +30,12 @@ internal partial class PlayerView
     // How long the picture's size must hold before the texture is remade at it.
     private static readonly TimeSpan ResizeSettle = TimeSpan.FromMilliseconds(150);
 
+    // How often the seek bar and time follow the player while it plays.
+    private static readonly TimeSpan PositionInterval = TimeSpan.FromMilliseconds(100);
+
     private readonly D3DImage _image = new();
     private readonly DispatcherTimer _settle;
+    private readonly DispatcherTimer _position;
     private PlayerPage? _page;
     private VideoSurface? _surface;
     private int _presentPending;
@@ -36,6 +45,9 @@ internal partial class PlayerView
         InitializeComponent();
         Picture.Source = _image;
         _settle = new DispatcherTimer(ResizeSettle, DispatcherPriority.Render, OnResizeSettled, Dispatcher) { IsEnabled = false };
+        _position = new DispatcherTimer(PositionInterval, DispatcherPriority.Background, (_, _) => _page?.RefreshPosition(), Dispatcher) { IsEnabled = false };
+        SeekBar.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnScrubStarted));
+        SeekBar.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnScrubCompleted));
         _image.IsFrontBufferAvailableChanged += OnFrontBufferAvailableChanged;
         ((FrameworkElement)Picture.Parent).SizeChanged += (_, _) =>
         {
@@ -85,12 +97,15 @@ internal partial class PlayerView
 
         _page = null;
         _settle.Stop();
+        _position.Stop();
+        StopScrub();
         ReleaseSurface();
         if (page is not null && IsLoaded)
         {
             _page = page;
             page.Player.FrameAvailable += OnFrameAvailable;
             page.PropertyChanged += OnPagePropertyChanged;
+            _position.IsEnabled = page.IsPlaying;
         }
     }
 
@@ -225,7 +240,67 @@ internal partial class PlayerView
         {
             OnFrameAvailable();
         }
+        else if (e.PropertyName == nameof(PlayerPage.IsPlaying) && _page is { } page)
+        {
+            _position.IsEnabled = page.IsPlaying;
+        }
     }
+
+    // The page's keys, after the focused control's own: Space plays and pauses, Left and Right seek 5 s,
+    // Up and Down change the volume 5 %. Esc is the shell's (it closes the drill-in).
+    private void OnKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_page is not { IsClosed: false } page || Keyboard.Modifiers != ModifierKeys.None)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Space:
+                page.PlayPauseCommand.Execute(null);
+                break;
+            case Key.Left:
+                page.SeekBy(-PlayerPage.SeekStep);
+                break;
+            case Key.Right:
+                page.SeekBy(PlayerPage.SeekStep);
+                break;
+            case Key.Up:
+                page.ChangeVolume(PlayerPage.VolumeStep);
+                break;
+            case Key.Down:
+                page.ChangeVolume(-PlayerPage.VolumeStep);
+                break;
+            default:
+                return;
+        }
+
+        e.Handled = true;
+    }
+
+    // Dragging the seek bar's thumb: the page keeps only the latest position, applied once a rendered frame.
+    private void OnScrubStarted(object sender, DragStartedEventArgs e)
+    {
+        if (_page is { } page)
+        {
+            page.IsScrubbing = true;
+            CompositionTarget.Rendering += OnRendering;
+        }
+    }
+
+    private void OnScrubCompleted(object sender, DragCompletedEventArgs e) => StopScrub();
+
+    private void StopScrub()
+    {
+        CompositionTarget.Rendering -= OnRendering;
+        if (_page is { IsScrubbing: true } page)
+        {
+            page.IsScrubbing = false;
+        }
+    }
+
+    private void OnRendering(object? sender, EventArgs e) => _page?.ApplyPendingScrub();
 
     // A lock screen or display change loses the D3D9 device: remake the surface on new devices when it's
     // back, and redraw the current frame, paused or playing.

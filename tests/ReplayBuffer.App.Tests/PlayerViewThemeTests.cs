@@ -35,7 +35,8 @@ public sealed class PlayerViewThemeTests : IDisposable
             Library = [new LibraryItem(Clip, null, 1, DateTimeOffset.UnixEpoch, false)],
         };
         var failing = false;
-        var model = new MainViewModel(engine, action => action(), player: () => new FakePlayer { Fail = failing });
+        FakePlayer? last = null;
+        var model = new MainViewModel(engine, action => action(), player: () => last = new FakePlayer { Fail = failing });
         var window = new MainWindow
         {
             DataContext = model,
@@ -71,7 +72,25 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.False(((FrameworkElement)view.FindName("ListContent")).IsVisible);
                 Assert.True(model.IsDrilledIn);
                 Assert.Contains(Descendants<Button>(player), b => b.Content as string == "Play" && b.IsVisible);
+
+                // Story 14.5: the transport over the video, paused at 0:04 of the fake's 10 s file.
+                page.Player!.SeekTo(TimeSpan.FromSeconds(4));
+                Sta.Pump(TimeSpan.FromMilliseconds(100));
+                Assert.True(((FrameworkElement)player.FindName("SeekBar")).IsVisible);
+                Assert.True(((FrameworkElement)player.FindName("VolumeBar")).IsVisible);
+                Assert.Contains(Descendants<TextBlock>(player), t => t.Text == "0:04 / 0:10" && t.IsVisible);
                 Save(window, file);
+
+                // The page's keys: Right seeks 5 s, Down lowers the volume 5 %, Space plays.
+                foreach (var key in new[] { Key.Right, Key.Down, Key.Space })
+                {
+                    player.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, key) { RoutedEvent = Keyboard.KeyDownEvent });
+                }
+
+                Assert.Equal(TimeSpan.FromSeconds(9), last!.Seeks[^1]);
+                Assert.Equal(0.95, Math.Round(last.Volume, 2));
+                Assert.True(last.IsPlaying);
+                page.Player.Volume = 1;
 
                 // The hidden list's keys do nothing: Space would star the row, F2 rename it.
                 var list = (ListBox)view.FindName("List");
