@@ -98,13 +98,22 @@ public sealed unsafe class EndpointWatcherTests : IDisposable
     }
 
     [Fact]
-    public void AnUnrelatedPropertyOrADefaultDeviceChangeRaisesNothing()
+    public void AConsoleDefaultChangeRaisesChanged()
+    {
+        // Story 10.4: the list marks each flow's console default.
+        Client->OnDefaultDeviceChanged(EDataFlow.eCapture, ERole.eConsole, FakeId);
+
+        Assert.True(WaitFor(1, Within), "no change after a default change");
+    }
+
+    [Fact]
+    public void AnUnrelatedPropertyOrAMultimediaDefaultChangeRaisesNothing()
     {
         // The same fmtid as the friendly name, another pid; and an unrelated fmtid with its pid.
         var name = PInvoke.PKEY_Device_FriendlyName;
         Client->OnPropertyValueChanged(FakeId, new PROPERTYKEY { fmtid = name.fmtid, pid = name.pid + 1 });
         Client->OnPropertyValueChanged(FakeId, new PROPERTYKEY { fmtid = Guid.NewGuid(), pid = name.pid });
-        Client->OnDefaultDeviceChanged(EDataFlow.eRender, ERole.eConsole, FakeId);
+        Client->OnDefaultDeviceChanged(EDataFlow.eRender, ERole.eMultimedia, FakeId);
 
         Thread.Sleep(Quiet);
         Assert.Equal(0, Volatile.Read(ref _raised));

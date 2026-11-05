@@ -70,6 +70,12 @@ internal sealed record EngineHostOptions
     /// </summary>
     public EngineRestartReason? Restarted { get; init; }
 
+    /// <summary>
+    /// Whether the engine seeds a first-run Track Layout from the default devices when settings.json
+    /// has none (R6, story 10.4); null is on for every instance but a test one.
+    /// </summary>
+    public bool? SeedTrackLayout { get; init; }
+
     /// <summary>The time between Game Detection polls.</summary>
     public TimeSpan GameScanInterval { get; init; } = TimeSpan.FromSeconds(1);
 
@@ -275,6 +281,12 @@ internal sealed class EngineHost : IAsyncDisposable
                 () => load.Store.Current,
                 list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
                 loggers.CreateLogger("Audio"));
+            // R6: a first run records the default devices; before the snapshot, so it starts seeded.
+            if (hostOptions.SeedTrackLayout ?? !instance.IsTest)
+            {
+                TrackLayoutSeed.Apply(load.Store, devices.Current.Devices, loggers.CreateLogger("Settings"));
+            }
+
             // The storage estimate (R2) seeds the initial state likewise.
             estimates = new EstimatePublisher(
                 () => load.Store.Current,

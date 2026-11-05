@@ -129,6 +129,24 @@ public sealed class MeterServeTests : IAsyncLifetime
         Assert.Equal(both.Id, levels[0].TrackId);
     }
 
+    [Fact]
+    public async Task ProbeTracksGiveALevelPerDeviceAndOpenEachDeviceOnce()
+    {
+        // Story 10.4: the card's source T and the picker's M, each probed; M isn't on any Track.
+        var (client, events) = await ConnectAsync();
+        var picker = new AudioDevice("M", "Microphone", "Realtek", AudioFlow.Input, Available: true, IsDefault: true);
+        var watched = MeterProbes.WithProbes(new TrackLayout([Tone], [Game]), [picker]);
+
+        await client.SendAsync(AudioMessages.Watch, new MetersWatch(watched), Token);
+
+        // Mic mute is on, but a probe shows the device as it sounds.
+        var levels = new MeterLevels(await LevelsAsync(events, l => Near(l[0]) && Near(l[1]) && Near(l[2]), tracks: 3));
+        Assert.Equal(Game.Id, levels.Tracks[0].TrackId);
+        Assert.True(Near(MeterProbes.LevelOf(levels, "T", AudioFlow.Output)));
+        Assert.True(Near(MeterProbes.LevelOf(levels, "m", AudioFlow.Input)));
+        Assert.Equal(2, _tones.ActiveSubscriptions);
+    }
+
     private static bool Near(TrackLevel level) => Near(level.Peak);
 
     private static bool Near(float peak) => Math.Abs(peak - Amplitude) < 0.05;
