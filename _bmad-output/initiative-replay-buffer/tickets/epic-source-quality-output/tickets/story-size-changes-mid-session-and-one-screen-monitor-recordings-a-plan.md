@@ -3,7 +3,7 @@ title: 'Size changes mid-session, and one-screen Monitor Recordings at source si
 type: 'feature'
 ticket: '2'
 created: '2026-11-05'
-status: ready-for-dev
+status: built
 baseline_revision: 'fea3ac6'
 route: 'full'
 risk: 'high'
@@ -99,9 +99,35 @@ With `video.matchSource` on (12.1), AD-26's held size change moves the Replay Bu
 - A size move for the Monitor session: its size is fixed per file (AD-25).
 - A codec switch for games (AD-26).
 
-## Verification (planned)
+## Implementation notes (approved 2026-11-05; built)
 
-- 0-warning Release build.
-- The Contracts, Core, Media, Platform.Capture, Engine and App default suites.
-- The NativeAOT publish.
-- The Heavy tests and the bench run at night, with their exact commands in this plan once written.
+- **`SourceSizeWatch` is simpler than planned.** A fire clears the candidate, and the session doesn't observe while a move is in flight (`_movingTo`). So a move that fails (a build failure, a lost device, a prepared chain dropped) just needs the size to hold another 3 s, and there's no "wait for the chain" state to get stuck.
+- **The budget, settled in code:** a new `ICaptureSession.SetBuildAhead(bool)` (a default method). The orchestrator turns it off while a Monitor Recording runs: when the Monitor session starts, and for a game session started beside one. It turns it back on when the Monitor session ends.
+  - With it off, the move goes through `Restart(old, …, old.Spec)`, `SwitchChain`'s tear-down-first machinery, at the new size. With it on, it builds ahead into the prepared slot and `ArmMove` arms it.
+- **`PrepareChain` and a move:**
+  - the same settings leave a move alone;
+  - null (a Monitor Recording taking the other chain) drops it;
+  - a profile's new spec is built at the move's size and switches at a save, as today.
+- A move is refused while a profile's chain is already prepared; it then happens after that chain's save switch.
+- **The move's default test:** a fake chain doesn't make it cheap. `StartMove` → `Build` → `ArmMove` needs a built encoder chain (a D3D11 device and FFmpeg), so the switch is covered by the Heavy tests, and the default tests cover the decision (`SourceSizeWatchTests`). The coordinator's note 1 allowed this.
+
+## Verification
+
+- `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings.
+- Default suites, 0 failed: Contracts 137, Core 173, Media 102, Platform.Capture 8, Engine 202, App 197.
+- `pwsh tools/publish-engine.ps1`: clean, 12.1 MB.
+- New default tests:
+  - `Core.Tests/SourceSizeWatchTests` (3): held 3 s; a short change, a tiny window, and a minimise and restore; a Recording holding the move;
+  - `Engine.Tests/CanvasPlanTests.UnderMatchSourceOneScreenRecordsAtItsModeSizeSwitchingCodecOnlyOver4096`.
+
+## Night runs (pending; one at a time, quiet PC)
+
+1. **Heavy** (each takes `.bench-running` itself):
+
+   `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*ARealWindowResizedTo2560By1440MovesTheReplayBufferAndTheNextClipHasIt" --filter-method "*AResizeDuringAGameRecordingKeepsItsSizeAndMovesAfterItStops" --filter-method "*AOneScreenMonitorRecordingOfThe3840By2160ScreenRecordsAtThatSize"`
+
+2. **Cost**, under a hand-made `.bench-running` (bench fps doesn't take it), on the 2560×1440 synthetic load, with an overlap log:
+
+   `bench\ReplayBuffer.Bench\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Bench.exe fps --repo <worktree> --presentmon %USERPROFILE%\Documents\repos\ReplayBuffer\native\presentmon\PresentMon-2.6.0-x64.exe --seconds 45 --passes 2 --settle 10 --conditions baseline,capture,capture-ms`
+
+   Then record the FPS loss of `capture` (1080p) and `capture-ms` (2560×1440 source) against NFR-1 in epic 12's Notes.
