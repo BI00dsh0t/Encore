@@ -390,12 +390,14 @@ internal sealed class EngineHost : IAsyncDisposable
 
             var defaultOutputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
             var displays = hostOptions.Displays ?? new DisplayMonitors(loggers.CreateLogger<DisplayMonitors>());
+            var captureWait = new CaptureWaitWarnings(warnings, gameLog);
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
                     new CaptureSessionOptions
                     {
                         OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"),
                         Replay = replay,
+                        FollowWindow = true,
                         RingFolder = ringFolder,
                         Margin = margin,
                         ResetGap = message => warnings.Raise(ErrorCodes.ResetGap, WarningSeverity.Warning, "replay", message, overlay: false),
@@ -425,11 +427,13 @@ internal sealed class EngineHost : IAsyncDisposable
                 hostOptions.DebugCapture
                     ? new TargetCapture(
                         _ => SessionAudio.None,
-                        (target, e) => gameLog.LogWarning(e, "The debug capture of {Name} (process {Pid}) failed", target.Name, target.ProcessId))
+                        (target, e) => gameLog.LogWarning(e, "The debug capture of {Name} (process {Pid}) failed", target.Name, target.ProcessId),
+                        captureWait.Wait)
                     : replay
                         ? new TargetCapture(
                             snapshot => SessionAudio.FromLayout(snapshot.TrackLayout),
-                            (target, e) => gameLog.LogWarning(e, "The Replay Buffer of {Name} (process {Pid}) failed", target.Name, target.ProcessId))
+                            (target, e) => gameLog.LogWarning(e, "The Replay Buffer of {Name} (process {Pid}) failed", target.Name, target.ProcessId),
+                            captureWait.Wait)
                         : null,
                 replay
                     ? new ReplayClips(
