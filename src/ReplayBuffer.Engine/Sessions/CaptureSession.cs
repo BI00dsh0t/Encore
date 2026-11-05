@@ -145,6 +145,9 @@ internal sealed record CaptureSessionOptions
     /// <summary>Spike 11.1, dev only: <see cref="CompositeMonitors"/> captures every monitor through Desktop Duplication.</summary>
     public bool CompositeDuplication { get; init; }
 
+    /// <summary>For tests (story 12.4): how long a size move's built chain waits before it arms, so a test can press Record while it is pending. Zero in production.</summary>
+    public TimeSpan MoveArmDelay { get; init; }
+
     /// <summary>For tests (story 11.3): the composited screens, by GDI device name, captured through Desktop Duplication instead of WGC.</summary>
     public IReadOnlyCollection<string>? DuplicationScreens { get; init; }
 
@@ -193,7 +196,9 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
 /// is padded with silence to one common end frame, the longest device's or the last video frame's,
 /// whichever is later. The first frame is the anchor, every stream's PTS 0. The snapshot's
 /// <c>video</c> sets the encoder (the probe's for its codec, else H.264), the output size, the fps,
-/// the bitrate and the rate control. The capture thread only scales each frame into the fixed output,
+/// the bitrate and the rate control; with <c>matchSource</c> on, a game's output size is instead the
+/// game's own at the first frame, and a size that holds 3 s moves the Replay Buffer to a new chain
+/// (AD-26, stories 12.1 and 12.2). The capture thread only scales each frame into the chain's output,
 /// letterboxed (<see cref="FrameScaler"/>), and posts it; the encoder thread emits exactly one frame
 /// per slot of the fps, repeating the last one when nothing new arrived (story 1.11,
 /// <see cref="PacedVideoEncoder"/>). A retarget swaps only the WGC capture, so the file keeps one
@@ -447,7 +452,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         // The first chain: its taps hold the last second of blocks until the anchor starts its audio.
-        var first = new EncoderChain(_spec, encoder, codec, _path, _options, _device, _audio, _micMute, _loggers, _log, Fail);
+        var first = NewChain(_spec, encoder, codec, _path, _device);
         lock (_gate)
         {
             lock (_chainLock)
@@ -590,6 +595,15 @@ internal sealed class CaptureSession : ICaptureSession
     /// <see cref="SourceOutputSize"/>: even sides, scaled only to fit the chain's codec, and a game
     /// under 640×360 keeping the snapshot's size). Unchanged otherwise, and for the Monitor session.
     /// </summary>
+    /// <summary>
+    /// Every chain of the session, made here (story 12.4): <paramref name="spec"/>'s on
+    /// <paramref name="device"/>, at the snapshot's fixed size, or, for a game under <c>matchSource</c>
+    /// once its source size is known, at that size or a move's (<see cref="SizedToSource(EncoderChain)"/>).
+    /// <paramref name="path"/> is the file a session with no Replay Buffer writes.
+    /// </summary>
+    private EncoderChain NewChain(SessionSpec spec, string encoder, VideoCodec codec, string? path, D3D11Device device) =>
+        SizedToSource(new EncoderChain(spec, encoder, codec, path, _options, device, _audio, _micMute, _loggers, _log, Fail));
+
     private EncoderChain SizedToSource(EncoderChain chain) => SizedToSource(chain, IsMonitor, _movingTo ?? _sourceSize);
 
     /// <summary><see cref="SizedToSource(EncoderChain)"/> for a session that <paramref name="isMonitor"/> or not, whose game was <paramref name="source"/> at the anchor.</summary>
@@ -699,6 +713,11 @@ internal sealed class CaptureSession : ICaptureSession
     /// </summary>
     private void ArmMove()
     {
+        if (_options.MoveArmDelay > TimeSpan.Zero)
+        {
+            Thread.Sleep(_options.MoveArmDelay);
+        }
+
         EncoderChain? armed = null;
         long armQpc;
         lock (_gate)
@@ -742,6 +761,21 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
+    /// <summary>For tests (12.4): whether a size move is built ahead and waits to arm, so a Record press now cancels it.</summary>
+    internal bool MovePending
+    {
+        get
+        {
+            lock (_chainLock)
+            {
+                return _armMove;
+            }
+        }
+    }
+
+    /// <summary>For tests (12.4): how many size moves a Recording's start cancelled. Under the chain lock.</summary>
+    internal int MovesCancelled { get; private set; }
+
     /// <summary>Story 12.2: whether a Record press holds the current chain until its writer attaches. Under the chain lock.</summary>
     private bool RecordReservedLocked() => Stopwatch.GetTimestamp() < _recordReservedUntil;
 
@@ -759,6 +793,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         _log.LogInformation("A Recording starts: the size move to {Size} is cancelled, and found again after it if the size still holds", _movingTo);
+        MovesCancelled++;
         DropMoveLocked();
         _wanted = null;
         if (_prepared is { } prepared)
@@ -1390,13 +1425,13 @@ internal sealed class CaptureSession : ICaptureSession
             if (switchTo is not null)
             {
                 var (encoder, codec) = ResolveEncoder(switchTo);
-                next = SizedToSource(new EncoderChain(switchTo, encoder, codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail));
+                next = NewChain(switchTo, encoder, codec, null, _device!);
                 next.Subscribe();
                 next.Build(_anchorQpc, first: false, latency: null);
             }
             else
             {
-                next = SizedToSource(new EncoderChain(old.Spec, old.EncoderName, old.Codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail));
+                next = NewChain(old.Spec, old.EncoderName, old.Codec, null, _device!);
                 next.Subscribe();
                 next.Build(_anchorQpc, first: false, latency: null, restartOf: old.Ring, window: old.WindowSeconds);
             }
@@ -1697,7 +1732,7 @@ internal sealed class CaptureSession : ICaptureSession
                 ? D3D11Device.CreateForMonitor(monitor.Handle, _loggers.CreateLogger<D3D11Device>())
                 : D3D11Device.Create(window!.Handle, _loggers.CreateLogger<D3D11Device>());
             var (encoder, codec) = ReferenceEquals(spec, lost.Spec) ? (lost.EncoderName, lost.Codec) : ResolveEncoder(spec);
-            next = SizedToSource(new EncoderChain(spec, encoder, codec, null, _options, device, _audio, _micMute, _loggers, _log, Fail));
+            next = NewChain(spec, encoder, codec, null, device);
             next.Subscribe();
 
             // The same ring, in a new generation: what it held before the reset stays saveable. One a
@@ -2602,7 +2637,7 @@ internal sealed class CaptureSession : ICaptureSession
         try
         {
             var (encoder, codec) = ResolveEncoder(spec);
-            chain = SizedToSource(new EncoderChain(spec, encoder, codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail));
+            chain = NewChain(spec, encoder, codec, null, _device!);
             chain.Subscribe();
             chain.Build(_anchorQpc, first: false, latency: null);
             _log.LogInformation("The encoder chain for the next save is built: {Size} at {Fps} fps, {Tracks} Tracks",
