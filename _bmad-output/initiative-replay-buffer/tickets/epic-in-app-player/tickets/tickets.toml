@@ -89,6 +89,17 @@ description = "The closing end-to-end check of the epic's Done when, integrated.
 verify = "The automated suite passes against the installed build, and the builder's session confirms each Done-when line."
 notes = ["QA 14.5, 2026-11-05: under Fluent the seek bar and its thumb take the Windows accent, which is grey on this PC (#4C4A48), so the thumb reads grey on grey. That's by design (R37: Fluent follows the Windows accent). Builder's check: is it visible enough here, or should the player's seek bar use a fixed colour under Fluent?"]
 covers = ["R1", "R2", "R3", "R4", "R5", "R6", "R7"]
-after = [7]
+after = [7, 9]
 hitl = true
+risk = "medium"
+
+[[entry]]
+id = 9
+type = "story"
+title = "Player controls restyled, with full screen"
+description = "The builder asked (2026-11-05) for the player's controls to be restyled after a reference video player, and approved the mockup at https://claude.ai/artifact/4CCgWPDzuYpDAxFJWsZdxz (\"Yes, build it\"); its two boards (gaming dark, Fluent dark) are the spec. One thin full-width seek bar sits above a single control row: the played part in the accent, the rest a muted track, a white round thumb. Left: Play/Pause; the speaker, whose volume slider slides out on hover or keyboard focus and hides again (clicking the speaker mutes); the time, elapsed / total. Right: a gear button that opens a menu headed Audio track listing the Tracks (the playing one ticked), a divider, then Open in default player; then a full-screen button. No logo button. The gear menu replaces 14.4's Audio track ComboBox and the bar's overflow; it opens by click, Enter or Space, closes on Esc, a choice or a click outside, and its items are reachable by arrow keys. Full screen is new (it was parked): the player page fills the screen with the bar over the video, Esc or the button leaves it, and F toggles it; leaving the player page leaves full screen. Behaviour is otherwise unchanged from 14.2 to 14.7 (keys, mute and volume rules, kept volume, unknown length, failures, Tracks). Both looks, tokens only, the glossary words."
+verify = "Automated tests (written now, run later with the test backlog): the gear menu lists the Tracks with the playing one ticked and a choice switches Track and closes it; Open in default player is in it; the volume slider shows on hover and on focus; F and the button enter and leave full screen, Esc leaves it, and leaving the page leaves it; the seek bar and keys work as in 14.5. PNGs of both looks, resting and with the menu open. Builder's check: compare with the mockup."
+covers = ["R3", "R4"]
+after = [7]
+hitl = false
 risk = "medium"

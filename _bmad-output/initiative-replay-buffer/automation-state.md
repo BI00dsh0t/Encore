@@ -47,7 +47,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.9 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -215,6 +215,7 @@ The coordinator logs each QA round in the Log below.
 | 35.6 | 14.6 When Windows can't play the file | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `d2273f9`) |
 | 35.7 | 14.7 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged; tests in the backlog) |
 | 35.8 | 14.8 The in-app player end to end on the builder's PC | | pending |
+| 35.9 | 14.9 Player controls restyled, with full screen | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress (build only, tests deferred) |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -1032,3 +1033,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 12.4 merged into develop by the coordinator (in `coord-develop`) at `ed567a6` (doc nits fixed) and marked done. Develop builds Release with 0 warnings. Epic 12 has only 12.5 left (end to end on the builder's PC, HITL), which waits on the test backlog's night runs.
 - 2026-11-05: The 14.7 round 2 review passed at `118d583`. The coordinator's risk question is settled: at open, the kept volume and mute restore muted (`Volume` set before `IsMuted`, the handler subscribed after); the slider binding only pushes source to target, so loading, re-templating or the 0.33 snap can't call the setter; only a user drag or Up/Down unmutes. Merged into develop by the coordinator and marked done; develop builds with 0 warnings. 14.7's 5 unrun default tests are in the backlog. **Epic 14 has only 14.8 left** (end to end on the builder's PC, HITL), which waits on the backlog's night run of `*PlayerPlaybackTests`.
 - 2026-11-05: **Builder: "Yes, switch to develop."** The coordinator's `coord-develop` worktree is removed and the main folder is back on develop at `4d57a37`, with everything through 14.7, so the builder can try the full player. Merges happen in the main folder again.
+- 2026-11-05: **Builder: a mockup of the player with controls restyled after a reference video (no logo button), then "Yes, build it."** The mockup is at https://claude.ai/artifact/4CCgWPDzuYpDAxFJWsZdxz: a thin full-width seek bar; Play, the speaker with a hover slider, and time on the left; a gear (Audio track list, Open in default player) and full screen on the right. A new story **14.9 "Player controls restyled, with full screen"** (after 14.7; 14.8 now waits on it too) was added to the tree (clean) and a card created In progress. It went to story-2-7: build only, tests written and deferred, code review, then merge.

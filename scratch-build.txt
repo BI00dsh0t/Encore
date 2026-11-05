@@ -1,0 +1,40 @@
+  Determining projects to restore...
+  Restored %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Core\ReplayBuffer.Core.csproj (in 256 ms).
+  Restored %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Platform.FFmpeg\ReplayBuffer.Platform.FFmpeg.csproj (in 256 ms).
+  Restored %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Platform.Capture\ReplayBuffer.Platform.Capture.csproj (in 256 ms).
+  Restored %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj (in 256 ms).
+  Restored %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Platform.Audio\ReplayBuffer.Platform.Audio.csproj (in 256 ms).
+  Restored %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Platform.Windows\ReplayBuffer.Platform.Windows.csproj (in 256 ms).
+  Restored %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Media\ReplayBuffer.Media.csproj (in 256 ms).
+  Restored %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Engine\ReplayBuffer.Engine.csproj (in 256 ms).
+  16 of 24 projects are up-to-date for restore.
+  ReplayBuffer.Platform.Desktop -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Platform.Desktop\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.Desktop.dll
+  ReplayBuffer.Bench.Overlay -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\bench\ReplayBuffer.Bench.Overlay\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Bench.Overlay.dll
+  ReplayBuffer.Platform.Desktop.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Platform.Desktop.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.Desktop.Tests.dll
+  ReplayBuffer.Contracts -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Contracts\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Contracts.dll
+  ReplayBuffer.Core -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Core\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Core.dll
+  ReplayBuffer.Contracts.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Contracts.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Contracts.Tests.dll
+  ReplayBuffer.Media -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Media\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Media.dll
+  ReplayBuffer.Bench.GpuLoad -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\bench\ReplayBuffer.Bench.GpuLoad\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Bench.GpuLoad.dll
+  ReplayBuffer.Core.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Core.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Core.Tests.dll
+  ReplayBuffer.Media.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Media.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Media.Tests.dll
+  ReplayBuffer.Platform.FFmpeg -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Platform.FFmpeg\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.FFmpeg.dll
+  ReplayBuffer.Platform.Windows -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Platform.Windows\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.Windows.dll
+  ReplayBuffer.Platform.Windows.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Platform.Windows.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.Windows.Tests.dll
+  ReplayBuffer.Platform.Audio -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Platform.Audio\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.Audio.dll
+  ReplayBuffer.Platform.Audio.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Platform.Audio.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.Audio.Tests.dll
+  ReplayBuffer.Bench -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\bench\ReplayBuffer.Bench\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Bench.dll
+  ReplayBuffer.Platform.Capture -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Platform.Capture\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.Capture.dll
+  ReplayBuffer.Platform.Capture.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Platform.Capture.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.Capture.Tests.dll
+  ReplayBuffer.Platform.FFmpeg.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Platform.FFmpeg.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Platform.FFmpeg.Tests.dll
+  ReplayBuffer.Engine -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.Engine\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Engine.dll
+  ReplayBuffer.Bench.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Bench.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Bench.Tests.dll
+  ReplayBuffer.Engine.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.Engine.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Engine.Tests.dll
+  ReplayBuffer.App -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\src\ReplayBuffer.App\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.App.dll
+  ReplayBuffer.App.Tests -> %USERPROFILE%\Documents\repos\ReplayBuffer\.claude\worktrees\festive-lamarr-1763e6\tests\ReplayBuffer.App.Tests\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.App.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:13.55
