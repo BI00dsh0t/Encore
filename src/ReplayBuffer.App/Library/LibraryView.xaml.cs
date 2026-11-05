@@ -92,9 +92,13 @@ internal partial class LibraryView
     }
 
     // Explorer's rule: a right-click outside the selection selects only that row first.
+    // A right-click in the rename box is the box's own (its Cut, Copy and Paste menu), and leaves the edit open.
     private void OnListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (Page is { } page && e.OriginalSource is DependencyObject source && ContainerOf(source) is { DataContext: LibraryRow row } container)
+        if (Page is { } page
+            && e.OriginalSource is DependencyObject source
+            && ContainerOf(source) is { DataContext: LibraryRow row } container
+            && !Within<TextBox>(source, container))
         {
             page.PrepareContextMenu(row);
             container.Focus();
@@ -105,6 +109,11 @@ internal partial class LibraryView
     private void OnListContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         if (Page is not { } page)
+        {
+            return;
+        }
+
+        if (e.OriginalSource is TextBox)
         {
             return;
         }

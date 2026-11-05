@@ -1091,6 +1091,7 @@ internal sealed class LibraryPage : Observable
         var failures = new Dictionary<string, int>(StringComparer.Ordinal);
         string? firstFailed = null;
         var deleted = 0;
+        var starred = 0;
         try
         {
             for (var i = 0; i < items.Count; i++)
@@ -1098,6 +1099,14 @@ internal sealed class LibraryPage : Observable
                 _deleteDone = i + 1;
                 RefreshSelection();
                 var item = items[i];
+
+                // A row starred while the batch runs is a Favourite now, and a Favourite is never deleted.
+                if (_rows.TryGetValue(item.Path, out var row) && row.IsFavourite)
+                {
+                    starred++;
+                    continue;
+                }
+
                 try
                 {
                     await _engine.SendAsync(LibraryMessages.Delete, new LibraryDelete(item.Path, item.Size, item.Modified));
@@ -1124,10 +1133,11 @@ internal sealed class LibraryPage : Observable
 
         // The most common reason wins; a tie goes to the first seen.
         var code = failures.MaxBy(f => f.Value).Key;
-        var failed = items.Count - deleted;
-        Fail(firstFailed, items.Count == 1
+        var sent = items.Count - starred;
+        var failed = sent - deleted;
+        Fail(firstFailed, sent == 1
             ? RefusalText(code, "Couldn't delete the file.")
-            : string.Create(CultureInfo.InvariantCulture, $"Deleted {deleted} of {items.Count}. ")
+            : string.Create(CultureInfo.InvariantCulture, $"Deleted {deleted} of {sent}. ")
                 + RefusalText(code, failed == 1 ? "1 file couldn't be deleted." : string.Create(CultureInfo.InvariantCulture, $"{failed} files couldn't be deleted.")));
     }
 

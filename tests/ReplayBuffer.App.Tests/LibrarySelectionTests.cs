@@ -130,6 +130,25 @@ public sealed class LibrarySelectionTests : IDisposable
     }
 
     [Fact]
+    public void ARowStarredWhileABatchRunsIsNotDeleted()
+    {
+        var page = new LibraryPage(_engine, shell: _shell, confirmDelete: _ => true);
+        var items = new[] { Item(@"G\d1.mp4", 1), Item(@"G\d2.mp4", 2), Item(@"G\d3.mp4", 3) };
+        page.Render(State(items));
+        page.SelectAll();
+        _engine.Reply = (_, _) =>
+        {
+            page.Render(State(items[0], items[1], items[2] with { Favourite = true }));
+            return Empty.Value;
+        };
+
+        page.DeleteCommand.Execute(null);
+
+        Assert.Equal([@"G\d1.mp4", @"G\d2.mp4"], _engine.Sent.Cast<LibraryDelete>().Select(d => d.Path));
+        Assert.Null(page.ActionError);
+    }
+
+    [Fact]
     public void DeletingASingleFavouriteAsksAndSendsNothing()
     {
         var asked = 0;
