@@ -1,5 +1,6 @@
 using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
+using ReplayBuffer.Core.Library;
 
 namespace ReplayBuffer.Platform.FFmpeg;
 
@@ -8,7 +9,8 @@ namespace ReplayBuffer.Platform.FFmpeg;
 /// every second. Encoders hand it packets in their own time base; it converts them to
 /// stream time and writes them under one lock. A durable muxer (a Recording's, R3) instead
 /// writes through a <see cref="DurableOutput"/>, cuts a fragment only at
-/// <see cref="CutFragment"/>, and flushes the header and every fragment to the disk.
+/// <see cref="CutFragment"/>, and flushes the header and every fragment to the disk; at
+/// <see cref="Finish"/> it gives the file its length in an <c>mehd</c> (R5, AD-27).
 /// </summary>
 public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 {
@@ -24,6 +26,10 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     private DurableOutput? _output;
     private bool _started;
     private bool _finished;
+
+    // A durable muxer's per stream first DTS, last DTS and last duration, in stream time; for the mehd.
+    private long[] _firstDts = [];
+    private long[] _lastEnd = [];
 
     public FragmentedMp4Muxer(string path, ILogger logger)
         : this(path, logger, durable: false)
@@ -153,6 +159,9 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
         // The empty moov is on the disk before the first fragment.
         if (_output is not null)
         {
+            _firstDts = new long[_context->nb_streams];
+            _lastEnd = new long[_context->nb_streams];
+            Array.Fill(_firstDts, ffmpeg.AV_NOPTS_VALUE);
             _output.Flush();
             DurableBytes = _output.Length;
         }
@@ -181,7 +190,17 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
                 // av_write_frame keeps its own reference; this one is the caller's to drop.
                 try
                 {
+                    var (dts, duration) = (packet->dts, packet->duration);
                     Check(ffmpeg.av_write_frame(_context, packet), "av_write_frame");
+                    if (dts != ffmpeg.AV_NOPTS_VALUE)
+                    {
+                        if (_firstDts[streamIndex] == ffmpeg.AV_NOPTS_VALUE)
+                        {
+                            _firstDts[streamIndex] = dts;
+                        }
+
+                        _lastEnd[streamIndex] = dts + duration;
+                    }
                 }
                 finally
                 {
@@ -239,6 +258,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
                 // The trailer writes the last fragment and the mfra.
                 Check(ffmpeg.av_write_trailer(_context), "av_write_trailer");
                 _output!.Flush();
+                WriteFragmentDuration();
                 CloseOutput();
             }
             else
@@ -273,6 +293,58 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 
             ffmpeg.avformat_free_context(_context);
             _context = null;
+        }
+    }
+
+    /// <summary>
+    /// After the trailer: patches the moov in place with an <c>mehd</c> of the file's length (the
+    /// longest stream's, as movenc's <c>track_duration</c>), so Media Foundation plays it to its end
+    /// and not to its last <c>tfra</c> entry. Two ordered writes, each flushed to the disk, with a
+    /// valid file between them (<see cref="Mp4File.PlanFragmentDuration"/>). A layout it doesn't
+    /// expect, or a failed write, leaves the file as written (it plays to its last fragment) with a
+    /// warning; it never fails the Recording.
+    /// </summary>
+    private void WriteFragmentDuration()
+    {
+        long durationUs = 0;
+        for (var i = 0; i < _firstDts.Length; i++)
+        {
+            if (_firstDts[i] != ffmpeg.AV_NOPTS_VALUE)
+            {
+                var timeBase = _context->streams[i]->time_base;
+                durationUs = Math.Max(durationUs, ffmpeg.av_rescale_rnd(_lastEnd[i] - _firstDts[i], 1_000_000L * timeBase.num, timeBase.den, AVRounding.AV_ROUND_UP));
+            }
+        }
+
+        if (durationUs <= 0)
+        {
+            _logger.LogWarning("{Path} has no length to write into its mehd; it plays to its last fragment", Path);
+            return;
+        }
+
+        if (Mp4File.PlanFragmentDuration(_output!.Header, durationUs) is not { } patch)
+        {
+            _logger.LogWarning("{Path}'s moov isn't laid out for an mehd; it plays to its last fragment", Path);
+            return;
+        }
+
+        try
+        {
+            _output.Overwrite(patch.MehdOffset, patch.MehdAndFree);
+            _output.Overwrite(patch.MvexOffset, patch.MvexSize);
+            // A first write across a 512-byte sector is the only one a power cut can tear; FFmpeg fixes its offset.
+            var straddles = patch.MehdOffset / 512 != (patch.MehdOffset + patch.MehdAndFree.Length - 1) / 512;
+            _logger.LogInformation(
+                "Wrote {Path}'s mehd: {Duration} at {Timescale} Hz ({Seconds:0.000} s); straddles a sector: {Straddles}",
+                Path,
+                patch.Duration,
+                patch.Timescale,
+                (double)patch.Duration / patch.Timescale,
+                straddles);
+        }
+        catch (IOException e)
+        {
+            _logger.LogWarning("Could not write {Path}'s mehd; it plays to its last fragment: {Message}", Path, e.Message);
         }
     }
 

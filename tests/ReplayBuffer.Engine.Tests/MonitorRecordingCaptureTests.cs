@@ -340,6 +340,9 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         AssertInStepAt30Fps(file, atLeast: 59);
         SessionTestKit.AssertDecodesCleanly(file);
         AssertGapsAreBlack(file, plan);
+
+        // Story 14.3: Media Foundation reads its length from the mehd and plays it to the end.
+        await MediaPlayerCheck.AssertPlaysToTheEndAsync(file, 30, Token);
     }
 
     [Fact(Explicit = true)]
