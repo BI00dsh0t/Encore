@@ -1,3 +1,11 @@
+---
+title: 'Final conformance run'
+type: 'feature'
+ticket: '7'
+created: '2026-11-04'
+status: done
+route: 'full'
+---
 # Story 8.7 plan: Final conformance run
 
 **Ticket:** 8.7 (epic-hardening, R7; risk medium; HITL). Halved by the builder (2026-11-04): a 30-minute drift Recording, and `bench fps --overlay` at 3 balanced passes of about 2.5 minutes. The bounds are unchanged: drift under one frame, and FPS loss within NFR-1's target.
