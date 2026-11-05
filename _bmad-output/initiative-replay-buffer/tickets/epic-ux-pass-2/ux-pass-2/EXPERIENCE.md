@@ -538,7 +538,8 @@ The rows are grouped by what they do, each section with its sentence from [the e
 One reusable control for every folder setting, in the shared settings layout, so no path is ever a bare text box (#6).
 
 ```
-Cache folder   [ C:\Users\sam\AppData\Local\ReplayBuffer\Cache          ]  [Browse…]  [Open in Explorer]  [Use default]
+Cache folder   [ C:\Users\sam\AppData\Local\ReplayBuffer\Cache                    ]
+               [Browse…]  [Open in Explorer]  [Use default]
                help text
                212 GB free on C:
                (a danger line when the last choice was refused)

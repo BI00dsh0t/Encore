@@ -127,6 +127,7 @@ This addendum doesn't change epic 9's two looks. Every component here takes its 
 - **Hover:** hover on a selected row keeps the selected fill and adds the hover fill over it.
 - **Focus:** the focused row shows epic 9's focus visual around the card, whether or not it's selected, so focus and selection always look different.
 - Under Gaming dark, the bar is square (`{rounded.nav-item}`), as in the nav.
+- **A grey Windows accent** (story 10.1's renders): Fluent's accent-subtle fill is then barely different from a row. When the accent's contrast against the row is below 1.5:1, the selected fill is `SubtleFillColorSecondaryBrush` instead, and the accent bar stays. Story 10.2 checks it on the builder's PC.
 
 ### Library command bar
 
@@ -138,7 +139,7 @@ This addendum doesn't change epic 9's two looks. Every component here takes its 
   - the count in `{typography.body-strong}`, and "(n hidden by filters)" in caption;
   - the actions as standard buttons, spaced `{spacing.xs}`, with Delete last before the ✕;
   - the ✕ is a subtle (transparent) button.
-- **Narrow windows:** below 640 px, actions that don't fit move into a "More ⋯" menu, keeping their order.
+- **When the actions don't fit:** they move into a "More ⋯" menu, Copy to folder… first, then Show in Explorer. Favourite, Copy and Delete stay. Story 10.1's renders show this happens under Gaming dark at the default 960 px width, because its button labels are uppercase.
 
 ### Search box
 
@@ -195,14 +196,15 @@ Epic 9's card, centred in the list area, at most 520 px wide:
 ### Folder picker
 
 ```
-[ C:\Users\sam\AppData\Local\ReplayBuffer\Cache          ] [Browse…] [Open in Explorer] [Use default]
+[ C:\Users\sam\AppData\Local\ReplayBuffer\Cache                         ]
+[Browse…] [Open in Explorer] [Use default]
   help text (caption, text-secondary)
   212 GB free on C: (caption, text-secondary)
   The cache folder can't be inside the Clips folder. (caption, danger)
 ```
 
 - **The path:** a read-only text box (`{colors.fill-control-disabled}` fill, `{colors.text-primary}` text, so it stays readable at AA), selectable, with a middle ellipsis and the full path as its tooltip. It isn't drawn disabled.
-- **Buttons:** standard buttons, `{spacing.xs}` apart. Use default is a subtle button.
+- **Buttons:** standard buttons on their own row under the path, `{spacing.xs}` apart. Use default is a subtle button. [DECISION, story 10.1] The renders showed one row clips the buttons beside a long path under Gaming dark.
 - **Disabled** (the cache folder under Memory): the whole row takes the disabled look, with "Used only in Disk mode" as its caption.
 - **The file variant** shows the same row with Browse… only.
 
