@@ -456,6 +456,70 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
 
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
+    public async Task ARecordPressWhileAMoveBuildsCancelsItAndTheRecordingKeepsItsChain()
+    {
+        // Story 12.2 (QA 1, 2): the window resizes at 2 s, the size holds at 5 s and the move's chain
+        // builds; Record lands then. The Recording keeps the 1280x720 chain in one file, and the move
+        // is found again after the stop.
+        using var bench = BenchLock.Take("Engine 12.2 size move test");
+        using var rig = NewRig(recordingsEnabled: true, clips: true);
+        MatchSource();
+        var window = SessionTestKit.OpenWindow(_directory, _processes, ResizingWindowScript, "2");
+        rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => rig.Factory.Sessions.Count == 1);
+        await Task.Delay(TimeSpan.FromSeconds(5.1), Token);
+
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        var recording = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+        await Task.Delay(TimeSpan.FromSeconds(4), Token);
+        Assert.True(rig.Factory.Sessions.Sum(s => s.Chains) <= 1, "no move chain parked beside the Recording");
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(recording.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+
+        await Task.Delay(TimeSpan.FromSeconds(6), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var clip = Assert.IsType<ClipSaved>(await rig.NextAsync()).Path;
+        rig.Orchestrator.Dispose();
+
+        Assert.Equal((1280, 720), (SessionTestKit.VideoStream(recording.Path).Width, SessionTestKit.VideoStream(recording.Path).Height));
+        SessionTestKit.AssertDecodesCleanly(recording.Path);
+        Assert.Equal((2560, 1440), (SessionTestKit.VideoStream(clip).Width, SessionTestKit.VideoStream(clip).Height));
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AMonitorRecordingStartsBesideAGameRecordingAfterAResize()
+    {
+        // Story 12.2 (QA 2): a resize during a game Recording parks no chain, so a Monitor Recording
+        // still fits AD-7's budget, and two chains run between the sessions.
+        using var bench = BenchLock.Take("Engine 12.2 size move test");
+        using var rig = NewRig(recordingsEnabled: true);
+        MatchSource();
+        var window = SessionTestKit.OpenWindow(_directory, _processes, ResizingWindowScript, "3");
+        rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => rig.Factory.Sessions.Count == 1);
+        await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        var game = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+
+        // The resize at 3 s, held past 6 s.
+        await Task.Delay(TimeSpan.FromSeconds(6), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
+        var monitor = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.Equal(2, rig.Factory.Sessions.Sum(s => s.Chains));
+
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(monitor.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(game.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+        rig.Orchestrator.Dispose();
+        SessionTestKit.AssertDecodesCleanly(game.Path);
+        SessionTestKit.AssertDecodesCleanly(monitor.Path);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AOneScreenMonitorRecordingOfThe3840By2160ScreenRecordsAtThatSize()
     {
         // Story 12.2 (AD-26): one screen under matchSource records at its physical mode size.

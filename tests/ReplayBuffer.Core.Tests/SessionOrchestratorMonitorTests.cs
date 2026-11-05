@@ -204,6 +204,9 @@ public sealed partial class SessionOrchestratorTests
             Assert.Equal([changed, null, changed], game.Prepares.Select(p => p?.Snapshot.Video));
             Assert.Equal([ErrorCodes.EncoderBudget], warnings);
             Assert.Single(factory.Sessions);
+
+            // Story 12.2 (QA): no size move may build ahead from before the check; restored on the refusal.
+            Assert.Equal([false, true], game.BuildAhead);
             Assert.All(published, p => Assert.Equal(RecordingState.Off, p.MonitorRecording));
         }
         finally

@@ -282,6 +282,11 @@ internal sealed class CaptureSession : ICaptureSession
     private bool _armMove;
     private bool _armPending;
     private volatile bool _buildAhead = true;
+
+    // Story 12.2 (QA): a Record press reserves the current chain until its writer attaches (at most
+    // RecordReserve), so no size move starts or arms in between. QPC; under the chain lock.
+    private long _recordReservedUntil;
+    private static readonly TimeSpan RecordReserve = TimeSpan.FromSeconds(10);
     private string? _path;
     private D3D11Device? _device;
     private ICaptureSource? _capture;
@@ -611,10 +616,12 @@ internal sealed class CaptureSession : ICaptureSession
     {
         EncoderChain? current;
         bool moving;
+        bool reserved;
         lock (_chainLock)
         {
             current = _current;
             moving = _movingTo is not null;
+            reserved = RecordReservedLocked();
             TryStartArmLocked();
         }
 
@@ -623,7 +630,7 @@ internal sealed class CaptureSession : ICaptureSession
             return;
         }
 
-        if (_sizeWatch.Observe(qpc, content.Width, content.Height, current.OutputSize.Width, current.OutputSize.Height, current.Codec, current.Tap is { HasWriter: true }) is { } target)
+        if (_sizeWatch.Observe(qpc, content.Width, content.Height, current.OutputSize.Width, current.OutputSize.Height, current.Codec, reserved || current.Tap is { HasWriter: true }) is { } target)
         {
             StartMove(new VideoSize(target.Width, target.Height));
         }
@@ -644,7 +651,7 @@ internal sealed class CaptureSession : ICaptureSession
         lock (_chainLock)
         {
             if (_chainsClosed || _keepRing || _outputFinished || _stopped || _deviceLost || _restarting || _building || _tearingDown > 0
-                || _armed is not null || _retiring is not null || _prepared is not null
+                || _armed is not null || _retiring is not null || _prepared is not null || RecordReservedLocked()
                 || _current is not { IsBuilt: true, IsDisposed: false, Tap.HasWriter: false } old)
             {
                 _log.LogInformation("The game's size changed to {Size} and held; the move waits, since another chain change or a Recording is running", target);
@@ -674,7 +681,7 @@ internal sealed class CaptureSession : ICaptureSession
     private void TryStartArmLocked()
     {
         if (!_armMove || _armPending || _prepared is null || _armed is not null || _retiring is not null || _restarting || _deviceLost
-            || _current is not { Tap.HasWriter: false } || _chainsClosed)
+            || _current is not { Tap.HasWriter: false } || _chainsClosed || RecordReservedLocked())
         {
             return;
         }
@@ -701,7 +708,7 @@ internal sealed class CaptureSession : ICaptureSession
             {
                 _armPending = false;
                 if (!_stopped && _armMove && _prepared is { } prepared && _armed is null && _retiring is null && !_restarting && !_deviceLost
-                    && _current is { Tap.HasWriter: false } current && !_outputFinished && !_keepRing && !_chainsClosed)
+                    && _current is { Tap.HasWriter: false } current && !_outputFinished && !_keepRing && !_chainsClosed && !RecordReservedLocked())
                 {
                     _prepared = null;
                     _wanted = null;
@@ -732,6 +739,32 @@ internal sealed class CaptureSession : ICaptureSession
             _sourceSize = moved;
             _movingTo = null;
             _armMove = false;
+        }
+    }
+
+    /// <summary>Story 12.2: whether a Record press holds the current chain until its writer attaches. Under the chain lock.</summary>
+    private bool RecordReservedLocked() => Stopwatch.GetTimestamp() < _recordReservedUntil;
+
+    /// <summary>
+    /// Story 12.2 (QA): a Recording starts on the current chain, so a pending size move is cancelled:
+    /// its prepared chain is torn down, a build in flight is torn down when it ends (its spec is no
+    /// longer wanted), and an arm queued finds nothing to arm. The watch finds the size again after the
+    /// Recording, if it still holds. A profile's chain waiting for a save is left alone. Under the chain lock.
+    /// </summary>
+    private void CancelMoveLocked()
+    {
+        if (!_armMove)
+        {
+            return;
+        }
+
+        _log.LogInformation("A Recording starts: the size move to {Size} is cancelled, and found again after it if the size still holds", _movingTo);
+        DropMoveLocked();
+        _wanted = null;
+        if (_prepared is { } prepared)
+        {
+            _prepared = null;
+            TearDownLocked(prepared);
         }
     }
 
@@ -1100,14 +1133,18 @@ internal sealed class CaptureSession : ICaptureSession
             }
 
             chain = _current;
+            if (chain is null || chain.IsDisposed || chain.Tap is not { HasWriter: false } || chain.Video is null)
+            {
+                return null;
+            }
+
+            // Story 12.2: the Recording keeps this chain (R12). A pending size move is cancelled, its
+            // chain torn down, and the chain reserved until the writer attaches.
+            CancelMoveLocked();
+            _recordReservedUntil = Stopwatch.GetTimestamp() + (long)(RecordReserve.TotalSeconds * _qpcFrequency);
         }
 
-        if (chain is null || chain.IsDisposed || chain.Tap is not { HasWriter: false } tap || chain.Video is not { } video)
-        {
-            return null;
-        }
-
-        return new RecordingWrite(this, tap, video, qpc);
+        return new RecordingWrite(this, chain, chain.Tap!, chain.Video!, qpc);
     }
 
     /// <summary>
@@ -3209,7 +3246,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// copies of the streams to the tap, then asks the encoder for a keyframe after the press; the
     /// writer's thread does the rest. <see cref="Stop"/> hands it the press as µs since the anchor.
     /// </summary>
-    private sealed class RecordingWrite(CaptureSession session, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
+    private sealed class RecordingWrite(CaptureSession session, EncoderChain chain, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
     {
         private RecordingWriter? _writer;
 
@@ -3244,8 +3281,21 @@ internal sealed class CaptureSession : ICaptureSession
 
             try
             {
-                // Attached before the keyframe is asked for, so the forced key can't pass the tap unseen.
-                tap.Attach(writer);
+                // Story 12.2: attached under the chain lock, and only to the chain Record reserved
+                // while it is still current, so a size move can't switch it out from under the
+                // Recording; the reservation ends here either way.
+                lock (session._chainLock)
+                {
+                    session._recordReservedUntil = 0;
+                    if (!ReferenceEquals(session._current, chain) || chain.Retiring || chain.IsDisposed)
+                    {
+                        throw new InvalidOperationException("The game's video changed size just as the Recording started; press Record again.");
+                    }
+
+                    // Attached before the keyframe is asked for, so the forced key can't pass the tap unseen.
+                    tap.Attach(writer);
+                }
+
                 ticket = video.RequestKeyframe(qpc);
                 writer.Start();
             }

@@ -1926,6 +1926,10 @@ public sealed class SessionOrchestrator : IDisposable
     private void StartMonitor(SettingsDocument document)
     {
         var recordings = _recordings!;
+
+        // Story 12.2 (QA, AD-7): no size move builds a chain ahead from here, before the budget check,
+        // so none can slip in between; restored when the Monitor session doesn't start.
+        _active?.Session.SetBuildAhead(false);
         if (_active is { } game)
         {
             int chains;
@@ -1952,6 +1956,7 @@ public sealed class SessionOrchestrator : IDisposable
                     $"The Monitor Recording didn't start: your graphics card's video encoder is already busy with this game ({chains} videos).");
 
                 // The chain dropped above is asked for again: nothing runs beside the game session.
+                game.Session.SetBuildAhead(true);
                 ApplySettings(game);
                 return;
             }
@@ -1963,6 +1968,7 @@ public sealed class SessionOrchestrator : IDisposable
             var snapshot = SettingsResolver.Resolve(document, null);
             if (!ResolveScreens(snapshot, out var screens))
             {
+                _active?.Session.SetBuildAhead(true);
                 return;
             }
 
@@ -1973,12 +1979,12 @@ public sealed class SessionOrchestrator : IDisposable
         }
         catch (Exception e)
         {
+            _active?.Session.SetBuildAhead(true);
             recordings.Failed(e);
             return;
         }
 
         _monitor = monitor;
-        _active?.Session.SetBuildAhead(false);
         SetState(_state with { MonitorRecording = RecordingState.Running });
     }
 

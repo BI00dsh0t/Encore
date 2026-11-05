@@ -131,3 +131,19 @@ With `video.matchSource` on (12.1), AD-26's held size change moves the Replay Bu
    `bench\ReplayBuffer.Bench\bin\Release\net10.0-windows10.0.26100.0\ReplayBuffer.Bench.exe fps --repo <worktree> --presentmon %USERPROFILE%\Documents\repos\ReplayBuffer\native\presentmon\PresentMon-2.6.0-x64.exe --seconds 45 --passes 2 --settle 10 --conditions baseline,capture,capture-ms`
 
    Then record the FPS loss of `capture` (1080p) and `capture-ms` (2560×1440 source) against NFR-1 in epic 12's Notes.
+
+## QA round 1 (3 findings), fixed
+
+1. **[high] A Record press raced `ArmMove`.** A successful `Record()` now reserves the current chain under the chain lock until its writer attaches (at most 10 s, if `Start` never comes). The watch counts the reservation as a Recording, and `StartMove`, `TryStartArmLocked` and `ArmMove` refuse while it holds. `RecordingWrite.Start` re-checks under the chain lock that its chain is still current, not retiring and not disposed, then attaches there, ending the reservation. A changed chain refuses the Recording with a "press Record again" message.
+2. **[medium] A parked move chain blocked a Monitor Recording.** A successful `Record()` cancels a pending move (`CancelMoveLocked`): its prepared chain is torn down, a build in flight is torn down when it ends (its spec is no longer `_wanted`), and a queued arm finds nothing. The watch finds the size again after the Recording if it still holds. A profile's chain waiting for a save is left alone, as today.
+3. **[medium] The AD-7 budget race at Monitor start.** `StartMonitor` turns the game session's build-ahead off before the `Chains` check, and back on when the Monitor session doesn't start (the budget refusal, no screens, a failed start). The existing budget-refusal test now asserts `[false, true]`.
+- **Noted:** on the tear-down-first path (a Monitor Recording running), a failed rebuild fails the session, as `SwitchChain` does today.
+- **Tests:** findings 1 and 2 need a built chain, so they are Heavy tests, added to tonight's list. Finding 3 has its default assertion.
+
+## Night runs, updated (round 2)
+
+1. **Heavy** (each takes `.bench-running` itself):
+
+   `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*ARealWindowResizedTo2560By1440MovesTheReplayBufferAndTheNextClipHasIt" --filter-method "*AResizeDuringAGameRecordingKeepsItsSizeAndMovesAfterItStops" --filter-method "*ARecordPressWhileAMoveBuildsCancelsItAndTheRecordingKeepsItsChain" --filter-method "*AMonitorRecordingStartsBesideAGameRecordingAfterAResize" --filter-method "*AOneScreenMonitorRecordingOfThe3840By2160ScreenRecordsAtThatSize"`
+
+2. **Cost**: as above (`--conditions baseline,capture,capture-ms`), unchanged.
