@@ -44,7 +44,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle; 14.3 in QA; its Heavy tonight |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (14.7 round 2 review comes back here) |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy reviewing 14.7 round 2 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 12.4's doc nits |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
@@ -214,7 +214,7 @@ The coordinator logs each QA round in the Log below.
 | 35.4 | 14.4 Track picker | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `de23206`) |
 | 35.5 | 14.5 Transport: seek bar, time, volume and keys | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `8ed5775`) |
 | 35.6 | 14.6 When Windows can't play the file | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `d2273f9`) |
-| 35.7 | 14.7 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | review round 1 failed (4 findings); fixing (no tests) |
+| 35.7 | 14.7 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | review round 2 at `118d583` (no tests) |
 | 35.8 | 14.8 The in-app player end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
@@ -1029,3 +1029,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 12.4 READY FOR REVIEW at `8af0e1f` (cleanup only; 0-warning build; no tests): one `NewChain` replaces five `EncoderChain` constructions; class docs; a test-only `MoveArmDelay` with probes, so the Heavy Record-during-build test deterministically exercises the cancel; backlog rows updated on the branch. The code review went to 2-1-tracer.
 - 2026-11-05: The code review of 14.7 at `fd4a77a` failed with 4 findings: (1, regression) a volume change while muted at a clamp (Up at 1.0, Down at 0) no longer unmutes; (2) the volume rounding doesn't snap the slider thumb; (3, risk) the no-picture timer never starts if `Media` is set before the view attaches, which could hang the new test; (4) the test and the code read different front-buffer signals. Saving on close (Quit included), the scrub stop and the frame-only count were confirmed. Sent back to story-2-7, no tests. Unrun 14.7 default tests (for the backlog): `PlayerTransportTests.AViewFileFromBeforeThePlayerLoadsFullAndUnmuted`, `TheVolumeStepsWithoutDriftAndAnyChangeUnmutes`, `TheVolumeAndMuteAreKeptAcrossRuns`; `PlayerViewThemeTests.APageWithNoPictureInTimeSaysTheFileCantBePlayed`, `ThePlayerPageShowsInBothLooksAndTheHiddenListIgnoresItsKeys`.
 - 2026-11-05: The code review of 12.4 passed at `8af0e1f`: the same arguments at all five sites; the first chain at Open is a no-op through `SizedToSource`; matchSource off never acts; `MoveArmDelay` is only set by the test rig; the Heavy test now deterministically hits the cancel, including during the build. Two doc nits (`NewChain` and `SizedToSource` summaries swapped; the `MovePending` wording) are being fixed; then the coordinator merges.
+- 2026-11-05: 14.7 round 2 at `118d583`: any volume request while muted unmutes (clamps included); rounding before the compare, with a PropertyChanged snap; the no-picture wait starts on attach when `Media` is already set; one `_frontBufferAvailable` signal. The coordinator asked the reviewer to check that no non-user path (restore at open, the slider's write-back, a theme re-template) sets `Volume` while muted.
