@@ -42,11 +42,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | busy with 14.3 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 14.2 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (QA 14.2 round 2 comes back here) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle; 14.2 in QA |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with the 14.2 round 1 fixes |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -207,7 +207,7 @@ The coordinator logs each QA round in the Log below.
 | 33.6 | 12.5 Source-resolution output end to end on the builder's PC | | pending |
 | 34.1 | 13.1 Capture new games: the key, the engine default and the General switch | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `4f06c58`) |
 | 35.1 | 14.1 Architecture: AD-27, the in-app player | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
-| 35.2 | 14.2 Tracer: a Clip plays on a player page from the Library | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (code); Heavy tonight; merges after it |
+| 35.2 | 14.2 Tracer: a Clip plays on a player page from the Library | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA round 1 failed; fixing; Heavy tonight |
 | 35.3 | 14.3 Recordings play to the end: mehd at finalize | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | plan approved; building (day); Heavy at night |
 | 35.4 | 14.4 Track picker | | pending |
 | 35.5 | 14.5 Transport: seek bar, time, volume and keys | | pending |
@@ -1000,3 +1000,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 14.2's plan at `de32126` was approved by the coordinator. A throwaway proof of the whole path played the 4-Track fixture through a share-delete stream, the frame server and `D3DImage` (CsWin32 at 0 warnings with the AOT analyzers; Track 0 forced; rename and delete while playing worked). Design: Platform.Desktop `VideoSurface`; the App's `IPlayer` seam with a fake; `PlayerPage` and `PlayerView`; the Library's DrillIn; rows still being written don't open; "Open in default player"; a list-key guard so Delete can't act on the hidden list. Real-fixture checks are Heavy at night. Note for 14.5: a seek while paused gave no frame and play resumed from about 0.
 - 2026-11-05: 14.3's plan at `4cf338e` was approved by the coordinator. A pure Core `Mp4File.TryAddFragmentDuration` rewrites `[mvex, udta+24)` in place in `FragmentedMp4Muxer.Finish` (durable path only, before `EndWrite`): `mvex` grows by 16 with a v0 `mehd`, and the rest of `udta` becomes `free`. No later byte moves. FFmpeg 9 always writes a 97 B `udta` after `mvex` (measured for H.264, HEVC and AV1). An unexpected layout or an I/O failure leaves the file as today. The duration is the maximum per-stream `track_duration` in the `mvhd` timescale. Added: a single write with `FlushFileBuffers`, a torn patch described, and `IsComplete` checked against one. Heavy at night: Media Foundation's `NaturalDuration` within one frame and playback to `MediaEnded` for H.264, HEVC, AV1 and Monitor; a crash-cut hand-patch experiment for the Notes.
 - 2026-11-05: 14.2 READY FOR QA at `b11f216`: Platform.Desktop `VideoSurface`; the App's `IPlayer`, `WindowsMediaPlayer`, `PlayerPage` and `PlayerView`; the Library's DrillIn and Player (Enter, double-click or Play opens finished rows; "Open in default player" moves to the overflow and context menu; the hidden list is guarded); the shell routes the drill-in and pauses on hide. App 231, Core 170, Contracts 137 and Platform.Desktop 14 passed. Code QA went to slice-epic-8 (Sonnet, high effort). **Tonight's queue adds:** `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --explicit only --filter-class "*PlayerPlaybackTests"` (a Clip on Track 1 with rename and delete while playing; 6400×2160 HEVC; 200 opens and closes). 14.2 merges after it, being high risk.
+- 2026-11-05: QA 14.2 round 1 failed at `b11f216` with 1 blocking finding: `VideoSurface.Dispose` drops the WinRT surface wrapper without disposing it, so COM refs on the surface, texture and device stay until GC (contrary to AD-27). Four smaller ones: unchecked D3D HRESULTs give a silent black picture; no redraw after front-buffer loss mid-clip; no explicit player close on Quit; a new surface on every resize step. Everything else passed (AD-27, the list guard, PNGs, suites). Sent back to story-2-7. **14.3 note:** a crash-cut file with no `mfra` reports no length at all; with a hand-patched `mehd` it reports the full length, so the start-up trim of interrupted Recordings could add one too (seeking checked tonight).
