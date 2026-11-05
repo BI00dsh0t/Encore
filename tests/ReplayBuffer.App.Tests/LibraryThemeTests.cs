@@ -65,7 +65,7 @@ public sealed class LibraryThemeTests
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
 
                 var view = (LibraryView)page.View;
-                Assert.True(view.IsLoaded, $"The Library didn't load under {which}");
+                Sta.PumpUntil(() => view.IsLoaded, $"the Library to load under {which}");
                 Assert.Equal(Visibility.Visible, ((FrameworkElement)view.FindName("Banner")).Visibility);
                 var bar = (FrameworkElement)view.FindName("CommandBar");
                 Assert.Equal((true, 40.0), (bar.IsVisible, bar.ActualHeight));
@@ -87,11 +87,11 @@ public sealed class LibraryThemeTests
                 page.Click(rows["ace.mp4"], ctrl: false, shift: false);
                 page.Click(rows["no-thumbnail.mp4"], ctrl: true, shift: false);
                 window.Activate();
-                ((ListBoxItem)list.ItemContainerGenerator.ContainerFromItem(rows["no-thumbnail.mp4"])).Focus();
+                Container(list, rows["no-thumbnail.mp4"]).Focus();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
+                Sta.PumpUntil(() => Descendants<TextBlock>(bar).Any(t => t.Text == "2 selected" && t.IsVisible), "\"2 selected\" in the command bar");
 
                 Assert.Equal((true, 40.0), (bar.IsVisible, bar.ActualHeight));
-                Assert.Contains(Descendants<TextBlock>(bar), t => t.Text == "2 selected" && t.IsVisible);
                 var selected = (SolidColorBrush)window.FindResource("RbLibraryRowSelectedBrush");
                 Assert.Equal((selected.Color, selected.Opacity), Fill(RowCard(list, rows["ace.mp4"])));
                 Assert.NotEqual(Fill(RowCard(list, rows["saving.mp4"])), Fill(RowCard(list, rows["ace.mp4"])));
@@ -175,9 +175,23 @@ public sealed class LibraryThemeTests
     // The row's card: the first child of its template's root, inside the ListBoxItem container.
     private static Border RowCard(ListBox list, LibraryRow row)
     {
-        var container = (ListBoxItem)list.ItemContainerGenerator.ContainerFromItem(row);
-        var root = (Grid)VisualTreeHelper.GetChild(Descendants<ContentPresenter>(container)[0], 0);
+        var root = (Grid)VisualTreeHelper.GetChild(Descendants<ContentPresenter>(Container(list, row))[0], 0);
         return (Border)root.Children[0];
+    }
+
+    // The row's ListBoxItem once it's realised with its template applied; under load that can take longer than a fixed pump.
+    private static ListBoxItem Container(ListBox list, LibraryRow row)
+    {
+        ListBoxItem? container = null;
+        Sta.PumpUntil(
+            () =>
+            {
+                list.UpdateLayout();
+                container = list.ItemContainerGenerator.ContainerFromItem(row) as ListBoxItem;
+                return container is not null && Descendants<ContentPresenter>(container) is [var presenter, ..] && VisualTreeHelper.GetChildrenCount(presenter) > 0;
+            },
+            $"the row container for {row.Name}");
+        return container!;
     }
 
     private static (Color Color, double Opacity) Fill(Border card) =>
