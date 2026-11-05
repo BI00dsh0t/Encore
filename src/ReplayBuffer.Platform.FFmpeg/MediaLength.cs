@@ -17,7 +17,13 @@ public static unsafe class MediaLength
     /// The length of <paramref name="path"/> in seconds: the container's duration when it has one, else
     /// its longest stream's. Null, with a warning naming the file, when FFmpeg can't read it.
     /// </summary>
-    public static double? Read(string path, ILogger logger)
+    public static double? Read(string path, ILogger logger) => Read(path, logger, whileOpen: null);
+
+    /// <summary>
+    /// <see cref="Read(string, ILogger)"/>, with a test seam: <paramref name="whileOpen"/> runs once the
+    /// file is open for the read, as a rename or delete from the user may land.
+    /// </summary>
+    internal static double? Read(string path, ILogger logger, Action? whileOpen)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(logger);
@@ -34,8 +40,25 @@ public static unsafe class MediaLength
 
         var background = PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_BEGIN);
         AVFormatContext* context = null;
+        SharedInput? input = null;
         try
         {
+            // Through a shared handle, not FFmpeg's file protocol: the read mustn't block a rename or delete.
+            try
+            {
+                input = new SharedInput(path);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning("The length of {Path} couldn't be read: {Message}", path, e.Message);
+                return null;
+            }
+
+            context = ffmpeg.avformat_alloc_context();
+            context->pb = input.Context;
+            context->flags |= ffmpeg.AVFMT_FLAG_CUSTOM_IO;
+
+            // On failure it frees the context and sets it to null.
             var result = ffmpeg.avformat_open_input(&context, path, null, null);
             if (result < 0)
             {
@@ -43,6 +66,7 @@ public static unsafe class MediaLength
                 return null;
             }
 
+            whileOpen?.Invoke();
             result = ffmpeg.avformat_find_stream_info(context, null);
             if (result < 0)
             {
@@ -64,6 +88,8 @@ public static unsafe class MediaLength
             {
                 ffmpeg.avformat_close_input(&context);
             }
+
+            input?.Dispose();
 
             if (background)
             {
