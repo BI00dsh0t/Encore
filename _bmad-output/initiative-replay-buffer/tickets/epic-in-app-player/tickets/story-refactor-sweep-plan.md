@@ -53,3 +53,14 @@ Built on 14.6's tip `c20c1a4` (`feature/14.7-player-sweep` from `feature/14.6-ca
 
 - 2026-11-05: branch `feature/14.7-player-sweep` from `feature/14.6-cant-play`; built by 16:43.
 - 2026-11-05: rebased onto develop `c7f7013` after 14.2 to 14.6 merged; the QA notes folded in; built at 16:53, tests deferred to the backlog.
+
+## Code review round 1 fixes (2026-11-05)
+
+The review of `fd4a77a` confirmed the view file saving on close (Quit included), the scrub stop, the count of player frames only, and the timer's threading. It asked for four fixes, with no tests run:
+
+1. **[regression] Unmute on any request:** `Volume` unmuted only when the value changed, so Up at 1.0 or Down at 0 while muted, or the slider at the same value, left it muted. Any set now unmutes when muted. `TheVolumeStepsWithoutDriftAndAnyChangeUnmutes` adds Up at 1.0 while muted.
+2. **The slider snaps to the rounded value:** `Volume` rounds before comparing and always raises PropertyChanged, so a slider at 0.333 is told the 0.33 kept. `VolumeChanged` is raised only when the volume or the mute changed. The test counts one PropertyChanged for the 0.333 set.
+3. **[risk] The no-picture wait for media already open:** `PlayerView.Attach` starts the wait (`StartNoPictureWait`) when the page has its media and hasn't failed, as the `Media` change does. A fast open, or `FakePlayer`, no longer leaves the timer unstarted.
+4. **One front-buffer signal:** `_frontBufferAvailable`, set from `D3DImage` at construction and by `FrontBufferChanged`, is what the present, the `Media` handler, `Attach` and the timer restart all read. The test's `FrontBufferChanged(false)` and the real event now mean the same thing.
+
+- `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors (16:58). The tests stay deferred to the backlog.

@@ -233,21 +233,30 @@ internal sealed class PlayerPage : Observable, IDisposable
     }
 
     /// <summary>
-    /// The volume, 0 to 1, as the slider shows it, rounded to 2 dp so steps don't drift. Changing it unmutes,
-    /// whether by the slider or the keys (QA 14.5), and raises <see cref="VolumeChanged"/> once.
+    /// The volume, 0 to 1, as the slider shows it, rounded to 2 dp so steps don't drift.
+    /// <list type="bullet">
+    /// <item>A set always raises PropertyChanged, so a slider at 0.333 snaps to the 0.33 kept (QA 14.7).</item>
+    /// <item>Any request while muted unmutes, by the slider or the keys, even one that leaves the value as it is
+    /// (Up at 1.0, Down at 0).</item>
+    /// <item><see cref="VolumeChanged"/> is raised once, when the volume or the mute changed.</item>
+    /// </list>
     /// </summary>
     public double Volume
     {
         get => _volume;
         set
         {
-            if (!Set(ref _volume, Math.Round(Math.Clamp(value, 0, 1), 2)))
+            var rounded = Math.Round(Math.Clamp(value, 0, 1), 2);
+            var changed = rounded != _volume;
+            _volume = rounded;
+            OnPropertyChanged();
+            if (changed)
             {
-                return;
+                Player.Volume = _volume;
             }
 
-            Player.Volume = _volume;
-            if (_isMuted)
+            var unmuted = _isMuted;
+            if (unmuted)
             {
                 _isMuted = false;
                 Player.IsMuted = false;
@@ -256,7 +265,10 @@ internal sealed class PlayerPage : Observable, IDisposable
                 OnPropertyChanged(nameof(MuteName));
             }
 
-            VolumeChanged?.Invoke(_volume, _isMuted);
+            if (changed || unmuted)
+            {
+                VolumeChanged?.Invoke(_volume, _isMuted);
+            }
         }
     }
 
@@ -396,7 +408,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>Left and Right: <see cref="SeekStep"/> back or forward.</summary>
     public void SeekBy(TimeSpan delta) => SeekTo(Position + delta);
 
-    /// <summary>Up and Down: <see cref="VolumeStep"/> up or down; a change unmutes.</summary>
+    /// <summary>Up and Down: <see cref="VolumeStep"/> up or down; while muted it unmutes, even at the end of the range.</summary>
     public void ChangeVolume(double delta) => Volume += delta;
 
     /// <summary>Seeks to the drag's latest position, if it moved since the last; the view calls it once a rendered frame while dragging.</summary>

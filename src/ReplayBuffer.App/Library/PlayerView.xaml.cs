@@ -48,8 +48,12 @@ internal partial class PlayerView
     // Frames the player itself has delivered since the page opened: what the no-picture timer waits for.
     private int _playerFrames;
 
-    // Whether the no-picture timer is due: started when the media arrives, paused while the front buffer is gone.
+    // Whether the no-picture timer is due: started when the media is there, paused while the front buffer is gone.
     private bool _noPictureWaiting;
+
+    // Whether D3DImage has its front buffer: the one signal the present, the no-picture timer and
+    // FrontBufferChanged all read (QA 14.7).
+    private bool _frontBufferAvailable = true;
 
     public PlayerView()
     {
@@ -60,6 +64,7 @@ internal partial class PlayerView
         _noPicture = new DispatcherTimer(NoPictureTimeout, DispatcherPriority.Background, OnNoPicture, Dispatcher) { IsEnabled = false };
         SeekBar.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnScrubStarted));
         SeekBar.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnScrubCompleted));
+        _frontBufferAvailable = _image.IsFrontBufferAvailable;
         _image.IsFrontBufferAvailableChanged += OnFrontBufferAvailableChanged;
         ((FrameworkElement)Picture.Parent).SizeChanged += (_, _) =>
         {
@@ -122,6 +127,24 @@ internal partial class PlayerView
             page.Player.FrameAvailable += OnPlayerFrame;
             page.PropertyChanged += OnPagePropertyChanged;
             _position.IsEnabled = page.IsPlaying;
+
+            // A page that opened before this view attached (a fast open) has its media already: wait for its
+            // picture from now, as the Media change would have started (QA 14.7).
+            if (page.Media is not null && !page.IsFailed)
+            {
+                StartNoPictureWait();
+            }
+        }
+    }
+
+    private void StartNoPictureWait()
+    {
+        _noPicture.Stop();
+        _noPicture.Interval = NoPictureTimeout;
+        _noPictureWaiting = true;
+        if (_frontBufferAvailable)
+        {
+            _noPicture.Start();
         }
     }
 
@@ -144,7 +167,7 @@ internal partial class PlayerView
     private void Present()
     {
         Interlocked.Exchange(ref _presentPending, 0);
-        if (_page is not { IsClosed: false, IsFailed: false, Media: { } media } page || !_image.IsFrontBufferAvailable)
+        if (_page is not { IsClosed: false, IsFailed: false, Media: { } media } page || !_frontBufferAvailable)
         {
             return;
         }
@@ -273,12 +296,7 @@ internal partial class PlayerView
     {
         if (e.PropertyName == nameof(PlayerPage.Media))
         {
-            _noPicture.Interval = NoPictureTimeout;
-            _noPictureWaiting = true;
-            if (_image.IsFrontBufferAvailable)
-            {
-                _noPicture.Start();
-            }
+            StartNoPictureWait();
             OnFrameAvailable();
         }
         else if (e.PropertyName == nameof(PlayerPage.IsPlaying) && _page is { } page)
@@ -354,6 +372,7 @@ internal partial class PlayerView
     /// </summary>
     internal void FrontBufferChanged(bool available)
     {
+        _frontBufferAvailable = available;
         if (!available)
         {
             _noPicture.Stop();

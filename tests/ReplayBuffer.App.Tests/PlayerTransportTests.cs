@@ -139,8 +139,12 @@ public sealed class PlayerTransportTests : IDisposable
         var player = new FakePlayer();
         var page = Open(player);
 
+        // A slider at 0.333 is told the 0.33 kept, so its thumb snaps (QA 14.7).
+        var raised = 0;
+        page.PropertyChanged += (_, e) => raised += e.PropertyName == nameof(PlayerPage.Volume) ? 1 : 0;
         page.Volume = 0.333333;
         Assert.Equal(0.33, page.Volume);
+        Assert.Equal(1, raised);
         page.Volume = 0.1;
         page.ChangeVolume(-PlayerPage.VolumeStep);
         page.ChangeVolume(-PlayerPage.VolumeStep);
@@ -151,6 +155,11 @@ public sealed class PlayerTransportTests : IDisposable
         }
 
         Assert.Equal(1.0, page.Volume);
+
+        // Up at 1.0 while muted still unmutes, though the volume can't rise (QA 14.7).
+        page.MuteCommand.Execute(null);
+        page.ChangeVolume(PlayerPage.VolumeStep);
+        Assert.Equal((1.0, false, false), (page.Volume, page.IsMuted, player.IsMuted));
 
         // The slider, dragged while muted, unmutes, as the keys do.
         page.MuteCommand.Execute(null);
