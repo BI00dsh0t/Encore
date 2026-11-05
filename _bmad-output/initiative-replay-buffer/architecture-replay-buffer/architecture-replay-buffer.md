@@ -349,13 +349,29 @@ graph LR
 ### AD-25 — Multi-monitor Monitor Recording: one compositor, one chain
 
 - **Binds:** R21, R39; NFR-1
-- **Prevents:** one encoder chain per monitor breaking the budget; files of one Recording out of sync; a saved monitor choice pointing at a different monitor after a replug; the canvas changing inside a file
+- **Prevents:** one encoder chain per monitor breaking the budget; files of one Recording out of sync; a saved monitor choice pointing at a different monitor after a replug; the canvas changing inside a file; screens recorded below their native resolution; GDI's DPI-virtualized sizes placing screens wrongly
 - **Rule:**
-  - **One video:** a Monitor Recording of several monitors is one file. Each monitor's source (a WGC monitor item, else its own Desktop Duplication fallback, AD-12) keeps its latest frame. A `MonitorCompositor` in Media blits them into one canvas per output frame, laid out by virtual-desktop position, ahead of the existing pacer, scaler, **one** encoder chain and the RecordingWriter. A single monitor passes straight through.
-  - **Canvas:** the canvas is the bounding box of the recorded monitors, scaled down with its aspect kept to fit the probed codec maximum and a pixel budget equal to the Output resolution's area or 3840×2160, whichever is larger, with even sides. It's fixed for the life of a file. A removed monitor's area turns black, an arriving monitor waits for the next Recording, and a mode change scales into the same area.
-  - **Device:** the Monitor session keeps its own D3D11 device, on the adapter of the primary recorded monitor. This is an explicit exception to AD-7's one device, which settles 6.9's open decision. The session's chain counts toward AD-7's two-chain budget as before.
+  - **One video:** a Monitor Recording of several monitors is one file.
+    - Each monitor's source (a WGC monitor item, else its own Desktop Duplication fallback, AD-12) keeps its latest frame.
+    - A `MonitorCompositor` in Media blits them into one canvas, laid out by virtual-desktop position, ahead of the existing pacer, scaler, **one** encoder chain and the RecordingWriter.
+    - It hands the pacer **one canvas per output slot, from its own slot clock**, never one per source frame. Spike 11.1's per-frame push gave hundreds of hand-off drops and about 2,000 non-increasing stamps per 50 s.
+    - A blit costs 11 to 22 µs of GPU time (1440p to 2160p). A single monitor passes straight through.
+  - **Canvas:**
+    - **Native size:** the canvas is the bounding box of the recorded monitors at their **physical** sizes and positions, from each display's current mode (`EnumDisplaySettings`), never GDI's `rcMonitor`. The engine declares no DPI awareness, so `rcMonitor` is DPI-virtualized; on the builder's PC it reports a 3840×2160 screen as 2560×1440.
+    - **Codec limit, no pixel budget:** the canvas is scaled down, with its aspect kept, only to fit the codec's largest frame side: H.264 4096 px, HEVC and AV1 8192 px. These are constants measured on NVENC (spike 11.1), because the encoder probe opens at 1280×720 and reports no limit.
+    - The earlier area budget (the Output area or 3840×2160) is dropped, by the builder's 2026-11-05 decision that several screens are recorded at full width.
+    - **Even sides.** Both sides are rounded down to even numbers.
+    - **Codec choice:** a canvas wider or taller than H.264's 4096 px is encoded with HEVC, else AV1, whichever the encoder probe found, at full size. It never falls back to H.264. H.264, when it's the Output codec, stays for a single screen or a canvas that fits. A canvas over 8192 px a side is fitted to 8192.
+    - **Fixed per file:** the canvas never changes inside a file. A removed monitor's area turns black, an arriving monitor waits for the next Recording, and a mode change scales into the same area.
+  - **Device:** the Monitor session keeps its own D3D11 device, on the adapter of the primary recorded monitor. This is an explicit exception to AD-7's one device, which settles 6.9's open decision.
+  - **Encoder sessions:** the session's chain counts toward AD-7's two-chain budget as before. Spike 11.1 saw 2 NVENC sessions with the Replay Buffer and a two-screen Monitor Recording running. At 6400×2160, 60 fps, NVENC use was about 30 % in total.
   - **Selection:** `monitorRecordingScreens` (`all`, or `selected` monitor ids; Global-only; additive, AD-22) names the monitors by DisplayConfig's monitor device path. While it's null, the old `monitorRecordingMonitor` (a GDI device name, null for the primary) is read as before. Core's one resolver turns either into the attached monitors and the missing ones.
   - **Faults:** GPU reset follows 8.3 and 6.6, rebuilding every source and continuing in a new file. Monitor removal follows 8.5, except that the Recording ends only when no recorded monitor is left.
+  - **Cost against NFR-1 (open):** NFR-1's 3 % binds game capture: the Replay Buffer measured 2.85 % on the synthetic load. A Monitor Recording beside a GPU-bound game is a known extra cost and doesn't meet 3 %:
+    - today's one monitor: 5.15 % in total;
+    - two screens at full width: 7.6 to 10 %.
+    - The extra isn't the encode or the blits. Story 11.3 splits the cost by stage and re-measures after per-slot compositing.
+    - Whether a Monitor Recording needs a cap while a game runs is the builder's decision (epic 11's Notes).
 
 ## Consistency Conventions
 
