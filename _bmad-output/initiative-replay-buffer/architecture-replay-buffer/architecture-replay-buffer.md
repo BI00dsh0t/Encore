@@ -4,11 +4,11 @@ type: architecture-spine
 purpose: build-substrate
 altitude: initiative
 paradigm: 'ports-and-adapters engine with a single-threaded orchestrator, hosting a pipes-and-filters media pipeline; MVVM thin client over IPC'
-scope: 'initiative-replay-buffer: the engine process and the Main App, all 9 epics'
+scope: 'initiative-replay-buffer: the engine process and the Main App, all 10 epics'
 status: final
 created: '2026-10-25'
 updated: '2026-11-04'
-binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37]
+binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38]
 sources:
   - _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md
   - PLAN.md
@@ -330,6 +330,22 @@ graph LR
   - **Switching** swaps the merged dictionaries on the UI thread. Every window, the tray context menu, the App's dialogs and the Overlay take their resources from `Application.Resources`, so they restyle with no restart. The theme is applied before the first window shows.
   - **Dialogs** are App windows, never `MessageBox`, so they follow the theme and keep `WDA_EXCLUDEFROMCAPTURE` (AD-15).
 
+### AD-24 — List and audio editing stay App-side, over the existing commands
+
+- **Binds:** R38
+- **Prevents:** a second delete path that skips the LibraryActor's checks; a new Track Layout shape for the editor; a first-run layout that differs between the engine and the App
+- **Rule:**
+  - **Library selection and bulk actions** live in the App's view model, as a set of item paths. A bulk action sends today's per-item commands (`library.setFavourite`, `library.delete`) one at a time, each with its identity as shown (AD-3), so the LibraryActor still re-checks Favourite and being-written status before each delete (AD-17). There is no bulk message.
+    - The App leaves Favourites out of a delete, single or many (R38). The engine's rules don't change.
+    - Copy to folder hands the files to the Windows shell's file operation; the App never opens the media itself (AD-1).
+  - **The audio-tracks editor** edits the AD-4 `trackLayout` shape as it is. Its `devices` list is derived from the Tracks' sources, and a device on no Track is dropped at save.
+  - **Default devices:** `AudioDevice` gains an optional `isDefault` (the Windows default endpoint of its flow, console role), added under AD-22 and filled by the AudioDeviceHub.
+  - **First-run seed:** when `settings.json` has no Global `trackLayout`, the engine writes one at start, once, through its own settings queue (AD-4): an "Everything" Track holding the default Output and Input Devices, the input marked as a Mic Device. The catalog default is unchanged, and an existing value is never touched.
+  - **Labels only:** the user-facing names (the glossary in epic 10's EXPERIENCE.md: Clips for the Replay Buffer, Cache folder for the ring path, Games for Game Profiles) change text, never a settings key, error code, message name or Contracts type. The engine's `warning.raised` texts follow the glossary; their codes don't change.
+  - **Games:** the list and a game's page are App view models over the settings document and snapshot. "Added by hand" comes from `manualGames`, and the icon is read from the program file (the profile id, AD-18) through the shell. A game's own settings are AD-4's overridable keys, set and removed as today, and its folder is shown, never changed (AD-21).
+  - **Library kind:** `LibraryItem` gains an optional `kind` (`clip` | `recording` | `monitorRecording`), set by the LibraryActor at `BeginWrite` and kept in `library.json`; scanned files have none (AD-22).
+  - **Per-device meters** reuse `meters.watch` (AD-20): the App adds one probe Track per device to the watched draft and never saves the probes. Should that cost too much, an optional per-device level list is added to `meters.levels` under AD-22 instead.
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -442,6 +458,7 @@ ReplayBuffer/
 | R27–R29 Library, Cleanup | Core (LibraryActor), App (shell actions) | AD-17, AD-1 |
 | R31, R34, R35 startup, supervision, hands-off | App (supervisor), Engine | AD-16, AD-22 |
 | R37 themes | App (ThemeService, theme dictionaries), Contracts (key catalog) | AD-23, AD-4 |
+| R38 Library selection and bulk actions, audio-tracks editor, first-run seed, Games, settings pages, plain labels | App (Library, Audio Tracks, Games and settings view models), Engine (settings seed, warning texts), Core (LibraryActor kind), Platform.Audio (default device) | AD-24, AD-17, AD-4, AD-20, AD-21, AD-22 |
 | R32 Hotkeys | Platform.Windows | AD-11 |
 | R33, R36 drift, FPS | Bench, Media | AD-6, AD-13, AD-7 |
 | NFR-2, NFR-3 constraints | all | AD-1, AD-2, AD-7, AD-11, AD-12, AD-16 |
