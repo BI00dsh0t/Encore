@@ -114,6 +114,14 @@ description = "A Global \"Capture new games\" switch on the General page, on by 
 covers = ["R41"]
 
 [[epic]]
+id = 14
+slug = "epic-in-app-player"
+title = "In-app player"
+description = "Enter or a double-click on a Library row plays the Clip, Recording or Monitor Recording on a page in the Main App, through Windows' own media player drawn into WPF: the first Track plays, a Track list switches Track mid-play, a seek bar, volume and keys control it, every file plays to its last frame, and a PC without the HEVC or AV1 extension gets a plain message and the default player."
+covers = ["R42"]
+after = [{ epic = 10, needs = "10.10's drill-in shell piece and 10.2's Library rows and keys, which the player page opens from" }]
+
+[[epic]]
 id = 8
 slug = "epic-hardening"
 title = "Hardening and hands-off operation"
@@ -132,4 +140,5 @@ after = [
   { epic = 11, needs = "multi-monitor Monitor Recording, finished, so 8.11's hands-off run uses it" },
   { epic = 12, needs = "source-resolution output, finished, so 8.11's hands-off run uses it; 8.7 to 8.10 don't wait" },
   { epic = 13, needs = "the Capture new games setting, so 8.11's hands-off run uses it; 8.7 to 8.10 don't wait" },
+  { epic = 14, needs = "the in-app player, finished, so 8.11's hands-off run uses it; 8.7 to 8.10 don't wait" },
 ]
