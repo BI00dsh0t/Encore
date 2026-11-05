@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | busy with 11.4 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy with bugfix full-run-flaky-tests (8.8 held at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.10 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
@@ -188,7 +188,7 @@ The coordinator logs each QA round in the Log below.
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.7 | 10.10 Games list and a page per game | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
+| 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
@@ -874,3 +874,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.10 READY FOR QA at `e348991` (from develop `a098561`): a reusable `SettingsPage.DrillIn` with a breadcrumb header; the Games list (grouped, shell icons through the additive `ShellThumbnail.TryGetIcon`, pills, Add a game… through the 10.9 file picker); a game's page (rename, Capture, the Clips, Video quality and Audio tracks inheritance sections, Recordings, read-only Files, Stop detecting); the Use Global boxes gone. 10.9's follow-up was judged unneeded: there's no per-game folder override, and a game's folder sits inside the Clips folder. 0-warning build; Contracts 128, Core 161, Platform.Desktop 13 and App 185 passed. QA went to slice-epic-8 (Sonnet, high effort). Human Check on merge: the builder walks their real games, changes one game's Clips and resets it, Ignores one, and adds one by hand.
 - 2026-11-05: QA 10.10 passed at `e348991` with 3 minor findings, to fix before the merge with no new QA round: (1) the game page header shows a letter tile, not the program's icon; (2) reselecting the Games nav item by keyboard doesn't close the page; (3) double spaces in the source and program caption. AD-22 and AD-4 hold, the keyboard paths and drafts work, and the 10.9 follow-up reasoning was agreed. Core 161, Contracts 128, Platform.Desktop 13 and App 185 passed (one load flake, which passed alone). qa-1-14 is fixing, then merging.
 - 2026-11-05: 10.10 merged (`4eb4963`, `feat(app): merge 10.10-games-pages`) after QA passed `e348991` and its 3 minor findings were fixed in `02d1b65` (the game page's program icon, Enter or Space on the selected nav item going back, the caption spacing). Develop (with 11.2, the Gaming TextBox padding fix and load-sensitive-tests) was synced first: 0-warning build; Contracts 135, Core 165, Platform.Desktop 13 and App 186 passed, 0 failed. Marked done; the Games and game-page renders were copied to `ux-pass-2/renders/`, and the builder's walk of real games was added to the Human Check Queue. qa-1-14 is back in the pool, with 10.11 next.
+- 2026-11-05: 10.10 merged (`4eb4963`, `feat(app): merge 10.10-games-pages`) after the 3 QA minors were fixed at `02d1b65` (the program's icon in the page tile; keyboard nav reselect closes the page, with a check; caption spacing). Synced with 11.2, the padding fix and load-sensitive-tests, with no conflicts: 0-warning build; Contracts 135, Core 165, Platform.Desktop 13 and App 186 passed. Marked done; renders copied; Human Check row added. Card moved to Done. **10.11 started on qa-1-14** (feature/10.11-plain-words), told to leave Hotkeys' Monitor Recording group to 11.4 and the monitor warnings to 11.3; whichever merges second makes the glossary test pass on the combined strings.
