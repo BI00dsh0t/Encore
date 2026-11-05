@@ -43,7 +43,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix bench-videoencode-count (8.8 held at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.2 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.3 |
 
@@ -193,7 +193,7 @@ The coordinator logs each QA round in the Log below.
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
 | 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `3fd6ed4`) |
-| 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | | pending |
+| 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
 | 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | | pending |
 | 32.4 | 11.4 Screens to record: the picker on Hotkeys | | pending |
 | 32.5 | 11.5 Refactor sweep | | pending |
@@ -845,3 +845,5 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 11.1 passed at `b060415` (round 2: all 4 findings fixed). qa-2-1 is merging; 11.2 comes next for it. The AD-25 spine edit and the bench triple-count fix are already running.
 - 2026-11-05: AD-25 spine edit merged (`e92f903`). The canvas is the physical bounding box, limited only by codec side limits (H.264 4096, HEVC and AV1 8192); over 4096 px it uses HEVC, else AV1, at full size; one canvas per output slot; 2 NVENC sessions; and an "open cost against NFR-1" bullet. 11.3's ticket is updated. 11.3 is now unblocked once 11.2 lands.
 - 2026-11-05: 11.1 merged into develop (`3fd6ed4`, `feat(capture): merge 11.1-multi-monitor-spike`) and marked done (its plan already said done). Synced with develop first (10.2, 10.4, 10.5): 0-warning build, Platform.Capture 6, Bench 150, Engine 190 passed; publish clean (11.9 MB). The AD-25 spine edit (`e92f903`) landed on develop after the sync; it was docs-only and merged cleanly. NFR-1 note added to Decisions Awaiting Review. Human Check: none new (the VLC check ran headless; watching one in VLC is optional, in the plan).
+- 2026-11-05: 11.1 merged (`3fd6ed4`; done and state in `6a2aeba`, with the NFR-1 row added under capture cost), and its card is Done. 11.2 (the `monitorRecordingScreens` key, the richer monitor list and the canvas rule; no App UI) went to qa-2-1 (Opus, medium effort; context kept), with its card In progress.
+- 2026-11-05: Bugfix `bench-videoencode-count` ready at `be7c2cb`. The coordinator checked it and approved the merge: per sample, the max over a process's instances of a type, summed over processes (the RTX 5090 gives each process 3 identical VideoEncode instances). The reduction moved to `tools/measure-gpu.ps1`, with `MeasureGpuSamplesTests`; correction notes were added to 1.2, epic 1, 1.14, capture-cost research, 5.12, 8.7 and 11.1; Bench 151 passed; no GPU runs.
