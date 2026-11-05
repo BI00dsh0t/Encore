@@ -43,11 +43,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle; 14.3 in QA; its Heavy tonight |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 14.4 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.4 (stacked on 14.5); 14.2's Heavy tonight |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.6 (stacked on 14.4); the player Heavy run tonight |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -210,7 +210,7 @@ The coordinator logs each QA round in the Log below.
 | 35.1 | 14.1 Architecture: AD-27, the in-app player | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 35.2 | 14.2 Tracer: a Clip plays on a player page from the Library | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | code approved at `27ebd41`; Heavy tonight, then merge |
 | 35.3 | 14.3 Recordings play to the end: mehd at finalize | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | code QA passed at `e0ad4c0`; Heavy tonight, then merge |
-| 35.4 | 14.4 Track picker | | pending |
+| 35.4 | 14.4 Track picker | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (stacked on 14.5) |
 | 35.5 | 14.5 Transport: seek bar, time, volume and keys | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed at `1e67196` (tip `7322dd2`); merges after 14.2 and 14.4 |
 | 35.6 | 14.6 When Windows can't play the file | | pending |
 | 35.7 | 14.7 Refactor sweep | | pending |
@@ -1015,3 +1015,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 14.5's branch is now at `7322dd2`: the ticket re-pin is undone (14.4 after [2], 14.5 after [4], 14.6 after [5], as planned; the tree check is clean). Code unchanged, so QA's review of `1e67196` stands. story-2-7 is on 14.4, then 14.6 and 14.7, each stacked.
 - 2026-11-05: QA 14.5 passed at `1e67196`: seek clamps; the final drag point is kept; keys bubble so controls win; the end of clip and an unknown length work; tokens; legible PNGs. App 239 and Platform.Desktop 15 passed. Minor items folded into 14.7: a test for an old `LibraryViewState` file; a single view-file write and 2 dp rounding in `ChangeVolume`; the volume slider unmutes while muted; the scrub stops before `_page` is cleared in `Detach`; the Fluent seek thumb's low contrast (or a 14.8 check).
 - 2026-11-05: 14.5's tip is now `c7257a3`, a test-only fix accepted by the coordinator: `PlayerPlaybackTests` mute through the page after it opens, since 14.5's page volume overrode the test player's mute and the night run would have played tones aloud. App and Desktop code are unchanged. 14.4 is rebased onto it.
+- 2026-11-05: 14.4 READY FOR QA at `7c22d82`, stacked on 14.5 (`c7257a3`). An "Audio track" ComboBox lists Tracks by name in file order (the first at open and on reopen; "track n" when unnamed); a switch mid-play keeps the position; a paused switch resumes in place. A Heavy test uses a new process-loopback helper (Goertzel tones at inaudible volume) to check the Track heard. Platform.Desktop 15 and App 243 passed. QA went to slice-epic-8. **Tonight's player run changes:** run `*PlayerPlaybackTests` once, on the stack's top tip (14.4 or later), which covers 14.2, 14.5 and 14.4.
