@@ -17,7 +17,13 @@ public static unsafe class MediaLength
     /// The length of <paramref name="path"/> in seconds: the container's duration when it has one, else
     /// its longest stream's. Null, with a warning naming the file, when FFmpeg can't read it.
     /// </summary>
-    public static double? Read(string path, ILogger logger)
+    public static double? Read(string path, ILogger logger) => Read(path, logger, whileOpen: null);
+
+    /// <summary>
+    /// <see cref="Read(string, ILogger)"/>, with a test seam: <paramref name="whileOpen"/> runs once the
+    /// file is open for the read, as a rename or delete from the user may land.
+    /// </summary>
+    internal static double? Read(string path, ILogger logger, Action? whileOpen)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(logger);
@@ -60,6 +66,7 @@ public static unsafe class MediaLength
                 return null;
             }
 
+            whileOpen?.Invoke();
             result = ffmpeg.avformat_find_stream_info(context, null);
             if (result < 0)
             {

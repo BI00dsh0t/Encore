@@ -141,8 +141,15 @@ internal sealed class IpcServer : IAsyncDisposable
                     // connect attempt timed out on a loaded machine. Only this instance is spent; a new
                     // one takes its place, created first so the name is never free.
                     _log.LogWarning("A client left before its connection was accepted: {Message}", e.Message);
-                    _listener = Create(first: false);
-                    await connected.DisposeAsync().ConfigureAwait(false);
+                    try
+                    {
+                        _listener = Create(first: false);
+                    }
+                    finally
+                    {
+                        await connected.DisposeAsync().ConfigureAwait(false);
+                    }
+
                     continue;
                 }
 
