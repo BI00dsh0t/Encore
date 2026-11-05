@@ -82,6 +82,41 @@ public sealed class ReplayBufferSettingsPageTests
     }
 
     [Fact]
+    public void SourceComesFirstSendsMatchSourceKeepingTheSizeAndAFixedSizeTurnsItOff()
+    {
+        // Story 12.3 (R40, AD-26).
+        var updates = new List<SettingsUpdate>();
+        _engine.Reply = (_, args) =>
+        {
+            updates.Add((SettingsUpdate)args);
+            return new SettingsUpdateResult(1);
+        };
+        _engine.State = _engine.State! with
+        {
+            VideoOptions = VideoOptions.FromProbe([new CodecOffer(VideoCodec.H264, "h264_nvenc", false), new CodecOffer(VideoCodec.Hevc, "hevc_nvenc", true)]),
+        };
+        var page = Create().ReplayBuffer;
+        Assert.Equal(ReplayBuffer.App.Settings.ReplayBufferSettingsPage.SourceLabel, page.Resolutions[0].Label);
+        Assert.Null(page.SourceHelp);
+
+        page.SelectedResolution = page.Resolutions[0];
+        Assert.True(page.SelectedResolution!.IsSource);
+        Assert.Contains("4096 px", page.SourceHelp, StringComparison.Ordinal);
+        page.SelectedCodec = page.Codecs.Single(c => c.Codec == VideoCodec.Hevc);
+        Assert.DoesNotContain("4096", page.SourceHelp, StringComparison.Ordinal);
+        page.SelectedResolution = page.Resolutions.Single(r => r.Label == "1280 × 720");
+        Assert.Null(page.SourceHelp);
+
+        Assert.Equal(
+            [
+                Keys.Video.Default with { MatchSource = true },
+                Keys.Video.Default with { MatchSource = true, Codec = VideoCodec.Hevc },
+                Keys.Video.Default with { Codec = VideoCodec.Hevc, Width = 1280, Height = 720 },
+            ],
+            updates.Select(u => Keys.Video.TryRead(Assert.Single(u.Ops).Value, out var v) ? v : null));
+    }
+
+    [Fact]
     public void TheCacheFolderIsEnabledOnlyUnderDiskAndSendsRingPathAndTimeBetweenSaves()
     {
         // Story 10.9: the ring path is the cache folder's picker; the Clips folder is D:\Clips.

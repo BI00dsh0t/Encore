@@ -326,10 +326,10 @@ internal sealed class GamePage : SettingsPage
         AudioTracks.Show(SettingsValues.HasOverride(document, Keys.TrackLayout, ProfileId), string.Join(Environment.NewLine, Tracks.Summary));
     }
 
-    /// <summary>"H.264 · 1920 × 1080 · 60 fps · 20,000 kbps".</summary>
+    /// <summary>"H.264 · 1920 × 1080 · 60 fps · 20,000 kbps"; "Source" in place of the size under <c>matchSource</c> (story 12.3).</summary>
     internal static string VideoSummary(VideoSettings video) => string.Create(
         CultureInfo.InvariantCulture,
-        $"{video.Codec switch { VideoCodec.H264 => "H.264", VideoCodec.Hevc => "HEVC", VideoCodec.Av1 => "AV1", var c => c.ToString() }} · {video.Width} × {video.Height} · {video.Fps} fps · {video.BitrateKbps:N0} kbps{(video.RateControl == RateControl.Vbr ? " · variable" : "")}");
+        $"{video.Codec switch { VideoCodec.H264 => "H.264", VideoCodec.Hevc => "HEVC", VideoCodec.Av1 => "AV1", var c => c.ToString() }} · {(video.MatchSource ? "Source" : $"{video.Width} × {video.Height}")} · {video.Fps} fps · {video.BitrateKbps:N0} kbps{(video.RateControl == RateControl.Vbr ? " · variable" : "")}");
 
     private void Reset(string section, Action reset)
     {

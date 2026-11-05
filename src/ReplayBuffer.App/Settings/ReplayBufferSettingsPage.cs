@@ -10,8 +10,11 @@ namespace ReplayBuffer.App.Settings;
 /// <summary>A codec the page offers, with its label.</summary>
 internal sealed record CodecItem(VideoCodec Codec, string Label);
 
-/// <summary>An output resolution the page offers, with its label.</summary>
-internal sealed record ResolutionItem(int Width, int Height, string Label);
+/// <summary>
+/// An output resolution the page offers, with its label. <see cref="IsSource"/> is "Source" (story 12.3,
+/// <c>matchSource</c>): the game's or screen's own size, with no width or height of its own.
+/// </summary>
+internal sealed record ResolutionItem(int Width, int Height, string Label, bool IsSource = false);
 
 /// <summary>
 /// The Global Replay Buffer and Output Settings (story 4.10): <c>bufferWindow</c>, <c>replayStorage</c>,
@@ -192,12 +195,33 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
         private set => Set(ref _resolutions, value);
     }
 
+    /// <summary>"Source" first in <see cref="Resolutions"/> (story 12.3, AD-26).</summary>
+    public const string SourceLabel = "Source — the game's or screen's own size";
+
+    /// <summary>
+    /// The selected resolution: "Source" while <c>matchSource</c> is on, else the fixed size. Choosing
+    /// Source sends <c>matchSource</c> true and keeps the width and height as the size to fall back to;
+    /// choosing a fixed size sends it with <c>matchSource</c> false.
+    /// </summary>
     public ResolutionItem? SelectedResolution
     {
-        get => _resolutions.FirstOrDefault(r => r.Width == _video.Width && r.Height == _video.Height);
+        get => _video.MatchSource
+            ? _resolutions.FirstOrDefault(r => r.IsSource)
+            : _resolutions.FirstOrDefault(r => !r.IsSource && r.Width == _video.Width && r.Height == _video.Height);
         set
         {
-            if (value is null || (value.Width == _video.Width && value.Height == _video.Height))
+            if (value is null)
+            {
+                return;
+            }
+
+            if (value.IsSource)
+            {
+                SendVideo(_video with { MatchSource = true }, nameof(SelectedResolution));
+                return;
+            }
+
+            if (!_video.MatchSource && value.Width == _video.Width && value.Height == _video.Height)
             {
                 return;
             }
@@ -208,9 +232,18 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
                 return;
             }
 
-            SendVideo(_video with { Width = value.Width, Height = value.Height }, nameof(SelectedResolution));
+            SendVideo(_video with { Width = value.Width, Height = value.Height, MatchSource = false }, nameof(SelectedResolution));
         }
     }
+
+    /// <summary>
+    /// What "Source" records at, shown only while it's chosen; null otherwise. The H.264 line shows only
+    /// for H.264, the one codec whose 4096 px limit a game window or screen can pass (AD-26).
+    /// </summary>
+    public string? SourceHelp => _video.MatchSource
+        ? "Clips and Recordings are recorded at the game window's own size, and Monitor Recordings at the screen's size. Frame rate and bitrate still apply."
+            + (_video.Codec == VideoCodec.H264 ? " With H.264, anything wider or taller than 4096 px is scaled down to fit." : "")
+        : null;
 
     /// <summary>The fps ceiling the engine offers.</summary>
     public int MaxFps => _options.MaxFps;
@@ -401,8 +434,8 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
             codecs.Insert(0, Codec(_video.Codec, VideoOptions.MayNotPlayEverywhereFor(_video.Codec)));
         }
 
-        List<ResolutionItem> resolutions = [.. _options.Resolutions.Select(r => Resolution(r.Width, r.Height))];
-        if (!resolutions.Any(r => r.Width == _video.Width && r.Height == _video.Height))
+        List<ResolutionItem> resolutions = [new(0, 0, SourceLabel, IsSource: true), .. _options.Resolutions.Select(r => Resolution(r.Width, r.Height))];
+        if (!_video.MatchSource && !resolutions.Any(r => !r.IsSource && r.Width == _video.Width && r.Height == _video.Height))
         {
             resolutions.Add(Resolution(_video.Width, _video.Height));
         }
@@ -424,7 +457,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
 
     private void ShowVideo()
     {
-        foreach (var name in (string[])[nameof(SelectedCodec), nameof(SelectedResolution), nameof(FpsText), nameof(BitrateText), nameof(IsVbr)])
+        foreach (var name in (string[])[nameof(SelectedCodec), nameof(SelectedResolution), nameof(SourceHelp), nameof(FpsText), nameof(BitrateText), nameof(IsVbr)])
         {
             OnPropertyChanged(name);
         }
