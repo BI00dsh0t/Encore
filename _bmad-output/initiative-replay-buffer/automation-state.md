@@ -44,7 +44,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle; 14.3 in QA; its Heavy tonight |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy reviewing 14.7 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 12.4 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
@@ -214,7 +214,7 @@ The coordinator logs each QA round in the Log below.
 | 35.4 | 14.4 Track picker | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `de23206`) |
 | 35.5 | 14.5 Transport: seek bar, time, volume and keys | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `8ed5775`) |
 | 35.6 | 14.6 When Windows can't play the file | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `d2273f9`) |
-| 35.7 | 14.7 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | built at `dc22314` (stacked); closing the queued QA items before QA |
+| 35.7 | 14.7 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in code review at `fd4a77a` (no tests) |
 | 35.8 | 14.8 The in-app player end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
@@ -1025,3 +1025,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: TESTS STOPPED for 14.7: nothing of story-2-7's is running. The queued QA items are done in code but unverified (2 dp volume, the slider unmutes, the scrub stops in `Detach`, the no-picture timer pauses while the front buffer is gone; tests for an old view file, the volume, the front buffer and the drop-down render). A focused Track ComboBox keeps its own arrows (Left and Right change Track): kept, as the focused-control rule says. The Fluent seek thumb follows the Windows accent (#4C4A48 on this PC), noted for 14.8. It's committed as WIP; it gets verified and goes to QA when tests resume.
 - 2026-11-05: 14.7's unverified work is committed as `67a4fba` (a WIP commit, to be reworded once verified), including the Fluent seek-thumb note on 14.8's ticket. Every session is idle and tests are stopped.
 - 2026-11-05: **Builder: "resume dev work. don't run any tests until later. make a backlog of tests to run. Merge to dev when changes are ready."** The new rule: builds yes, tests no, QA by code review, merges on review pass. The coordinator merged the code-approved branches into develop in `coord-develop`: 12.2 `242e947`, 14.3 `6a8340a`, 14.2 `de6f653`, 14.5 `8ed5775`, 14.4 `de23206`, 14.6 `d2273f9`. All were clean, and develop builds Release with 0 warnings. Marked done: 12.2, 14.2 to 14.6, and 11.5 and 12.1 (their Heavy checks are moved to the backlog). `test-backlog.md` lists the default suites first, then 10 night runs in order. Next: 14.7 finishes and merges on code review; 12.4 (sweep) starts.
+- 2026-11-05: 14.7 READY FOR REVIEW at `fd4a77a` (rebased onto develop; the WIP commit replaced by two `refactor(app)` commits; 0-warning build; no tests run). Every queued QA item is closed in code or as a 14.8 note. The code review went to slice-epic-8.
