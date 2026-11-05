@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Windows.Media;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -18,7 +17,7 @@ internal partial class MainWindow
     private bool _quitting;
 
     // The window as it was before the player went full screen (story 14.9); null while not.
-    private (WindowStyle Style, ResizeMode Resize, WindowState State)? _beforeFullScreen;
+    private (WindowStyle Style, ResizeMode Resize, WindowState State, Thickness PageMargin)? _beforeFullScreen;
 
     internal override bool UsesMica => true;
 
@@ -42,6 +41,11 @@ internal partial class MainWindow
         {
             if (DataContext is MainViewModel model)
             {
+                if (!IsVisible)
+                {
+                    model.LeavePlayerFullScreen();
+                }
+
                 model.IsWindowShown = IsVisible;
             }
         };
@@ -155,16 +159,16 @@ internal partial class MainWindow
 
         if (on)
         {
-            _beforeFullScreen = (WindowStyle, ResizeMode, WindowState);
+            _beforeFullScreen = (WindowStyle, ResizeMode, WindowState, Page.Margin);
             NavPane.Visibility = Visibility.Collapsed;
             NavColumn.Width = new GridLength(0);
             StatusHeader.Visibility = Visibility.Collapsed;
             PageHeader.Visibility = Visibility.Collapsed;
             ContentPanel.Margin = new Thickness(0);
-            Page.Margin = new Thickness(0);
+            Page.SetCurrentValue(MarginProperty, new Thickness(0));
             ContentLayer.BorderThickness = new Thickness(0);
             ContentLayer.CornerRadius = new CornerRadius(0);
-            ContentLayer.Background = Brushes.Black;
+            ContentLayer.SetResourceReference(Border.BackgroundProperty, "RbPlayerBackdropBrush");
 
             // Normal first, so the maximized borderless window covers the taskbar too.
             WindowState = System.Windows.WindowState.Normal;
@@ -174,7 +178,7 @@ internal partial class MainWindow
             return;
         }
 
-        var (style, resize, state) = _beforeFullScreen!.Value;
+        var (style, resize, state, pageMargin) = _beforeFullScreen!.Value;
         _beforeFullScreen = null;
         WindowState = System.Windows.WindowState.Normal;
         WindowStyle = style;
@@ -184,7 +188,7 @@ internal partial class MainWindow
         StatusHeader.ClearValue(VisibilityProperty);
         PageHeader.ClearValue(VisibilityProperty);
         ContentPanel.ClearValue(MarginProperty);
-        Page.Margin = new Thickness(0, 12, 0, 0);
+        Page.SetCurrentValue(MarginProperty, pageMargin);
         ContentLayer.ClearValue(Border.BorderThicknessProperty);
         ContentLayer.ClearValue(Border.CornerRadiusProperty);
         ContentLayer.ClearValue(Border.BackgroundProperty);

@@ -26,7 +26,10 @@ These cover the merges made without a post-merge run:
 | `14.7 merge` | 14.7 Player sweep | **never run:** `PlayerTransportTests.AViewFileFromBeforeThePlayerLoadsFullAndUnmuted`, `TheVolumeStepsWithoutDriftAndAnyChangeUnmutes`, `TheVolumeAndMuteAreKeptAcrossRuns`; `PlayerViewThemeTests.APageWithNoPictureInTimeSaysTheFileCantBePlayed`, `ThePlayerPageShowsInBothLooksAndTheHiddenListIgnoresItsKeys` |
 | later | 12.4 Source-resolution sweep | **never run** (from `feature/12.4-source-sweep`): Engine above all, for `CaptureSession.NewChain`; its changed Heavy test (`ARecordPressWhileAMoveBuildsCancelsItAndTheRecordingKeepsItsChain`, now with an arm delay and a cancel check) is in §2 #4, and a fixed-size Clip check is `--filter-class "*ReplayClipCaptureTests"` with `--explicit only` |
 
-| on merge | 14.9 Player restyle | **never run:** `PlayerViewThemeTests` (rewritten for 14.9), which also renders `player-`, `player-menu-` and `player-fullscreen-{fluent,gaming}.png` for review against the mockup |
+| `a38758d` | 14.9 Player restyle | **deferred:** the original `PlayerViewThemeTests` (rewritten for 14.9), which also renders `player-`, `player-menu-` and `player-fullscreen-{fluent,gaming}.png` for review against the mockup |
+| bugfix/player-blank-controls | 14.9 Blank control icons and small follow-ups | **not run:** expanded `PlayerViewThemeTests.ThePlayerPageShowsInBothLooksAndTheHiddenListIgnoresItsKeys`, covering the centred menu heading, right-side accent check, saved page margin, and close-to-tray/full-screen restoration. **Only the builder-authorized focused render ran:** `ThePlayerIconsRenderInBothLooks` passed (1 test, 2026-11-05), with real-glyph/font/foreground assertions for Play/Pause, speaker/mute, gear and enter/exit full screen in both looks; `player-icons-{fluent,gaming}.png` beside the Release test binary were visually inspected. No other tests ran. |
+
+Player HITL follow-up: with the gear menu open, click the gear again and check that the menu stays closed. The possible outside-click dismissal/reopen race remains unchanged; resolve it with a real pointer check when the builder permits that work (or during 14.8).
 
 ## 2. Heavy and GPU, at night, in this order
 

@@ -340,12 +340,13 @@
         full-width seek bar above a single control row, on the Overlay's card brush so it reads over any picture;
         in full screen the bar sits over the video's bottom edge. Played parts take the accent (the volume's,
         the text colour), the rest a strong stroke, and the thumbs are round in the text colour (white in the
-        dark looks). Icon buttons are 40 px, the glyphs Segoe Fluent Icons. Tokens only, in both looks.
+        dark looks). Icon buttons are 40 px, with Windows' Segoe MDL2 glyphs. Tokens only, in both looks.
     -->
-    <FontFamily x:Key="RbPlayerGlyphFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <FontFamily x:Key="RbPlayerGlyphFont">Segoe MDL2 Assets, Segoe Fluent Icons</FontFamily>
+    <SolidColorBrush x:Key="RbPlayerBackdropBrush" Color="Black" />
 
     <Style x:Key="RbPlayerBackdropStyle" TargetType="Border">
-        <Setter Property="Background" Value="Black" />
+        <Setter Property="Background" Value="{DynamicResource RbPlayerBackdropBrush}" />
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}" />
         <Setter Property="ClipToBounds" Value="True" />
         <Style.Triggers>
@@ -388,7 +389,15 @@
         <Border x:Name="Fill"
                 Background="{TemplateBinding Background}"
                 CornerRadius="{DynamicResource ControlCornerRadius}">
-            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <!-- Explicit bindings beat the implicit TextBlock font style (Segoe UI in Gaming dark).
+                 A ContentPresenter's generated TextBlock only inherits the button's glyph font. -->
+            <TextBlock x:Name="Glyph"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       FontFamily="{TemplateBinding FontFamily}"
+                       FontSize="{TemplateBinding FontSize}"
+                       Foreground="{TemplateBinding Foreground}"
+                       Text="{TemplateBinding Content}" />
         </Border>
         <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
@@ -489,5 +498,53 @@
     <Style x:Key="RbPlayerMenuHeadingStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="TextAlignment" Value="Center" />
+    </Style>
+
+    <!-- Only the player's flat menu: the selected track has an accent check on the right. -->
+    <Style x:Key="RbPlayerMenuItemStyle" TargetType="MenuItem">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="MinWidth" Value="220" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="Fill" Background="{TemplateBinding Background}"
+                            CornerRadius="{DynamicResource ControlCornerRadius}" Padding="{TemplateBinding Padding}">
+                        <Grid VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                            <Path x:Name="Check" Grid.Column="1" Width="12" Height="10" Margin="16,0,0,0"
+                                  VerticalAlignment="Center" Stretch="Uniform" Data="M 0,5 L 4,9 L 12,0"
+                                  Stroke="{DynamicResource AccentTextFillColorPrimaryBrush}" StrokeThickness="2"
+                                  Visibility="Hidden" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsCheckable" Value="False">
+                            <Setter TargetName="Check" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+                            <Setter TargetName="Check" Property="Stroke" Value="{DynamicResource TextFillColorDisabledBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 </ResourceDictionary>
