@@ -3,7 +3,7 @@ title: 'Track picker'
 type: 'feature'
 ticket: '4'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: 'c7257a3'
 route: 'quick'
 risk: 'medium'

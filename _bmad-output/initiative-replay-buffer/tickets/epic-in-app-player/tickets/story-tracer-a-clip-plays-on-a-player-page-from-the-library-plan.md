@@ -3,7 +3,7 @@ title: 'Tracer: a Clip plays on a player page from the Library'
 type: 'feature'
 ticket: '2'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: '3cca32f'
 route: 'quick'
 risk: 'high'

@@ -3,7 +3,7 @@ title: 'Recordings play to the end: mehd at finalize'
 type: 'feature'
 ticket: '3'
 created: '2026-11-05'
-status: 'built'
+status: done
 baseline_revision: '3cca32f9b04352c3872ee3db3f2201f99dbaa1eb'
 route: 'full'
 route_source: 'auto'

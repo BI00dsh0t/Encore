@@ -3,7 +3,7 @@ title: 'Tracer: the matchSource key and a game chain at the source size'
 type: 'feature'
 ticket: '1'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: 'c51f4be'
 route: 'quick'
 risk: 'medium'

@@ -3,7 +3,7 @@ title: 'Transport: seek bar, time, volume and keys'
 type: 'feature'
 ticket: '5'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: '27ebd41'
 route: 'quick'
 risk: 'low'

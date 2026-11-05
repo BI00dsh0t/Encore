@@ -3,7 +3,7 @@ title: "When Windows can't play the file"
 type: 'feature'
 ticket: '6'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: '7c22d82'
 route: 'quick'
 risk: 'low'

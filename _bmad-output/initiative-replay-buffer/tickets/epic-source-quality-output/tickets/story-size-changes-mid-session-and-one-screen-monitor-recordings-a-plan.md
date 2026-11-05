@@ -3,7 +3,7 @@ title: 'Size changes mid-session, and one-screen Monitor Recordings at source si
 type: 'feature'
 ticket: '2'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: 'fea3ac6'
 route: 'full'
 risk: 'high'
