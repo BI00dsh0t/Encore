@@ -42,6 +42,13 @@
                             <Border Style="{DynamicResource RbLibraryLengthBadgeStyle}">
                                 <TextBlock Style="{DynamicResource RbLibraryLengthTextStyle}" Text="{Binding Length}" />
                             </Border>
+                            <!-- Story 10.6: a Recording's or Monitor Recording's kind, top left; a Clip shows none. -->
+                            <Border HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Style="{DynamicResource RbLibraryLengthBadgeStyle}"
+                                    Visibility="{Binding HasBadge, Converter={StaticResource Visible}}">
+                                <TextBlock Style="{DynamicResource RbLibraryLengthTextStyle}" Text="{Binding Badge}" />
+                            </Border>
                         </Grid>
                         <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
                             <!-- The name, or its inline editor while renaming: Enter or leaving commits, Escape cancels. -->
@@ -328,33 +335,51 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
-            <!-- Only for a Library with nothing in it. -->
-            <TextBlock x:Name="EmptyMessage"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       FontSize="14"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       Text="No Clips or Recordings yet."
-                       TextAlignment="Center"
-                       TextWrapping="Wrap">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Visibility" Value="Collapsed" />
-                        <Style.Triggers>
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding Entries.Count}" Value="0" />
-                                    <Condition Binding="{Binding GameFilter}" Value="{x:Null}" />
-                                    <Condition Binding="{Binding DateFilter}" Value="{x:Static local:LibraryDateFilter.All}" />
-                                    <Condition Binding="{Binding FavouritesOnly}" Value="False" />
-                                    <Condition Binding="{Binding IsSearching}" Value="False" />
-                                </MultiDataTrigger.Conditions>
-                                <Setter Property="Visibility" Value="Visible" />
-                            </MultiDataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
+            <!-- Story 10.6's welcome card, only for a Library with nothing in it (no filter or search). -->
+            <Border x:Name="EmptyMessage"
+                    MaxWidth="520"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    DataContext="{Binding Welcome}"
+                    Style="{DynamicResource RbCardStyle}">
+                <Border.Visibility>
+                    <Binding Path="DataContext.ShowsWelcome" RelativeSource="{RelativeSource AncestorType=UserControl}" Converter="{StaticResource Visible}" />
+                </Border.Visibility>
+                <StackPanel>
+                    <WrapPanel>
+                        <TextBlock VerticalAlignment="Center" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Play a game, then press " />
+                        <Border Margin="2,0,6,0"
+                                Padding="8,2"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                CornerRadius="{DynamicResource RbSmallCornerRadius}">
+                            <TextBlock FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="{Binding SaveKey}" />
+                        </Border>
+                        <TextBlock VerticalAlignment="Center" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="{Binding LeadTail}" TextWrapping="Wrap" />
+                    </WrapPanel>
+                    <TextBlock Margin="0,12,0,0" TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSilent}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        <Run Text="{Binding Audio, Mode=OneWay}" /><Run Text=" · " /><Hyperlink Command="{Binding ChangeAudioCommand}" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"><Run Text="{Binding AudioLink, Mode=OneWay}" /></Hyperlink>
+                    </TextBlock>
+                    <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap">
+                        <Run Text="{Binding Folder, Mode=OneWay}" /><Run Text=" · " /><Hyperlink Command="{Binding ChangeFolderCommand}" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">Change</Hyperlink>
+                    </TextBlock>
+                    <TextBlock Margin="0,12,0,0"
+                               FontSize="{DynamicResource CaptionTextBlockFontSize}"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="{Binding Recordings}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
         </Grid>
     </DockPanel>
 </UserControl>

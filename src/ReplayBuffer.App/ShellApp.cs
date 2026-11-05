@@ -36,6 +36,9 @@ internal sealed class ShellApp(Instance instance) : Application
     /// <summary>The tray menu's Control gallery item, which only dev and test instances have.</summary>
     public const string GalleryItemName = "GalleryItem";
 
+    /// <summary>The tray menu's live status item (story 10.6).</summary>
+    public const string StatusItemName = "StatusItem";
+
     /// <summary>How long Quit waits for the engine to exit, so a pending save can finish (AD-16).</summary>
     private static readonly TimeSpan QuitTimeout = TimeSpan.FromSeconds(5);
 
@@ -159,17 +162,39 @@ internal sealed class ShellApp(Instance instance) : Application
     }
 
     /// <summary>
-    /// The tray's menu: Open, Start with Windows and Quit (epic Decision, 2026-10-25), and a hidden
-    /// Restart item, named <see cref="RestartItemName"/>, shown only while the engine is in a crash loop.
-    /// With <paramref name="gallery"/>, which dev and test instances pass, it has a Control gallery item too.
+    /// The tray's menu (story 10.6, EXPERIENCE.md "Tray menu"): the live status, disabled and named
+    /// <see cref="StatusItemName"/>; Open, Open Library and Open the Clips folder; Start with Windows, a
+    /// hidden Restart item, named <see cref="RestartItemName"/>, shown only while the background service is
+    /// in a crash loop; and Quit. With <paramref name="gallery"/>, which dev and test instances pass, it has
+    /// a Control gallery item too. <paramref name="openFolder"/> opens the Clips folder; by default, in Explorer.
     /// </summary>
-    internal static ContextMenu CreateTrayMenu(MainViewModel model, Action open, Action quit, Action? restart = null, Action? gallery = null)
+    internal static ContextMenu CreateTrayMenu(MainViewModel model, Action open, Action quit, Action? restart = null, Action? gallery = null, Action<string>? openFolder = null)
     {
         var restartItem = new MenuItem { Header = "Restart", Name = RestartItemName, Visibility = Visibility.Collapsed };
         restartItem.Click += (_, _) => restart?.Invoke();
 
+        // The status header's text, live while the menu is open.
+        var statusItem = new MenuItem { Name = StatusItemName, IsEnabled = false };
+        statusItem.SetBinding(HeaderedItemsControl.HeaderProperty, new Binding(nameof(model.StatusLine.State)) { Source = model.StatusLine, Mode = BindingMode.OneWay });
+
         var openItem = new MenuItem { Header = "Open" };
         openItem.Click += (_, _) => open();
+
+        var libraryItem = new MenuItem { Header = "Open Library" };
+        libraryItem.Click += (_, _) =>
+        {
+            model.SelectedNavItem = model.LibraryNav;
+            open();
+        };
+
+        var folderItem = new MenuItem { Header = "Open the Clips folder" };
+        folderItem.Click += (_, _) =>
+        {
+            if (model.ClipsFolder is { } folder)
+            {
+                (openFolder ?? OpenInExplorer)(folder);
+            }
+        };
 
         var startWithWindows = new MenuItem { Header = "Start with Windows", IsCheckable = true };
         startWithWindows.SetBinding(
@@ -179,7 +204,7 @@ internal sealed class ShellApp(Instance instance) : Application
         var quitItem = new MenuItem { Header = "Quit" };
         quitItem.Click += (_, _) => quit();
 
-        var menu = new ContextMenu { Items = { restartItem, openItem, startWithWindows } };
+        var menu = new ContextMenu { Items = { statusItem, new Separator(), openItem, libraryItem, folderItem, new Separator(), startWithWindows, restartItem } };
         if (gallery is not null)
         {
             var galleryItem = new MenuItem { Header = "Control gallery", Name = GalleryItemName };
@@ -199,6 +224,19 @@ internal sealed class ShellApp(Instance instance) : Application
             }
         });
         return menu;
+    }
+
+    private static void OpenInExplorer(string folder)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(folder);
+            using var _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true, Verb = "open" });
+        }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            // Nothing to open: the tray has nowhere to say so, and the Library shows the folder.
+        }
     }
 
     /// <summary>Shows the tray menu's Restart item only while the engine is in a crash loop.</summary>
