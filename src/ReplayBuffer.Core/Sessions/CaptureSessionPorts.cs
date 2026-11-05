@@ -130,6 +130,20 @@ public interface ICaptureSession
     /// the orchestrator thread; never blocks.
     /// </summary>
     string? MonitorDevice => null;
+
+    /// <summary>
+    /// The GDI device names of every monitor a Monitor session still captures (story 11.3): several
+    /// for a composited Recording, else <see cref="MonitorDevice"/> alone. Called on the orchestrator
+    /// thread; never blocks.
+    /// </summary>
+    IReadOnlyList<string> MonitorDevices => MonitorDevice is { } device ? [device] : [];
+
+    /// <summary>
+    /// Stops capturing <paramref name="device"/>, one of several composited monitors that was removed
+    /// (story 11.3): its area turns black and the Recording goes on. False when the session doesn't
+    /// capture it. Called on the orchestrator thread.
+    /// </summary>
+    bool DropMonitor(string device) => false;
 }
 
 /// <summary>

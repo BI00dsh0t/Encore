@@ -5,6 +5,7 @@ using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Hotkeys;
 using ReplayBuffer.Core.Library;
+using ReplayBuffer.Core.Monitors;
 using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Settings;
 
@@ -1953,7 +1954,12 @@ public sealed class SessionOrchestrator : IDisposable
         try
         {
             var snapshot = SettingsResolver.Resolve(document, null);
-            var spec = new SessionSpec(SessionKind.Monitor, new CaptureTarget(0, 0, null), snapshot, MonitorAudio(snapshot), _state.MicMuted);
+            if (!ResolveScreens(snapshot, out var screens))
+            {
+                return;
+            }
+
+            var spec = new SessionSpec(SessionKind.Monitor, new CaptureTarget(0, 0, null), snapshot, MonitorAudio(snapshot), _state.MicMuted) { Screens = screens };
             var id = ++_nextSessionId;
             var session = _factory.Start(spec, new Events(this, id));
             monitor = new Active(id, session, spec, MonitorAudio);
@@ -1966,6 +1972,42 @@ public sealed class SessionOrchestrator : IDisposable
 
         _monitor = monitor;
         SetState(_state with { MonitorRecording = RecordingState.Running });
+    }
+
+    /// <summary>
+    /// The screens a Monitor Recording composites (story 11.3, AD-25): with <c>monitorRecordingScreens</c>
+    /// set and a display source given, Core's resolver over the attached monitors (one whose mode reads
+    /// 0x0 counts as not attached). Each chosen screen that isn't attached raises
+    /// <see cref="ErrorCodes.MonitorMissing"/> and is skipped; with none left, the start is refused with
+    /// <see cref="ErrorCodes.MonitorRecordingNoScreens"/> through the usual failure notices, and false
+    /// is returned. Null screens (the key null, or no display source): the session reads
+    /// <c>monitorRecordingMonitor</c> as before.
+    /// </summary>
+    private bool ResolveScreens(EffectiveSettings snapshot, out IReadOnlyList<DisplayMonitor>? screens)
+    {
+        screens = null;
+        if (snapshot.MonitorRecordingScreens is not { } chosen || _displays is not { } displays)
+        {
+            return true;
+        }
+
+        var recordings = _recordings!;
+        var attached = displays.List().Where(m => m.Width > 0 && m.Height > 0).ToList();
+        var resolved = MonitorScreens.Resolve(chosen, snapshot.MonitorRecordingMonitor, attached);
+        foreach (var missing in resolved.Missing)
+        {
+            recordings.Warn?.Invoke(ErrorCodes.MonitorMissing, $"The chosen screen {missing} isn't connected; the Monitor Recording skips it");
+        }
+
+        if (resolved.Screens.Count == 0)
+        {
+            recordings.Failed(new ErrorCodeException(
+                ErrorCodes.MonitorRecordingNoScreens, "The Monitor Recording didn't start: none of the screens chosen to record is connected."));
+            return false;
+        }
+
+        screens = resolved.Screens;
+        return true;
     }
 
     /// <summary>The Monitor session's audio: the Global Track Layout's.</summary>
@@ -2290,11 +2332,11 @@ public sealed class SessionOrchestrator : IDisposable
             return false;
         }
 
-        string? device;
+        IReadOnlyList<string> devices;
         IReadOnlyList<DisplayMonitor> attached;
         try
         {
-            device = monitor.Session.MonitorDevice;
+            devices = monitor.Session.MonitorDevices;
             attached = displays.List();
         }
         catch (Exception e)
@@ -2304,16 +2346,53 @@ public sealed class SessionOrchestrator : IDisposable
         }
 
         // An empty list is a read that failed mid-change, not every monitor gone.
-        if (string.IsNullOrEmpty(device) || attached.Count == 0
-            || attached.Any(m => string.Equals(m.DeviceName, device, StringComparison.OrdinalIgnoreCase)))
+        if (devices.Count == 0 || attached.Count == 0)
         {
+            return false;
+        }
+
+        static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+        // Story 11.3: under All screens, a monitor that arrives joins at the next Monitor Recording.
+        if (monitor.Spec.Screens is not null && monitor.Spec.Snapshot.MonitorRecordingScreens?.Mode == MonitorScreensMode.All)
+        {
+            foreach (var arrived in attached.Where(m => m.Width > 0 && !devices.Any(d => Same(d, m.DeviceName))))
+            {
+                if (monitor.Announced.Add(arrived.DeviceName))
+                {
+                    _recordings?.Warn?.Invoke(
+                        ErrorCodes.MonitorAddedNextRecording,
+                        $"Screen {arrived.DeviceName} was connected; it joins at the next Monitor Recording (the video's size can't change inside a file)");
+                }
+            }
+        }
+
+        var gone = devices.Where(d => !attached.Any(m => Same(m.DeviceName, d))).ToList();
+        if (gone.Count == 0)
+        {
+            return false;
+        }
+
+        // Some of several composited monitors gone: their areas turn black and the Recording goes on.
+        if (gone.Count < devices.Count)
+        {
+            foreach (var device in gone)
+            {
+                if (monitor.Session.DropMonitor(device))
+                {
+                    _recordings?.Warn?.Invoke(
+                        ErrorCodes.MonitorRemoved,
+                        $"Screen {device} was removed; its part of the Monitor Recording is black and the Monitor Recording goes on");
+                }
+            }
+
             return false;
         }
 
         EndMonitor("monitor removed", RecordingStopReasons.MonitorRemoved);
         _recordings?.Warn?.Invoke(
             ErrorCodes.MonitorRemoved,
-            $"Monitor {device} was removed; the Monitor Recording ended at its last frame and its file was kept");
+            $"Screen {string.Join(", ", gone)} was removed; the Monitor Recording ended at its last frame and its file was kept");
         return true;
     }
 
@@ -2563,6 +2642,9 @@ public sealed class SessionOrchestrator : IDisposable
 
         /// <summary>Whether the session was last asked to prepare a chain, not to drop one.</summary>
         public bool Pending { get; set; }
+
+        /// <summary>Monitors whose arrival a Monitor session has announced (story 11.3), by GDI device name.</summary>
+        public HashSet<string> Announced { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Whether a chain change was deferred, and logged, during the running Recording.</summary>
         public bool Deferred { get; set; }

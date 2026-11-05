@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using ReplayBuffer.Contracts;
+using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Core.Audio;
+using ReplayBuffer.Core.Monitors;
 using ReplayBuffer.Core.Replay;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Engine.Audio;
@@ -140,6 +142,16 @@ internal sealed record CaptureSessionOptions
 
     /// <summary>Spike 11.1, dev only: <see cref="CompositeMonitors"/> captures every monitor through Desktop Duplication.</summary>
     public bool CompositeDuplication { get; init; }
+
+    /// <summary>For tests (story 11.3): the composited screens, by GDI device name, captured through Desktop Duplication instead of WGC.</summary>
+    public IReadOnlyCollection<string>? DuplicationScreens { get; init; }
+
+    /// <summary>
+    /// Called once, on the opening thread, with a warning code and message for the Monitor session
+    /// (story 11.3): <see cref="ErrorCodes.MonitorRecordingScaled"/> when a composited canvas over 4096 px
+    /// has to stay H.264; null ignores it.
+    /// </summary>
+    public Action<string, string>? Warn { get; init; }
 }
 
 /// <summary>
@@ -240,7 +252,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>How long <see cref="End"/> waits for a running GPU device recovery attempt.</summary>
     private static readonly TimeSpan RecoveryJoinWait = TimeSpan.FromSeconds(10);
 
-    private readonly SessionSpec _spec;
+    private SessionSpec _spec;
     private readonly ISessionEvents _events;
     private readonly CaptureSessionOptions _options;
     private readonly ILoggerFactory _loggers;
@@ -342,10 +354,26 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>Opens the device, subscribes to the audio devices and starts capture; the output opens on the first frame.</summary>
     public void Open()
     {
+        // Story 11.3: several screens composited; the plan sets the codec and size before the encoder resolves.
+        if (IsMonitor && _options.CompositeMonitors is null && _spec.Screens is { Count: > 1 } screens)
+        {
+            PlanCanvas(screens);
+        }
+
         // Before anything is opened: the first codec use may run the probe.
         var (encoder, codec) = ResolveEncoder(_spec);
         var target = _spec.Target;
-        if (_options.CompositeMonitors is { } names)
+        if (_composite is not null)
+        {
+            _monitor = _composite[0].Monitor;
+            _log.LogInformation("Monitor capture of {Count} screens composited: {Screens}", _composite.Count, string.Join("; ", _composite));
+        }
+        else if (IsMonitor && _spec.Screens is [var only])
+        {
+            _monitor = MonitorFinder.Find(only.DeviceName, _log);
+            _log.LogInformation("Monitor capture of {Device}", _monitor.DeviceName);
+        }
+        else if (_options.CompositeMonitors is { } names)
         {
             // Spike 11.1: the device goes on the primary composited monitor's adapter.
             _composite = MonitorCanvas.Place(names);
@@ -437,11 +465,92 @@ internal sealed class CaptureSession : ICaptureSession
         duplication.SimulateAccessLost();
     }
 
+    /// <summary>
+    /// Story 11.3 (AD-25): the canvas of <paramref name="screens"/>, placed by their display modes now.
+    /// Its codec and size replace the snapshot's video (HEVC, else AV1, over H.264's 4096 px, at full
+    /// size), so the one encoder chain encodes the whole canvas. A canvas over 4096 px that has to stay
+    /// H.264 is fitted to 4096 with <see cref="ErrorCodes.MonitorRecordingScaled"/>. Fewer than two
+    /// screens still attached: the one left is captured as today; none, the start fails with
+    /// <see cref="ErrorCodes.MonitorRecordingNoScreens"/>.
+    /// </summary>
+    private void PlanCanvas(IReadOnlyList<DisplayMonitor> screens)
+    {
+        var placements = MonitorCanvas.Place(screens);
+        if (placements.Count == 0)
+        {
+            throw new EngineFailure(ErrorCodes.MonitorRecordingNoScreens, "None of the screens chosen to record is connected.");
+        }
+
+        if (placements.Count == 1)
+        {
+            _spec = _spec with { Screens = [screens.First(s => string.Equals(s.DeviceName, placements[0].Monitor.DeviceName, StringComparison.OrdinalIgnoreCase))] };
+            return;
+        }
+
+        var placed = placements.Select(p => new DisplayMonitor(p.Monitor.DeviceName, p.Monitor.DeviceName, p.Width, p.Height, p.Monitor.IsPrimary, null, p.X, p.Y, p.RefreshHz)).ToList();
+        var video = _spec.Snapshot.Video;
+        var plan = MonitorCanvasRule.Plan(placed, video.Codec, CanEncode);
+        _log.LogInformation("Canvas {Native}x{NativeHeight} encoded {Codec} {Width}x{Height} (Output codec {Output})",
+            plan.NativeWidth, plan.NativeHeight, plan.Codec, plan.Width, plan.Height, video.Codec);
+        if (plan.Codec == VideoCodec.H264 && plan.Scaled)
+        {
+            _options.Warn?.Invoke(
+                ErrorCodes.MonitorRecordingScaled,
+                $"No HEVC or AV1 encoder works on this PC, so the {plan.NativeWidth} × {plan.NativeHeight} Monitor Recording is scaled down to {plan.Width} × {plan.Height} for H.264.");
+        }
+
+        _spec = _spec with { Snapshot = _spec.Snapshot with { Video = video with { Codec = plan.Codec, Width = plan.Width, Height = plan.Height } } };
+        _composite = placements;
+    }
+
+    /// <summary>Whether this PC has a working encoder for <paramref name="codec"/> (the probe's answer); false when the probe fails.</summary>
+    private bool CanEncode(VideoCodec codec)
+    {
+        try
+        {
+            return _encoders.EncoderFor(codec) is not null;
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning("The {Codec} encoder probe failed: {Message}", codec, e.Message);
+            return false;
+        }
+    }
+
     /// <summary>Whether this is the Monitor session (6.9), not a game window's.</summary>
     private bool IsMonitor => _spec.Kind == SessionKind.Monitor;
 
     /// <inheritdoc/>
     public string? MonitorDevice => _monitor is { DeviceName.Length: > 0 } monitor ? monitor.DeviceName : null;
+
+    /// <summary>Story 11.3: the screens still composited, else <see cref="MonitorDevice"/> alone.</summary>
+    public IReadOnlyList<string> MonitorDevices
+    {
+        get
+        {
+            ICaptureSource? capture;
+            lock (_gate)
+            {
+                capture = _capture;
+            }
+
+            return capture is CompositeCapture composite ? composite.LiveDevices
+                : _composite is not null ? [.. _composite.Select(p => p.Monitor.DeviceName)]
+                : MonitorDevice is { } device ? [device] : [];
+        }
+    }
+
+    /// <summary>Story 11.3: stops capturing a removed one of the composited screens; its area turns black. Outside the gate: the compositor's clock takes it.</summary>
+    public bool DropMonitor(string device)
+    {
+        ICaptureSource? capture;
+        lock (_gate)
+        {
+            capture = _capture;
+        }
+
+        return capture is CompositeCapture composite && composite.Drop(device);
+    }
 
     /// <summary>Whether it holds a Replay Buffer: Replay mode, and not the Monitor session.</summary>
     private bool HasRing => _options.Replay && !IsMonitor;
@@ -1741,6 +1850,12 @@ internal sealed class CaptureSession : ICaptureSession
                 throw;
             }
 
+            if (composite.Sources.Where(s => s.Api == "desktop-duplication").Select(s => s.Placement.Monitor.DeviceName).ToList() is { Count: > 0 } duplicated)
+            {
+                _options.CaptureFallback?.Invoke(
+                    $"Windows Graphics Capture couldn't capture {string.Join(", ", duplicated)}; the Monitor Recording uses Desktop Duplication for it instead.");
+            }
+
             return composite;
         }
 
@@ -1809,7 +1924,11 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>Spike 11.1: the composited capture of <see cref="_composite"/> on <paramref name="device"/>, not started.</summary>
     private CompositeCapture NewComposite(D3D11Device device, int fps)
     {
-        var composite = Wire(new CompositeCapture(device, _composite!, fps, _options.CompositeDuplication, OnFrame, _loggers.CreateLogger<CompositeCapture>()));
+        var forced = _options.DuplicationScreens;
+        var composite = Wire(new CompositeCapture(
+            device, _composite!, fps,
+            p => _options.CompositeDuplication || forced?.Contains(p.Monitor.DeviceName, StringComparer.OrdinalIgnoreCase) == true,
+            OnFrame, _loggers.CreateLogger<CompositeCapture>()));
         CaptureApi = _options.CompositeDuplication ? "composite-desktop-duplication" : "composite";
         return composite;
     }

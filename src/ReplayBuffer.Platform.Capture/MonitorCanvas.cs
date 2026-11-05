@@ -36,7 +36,9 @@ public static class MonitorCanvas
             }
 
             var mode = new DEVMODEW { dmSize = (ushort)System.Runtime.CompilerServices.Unsafe.SizeOf<DEVMODEW>() };
-            if (PInvoke.EnumDisplaySettings(monitor.DeviceName, ENUM_DISPLAY_SETTINGS_MODE.ENUM_CURRENT_SETTINGS, ref mode))
+            // A mode that reads as 0x0 is skipped, as if the monitor weren't attached (11.2's QA).
+            if (PInvoke.EnumDisplaySettings(monitor.DeviceName, ENUM_DISPLAY_SETTINGS_MODE.ENUM_CURRENT_SETTINGS, ref mode)
+                && mode.dmPelsWidth > 0 && mode.dmPelsHeight > 0)
             {
                 placements.Add(new MonitorPlacement(
                     monitor, mode.dmPosition.x, mode.dmPosition.y, (int)mode.dmPelsWidth, (int)mode.dmPelsHeight, (int)mode.dmDisplayFrequency));
@@ -44,6 +46,17 @@ public static class MonitorCanvas
         }
 
         return placements;
+    }
+
+    /// <summary>
+    /// Story 11.3: the attached monitors among <paramref name="screens"/> (a Monitor Recording's
+    /// resolved screens, matched by GDI device name), placed by their current display mode now, in
+    /// <paramref name="screens"/>' order. A screen that is gone or whose mode reads as 0x0 is left out.
+    /// </summary>
+    public static IReadOnlyList<MonitorPlacement> Place(IReadOnlyList<Contracts.Messages.DisplayMonitor> screens)
+    {
+        var placed = Place((IReadOnlyCollection<string>?)null);
+        return [.. screens.Select(s => placed.FirstOrDefault(p => string.Equals(p.Monitor.DeviceName, s.DeviceName, StringComparison.OrdinalIgnoreCase))).OfType<MonitorPlacement>()];
     }
 
     /// <summary>The bounding box of <paramref name="placements"/> and its top-left corner on the virtual desktop.</summary>

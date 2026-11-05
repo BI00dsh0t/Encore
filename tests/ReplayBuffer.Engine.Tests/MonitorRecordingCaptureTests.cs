@@ -4,6 +4,7 @@ using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
+using ReplayBuffer.Core.Monitors;
 using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Engine.Sessions;
@@ -283,6 +284,95 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
 
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
+    public async Task ATwoScreenMonitorRecordingOf60SecondsPlaysToTheEndWithEveryTrackAndBothScreensPlaced()
+    {
+        // Story 11.3 on the builder's PC: All screens, composited on one chain at the canvas rule's size.
+        using var bench = BenchLock.Take();
+        var displays = new DisplayMonitors(NullLogger.Instance);
+        var screens = RequireTwoScreens(displays);
+        var warns = new ConcurrentQueue<string>();
+        using var rig = NewRig(displays: displays, warn: warns.Enqueue);
+        ChooseAllScreens();
+        var chains = 0;
+
+        var file = await RecordMonitorAsync(rig, TimeSpan.FromSeconds(60), async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), Token);
+            chains = rig.Factory.Sessions.Sum(s => s.Chains);
+        });
+
+        Assert.Equal("composite", MonitorSession(rig).CaptureApi);
+        Assert.Equal(1, chains);
+        Assert.Empty(warns);
+        var plan = MonitorCanvasRule.Plan(screens, VideoCodec.H264, _ => true);
+        var video = SessionTestKit.VideoStream(file);
+        Assert.Equal((plan.Codec.ToString().ToLowerInvariant(), plan.Width, plan.Height), (video.Codec, video.Width, video.Height));
+        Assert.Equal(["Game", "Mic"], AudioTitles(file));
+        AssertInStepAt30Fps(file, atLeast: 59);
+        SessionTestKit.AssertDecodesCleanly(file);
+        AssertGapsAreBlack(file, plan);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AScreenOnDesktopDuplicationStillComposites()
+    {
+        using var bench = BenchLock.Take();
+        var displays = new DisplayMonitors(NullLogger.Instance);
+        var screens = RequireTwoScreens(displays);
+        var fallbacks = new ConcurrentQueue<string>();
+        using var rig = NewRig(displays: displays, fallback: fallbacks.Enqueue, duplicationScreens: [screens[1].DeviceName]);
+        ChooseAllScreens();
+
+        var file = await RecordMonitorAsync(rig, TimeSpan.FromSeconds(4));
+
+        Assert.Contains(screens[1].DeviceName, Assert.Single(fallbacks), StringComparison.Ordinal);
+        var plan = MonitorCanvasRule.Plan(screens, VideoCodec.H264, _ => true);
+        Assert.Equal((plan.Width, plan.Height), (SessionTestKit.VideoStream(file).Width, SessionTestKit.VideoStream(file).Height));
+        AssertInStepAt30Fps(file, atLeast: 3.5);
+        SessionTestKit.AssertDecodesCleanly(file);
+        AssertGapsAreBlack(file, plan);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AGpuResetRebuildsTheCompositeAndTheMonitorRecordingContinuesInASecondFile()
+    {
+        using var bench = BenchLock.Take();
+        var displays = new DisplayMonitors(NullLogger.Instance);
+        var screens = RequireTwoScreens(displays);
+        using var rig = NewRig(displays: displays, recovery: true);
+        ChooseAllScreens();
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
+        var first = Assert.IsType<RecordingStarted>(await rig.NextAsync()).Path;
+        await Task.Delay(TimeSpan.FromSeconds(3), Token);
+
+        MonitorSession(rig).SimulateDeviceLoss();
+        RecordingRestart? restart = null;
+        while (restart is null)
+        {
+            restart = await rig.NextAsync() as RecordingRestart;
+        }
+
+        Assert.Equal(first, restart.StoppedPath);
+        await Task.Delay(TimeSpan.FromSeconds(3), Token);
+        Assert.Equal(1, rig.Factory.Sessions.Sum(s => s.Chains));
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
+        while (await rig.NextAsync() is not RecordingStopped { Reason: RecordingStopReasons.Stopped } stopped || stopped.Path != restart.StartedPath)
+        {
+        }
+
+        rig.Orchestrator.Dispose();
+        var plan = MonitorCanvasRule.Plan(screens, VideoCodec.H264, _ => true);
+        foreach (var file in new[] { first, restart.StartedPath })
+        {
+            Assert.Equal((plan.Width, plan.Height), (SessionTestKit.VideoStream(file).Width, SessionTestKit.VideoStream(file).Height));
+            SessionTestKit.AssertDecodesCleanly(file);
+        }
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AGameSessionWhoseWgcFailsNeverFallsBack()
     {
         using var bench = BenchLock.Take();
@@ -366,6 +456,40 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
 
     private static Exception? WgcOff() => new InvalidOperationException(WgcOffMessage);
 
+    /// <summary>The attached screens, skipping the test unless there are at least two (story 11.3 needs them).</summary>
+    private static IReadOnlyList<DisplayMonitor> RequireTwoScreens(DisplayMonitors displays)
+    {
+        var screens = displays.List();
+        Assert.SkipWhen(screens.Count < 2, "A composited Monitor Recording needs two screens attached.");
+        return screens;
+    }
+
+    /// <summary>Global <c>monitorRecordingScreens</c> = All screens (story 11.3).</summary>
+    private void ChooseAllScreens()
+    {
+        var document = Volatile.Read(ref _document);
+        Volatile.Write(ref _document, document with { Global = document.Global.SetItem(Keys.MonitorRecordingScreens.Name, Keys.MonitorRecordingScreens.ToJson(MonitorRecordingScreens.AllScreens)) });
+    }
+
+    /// <summary>
+    /// The canvas's gaps, where no screen sits (below a shorter screen), are black in every frame: the
+    /// screens are placed as Windows arranges them, not stretched.
+    /// </summary>
+    private static void AssertGapsAreBlack(string file, CanvasPlan plan)
+    {
+        var scale = (double)plan.Width / plan.NativeWidth;
+        foreach (var area in plan.Areas.Where(a => a.Y + a.Height < plan.NativeHeight))
+        {
+            var x = (int)(area.X * scale) + 8;
+            var y = (int)((area.Y + area.Height) * scale) + 8;
+            var w = (int)(area.Width * scale) - 16;
+            var h = (int)((plan.NativeHeight - area.Y - area.Height) * scale) - 16;
+            var frames = SessionTestKit.FrameStats(file, FormattableString.Invariant($"crop={w}:{h}:{x}:{y}"));
+            Assert.NotEmpty(frames);
+            Assert.All(frames, f => Assert.True(f.Y < 24, $"the gap under {area.Screen.DeviceName} isn't black at {f.Time:0.000} s (Y {f.Y:0})"));
+        }
+    }
+
     private static CaptureSession MonitorSession(Rig rig) => Assert.Single(rig.Factory.Sessions.OfType<CaptureSession>());
 
     /// <summary>
@@ -443,6 +567,8 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     /// <param name="fallback">Receives each <c>monitor-capture-fallback</c> message.</param>
     /// <param name="displays">The display port the orchestrator watches; none when null.</param>
     /// <param name="warn">Receives each Recordings warning's code.</param>
+    /// <param name="duplicationScreens">Composited screens captured through Desktop Duplication (story 11.3).</param>
+    /// <param name="recovery">Whether the orchestrator recovers a lost GPU device (8.3), its restarts landing in the events.</param>
     private Rig NewRig(
         bool recordingsEnabled = false,
         bool clips = false,
@@ -450,7 +576,9 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         Func<Exception?>? wgcFault = null,
         Action<string>? fallback = null,
         IDisplayMonitors? displays = null,
-        Action<string>? warn = null)
+        Action<string>? warn = null,
+        IReadOnlyCollection<string>? duplicationScreens = null,
+        bool recovery = false)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)> { ["game"] = (0.1, 440), ["mic"] = (0.2, 1000) });
@@ -477,7 +605,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var published = new ConcurrentQueue<CaptureState>();
         var factory = new KeepingFactory(new CaptureSessionFactory(
-            new CaptureSessionOptions { OutputFolder = _directory, Replay = true, ResetGap = resetGap, WgcFault = wgcFault, CaptureFallback = fallback },
+            new CaptureSessionOptions { OutputFolder = _directory, Replay = true, ResetGap = resetGap, WgcFault = wgcFault, CaptureFallback = fallback, DuplicationScreens = duplicationScreens },
             NullLoggerFactory.Instance,
             hub));
         var orchestrator = new SessionOrchestrator(
@@ -494,7 +622,9 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
                 s => events.Writer.TryWrite(s),
                 s => events.Writer.TryWrite(s),
                 e => events.Writer.TryWrite(e),
-                Warn: warn is null ? null : (code, _) => warn(code)),
+                Warn: warn is null ? null : (code, _) => warn(code),
+                Restarted: r => events.Writer.TryWrite(r)),
+            deviceRecovery: recovery ? new DeviceRecovery(RetryEvery: TimeSpan.FromSeconds(1)) : null,
             displays: displays);
         return new Rig(orchestrator, hub, events, published, factory);
     }
