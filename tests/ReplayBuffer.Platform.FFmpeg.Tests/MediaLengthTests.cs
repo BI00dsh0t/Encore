@@ -50,6 +50,23 @@ public sealed class MediaLengthTests : IDisposable
     }
 
     [Fact]
+    public void TheReadersHandleLetsTheFileBeRenamed()
+    {
+        // The bug that bit (full-run-flaky-tests): FFmpeg's own file protocol shares no delete, so a
+        // rename during a starved length read failed as "in use".
+        RequireFFmpeg();
+        var clip = Generate("held.mp4", 30, "");
+        var renamed = Path.Combine(_directory, "renamed.mp4");
+
+        using (new SharedInput(clip))
+        {
+            File.Move(clip, renamed);
+        }
+
+        Assert.NotNull(MediaLength.Read(renamed, _log));
+    }
+
+    [Fact]
     public void AnUnreadableFileHasNoLengthAndIsLogged()
     {
         RequireFFmpeg();
