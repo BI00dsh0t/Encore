@@ -32,6 +32,9 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
 
     public FrameworkElement View => _view ??= CreateView();
 
+    /// <summary>Whether the page holds an unsaved draft: the nav item shows a dot (story 10.5). Raised as a property change.</summary>
+    public virtual bool HasUnsavedChanges => false;
+
     /// <summary>The document the page shows, and the basis of its updates.</summary>
     protected SettingsDocument Document { get; private set; } = SettingsDocument.Empty;
 

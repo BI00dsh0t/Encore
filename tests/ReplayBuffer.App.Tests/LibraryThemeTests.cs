@@ -16,7 +16,7 @@ using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Tests;
 
-/// <summary>The Library restyled (story 9.4): its rows, banner and empty state, in both themes.</summary>
+/// <summary>The Library restyled (story 9.4) and selectable (story 10.2): its rows, banner, empty state, selection and command bar, in both themes.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class LibraryThemeTests
 {
@@ -55,28 +55,50 @@ public sealed class LibraryThemeTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
+            var page = model.Library;
             foreach (var which in new[] { AppTheme.Fluent, AppTheme.GamingDark })
             {
+                var name = which == AppTheme.Fluent ? "fluent" : "gaming-dark";
+                page.ClearSelection();
                 theme.Apply(which);
                 window.Show();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
 
-                var view = (LibraryView)model.Library.View;
+                var view = (LibraryView)page.View;
                 Assert.True(view.IsLoaded, $"The Library didn't load under {which}");
                 Assert.Equal(Visibility.Visible, ((FrameworkElement)view.FindName("Banner")).Visibility);
+                var bar = (FrameworkElement)view.FindName("CommandBar");
+                Assert.Equal((true, 40.0), (bar.IsVisible, bar.ActualHeight));
 
-                var list = (ItemsControl)view.FindName("List");
+                var list = (ListBox)view.FindName("List");
                 Assert.True(VirtualizingPanel.GetIsVirtualizing(list));
                 Assert.Single(Descendants<VirtualizingStackPanel>(list));
 
-                var rows = model.Library.Rows.ToDictionary(r => r.Name);
+                var rows = page.Rows.ToDictionary(r => r.Name);
                 var ace = RowCard(list, rows["ace.mp4"]);
                 Assert.Same(window.FindResource("RbLibraryRowStyle"), ace.Style);
                 Assert.True(Descendants<ToggleButton>(ace).Single().IsChecked);
                 Assert.False(Descendants<ToggleButton>(RowCard(list, rows["no-thumbnail.mp4"])).Single().IsChecked);
                 Assert.Contains(Descendants<TextBlock>(RowCard(list, rows["saving.mp4"])), t => t.Text == "Saving…" && t.IsVisible);
 
-                Save(window, $"library-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
+                Save(window, $"library-{name}.png");
+
+                // Story 10.2: two rows selected, the second focused, with keyboard focus in the list.
+                page.Click(rows["ace.mp4"], ctrl: false, shift: false);
+                page.Click(rows["no-thumbnail.mp4"], ctrl: true, shift: false);
+                window.Activate();
+                ((ListBoxItem)list.ItemContainerGenerator.ContainerFromItem(rows["no-thumbnail.mp4"])).Focus();
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+
+                Assert.Equal((true, 40.0), (bar.IsVisible, bar.ActualHeight));
+                Assert.Contains(Descendants<TextBlock>(bar), t => t.Text == "2 selected" && t.IsVisible);
+                var selected = (SolidColorBrush)window.FindResource("RbLibraryRowSelectedBrush");
+                Assert.Equal((selected.Color, selected.Opacity), Fill(RowCard(list, rows["ace.mp4"])));
+                Assert.NotEqual(Fill(RowCard(list, rows["saving.mp4"])), Fill(RowCard(list, rows["ace.mp4"])));
+                Assert.True(VirtualizingPanel.GetIsVirtualizing(list));
+                Assert.Single(Descendants<VirtualizingStackPanel>(list));
+
+                Save(window, $"library-selected-{name}.png");
             }
         }
         finally
@@ -129,11 +151,16 @@ public sealed class LibraryThemeTests
         view.UpdateLayout();
     }
 
-    private static Border RowCard(ItemsControl list, LibraryRow row)
+    // The row's card: the first child of its template's root, inside the ListBoxItem container.
+    private static Border RowCard(ListBox list, LibraryRow row)
     {
-        var container = (ContentPresenter)list.ItemContainerGenerator.ContainerFromItem(row);
-        return (Border)VisualTreeHelper.GetChild(container, 0);
+        var container = (ListBoxItem)list.ItemContainerGenerator.ContainerFromItem(row);
+        var root = (Grid)VisualTreeHelper.GetChild(Descendants<ContentPresenter>(container)[0], 0);
+        return (Border)root.Children[0];
     }
+
+    private static (Color Color, double Opacity) Fill(Border card) =>
+        card.Background is SolidColorBrush brush ? (brush.Color, brush.Opacity) : default;
 
     private static List<T> Descendants<T>(DependencyObject root)
         where T : DependencyObject

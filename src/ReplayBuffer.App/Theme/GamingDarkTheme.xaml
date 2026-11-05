@@ -50,6 +50,7 @@
     <SolidColorBrush x:Key="FocusStrokeColorOuterBrush" Color="#2DD4BF" />
     <SolidColorBrush x:Key="FocusStrokeColorInnerBrush" Color="#0A0B0E" />
     <SolidColorBrush x:Key="RbAccentSubtleBrush" Color="#1A2DD4BF" />
+    <SolidColorBrush x:Key="RbLibraryRowSelectedBrush" Color="#1A2DD4BF" />
     <SolidColorBrush x:Key="RbRecordBrush" Color="#FF4655" />
     <SolidColorBrush x:Key="RbOverlayCardBrush" Color="#E61E222A" />
 

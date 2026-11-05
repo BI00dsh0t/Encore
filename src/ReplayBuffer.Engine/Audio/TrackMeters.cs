@@ -29,6 +29,7 @@ internal sealed class TrackMeters : IDisposable
     private readonly Action<MeterLevels> _publish;
     private readonly ILogger _log;
     private ActiveWatch? _watch;
+    private long _generation;
 
     // Muted until told otherwise, as CaptureState.Initial is.
     private bool _micMuted = true;
@@ -59,6 +60,7 @@ internal sealed class TrackMeters : IDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             // The new watch's first levels follow, so no empty levels in between.
+            _generation++;
             _watch?.Stop();
             _watch = null;
             try
@@ -81,6 +83,38 @@ internal sealed class TrackMeters : IDisposable
         {
             _watch?.Dispose();
             _watch = null;
+        }
+    }
+
+    /// <summary>Counts <see cref="Watch"/> calls; read it to stop only the watches made before a moment.</summary>
+    public long Generation
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _generation;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Unwatch"/>, unless a watch arrived after <paramref name="generation"/> was read: a
+    /// late unwatch for a departed client must not stop a newly connected one's watch.
+    /// </summary>
+    /// <returns>Whether it stopped the watch (or there was none).</returns>
+    public bool UnwatchIf(long generation)
+    {
+        lock (_lock)
+        {
+            if (_generation != generation)
+            {
+                return false;
+            }
+
+            _watch?.Dispose();
+            _watch = null;
+            return true;
         }
     }
 

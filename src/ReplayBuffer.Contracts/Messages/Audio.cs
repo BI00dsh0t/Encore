@@ -13,7 +13,17 @@ namespace ReplayBuffer.Contracts.Messages;
 /// <param name="EndpointId">The MMDevice endpoint id.</param>
 /// <param name="ParentName">The name of the audio device that exposes the endpoint, or empty.</param>
 /// <param name="Available">Whether the endpoint is present and active now.</param>
-public sealed record AudioDevice(string EndpointId, string FriendlyName, string ParentName, AudioFlow Flow, bool Available);
+/// <param name="IsDefault">
+/// Whether it is the Windows default endpoint of its flow (console role), story 10.4. Optional
+/// (AD-22): written only when true, and false from an engine that predates it.
+/// </param>
+public sealed record AudioDevice(
+    string EndpointId,
+    string FriendlyName,
+    string ParentName,
+    AudioFlow Flow,
+    bool Available,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool IsDefault = false);
 
 /// <summary>
 /// <c>devices.changed</c> and <c>devices.list</c>'s result: the present endpoints of both flows, with

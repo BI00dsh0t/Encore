@@ -150,32 +150,34 @@ public sealed class LibraryEndToEndTests : IDisposable
         Until(() => page.Rows.Count == 5, "the rows following");
 
         // R5: Open, Show in Explorer and Copy pass the absolute path to the shell; Copy's data is one file drop.
-        var oldRow = Row(page, @"Alpha\a-old.mp4");
+        page.Click(Row(page, @"Alpha\a-old.mp4"), ctrl: false, shift: false);
         var oldPath = Path.Combine(output, @"Alpha\a-old.mp4");
-        oldRow.OpenCommand.Execute(null);
-        oldRow.ShowInExplorerCommand.Execute(null);
-        oldRow.CopyCommand.Execute(null);
+        page.OpenCommand.Execute(null);
+        page.ShowInExplorerCommand.Execute(null);
+        page.CopyCommand.Execute(null);
         Assert.Equal([("open", oldPath), ("show", oldPath), ("copy", oldPath)], shell.Calls);
-        Assert.Equal([oldPath], LibraryClipboard.Create(oldPath).GetFileDropList().Cast<string>());
+        Assert.Equal([oldPath], LibraryClipboard.Create([oldPath]).GetFileDropList().Cast<string>());
         Assert.Null(page.ActionError);
 
-        // R6: rename in place; delete asks, No keeps the file, Yes sends it to the Recycle Bin.
+        // R6: rename in place (the selection follows it); delete asks, No keeps the file, Yes sends it to the Recycle Bin.
         var copied = Row(page, @"Beta\b-copied.mp4");
-        copied.RenameCommand.Execute(null);
+        page.Click(copied, ctrl: false, shift: false);
+        page.RenameCommand.Execute(null);
         copied.RenameText = "b-best";
         copied.CommitRenameCommand.Execute(null);
         Until(() => Paths(engine).Contains(@"Beta\b-best.mp4") && page.Rows.Any(r => r.Path == @"Beta\b-best.mp4"), "the rename");
+        Assert.True(Row(page, @"Beta\b-best.mp4").IsSelected);
         var best = Path.Combine(output, @"Beta\b-best.mp4");
         Assert.True(File.Exists(best));
         session.Answer = false;
-        Row(page, @"Beta\b-best.mp4").DeleteCommand.Execute(null);
+        page.DeleteCommand.Execute(null);
         Pump(TimeSpan.FromMilliseconds(300));
         Assert.True(File.Exists(best));
         session.Answer = true;
         _recycled.Add(best);
-        Row(page, @"Beta\b-best.mp4").DeleteCommand.Execute(null);
+        page.DeleteCommand.Execute(null);
         Until(() => !Paths(engine).Contains(@"Beta\b-best.mp4") && !File.Exists(best), "the delete to the Recycle Bin");
-        Assert.Equal(["b-best.mp4", "b-best.mp4"], session.Asked);
+        Assert.Equal(["Move “b-best.mp4” to the Recycle Bin?", "Move “b-best.mp4” to the Recycle Bin?"], session.Asked);
         Assert.Null(page.ActionError);
 
         // R6: a growing file being written is locked: no Copy, Rename or Delete, and the engine refuses a rename.
@@ -185,10 +187,10 @@ public sealed class LibraryEndToEndTests : IDisposable
         growing.Write(new byte[4096]);
         growing.Flush();
         Until(() => page.Rows.FirstOrDefault(r => r.Path == @"Beta\rec.mp4") is { IsLocked: true }, "the locked row");
-        var recRow = Row(page, @"Beta\rec.mp4");
-        Assert.False(recRow.CopyCommand.CanExecute(null));
-        Assert.False(recRow.RenameCommand.CanExecute(null));
-        Assert.False(recRow.DeleteCommand.CanExecute(null));
+        page.Click(Row(page, @"Beta\rec.mp4"), ctrl: false, shift: false);
+        Assert.False(page.CopyCommand.CanExecute(null));
+        Assert.False(page.RenameCommand.CanExecute(null));
+        Assert.False(page.DeleteCommand.CanExecute(null));
         var recItem = Item(engine, @"Beta\rec.mp4");
         var refused = Assert.Throws<ErrorCodeException>(() => Run(engine.SendAsync(LibraryMessages.Rename, new LibraryRename(recItem.Path, recItem.Size, recItem.Modified, "x"), TestContext.Current.CancellationToken)));
         Assert.Equal(ErrorCodes.FileBeingWritten, refused.Code);
@@ -426,9 +428,9 @@ public sealed class LibraryEndToEndTests : IDisposable
 
             var shell = new RecordingShell();
             Session? session = null;
-            var page = new LibraryPage(engine, LibraryThumbnails.Shell(post), shell: shell, confirmDelete: name =>
+            var page = new LibraryPage(engine, LibraryThumbnails.Shell(post), shell: shell, confirmDelete: question =>
             {
-                session!.Asked.Add(name);
+                session!.Asked.Add(question);
                 return session.Answer;
             });
             var main = new MainViewModel(engine, post);
@@ -475,9 +477,13 @@ public sealed class LibraryEndToEndTests : IDisposable
 
         public void Open(string path) => Calls.Add(("open", path));
 
-        public void ShowInExplorer(string path) => Calls.Add(("show", path));
+        public void ShowInExplorer(string folder, IReadOnlyList<string> files) => Calls.Add(("show", string.Join('|', files)));
 
-        public void Copy(string path) => Calls.Add(("copy", path));
+        public void OpenFolder(string folder) => Calls.Add(("folder", folder));
+
+        public void Copy(IReadOnlyList<string> paths) => Calls.Add(("copy", string.Join('|', paths)));
+
+        public void CopyToFolder(IReadOnlyList<string> paths, string folder) => Calls.Add(("copy to " + folder, string.Join('|', paths)));
     }
 
     /// <summary>Keeps every message the engine's Library category logs.</summary>
