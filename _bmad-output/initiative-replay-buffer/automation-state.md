@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | waiting for GPU FREE to run 8.8's smokes and soaks (8.8 at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.11 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.6 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
@@ -189,7 +189,7 @@ The coordinator logs each QA round in the Log below.
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.7 | 10.10 Games list and a page per game | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
+| 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
 | 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `3fd6ed4`) |
@@ -894,3 +894,6 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: Bugfix `full-run-flaky-tests` merged (`1a96b36`, `fix(engine): merge full-run-flaky-tests`) after QA round 2 passed at `ae7287a`. Two product fixes: the IPC accept loop survives a client that leaves before it is accepted (it had stopped for good, leaving an unreachable engine), and the Library's length read goes through a delete-sharing handle, so a rename or delete of a fresh Clip isn't blocked. The rest are test fixes (races and CPU-starvation bounds). Post-sync on `afdea92`: build with 0 warnings; Engine 194, App 187 and FFmpeg 40 passed; NativeAOT publish OK (it needs vswhere on PATH: `C:\Program Files (x86)\Microsoft Visual Studio\Installer`). Open: RecordingCrashTests can still miss its 0.5 s fragment cadence under load (1 of 4 loaded runs), which needs a Heavy-capable look. slice-epic-5 waits for GPU FREE: 8.8.
 - 2026-11-05: full-run-flaky-tests merged (`1a96b36`, logged `a12d6d1`) after its post-sync run: 0-warning build; Engine 194, App 187 and FFmpeg 40 passed; publish clean (it needs `vswhere.exe` on PATH from a Bash shell, which is an environment note, not a code problem). The `IpcServer` and `MediaLength` product fixes are in develop. slice-epic-5 waits for the GPU to run 8.8.
 - 2026-11-05: 10.11 merged (`63f21c4`, `feat(app): merge 10.11-plain-words`) after tests resumed: develop synced (state lines only); 0-warning build; Contracts 135, Core 165, App 190 and Engine 193 passed, 0 failed; publish clean. Marked done; the General and Sounds renders were copied to `ux-pass-2/renders/`, and QA's C#-strings gap is noted on 10.7. qa-1-14 starts 10.6.
+- 2026-11-05: 10.11 merged (`63f21c4`) and done after its post-sync run (0-warning build; Contracts 135, Core 165, App 190 and Engine 193 passed; publish clean). Card moved to Done. 10.6 started on qa-1-14, card In progress.
+- 2026-11-05: 10.6 READY FOR QA at `1390586` (from develop `4f16173`): an optional `LibraryItem.Kind` (additive; set through a default-implemented `ILibraryWrites.BeginWrite`; kept in library.json); a Recording or Monitor Recording badge; the welcome card; the tray menu (live status, Open, Open Library, Open the Clips folder, and so on; no Save Clip now); the status hint. Contracts 135, Core 166, App 193 and Engine 194 passed; publish clean. QA went to slice-epic-8 (Sonnet, medium effort).
+- 2026-11-05: QA 10.6 passed at `1390586` with no blocking findings: `Kind` is additive, kinds survive a restart, scanned files have none except in Monitor Recordings, and the tray, hint and badge match the design. Contracts 135, Core 166, App 213 and Engine 238 passed. Nit: drop the unbound `OpenGamesCommand` and `WelcomeLink.Games`. qa-1-14 is merging; 10.7 comes to it next.
