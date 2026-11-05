@@ -2182,6 +2182,11 @@ public sealed partial class SessionOrchestratorTests : IDisposable
 
         public ConcurrentQueue<string> Dropped { get; } = new();
 
+        /// <summary>Story 12.2: each SetBuildAhead call, in order.</summary>
+        public ConcurrentQueue<bool> BuildAhead { get; } = new();
+
+        public void SetBuildAhead(bool allowed) => BuildAhead.Enqueue(allowed);
+
         public void SetMonitorDevices(params string[] devices) => _monitorDevices = devices;
 
         public bool DropMonitor(string device)

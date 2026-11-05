@@ -62,6 +62,35 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         [void] $form.ShowDialog()
         """;
 
+    // Story 12.2: a borderless, animated window at the primary screen's top-left, 1280x720, that
+    // resizes itself to 2560x1440 after $After seconds.
+    private const string ResizingWindowScript =
+        """
+        param([string] $Title, [string] $After)
+        Add-Type -AssemblyName System.Windows.Forms
+        $form = New-Object System.Windows.Forms.Form
+        $form.Text = $Title
+        $form.FormBorderStyle = 'None'
+        $form.StartPosition = 'Manual'
+        $form.Left = 0
+        $form.Top = 0
+        $form.Width = 1280
+        $form.Height = 720
+        $start = [Diagnostics.Stopwatch]::StartNew()
+        $timer = New-Object System.Windows.Forms.Timer
+        $timer.Interval = 16
+        $timer.Add_Tick({
+            $v = [int](($start.ElapsedMilliseconds / 4) % 255)
+            $form.BackColor = [Drawing.Color]::FromArgb($v, 255 - $v, 128)
+            if ($form.Width -ne 2560 -and $start.Elapsed.TotalSeconds -ge [double] $After) {
+                $form.Width = 2560
+                $form.Height = 1440
+            }
+        })
+        $timer.Start()
+        [void] $form.ShowDialog()
+        """;
+
     private const string ProfileId = @"c:\games\test game\testgame.exe";
 
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
@@ -373,6 +402,145 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
 
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
+    public async Task ARealWindowResizedTo2560By1440MovesTheReplayBufferAndTheNextClipHasIt()
+    {
+        // Story 12.2 (AD-26): matchSource on; the window resizes itself from 1280x720 after 3 s.
+        using var bench = BenchLock.Take("Engine 12.2 size move test");
+        var gaps = new ConcurrentQueue<string>();
+        using var rig = NewRig(clips: true, resetGap: gaps.Enqueue);
+        MatchSource();
+        var window = SessionTestKit.OpenWindow(_directory, _processes, ResizingWindowScript, "3");
+        rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => rig.Factory.Sessions.Count == 1);
+
+        // 3 s at 1280x720, the resize, 3 s held, then the build and the switch.
+        await Task.Delay(TimeSpan.FromSeconds(11), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var clip = Assert.IsType<ClipSaved>(await rig.NextAsync()).Path;
+        rig.Orchestrator.Dispose();
+
+        Assert.Equal((2560, 1440), (SessionTestKit.VideoStream(clip).Width, SessionTestKit.VideoStream(clip).Height));
+        SessionTestKit.AssertDecodesCleanly(clip);
+        Assert.True(gaps.Count <= 1, string.Join(" | ", gaps));
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AResizeDuringAGameRecordingKeepsItsSizeAndMovesAfterItStops()
+    {
+        // Story 12.2 (R12): the Recording stays one 1280x720 file; the move waits for its end.
+        using var bench = BenchLock.Take("Engine 12.2 size move test");
+        using var rig = NewRig(recordingsEnabled: true, clips: true);
+        MatchSource();
+        var window = SessionTestKit.OpenWindow(_directory, _processes, ResizingWindowScript, "4");
+        rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => rig.Factory.Sessions.Count == 1);
+        await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        var recording = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+        await Task.Delay(TimeSpan.FromSeconds(9), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(recording.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+
+        // The size held all along: the move runs at the first frame after the stop.
+        await Task.Delay(TimeSpan.FromSeconds(6), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var clip = Assert.IsType<ClipSaved>(await rig.NextAsync()).Path;
+        rig.Orchestrator.Dispose();
+
+        Assert.Equal((1280, 720), (SessionTestKit.VideoStream(recording.Path).Width, SessionTestKit.VideoStream(recording.Path).Height));
+        SessionTestKit.AssertDecodesCleanly(recording.Path);
+        Assert.Equal((2560, 1440), (SessionTestKit.VideoStream(clip).Width, SessionTestKit.VideoStream(clip).Height));
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task ARecordPressWhileAMoveBuildsCancelsItAndTheRecordingKeepsItsChain()
+    {
+        // Story 12.2 (QA 1, 2): the window resizes at 2 s, the size holds at 5 s and the move's chain
+        // builds; Record lands then. The Recording keeps the 1280x720 chain in one file, and the move
+        // is found again after the stop.
+        using var bench = BenchLock.Take("Engine 12.2 size move test");
+        using var rig = NewRig(recordingsEnabled: true, clips: true);
+        MatchSource();
+        var window = SessionTestKit.OpenWindow(_directory, _processes, ResizingWindowScript, "2");
+        rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => rig.Factory.Sessions.Count == 1);
+        await Task.Delay(TimeSpan.FromSeconds(5.1), Token);
+
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        var recording = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+        await Task.Delay(TimeSpan.FromSeconds(4), Token);
+        Assert.True(rig.Factory.Sessions.Sum(s => s.Chains) <= 1, "no move chain parked beside the Recording");
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(recording.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+
+        await Task.Delay(TimeSpan.FromSeconds(6), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
+        var clip = Assert.IsType<ClipSaved>(await rig.NextAsync()).Path;
+        rig.Orchestrator.Dispose();
+
+        Assert.Equal((1280, 720), (SessionTestKit.VideoStream(recording.Path).Width, SessionTestKit.VideoStream(recording.Path).Height));
+        SessionTestKit.AssertDecodesCleanly(recording.Path);
+        Assert.Equal((2560, 1440), (SessionTestKit.VideoStream(clip).Width, SessionTestKit.VideoStream(clip).Height));
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AMonitorRecordingStartsBesideAGameRecordingAfterAResize()
+    {
+        // Story 12.2 (QA 2): a resize during a game Recording parks no chain, so a Monitor Recording
+        // still fits AD-7's budget, and two chains run between the sessions.
+        using var bench = BenchLock.Take("Engine 12.2 size move test");
+        using var rig = NewRig(recordingsEnabled: true);
+        MatchSource();
+        var window = SessionTestKit.OpenWindow(_directory, _processes, ResizingWindowScript, "3");
+        rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
+        await WaitUntil(() => rig.Factory.Sessions.Count == 1);
+        await Task.Delay(TimeSpan.FromSeconds(1.5), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        var game = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+
+        // The resize at 3 s, held past 6 s.
+        await Task.Delay(TimeSpan.FromSeconds(6), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
+        var monitor = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+        await Task.Delay(TimeSpan.FromSeconds(2), Token);
+        Assert.Equal(2, rig.Factory.Sessions.Sum(s => s.Chains));
+
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(monitor.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(game.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+        rig.Orchestrator.Dispose();
+        SessionTestKit.AssertDecodesCleanly(game.Path);
+        SessionTestKit.AssertDecodesCleanly(monitor.Path);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public async Task AOneScreenMonitorRecordingOfThe3840By2160ScreenRecordsAtThatSize()
+    {
+        // Story 12.2 (AD-26): one screen under matchSource records at its physical mode size.
+        using var bench = BenchLock.Take("Engine 12.2 one-screen source size test");
+        var displays = new DisplayMonitors(NullLogger.Instance);
+        var uhd = displays.List().FirstOrDefault(m => m is { Width: 3840, Height: 2160 });
+        Assert.SkipWhen(uhd is null, "Needs a 3840x2160 screen attached.");
+        using var rig = NewRig(displays: displays);
+        MatchSource();
+        var document = Volatile.Read(ref _document);
+        Volatile.Write(ref _document, document with { Global = document.Global.SetItem(Keys.MonitorRecordingScreens.Name, Keys.MonitorRecordingScreens.ToJson(MonitorRecordingScreens.Selected(uhd!.MonitorId ?? uhd.DeviceName))) });
+
+        var file = await RecordMonitorAsync(rig, TimeSpan.FromSeconds(4));
+
+        var video = SessionTestKit.VideoStream(file);
+        Assert.Equal(("h264", 3840, 2160), (video.Codec, video.Width, video.Height));
+        SessionTestKit.AssertDecodesCleanly(file);
+    }
+
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
     public async Task AGameSessionWhoseWgcFailsNeverFallsBack()
     {
         using var bench = BenchLock.Take();
@@ -462,6 +630,20 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         var screens = displays.List();
         Assert.SkipWhen(screens.Count < 2, "A composited Monitor Recording needs two screens attached.");
         return screens;
+    }
+
+    /// <summary>Story 12.2: <c>video.matchSource</c> on, in Global and in the test game's profile override.</summary>
+    private void MatchSource()
+    {
+        var document = Volatile.Read(ref _document);
+        var global = Keys.Video.TryRead(document.Global[Keys.Video.Name], out var g) ? g : Keys.Video.Default;
+        var profile = document.Profiles[ProfileId];
+        var overridden = Keys.Video.TryRead(profile.Overrides[Keys.Video.Name], out var o) ? o : global;
+        Volatile.Write(ref _document, document with
+        {
+            Global = document.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(global with { MatchSource = true })),
+            Profiles = document.Profiles.SetItem(ProfileId, profile with { Overrides = profile.Overrides.SetItem(Keys.Video.Name, Keys.Video.ToJson(overridden with { MatchSource = true })) }),
+        });
     }
 
     /// <summary>Global <c>monitorRecordingScreens</c> = All screens (story 11.3).</summary>

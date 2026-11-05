@@ -271,7 +271,22 @@ internal sealed class CaptureSession : ICaptureSession
     private IReadOnlyList<MonitorPlacement>? _composite;
 
     // Story 12.1: the game's captured size at the anchor, for chains under matchSource; written before the anchor is published.
+    // Story 12.2: then the size the Replay Buffer last moved to.
     private VideoSize? _sourceSize;
+
+    // Story 12.2 (AD-26): the held size change. The watch runs on the capture thread, under the gate;
+    // a move's state is under the chain lock: the size it moves to, whether its build-ahead chain arms
+    // without a save, and whether that arm is already queued.
+    private readonly SourceSizeWatch _sizeWatch = new(Stopwatch.Frequency);
+    private VideoSize? _movingTo;
+    private bool _armMove;
+    private bool _armPending;
+    private volatile bool _buildAhead = true;
+
+    // Story 12.2 (QA): a Record press reserves the current chain until its writer attaches (at most
+    // RecordReserve), so no size move starts or arms in between. QPC; under the chain lock.
+    private long _recordReservedUntil;
+    private static readonly TimeSpan RecordReserve = TimeSpan.FromSeconds(10);
     private string? _path;
     private D3D11Device? _device;
     private ICaptureSource? _capture;
@@ -360,9 +375,29 @@ internal sealed class CaptureSession : ICaptureSession
     public void Open()
     {
         // Story 11.3: several screens composited; the plan sets the codec and size before the encoder resolves.
-        if (IsMonitor && _options.CompositeMonitors is null && _spec.Screens is { Count: > 1 } screens)
+        // Story 12.2: so does one screen under matchSource (its physical mode, HEVC or AV1 over 4096 px).
+        if (IsMonitor && _options.CompositeMonitors is null)
         {
-            PlanCanvas(screens);
+            if (_spec.Screens is { Count: > 1 } screens)
+            {
+                PlanCanvas(screens);
+            }
+            else if (_spec.Snapshot.Video.MatchSource)
+            {
+                var one = _spec.Screens is [var resolved]
+                    ? resolved
+                    : MonitorFinder.Find(_spec.Snapshot.MonitorRecordingMonitor, _log) is var found
+                        ? new DisplayMonitor(found.DeviceName, found.DeviceName, 0, 0, found.IsPrimary)
+                        : null;
+                if (one is not null)
+                {
+                    var placements = MonitorCanvas.Place([one]);
+                    if (placements.Count == 1)
+                    {
+                        (_spec, _) = PlanCanvas(_spec, [one], placements, CanEncode, _options.Warn, _log);
+                    }
+                }
+            }
         }
 
         // Before anything is opened: the first codec use may run the probe.
@@ -495,7 +530,29 @@ internal sealed class CaptureSession : ICaptureSession
 
         if (placements.Count == 1)
         {
-            return (spec with { Screens = [screens.First(s => string.Equals(s.DeviceName, placements[0].Monitor.DeviceName, StringComparison.OrdinalIgnoreCase))] }, null);
+            var only = screens.First(s => string.Equals(s.DeviceName, placements[0].Monitor.DeviceName, StringComparison.OrdinalIgnoreCase));
+            if (!spec.Snapshot.Video.MatchSource)
+            {
+                return (spec with { Screens = [only] }, null);
+            }
+
+            // Story 12.2 (AD-26): one screen under matchSource records at its physical mode size,
+            // through AD-25's rule: HEVC, else AV1, over H.264's 4096 px. Captured as one screen.
+            var single = MonitorCanvasRule.Plan(
+                [new DisplayMonitor(only.DeviceName, only.DeviceName, placements[0].Width, placements[0].Height, only.Primary, null, placements[0].X, placements[0].Y, placements[0].RefreshHz)],
+                spec.Snapshot.Video.Codec,
+                canEncode);
+            log.LogInformation("One screen at source size: {Native}x{NativeHeight} encoded {Codec} {Width}x{Height}",
+                single.NativeWidth, single.NativeHeight, single.Codec, single.Width, single.Height);
+            if (single.Codec == VideoCodec.H264 && single.Scaled)
+            {
+                warn?.Invoke(
+                    ErrorCodes.MonitorRecordingScaled,
+                    $"No HEVC or AV1 encoder works on this PC, so the {single.NativeWidth} × {single.NativeHeight} Monitor Recording is scaled down to {single.Width} × {single.Height} for H.264.");
+            }
+
+            var oneVideo = spec.Snapshot.Video;
+            return (spec with { Screens = [only], Snapshot = spec.Snapshot with { Video = oneVideo with { Codec = single.Codec, Width = single.Width, Height = single.Height } } }, null);
         }
 
         var placed = placements.Select(p => new DisplayMonitor(p.Monitor.DeviceName, p.Monitor.DeviceName, p.Width, p.Height, p.Monitor.IsPrimary, null, p.X, p.Y, p.RefreshHz)).ToList();
@@ -533,7 +590,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// <see cref="SourceOutputSize"/>: even sides, scaled only to fit the chain's codec, and a game
     /// under 640×360 keeping the snapshot's size). Unchanged otherwise, and for the Monitor session.
     /// </summary>
-    private EncoderChain SizedToSource(EncoderChain chain) => SizedToSource(chain, IsMonitor, _sourceSize);
+    private EncoderChain SizedToSource(EncoderChain chain) => SizedToSource(chain, IsMonitor, _movingTo ?? _sourceSize);
 
     /// <summary><see cref="SizedToSource(EncoderChain)"/> for a session that <paramref name="isMonitor"/> or not, whose game was <paramref name="source"/> at the anchor.</summary>
     internal static EncoderChain SizedToSource(EncoderChain chain, bool isMonitor, VideoSize? source)
@@ -545,6 +602,177 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         return chain;
+    }
+
+    /// <summary>Story 12.2: whether a size move may build its chain ahead (false while a Monitor Recording holds the other chain).</summary>
+    public void SetBuildAhead(bool allowed) => _buildAhead = allowed;
+
+    /// <summary>
+    /// Story 12.2 (AD-26): one captured frame's size, under the gate. With <c>matchSource</c> on, no
+    /// move running and the current chain live, a size that held 3 s (none while a Recording is
+    /// attached) starts a move; a move's prepared chain waiting for a Recording to end arms once it has.
+    /// </summary>
+    private void WatchSourceSize(long qpc, VideoSize content)
+    {
+        EncoderChain? current;
+        bool moving;
+        bool reserved;
+        lock (_chainLock)
+        {
+            current = _current;
+            moving = _movingTo is not null;
+            reserved = RecordReservedLocked();
+            TryStartArmLocked();
+        }
+
+        if (moving || current is not { IsBuilt: true, IsDisposed: false, Spec.Snapshot.Video.MatchSource: true })
+        {
+            return;
+        }
+
+        if (_sizeWatch.Observe(qpc, content.Width, content.Height, current.OutputSize.Width, current.OutputSize.Height, current.Codec, reserved || current.Tap is { HasWriter: true }) is { } target)
+        {
+            StartMove(new VideoSize(target.Width, target.Height));
+        }
+    }
+
+    /// <summary>
+    /// Story 12.2: moves the Replay Buffer to <paramref name="target"/>, under the gate. With build-ahead
+    /// allowed, the current spec's chain is built ahead at that size in the prepared slot (the
+    /// <c>ChainKey</c> is unchanged, so no settings change would) and armed without a save once built
+    /// (<see cref="ArmMove"/>). While a Monitor Recording holds the other chain, the current chain is
+    /// torn down first and rebuilt at that size into a fresh ring (<see cref="SwitchChain"/>'s
+    /// machinery). Either way a gap over a frame raises <c>reset-gap</c>. Refused, to be found again
+    /// after another 3 s, while any switch, build, teardown, restart or recovery runs, a chain is
+    /// prepared, or a Recording is attached.
+    /// </summary>
+    private void StartMove(VideoSize target)
+    {
+        lock (_chainLock)
+        {
+            if (_chainsClosed || _keepRing || _outputFinished || _stopped || _deviceLost || _restarting || _building || _tearingDown > 0
+                || _armed is not null || _retiring is not null || _prepared is not null || RecordReservedLocked()
+                || _current is not { IsBuilt: true, IsDisposed: false, Tap.HasWriter: false } old)
+            {
+                _log.LogInformation("The game's size changed to {Size} and held; the move waits, since another chain change or a Recording is running", target);
+                return;
+            }
+
+            _movingTo = target;
+            if (_buildAhead)
+            {
+                _log.LogInformation("The game's size changed to {Size} and held 3 s: the Replay Buffer moves to it (built ahead)", target);
+                _wanted = old.Spec;
+                _armMove = true;
+                StartBuildLocked();
+            }
+            else
+            {
+                _log.LogInformation("The game's size changed to {Size} and held 3 s: the Replay Buffer moves to it, torn down first while a Monitor Recording runs", target);
+                _wanted = null;
+                _restarting = true;
+                _restartThread = new Thread(() => Restart(old, "the game's size changed while a Monitor Recording runs", old.Spec)) { Name = "Encoder chain move", IsBackground = true };
+                _restartThread.Start();
+            }
+        }
+    }
+
+    /// <summary>Story 12.2: queues <see cref="ArmMove"/> when a move's chain is prepared and nothing blocks it. Under the chain lock.</summary>
+    private void TryStartArmLocked()
+    {
+        if (!_armMove || _armPending || _prepared is null || _armed is not null || _retiring is not null || _restarting || _deviceLost
+            || _current is not { Tap.HasWriter: false } || _chainsClosed || RecordReservedLocked())
+        {
+            return;
+        }
+
+        _armPending = true;
+        StartWorkerLocked("Encoder chain move", ArmMove);
+    }
+
+    /// <summary>
+    /// Story 12.2: <see cref="TryArm"/>'s arm for a size move, with no save: on a background thread,
+    /// the prepared chain is armed now, its audio starting here; the first frame captured after it makes
+    /// it current, and the old chain, bound to no save, retires at once, with <c>reset-gap</c> when its
+    /// last frame and the new chain's first keyframe are more than a frame apart. Never while a
+    /// Recording is attached: it then waits for the next frame after the Recording ends.
+    /// </summary>
+    private void ArmMove()
+    {
+        EncoderChain? armed = null;
+        long armQpc;
+        lock (_gate)
+        {
+            armQpc = Stopwatch.GetTimestamp();
+            lock (_chainLock)
+            {
+                _armPending = false;
+                if (!_stopped && _armMove && _prepared is { } prepared && _armed is null && _retiring is null && !_restarting && !_deviceLost
+                    && _current is { Tap.HasWriter: false } current && !_outputFinished && !_keepRing && !_chainsClosed && !RecordReservedLocked())
+                {
+                    _prepared = null;
+                    _wanted = null;
+                    _armMove = false;
+                    _armed = prepared;
+                    _armedQpc = armQpc;
+                    current.SwitchEndUs = MicrosAt(armQpc);
+                    armed = prepared;
+                }
+            }
+        }
+
+        if (armed is null)
+        {
+            return;
+        }
+
+        armed.StartAudio(armQpc);
+        _log.LogInformation("The size move switches the Replay Buffer to its new encoder chain {At:0.000} s after the anchor", MicrosAt(armQpc) / 1e6);
+    }
+
+    /// <summary>Story 12.2: a move ends once a chain at its size is current: that size is the source's from here. Under the chain lock.</summary>
+    private void CompleteMoveLocked(EncoderChain current)
+    {
+        if (_movingTo is { } moved && SourceOutputSize.For(moved.Width, moved.Height, current.Codec) is { } size
+            && size == (current.OutputSize.Width, current.OutputSize.Height))
+        {
+            _sourceSize = moved;
+            _movingTo = null;
+            _armMove = false;
+        }
+    }
+
+    /// <summary>Story 12.2: whether a Record press holds the current chain until its writer attaches. Under the chain lock.</summary>
+    private bool RecordReservedLocked() => Stopwatch.GetTimestamp() < _recordReservedUntil;
+
+    /// <summary>
+    /// Story 12.2 (QA): a Recording starts on the current chain, so a pending size move is cancelled:
+    /// its prepared chain is torn down, a build in flight is torn down when it ends (its spec is no
+    /// longer wanted), and an arm queued finds nothing to arm. The watch finds the size again after the
+    /// Recording, if it still holds. A profile's chain waiting for a save is left alone. Under the chain lock.
+    /// </summary>
+    private void CancelMoveLocked()
+    {
+        if (!_armMove)
+        {
+            return;
+        }
+
+        _log.LogInformation("A Recording starts: the size move to {Size} is cancelled, and found again after it if the size still holds", _movingTo);
+        DropMoveLocked();
+        _wanted = null;
+        if (_prepared is { } prepared)
+        {
+            _prepared = null;
+            TearDownLocked(prepared);
+        }
+    }
+
+    /// <summary>Story 12.2: forgets a pending move (a failed build, a lost device, a dropped prepared chain); the size must hold again. Under the chain lock.</summary>
+    private void DropMoveLocked()
+    {
+        _movingTo = null;
+        _armMove = false;
     }
 
     /// <summary>Whether this is the Monitor session (6.9), not a game window's.</summary>
@@ -905,14 +1133,18 @@ internal sealed class CaptureSession : ICaptureSession
             }
 
             chain = _current;
+            if (chain is null || chain.IsDisposed || chain.Tap is not { HasWriter: false } || chain.Video is null)
+            {
+                return null;
+            }
+
+            // Story 12.2: the Recording keeps this chain (R12). A pending size move is cancelled, its
+            // chain torn down, and the chain reserved until the writer attaches.
+            CancelMoveLocked();
+            _recordReservedUntil = Stopwatch.GetTimestamp() + (long)(RecordReserve.TotalSeconds * _qpcFrequency);
         }
 
-        if (chain is null || chain.IsDisposed || chain.Tap is not { HasWriter: false } tap || chain.Video is not { } video)
-        {
-            return null;
-        }
-
-        return new RecordingWrite(this, tap, video, qpc);
+        return new RecordingWrite(this, chain, chain.Tap!, chain.Video!, qpc);
     }
 
     /// <summary>
@@ -947,11 +1179,19 @@ internal sealed class CaptureSession : ICaptureSession
 
             var current = (_armed ?? _current)?.Spec ?? _spec;
             EncoderChain? drop;
+            if (next is not null && ChainKey.SameChain(next, current) && _armMove)
+            {
+                // Story 12.2: the same settings leave a size move alone.
+                return;
+            }
+
             if (next is null || ChainKey.SameChain(next, current))
             {
+                // Null (a Monitor Recording takes the other chain) drops a size move too.
                 drop = _prepared;
                 _prepared = null;
                 _wanted = null;
+                DropMoveLocked();
             }
             else if (_wanted is { } wanted && ChainKey.SameChain(next, wanted))
             {
@@ -964,6 +1204,9 @@ internal sealed class CaptureSession : ICaptureSession
                 _wanted = next;
                 drop = _prepared;
                 _prepared = null;
+
+                // Story 12.2: the profile's chain is built at a pending move's size, and switches at a save.
+                _armMove = false;
             }
 
             if (drop is not null)
@@ -1173,6 +1416,7 @@ internal sealed class CaptureSession : ICaptureSession
                     _current = next;
                     installed = true;
                     _restarting = false;
+                    CompleteMoveLocked(next);
                     if (next.Fps != old.Fps)
                     {
                         _capture?.SetFps(next.Fps);
@@ -1313,6 +1557,7 @@ internal sealed class CaptureSession : ICaptureSession
                 // the teardown below runs once it has finished.
                 _suspended = true;
                 _deviceLost = true;
+                DropMoveLocked();
                 foreach (var chain in new[] { _current, _armed, _retiring })
                 {
                     chain?.Fed = false;
@@ -1797,6 +2042,7 @@ internal sealed class CaptureSession : ICaptureSession
             lock (_chainLock)
             {
                 _deviceLost = true;
+                DropMoveLocked();
                 foreach (var chain in new[] { _current, _armed, _retiring })
                 {
                     chain?.Fed = false;
@@ -2020,6 +2266,11 @@ internal sealed class CaptureSession : ICaptureSession
                 return;
             }
 
+            if (HasRing)
+            {
+                WatchSourceSize(qpc, contentSize);
+            }
+
             // The first frame captured after an armed press: the new chain's first, and the one the
             // old chain's forced keyframe lands on, so the next Clip starts where this one ends.
             if (_armed is { } armed && qpc > _armedQpc)
@@ -2127,6 +2378,7 @@ internal sealed class CaptureSession : ICaptureSession
             var old = _current!;
             _current = armed;
             _armed = null;
+            CompleteMoveLocked(armed);
             _retiring = old;
             old.Retiring = true;
             old.Successor = armed;
@@ -2371,6 +2623,9 @@ internal sealed class CaptureSession : ICaptureSession
                 && _wanted is { } wanted && ChainKey.SameChain(wanted, spec))
             {
                 _prepared = chain;
+
+                // Story 12.2: a move's chain arms at once, without a save.
+                TryStartArmLocked();
             }
             else if (chain is not null)
             {
@@ -2380,6 +2635,9 @@ internal sealed class CaptureSession : ICaptureSession
             else if (ReferenceEquals(_wanted, spec))
             {
                 _wanted = null;
+
+                // A move whose chain couldn't be built is forgotten: the size must hold again.
+                DropMoveLocked();
             }
 
             // A newer spec asked for while this one built.
@@ -2988,7 +3246,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// copies of the streams to the tap, then asks the encoder for a keyframe after the press; the
     /// writer's thread does the rest. <see cref="Stop"/> hands it the press as µs since the anchor.
     /// </summary>
-    private sealed class RecordingWrite(CaptureSession session, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
+    private sealed class RecordingWrite(CaptureSession session, EncoderChain chain, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
     {
         private RecordingWriter? _writer;
 
@@ -3023,8 +3281,21 @@ internal sealed class CaptureSession : ICaptureSession
 
             try
             {
-                // Attached before the keyframe is asked for, so the forced key can't pass the tap unseen.
-                tap.Attach(writer);
+                // Story 12.2: attached under the chain lock, and only to the chain Record reserved
+                // while it is still current, so a size move can't switch it out from under the
+                // Recording; the reservation ends here either way.
+                lock (session._chainLock)
+                {
+                    session._recordReservedUntil = 0;
+                    if (!ReferenceEquals(session._current, chain) || chain.Retiring || chain.IsDisposed)
+                    {
+                        throw new InvalidOperationException("The game's video changed size just as the Recording started; press Record again.");
+                    }
+
+                    // Attached before the keyframe is asked for, so the forced key can't pass the tap unseen.
+                    tap.Attach(writer);
+                }
+
                 ticket = video.RequestKeyframe(qpc);
                 writer.Start();
             }
