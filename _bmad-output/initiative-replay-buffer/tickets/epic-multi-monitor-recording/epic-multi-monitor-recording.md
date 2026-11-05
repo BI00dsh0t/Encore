@@ -85,6 +85,21 @@ The builder presses the Monitor Recording key and gets one playable file holding
 - Decision: 2026-11-04 (spike 11.1), **the pixel budget, under the builder's full-width decision:** HEVC and AV1 encode the full canvas, limited only by 8192 px a side; a wider canvas is fitted to 8192, aspect kept. H.264 fits the canvas to 4096 px a side. AD-25's 3840x2160 area budget is dropped. AD-25's Canvas rule needs this edit before 11.3. The coordinator schedules that AD-25 spine edit (an architecture update session, AD-22) before 11.3 starts; this spike doesn't touch the architecture file. R2 above and 11.2's ticket already state the new rule.
 - Decision: 2026-11-04 (spike 11.1), the per-codec frame limits are constants (NVENC's: H.264 4096, HEVC and AV1 8192 a side), not a probe result. Story 1.13's probe opens each encoder at 1280x720 only.
 - Decision: 2026-11-04 (spike 11.1), 11.3's compositor hands the pacer one canvas per output slot, from its own slot clock, not one per source frame. The spike's per-frame push gave 160 to 946 queue drops and about 2,000 non-increasing stamps per 50 s run, and a full-canvas scale pass for each source frame.
+- Story 11.3 cost, re-measured after per-slot compositing, 2026-11-05 01:43 to 01:59, for the builder's NFR-1 decision. This was bench fps on the synthetic 80 fps load, 2 balanced passes of 45 s, with an animated window on DISPLAY2 as in the spike. Baseline 81.59 / 79.77 fps.
+
+  | Condition (beside the game capture) | FPS loss, mean (pass 1 / pass 2) |
+  |---|---|
+  | game capture alone | **3.43 %** (4.17 / 2.69) |
+  | + today's one-screen Monitor Recording | **5.44 %** (6.02 / 4.85) |
+  | + two screens, HEVC 6400x2160, full encode | **7.00 %** (6.75 / 7.23) |
+  | + the same, stopped after the scale (`--stages copy`) | **7.16 %** (6.56 / 7.76) |
+  | + the same, capture and composite only (`--stages wgc`) | **7.12 %** (6.51 / 7.73) |
+
+  - **The stage split:** capture and composite alone cost what the full encode does. So the composite's extra cost over one screen (about 1.6 points; about 3.6 over the game capture alone) is in capturing the second, 3840x2160 144 Hz screen through WGC and DWM. It isn't the blits, the scale or the encode. NVENC use was 30 % in total and engine 3D ≤ 3.9 %.
+  - **Against the spike:** the full composite is 7.0 %, against the spike's 7.6 to 10 % (mean 8.8 %).
+  - **The pacer:** with per-slot hand-off it got 2,995 canvases in 50 s (one per slot). Duplicates were 1.1 to 1.3 %, missed slots 0.4 %, and there were 12 to 24 hand-off drops and 0 non-increasing stamps. The spike had 160 to 946 drops and about 2,000 non-increasing stamps.
+  - **Contamination:** another process held 2 to 4 extra NVENC sessions at 01:51:03 to 01:51:29, during the capture-only pass 1 (6.51 %, the better of its two passes).
+  - **For the builder:** no Monitor Recording beside a GPU-bound game meets 3 %. The decision row below stands, with these figures: one screen about +2 points, two screens about +3.6 points. The cost is capture of the extra screen, so a lower preset or the old 4K budget wouldn't reduce it; recording fewer screens would.
 - Decision awaiting review: 2026-11-04 (spike 11.1), NFR-1 and a Monitor Recording beside a game. Neither today's one-monitor Recording (5.15 % in total) nor the two-monitor composite (7.6 to 10 %, mean 8.8 %) meets 3 % beside a GPU-bound game. Unattended default: NFR-1 stays the game-capture target (2.85 %, pass). A Monitor Recording beside a game is reported as a known extra cost, and 11.3 re-measures after the per-slot compositing. The builder decides whether 11.3 needs a cap while a game runs. 11.3 first splits the cost by stage, since the encoder (about 30 %) and the blits aren't the cause. The Done-when's "within NFR-1" waits on this.
 - Spike code kept as the base for 11.3:
   - `Platform.Capture`: `MonitorCanvas` and `CompositeCapture`, and `D3D11Device.CopyFrameTo` and `TimeCopies`;

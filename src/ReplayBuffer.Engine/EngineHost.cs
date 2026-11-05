@@ -415,6 +415,7 @@ internal sealed class EngineHost : IAsyncDisposable
                         Margin = margin,
                         ResetGap = message => warnings.Raise(ErrorCodes.ResetGap, WarningSeverity.Warning, "replay", message, overlay: false),
                         CaptureFallback = message => warnings.Raise(ErrorCodes.MonitorCaptureFallback, WarningSeverity.Warning, "recordings", message, overlay: false),
+                        Warn = (code, message) => warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay: false),
                     },
                     loggers,
                     audio,
@@ -528,7 +529,9 @@ internal sealed class EngineHost : IAsyncDisposable
                         Warn: (code, message) =>
                         {
                             recordingLog.LogWarning("{Code}: {Message}", code, message);
-                            warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay: true);
+                            // Story 11.3: a skipped or arriving screen is a notice in the Main App, not an Overlay message.
+                            var overlay = code is not (ErrorCodes.MonitorMissing or ErrorCodes.MonitorAddedNextRecording);
+                            warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay);
                         })
                     : null,
                 new GpuResetWarnings(warnings, clipLog).Recovery,

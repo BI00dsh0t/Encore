@@ -30,6 +30,8 @@
                        av1     every monitor composited, AV1 at the full canvas size
                        h264    every monitor composited, H.264 fitted to 4096 px a side
                        dd      as hevc, every monitor through Desktop Duplication
+                       hevccopy as hevc, but the monitor engine stops after the scale into the encoder's frames (--stages copy)
+                       hevcwgc  as hevc, but the monitor engine only captures and composites (--stages wgc)
                      The GPU sampler then sums both engines.
 
     Writes into -OutDir: per run a PresentMon CSV, and for capture runs the engine's stats
@@ -135,7 +137,9 @@ function Resolve-MonitorOptions([string] $Mode, [string] $Name) {
         'av1' { return @('--monitors', 'all', '--codec', 'av1', '--size', $all.Size) + $bitrate }
         'h264' { return @('--monitors', 'all', '--codec', 'h264') + $bitrate }
         'dd' { return @('--monitors', 'all', '--monitor-api', 'dd', '--codec', 'hevc', '--size', $all.Size) + $bitrate }
-        default { Fail "Unknown monitor mode '$Mode' in condition '$Name'. Use -monone, -monhevc, -monav1, -monh264 or -mondd." }
+        'hevccopy' { return @('--monitors', 'all', '--codec', 'hevc', '--size', $all.Size, '--stages', 'copy') + $bitrate }
+        'hevcwgc' { return @('--monitors', 'all', '--codec', 'hevc', '--size', $all.Size, '--stages', 'wgc') + $bitrate }
+        default { Fail "Unknown monitor mode '$Mode' in condition '$Name'. Use -monone, -monhevc, -monav1, -monh264, -mondd, -monhevccopy or -monhevcwgc." }
     }
 }
 

@@ -325,6 +325,12 @@ public static class ErrorCodes
     /// </summary>
     public const string MonitorAddedNextRecording = "monitor-added-next-recording";
 
+    /// <summary>
+    /// A warning (AD-25, story 11.3): a Monitor Recording's canvas is over H.264's 4096 px and this PC
+    /// has no HEVC or AV1 encoder, so it is scaled down to fit H.264. No Overlay message.
+    /// </summary>
+    public const string MonitorRecordingScaled = "monitor-recording-scaled";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -400,5 +406,6 @@ public static class ErrorCodes
         MonitorMissing,
         MonitorRecordingNoScreens,
         MonitorAddedNextRecording,
+        MonitorRecordingScaled,
     ];
 }

@@ -134,4 +134,12 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
 /// later toggles reach the session through <see cref="ICaptureSession.SetMicMuted"/>, and the spec
 /// keeps the Start value.
 /// </summary>
-public sealed record SessionSpec(SessionKind Kind, CaptureTarget Target, EffectiveSettings Snapshot, SessionAudio Audio, bool MicMuted = true);
+public sealed record SessionSpec(SessionKind Kind, CaptureTarget Target, EffectiveSettings Snapshot, SessionAudio Audio, bool MicMuted = true)
+{
+    /// <summary>
+    /// A Monitor session's screens (story 11.3, AD-25), resolved from <c>monitorRecordingScreens</c> at
+    /// Start, the primary first: two or more are composited into one canvas, one is captured as today.
+    /// Null while the key is null, when the session reads <c>monitorRecordingMonitor</c> as before.
+    /// </summary>
+    public IReadOnlyList<Contracts.Messages.DisplayMonitor>? Screens { get; init; }
+}

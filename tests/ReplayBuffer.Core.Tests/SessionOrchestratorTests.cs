@@ -2175,6 +2175,22 @@ public sealed partial class SessionOrchestratorTests : IDisposable
             set => _monitorDevice = value;
         }
 
+        private volatile string[]? _monitorDevices;
+
+        /// <summary>Story 11.3: the composited monitors a test set (<see cref="SetMonitorDevices"/>), less the dropped; else <see cref="MonitorDevice"/>.</summary>
+        public IReadOnlyList<string> MonitorDevices => _monitorDevices ?? (MonitorDevice is { } device ? [device] : []);
+
+        public ConcurrentQueue<string> Dropped { get; } = new();
+
+        public void SetMonitorDevices(params string[] devices) => _monitorDevices = devices;
+
+        public bool DropMonitor(string device)
+        {
+            Dropped.Enqueue(device);
+            _monitorDevices = [.. MonitorDevices.Where(d => d != device)];
+            return true;
+        }
+
         public void SetMicMuted(bool muted, long qpc)
         {
             ThreadIds.Enqueue(Environment.CurrentManagedThreadId);
