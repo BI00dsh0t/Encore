@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix bench-videoencode-count (8.8 held at e3822aa) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with QA 11.1 (8.7 fps command is in its plan) |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with the AD-25 spine edit |
@@ -192,7 +192,7 @@ The coordinator logs each QA round in the Log below.
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
-| 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA (slice-epic-8) |
+| 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | QA passed, merging |
 | 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | | pending |
 | 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | | pending |
 | 32.4 | 11.4 Screens to record: the picker on Hotkeys | | pending |
@@ -841,3 +841,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.2 merged (`6f23d23`; marked done, renders and its Human Check row in `a60deb5`). The merged develop with 10.4, 10.5 and 10.2 passed App 165, Core 161, Contracts 128 and Platform.Desktop 13. Its card is Done. 10.3 (Library sort and search) went to story-2-7 (Opus, medium effort; context kept), in parallel with 10.9.
 - 2026-11-05: 11.1 fixes are in at `b060415` (all 4 QA findings), with QA re-verifying. The VLC check passed (a composite played to the end, both screens in place). NVENC use corrected to about 30 % at 6400x2160 (it was over-counted 3x). The composite FPS cost is now a range, 7.6 to 10 %. **Follow-ups queued:** (1) the AD-25 spine edit (drop the 4K area budget; codec side limits only), needed before 11.3; (2) `measure-path-a.ps1` triple-counts `gpu_videoencode` in every bench run so far. That's an encoder-utilisation figure only, and FPS-loss results aren't affected, but it needs a bench bugfix and a note on the earlier reports.
 - 2026-11-05: Follow-ups started: the AD-25 spine edit (drop the 4K budget, codec side limits only) went to 2-1-tracer; bugfix `bench-videoencode-count` (`measure-path-a.ps1` triple-counts `gpu_videoencode`; correction notes on the earlier reports; no bench runs) went to slice-epic-5.
+- 2026-11-05: QA 11.1 passed at `b060415` (round 2: all 4 findings fixed). qa-2-1 is merging; 11.2 comes next for it. The AD-25 spine edit and the bench triple-count fix are already running.
