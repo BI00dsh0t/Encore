@@ -68,6 +68,7 @@ graph LR
   - The diagram above is the only allowed reference graph; `App` and `Engine` never reference each other.
   - `Platform.Desktop` holds the App's own Win32 calls and references nothing; only the App references it. (Story 1.7, 2026-10-25.)
   - Only `ReplayBuffer.Platform.*` contains `unsafe` code, P/Invoke, COM or FFmpeg calls.
+  - **Exception (story 11.4, 2026-11-05):** the App compiles `Core/Monitors/MonitorCanvasRule.cs` as a linked source file, so the engine and the Hotkeys screen picker share one canvas rule (AD-25) without an App → Core edge. That file may use only Contracts types. App.Tests sees the type twice (App's copy and, through the engine, Core's), so it must not name it, or it gets CS0433.
 
 ### AD-3 — IPC protocol [ADOPTED]
 
