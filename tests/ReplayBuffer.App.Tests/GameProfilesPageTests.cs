@@ -131,6 +131,23 @@ public sealed class GameProfilesPageTests
     }
 
     [Fact]
+    public void AGameTakingItsOwnVideoQualityKeepsSource()
+    {
+        // Story 12.3: the main Video quality is Source; the game's summary says so and its own copy carries matchSource.
+        SetProfiles(revision: 3, global: [("video", Keys.Video.ToJson(GlobalVideo with { MatchSource = true }))]);
+        var updates = Capture();
+        var page = Create().GameProfiles;
+        var game = page.Page(BetaId);
+        Assert.Equal("H.264 · Source · 60 fps · 40,000 kbps", game.Video.Summary);
+
+        game.Video.ChangeCommand.Execute(null);
+
+        var op = Assert.Single(Assert.Single(updates).Ops);
+        Assert.Equal((BetaId, "video", SettingsOpKind.Set), (op.ProfileId, op.Key, op.Op));
+        Assert.True(Keys.Video.TryRead(op.Value, out var video) && video.MatchSource);
+    }
+
+    [Fact]
     public void CaptureOffSetsIgnoredAndStopDetectingRemovesTheProgramFromManualGames()
     {
         SetProfiles(revision: 3);
@@ -282,10 +299,12 @@ public sealed class GameProfilesPageTests
             Settings = SettingsDocument.Empty with
             {
                 Revision = revision,
-                Global = Values(global)
+                // The test's own global values win over these defaults.
+                Global = SettingsMaps.EmptyValues
                     .SetItem(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(GlobalLayout))
                     .SetItem(Keys.Video.Name, Keys.Video.ToJson(GlobalVideo))
-                    .SetItem(Keys.ManualGames.Name, Keys.ManualGames.ToJson([ChadId])),
+                    .SetItem(Keys.ManualGames.Name, Keys.ManualGames.ToJson([ChadId]))
+                    .SetItems(global.Select(o => KeyValuePair.Create(o.Key, o.Value))),
                 Profiles = SettingsMaps.EmptyProfiles
                     .Add(BetaId, new GameProfile { Name = "Beta", Overrides = Values(beta) })
                     .Add(ChadId, new GameProfile { Name = "Chad" })

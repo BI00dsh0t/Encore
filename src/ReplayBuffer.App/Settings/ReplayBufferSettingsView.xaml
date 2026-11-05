@@ -104,13 +104,14 @@
                                   DisplayMemberPath="Label"
                                   ItemsSource="{Binding Codecs}"
                                   SelectedItem="{Binding SelectedCodec}" />
-                        <TextBlock Grid.Row="1" Style="{DynamicResource RbSettingsLabelStyle}" Text="Resolution" />
-                        <ComboBox Grid.Row="1"
-                                  Grid.Column="1"
-                                  Margin="0,4"
-                                  DisplayMemberPath="Label"
-                                  ItemsSource="{Binding Resolutions}"
-                                  SelectedItem="{Binding SelectedResolution}" />
+                        <TextBlock Grid.Row="1" Margin="0,10,12,0" VerticalAlignment="Top" Style="{DynamicResource RbSettingsLabelStyle}" Text="Resolution" />
+                        <StackPanel Grid.Row="1" Grid.Column="1">
+                            <ComboBox Margin="0,4"
+                                      DisplayMemberPath="Label"
+                                      ItemsSource="{Binding Resolutions}"
+                                      SelectedItem="{Binding SelectedResolution}" />
+                            <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding SourceHelp}" Visibility="{Binding SourceHelp, Converter={StaticResource Collapsed}}" />
+                        </StackPanel>
                         <TextBlock Grid.Row="2" Style="{DynamicResource RbSettingsLabelStyle}" Text="Frame rate" />
                         <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
                             <TextBox MinWidth="80" Margin="0,4" Text="{Binding FpsText}" />
