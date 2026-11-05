@@ -189,7 +189,7 @@ The coordinator logs each QA round in the Log below.
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.7 | 10.10 Games list and a page per game | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
+| 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed; merge held at `d824347` until tests resume |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
@@ -888,3 +888,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 10.11 passed at `2967259`: text only, about 25 rewordings match the glossary, and the test catches the fabricated view. App 190, Core 165, Contracts 135 and Engine passed. Gap noted for 10.7: the glossary test checks XAML only, so C#-set user strings (`warning.raised`, view models) need the sweep to extend it. qa-1-14 is merging.
 - 2026-11-05: QA round 2 passed for full-run-flaky-tests at `ae7287a`: the regression test passes alone and fails with the file protocol restored; the seam is harmless; IpcServer disposes in a finally. FFmpeg 42, Engine 194 and App 182 passed. slice-epic-5 is merging.
 - 2026-11-05: **Builder: "stop all tests".** The "Tests stopped" rule is added. The coordinator sent stop messages and interrupted the turns of qa-1-14 (10.11, was running its post-sync suites before merging), qa-2-1 (11.3) and slice-epic-5 (full-run-flaky-tests, was syncing to merge). Both merges are held until tests resume. Each session stops only the test processes it started and replies TESTS STOPPED.
+- 2026-11-05: TESTS STOPPED for 10.11: qa-1-14's post-sync run was interrupted, and no process from its worktree is left. It's not merged; `feature/10.11-plain-words` is at `d824347` (the 10.7 glossary note plus a state-only sync). Its post-sync suites and publish run when tests resume, then it merges.
