@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | busy with 8.7's fps run (holds the GPU) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | waiting for GPU FREE to run 8.8's smokes and soaks (8.8 at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.6 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.7 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
@@ -190,7 +190,7 @@ The coordinator logs each QA round in the Log below.
 | 31.7 | 10.10 Games list and a page per game | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.10 | 10.7 Refactor sweep | | pending |
+| 31.10 | 10.7 Refactor sweep | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
 | 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `3fd6ed4`) |
 | 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `5ae65e3`) |
@@ -899,3 +899,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 10.6 passed at `1390586` with no blocking findings: `Kind` is additive, kinds survive a restart, scanned files have none except in Monitor Recordings, and the tray, hint and badge match the design. Contracts 135, Core 166, App 213 and Engine 238 passed. Nit: drop the unbound `OpenGamesCommand` and `WelcomeLink.Games`. qa-1-14 is merging; 10.7 comes to it next.
 - 2026-11-05: 10.6 merged (`feat(app): merge 10.6-welcome-badge-tray`) after QA passed `1390586` and its nit was fixed in `89bba6a` (the welcome card's unused Games link removed). Develop synced (state lines only): 0-warning build; Contracts 135, Core 166, App 193 and Engine 194 passed, 0 failed; publish clean. Marked done; the welcome and badge-plus-hint renders were copied to `ux-pass-2/renders/`. qa-1-14 takes 10.7 next.
 - 2026-11-05: GPU DONE for 11.3: Heavy `MonitorRecordingCaptureTests` passed 13/13 after the hand-off fix, and the clean stage-split cost run is done; the lock is clear. 11.3's READY FOR QA follows. **8.7's fps run** (`fps --overlay --recording`, about 18 min) went to slice-epic-4 (Opus, medium effort). It checks first that no `ReplayBuffer.App` is running, then records the results against NFR-1's 3 %, merges and marks 8.7 done.
+- 2026-11-05: 10.6 merged (`532af02`; the nit fix `89bba6a` dropped the unbound Games link) and done (`8ddd998`): 0-warning build; Contracts 135, Core 166, App 193 and Engine 194 passed; publish clean. Card moved to Done. **10.7 (refactor sweep)** started on qa-1-14, with 10.11's note (extend the glossary check to user strings set in C#), told to leave 11.3's files to 11.5.
