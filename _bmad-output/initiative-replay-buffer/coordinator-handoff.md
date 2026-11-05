@@ -17,7 +17,7 @@ You coordinate the ReplayBuffer initiative, built unattended by a pool of Claude
    - QA is **code review only**, and a story merges when its review passes.
    - Every unrun test goes into `test-backlog.md`.
    - Only the builder lifts this rule.
-2. **GPU work at night only.** Heavy, GPU, capture, bench and soak runs happen at night, after the builder's go. Tonight's 23:03 timer (a session-only cron, lost with this session) is **held** by rule 1.
+2. **GPU work at night only.** Heavy, GPU, capture, bench and soak runs happen at night, after the builder's go. Tonight's 23:03 timer was **deleted** at the builder's request; nothing is scheduled.
 3. **Measurement runs need a quiet PC.** Before any fps or bench run, pause every session's builds and suites. `.bench-running` doesn't stop other sessions. Keep an overlap log.
 4. **Merges:** in the main folder `%USERPROFILE%/Documents/repos/ReplayBuffer` on develop, with exactly `git merge --no-ff <branch> -m "<type>(<scope>): merge <name>"`, serialized. Never push; there's no remote.
 5. **Never:**
