@@ -46,7 +46,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; runs 11.5's Heavy rerun after 8.8's soaks |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 13.1 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -205,7 +205,7 @@ The coordinator logs each QA round in the Log below.
 | 33.4 | 12.3 Source in the Video quality section | | pending |
 | 33.5 | 12.4 Refactor sweep | | pending |
 | 33.6 | 12.5 Source-resolution output end to end on the builder's PC | | pending |
-| 34.1 | 13.1 Capture new games: the key, the engine default and the General switch | | pending |
+| 34.1 | 13.1 Capture new games: the key, the engine default and the General switch | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -374,7 +374,7 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 | 2026-11-04 | v0.9.0 | Epic 9 is done, but its release waits for epic 8: develop already holds 8.1 to 8.6, so a v0.9.0 cut now would ship a half-done epic 8 on master. When epic 8 finishes, cut v0.8.0, then v0.9.0 (or the builder may prefer one v1.0.0 for the finished initiative) | Same reasoning as the v0.6.0 and v0.7.0 hold |
 | 2026-11-05 | v0.10.0 | Epic 10 (UX pass 2) is done, but develop also holds unfinished epic 8 (8.8 to 8.11) and epic 11 (11.6). Hold v0.10.0 behind v0.8.0 and v0.9.0, so tags come out in order: when epic 8 finishes, cut v0.8.0, v0.9.0 and v0.10.0 (or one v1.0.0 for the finished initiative, if the builder prefers) | Same reasoning as the v0.9.0 hold |
 | 2026-11-05 | Epic 12 (R40) | **Source-resolution output: unattended defaults.** "Source" is the first item in the Resolution list, with fixed sizes kept. Bitrate and rate control are unchanged, so the storage estimate stays exact. A game wider than 4096 px under H.264 is scaled to fit, never switched to HEVC; a one-screen Monitor Recording keeps AD-25's HEVC or AV1 switch. A size change held for 3 s moves the Replay Buffer to the new size (as at a Reset); a Recording never moves and letterboxes. Windows under 640×360 are ignored. It applies to Clips, Recordings and Monitor Recordings, and per game. **Open:** should bitrate scale with the source size? Should a game wider than 4096 px switch to HEVC? Should the size follow a mid-session change, or stay fixed until the next save? | Epic file `epic-source-quality-output.md`; 12.6 (AD-26) is a spine edit before 12.2 |
-| 2026-11-05 | Epic 13 (R41) | **Capture new games by default: unattended defaults.** On by default; a hand-added game is always captured; existing games are unchanged; a one-time notice shows on the status line and as an Overlay message; the switch sits in a Games section on General. **Open:** drop the Overlay message and keep only the status line? | Epic file `epic-new-game-capture-default.md` |
+| 2026-11-05 | Epic 13 (R41) | **Capture new games by default: unattended defaults.** On by default; a hand-added game is always captured; existing games are unchanged; a one-time notice shows on the status line and as an Overlay message; the switch sits in a Games section on General. **Builder, 2026-11-05: "Yes, start 13.1": the recommended defaults are accepted, the Overlay message included.** | Epic file `epic-new-game-capture-default.md` |
 
 ## Log
 
@@ -954,3 +954,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: **Builder clarification: source quality means resolution only.** "We don't want to match the source framerate. Just the resolution. Output fps should always be determined by the output settings." Passed to the planning worker as a builder decision.
 - 2026-11-05: **Builder feature request: a General setting for whether new games are captured by default.** "If a new game is detected, its Capture this game setting will be on or off by default." Sent to the same planning worker (story-2-7) to plan alongside source quality: a Global key with today's behaviour as the default; the engine sets a new profile's `ignored` flag on first detection; hand-added games always captured (recommended); existing games unchanged.
 - 2026-11-05: Planning for both requests merged (`5503712`, `docs(tickets): merge 12.0-source-quality-planning`). **Epic 12 "Source-resolution output" (R40):** 12.1 tracer (after 11.5), 12.6 AD-26 spine edit (HITL), 12.2 size changes and one-screen Monitor Recordings (high risk), 12.3 the Video quality UI, 12.4 sweep, 12.5 end to end (HITL). **Epic 13 "New games captured by default, or not" (R41):** 13.1, ready now. 8.11 now waits on 12.5 and 13.1. 7 Trello cards created in Backlog with labels; Queue rows 33.1 to 33.6 and 34.1 added; the unattended defaults and open questions are in Decisions Awaiting Review.
+- 2026-11-05: **Builder: "Yes, start 13.1"** with the recommended defaults (the Overlay message included). 13.1 went to story-2-7 (Opus, high effort), which planned it, on `feature/13.1-capture-new-games`. Default tests only. Card In progress.
