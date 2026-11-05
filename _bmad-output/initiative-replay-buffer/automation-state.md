@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 10.2 (8.8 is held on its branch at e3822aa) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off (8.8 is held on its branch at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with QA 11.1 (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.5 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
@@ -182,7 +182,7 @@ The coordinator logs each QA round in the Log below.
 | 30.8 | 9.8 Refactor sweep | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `5d43a43`) |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged) |
 | 31.1 | 10.1 Design pass: renders and the builder's approval of ux-pass-2 | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (builder approved all recommendations) |
-| 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (slice-epic-5) |
+| 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
 | 31.3 | 10.3 Library sort and search | | pending |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
@@ -832,3 +832,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 10.5 round 1 failed with 2 small findings at `11eab9a`, sent to qa-1-14: (1) the sound picker isn't closed when a reload rebuilds the cards, so a click after a `settings.changed` adds nothing; (2) the nav dot's corner radius is hard-coded in the shell dictionaries, not taken from a token. Everything else passed (App 156, Core 161, Contracts 128; no engine change; no overlap with 10.2).
 - 2026-11-05: QA 10.2 round 1 failed with 2 findings at `90f1d5e`, sent to story-2-7: (1) **a Clip starred as a Favourite in the middle of a large bulk delete (over 10 items) still gets deleted**, because the Favourite check is taken once at the start rather than per item; (2) a right-click in the rename box commits the rename. Build and default suites pass.
 - 2026-11-05: QA 10.5 passed at `d0880b9` (round 2): `Load()` closes the picker, with a test, and the nav dot uses the radius tokens. App 157 passed. qa-1-14 is merging. QA 11.1 found 4 problems at `96abe48` (the go verdict looks sound) and is waiting for the implementer's fixes.
+- 2026-11-05: QA 10.2 passed at `be7ee5e` (round 2): a Favourite starred mid-batch is skipped, and the rename box keeps its own right-click. App 159, Core 161, Contracts 125 and Platform.Desktop 13 passed. story-2-7 is merging.
