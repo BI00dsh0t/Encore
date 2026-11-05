@@ -26,6 +26,8 @@ These cover the merges made without a post-merge run:
 | `14.7 merge` | 14.7 Player sweep | **never run:** `PlayerTransportTests.AViewFileFromBeforeThePlayerLoadsFullAndUnmuted`, `TheVolumeStepsWithoutDriftAndAnyChangeUnmutes`, `TheVolumeAndMuteAreKeptAcrossRuns`; `PlayerViewThemeTests.APageWithNoPictureInTimeSaysTheFileCantBePlayed`, `ThePlayerPageShowsInBothLooksAndTheHiddenListIgnoresItsKeys` |
 | later | 12.4 Source-resolution sweep | **never run** (from `feature/12.4-source-sweep`): Engine above all, for `CaptureSession.NewChain`; its changed Heavy test (`ARecordPressWhileAMoveBuildsCancelsItAndTheRecordingKeepsItsChain`, now with an arm delay and a cancel check) is in §2 #4, and a fixed-size Clip check is `--filter-class "*ReplayClipCaptureTests"` with `--explicit only` |
 
+| on merge | 14.9 Player restyle | **never run:** `PlayerViewThemeTests` (rewritten for 14.9), which also renders `player-`, `player-menu-` and `player-fullscreen-{fluent,gaming}.png` for review against the mockup |
+
 ## 2. Heavy and GPU, at night, in this order
 
 | # | Story | Command or run | Notes |
