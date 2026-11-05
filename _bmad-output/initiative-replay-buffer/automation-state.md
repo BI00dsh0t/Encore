@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy with 8.8 smokes then soaks (holds the GPU) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (QA 11.3 round 2 comes back here) |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA round 2 of 11.3 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy merging 10.7 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
@@ -194,7 +194,7 @@ The coordinator logs each QA round in the Log below.
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
 | 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `3fd6ed4`) |
 | 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `5ae65e3`) |
-| 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | QA round 1 failed; fixing |
+| 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA (round 2) |
 | 32.4 | 11.4 Screens to record: the picker on Hotkeys | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
 | 32.5 | 11.5 Refactor sweep | | pending |
 | 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
@@ -906,3 +906,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 11.3 round 1 failed at `64e2b4c` with 3 findings: (1, medium) `CompositeCapture`'s start/dispose order. A screen that fails to start leads to a Join on an unstarted clock thread, which hides the real error and leaks the other screens' captures. (2, low) `Drop`, `RemoveSource` and `CanvasSurface.Clear` aren't guarded against a dispose in between. (3, low) No test for `monitor-recording-scaled` (to be a default test with a fake encoder probe, since the soaks hold the GPU). QA passed the slot clock, D3D locking, texture lifetimes, pass-through, AD-22, the cost entry and the orchestrator rules; every default suite passed (Contracts 135, Core 168, Media 106, Platform.Capture 7, Engine 241, App 210); publish clean. Sent to qa-2-1.
 - 2026-11-05: 8.7's session started a clean fps re-run at 02:21 (from the coordinator's contamination heads-up, which crossed with the "don't re-run" message). It's left to finish, about 18 min, for a clean headline number. 8.8 is ready at `527c279` (synced, 0-warning build, re-published) and held until the lock clears; slice-epic-5 correctly didn't touch the lock.
 - 2026-11-05: QA 10.7 passed at `500157f` with no findings: cleanup only; the removed members have no references and later tickets don't name them; the C# glossary test caught a planted term; App 194 and Engine 194 passed. Core hit one load flake (`SessionOrchestratorTests.ARunningRecordingHoldsASwitchUntilItsWriterPostsBackThenItCommitsAtOnce`, which passed alone 3 times) — a candidate for the next flaky-test sweep. Before merging: narrow the test's skip rule from any line with "Log" to real log calls, and add `LibraryPage.cs` and `ShellApp.cs` to the scan. qa-1-14 merges after 8.7's fps re-run clears.
+- 2026-11-05: 11.3 round 2 at `8379a74`: the start and dispose order is fixed (a failed screen throws its own error and everything already started is disposed; default `CompositeCaptureTests` with fakes); drop and teardown are guarded; `monitor-recording-scaled` is covered by default `CanvasPlanTests` over an internal `PlanCanvas`. The mode-change scale path in Blit is a Human Check (change a recorded screen's resolution during a Monitor Recording). Media 102, Platform.Capture 8, Engine 196 and App 190 passed; publish clean. 10.7's glossary-test fixes are at `5efa52a`, and its merge waits for the fps re-run to clear.
