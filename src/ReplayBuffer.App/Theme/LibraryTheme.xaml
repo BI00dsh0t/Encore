@@ -335,33 +335,159 @@
     </Style>
 
     <!--
-        The in-app player's page (story 14.2, AD-27): the video on black, letterboxed, with the page's corners,
-        and the control bar across its bottom edge on the Overlay's card brush, so it reads over any picture in
-        both themes. The message over the video is white on that black.
+        The in-app player's page (stories 14.2 to 14.7, restyled in 14.9 after the builder's approved mockup, AD-27).
+        The video on black, letterboxed, with the page's corners (square in full screen). Under it, one thin
+        full-width seek bar above a single control row, on the Overlay's card brush so it reads over any picture;
+        in full screen the bar sits over the video's bottom edge. Played parts take the accent (the volume's,
+        the text colour), the rest a strong stroke, and the thumbs are round in the text colour (white in the
+        dark looks). Icon buttons are 40 px, the glyphs Segoe Fluent Icons. Tokens only, in both looks.
     -->
+    <FontFamily x:Key="RbPlayerGlyphFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
     <Style x:Key="RbPlayerBackdropStyle" TargetType="Border">
         <Setter Property="Background" Value="Black" />
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}" />
         <Setter Property="ClipToBounds" Value="True" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsFullScreen}" Value="True">
+                <Setter Property="CornerRadius" Value="0" />
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
+
     <Style x:Key="RbPlayerBarStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource RbOverlayCardBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}" />
-        <Setter Property="Padding" Value="8" />
-        <Setter Property="Margin" Value="16,0,16,16" />
+        <Setter Property="Padding" Value="16,10,16,6" />
+        <Style.Triggers>
+            <!-- Full screen: the bar over the video's bottom edge. -->
+            <DataTrigger Binding="{Binding IsFullScreen}" Value="True">
+                <Setter Property="Grid.Row" Value="0" />
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
-    <!-- The transport's time (story 14.5): text-primary on the bar, tabular figures so it doesn't jitter as it counts. -->
+
+    <!-- The time, elapsed / total: text-primary, tabular figures so it doesn't jitter as it counts. -->
     <Style x:Key="RbPlayerTimeStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="14" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
     </Style>
+
     <Style x:Key="RbPlayerMessageStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="TextAlignment" Value="Center" />
         <Setter Property="Margin" Value="16" />
+    </Style>
+
+    <!-- A 40 px icon button: transparent, subtle fills on hover and press, the glyph in text-primary. -->
+    <ControlTemplate x:Key="RbPlayerIconTemplate" TargetType="ButtonBase">
+        <Border x:Name="Fill"
+                Background="{TemplateBinding Background}"
+                CornerRadius="{DynamicResource ControlCornerRadius}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+    <Style x:Key="RbPlayerIconButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource RbPlayerGlyphFont}" />
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="Template" Value="{StaticResource RbPlayerIconTemplate}" />
+    </Style>
+    <!-- The gear: the same button, held in the subtle fill while its menu is open. -->
+    <Style x:Key="RbPlayerIconToggleStyle" TargetType="ToggleButton">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource RbPlayerGlyphFont}" />
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="Template" Value="{StaticResource RbPlayerIconTemplate}" />
+        <Style.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- The sliders' parts: a 4 px rounded line in a 16 px hit area, and a 12 px round thumb. -->
+    <Style x:Key="RbPlayerLineStyle" TargetType="RepeatButton">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Grid Background="Transparent">
+                        <Border Height="4" VerticalAlignment="Center" Background="{TemplateBinding Background}" CornerRadius="2" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="RbPlayerThumbStyle" TargetType="Thumb">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Ellipse Width="12" Height="12" Fill="{DynamicResource TextFillColorPrimaryBrush}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <ControlTemplate x:Key="RbPlayerSliderTemplate" TargetType="Slider">
+        <Grid Background="Transparent">
+            <Track x:Name="PART_Track">
+                <Track.DecreaseRepeatButton>
+                    <RepeatButton Background="{TemplateBinding Foreground}" Command="Slider.DecreaseLarge" Style="{StaticResource RbPlayerLineStyle}" />
+                </Track.DecreaseRepeatButton>
+                <Track.IncreaseRepeatButton>
+                    <RepeatButton Background="{TemplateBinding BorderBrush}" Command="Slider.IncreaseLarge" Style="{StaticResource RbPlayerLineStyle}" />
+                </Track.IncreaseRepeatButton>
+                <Track.Thumb>
+                    <Thumb Style="{StaticResource RbPlayerThumbStyle}" />
+                </Track.Thumb>
+            </Track>
+        </Grid>
+    </ControlTemplate>
+    <!-- The seek bar: the played part in the accent (Foreground), the rest a strong stroke (BorderBrush). -->
+    <Style x:Key="RbPlayerSeekStyle" TargetType="Slider">
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrongStrokeColorDisabledBrush}" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="Template" Value="{StaticResource RbPlayerSliderTemplate}" />
+    </Style>
+    <!-- The volume: its played part in the text colour, as the thumb. -->
+    <Style x:Key="RbPlayerVolumeStyle" TargetType="Slider">
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrongStrokeColorDisabledBrush}" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="Template" Value="{StaticResource RbPlayerSliderTemplate}" />
+    </Style>
+
+    <!-- The gear menu's heading, "Audio track": caption size, text-secondary, not a choice. -->
+    <Style x:Key="RbPlayerMenuHeadingStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     </Style>
 </ResourceDictionary>

@@ -54,6 +54,15 @@ internal sealed class MainViewModel : Observable
             };
         }
 
+        // Story 14.9: the shell follows the player page's full screen; a page closing leaves it.
+        Library.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LibraryPage.Player))
+            {
+                WatchPlayer(Library.Player);
+            }
+        };
+
         // The welcome card's links (story 10.6).
         Library.Welcome.Navigate = link => SelectedNavItem = NavItems.First(i => i.Page == link switch
         {
@@ -154,6 +163,18 @@ internal sealed class MainViewModel : Observable
         }
     }
 
+    /// <summary>Whether the player page fills the screen (story 14.9): the window drops its frame, nav and headers.</summary>
+    public bool IsPlayerFullScreen => Library.Player?.IsFullScreen == true;
+
+    /// <summary>Esc in full screen: back to the window, the player page still open.</summary>
+    public void LeavePlayerFullScreen()
+    {
+        if (Library.Player is { } player)
+        {
+            player.IsFullScreen = false;
+        }
+    }
+
     /// <summary>The page header's title: "Library" or the settings page's.</summary>
     public string CurrentTitle => SelectedNavItem.Title;
 
@@ -240,6 +261,32 @@ internal sealed class MainViewModel : Observable
         foreach (var page in Pages)
         {
             page.Render(state.Settings);
+        }
+    }
+
+    private PlayerPage? _watchedPlayer;
+
+    private void WatchPlayer(PlayerPage? player)
+    {
+        if (_watchedPlayer is { } old)
+        {
+            old.PropertyChanged -= OnPlayerPropertyChanged;
+        }
+
+        _watchedPlayer = player;
+        if (player is not null)
+        {
+            player.PropertyChanged += OnPlayerPropertyChanged;
+        }
+
+        OnPropertyChanged(nameof(IsPlayerFullScreen));
+    }
+
+    private void OnPlayerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PlayerPage.IsFullScreen))
+        {
+            OnPropertyChanged(nameof(IsPlayerFullScreen));
         }
     }
 

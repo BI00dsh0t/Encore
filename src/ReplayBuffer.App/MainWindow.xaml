@@ -29,7 +29,7 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <DockPanel Margin="{DynamicResource RbNavPanePadding}">
+        <DockPanel x:Name="NavPane" Margin="{DynamicResource RbNavPanePadding}">
             <ContentControl x:Name="Brand"
                             Margin="{DynamicResource RbNavBrandMargin}"
                             Content="{Binding Title, ElementName=Shell}"
@@ -51,13 +51,13 @@
                      TextSearch.TextPath="Title" />
         </DockPanel>
 
-        <Border Grid.Column="1" Style="{DynamicResource RbShellContentLayerStyle}">
-            <DockPanel Margin="{DynamicResource RbPagePadding}">
+        <Border x:Name="ContentLayer" Grid.Column="1" Style="{DynamicResource RbShellContentLayerStyle}">
+            <DockPanel x:Name="ContentPanel" Margin="{DynamicResource RbPagePadding}">
                 <ContentControl x:Name="StatusHeader"
                                 Content="{Binding StatusLine.View}"
                                 DockPanel.Dock="Top"
                                 Focusable="False" />
-                <Grid Margin="0,16,0,0" DockPanel.Dock="Top">
+                <Grid x:Name="PageHeader" Margin="0,16,0,0" DockPanel.Dock="Top">
                     <ContentControl x:Name="PageTitle"
                                     Content="{Binding CurrentTitle}"
                                     Style="{DynamicResource RbPageTitleStyle}"

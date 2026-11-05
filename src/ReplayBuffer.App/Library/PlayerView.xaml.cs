@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -21,6 +22,7 @@ namespace ReplayBuffer.App.Library;
 /// Failed state rather than leaving a blank picture.</item>
 /// <item>After a lost front buffer (a lock screen, a display change) the surface is remade and the current frame redrawn.</item>
 /// <item>Leaving the page drops its frames before the back buffer goes (the proof's close order).</item>
+/// <item>The controls (story 14.9): the gear's menu, the volume slider that slides out, and F for full screen.</item>
 /// <item>The transport (story 14.5): the position is read for the seek bar about ten times a second while playing,
 /// a drag of the seek bar's thumb seeks about once a rendered frame, and the keys bubble here, so a focused
 /// control's own keys win.</item>
@@ -44,6 +46,8 @@ internal partial class PlayerView
     private PlayerPage? _page;
     private VideoSurface? _surface;
     private int _presentPending;
+    private ContextMenu? _menu;
+    private bool _volumeHover;
 
     // Frames the player itself has delivered since the page opened: what the no-picture timer waits for.
     private int _playerFrames;
@@ -74,6 +78,19 @@ internal partial class PlayerView
         DataContextChanged += (_, e) => Attach(e.NewValue as PlayerPage);
         Unloaded += (_, _) => Attach(null);
         Loaded += (_, _) => Attach(DataContext as PlayerPage);
+
+        // Story 14.9: the volume slider slides out while the pointer or keyboard focus is in the speaker's group.
+        VolumeGroup.MouseEnter += (_, _) =>
+        {
+            _volumeHover = true;
+            UpdateVolumeShown();
+        };
+        VolumeGroup.MouseLeave += (_, _) =>
+        {
+            _volumeHover = false;
+            UpdateVolumeShown();
+        };
+        VolumeGroup.IsKeyboardFocusWithinChanged += (_, _) => UpdateVolumeShown();
     }
 
     /// <summary>The surface's texture size now, or null with none: for tests.</summary>
@@ -114,6 +131,7 @@ internal partial class PlayerView
 
         // The scrub stops while its page is still known, so the page's IsScrubbing is cleared (QA 14.5).
         StopScrub();
+        CloseSettingsMenu();
         _page = null;
         _settle.Stop();
         _position.Stop();
@@ -331,12 +349,87 @@ internal partial class PlayerView
             case Key.Down:
                 page.ChangeVolume(-PlayerPage.VolumeStep);
                 break;
+            case Key.F:
+                page.FullScreenCommand.Execute(null);
+                break;
             default:
                 return;
         }
 
         e.Handled = true;
     }
+
+    /// <summary>Whether the volume slider shows: for tests.</summary>
+    internal bool IsVolumeShown => VolumeBar.Visibility == Visibility.Visible;
+
+    /// <summary>The gear's menu while it's open, else null: for tests.</summary>
+    internal ContextMenu? SettingsMenu => _menu is { IsOpen: true } menu ? menu : null;
+
+    /// <summary>
+    /// Opens the gear's menu (story 14.9): headed "Audio track", the Tracks in file order with the playing one
+    /// ticked (one Windows can't decode is shown and can't be chosen), a divider, then "Open in default player".
+    /// It's the theme's ContextMenu, so Esc, a click outside and a choice close it, and the arrow keys move through
+    /// its items; the heading isn't one of them.
+    /// </summary>
+    internal ContextMenu? OpenSettingsMenu()
+    {
+        if (_page is not { IsClosed: false } page)
+        {
+            return null;
+        }
+
+        CloseSettingsMenu();
+        var menu = new ContextMenu { PlacementTarget = Gear, Placement = PlacementMode.Top };
+        menu.Items.Add(new MenuItem
+        {
+            Header = new TextBlock { Text = "Audio track", Style = (Style)FindResource("RbPlayerMenuHeadingStyle") },
+            Focusable = false,
+            IsHitTestVisible = false,
+        });
+        foreach (var track in page.Tracks)
+        {
+            var item = new MenuItem { Header = track.Name, IsChecked = track.IsPlaying, IsEnabled = track.IsAvailable };
+            item.Click += (_, _) => page.SelectedTrack = track;
+            menu.Items.Add(item);
+        }
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem { Header = "Open in default player", Command = page.OpenInDefaultPlayerCommand });
+        menu.Closed += (_, _) => Gear.IsChecked = false;
+        _menu = menu;
+        menu.IsOpen = true;
+        Gear.IsChecked = true;
+        return menu;
+    }
+
+    // The gear, by click, Enter or Space: opens its menu, or closes it when it's open.
+    private void OnGearClick(object sender, RoutedEventArgs e)
+    {
+        if (_menu is { IsOpen: true })
+        {
+            CloseSettingsMenu();
+            return;
+        }
+
+        if (OpenSettingsMenu() is null)
+        {
+            Gear.IsChecked = false;
+        }
+    }
+
+    private void CloseSettingsMenu()
+    {
+        if (_menu is { } menu)
+        {
+            _menu = null;
+            menu.IsOpen = false;
+        }
+
+        Gear.IsChecked = false;
+    }
+
+    private void UpdateVolumeShown() =>
+        VolumeBar.Visibility = _volumeHover || VolumeGroup.IsKeyboardFocusWithin ? Visibility.Visible : Visibility.Collapsed;
 
     // Dragging the seek bar's thumb: the page keeps only the latest position, applied once a rendered frame.
     private void OnScrubStarted(object sender, DragStartedEventArgs e)
