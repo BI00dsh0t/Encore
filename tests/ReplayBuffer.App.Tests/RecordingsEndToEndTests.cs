@@ -23,7 +23,7 @@ namespace ReplayBuffer.App.Tests;
 /// Story 6.13's closing check of epic 6, the parts that need no capture (the builder has paused GPU tests):
 /// the whole engine (<c>EngineHost</c>) in-process on a throwaway test instance with the Replay Buffer off,
 /// the App's own <see cref="EngineConnection"/> and the real <c>MainViewModel</c>'s pages. It walks the
-/// Recordings settings through the Game Profiles, Hotkeys and Recordings pages and across an engine restart,
+/// Recordings settings through a game's page and the Hotkeys page (with its screen picker) and across an engine restart,
 /// <c>monitors.list</c> on this PC, the Hotkeys rows each Record mode shows, Recording and Monitor Recording
 /// names and folders from Core's allocator as the Library sees them, and an interrupted fragmented MP4
 /// (made by <c>ffmpeg.exe</c> on the CPU) trimmed at the next start with <c>recording-interrupted</c>.
@@ -184,7 +184,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             var engine = third.Engine;
             Until(() => third.Main.StatusLine.Warnings.Count(w => w.Message.Contains("was cut short", StringComparison.Ordinal)) == 2, "two recording-interrupted warnings on the status line");
             Assert.Equal(2, engine.State!.Warnings.Count(w => w.Code == ErrorCodes.RecordingInterrupted));
-            Assert.Contains(engine.State.Warnings, w => w.Code == ErrorCodes.RecordingInterrupted && w.Message.Contains(torn, StringComparison.Ordinal) && w.Message.Contains("last whole fragment", StringComparison.Ordinal));
+            Assert.Contains(engine.State.Warnings, w => w.Code == ErrorCodes.RecordingInterrupted && w.Message.Contains(torn, StringComparison.Ordinal) && w.Message.Contains("the last part that was fully written", StringComparison.Ordinal));
             Assert.Contains(engine.State.Warnings, w => w.Code == ErrorCodes.RecordingInterrupted && w.Message.Contains(empty, StringComparison.Ordinal) && w.Message.Contains("removed", StringComparison.Ordinal));
 
             Assert.Equal(tornAt, new FileInfo(torn).Length);
