@@ -168,7 +168,7 @@ The coordinator logs each QA round in the Log below.
 | 29.5 | 8.5 Monitor changes | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `af6eab8`) |
 | 29.6 | 8.6 Nothing to re-select after a reboot, a restart or a mixer restart | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | done (merged `041a8b6`) |
 | 29.7 | 8.7 Final conformance run | slice-epic-8 pool worker (local_72b7980a-c079-4b93-949b-0a98dc8cee69) | merged `1400c42`; ticket open, fps run pending (the builder must close the Dev App) |
-| 29.8 | 8.8 8-hour soaks in Memory and Disk mode | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | in progress (build and smoke; soaks wait for the builder) |
+| 29.8 | 8.8 8-hour soaks in Memory and Disk mode | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | stopped by the builder at `e3822aa`; 2 smoke reruns, then 2 × 8 h soaks, wait for the go-ahead |
 | 29.9 | 8.9 T-01 to T-25 conformance record | | pending |
 | 29.10 | 8.10 Refactor sweep | | pending |
 | 29.11 | 8.11 Hands-off operation on the builder's PC | | pending |
@@ -791,3 +791,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: QA 8.7 passed (the code and the drift and playback results) at `159922a`. 8.7 merges now, but its ticket stays open until the fps run, which waits for the builder to close the Dev App. 8.8 starts its build and short smoke runs on top of it; its 16 hours of soaks wait for the builder's go-ahead (and the Dev App closed, which would spoil them too).
 - 2026-11-04: 8.7 merged (`1400c42`; docs `e2bef31` with 5 Human Check rows). The ticket stays open until the fps run. 8.8 went to slice-epic-5 (Opus) for the build and short smoke soaks only. The two 8-hour soaks wait for the builder's go-ahead, and probably for the Dev App to be closed.
 - 2026-11-05: **Builder: "stop the current tests."** 8.8's Memory smoke rerun was stopped: the session's turn interrupted, and told to stop its own soak processes and monitor and to start no further tests until the builder says so.
+- 2026-11-05: 8.8 stopped at `e3822aa` (not merged). Nothing is running and `.bench-running` is clear. Smoke 1 (Memory, 10 min) missed only on harness bugs: 16/17 Clips, 10/10 bounds, the kill-app recovered in 1 s and saved, 2/2 Recordings with 4 Tracks, Cleanup kept all Favourites. All 3 harness bugs are fixed (a separate Recording check queue, the two-clock bucket size, the recovery count), but not yet re-verified. The Dev App doesn't detect the soak's marker window, so the soaks don't need it closed. Left: rerun the Memory and Disk smokes (about 11 min each), then 2 × 8 h soaks, all on the builder's go-ahead.
