@@ -134,9 +134,10 @@ internal sealed record CaptureSessionOptions
     public Action<string>? ResetGap { get; init; }
 
     /// <summary>
-    /// Spike 11.1, dev only (<c>debug-capture --monitors</c>): the session captures these monitors
-    /// (GDI device names; empty for every attached monitor) composited into one canvas
-    /// (<see cref="CompositeCapture"/>) instead of its window or its one monitor; null for the normal path.
+    /// Dev only (<c>debug-capture --monitors</c>, spike 11.1; kept for the NFR-1 cost measurements of
+    /// <c>measure-path-a.ps1 -mon&lt;mode&gt;</c>): a file session captures these monitors (GDI device
+    /// names; empty for every attached monitor) composited into one canvas (<see cref="CompositeCapture"/>)
+    /// instead of a window. A Monitor session composites its resolved screens instead (story 11.3).
     /// </summary>
     public IReadOnlyList<string>? CompositeMonitors { get; init; }
 
@@ -368,29 +369,22 @@ internal sealed class CaptureSession : ICaptureSession
             _monitor = _composite[0].Monitor;
             _log.LogInformation("Monitor capture of {Count} screens composited: {Screens}", _composite.Count, string.Join("; ", _composite));
         }
-        else if (IsMonitor && _spec.Screens is [var only])
+        else if (IsMonitor)
         {
-            _monitor = MonitorFinder.Find(only.DeviceName, _log);
+            // One screen, the pass-through: the resolved one (monitorRecordingScreens), else the old
+            // monitorRecordingMonitor's (null for the primary), captured as before 11.3.
+            _monitor = MonitorFinder.Find(_spec.Screens is [var only] ? only.DeviceName : _spec.Snapshot.MonitorRecordingMonitor, _log);
             _log.LogInformation("Monitor capture of {Device}", _monitor.DeviceName);
         }
         else if (_options.CompositeMonitors is { } names)
         {
-            // Spike 11.1: the device goes on the primary composited monitor's adapter.
+            // debug-capture --monitors (spike 11.1, kept for cost measurements): a file session of the
+            // composited monitors, its device on the primary composited monitor's adapter.
             _composite = MonitorCanvas.Place(names);
             if (_composite.Count == 0)
             {
                 throw new EngineFailure(ErrorCodes.CaptureFailed, $"None of the monitors '{string.Join(", ", names)}' is attached.");
             }
-
-            if (IsMonitor)
-            {
-                _monitor = _composite[0].Monitor;
-            }
-        }
-        else if (IsMonitor)
-        {
-            _monitor = MonitorFinder.Find(_spec.Snapshot.MonitorRecordingMonitor, _log);
-            _log.LogInformation("Monitor capture of {Device}", _monitor.DeviceName);
         }
         else
         {
