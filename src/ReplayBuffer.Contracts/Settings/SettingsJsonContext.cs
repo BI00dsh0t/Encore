@@ -24,6 +24,7 @@ namespace ReplayBuffer.Contracts.Settings;
 [JsonSerializable(typeof(AppTheme))]
 [JsonSerializable(typeof(FeedbackSounds))]
 [JsonSerializable(typeof(CleanupSettings))]
+[JsonSerializable(typeof(MonitorRecordingScreens))]
 [JsonSerializable(typeof(AppliesAt))]
 [JsonSerializable(typeof(IReadOnlyList<string>))]
 [JsonSerializable(typeof(string))]

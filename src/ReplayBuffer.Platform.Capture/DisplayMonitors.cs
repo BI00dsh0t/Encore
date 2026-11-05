@@ -44,7 +44,7 @@ public sealed unsafe partial class DisplayMonitors(ILogger logger) : IDisplayMon
     {
         try
         {
-            return [.. MonitorFinder.Describe().Select(m => new DisplayMonitor(m.DeviceName, m.FriendlyName, m.Width, m.Height, m.IsPrimary))];
+            return [.. MonitorFinder.Describe().Select(m => new DisplayMonitor(m.DeviceName, m.FriendlyName, m.Width, m.Height, m.IsPrimary, m.MonitorId, m.X, m.Y, m.RefreshHz, m.Hdr))];
         }
         catch (Exception e)
         {
