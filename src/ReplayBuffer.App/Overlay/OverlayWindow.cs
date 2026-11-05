@@ -98,7 +98,7 @@ internal sealed class OverlayWindow : ShellWindow
     {
         _model = model;
         _locate = locate ?? Monitors.ForProcess;
-        Title = "Replay Buffer Overlay";
+        Title = "ReplayBuffer Overlay";
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;

@@ -32,6 +32,9 @@ public sealed class DeviceDropoutReporterTests
             Assert.False(w.Overlay);
             Assert.True(w.Dismissable);
             Assert.Contains("'Game'", w.Message, StringComparison.Ordinal);
+
+            // Story 10.11: the glossary's words, the code unchanged.
+            Assert.EndsWith("was disconnected. Your audio tracks record silence from it until it's back.", w.Message, StringComparison.Ordinal);
         });
         Assert.NotEqual(warnings[0].Id, warnings[1].Id);
     }

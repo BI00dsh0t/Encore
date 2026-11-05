@@ -20,7 +20,7 @@ internal static class InterruptedRecordings
         var messages = new List<string>(paths.Count);
         foreach (var path in paths)
         {
-            messages.Add($"The Recording {path} was cut short: the engine stopped while it was being written. {RecoverOne(path, log)}");
+            messages.Add($"The Recording {path} was cut short: ReplayBuffer's background service stopped while it was being written. {RecoverOne(path, log)}");
         }
 
         return messages;

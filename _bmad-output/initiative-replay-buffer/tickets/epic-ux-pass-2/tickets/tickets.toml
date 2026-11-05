@@ -111,6 +111,7 @@ covers = []
 after = [1, 2, 3, 4, 5, 6, 9, 10, 11]
 hitl = false
 risk = "low"
+notes = ["QA 10.11, 2026-11-05: the glossary test checks the App's XAML only. Extend it to the user-facing strings set in C#: the engine's warning.raised texts, the Overlay notices and the view models' strings (status, refusals, dialogs, tray)."]
 
 [[entry]]
 id = 8

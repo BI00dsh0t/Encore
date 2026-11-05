@@ -79,8 +79,8 @@ internal sealed class AppSupervisor(EventHub hub, Warnings warnings, IAppLaunche
                 WarningSeverity.Warning,
                 "supervision",
                 reason == EngineRestartReason.Hung
-                    ? "The engine stopped answering and was restarted."
-                    : "The engine stopped unexpectedly and was restarted.",
+                    ? "ReplayBuffer's background service stopped answering and was restarted."
+                    : "ReplayBuffer's background service stopped unexpectedly and was restarted.",
                 overlay: false);
         }
     }

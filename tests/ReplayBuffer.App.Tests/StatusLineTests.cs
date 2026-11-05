@@ -22,14 +22,14 @@ public sealed class StatusLineTests
     {
         var line = new StatusLine(_engine);
 
-        Assert.Equal("Replay Buffer off", Render(line, CaptureState.Initial with { MicMuted = false }));
+        Assert.Equal("Waiting for a game", Render(line, CaptureState.Initial with { MicMuted = false }));
         Assert.Equal(
-            "Buffering on Game.exe · Mic muted",
+            "Ready to save Clips in Game.exe · Mic muted",
             Render(line, CaptureState.Initial with { Replay = ReplayState.Buffering }, new TargetGame("p1", "Game.exe", 77)));
         Assert.Equal(
-            "Draining · Recording · Monitor Recording",
+            "Finishing the save… · Recording · Monitor Recording",
             Render(line, new CaptureState(ReplayState.Draining, RecordingState.Running, RecordingState.Running, MicMuted: false, CooldownUntil: null)));
-        Assert.Equal("Buffering", Render(line, CaptureState.Initial with { Replay = ReplayState.Buffering, MicMuted = false }));
+        Assert.Equal("Ready to save Clips", Render(line, CaptureState.Initial with { Replay = ReplayState.Buffering, MicMuted = false }));
     }
 
     [Fact]

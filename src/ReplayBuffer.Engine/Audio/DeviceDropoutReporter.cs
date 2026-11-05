@@ -36,6 +36,6 @@ internal sealed class DeviceDropoutReporter : IDisposable
             ErrorCodes.DeviceDropout,
             WarningSeverity.Warning,
             "audio",
-            $"'{dropout.FriendlyName}' dropped out. Its Tracks record silence from it until it returns.",
+            $"'{dropout.FriendlyName}' was disconnected. Your audio tracks record silence from it until it's back.",
             overlay: false);
 }

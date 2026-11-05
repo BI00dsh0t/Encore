@@ -1579,7 +1579,7 @@ public sealed partial class SessionOrchestratorTests : IDisposable
         public IEnumerable<FakeWrite> Writes => _writes;
 
         /// <summary>The Info lines saying a chain change waits for the Recording.</summary>
-        public IEnumerable<string> Deferrals => _info.Where(i => i.Contains("until the Recording stops", StringComparison.Ordinal));
+        public IEnumerable<string> Deferrals => _info.Where(i => i.Contains("once the Recording stops", StringComparison.Ordinal));
 
         public async Task<FakeSession> StartAsync()
         {

@@ -92,7 +92,7 @@ public sealed class EngineClient : IAsyncDisposable
             }
             catch (Exception e) when (e is TimeoutException or IOException or UnauthorizedAccessException)
             {
-                throw new ErrorCodeException(ErrorCodes.EngineDisconnected, $"No engine answered on '{pipeName}': {e.Message}", e);
+                throw new ErrorCodeException(ErrorCodes.EngineDisconnected, $"ReplayBuffer's background service didn't answer on '{pipeName}': {e.Message}", e);
             }
 
             if (options.VerifyServer is { } verify && !verify(pipe))

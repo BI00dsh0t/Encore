@@ -34,7 +34,12 @@ public sealed class MemoryMarginReporterTests
             Assert.Equal("replay", w.Source);
             Assert.False(w.Overlay);
             Assert.True(w.Dismissable);
+
+            // Story 10.11: the glossary's words, the code unchanged.
+            Assert.StartsWith("Memory is", w.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("Replay Buffer", w.Message, StringComparison.Ordinal);
         });
+        Assert.Contains(warnings, w => w.Message == "Memory is low, so ReplayBuffer stopped keeping more gameplay. Clips may be shorter than your Clip length.");
     }
 
     private sealed class FakeMemoryStatus : IMemoryStatus
