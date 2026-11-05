@@ -4,11 +4,11 @@ type: architecture-spine
 purpose: build-substrate
 altitude: initiative
 paradigm: 'ports-and-adapters engine with a single-threaded orchestrator, hosting a pipes-and-filters media pipeline; MVVM thin client over IPC'
-scope: 'initiative-replay-buffer: the engine process and the Main App, all 13 epics'
+scope: 'initiative-replay-buffer: the engine process and the Main App, all 14 epics'
 status: final
 created: '2026-10-25'
 updated: '2026-11-05'
-binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39, R40, R41]
+binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39, R40, R41, R42]
 sources:
   - _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md
   - PLAN.md
@@ -59,6 +59,7 @@ graph LR
 - **Rule:**
   - The **engine** owns capture, encoding, the Replay Buffer, Recordings, Hotkeys, Feedback Sounds, Game Detection, settings, the library index and Cleanup.
   - The **Main App** owns UI, the Overlay, the tray and supervision. It never captures, encodes, writes settings, or opens media file contents. It may pass *paths* to the Windows shell: open, show in Explorer, the clipboard (`CF_HDROP`), and shell thumbnails (`IShellItemImageFactory`, `SIIGBF_THUMBNAILONLY`). It never asks for a thumbnail of an item that is being written.
+    - **Exception ([AD-27](#ad-27--in-app-player-winrt-mediaplayer-into-a-d3dimage-app-side-and-read-only), 2026-11-05):** the App may open a *finished* media file read-only, shared for read, write and delete, to play it in the in-app player. It never opens a file being written.
 
 ### AD-2 — Dependency direction
 
@@ -67,6 +68,7 @@ graph LR
 - **Rule:**
   - The diagram above is the only allowed reference graph; `App` and `Engine` never reference each other.
   - `Platform.Desktop` holds the App's own Win32 calls and references nothing; only the App references it. (Story 1.7, 2026-10-25.)
+    - That includes the in-app player's D3D11 and D3D9Ex interop (AD-27).
   - Only `ReplayBuffer.Platform.*` contains `unsafe` code, P/Invoke, COM or FFmpeg calls.
   - **Exception (story 11.4, 2026-11-05):** the App compiles `Core/Monitors/MonitorCanvasRule.cs` as a linked source file, so the engine and the Hotkeys screen picker share one canvas rule (AD-25) without an App → Core edge. That file may use only Contracts types. App.Tests sees the type twice (App's copy and, through the engine, Core's), so it must not name it, or it gets CS0433.
 
@@ -160,10 +162,11 @@ graph LR
 
 ### AD-9 — Containers and the file-write protocol
 
-- **Binds:** R4, R7, R11, R12, R26, R27, R33
-- **Prevents:** crash-unsafe Recordings; Clips that won't play everywhere; a half-written file showing up as a Library item
+- **Binds:** R4, R7, R11, R12, R26, R27, R33, R42
+- **Prevents:** crash-unsafe Recordings; Clips that won't play everywhere; a half-written file showing up as a Library item; a Recording that Windows' players end a fragment early
 - **Rule:**
   - **Recordings and Monitor Recordings** are fragmented MP4, written in place, with a fragment flushed at least every 1 s.
+    - At finalize, before `EndWrite`, the writer adds an `mehd` with the fragment duration to `moov/mvex`, in place, so Windows' players show the full length and play the last fragment (AD-27, story 14.3).
   - **Clips** are complete MP4 files with the index at the front (faststart). Each is written to `<final>.rbpart` in the same folder, then renamed. (Deviates from PLAN.md's fMP4-everywhere; confirmed by the user.)
   - **Audio:** AAC-LC at 48 kHz, one stream per Track, with the stream `title` set to the Track name and Track 1 marked default.
   - **Writers** open files with `FILE_SHARE_READ | FILE_SHARE_DELETE`. Every writer calls `Library.BeginWrite` before creating a file, and `EndWrite(outcome)` after the rename or final flush.
@@ -251,6 +254,7 @@ graph LR
   - **LibraryActor:** a single-threaded actor in Core. It handles watcher events, IPC commands, `BeginWrite`/`EndWrite`, and every Cleanup step, and it re-checks Favourite and being-written status immediately before each delete.
     - The engine's own renames and deletes are registered in advance, so their watcher echoes are ignored.
     - A rename made outside the app moves the item's metadata to the new path.
+    - A file the in-app player is playing is open shared for delete (AD-27), so it never blocks a rename, delete or Cleanup step.
   - **Index file:** `library.json` holds items keyed by path relative to the Output Folder, each with the `profileId` recorded at `BeginWrite`; the Library groups items by `profileId`. The file is written atomically, with a `.bak`. If neither copy parses, `library-corrupt` is raised and Cleanup stays off until the user acknowledges it.
   - **Cleanup:** never runs in the first 60 s after start, or before the first folder scan has been reconciled. It considers only indexed `*.mp4` items.
   - **Temporary files:** `*.rbpart` files are always ignored, and deleted when the engine starts.
@@ -399,6 +403,49 @@ graph LR
   - **Monitor Recording:** with `matchSource` on, one screen records at its physical mode size through `MonitorCanvasRule.Plan`. That is AD-25's canvas rule for one screen, its switch to HEVC or AV1 over 4096 px included. Several screens keep AD-25's canvas, which is already full size. The size is fixed per file (AD-25).
   - **Cost:** encoder load grows with the pixel count. Story 12.2 measures the Replay Buffer at 2560×1440 source size against NFR-1 (R36) and records the result in epic 12's Notes.
 
+### AD-27 — In-app player: WinRT MediaPlayer into a D3DImage, App-side and read-only
+
+- **Binds:** R42; R11, R12, R15, R21, R28, R33
+- **Prevents:**
+  - a second media stack in the App (LibVLC, WebView2, FFME or our own FFmpeg decode);
+  - an airspace window that the looks and controls can't draw over;
+  - a playing file that blocks the engine's rename, delete or Cleanup;
+  - a half-written file opened for playback;
+  - the wrong Track playing at open;
+  - a Recording that ends a fragment early in Windows' players.
+- **Rule:**
+  - **Owner:** playback is App-only (an exception to AD-1). The engine plays nothing, and no IPC message, Contracts type or settings key is added (AD-22). The player's volume is App-side view state, kept with the Library's sort and grouping.
+  - **Opening:** only a Library item that isn't being written (the row's locked state, AD-17). Enter or a double-click on a row still being written does nothing, and "Open in default player" still hands its path to the shell (AD-1).
+    - The App opens the file read-only, with `FileShare.ReadWrite | FileShare.Delete`, and hands it to the player as a stream (`MediaSource.CreateFromStream`), never by path. So the LibraryActor's renames, deletes and Cleanup (AD-17) never fail on a playing file.
+    - When the item leaves the Library, the page closes and disposes the player and the stream.
+  - **Player:** WinRT `Windows.Media.Playback.MediaPlayer` (Media Foundation), from the target framework's projection; no package. It sits behind a small App seam (open, play, pause, position, Tracks, events), so view models are tested against a fake.
+  - **Rendering, with no airspace:**
+    - `IsVideoFrameServerEnabled` is set before playing.
+    - On `VideoFrameAvailable`, `CopyFrameToVideoSurface` copies the frame, scaled, into a shared D3D11 BGRA texture at the view's pixel size.
+    - A D3D9Ex device opens that texture (`OpenSharedResource`), and a WPF `D3DImage` shows its surface. The App marks the `D3DImage` dirty on the UI thread only when a frame was copied.
+    - The texture is remade when the view's pixel size changes. The picture is letterboxed with its aspect kept, and the page's controls and theme brushes draw over it (AD-23).
+  - **Interop placement (AD-2, AD-14):** the D3D11 device and texture, the D3D9Ex device and surface, and the `IDirect3DSurface` wrapper (`CreateDirect3D11SurfaceFromDXGISurface`, then `FromAbi`) live in `Platform.Desktop`, through CsWin32. They pass its AOT analyzers. The App holds the `MediaPlayer` and the `D3DImage` and makes no Win32 call itself. Each player page has its own D3D11 device, released when the page closes.
+  - **Tracks:** one plays at a time.
+    - Media Foundation ignores the MP4 default flag and opens on the *last* Track. So the App sets `AudioTracks.SelectedIndex = 0` (Track 1, the default under AD-9) when the item opens, before it plays.
+    - A switch sets `SelectedIndex` mid-play. It leaves a gap of about 0.1 s and doesn't move the position.
+    - Names come from `AudioTrack.Name`, which reads the stream's `handler_name`, which AD-9's writers set to the Track name.
+    - Mixing several Tracks is parked.
+  - **Codecs:** H.264, HEVC and AV1 play through Windows' decoders.
+    - HEVC and AV1 need the **HEVC Video Extension** and the **AV1 Video Extension** from the Microsoft Store. They're an external touch point (the initiative's Boundaries), and the app never installs them.
+    - When the video Track's `SupportInfo.DecoderStatus` isn't `FullySupported`, or `MediaFailed` is raised, the page says so in plain words, links to the extension's Store page and offers the shell's default player.
+    - A dev-instance switch can force that state for tests; it's never on in a normal run.
+  - **Recording length (amends AD-9):**
+    - Media Foundation takes a fragmented MP4's length from its last `mfra` entry and ends playback there, up to one fragment early. So the Recording writer adds an `mehd` (the fragment duration) to `moov/mvex` at finalize.
+    - The `mehd` is written in place, with no later bytes moved, and before `EndWrite`, so the Library never lists a half-patched file. Story 14.3 settles how; the lead is to take the first 16 bytes of the `udta` that follows `mvex` and leave the rest as a `free` box.
+    - Clips (faststart) are unaffected. Recordings made before the change play up to their last fragment, and nothing rewrites them.
+    - A crash-cut Recording, with no `mfra`, has no known length: the page shows the elapsed time only and turns seeking off.
+  - **Not in the player:** editing (the initiative's Boundaries), playing a file still being written, and full screen, speed and frame step (parked).
+  - **Measured** (`research/in-app-player.md`, 2026-11-05):
+    - 30 of 30 audible Track switches were correct;
+    - seeks took 7–144 ms;
+    - a 6400×2160 HEVC frame scaled into a 1600×540 texture in about 2 ms per copy;
+    - an `mehd` patched into a fixture made Windows play it to the end.
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -428,6 +475,7 @@ graph LR
 | FFmpeg.AutoGen.Abstractions + FFmpeg.AutoGen.Bindings.DynamicallyLinked | 9.0.1.1 |
 | FFmpeg native | 9.0.2, BtbN month-end `win64-gpl-shared-9.0` asset, SHA-256 pinned in `tools/fetch-ffmpeg.ps1` |
 | H.NotifyIcon.Wpf | 2.4.1 |
+| In-app playback (AD-27) | WinRT `Windows.Media.Playback` (Media Foundation), from the target framework; HEVC and AV1 Video Extensions from the Microsoft Store for those codecs |
 
 ## Structural Seed
 
@@ -435,7 +483,7 @@ graph LR
 graph TB
   subgraph PC[Builder's PC — single user session]
     subgraph App[ReplayBuffer.App — WPF, unelevated]
-      UI[Main App: Library · Settings · Meters]
+      UI[Main App: Library · Player · Settings · Meters]
       OV[Overlay window]
       TR[Tray + engine supervisor]
     end
@@ -481,7 +529,7 @@ ReplayBuffer/
     ReplayBuffer.Platform.Audio/    # AudioDeviceHub (WASAPI, MMDevice)
     ReplayBuffer.Platform.FFmpeg/   # encode/mux via FFmpeg.AutoGen bindings
     ReplayBuffer.Platform.Windows/  # Hotkeys, GameMonitor, Canonicalize, file system, sounds
-    ReplayBuffer.Platform.Desktop/  # the App's Win32 calls: capture exclusion, server checks
+    ReplayBuffer.Platform.Desktop/  # the App's Win32 calls: capture exclusion, server checks, player D3D interop
     ReplayBuffer.Engine/            # composition root, IPC server (NativeAOT exe)
     ReplayBuffer.App/               # WPF Main App, Overlay, tray, supervisor
   tests/                            # *.Tests per project
@@ -513,6 +561,7 @@ ReplayBuffer/
 | R37 themes | App (ThemeService, theme dictionaries), Contracts (key catalog) | AD-23, AD-4 |
 | R40 source-resolution output | Contracts (`video` key), Core (size rule), Engine (chain sizing and moves), App (Video quality) | AD-26, AD-7, AD-25, AD-4, AD-22 |
 | R41 new games captured by default, or not | Contracts (`captureNewGames` key), Engine (new Game Profiles), Platform.Windows (detection), App (General) | AD-4, AD-5, AD-18, AD-22 |
+| R42 in-app player, Track switching | App (Library player page, player view model and seam), Platform.Desktop (D3D11 and D3D9Ex interop), Platform.FFmpeg (`mehd` at finalize) | AD-27, AD-1, AD-2, AD-9, AD-14, AD-17, AD-23, AD-24 |
 | R39 multi-monitor Monitor Recording | Media (MonitorCompositor), Platform.Capture, Core (screen resolver, canvas rule), App (Hotkeys picker) | AD-25, AD-7, AD-12, AD-22 |
 | R38 Library selection and bulk actions, audio-tracks editor, first-run seed, Games, settings pages, plain labels | App (Library, Audio Tracks, Games and settings view models), Engine (settings seed, warning texts), Core (LibraryActor kind), Platform.Audio (default device) | AD-24, AD-17, AD-4, AD-20, AD-21, AD-22 |
 | R32 Hotkeys | Platform.Windows | AD-11 |
