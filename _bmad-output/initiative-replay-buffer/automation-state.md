@@ -44,7 +44,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (holds 8.7 for its pending fps run) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.5 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 10.5 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.2 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -185,7 +185,7 @@ The coordinator logs each QA round in the Log below.
 | 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (slice-epic-5) |
 | 31.3 | 10.3 Library sort and search | | pending |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
+| 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA (2-1-tracer) |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | | pending |
 | 31.7 | 10.10 Games list and a page per game | | pending |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
@@ -827,3 +827,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.4 merged (`3bec10b`, `feat(engine): merge 10.4-audio-defaults-presets`), after QA's race note was folded in (`6773990`: the disconnect's queued unwatch keeps a newer watch) and develop was synced: 0-warning build, Contracts 128, Core 161, Engine 190, Platform.Audio 26 and App 155 passed, 0 failed; publish clean. Heavy meter cost (QA): 30 devices probed, +0.036 core, 16.0 levels/s; probes kept. Marked done. qa-1-14 is back in the pool.
 - 2026-11-05: 10.4 merged (`3bec10b`, marked done `4606533`; race fix `6773990` with `MeterServeTests.ALateDisconnectUnwatchKeepsANewerWatch`), and its card is Done. 10.5 (the Audio Tracks editor) went to qa-1-14, which built 10.4 (Opus, medium effort; context kept), with its card In progress.
 - 2026-11-05: 10.2 READY FOR QA at `90f1d5e`: App 158, Core 161, Contracts 125 and Platform.Desktop 13 passed; no engine change. QA went to slice-epic-5 (Sonnet, high effort). Human Check at merge: select, star, copy to Discord, copy to a folder, show in Explorer and delete a batch of real Clips by mouse and keyboard, and check the Fluent selected-row fill on the grey accent.
+- 2026-11-05: 10.5 READY FOR QA at `11eab9a`: Contracts 128, Core 161 and App 156 passed; App files only. QA went to 2-1-tracer, which designed epic 10 (Sonnet, medium effort). Human Check at merge: the builder rebuilds the BEACN layout from a preset with the meters moving, saves it, and checks the next Clip's tracks in DaVinci Resolve.
