@@ -40,8 +40,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | busy with 11.4 |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; bugfix load-sensitive-tests in QA (8.8 held at e3822aa) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of load-sensitive-tests (8.7 fps command is in its plan) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy merging load-sensitive-tests, then bugfix full-run-flaky-tests (8.8 held at e3822aa) |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.10 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | busy with QA of gaming-textbox-padding |
@@ -865,3 +865,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: Bugfix `gaming-textbox-padding` READY FOR QA at `c53e348`: the gaming TextBox's `PART_ContentHost` takes Padding once (as the ScrollViewer's Padding); it's the only gaming template with a content host; Fluent untouched. `GamingTextBoxPaddingTests` failed before (6 of 6 boxes at 2x) and passes after. 0-warning build; App 182 passed. QA went to 2-1-tracer (Sonnet, medium effort).
 - 2026-11-05: 11.2 merged into develop (`5ae65e3`, `feat(contracts): merge 11.2-screen-selection`) and marked done. Synced develop (10.9, `ec7a0ed`) in first, resolving `ErrorCodes.All` to keep `RingPathInvalid` and the three monitor codes. QA's doc fixes are on the branch (`c834c6d`): the monitor list's home is Platform.Capture, AD-25 has the H.264-fitted fallback with a warning, and 11.3's notes cover that warning and skipping a 0x0 monitor. 0-warning build; Contracts 135, Core 165, Platform.Capture 6, Engine 193 passed, 0 failed; publish clean (12.0 MB). TracerCapture.cs's large diff is only CRLF to LF. Human Check: none.
 - 2026-11-05: 11.2 merged (`5ae65e3`, `feat(contracts): merge 11.2-screen-selection`); done at `2aef49f`. Synced with 10.9 first (one conflict in `ErrorCodes.All`, kept both). QA doc fixes at `c834c6d`: the ticket now says Platform.Capture; AD-25's line on the H.264 fit with a warning; 11.3's two notes. 0-warning build; Contracts 135, Core 165, Platform.Capture 6 and Engine 193 passed; publish clean. Started **11.3** on qa-2-1 (Heavy two-monitor checks and a `bench --stages` cost re-measure under the `.bench-running` lock) and **11.4** on slice-epic-4 (Hotkeys picker; App only), with cards moved.
+- 2026-11-05: QA passed for load-sensitive-tests at `a0768d0`: test-only; `PumpUntil` (5 s) and `ReadShared` (2 s) are bounded; no assertion is weakened; App 173 and Engine 190 passed; each fixed test passed 3 of 3. slice-epic-5 is merging it, then starting bugfix `full-run-flaky-tests` for the eight full-run flakes, finding each one's real cause.
