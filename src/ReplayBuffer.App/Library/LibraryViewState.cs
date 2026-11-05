@@ -38,14 +38,19 @@ internal enum LibraryDateFilter
 /// The Library's view choices (story 7.5), remembered per instance in a small JSON file. Any failure
 /// to read or write the file is ignored: a load gives the defaults, a save is dropped. Story 10.3 adds
 /// the sort; a file from before it has none and loads with Newest first. The search text isn't kept.
+/// Story 14.5 adds the in-app player's volume and mute, full and unmuted for a file from before it.
 /// </summary>
 /// <param name="Game">The game filter's group key; null for all games.</param>
+/// <param name="PlayerVolume">The player's volume, 0 to 1.</param>
+/// <param name="PlayerMuted">Whether the player is muted.</param>
 internal sealed record LibraryViewState(
     LibraryGrouping GroupBy = LibraryGrouping.Game,
     string? Game = null,
     LibraryDateFilter Date = LibraryDateFilter.All,
     bool FavouritesOnly = false,
-    LibrarySort Sort = LibrarySort.NewestFirst)
+    LibrarySort Sort = LibrarySort.NewestFirst,
+    double PlayerVolume = 1.0,
+    bool PlayerMuted = false)
 {
     private static LibraryViewState Default { get; } = new();
 
@@ -59,7 +64,9 @@ internal sealed record LibraryViewState(
         try
         {
             var state = JsonSerializer.Deserialize(File.ReadAllText(path), LibraryViewStateJson.Default.LibraryViewState);
-            return state is not null && Enum.IsDefined(state.GroupBy) && Enum.IsDefined(state.Date) && Enum.IsDefined(state.Sort) ? state : Default;
+            return state is not null && Enum.IsDefined(state.GroupBy) && Enum.IsDefined(state.Date) && Enum.IsDefined(state.Sort)
+                ? state with { PlayerVolume = double.IsFinite(state.PlayerVolume) ? Math.Clamp(state.PlayerVolume, 0, 1) : 1.0 }
+                : Default;
         }
         catch (Exception)
         {

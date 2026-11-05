@@ -9,6 +9,12 @@ namespace ReplayBuffer.App.Library;
 /// <summary>
 /// Windows' own media player (WinRT <c>Windows.Media.Playback.MediaPlayer</c>, Media Foundation) in frame-server
 /// mode (AD-27): it never draws itself; each frame is copied into the page's <see cref="VideoSurface"/>.
+/// <para>
+/// A Track switch while paused makes Media Foundation's next Play resume from the start, though a paused
+/// seek after it shows the right frame (the 14.5 probe). So the first Track is chosen as the Tracks are
+/// first listed, before the file opens, with no switch. And after a switch while paused, Play moves back
+/// to the paused position.
+/// </para>
 /// </summary>
 internal sealed class WindowsMediaPlayer : IPlayer
 {
@@ -17,6 +23,7 @@ internal sealed class WindowsMediaPlayer : IPlayer
     // The frame server is on before any source is set (AD-27).
     private readonly MediaPlayer _player = new() { AutoPlay = false, IsVideoFrameServerEnabled = true };
     private MediaPlaybackItem? _item;
+    private TimeSpan? _resumeAt;
     private volatile bool _disposed;
 
     public WindowsMediaPlayer()
@@ -29,11 +36,16 @@ internal sealed class WindowsMediaPlayer : IPlayer
 
     public event Action? Ended;
 
-    /// <summary>Mutes the player: the Heavy playback tests never make a sound.</summary>
     public bool IsMuted
     {
         get => _player.IsMuted;
         set => _player.IsMuted = value;
+    }
+
+    public double Volume
+    {
+        get => _player.Volume;
+        set => _player.Volume = Math.Clamp(value, 0, 1);
     }
 
     public bool IsPlaying => !_disposed && _player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing;
@@ -45,10 +57,17 @@ internal sealed class WindowsMediaPlayer : IPlayer
         get => _item?.AudioTracks.SelectedIndex ?? -1;
         set
         {
-            if (_item is { } item && value >= 0 && value < item.AudioTracks.Count)
+            if (_item is not { } item || value < 0 || value >= item.AudioTracks.Count || value == item.AudioTracks.SelectedIndex)
             {
-                item.AudioTracks.SelectedIndex = value;
+                return;
             }
+
+            if (!IsPlaying)
+            {
+                _resumeAt = Position;
+            }
+
+            item.AudioTracks.SelectedIndex = value;
         }
     }
 
@@ -60,13 +79,25 @@ internal sealed class WindowsMediaPlayer : IPlayer
         void OnFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args) =>
             opened.TrySetException(new PlayerException($"{args.Error}: {args.ErrorMessage}"));
 
+        // The first Track, chosen as the Tracks are listed: no switch at open, which would break the next resume (AD-27).
+        static void FirstTrack(MediaPlaybackItem item, Windows.Foundation.Collections.IVectorChangedEventArgs args)
+        {
+            if (item.AudioTracks.Count > 0 && item.AudioTracks.SelectedIndex != 0)
+            {
+                item.AudioTracks.SelectedIndex = 0;
+            }
+        }
+
         _player.MediaOpened += OnOpened;
         _player.MediaFailed += OnFailed;
+        MediaPlaybackItem? item = null;
         try
         {
             // A stream, never a path: the App's own read-only handle, shared for delete (AD-27).
-            _item = new MediaPlaybackItem(MediaSource.CreateFromStream(file.AsRandomAccessStream(), "video/mp4"));
-            _player.Source = _item;
+            item = new MediaPlaybackItem(MediaSource.CreateFromStream(file.AsRandomAccessStream(), "video/mp4"));
+            item.AudioTracksChanged += FirstTrack;
+            _item = item;
+            _player.Source = item;
             await opened.Task.WaitAsync(OpenTimeout);
         }
         catch (TimeoutException e)
@@ -77,23 +108,45 @@ internal sealed class WindowsMediaPlayer : IPlayer
         {
             _player.MediaOpened -= OnOpened;
             _player.MediaFailed -= OnFailed;
+            if (item is not null)
+            {
+                item.AudioTracksChanged -= FirstTrack;
+            }
         }
 
         var session = _player.PlaybackSession;
         var duration = session.NaturalDuration;
-        var video = _item.VideoTracks.Count > 0 ? _item.VideoTracks[0] : null;
+        var video = item.VideoTracks.Count > 0 ? item.VideoTracks[0] : null;
         return new PlayerMedia(
             (int)session.NaturalVideoWidth,
             (int)session.NaturalVideoHeight,
             duration > TimeSpan.Zero && duration < TimeSpan.FromDays(1) ? duration : null,
-            _item.AudioTracks.Select(t => t.Name).ToList(),
+            item.AudioTracks.Select(t => t.Name).ToList(),
             video?.SupportInfo.DecoderStatus == MediaDecoderStatus.FullySupported);
     }
 
-    // Paused, a position set delivers that frame through the frame server (the 14.2 proof).
-    public void ShowFirstFrame() => _player.PlaybackSession.Position = TimeSpan.Zero;
+    // Paused, a position set delivers that frame through the frame server (the 14.2 proof, the 14.5 probe).
+    public void Seek(TimeSpan position)
+    {
+        _player.PlaybackSession.Position = position;
+        if (_resumeAt is not null)
+        {
+            _resumeAt = position;
+        }
+    }
 
-    public void Play() => _player.Play();
+    public void ShowFirstFrame() => Seek(TimeSpan.Zero);
+
+    public void Play()
+    {
+        _player.Play();
+        if (_resumeAt is { } at)
+        {
+            // A Track was switched while paused: without this, Media Foundation resumes from the start.
+            _resumeAt = null;
+            _player.PlaybackSession.Position = at;
+        }
+    }
 
     public void Pause() => _player.Pause();
 

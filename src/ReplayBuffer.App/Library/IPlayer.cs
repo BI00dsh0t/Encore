@@ -21,11 +21,19 @@ internal interface IPlayer : IDisposable
     /// <summary>The position in the file.</summary>
     TimeSpan Position { get; }
 
+    /// <summary>The volume, 0 to 1.</summary>
+    double Volume { get; set; }
+
+    bool IsMuted { get; set; }
+
     /// <summary>The audio Track that plays, by index in file order (AD-27: one at a time).</summary>
     int SelectedTrack { get; set; }
 
     /// <summary>Opens the file from <paramref name="file"/>, paused; throws <see cref="PlayerException"/> when it can't.</summary>
     Task<PlayerMedia> OpenAsync(Stream file);
+
+    /// <summary>Moves to <paramref name="position"/>, playing or paused; paused, that frame is delivered (story 14.5).</summary>
+    void Seek(TimeSpan position);
 
     /// <summary>Shows the first frame while paused.</summary>
     void ShowFirstFrame();

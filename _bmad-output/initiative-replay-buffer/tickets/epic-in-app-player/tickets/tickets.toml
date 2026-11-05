@@ -36,17 +36,6 @@ risk = "high"
 plan_checkpoint = true
 
 [[entry]]
-id = 4
-type = "story"
-title = "Track picker"
-description = "The player page lists the file's Tracks from MediaPlaybackItem.AudioTracks by Name, which is our handler_name. They're shown in file order, with the playing one marked and the first selected at open (from the tracer). Choosing another sets AudioTracks.SelectedIndex mid-play. Playback carries on with no restart or change of position, and only the brief gap Windows makes (about 0.1 s). One Track at a time. A Track with no name shows 'track n', to epic 10's glossary. The list works by mouse and keyboard, in both looks, to epic 10's glossary. Reopening a file starts on the first Track again. R4."
-verify = "Automated tests on the 2 s four-Track fixture: the list shows Game, Mic, Discord and Desktop with the first selected. Choosing Discord while playing sets SelectedIndex 2 and the position keeps advancing. An unnamed Track shows 'track n'. Heavy (explicit): the process-loopback check from the research (inaudible volume, Goertzel on each Track's tone) hears the chosen Track after each of ten switches."
-covers = ["R4"]
-after = [2]
-hitl = false
-risk = "medium"
-
-[[entry]]
 id = 5
 type = "story"
 title = "Transport: seek bar, time, volume and keys"
@@ -54,9 +43,21 @@ description = "The player page's controls, drawn over the video in both looks. A
 verify = "Automated tests on the player view model, against 14.2's fake player with a 30 s file: Right moves the position by 5 s (clamped at the end), a seek bar drag to 50 % lands within a frame of the middle, Space toggles playing, the volume persists through LibraryViewState, and the end state replays from the start, and an unknown length hides the total and disables seeking. The page loads in both looks."
 notes = ["14.2 proof, 2026-11-05: with the player paused, a Position set to 3 s delivered no frame through the frame server, and Play then resumed from about 0. Scrubbing must find a way that redraws while paused (StepForwardOneFrame, or a brief muted play) and check where play resumes. Position = 0 while paused does deliver the first frame (14.2 relies on it)."]
 covers = ["R3"]
-after = [4]
+after = [2]
 hitl = false
 risk = "low"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Track picker"
+description = "The player page lists the file's Tracks from MediaPlaybackItem.AudioTracks by Name, which is our handler_name. They're shown in file order, with the playing one marked and the first selected at open (from the tracer). Choosing another sets AudioTracks.SelectedIndex mid-play. Playback carries on with no restart or change of position, and only the brief gap Windows makes (about 0.1 s). One Track at a time. A Track with no name shows 'track n', to epic 10's glossary. The list works by mouse and keyboard, in both looks, to epic 10's glossary. Reopening a file starts on the first Track again. R4."
+verify = "Automated tests on the 2 s four-Track fixture: the list shows Game, Mic, Discord and Desktop with the first selected. Choosing Discord while playing sets SelectedIndex 2 and the position keeps advancing. An unnamed Track shows 'track n'. Heavy (explicit): the process-loopback check from the research (inaudible volume, Goertzel on each Track's tone) hears the chosen Track after each of ten switches."
+notes = ["14.5 probe, 2026-11-05: a Track switch while paused makes Media Foundation's next Play resume from 0 (a switch while playing is fine). WindowsMediaPlayer now sets the paused position again just after Play when a Track was switched while paused, and picks the first Track as the Tracks are listed, so there is no switch at open. 14.4's picker relies on this; test a paused switch then Play in its Heavy check."]
+covers = ["R4"]
+after = [5]
+hitl = false
+risk = "medium"
 
 [[entry]]
 id = 6
@@ -65,7 +66,7 @@ title = "When Windows can't play the file"
 description = "When the video Track's SupportInfo.DecoderStatus isn't supported (or a dev-instance switch forces it, for the checks in 14.8 and the Done when), MediaFailed is raised, or no frame arrives, the player page shows a plain-words message in place of the video. It names the HEVC Video Extension or AV1 Video Extension, linking to its Microsoft Store page (opened through the shell), says the file is fine, and offers 'Open in default player'. Text follows epic 10's glossary, and the page's Back and keys keep working. The App's log line records the codec and the status. Audio-only problems (an undecodable Track) show the Track as unavailable in the list. R6."
 verify = "Automated tests with 14.2's fake player, which reports DecoderStatus UnsupportedSubtype for HEVC, and MediaFailed for a corrupt file: the page shows the matching message, the Store link and 'Open in default player', and Back returns to the row. The message view loads in both looks."
 covers = ["R6"]
-after = [5]
+after = [4]
 hitl = false
 risk = "low"
 

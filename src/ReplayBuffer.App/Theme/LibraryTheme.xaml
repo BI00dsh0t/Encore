@@ -336,7 +336,7 @@
 
     <!--
         The in-app player's page (story 14.2, AD-27): the video on black, letterboxed, with the page's corners,
-        and the control bar over its bottom edge on the Overlay's card brush, so it reads over any picture in
+        and the control bar across its bottom edge on the Overlay's card brush, so it reads over any picture in
         both themes. The message over the video is white on that black.
     -->
     <Style x:Key="RbPlayerBackdropStyle" TargetType="Border">
@@ -348,7 +348,14 @@
         <Setter Property="Background" Value="{DynamicResource RbOverlayCardBrush}" />
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}" />
         <Setter Property="Padding" Value="8" />
-        <Setter Property="Margin" Value="0,0,0,16" />
+        <Setter Property="Margin" Value="16,0,16,16" />
+    </Style>
+    <!-- The transport's time (story 14.5): text-primary on the bar, tabular figures so it doesn't jitter as it counts. -->
+    <Style x:Key="RbPlayerTimeStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
     </Style>
     <Style x:Key="RbPlayerMessageStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="14" />
