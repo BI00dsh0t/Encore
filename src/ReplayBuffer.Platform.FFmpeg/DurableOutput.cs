@@ -26,6 +26,10 @@ internal sealed unsafe class DurableOutput : IDisposable
     private AVIOContext* _context;
     private Exception? _failure;
 
+    // The bytes written before the first flush, until it seals them.
+    private MemoryStream? _header = new();
+    private byte[] _sealedHeader = [];
+
     /// <summary>Creates (or truncates) <paramref name="path"/>, shared for reading only.</summary>
     /// <param name="path">The file.</param>
     /// <param name="flushToDisk">Whether <see cref="Flush"/> also flushes the file to the disk; false only for tests.</param>
@@ -75,6 +79,12 @@ internal sealed unsafe class DurableOutput : IDisposable
     /// <summary>The bytes that have reached the file so far.</summary>
     public long Length => _file.Length;
 
+    /// <summary>
+    /// A copy of the bytes written before the first <see cref="Flush"/> (the muxer's header: <c>ftyp</c>
+    /// and <c>moov</c>), from file offset 0; empty before that flush.
+    /// </summary>
+    public ReadOnlySpan<byte> Header => _header is null ? _sealedHeader : [];
+
     /// <summary>Rethrows the first write or seek failure, if any, as it was thrown.</summary>
     public void ThrowIfFailed()
     {
@@ -91,6 +101,31 @@ internal sealed unsafe class DurableOutput : IDisposable
         ThrowIfFailed();
         FFmpegLibrary.Check(_context->error, "avio_flush");
         _file.Flush(_flushToDisk);
+        if (_header is not null)
+        {
+            _sealedHeader = _header.ToArray();
+            _header = null;
+        }
+    }
+
+    /// <summary>
+    /// Writes <paramref name="bytes"/> over the file at <paramref name="offset"/> in one write, flushes
+    /// the file to the disk, and goes back to the end. Only after a <see cref="Flush"/> that left
+    /// FFmpeg's buffer empty, as the trailer's does.
+    /// </summary>
+    /// <exception cref="IOException">The write or the flush failed.</exception>
+    public void Overwrite(long offset, ReadOnlySpan<byte> bytes)
+    {
+        _file.Seek(offset, SeekOrigin.Begin);
+        try
+        {
+            _file.Write(bytes);
+            _file.Flush(_flushToDisk);
+        }
+        finally
+        {
+            _file.Seek(0, SeekOrigin.End);
+        }
     }
 
     public void Dispose()
@@ -130,6 +165,12 @@ internal sealed unsafe class DurableOutput : IDisposable
             {
                 output._file.Write(bytes[..(int)Math.Max(0, capacity - output._file.Position)]);
                 throw new IOException("There is not enough space on the disk.", unchecked((int)0x80070070));
+            }
+
+            if (output._header is { } header)
+            {
+                header.Position = output._file.Position;
+                header.Write(bytes);
             }
 
             output._file.Write(bytes);

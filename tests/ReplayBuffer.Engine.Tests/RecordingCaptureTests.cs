@@ -263,6 +263,27 @@ public sealed class RecordingCaptureTests : IDisposable
         SessionTestKit.AssertDecodesCleanly(file);
     }
 
+    /// <summary>
+    /// Story 14.3: a ~5 s Recording in each codec carries its length in an <c>mehd</c>, so Media
+    /// Foundation reads ffprobe's length and plays it to its last frame.
+    /// </summary>
+    [Theory(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    [InlineData(VideoCodec.H264)]
+    [InlineData(VideoCodec.Hevc)]
+    [InlineData(VideoCodec.Av1)]
+    public async Task AFiveSecondRecordingPlaysToItsEndInMediaPlayer(VideoCodec codec)
+    {
+        using var rig = await StartRecordingAsync(codec: codec);
+        await Task.Delay(TimeSpan.FromSeconds(5), Token);
+        Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
+        Assert.Equal(new RecordingStopped(rig.Started.Path, RecordingStopReasons.Stopped), await rig.NextAsync());
+        rig.Orchestrator.Dispose();
+
+        Assert.Equal(codec.ToString().ToLowerInvariant(), SessionTestKit.VideoStream(rig.Started.Path).Codec);
+        await MediaPlayerCheck.AssertPlaysToTheEndAsync(rig.Started.Path, 30, Token);
+    }
+
     [Fact]
     public void ARestartIsRefusedBeforeTheSessionHasAnchored()
     {
@@ -592,7 +613,7 @@ public sealed class RecordingCaptureTests : IDisposable
     /// <c>recordToggle</c>: returns with the Recording running. With <paramref name="clips"/>, the
     /// orchestrator has Replay Clips (Save Cooldown 0) whose saves and refusals land in the events;
     /// with <paramref name="pending"/>, that document is committed and <see cref="SettingsUpdated"/>
-    /// posted before the press.
+    /// posted before the press. The video is 640x480 at 30 fps in <paramref name="codec"/>.
     /// </summary>
     private async Task<Rig> StartRecordingAsync(
         bool clips = false,
@@ -602,7 +623,8 @@ public sealed class RecordingCaptureTests : IDisposable
         Func<Exception?>? recoveryFault = null,
         bool recovery = false,
         IPowerNotifications? power = null,
-        Func<bool>? starveFrames = null)
+        Func<bool>? starveFrames = null,
+        VideoCodec codec = VideoCodec.H264)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)>
@@ -624,7 +646,7 @@ public sealed class RecordingCaptureTests : IDisposable
         var document = SettingsDocument.Empty with
         {
             Global = SettingsDocument.Empty.Global
-                .SetItem(Keys.Video.Name, Keys.Video.ToJson(new VideoSettings(VideoCodec.H264, 640, 480, 30, 4_000, RateControl.Cbr)))
+                .SetItem(Keys.Video.Name, Keys.Video.ToJson(new VideoSettings(codec, 640, 480, 30, 4_000, RateControl.Cbr)))
                 .SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(_directory))
                 .SetItem(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(0)),
             Profiles = SettingsMaps.EmptyProfiles.Add(ProfileId, new GameProfile
