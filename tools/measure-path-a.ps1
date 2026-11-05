@@ -705,7 +705,7 @@ $summary = [ordered]@{
         'fpsLossPercent is against the mean of the baseline runs in this invocation.'
         'Engine CPU, allocations and GC rates exclude the engine''s first 10 s (warm-up); frame counts include them.'
         'Missed slots are against 60 fps; judge them against the game''s own present rate (avgFps).'
-        'GPU engine use is the engine process only, per 1 s sample the maximum over the process''s engines of a type (a process gets three identical video-encode instances; before 2026-11-04 they were summed, 3x too high) (Get-Counter "\GPU Engine(pid_<engine>_*)\Utilization Percentage").'
+        'GPU engine use is the engine processes only (game engine, plus the monitor engine in -mon conditions): per 1 s sample, the maximum over each process''s engines of a type, summed over processes (a process gets three identical video-encode instances; before 2026-11-04 they were summed too, 3x too high) (Get-Counter "\GPU Engine(pid_<engine>_*)\Utilization Percentage").'
         'NativeAOT: see engine.nativeAot and engine.sizeBytes; startupToFirstFrameMs is process start to the first captured frame.'
         'Interop debugging effort is qualitative and not measured here.'
     )
