@@ -150,8 +150,8 @@ public sealed class TinyStartupWindowCaptureTests : IDisposable
             clips: new ReplayClips(OutputPathAllocator.System, () => _directory, c => saved.Writer.TryWrite(c), _ => { }));
         orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "tinygame.exe"), TargetChangeReason.Detected));
 
-        // The placeholder is waited for, not captured.
-        Assert.Contains("156x27", await NextAsync(waiting), StringComparison.Ordinal);
+        // The placeholder (WinForms makes it at least 156x39) is waited for, not captured.
+        Assert.Contains("under 320x180", await NextAsync(waiting), StringComparison.Ordinal);
         await Task.Delay(TimeSpan.FromSeconds(2), Token);
         Assert.False(anchored.Task.IsCompleted);
 
