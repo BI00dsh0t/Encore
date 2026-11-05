@@ -1,7 +1,9 @@
 <!--
-    The Library (story 4): filters, the corrupt-index banner, the last action's failure, then one virtualized
-    list of group headers and rows. Every colour, corner and type comes from LibraryTheme.xaml and the token
-    keys; the shell's page title is the heading.
+    The Library (story 4; selection, the command bar and the shortcuts from story 10.2): filters, the corrupt-index
+    banner, the last action's failure, the command bar, then one virtualized list of group headers and rows. The
+    list's own selection is unused: the page holds the selection, and the code-behind routes the mouse and keys
+    to it. Every colour, corner and type comes from LibraryTheme.xaml and the token keys; the shell's page title
+    is the heading.
 -->
 <UserControl x:Class="ReplayBuffer.App.Library.LibraryView"
              x:ClassModifier="internal"
@@ -15,89 +17,81 @@
             <ContentControl Content="{Binding Name}" Style="{DynamicResource RbLibraryGroupHeaderStyle}" />
         </DataTemplate>
         <DataTemplate DataType="{x:Type local:LibraryRow}">
-            <!-- The card takes the double-click and the right-click everywhere on the row. -->
-            <Border Style="{DynamicResource RbLibraryRowStyle}">
-                <Border.InputBindings>
-                    <MouseBinding Command="{Binding OpenCommand}" Gesture="LeftDoubleClick" />
-                </Border.InputBindings>
-                <Border.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Command="{Binding OpenCommand}" Header="Open" />
-                        <MenuItem Command="{Binding ShowInExplorerCommand}" Header="Show in Explorer" />
-                        <MenuItem Command="{Binding CopyCommand}" Header="Copy" />
-                        <MenuItem Command="{Binding RenameCommand}" Header="Rename" />
-                        <MenuItem Command="{Binding DeleteCommand}" Header="Delete" />
-                    </ContextMenu>
-                </Border.ContextMenu>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <!-- The thumbnail, or the generic video glyph until the shell has one; the length on it. -->
+            <Grid>
+                <Border Style="{DynamicResource RbLibraryRowStyle}">
                     <Grid>
-                        <Border Style="{DynamicResource RbLibraryThumbnailStyle}">
-                            <Path Style="{DynamicResource RbLibraryPlaceholderGlyphStyle}" />
-                        </Border>
-                        <Border Style="{DynamicResource RbLibraryThumbnailImageStyle}"
-                                Visibility="{Binding HasThumbnail, Converter={StaticResource Visible}}">
-                            <Border.Background>
-                                <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
-                            </Border.Background>
-                        </Border>
-                        <Border Style="{DynamicResource RbLibraryLengthBadgeStyle}">
-                            <TextBlock Style="{DynamicResource RbLibraryLengthTextStyle}" Text="{Binding Length}" />
-                        </Border>
-                    </Grid>
-                    <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
-                        <!-- The name, or its inline editor while renaming: Enter or leaving commits, Escape cancels. -->
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{DynamicResource RbLibrarySelectionBarStyle}" />
+                        <!-- The thumbnail, or the generic video glyph until the shell has one; the length on it. -->
                         <Grid>
-                            <Border>
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsRenaming}" Value="True">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <TextBlock Style="{DynamicResource RbLibraryNameStyle}" Text="{Binding Name}" ToolTip="{Binding Path}" />
+                            <Border Style="{DynamicResource RbLibraryThumbnailStyle}">
+                                <Path Style="{DynamicResource RbLibraryPlaceholderGlyphStyle}" />
                             </Border>
-                            <TextBox IsVisibleChanged="OnRenameVisibleChanged"
-                                     LostFocus="OnRenameLostFocus"
-                                     Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"
-                                     Visibility="{Binding IsRenaming, Converter={StaticResource Visible}}">
-                                <TextBox.InputBindings>
-                                    <KeyBinding Key="Enter" Command="{Binding CommitRenameCommand}" />
-                                    <KeyBinding Key="Escape" Command="{Binding CancelRenameCommand}" />
-                                </TextBox.InputBindings>
-                            </TextBox>
+                            <Border Style="{DynamicResource RbLibraryThumbnailImageStyle}"
+                                    Visibility="{Binding HasThumbnail, Converter={StaticResource Visible}}">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                </Border.Background>
+                            </Border>
+                            <Border Style="{DynamicResource RbLibraryLengthBadgeStyle}">
+                                <TextBlock Style="{DynamicResource RbLibraryLengthTextStyle}" Text="{Binding Length}" />
+                            </Border>
                         </Grid>
-                        <TextBlock Style="{DynamicResource RbLibraryMetaStyle}">
-                            <TextBlock.Text>
-                                <MultiBinding Converter="{StaticResource Meta}">
-                                    <Binding Path="Game" />
-                                    <Binding Path="Date" />
-                                    <Binding Path="Size" />
-                                </MultiBinding>
-                            </TextBlock.Text>
-                        </TextBlock>
-                        <Border Style="{DynamicResource RbLibraryLockPillStyle}"
-                                Visibility="{Binding IsLocked, Converter={StaticResource Visible}}">
-                            <TextBlock Style="{DynamicResource RbLibraryLockTextStyle}" Text="{Binding Lock, Mode=OneWay}" />
-                        </Border>
-                    </StackPanel>
-                    <!-- The star follows the snapshot: a click only sends library.setFavourite. -->
-                    <local:StarToggle Grid.Column="2"
-                                      AutomationProperties.Name="Favourite"
-                                      Command="{Binding FavouriteCommand}"
-                                      IsChecked="{Binding IsFavourite, Mode=OneWay}"
-                                      Style="{DynamicResource RbStarToggleStyle}"
-                                      ToolTip="Favourite" />
-                </Grid>
-            </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                            <!-- The name, or its inline editor while renaming: Enter or leaving commits, Escape cancels. -->
+                            <Grid>
+                                <Border>
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsRenaming}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Style="{DynamicResource RbLibraryNameStyle}" Text="{Binding Name}" ToolTip="{Binding Path}" />
+                                </Border>
+                                <TextBox IsVisibleChanged="OnRenameVisibleChanged"
+                                         KeyDown="OnRenameKeyDown"
+                                         LostFocus="OnRenameLostFocus"
+                                         Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"
+                                         Visibility="{Binding IsRenaming, Converter={StaticResource Visible}}">
+                                    <TextBox.InputBindings>
+                                        <KeyBinding Key="Enter" Command="{Binding CommitRenameCommand}" />
+                                        <KeyBinding Key="Escape" Command="{Binding CancelRenameCommand}" />
+                                    </TextBox.InputBindings>
+                                </TextBox>
+                            </Grid>
+                            <TextBlock Style="{DynamicResource RbLibraryMetaStyle}">
+                                <TextBlock.Text>
+                                    <MultiBinding Converter="{StaticResource Meta}">
+                                        <Binding Path="Game" />
+                                        <Binding Path="Date" />
+                                        <Binding Path="Size" />
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                            <Border Style="{DynamicResource RbLibraryLockPillStyle}"
+                                    Visibility="{Binding IsLocked, Converter={StaticResource Visible}}">
+                                <TextBlock Style="{DynamicResource RbLibraryLockTextStyle}" Text="{Binding Lock, Mode=OneWay}" />
+                            </Border>
+                        </StackPanel>
+                        <!-- The star follows the snapshot: a click only sends library.setFavourite, and leaves the selection. -->
+                        <local:StarToggle Grid.Column="2"
+                                          AutomationProperties.Name="Favourite"
+                                          Command="{Binding FavouriteCommand}"
+                                          IsChecked="{Binding IsFavourite, Mode=OneWay}"
+                                          Style="{DynamicResource RbStarToggleStyle}"
+                                          ToolTip="Favourite" />
+                    </Grid>
+                </Border>
+                <Border Style="{DynamicResource RbLibraryFocusRingStyle}" />
+            </Grid>
         </DataTemplate>
     </UserControl.Resources>
     <DockPanel>
@@ -148,30 +142,112 @@
                    Style="{DynamicResource RbLibraryActionErrorStyle}"
                    Text="{Binding ActionError}"
                    Visibility="{Binding HasActionError, Converter={StaticResource Visible}}" />
+        <!-- The command bar: the summary with nothing selected, else the count and the actions. Always 40 px. -->
+        <Border x:Name="CommandBar" DockPanel.Dock="Top" Style="{DynamicResource RbLibraryCommandBarStyle}">
+            <Grid>
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Style="{DynamicResource RbLibraryBarTextStyle}" Text="{Binding SummaryText}" />
+                    <TextBlock Margin="12,0,0,0"
+                               Style="{DynamicResource RbLibraryBarCaptionStyle}"
+                               Text="Click to select. Ctrl or Shift selects more." />
+                </StackPanel>
+                <DockPanel Visibility="{Binding HasSelection, Converter={StaticResource Visible}}">
+                    <Button AutomationProperties.Name="Clear selection"
+                            Command="{Binding ClearSelectionCommand}"
+                            Content="✕"
+                            DockPanel.Dock="Right"
+                            Style="{DynamicResource RbLibraryClearSelectionButtonStyle}"
+                            ToolTip="Clear selection (Esc)" />
+                    <StackPanel DockPanel.Dock="Left" Margin="0,0,12,0" Orientation="Horizontal">
+                        <TextBlock x:Name="SelectionCount"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   Style="{DynamicResource RbLibraryBarCountStyle}"
+                                   Text="{Binding SelectionText}" />
+                        <TextBlock Style="{DynamicResource RbLibraryBarCaptionStyle}" Text="{Binding HiddenText}" />
+                    </StackPanel>
+                    <local:LibraryOverflowPanel x:Name="Actions" HorizontalAlignment="Left" VerticalAlignment="Center">
+                        <Button VerticalAlignment="Center"
+                                Command="{Binding OpenCommand}"
+                                Content="Open"
+                                Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                        <Button VerticalAlignment="Center" Command="{Binding FavouriteSelectionCommand}" Content="{Binding FavouriteLabel}" />
+                        <Button VerticalAlignment="Center" Command="{Binding CopyCommand}" Content="Copy" />
+                        <Button local:LibraryOverflowPanel.Overflows="True"
+                                VerticalAlignment="Center"
+                                Command="{Binding CopyToFolderCommand}"
+                                Content="Copy to folder…" />
+                        <Button local:LibraryOverflowPanel.Overflows="True"
+                                VerticalAlignment="Center"
+                                Command="{Binding ShowInExplorerCommand}"
+                                Content="Show in Explorer" />
+                        <Button VerticalAlignment="Center"
+                                Command="{Binding RenameCommand}"
+                                Content="Rename"
+                                Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                        <Button VerticalAlignment="Center"
+                                Command="{Binding DeleteCommand}"
+                                Content="Delete"
+                                ToolTip="{Binding DeleteToolTip}"
+                                ToolTipService.ShowOnDisabled="True" />
+                        <Button local:LibraryOverflowPanel.IsMore="True"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="More"
+                                Click="OnMoreClick"
+                                Content="More ⋯">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Command="{Binding CopyToFolderCommand}" Header="Copy to folder…" />
+                                    <MenuItem Command="{Binding ShowInExplorerCommand}" Header="Show in Explorer" />
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                    </local:LibraryOverflowPanel>
+                </DockPanel>
+            </Grid>
+        </Border>
         <Grid>
             <!-- One virtualized list of headers and rows; it scrolls itself, so nothing wraps it in a ScrollViewer. -->
-            <ItemsControl x:Name="List"
-                          ItemsSource="{Binding Entries}"
-                          ScrollViewer.CanContentScroll="True"
-                          VirtualizingPanel.IsVirtualizing="True"
-                          VirtualizingPanel.ScrollUnit="Pixel"
-                          VirtualizingPanel.VirtualizationMode="Recycling">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <VirtualizingStackPanel />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.Template>
-                    <ControlTemplate TargetType="ItemsControl">
-                        <ScrollViewer CanContentScroll="True"
-                                      Focusable="False"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      VerticalScrollBarVisibility="Auto">
-                            <ItemsPresenter />
-                        </ScrollViewer>
-                    </ControlTemplate>
-                </ItemsControl.Template>
-            </ItemsControl>
+            <ListBox x:Name="List"
+                     ContextMenuOpening="OnListContextMenuOpening"
+                     GotKeyboardFocus="OnListGotKeyboardFocus"
+                     ItemContainerStyle="{DynamicResource RbLibraryItemContainerStyle}"
+                     ItemsSource="{Binding Entries}"
+                     PreviewKeyDown="OnListPreviewKeyDown"
+                     PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
+                     PreviewMouseRightButtonDown="OnListPreviewMouseRightButtonDown"
+                     Style="{DynamicResource RbLibraryListStyle}">
+                <ListBox.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Command="{Binding OpenCommand}"
+                                  Header="Open"
+                                  InputGestureText="Enter"
+                                  Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                        <MenuItem Command="{Binding FavouriteSelectionCommand}" Header="{Binding FavouriteLabel}" />
+                        <MenuItem Command="{Binding CopyCommand}" Header="Copy" InputGestureText="Ctrl+C" />
+                        <MenuItem Command="{Binding CopyToFolderCommand}" Header="Copy to folder…" />
+                        <MenuItem Command="{Binding ShowInExplorerCommand}" Header="Show in Explorer" />
+                        <Separator />
+                        <MenuItem Command="{Binding RenameCommand}"
+                                  Header="Rename"
+                                  InputGestureText="F2"
+                                  Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                        <MenuItem Command="{Binding DeleteCommand}"
+                                  Header="Delete"
+                                  InputGestureText="Del"
+                                  ToolTip="{Binding DeleteToolTip}"
+                                  ToolTipService.ShowOnDisabled="True" />
+                    </ContextMenu>
+                </ListBox.ContextMenu>
+            </ListBox>
             <!-- Only for a Library with nothing in it; a filter that matches nothing shows an empty list. -->
             <TextBlock x:Name="EmptyMessage"
                        HorizontalAlignment="Center"
