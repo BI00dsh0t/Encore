@@ -46,8 +46,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy reviewing 14.7 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 12.4 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; 12.4 in review |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | busy reviewing 12.4 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.7 (stacked on 14.6); the player Heavy run tonight |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -205,7 +205,7 @@ The coordinator logs each QA round in the Log below.
 | 33.2 | 12.6 Architecture: AD-26, the source output size | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 33.3 | 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `242e947`; Heavy and cost in the test backlog) |
 | 33.4 | 12.3 Source in the Video quality section | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `edf675f`) |
-| 33.5 | 12.4 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress (build only, tests deferred) |
+| 33.5 | 12.4 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in code review at `8af0e1f` (no tests) |
 | 33.6 | 12.5 Source-resolution output end to end on the builder's PC | | pending |
 | 34.1 | 13.1 Capture new games: the key, the engine default and the General switch | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `4f06c58`) |
 | 35.1 | 14.1 Architecture: AD-27, the in-app player | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
@@ -1026,3 +1026,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 14.7's unverified work is committed as `67a4fba` (a WIP commit, to be reworded once verified), including the Fluent seek-thumb note on 14.8's ticket. Every session is idle and tests are stopped.
 - 2026-11-05: **Builder: "resume dev work. don't run any tests until later. make a backlog of tests to run. Merge to dev when changes are ready."** The new rule: builds yes, tests no, QA by code review, merges on review pass. The coordinator merged the code-approved branches into develop in `coord-develop`: 12.2 `242e947`, 14.3 `6a8340a`, 14.2 `de6f653`, 14.5 `8ed5775`, 14.4 `de23206`, 14.6 `d2273f9`. All were clean, and develop builds Release with 0 warnings. Marked done: 12.2, 14.2 to 14.6, and 11.5 and 12.1 (their Heavy checks are moved to the backlog). `test-backlog.md` lists the default suites first, then 10 night runs in order. Next: 14.7 finishes and merges on code review; 12.4 (sweep) starts.
 - 2026-11-05: 14.7 READY FOR REVIEW at `fd4a77a` (rebased onto develop; the WIP commit replaced by two `refactor(app)` commits; 0-warning build; no tests run). Every queued QA item is closed in code or as a 14.8 note. The code review went to slice-epic-8.
+- 2026-11-05: 12.4 READY FOR REVIEW at `8af0e1f` (cleanup only; 0-warning build; no tests): one `NewChain` replaces five `EncoderChain` constructions; class docs; a test-only `MoveArmDelay` with probes, so the Heavy Record-during-build test deterministically exercises the cancel; backlog rows updated on the branch. The code review went to 2-1-tracer.
