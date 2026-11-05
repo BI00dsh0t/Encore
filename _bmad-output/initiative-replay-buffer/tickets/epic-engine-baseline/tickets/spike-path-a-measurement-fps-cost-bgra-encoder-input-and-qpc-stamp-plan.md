@@ -125,6 +125,8 @@ context:
 > - **Misses that are tracer shortcuts, for stories 6/11/12:** capture→encoded p99 ≈ 128 ms against < 1 frame, unchanged by preset, X2 or an encode thread, so it comes from NVENC's frames in flight (surfaces/delay, story 11); capture delivers ≈ 55 fps against a 78 fps game, 15 % of 60 fps slots empty, because `MinUpdateInterval` 1/60 skips frames (the pacer, story 6/12); ≈ 200 KB/s allocated and 4 Gen2 GCs a minute, all GCs Gen2, against Gen2 = 0 (story 11). 0 duplicate frames.
 > - **NativeAOT and interop:** framework-dependent build (spike 3 does AOT); first frame 0.7–1.5 s after process start; 1715 lines of interop in Platform.* for the tracer path.
 
+**Correction (bugfix `bench-videoencode-count`, 2026-11-04):** `measure-path-a.ps1` summed the three identical `engtype_VideoEncode` counter instances each process gets on this GPU, so every `gpu_videoencode` figure was **3× over-counted**. The "VideoEncode ≈ 31 %" above is about 10 % in fact; the `gpu_videoencode_meanPercent` columns in the `path-a-*` summaries are 3× too high too. FPS loss, 1 % lows, engine CPU and 3D use are unaffected (the sampler only reads counters, and 3D has one instance), so X1 and every FPS-loss result stand.
+
 ## Plan Change Log
 
 - 2026-10-25: added the error codes `gpu-priority-failed` (warning) and `stats-write-failed`; the report also records process start→first frame (for the §6.3 NativeAOT startup row). The script gained `-PresentMon` with the native/presentmon default (coordinator request), a balanced run order, comma-list `-Conditions` (so `pwsh -File` works), and a gitignored `measurements/` output folder. Added an FFmpeg-level test: synthetic NVENC with a latency recorder, count = encoded frames.

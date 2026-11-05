@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using ReplayBuffer.App.Engine;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
@@ -10,7 +11,9 @@ namespace ReplayBuffer.App.Settings;
 /// The Global Hotkeys (story 4.12): each <see cref="HotkeyAction"/>'s binding with the engine's status for
 /// it, set by pressing a combination or cleared, and <c>recordHotkeyMode</c>. Each change sends one Global
 /// op at once. A combination another action has is refused before sending, by the engine's rule (same key,
-/// same modifiers ignoring NoRepeat, whatever the mode). Members run on the UI thread.
+/// same modifiers ignoring NoRepeat, whatever the mode). Story 10.9 groups the rows into Clips,
+/// Recordings, Monitor Recording (with the screen picker moved here from the removed Recordings page)
+/// and Microphone, each with its plain sentence. Members run on the UI thread.
 /// </summary>
 internal sealed class HotkeysPage : SettingsPage
 {
@@ -18,11 +21,13 @@ internal sealed class HotkeysPage : SettingsPage
     private bool _fromDocument;
     private RecordHotkeyMode _mode = Keys.RecordHotkeyMode.Default;
     private HotkeyStatus _status = HotkeyStatus.Unbound;
+    private int _clipSeconds = Keys.BufferWindow.Default;
 
-    public HotkeysPage(SettingsSender sender)
+    public HotkeysPage(SettingsSender sender, IEngineSession engine)
         : base(sender)
     {
         Rows = [.. Enum.GetValues<HotkeyAction>().Select(a => new HotkeyRow(this, a, Label(a)))];
+        Monitor = new MonitorPicker(engine, async ops => await SendAsync(ops), message => Message = message);
         ShowRows();
     }
 
@@ -30,6 +35,46 @@ internal sealed class HotkeysPage : SettingsPage
 
     /// <summary>One row per action, in <see cref="HotkeyAction"/> order.</summary>
     public IReadOnlyList<HotkeyRow> Rows { get; }
+
+    /// <summary>Clips: Save Clip.</summary>
+    public IReadOnlyList<HotkeyRow> ClipRows => [.. Rows.Where(r => r.Action == HotkeyAction.Save)];
+
+    /// <summary>Recordings: Record, or Record start and stop.</summary>
+    public IReadOnlyList<HotkeyRow> RecordRows => [.. Rows.Where(r => r.Action is HotkeyAction.RecordToggle or HotkeyAction.RecordStart or HotkeyAction.RecordStop)];
+
+    /// <summary>Monitor Recording: its key, or its start and stop keys.</summary>
+    public IReadOnlyList<HotkeyRow> MonitorRows => [.. Rows.Where(r => r.Action is HotkeyAction.MonitorRecordToggle or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop)];
+
+    /// <summary>Microphone: Mic mute.</summary>
+    public IReadOnlyList<HotkeyRow> MicRows => [.. Rows.Where(r => r.Action == HotkeyAction.MicMute)];
+
+    /// <summary>The screen a Monitor Recording captures, beside its key.</summary>
+    public MonitorPicker Monitor { get; }
+
+    /// <summary>The Clip sentence (EXPERIENCE.md "Clips and Recordings, explained").</summary>
+    public string ClipsHelp =>
+        $"The last {ClipLength(_clipSeconds)} of your game, saved when you press {KeyName(HotkeyAction.Save, "Save Clip")}. ReplayBuffer keeps that much ready all the time, so you never miss a moment.";
+
+    /// <summary>The Recording sentence.</summary>
+    public string RecordingsHelp =>
+        $"One long video of your game that you start and stop yourself with {KeyName(_mode == RecordHotkeyMode.Toggle ? HotkeyAction.RecordToggle : HotkeyAction.RecordStart, "the Record key")}, alongside Clips. Allow it per game, on the game's page.";
+
+    /// <summary>The Monitor Recording sentence.</summary>
+    public string MonitorHelp =>
+        $"A Recording of a whole screen instead of a game, for anything that isn't detected as a game. Start and stop it with {KeyName(_mode == RecordHotkeyMode.Toggle ? HotkeyAction.MonitorRecordToggle : HotkeyAction.MonitorRecordStart, "the Monitor Recording key")}.";
+
+    public string MicHelp => "Silences your microphone on the tracks you choose in Audio Tracks.";
+
+    /// <summary>A Clip length in words: "30 s", "5 min", "1 min 30 s".</summary>
+    internal static string ClipLength(int seconds) => seconds switch
+    {
+        < 60 => $"{seconds} s",
+        _ when seconds % 60 == 0 => $"{seconds / 60} min",
+        _ => $"{seconds / 60} min {seconds % 60} s",
+    };
+
+    /// <summary>Shows the screens a newly connected engine run lists. Called before <see cref="SettingsPage.Render"/>.</summary>
+    public void ShowMonitors(StateSnapshot state) => Monitor.ShowState(state);
 
     /// <summary>The row waiting for a combination, or null.</summary>
     public HotkeyRow? CapturingRow => Rows.FirstOrDefault(r => r.IsCapturing);
@@ -221,12 +266,12 @@ internal sealed class HotkeysPage : SettingsPage
     {
         HotkeyAction.Save => "Save Clip",
         HotkeyAction.MicMute => "Mic mute",
-        HotkeyAction.RecordToggle => "Record (toggle)",
+        HotkeyAction.RecordToggle => "Record",
         HotkeyAction.RecordStart => "Record start",
         HotkeyAction.RecordStop => "Record stop",
-        HotkeyAction.MonitorRecordToggle => "Monitor Recording (toggle)",
-        HotkeyAction.MonitorRecordStart => "Monitor Recording (start)",
-        HotkeyAction.MonitorRecordStop => "Monitor Recording (stop)",
+        HotkeyAction.MonitorRecordToggle => "Monitor Recording",
+        HotkeyAction.MonitorRecordStart => "Monitor Recording start",
+        HotkeyAction.MonitorRecordStop => "Monitor Recording stop",
         _ => action.ToString(),
     };
 
@@ -237,10 +282,14 @@ internal sealed class HotkeysPage : SettingsPage
         _fromDocument = document.Global.TryGetValue(Keys.Hotkeys.Name, out var raw) && Keys.Hotkeys.TryRead(raw, out _);
         _hotkeys = _fromDocument ? SettingsValues.Global(document, Keys.Hotkeys) : FromStatus(_status);
         _mode = SettingsValues.Global(document, Keys.RecordHotkeyMode);
+        _clipSeconds = SettingsValues.Global(document, Keys.BufferWindow);
         OnPropertyChanged(nameof(IsToggleMode));
         OnPropertyChanged(nameof(IsSeparateMode));
+        Monitor.Render(document);
         ShowRows();
     }
+
+    private string KeyName(HotkeyAction action, string unbound) => _hotkeys.For(action) is { } binding ? Describe(binding) : unbound;
 
     // Engine rule (HotkeyPlan.SameCombination): NoRepeat doesn't count.
     private static bool SameCombination(HotkeyBinding a, HotkeyBinding b) =>
@@ -305,6 +354,9 @@ internal sealed class HotkeysPage : SettingsPage
 
     private void ShowRows()
     {
+        OnPropertyChanged(nameof(ClipsHelp));
+        OnPropertyChanged(nameof(RecordingsHelp));
+        OnPropertyChanged(nameof(MonitorHelp));
         foreach (var row in Rows)
         {
             var status = _status.Bindings.FirstOrDefault(b => b.Action == row.Action);

@@ -22,6 +22,42 @@ internal partial class LibraryView
 
     private LibraryPage? Page => DataContext as LibraryPage;
 
+    // Ctrl+F, anywhere on the page: focus the search box with its text selected (story 10.3). A rename box
+    // keeps every key, so an open rename isn't committed by the focus moving away.
+    private void OnViewPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control
+            && (e.OriginalSource is not TextBox box || ReferenceEquals(box, SearchBox)))
+        {
+            SearchBox.Focus();
+            SearchBox.SelectAll();
+            e.Handled = true;
+        }
+    }
+
+    // Esc in the search box clears it at once, even within the 150 ms the search waits for typing.
+    private void OnSearchPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && SearchBox.Text.Length > 0)
+        {
+            ClearSearch();
+            e.Handled = true;
+        }
+    }
+
+    private void OnClearSearchClick(object sender, RoutedEventArgs e)
+    {
+        ClearSearch();
+        SearchBox.Focus();
+    }
+
+    // Empties the box and pushes it to the page now, past the binding's delay.
+    private void ClearSearch()
+    {
+        SearchBox.Text = "";
+        SearchBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+    }
+
     // The inline editor takes focus with its text selected once shown; after the context menu has closed.
     private void OnRenameVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {

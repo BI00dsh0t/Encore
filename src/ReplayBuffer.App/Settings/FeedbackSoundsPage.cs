@@ -40,7 +40,7 @@ internal sealed class FeedbackSoundsPage : SettingsPage
         ];
     }
 
-    public override string Title => "Feedback Sounds";
+    public override string Title => "Sounds";
 
     /// <summary>One row per sound, in the page's order.</summary>
     public IReadOnlyList<FeedbackSoundRow> Sounds { get; }

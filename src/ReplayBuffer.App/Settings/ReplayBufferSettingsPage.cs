@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Windows;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 
@@ -19,10 +20,15 @@ internal sealed record ResolutionItem(int Width, int Height, string Label);
 /// It shows the engine's storage estimate (R2) and warns, blocking nothing, when it is over the free
 /// bytes. With a profile id it edits that Game Profile's <c>bufferWindow</c> and <c>video</c> overrides
 /// (R7) instead: each key either uses Global, shown and not editable, or has the profile's own value.
-/// Members run on the UI thread.
+/// Members run on the UI thread. Story 10.9 renames it Clips, with the glossary's labels, and the
+/// ring path becomes the cache folder's <see cref="FolderPicker"/>, enabled only under Disk.
 /// </summary>
-internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? profileId = null) : SettingsPage(sender)
+internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? profileId = null, string? defaultCacheFolder = null) : SettingsPage(sender)
 {
+    public const string CacheInsideClips = "The cache folder can't be inside the Clips folder.";
+    public const string CantWrite = "ReplayBuffer can't write to that folder.";
+    public const string ClipsContainsCache = "The Clips folder can't contain the cache folder.";
+
     private int _bufferWindow = Keys.BufferWindow.Default;
     private ReplayStorage _storage = Keys.ReplayStorage.Default;
     private string? _ringPath = Keys.RingPath.Default;
@@ -34,8 +40,34 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
     private IReadOnlyList<ResolutionItem> _resolutions = [];
     private bool _bufferWindowUsesGlobal = profileId is not null;
     private bool _videoUsesGlobal = profileId is not null;
+    private FolderPicker? _cacheFolder;
+    private string? _clipsFolder;
+    private string? _libraryFolder;
+    private HotkeyBinding? _saveKey;
 
-    public override string Title => "Replay Buffer";
+    public override string Title => "Clips";
+
+    /// <summary>The page's intro: what it controls, with the Save Hotkey.</summary>
+    public string Intro =>
+        $"ReplayBuffer keeps the last part of your game ready, so {(_saveKey is { } key ? HotkeysPage.Describe(key) : "the Save Clip key")} can save it as a Clip.";
+
+    /// <summary>The cache folder (<c>ringPath</c>): enabled only under Disk.</summary>
+    public FolderPicker CacheFolder => _cacheFolder ??= new FolderPicker(Keys.RingPath, ops => SendForPickerAsync(ops, ErrorCodes.RingPathInvalid))
+    {
+        RefusalText = code => code == ErrorCodes.RingPathInvalid ? CacheInsideClips : null,
+        DialogTitle = "Choose the cache folder",
+        DisabledCaption = "Used only in Disk mode",
+        Validate = ValidateCacheFolder,
+    };
+
+    /// <summary>The cache folder's help: what it holds, with the Clip length.</summary>
+    public string CacheHelp => $"In Disk mode, the last {HotkeysPage.ClipLength(_bufferWindow)} of gameplay is kept here in one file. It doesn't grow.";
+
+    /// <summary>The Memory option's line, with the estimate.</summary>
+    public string MemoryLine => _estimate is { } e ? $"Fastest. Uses about {FormatBytes(e.Bytes)} of RAM." : "Fastest. Uses RAM.";
+
+    /// <summary>The Disk option's line, with the estimate.</summary>
+    public string DiskLine => _estimate is { } e ? $"Uses about {FormatBytes(e.Bytes)} in the cache folder instead of RAM." : "Uses the cache folder instead of RAM.";
 
     /// <summary>The Game Profile whose overrides this page edits; null on the Global page.</summary>
     public string? ProfileId { get; } = profileId;
@@ -101,7 +133,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
                 return;
             }
 
-            SendInt(value, ref _bufferWindow, v => v >= 1, Keys.BufferWindow, ProfileId, "The Buffer Window must be a whole number of seconds, 1 or more.");
+            SendInt(value, ref _bufferWindow, v => v >= 1, Keys.BufferWindow, ProfileId, "The Clip length must be a whole number of seconds, 1 or more.");
         }
     }
 
@@ -125,36 +157,11 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
         set => SendStorage(value ? ReplayStorage.Disk : ReplayStorage.Memory);
     }
 
-    /// <summary><c>ringPath</c>; empty is the default folder.</summary>
-    public string RingPath
-    {
-        get => _ringPath ?? "";
-        set
-        {
-            var path = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-            if (path is not null && !Path.IsPathFullyQualified(path))
-            {
-                Refuse("The ring folder must be a full path, such as D:\\ReplayBuffer\\ring, or empty for the default.", nameof(RingPath));
-                return;
-            }
-
-            if (path == _ringPath)
-            {
-                OnPropertyChanged();
-                return;
-            }
-
-            _ringPath = path;
-            OnPropertyChanged();
-            _ = SendAsync([SettingsValues.SetGlobal(Keys.RingPath, path)]);
-        }
-    }
-
     /// <summary><c>saveCooldown</c>, in s; 0 or more.</summary>
     public string SaveCooldownText
     {
         get => Text(_saveCooldown);
-        set => SendInt(value, ref _saveCooldown, v => v >= 0, Keys.SaveCooldown, null, "The save cooldown must be a whole number of seconds, 0 or more.");
+        set => SendInt(value, ref _saveCooldown, v => v >= 0, Keys.SaveCooldown, null, "Time between saves must be a whole number of seconds, 0 or more.");
     }
 
     /// <summary>The probed codecs, or the current one alone before the probe.</summary>
@@ -261,7 +268,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
         { ExceedsFree: true, Storage: ReplayStorage.Memory } e =>
             $"More than the free RAM ({FormatBytes(e.FreeBytes ?? 0)}). The value is kept; Clips may be shorter.",
         { ExceedsFree: true } e =>
-            $"More than the free space on the ring folder's drive ({FormatBytes(e.FreeBytes ?? 0)}). The value is kept.",
+            $"More than the free space on the cache folder's drive ({FormatBytes(e.FreeBytes ?? 0)}). The value is kept.",
         _ => null,
     };
 
@@ -281,7 +288,11 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
             _estimate = state.Estimate;
             OnPropertyChanged(nameof(EstimateText));
             OnPropertyChanged(nameof(EstimateWarning));
+            OnPropertyChanged(nameof(MemoryLine));
+            OnPropertyChanged(nameof(DiskLine));
         }
+
+        _libraryFolder = state.LibraryFolder;
     }
 
     /// <summary>Bytes with one decimal, in GB (10^9) from 1 GB, else in MB (10^6).</summary>
@@ -306,10 +317,17 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
         _bufferWindow = SettingsValues.Resolve(document, Keys.BufferWindow, ProfileId);
         _storage = SettingsValues.Global(document, Keys.ReplayStorage);
         _ringPath = SettingsValues.Global(document, Keys.RingPath);
+        _clipsFolder = SettingsValues.Global(document, Keys.OutputFolder);
+        _saveKey = SettingsValues.Global(document, Keys.Hotkeys).Save;
+        if (IsGlobal)
+        {
+            CacheFolder.Show(_ringPath, defaultCacheFolder ?? "");
+            CacheFolder.IsEnabled = _storage == ReplayStorage.Disk;
+        }
         _saveCooldown = SettingsValues.Global(document, Keys.SaveCooldown);
         _video = SettingsValues.Resolve(document, Keys.Video, ProfileId);
         ShowLists();
-        foreach (var name in (string[])[nameof(BufferWindowText), nameof(IsMemory), nameof(IsDisk), nameof(RingPath), nameof(SaveCooldownText)])
+        foreach (var name in (string[])[nameof(BufferWindowText), nameof(IsMemory), nameof(IsDisk), nameof(SaveCooldownText), nameof(Intro), nameof(CacheHelp)])
         {
             OnPropertyChanged(name);
         }
@@ -317,16 +335,36 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
         ShowVideo();
     }
 
+    // The glossary's codec names; each says how widely it plays.
     private static string CodecName(VideoCodec codec) => codec switch
     {
-        VideoCodec.H264 => "H.264",
-        VideoCodec.Hevc => "HEVC",
-        VideoCodec.Av1 => "AV1",
+        VideoCodec.H264 => "H.264 (plays everywhere)",
+        VideoCodec.Hevc => "HEVC (smaller files)",
+        VideoCodec.Av1 => "AV1 (smallest; newer players only)",
         _ => codec.ToString(),
     };
 
     private static CodecItem Codec(VideoCodec codec, bool mayNotPlayEverywhere) =>
-        new(codec, CodecName(codec) + (mayNotPlayEverywhere ? " (may not play everywhere)" : ""));
+        new(codec, CodecName(codec) + (mayNotPlayEverywhere && codec == VideoCodec.Hevc ? " — may not play everywhere" : ""));
+
+    /// <summary>The cache folder's refusals: inside the Clips folder, or not writable.</summary>
+    private string? ValidateCacheFolder(string path)
+    {
+        if ((_clipsFolder ?? _libraryFolder) is { Length: > 0 } clips && IsInside(path, clips))
+        {
+            return CacheInsideClips;
+        }
+
+        return FolderPicker.CanWrite(path) ? null : CantWrite;
+    }
+
+    /// <summary>Whether <paramref name="path"/> is <paramref name="folder"/> or inside it, ignoring case.</summary>
+    internal static bool IsInside(string path, string folder)
+    {
+        // A drive root keeps its separator, so add one only where it's missing.
+        static string WithSeparator(string p) => Path.EndsInDirectorySeparator(p) ? p : p + Path.DirectorySeparatorChar;
+        return WithSeparator(Path.GetFullPath(path)).StartsWith(WithSeparator(Path.GetFullPath(folder)), StringComparison.OrdinalIgnoreCase);
+    }
 
     private static ResolutionItem Resolution(int width, int height) =>
         new(width, height, string.Create(CultureInfo.InvariantCulture, $"{width} × {height}"));
@@ -424,6 +462,7 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
         _storage = storage;
         OnPropertyChanged(nameof(IsMemory));
         OnPropertyChanged(nameof(IsDisk));
+        CacheFolder.IsEnabled = storage == ReplayStorage.Disk;
         _ = SendAsync([SettingsValues.SetGlobal(Keys.ReplayStorage, storage)]);
     }
 

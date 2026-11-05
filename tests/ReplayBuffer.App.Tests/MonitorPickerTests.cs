@@ -10,7 +10,7 @@ using ReplayBuffer.Contracts.Settings;
 namespace ReplayBuffer.App.Tests;
 
 [Collection(nameof(WpfCollection))]
-public sealed class RecordingsSettingsPageTests
+public sealed class MonitorPickerTests
 {
     private static readonly DisplayMonitor Dell = new(@"\\.\DISPLAY1", "DELL", 2560, 1440, true);
     private static readonly DisplayMonitor Lg = new(@"\\.\DISPLAY2", "LG", 1920, 1080, false);
@@ -18,7 +18,7 @@ public sealed class RecordingsSettingsPageTests
     private readonly FakeEngineSession _engine = new();
     private readonly List<SettingsUpdate> _updates = [];
 
-    public RecordingsSettingsPageTests()
+    public MonitorPickerTests()
     {
         _engine.Monitors = () => new MonitorList([Dell, Lg]);
         _engine.Reply = (_, args) =>
@@ -34,7 +34,7 @@ public sealed class RecordingsSettingsPageTests
     {
         SetState(revision: 3, monitor: null);
         var model = Create();
-        var page = model.Recordings;
+        var page = model.Hotkeys.Monitor;
         Assert.Equal(["Primary monitor", "DELL — 2560×1440 (primary)", "LG — 1920×1080"], page.Monitors.Select(m => m.Label));
         Assert.Null(page.SelectedMonitor!.DeviceName);
 
@@ -59,13 +59,13 @@ public sealed class RecordingsSettingsPageTests
     {
         SetState(revision: 1, monitor: @"\\.\DISPLAY3");
         var model = Create();
-        var page = model.Recordings;
+        var page = model.Hotkeys.Monitor;
         Assert.Equal(@"\\.\DISPLAY3 (not connected)", page.Monitors[^1].Label);
         Assert.Same(page.Monitors[^1], page.SelectedMonitor);
 
         _engine.Monitors = () => throw new ErrorCodeException(ErrorCodes.EngineDisconnected, "Gone.");
         page.RefreshCommand.Execute(null);
-        Assert.Equal($"Couldn't list monitors ({ErrorCodes.EngineDisconnected}): Gone.", page.Message);
+        Assert.Equal($"Couldn't list screens ({ErrorCodes.EngineDisconnected}): Gone.", model.Hotkeys.Message);
         Assert.Equal(4, page.Monitors.Count);
 
         // A new engine run lists them again.
@@ -74,7 +74,7 @@ public sealed class RecordingsSettingsPageTests
         model.Refresh();
         Assert.Equal(3, _engine.MonitorFetches);
         Assert.Equal(3, page.Monitors.Count);
-        Assert.Null(page.Message);
+        Assert.Null(model.Hotkeys.Message);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public sealed class RecordingsSettingsPageTests
     {
         SetState(revision: 1, monitor: Lg.DeviceName);
         var model = Create();
-        var page = model.Recordings;
+        var page = model.Hotkeys.Monitor;
         Assert.Equal(3, page.Monitors.Count);
 
         // The LG is unplugged (T-03): the list follows the event, and the chosen monitor shows as not connected.
@@ -97,8 +97,8 @@ public sealed class RecordingsSettingsPageTests
     {
         SetState(revision: 1, monitor: Lg.DeviceName);
         var model = Create();
-        Assert.Contains(model.Pages, p => p.Title == "Recordings");
-        model.SelectedPage = model.Recordings;
+        Assert.DoesNotContain(model.Pages, p => p.Title == "Recordings");
+        model.SelectedPage = model.Hotkeys;
 
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
@@ -124,7 +124,7 @@ public sealed class RecordingsSettingsPageTests
             // The HITL record's picture of the page.
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using (var file = File.Create(Path.Combine(AppContext.BaseDirectory, "recordings-settings.png")))
+            using (var file = File.Create(Path.Combine(AppContext.BaseDirectory, "hotkeys-screen-picker.png")))
             {
                 encoder.Save(file);
             }

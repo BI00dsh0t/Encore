@@ -18,12 +18,12 @@ public sealed partial class SettingsLayoutTests
 {
     private static readonly string[] Views =
         [
-            "GeneralSettingsView", "ReplayBufferSettingsView", "RecordingsSettingsView", "HotkeysView", "FeedbackSoundsView",
+            "GeneralSettingsView", "ReplayBufferSettingsView", "FolderPickerView", "HotkeysView", "FeedbackSoundsView",
             "TrackLayoutView", "GameProfilesView", "LibrarySettingsView",
         ];
 
     [Fact]
-    public void TheFivePagesShowTheirSectionsAsCardsInBothThemes() => Sta.Run(() =>
+    public void TheFirstFourPagesShowTheirSectionsAsCardsInBothThemes() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
         var window = Offscreen(new MainWindow { DataContext = model });
@@ -31,10 +31,9 @@ public sealed partial class SettingsLayoutTests
         var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
         {
             (model.General, "general", ["Appearance", "Startup and Overlay"]),
-            (model.ReplayBuffer, "replay-buffer", ["Replay Buffer", "Output"]),
-            (model.Recordings, "recordings", ["Recordings"]),
-            (model.Hotkeys, "hotkeys", ["Hotkeys"]),
-            (model.FeedbackSounds, "feedback-sounds", ["Feedback Sounds"]),
+            (model.ReplayBuffer, "clips", ["Clip length", "Where recent gameplay is kept", "Video quality — for Clips and Recordings"]),
+            (model.Hotkeys, "hotkeys", ["Clips", "Recordings", "Monitor Recording", "Microphone"]),
+            (model.FeedbackSounds, "sounds", ["Sounds"]),
         };
         try
         {
@@ -49,7 +48,7 @@ public sealed partial class SettingsLayoutTests
                     Sta.Pump(TimeSpan.FromMilliseconds(100));
 
                     Assert.True(page.View.IsLoaded, $"{page.Title} didn't load under {which}");
-                    var found = Descendants<HeaderedContentControl>(page.View).ToList();
+                    var found = Descendants<HeaderedContentControl>(page.View).Where(s => s.Visibility == Visibility.Visible).ToList();
                     Assert.Equal(sections, found.Select(s => s.Header as string));
                     Assert.All(found, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
                     Save(window, $"settings-{slug}-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
@@ -95,8 +94,8 @@ public sealed partial class SettingsLayoutTests
         var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
         {
             (model.TrackLayout, "audio-tracks", []),
-            (model.GameProfiles, "game-profiles", ["Games", "Add a game by hand", "Overrides for", "Replay Buffer", "Output"]),
-            (model.LibrarySettings, "library-and-cleanup", ["Output Folder", "Cleanup"]),
+            (model.GameProfiles, "game-profiles", ["Games", "Add a game by hand", "Overrides for", "Clip length", "Video quality — for Clips and Recordings"]),
+            (model.LibrarySettings, "storage-and-cleanup", ["Clips folder", "Cleanup"]),
         };
         try
         {
@@ -145,14 +144,14 @@ public sealed partial class SettingsLayoutTests
                         tracks[0].Sources[0].ShowPeak(0.3f);
                         tracks[1].Sources[0].ShowPeak(0.1f);
                         Sta.Pump(TimeSpan.FromMilliseconds(50));
-                        foreach (var key in AudioTracksResourceKeys())
+                        foreach (var key in ViewResourceKeys())
                         {
                             Assert.True(window.TryFindResource(key) is not null, $"Missing resource {key} under {which}");
                         }
                     }
 
                     Assert.True(page.View.IsLoaded, $"{page.Title} didn't load under {which}");
-                    var found = Descendants<HeaderedContentControl>(page.View).ToList();
+                    var found = Descendants<HeaderedContentControl>(page.View).Where(s => s.Visibility == Visibility.Visible).ToList();
                     Assert.Equal(sections, found.Select(s => s.Header as string));
                     Assert.All(found, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
 
@@ -215,13 +214,18 @@ public sealed partial class SettingsLayoutTests
         }
     }
 
-    /// <summary>Every resource key Audio Tracks' view and dictionary look up, but the view's own converter.</summary>
-    private static IEnumerable<string> AudioTracksResourceKeys()
+    /// <summary>
+    /// Every theme resource key the views stories 10.5 and 10.9 built look up: Audio Tracks, its dictionary,
+    /// the folder picker, Clips, Hotkeys and Storage. Keys the files define themselves are left out.
+    /// </summary>
+    private static IEnumerable<string> ViewResourceKeys()
     {
         var folder = Path.Combine(MainFolder(), "src", "ReplayBuffer.App");
-        var xaml = File.ReadAllText(Path.Combine(folder, "Settings", "TrackLayoutView.xaml"))
-            + File.ReadAllText(Path.Combine(folder, "Theme", "AudioTracksTheme.xaml"));
-        return ResourceKey().Matches(xaml).Select(m => m.Groups[1].Value).Where(k => k != "Visible").Distinct();
+        var xaml = string.Concat(
+            ((string[])[@"Settings\TrackLayoutView.xaml", @"Theme\AudioTracksTheme.xaml", @"Settings\FolderPickerView.xaml", @"Settings\ReplayBufferSettingsView.xaml", @"Settings\HotkeysView.xaml", @"Settings\LibrarySettingsView.xaml"])
+            .Select(f => File.ReadAllText(Path.Combine(folder, f))));
+        var local = LocalKey().Matches(xaml).Select(m => m.Groups[1].Value).ToHashSet();
+        return ResourceKey().Matches(xaml).Select(m => m.Groups[1].Value).Where(k => !local.Contains(k)).Distinct();
     }
 
     private static void SaveElement(FrameworkElement element, string name, Window window)
@@ -310,4 +314,7 @@ public sealed partial class SettingsLayoutTests
 
     [GeneratedRegex(@"\{(?:Dynamic|Static)Resource (\w+)\}")]
     private static partial Regex ResourceKey();
+
+    [GeneratedRegex(@"x:Key=""(\w+)""")]
+    private static partial Regex LocalKey();
 }
