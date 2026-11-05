@@ -44,7 +44,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with QA 11.1 (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.5 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 10.5 |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.2 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -185,7 +185,7 @@ The coordinator logs each QA round in the Log below.
 | 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (slice-epic-5) |
 | 31.3 | 10.3 Library sort and search | | pending |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA (2-1-tracer) |
+| 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | | pending |
 | 31.7 | 10.10 Games list and a page per game | | pending |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
@@ -831,3 +831,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 11.1 spike READY at `96abe48`: **GO** for 11.3, with changes. PC correction: DISPLAY2 is 3840x2160@144 Hz and DISPLAY1 2560x1440@240 Hz, so the canvas is 6400x2160. FPS loss on the synthetic 80 fps load: Replay Buffer alone 2.85 %; plus one-monitor Monitor Recording 5.15 %; plus two composited, HEVC 8.83 %, AV1 8.80 %, H.264 at 4096x1382 9.27 %, Desktop Duplication with HEVC 7.06 %. 2 NVENC sessions; codec limits H.264 4096, HEVC and AV1 8192; push once per output slot. **Decisions awaiting review:** dropping AD-25's 4K budget (a spine edit needed before 11.3), and **no Monitor Recording beside a game meets NFR-1's 3 %, not even today's one-monitor one** (this ties to the pending NFR-1 re-baseline). The spike says VLC isn't installed, but the builder's log shows it is, so QA is checking. QA went to slice-epic-8 (Sonnet, high effort).
 - 2026-11-05: QA 10.5 round 1 failed with 2 small findings at `11eab9a`, sent to qa-1-14: (1) the sound picker isn't closed when a reload rebuilds the cards, so a click after a `settings.changed` adds nothing; (2) the nav dot's corner radius is hard-coded in the shell dictionaries, not taken from a token. Everything else passed (App 156, Core 161, Contracts 128; no engine change; no overlap with 10.2).
 - 2026-11-05: QA 10.2 round 1 failed with 2 findings at `90f1d5e`, sent to story-2-7: (1) **a Clip starred as a Favourite in the middle of a large bulk delete (over 10 items) still gets deleted**, because the Favourite check is taken once at the start rather than per item; (2) a right-click in the rename box commits the rename. Build and default suites pass.
+- 2026-11-05: QA 10.5 passed at `d0880b9` (round 2): `Load()` closes the picker, with a test, and the nav dot uses the radius tokens. App 157 passed. qa-1-14 is merging. QA 11.1 found 4 problems at `96abe48` (the go verdict looks sound) and is waiting for the implementer's fixes.
