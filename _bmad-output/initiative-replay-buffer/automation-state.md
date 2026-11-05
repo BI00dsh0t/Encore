@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy with 8.8 smokes then soaks (holds the GPU) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; runs 11.5's Heavy rerun after 8.8's soaks |
@@ -939,3 +939,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: **Builder: "let's cut the memory soak short here."** At about 08:34 (about 4 h 55 m into its 8 h), slice-epic-5 was told to stop the Memory soak cleanly, write up the partial run as its result, then start the Disk soak as planned (8 h).
 - 2026-11-05: **Builder: "we'll run that tonight."** The 8-hour Disk soak moves to tonight. slice-epic-5 commits the Memory result on `feature/8.8-soaks` (not merged), clears the lock and frees the GPU. Today's GPU queue: 11.5's Heavy `MonitorRecordingCaptureTests` rerun (qa-2-1), then the two Heavy follow-ups (`RecordingWriter`'s fragment cadence under load; the video ending short of the audio at a stop).
 - 2026-11-05: **Builder: "those need to run at night as well."** The "GPU work at night only" rule is added. 11.5's Heavy rerun and the two Heavy follow-ups move to tonight with the Disk soak. qa-2-1 and slice-epic-5 have been told.
+- 2026-11-05: **8.8 Memory soak result** (cut short by the builder at 5 h 9 min, 03:28 to 08:37; committed on `feature/8.8-soaks`, not merged; report `story-8-hour-soaks-memory-soak-report.md`): Clips 101/101; bounds 10/10 from the 30 min warm-up. Engine private bytes +12.4 MB (limit 27.2 MB), **slope 1.87 MB/h against a 2 MB/h limit (close; watch it on the Disk soak)**. App private bytes +5.2 MB, slope 1.24 MB/h, with flat handles, GDI and USER (the App's working set rose 181 to 515 MB as shared or mapped pages, for information). Recordings 5/5 with 4 Tracks; Cleanup removed 67 and kept all 16 Favourites. Not reached because of the cut: the minute-450 App kill (the smoke covered it) and the closing two-clock Clip. No overlap noticed. The lock is clear and the GPU is free; the Disk soak waits for tonight.
