@@ -123,3 +123,4 @@ covers = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11"]
 after = [7]
 hitl = true
 risk = "low"
+notes = ["10.7 sweep, 2026-11-05: check the Library's selected row in Windows light mode under Fluent; 10.2 deferred whether its AccentColorLight2 fill at 25 % is visible enough (unverified)."]

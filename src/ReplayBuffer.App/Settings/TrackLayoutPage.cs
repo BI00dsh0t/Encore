@@ -22,7 +22,6 @@ namespace ReplayBuffer.App.Settings;
 internal sealed class TrackLayoutPage : SettingsPage
 {
     public const string PageTitle = "Audio Tracks";
-    public const string AppliesHint = "Changes apply from your next game, or right after your next saved Clip.";
     public const string NameNeeded = "Give every track a name to save.";
     public const string ChangedElsewhere = "Audio tracks were changed somewhere else, so this page shows the new ones.";
 

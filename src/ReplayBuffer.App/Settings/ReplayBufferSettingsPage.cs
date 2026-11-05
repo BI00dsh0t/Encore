@@ -300,11 +300,8 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
         ? string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e9:0.0} GB")
         : string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e6:0.0} MB");
 
-    protected override FrameworkElement CreateView()
-    {
-        var view = new ReplayBufferSettingsView { DataContext = this };
-        return IsGlobal ? view : Embedded(view);
-    }
+    // A game's Clip length and Video quality show in their own editors on its page (story 10.10), so only the main page has a view.
+    protected override FrameworkElement CreateView() => new ReplayBufferSettingsView { DataContext = this };
 
     protected override void OnRender(SettingsDocument document)
     {

@@ -49,9 +49,6 @@ internal partial class MainWindow
         Close();
     }
 
-    /// <summary>Whether the nav pane is at its narrow width.</summary>
-    internal bool IsNavNarrow => NavColumn.Width.Value < NavWidth;
-
     // Ctrl+Tab and Ctrl+Shift+Tab step through the nav from anywhere, as the old TabControl did. On the
     // bubbling KeyDown, so the Hotkeys page, which takes every key while capturing, keeps them.
     private void OnKeyDown(object sender, KeyEventArgs e)

@@ -48,7 +48,7 @@ internal static class InterruptedRecordings
         if (fragments > 0)
         {
             log.LogWarning("The interrupted Recording {Path} was trimmed to its last whole fragment ({Fragments} kept)", path, fragments);
-            return "It was kept up to its last whole fragment, and not resumed.";
+            return "It was kept up to the last part that was fully written, and not resumed.";
         }
 
         try
