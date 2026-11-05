@@ -181,6 +181,17 @@ The coordinator logs each QA round in the Log below.
 | 30.7 | 9.7 Tray menu, dialogs and Overlay messages | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged `8dbac3d`) |
 | 30.8 | 9.8 Refactor sweep | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged `5d43a43`) |
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged) |
+| 31.1 | 10.1 Design pass: renders and the builder's approval of ux-pass-2 | | pending |
+| 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | | pending |
+| 31.3 | 10.3 Library sort and search | | pending |
+| 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | | pending |
+| 31.5 | 10.5 Audio Tracks editor | | pending |
+| 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | | pending |
+| 31.7 | 10.10 Games list and a page per game | | pending |
+| 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
+| 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
+| 31.10 | 10.7 Refactor sweep | | pending |
+| 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -797,3 +808,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: Builder: "this still doesn't work correctly … retry initiating the capture or poll while the game is launched … we might capture for a second, but then because the game isn't ready, it stops." Their 19:42 test ran the old Dev build, since the fix isn't merged. The fix is widened on its branch: capture follows the Target's process (re-find its window and retarget, keeping the ring) for any window or capture end, before or after the anchor, while the process runs. Tests are still written and not run.
 - 2026-11-05: **Builder: "pause".** All work is paused. The bugfix session's turn (widening `tiny-startup-window-capture`, partway through on its branch) was stopped. All 7 sessions are idle, and nothing new starts until the builder resumes. On resume: finish the widened fix, then its tests and merge; 8.7 fps (needs the Dev App closed); the 8.8 smoke reruns, then 2 × 8 h soaks; then 8.9 to 8.11 and the v0.8.0 and v0.9.0 releases.
 - 2026-11-05: The builder tested `bugfix/tiny-startup-window-capture` (`89557eb`) on the Dev App: it works. Rocket League was detected minimized, captured once its window was ready, and 3 Clips were saved. The same log shows **VLC and Chrome detected as games**: the fullscreen or borderless rule plus the focus rule made VLC (opening a Clip) and Chrome steal the Target from the running Rocket League. The builder: yes, fix that on the same branch. **Builder: "resume it"**: the bugfix resumes, with its tests allowed (the rest stays paused). The main folder is back on develop so the worker can use the branch.
+- 2026-11-05: **Epic 10 "UX pass 2" planned and merged** (`feature/10.0-ux-pass-2-planning` at `4be8895`). It comes from the builder's feedback: Library list basics (multi-select), a Track Layout that makes no sense to an end user, Game Profiles (a list, then a page per game), the Recordings page (removed), the Replay Buffer page renamed to Clips ("Ring folder" becomes "Cache folder"), a folder picker everywhere, and a glossary of plain words. 11 stories; build order 10.1 → 10.2 → 10.3 | 10.4 → 10.5 → 10.9 → 10.10 → 10.11 → 10.6 → 10.7 → 10.8. R38 is widened, AD-24 added, and 8.11 now waits on 10.8. Epic 7's "one item at a time" decision is overridden. Trello cards were created (10.1 in Ready) and Queue rows 31.x added. Paused like the rest: only the bugfix runs. For the builder at 10.1: the page names, removing Recordings, the glossary labels, Favourites protected from Delete, and a tray "Save Clip now".

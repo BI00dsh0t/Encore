@@ -138,5 +138,16 @@ Label ids take the form `ari:cloud:trello::label/workspace/6ae9f97af5eb2665e5252
 | 9.7 Tray menu, dialogs and Overlay messages | `6aeb567e724bef294d1f3f3b` |
 | 9.8 Refactor sweep | `6aeb567f4ba1943f56124875` |
 | 9.9 Modern UI end to end on the builder's PC | `6aeb5680f8d5e704797db805` |
+| 10.1 Design pass: renders and the builder's approval of ux-pass-2 | `6aebdef61c19baef81e4ec1d` |
+| 10.2 Library selection, bulk actions, context menu and shortcuts | `6aebdef77fb58ca4e3080034` |
+| 10.3 Library sort and search | `6aebdef8835ce8d71f47c993` |
+| 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | `6aebdef9f89769c305ceae2f` |
+| 10.5 Audio Tracks editor | `6aebdefa950d0b0a2f14cd84` |
+| 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | `6aebdefb79c80d2d886f4100` |
+| 10.10 Games list and a page per game | `6aebdefcca38757ec3935515` |
+| 10.11 Plain words everywhere: the glossary on every label, status and warning | `6aebdefd5c3d9d6b37f56bfa` |
+| 10.6 Welcome card, Library kind badge, tray menu and status hint | `6aebdefe46db8a9313312aa9` |
+| 10.7 Refactor sweep | `6aebdeff6db3f46824b5952b` |
+| 10.8 UX pass 2 end to end on the builder's PC | `6aebdf008283931c151819cf` |
 
 The legend card at the top of Backlog is `6ae9fa9bd7f70d53c9518fbf`.
