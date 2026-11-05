@@ -44,7 +44,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.2 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 10.9 |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -186,7 +186,7 @@ The coordinator logs each QA round in the Log below.
 | 31.3 | 10.3 Library sort and search | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `c322f3e`) |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA (2-1-tracer) |
+| 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | App QA passed; engine guard pending, then the coordinator reviews and it merges |
 | 31.7 | 10.10 Games list and a page per game | | pending |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
@@ -854,3 +854,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 10.9 round 1 failed with 1 finding at `d8c9b64`: the "cache folder can't be inside the Clips folder" guard is bypassable from Storage and Cleanup, because it's checked one way only and the engine has no check. The coordinator asked for both directions in the App plus an engine-side refusal (AD-4's single writer) with an additive `ring-path-invalid` code. Everything else passed. Noted: Game Profiles' AddPath is the last bare path box, left for 10.10.
 - 2026-11-05: 10.3 merged (`c322f3e`, `feat(app): merge 10.3-library-sort-search`) after QA passed at `58fc9b1`; develop merged into the branch first with no conflicts: 0-warning build; App 173, Core 161 and Contracts 128 passed. Marked done; `library-search-{fluent,gaming-dark}.png` copied to `ux-pass-2/renders/`.
 - 2026-11-05: 10.3 merged (`c322f3e`; marked done and renders in `5e1ebf2`), and its card is Done. story-2-7 is back in the pool. Bugfix `load-sensitive-tests` (`LibraryThemeTests...BannerLockAndFavourite` and `NothingToReselectServeTests`) went to slice-epic-5 (Opus, medium effort).
+- 2026-11-05: QA 10.9 passed the App-side fix at `ad15c27`: both pickers enforce the cache-versus-Clips-folder rule, and the `IsInside` drive-root bug is fixed; App 171 passed. The engine-side `ring-path-invalid` refusal is pending; the coordinator reviews it, then the merge.
