@@ -4,11 +4,11 @@ type: architecture-spine
 purpose: build-substrate
 altitude: initiative
 paradigm: 'ports-and-adapters engine with a single-threaded orchestrator, hosting a pipes-and-filters media pipeline; MVVM thin client over IPC'
-scope: 'initiative-replay-buffer: the engine process and the Main App, all 10 epics'
+scope: 'initiative-replay-buffer: the engine process and the Main App, all 11 epics'
 status: final
 created: '2026-10-25'
 updated: '2026-11-04'
-binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38]
+binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39]
 sources:
   - _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md
   - PLAN.md
@@ -140,7 +140,7 @@ graph LR
   - **Sharing:** Sinks share an encoder chain exactly when they share a `ChainKey = (source identity, video keys, Track structure)`. Live mute and profile attributes are not part of the key.
   - **Budget:**
     - At most 2 video encoder chains run at once; a request for a third is refused with `encoder-budget`.
-    - The engine uses one D3D11 device, on the Target Game's adapter.
+    - The engine uses one D3D11 device, on the Target Game's adapter. The one exception is the Monitor session's own device (AD-25).
     - File I/O runs at low I/O priority.
     - Both processes run unelevated, and GPU priority uses only `SetGPUThreadPriority`.
   - **Chain changes at a Reset:** when a pending settings change alters the Replay Buffer's `ChainKey`, the orchestrator builds the next chain in advance and switches to it at the press frame. If a gap can't be avoided, it raises `warning.raised { code: reset-gap }`.
@@ -346,6 +346,17 @@ graph LR
   - **Library kind:** `LibraryItem` gains an optional `kind` (`clip` | `recording` | `monitorRecording`), set by the LibraryActor at `BeginWrite` and kept in `library.json`; scanned files have none (AD-22).
   - **Per-device meters** reuse `meters.watch` (AD-20): the App adds one probe Track per device to the watched draft and never saves the probes. Should that cost too much, an optional per-device level list is added to `meters.levels` under AD-22 instead.
 
+### AD-25 — Multi-monitor Monitor Recording: one compositor, one chain
+
+- **Binds:** R21, R39; NFR-1
+- **Prevents:** one encoder chain per monitor breaking the budget; files of one Recording out of sync; a saved monitor choice pointing at a different monitor after a replug; the canvas changing inside a file
+- **Rule:**
+  - **One video:** a Monitor Recording of several monitors is one file. Each monitor's source (a WGC monitor item, else its own Desktop Duplication fallback, AD-12) keeps its latest frame. A `MonitorCompositor` in Media blits them into one canvas per output frame, laid out by virtual-desktop position, ahead of the existing pacer, scaler, **one** encoder chain and the RecordingWriter. A single monitor passes straight through.
+  - **Canvas:** the canvas is the bounding box of the recorded monitors, scaled down with its aspect kept to fit the probed codec maximum and a pixel budget equal to the Output resolution's area or 3840×2160, whichever is larger, with even sides. It's fixed for the life of a file. A removed monitor's area turns black, an arriving monitor waits for the next Recording, and a mode change scales into the same area.
+  - **Device:** the Monitor session keeps its own D3D11 device, on the adapter of the primary recorded monitor. This is an explicit exception to AD-7's one device, which settles 6.9's open decision. The session's chain counts toward AD-7's two-chain budget as before.
+  - **Selection:** `monitorRecordingScreens` (`all`, or `selected` monitor ids; Global-only; additive, AD-22) names the monitors by DisplayConfig's monitor device path. While it's null, the old `monitorRecordingMonitor` (a GDI device name, null for the primary) is read as before. Core's one resolver turns either into the attached monitors and the missing ones.
+  - **Faults:** GPU reset follows 8.3 and 6.6, rebuilding every source and continuing in a new file. Monitor removal follows 8.5, except that the Recording ends only when no recorded monitor is left.
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -458,6 +469,7 @@ ReplayBuffer/
 | R27–R29 Library, Cleanup | Core (LibraryActor), App (shell actions) | AD-17, AD-1 |
 | R31, R34, R35 startup, supervision, hands-off | App (supervisor), Engine | AD-16, AD-22 |
 | R37 themes | App (ThemeService, theme dictionaries), Contracts (key catalog) | AD-23, AD-4 |
+| R39 multi-monitor Monitor Recording | Media (MonitorCompositor), Platform.Capture, Core (screen resolver, canvas rule), App (Hotkeys picker) | AD-25, AD-7, AD-12, AD-22 |
 | R38 Library selection and bulk actions, audio-tracks editor, first-run seed, Games, settings pages, plain labels | App (Library, Audio Tracks, Games and settings view models), Engine (settings seed, warning texts), Core (LibraryActor kind), Platform.Audio (default device) | AD-24, AD-17, AD-4, AD-20, AD-21, AD-22 |
 | R32 Hotkeys | Platform.Windows | AD-11 |
 | R33, R36 drift, FPS | Bench, Media | AD-6, AD-13, AD-7 |
