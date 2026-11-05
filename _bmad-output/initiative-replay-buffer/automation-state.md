@@ -193,7 +193,7 @@ The coordinator logs each QA round in the Log below.
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
 | 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `3fd6ed4`) |
-| 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
+| 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA |
 | 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | | pending |
 | 32.4 | 11.4 Screens to record: the picker on Hotkeys | | pending |
 | 32.5 | 11.5 Refactor sweep | | pending |
@@ -856,3 +856,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.3 merged (`c322f3e`; marked done and renders in `5e1ebf2`), and its card is Done. story-2-7 is back in the pool. Bugfix `load-sensitive-tests` (`LibraryThemeTests...BannerLockAndFavourite` and `NothingToReselectServeTests`) went to slice-epic-5 (Opus, medium effort).
 - 2026-11-05: QA 10.9 passed the App-side fix at `ad15c27`: both pickers enforce the cache-versus-Clips-folder rule, and the `IsInside` drive-root bug is fixed; App 171 passed. The engine-side `ring-path-invalid` refusal is pending; the coordinator reviews it, then the merge.
 - 2026-11-05: 10.9's engine guard at `a9ead21`, reviewed and approved by the coordinator: the additive `ErrorCodes.RingPathInvalid`; `RingPathRule.Nests` checks either way with defaults; `SettingsStore` refuses only when `ringPath` or `outputFolder` changes; the pickers word the refusal. Contracts 128, Core 161, Engine 191 and App 173 passed; publish clean. Follow-up for 10.10: a per-game `outputFolder` override isn't checked against the cache folder. qa-1-14 is merging.
+- 2026-11-05: 11.2 READY FOR QA at `10d0c29` (from develop `ea10553`): the Global-only `monitorRecordingScreens` key; DisplayMonitor's MonitorId, X, Y, RefreshHz and Hdr; three warning codes; Core.Monitors `MonitorScreens.Resolve` and `MonitorCanvasRule.Plan`; no capture or App change. Deviations: the monitor list lives in Platform.Capture, and with no HEVC or AV1 encoder a canvas over 4096 stays H.264 fitted to 4096. Fixed a test bug that bit: `NothingToReselectServeTests` read library.json mid-write. Contracts 135, Core 165, Platform.Capture 6 and Engine 192 passed (one unrelated `RecordingCrashTests` failure under load, which passes alone). Publish clean. QA went to slice-epic-8 (Sonnet, high effort).
