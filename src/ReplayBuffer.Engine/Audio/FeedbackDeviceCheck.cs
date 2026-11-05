@@ -95,7 +95,7 @@ internal sealed class FeedbackDeviceCheck : IDisposable
                 ErrorCodes.FeedbackDeviceCaptured,
                 WarningSeverity.Warning,
                 Source,
-                $"Feedback Sounds play on '{device}', which {(captured.Count == 1 ? "Track" : "Tracks")} {tracks} {(captured.Count == 1 ? "records" : "record")}. Pick another Feedback Sound device, or take it out of the Track.",
+                $"Sounds play on '{device}', which the audio {(captured.Count == 1 ? "track" : "tracks")} {tracks} {(captured.Count == 1 ? "records" : "record")}, so they end up in your Clips. Pick another sound device on the Sounds page, or remove it from the track.",
                 overlay: false).Id;
             _log.LogWarning("Feedback Sounds play on {Device}, which {Tracks} record", device, tracks);
         }

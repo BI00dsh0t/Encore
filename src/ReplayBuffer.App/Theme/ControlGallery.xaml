@@ -88,7 +88,7 @@
                 </ListBox>
                 <ListBox Width="200" Height="130" IsEnabled="False" SelectedIndex="0" Margin="0,0,12,8">
                     <ListBoxItem Content="Disabled list" />
-                    <ListBoxItem Content="Use Global on" />
+                    <ListBoxItem Content="Uses the main setting" />
                 </ListBox>
                 <ListView Width="200" Height="130" SelectedIndex="0" Margin="0,0,12,8">
                     <ListViewItem Content="List view item" />
@@ -136,7 +136,7 @@
                     <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Style="{DynamicResource CaptionTextBlockStyle}" Text="Settings sections and the status header are cards." />
                 </StackPanel>
             </Border>
-            <ContentControl Margin="0,8,0,0" Content="Saving failed: the Output Folder is full." Style="{DynamicResource RbInfoBarDangerStyle}" />
+            <ContentControl Margin="0,8,0,0" Content="Saving failed: the Clips folder is full." Style="{DynamicResource RbInfoBarDangerStyle}" />
             <ContentControl Margin="0,8,0,0" Style="{DynamicResource RbInfoBarCautionStyle}">
                 <DockPanel>
                     <Button Margin="12,0,0,0" Content="Acknowledge" DockPanel.Dock="Right" />

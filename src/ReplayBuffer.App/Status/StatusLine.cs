@@ -65,12 +65,12 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
 
     private static string ConnectionText(EngineStatus status, string? problem) => status switch
     {
-        EngineStatus.Connecting => "Connecting to the engine…",
-        EngineStatus.Connected => "Connected to the engine.",
-        EngineStatus.Restarting => "Restarting the engine…" + (problem is { } why ? " " + why : ""),
-        EngineStatus.NotRunning => "The engine isn't running." + (problem is { } reason ? " " + reason : ""),
-        EngineStatus.CrashLoop => problem ?? "The engine keeps crashing, so it isn't being restarted. Restart it from the tray menu.",
-        _ => "The engine disconnected. Reconnecting…",
+        EngineStatus.Connecting => "Connecting to ReplayBuffer's background service…",
+        EngineStatus.Connected => "Connected to ReplayBuffer's background service.",
+        EngineStatus.Restarting => "Restarting ReplayBuffer's background service…" + (problem is { } why ? " " + why : ""),
+        EngineStatus.NotRunning => "ReplayBuffer's background service isn't running." + (problem is { } reason ? " " + reason : ""),
+        EngineStatus.CrashLoop => problem ?? "ReplayBuffer's background service keeps crashing, so it isn't being restarted. Restart it from the tray menu.",
+        _ => "ReplayBuffer's background service disconnected. Reconnecting…",
     };
 
     private static StatusDot DotFor(CaptureState capture) =>
@@ -85,9 +85,9 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
         [
             capture.Replay switch
             {
-                ReplayState.Buffering => state.TargetGame is { } game ? $"Buffering on {game.Name}" : "Buffering",
-                ReplayState.Draining => "Draining",
-                _ => "Replay Buffer off",
+                ReplayState.Buffering => state.TargetGame is { } game ? $"Ready to save Clips in {game.Name}" : "Ready to save Clips",
+                ReplayState.Draining => "Finishing the save…",
+                _ => "Waiting for a game",
             },
         ];
         if (capture.Recording == RecordingState.Running)

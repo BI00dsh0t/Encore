@@ -189,10 +189,10 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     {
         RecordingStopReasons.Stopped => "Recording stopped",
         RecordingStopReasons.GameExit => "Recording stopped: the game exited",
-        RecordingStopReasons.Ignored => "Recording stopped: the game was set Ignored",
-        RecordingStopReasons.SessionEnded => "Recording stopped: the game session ended",
+        RecordingStopReasons.Ignored => "Recording stopped: capture was switched off for the game",
+        RecordingStopReasons.SessionEnded => "Recording stopped: the game stopped being captured",
         RecordingStopReasons.Shutdown => "Recording stopped: ReplayBuffer shut down",
-        RecordingStopReasons.EncoderRestart => "Recording stopped: encoder restart",
+        RecordingStopReasons.EncoderRestart => "Recording stopped: its video restarted",
         RecordingStopReasons.DiskFull => "Recording stopped: the disk is full",
         RecordingStopReasons.Suspend => "Recording stopped: the PC went to sleep",
         _ => $"Recording stopped: the write failed ({reason})",
@@ -223,7 +223,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
                 ErrorCodes.RecordingRestarted,
                 WarningSeverity.Warning,
                 Recordings,
-                $"Recording restarted after an encoder restart: {Path.GetFileName(restart.StoppedPath)} → {Path.GetFileName(restart.StartedPath)}",
+                $"The Recording continues in a new file after its video restarted: {Path.GetFileName(restart.StoppedPath)} → {Path.GetFileName(restart.StartedPath)}",
                 FeedbackSoundNames.RecordingStarted));
         });
     }
@@ -248,7 +248,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
                 ErrorCodes.ReplayStoppedDiskFull,
                 WarningSeverity.Warning,
                 Replay,
-                "The Replay Buffer stopped: its disk is full. It restarts once there is room.",
+                "Clips stopped: the cache folder's drive is full. They start again once there is room.",
                 null)));
         });
     }
@@ -266,8 +266,8 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
     public static string ShortReason(string reason) => reason switch
     {
         ErrorCodes.DiskFull => "disk full",
-        ErrorCodes.ClipTooShort => "clip too short",
-        ErrorCodes.SaveBusy => "busy",
+        ErrorCodes.ClipTooShort => "nothing to save yet",
+        ErrorCodes.SaveBusy => "still saving the last one",
         ErrorCodes.AccessDenied => "access denied",
         _ => "save failed",
     };

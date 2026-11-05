@@ -2131,8 +2131,8 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         var message = first == long.MaxValue
-            ? $"The Replay Buffer's new encoder chain had no frame {(MicrosAt(Stopwatch.GetTimestamp()) - end) / 1000} ms after the last Clip's end; the next Clip starts at its first frame."
-            : $"The Replay Buffer's new encoder chain started {(first - end) / 1000} ms after the last Clip's end; the next Clip starts that much later.";
+            ? $"After your last saved Clip, the video didn't restart for {(MicrosAt(Stopwatch.GetTimestamp()) - end) / 1000} ms; the next Clip starts when it does."
+            : $"After your last saved Clip, the video restarted {(first - end) / 1000} ms late; the next Clip starts that much later.";
         _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
         _options.ResetGap?.Invoke(message);
     }
@@ -2165,8 +2165,8 @@ internal sealed class CaptureSession : ICaptureSession
         var reset = Volatile.Read(ref _resetUs);
         var first = ring.FirstKeyUs;
         var message = first == long.MaxValue
-            ? "The Replay Buffer switched to its new encoder chain at the Reset, tearing the old one down first while a Monitor Recording runs; no frame came within 1 s, so the next Clip starts at its first frame."
-            : $"The Replay Buffer switched to its new encoder chain at the Reset, tearing the old one down first while a Monitor Recording runs; the next Clip starts {(reset == long.MinValue ? 0 : Math.Max(0, first - reset)) / 1000} ms after the last Clip's end.";
+            ? "Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; the video didn't restart within 1 s, so the next Clip starts when it does."
+            : $"Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; the next Clip starts {(reset == long.MinValue ? 0 : Math.Max(0, first - reset)) / 1000} ms after the last one ended.";
         _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
         _options.ResetGap?.Invoke(message);
     }
@@ -2741,7 +2741,7 @@ internal sealed class CaptureSession : ICaptureSession
                 {
                     throw new ErrorCodeException(
                         ErrorCodes.ClipTooShort,
-                        "The Replay Buffer holds no keyframe before the cut yet, or less than 1 s since a ring generation began; there is nothing to save.");
+                        "There's nothing to save yet: ReplayBuffer has kept less than 1 s of gameplay since the game started or the last save.");
                 }
 
                 if (session._options.ClipWriteFault?.Invoke(path) is { } fault)
