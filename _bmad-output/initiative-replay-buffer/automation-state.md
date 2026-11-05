@@ -39,13 +39,13 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle (the orphan PID 66604 is gone) |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix load-sensitive-tests (8.8 held at e3822aa) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (8.7 fps command is in its plan) |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.2 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | busy with 11.4 |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; bugfix load-sensitive-tests in QA (8.8 held at e3822aa) |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of load-sensitive-tests (8.7 fps command is in its plan) |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.10 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | busy with QA of gaming-textbox-padding |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle; bugfix gaming-textbox-padding in QA |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -194,8 +194,8 @@ The coordinator logs each QA round in the Log below.
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
 | 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `3fd6ed4`) |
 | 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `5ae65e3`) |
-| 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | | pending |
-| 32.4 | 11.4 Screens to record: the picker on Hotkeys | | pending |
+| 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
+| 32.4 | 11.4 Screens to record: the picker on Hotkeys | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in progress |
 | 32.5 | 11.5 Refactor sweep | | pending |
 | 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
@@ -864,3 +864,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: Bugfix `load-sensitive-tests` READY FOR QA at `a0768d0` (test-only): `LibraryThemeTests` waits for its row containers (`Sta.PumpUntil`); `NothingToReselectServeTests` reads with ReadWrite|Delete sharing and a 2 s retry (the lock was the test racing `File.Replace`, not a product race). It passed 5/5 loaded, where before it failed 3/5 and 1/5. App 173 and Engine 190 passed alone. QA went to slice-epic-8 (Sonnet, medium effort). **Still flaky in full runs** (all pass alone; queued as a second flaky-test bugfix after this one merges): `EngineConnectionTests.ASupervisedEngineThatDiesIsRelaunched…` (fails nearly every full run), `EngineConnectionTests.TheThemePickerSendsAppTheme…`, `RecordingCrashTests.ARecordingKilledThreeSecondsIn…`, `TrackMixCaptureTests.EachTrackCarriesExactlyItsDevicesTones`, `LibraryServeTests.RenameOverIpcUpdatesTheSnapshot`, `LibraryActorTests.AWrittenClipsLengthIs…`, `SessionOrchestratorTests.ATinyStartupWindow…`, `SupervisionTests.AMutexAbandoned…`.
 - 2026-11-05: Bugfix `gaming-textbox-padding` READY FOR QA at `c53e348`: the gaming TextBox's `PART_ContentHost` takes Padding once (as the ScrollViewer's Padding); it's the only gaming template with a content host; Fluent untouched. `GamingTextBoxPaddingTests` failed before (6 of 6 boxes at 2x) and passes after. 0-warning build; App 182 passed. QA went to 2-1-tracer (Sonnet, medium effort).
 - 2026-11-05: 11.2 merged into develop (`5ae65e3`, `feat(contracts): merge 11.2-screen-selection`) and marked done. Synced develop (10.9, `ec7a0ed`) in first, resolving `ErrorCodes.All` to keep `RingPathInvalid` and the three monitor codes. QA's doc fixes are on the branch (`c834c6d`): the monitor list's home is Platform.Capture, AD-25 has the H.264-fitted fallback with a warning, and 11.3's notes cover that warning and skipping a 0x0 monitor. 0-warning build; Contracts 135, Core 165, Platform.Capture 6, Engine 193 passed, 0 failed; publish clean (12.0 MB). TracerCapture.cs's large diff is only CRLF to LF. Human Check: none.
+- 2026-11-05: 11.2 merged (`5ae65e3`, `feat(contracts): merge 11.2-screen-selection`); done at `2aef49f`. Synced with 10.9 first (one conflict in `ErrorCodes.All`, kept both). QA doc fixes at `c834c6d`: the ticket now says Platform.Capture; AD-25's line on the H.264 fit with a warning; 11.3's two notes. 0-warning build; Contracts 135, Core 165, Platform.Capture 6 and Engine 193 passed; publish clean. Started **11.3** on qa-2-1 (Heavy two-monitor checks and a `bench --stages` cost re-measure under the `.bench-running` lock) and **11.4** on slice-epic-4 (Hotkeys picker; App only), with cards moved.
