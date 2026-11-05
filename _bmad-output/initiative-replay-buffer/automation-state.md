@@ -44,7 +44,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with the AD-25 spine edit |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.3 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -842,3 +842,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 11.1 fixes are in at `b060415` (all 4 QA findings), with QA re-verifying. The VLC check passed (a composite played to the end, both screens in place). NVENC use corrected to about 30 % at 6400x2160 (it was over-counted 3x). The composite FPS cost is now a range, 7.6 to 10 %. **Follow-ups queued:** (1) the AD-25 spine edit (drop the 4K area budget; codec side limits only), needed before 11.3; (2) `measure-path-a.ps1` triple-counts `gpu_videoencode` in every bench run so far. That's an encoder-utilisation figure only, and FPS-loss results aren't affected, but it needs a bench bugfix and a note on the earlier reports.
 - 2026-11-05: Follow-ups started: the AD-25 spine edit (drop the 4K budget, codec side limits only) went to 2-1-tracer; bugfix `bench-videoencode-count` (`measure-path-a.ps1` triple-counts `gpu_videoencode`; correction notes on the earlier reports; no bench runs) went to slice-epic-5.
 - 2026-11-05: QA 11.1 passed at `b060415` (round 2: all 4 findings fixed). qa-2-1 is merging; 11.2 comes next for it. The AD-25 spine edit and the bench triple-count fix are already running.
+- 2026-11-05: AD-25 spine edit merged (`e92f903`). The canvas is the physical bounding box, limited only by codec side limits (H.264 4096, HEVC and AV1 8192); over 4096 px it uses HEVC, else AV1, at full size; one canvas per output slot; 2 NVENC sessions; and an "open cost against NFR-1" bullet. 11.3's ticket is updated. 11.3 is now unblocked once 11.2 lands.
