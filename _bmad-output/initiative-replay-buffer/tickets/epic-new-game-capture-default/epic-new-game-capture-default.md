@@ -9,6 +9,7 @@ companions: []
 after: []
 refined: true
 risk: low
+status: done
 ---
 
 # New games captured by default, or not

@@ -3,7 +3,7 @@ title: 'Capture new games: the key, the engine default and the General switch'
 type: 'feature'
 ticket: '1'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: '40bf280'
 route: 'quick'
 risk: 'low'
