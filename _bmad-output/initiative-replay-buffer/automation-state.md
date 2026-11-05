@@ -40,13 +40,13 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | busy with 14.3 |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.1 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.2 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -206,9 +206,9 @@ The coordinator logs each QA round in the Log below.
 | 33.5 | 12.4 Refactor sweep | | pending |
 | 33.6 | 12.5 Source-resolution output end to end on the builder's PC | | pending |
 | 34.1 | 13.1 Capture new games: the key, the engine default and the General switch | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `4f06c58`) |
-| 35.1 | 14.1 Architecture: AD-27, the in-app player | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
-| 35.2 | 14.2 Tracer: a Clip plays on a player page from the Library | | pending |
-| 35.3 | 14.3 Recordings play to the end: mehd at finalize | | pending |
+| 35.1 | 14.1 Architecture: AD-27, the in-app player | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
+| 35.2 | 14.2 Tracer: a Clip plays on a player page from the Library | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | plan in progress (plan checkpoint) |
+| 35.3 | 14.3 Recordings play to the end: mehd at finalize | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | plan in progress (plan checkpoint) |
 | 35.4 | 14.4 Track picker | | pending |
 | 35.5 | 14.5 Transport: seek bar, time, volume and keys | | pending |
 | 35.6 | 14.6 When Windows can't play the file | | pending |
@@ -996,3 +996,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: **Builder: "use the windows media player."** The in-app player uses WinRT `MediaPlayer` in frame-server mode into a WPF `D3DImage`. Epic 14 planning went to story-2-7 (`bmad-agent-po` headless), covering R42, an AD-27 spine-edit ticket, the `mehd` finalize spike, the player surface, transport, Track picker, missing-codec handling, a sweep and an end-to-end check. Unanswered questions get recommended defaults recorded as decisions for the builder: a drill-in page from the Library; one Track at a time (Track 1 by default; mixing parked); one volume control; Clips, Recordings and Monitor Recordings; basic controls and keys; a missing-codec message with a Store link; trimming parked.
 - 2026-11-05: Epic 14 planning merged (`84427b0`). R42; **epic 14 "In-app player"**: 14.1 AD-27 spine edit (HITL), 14.2 tracer (high, plan checkpoint), 14.3 `mehd` at finalize (high, engine, Heavy at night), 14.4 Track picker, 14.5 transport, 14.6 missing codec, 14.7 sweep, 14.8 end to end (HITL). 8.11 waits on 14.8. 8 cards created in Backlog with labels; Queue rows 35.1 to 35.8 added; defaults in Decisions Awaiting Review.
 - 2026-11-05: **Builder: "Yes, start epic 14"** (the defaults are accepted). 14.1 (AD-27 spine edit, docs only; the coordinator merges it) went to story-2-7. Once it's merged, 14.2 (player tracer) and 14.3 (`mehd` at finalize, engine) start in parallel, both with a plan checkpoint.
+- 2026-11-05: 14.1 (AD-27, "In-app player: WinRT MediaPlayer into a D3DImage, App-side and read-only") was reviewed by the coordinator, merged and marked done. It covers: App-only ownership; finished items opened read-only through a stream with `FileShare.ReadWrite | Delete`; the frame server into a shared texture into `D3DImage`; interop in Platform.Desktop through CsWin32; Track 0 at open; `mehd` in place at finalize before `EndWrite`. AD-1, AD-2, AD-9 and AD-17 are amended. **14.2** (player tracer, App) went to story-2-7 and **14.3** (`mehd` at finalize, Platform.FFmpeg) to slice-epic-4 (Opus), both plan first.

@@ -3,7 +3,7 @@ title: 'Architecture: AD-27, the in-app player'
 type: 'docs'
 ticket: '1'
 created: '2026-11-05'
-status: in-review
+status: done
 baseline_revision: 'c0353d5'
 route: 'quick'
 risk: 'low'
