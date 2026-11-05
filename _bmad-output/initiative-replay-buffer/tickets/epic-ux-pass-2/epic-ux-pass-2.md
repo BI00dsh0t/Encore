@@ -84,6 +84,8 @@ A gamer installs the App, gets Clips with game sound and voice without opening a
 
 ## Notes
 
+- Decision: 2026-11-05, **the builder approved 10.1's design and every recommendation in `ux-pass-2/DECISIONS-FOR-BUILDER.md` ("I approve the recommended decisions in the design docs")**: (1) the page names and order: Library, then General, Clips, Hotkeys, Audio Tracks, Games, Sounds, and Storage and Cleanup; (2) the Recordings page is removed; (3) the glossary labels everywhere; (4) Favourites can't be deleted, even one at a time; (5) no tray "Save Clip now"; (6) the presets "Simple" and "For editing", with Simple seeded on a fresh install; (7) the renders as they stand, with the three DESIGN.md adjustments.
+
 - Decision: 2026-11-05, the builder's words: "We need to do another pass on UX. The library is missing basic list functionality, like multi select." and "The track layout is convoluted and makes no sense to an end user."
 - Decision: 2026-11-05, the builder's later words, via the coordinator: "game profiles needs to be revamped as well" and "game profiles probably needs to have a new page opened once you select a game"; "the recordings tab in the settings seems silly. What does recordings even mean. What is the point of that setting."; "Why is it called replay buffer. The name needs to make more sense for what settings it controls." "What is a Ring Folder? The name should reflect what it does for the end user." "It should also not be a normal text box. It should be a folder picker." These add R9 to R11 and stories 9 to 11.
 - Decision: 2026-11-05, this overrides epic 7's decision (automation-state, 2026-11-02) that "Actions act on one item at a time (no multi-select in v1)".

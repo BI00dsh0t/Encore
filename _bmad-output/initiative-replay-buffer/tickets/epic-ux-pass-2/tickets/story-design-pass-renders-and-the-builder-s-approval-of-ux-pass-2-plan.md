@@ -1,7 +1,7 @@
 ---
 title: "Design pass: renders and the builder's approval of ux-pass-2"
 ticket: 1
-status: in-review
+status: done
 ---
 
 # Plan: 10.1 design pass
