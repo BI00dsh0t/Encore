@@ -40,11 +40,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off (8.8 is held on its branch at e3822aa) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with bugfix bench-videoencode-count (8.8 held at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with QA 11.1 (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with the AD-25 spine edit |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.3 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -840,3 +840,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.2 merged (`6f23d23`, `feat(app): merge 10.2-library-selection`) after QA passed at `be7ee5e`; develop (with 10.4) was merged into the branch first with no conflicts, and the merged tip with 10.5 was rebuilt: 0-warning build; App 165, Core 161, Contracts 128 and Platform.Desktop 13 passed. Marked done; `library-selected-{fluent,gaming-dark}.png` copied to `ux-pass-2/renders/`, and the Library Human Check row added.
 - 2026-11-05: 10.2 merged (`6f23d23`; marked done, renders and its Human Check row in `a60deb5`). The merged develop with 10.4, 10.5 and 10.2 passed App 165, Core 161, Contracts 128 and Platform.Desktop 13. Its card is Done. 10.3 (Library sort and search) went to story-2-7 (Opus, medium effort; context kept), in parallel with 10.9.
 - 2026-11-05: 11.1 fixes are in at `b060415` (all 4 QA findings), with QA re-verifying. The VLC check passed (a composite played to the end, both screens in place). NVENC use corrected to about 30 % at 6400x2160 (it was over-counted 3x). The composite FPS cost is now a range, 7.6 to 10 %. **Follow-ups queued:** (1) the AD-25 spine edit (drop the 4K area budget; codec side limits only), needed before 11.3; (2) `measure-path-a.ps1` triple-counts `gpu_videoencode` in every bench run so far. That's an encoder-utilisation figure only, and FPS-loss results aren't affected, but it needs a bench bugfix and a note on the earlier reports.
+- 2026-11-05: Follow-ups started: the AD-25 spine edit (drop the 4K budget, codec side limits only) went to 2-1-tracer; bugfix `bench-videoencode-count` (`measure-path-a.ps1` triple-counts `gpu_videoencode`; correction notes on the earlier reports; no bench runs) went to slice-epic-5.
