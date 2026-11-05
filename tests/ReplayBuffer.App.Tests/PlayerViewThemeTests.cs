@@ -35,8 +35,11 @@ public sealed class PlayerViewThemeTests : IDisposable
             Library = [new LibraryItem(Clip, null, 1, DateTimeOffset.UnixEpoch, false)],
         };
         var failing = false;
+        string? undecodable = null;
         FakePlayer? last = null;
-        var model = new MainViewModel(engine, action => action(), player: () => last = new FakePlayer { Fail = failing });
+        var model = new MainViewModel(engine, action => action(), player: () => last = undecodable is null
+            ? new FakePlayer { Fail = failing }
+            : new FakePlayer { Media = new PlayerMedia(1280, 720, TimeSpan.FromSeconds(10), ["Game"], false, undecodable) });
         var window = new MainWindow
         {
             DataContext = model,
@@ -48,6 +51,9 @@ public sealed class PlayerViewThemeTests : IDisposable
             ShowActivated = false,
             ShowInTaskbar = false,
         };
+        // One service for the window, as the App has: each ForWindow makes its own dictionaries, and a second
+        // couldn't swap the first's out.
+        var looks = ThemeService.ForWindow(window);
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
         PresentationTraceSources.Refresh();
@@ -62,7 +68,7 @@ public sealed class PlayerViewThemeTests : IDisposable
             Sta.PumpUntil(() => view.IsLoaded, "the Library to load");
             foreach (var (theme, file) in new[] { (AppTheme.Fluent, "player-fluent.png"), (AppTheme.GamingDark, "player-gaming.png") })
             {
-                ThemeService.ForWindow(window).Apply(theme);
+                looks.Apply(theme);
                 page.Click(row, ctrl: false, shift: false);
                 page.OpenFocused();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
@@ -121,6 +127,25 @@ public sealed class PlayerViewThemeTests : IDisposable
             Assert.Contains(Descendants<TextBlock>(failed), t => t.Text == PlayerPage.FailedText && t.IsVisible);
             Assert.Contains(Descendants<Button>(failed), b => b.Content as string == "Open in default player" && b.IsVisible);
             Save(window, "player-failed-gaming.png");
+            model.CurrentDrillIn!.Close();
+
+            // Story 14.6: a missing HEVC Video Extension, named, with its Store page, in both looks.
+            (failing, undecodable) = (false, "HEVC");
+            foreach (var (theme, file) in new[] { (AppTheme.Fluent, "player-codec-fluent.png"), (AppTheme.GamingDark, "player-codec-gaming.png") })
+            {
+                looks.Apply(theme);
+                page.Click(row, ctrl: false, shift: false);
+                page.OpenFocused();
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+                var codec = (PlayerView)view.FindName("PlayerContent");
+                Assert.Contains(Descendants<TextBlock>(codec), t => t.Text.Contains("HEVC Video Extension", StringComparison.Ordinal) && t.IsVisible);
+                Assert.Contains(Descendants<Button>(codec), b => b.Content as string == "Get the HEVC Video Extension" && b.IsVisible);
+                Assert.Contains(Descendants<Button>(codec), b => b.Content as string == "Open in default player" && b.IsVisible);
+                Save(window, file);
+                model.CurrentDrillIn!.Close();
+                Sta.Pump(TimeSpan.FromMilliseconds(100));
+                Assert.True(((FrameworkElement)view.FindName("ListContent")).IsVisible);
+            }
 
             // The player page's own bindings; WPF's ListBoxItem alignment noise from the hidden list is not this page's.
             Assert.DoesNotContain(errors.Messages, m => m.Contains("Player", StringComparison.Ordinal));

@@ -46,8 +46,19 @@ internal interface IPlayer : IDisposable
     void CopyFrame(VideoSurface target);
 }
 
-/// <summary>What an opened file holds: its video size, its length when known, its Tracks' names, and whether Windows can decode its video.</summary>
-internal sealed record PlayerMedia(int Width, int Height, TimeSpan? Duration, IReadOnlyList<string> TrackNames, bool VideoDecodable);
+/// <summary>
+/// What an opened file holds: its video size, its length when known, its Tracks' names, whether Windows can decode
+/// its video, the video's codec as Windows names it ("H264", "HEVC", "AV1"), and which Tracks Windows can decode
+/// (null when all can).
+/// </summary>
+internal sealed record PlayerMedia(
+    int Width,
+    int Height,
+    TimeSpan? Duration,
+    IReadOnlyList<string> TrackNames,
+    bool VideoDecodable,
+    string VideoCodec = "",
+    IReadOnlyList<bool>? TracksPlayable = null);
 
 /// <summary>The file couldn't be opened for playback.</summary>
 internal sealed class PlayerException : Exception

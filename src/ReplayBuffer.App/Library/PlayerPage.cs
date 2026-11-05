@@ -25,14 +25,20 @@ internal enum PlayerState
 /// <item>The Track list (story 14.4): the file's Tracks by name, in file order, one playing at a time, the
 /// first at open. Choosing another switches mid-play, with no restart and no jump in position.</item>
 /// <item>At the end it stops on the last frame, and Play starts again from the beginning.</item>
+/// <item>When Windows can't play the file (story 14.6) it says so in plain words: the missing HEVC or AV1
+/// Video Extension by name, with its Microsoft Store page; a file it can't open or that shows no picture;
+/// and "Open in default player" either way. A Track Windows can't decode shows as unavailable.</item>
 /// <item>Disposing it stops the player and releases the file.</item>
 /// </list>
 /// Created and used on the UI thread; the player's own events are brought back to it.
 /// </summary>
 internal sealed class PlayerPage : Observable, IDisposable
 {
-    /// <summary>The plain line shown when the file can't be played; 14.6 names the missing codec instead.</summary>
+    /// <summary>The plain line when the file can't be opened, or shows no picture.</summary>
     public const string FailedText = "This file couldn't be played.";
+
+    /// <summary>The line for a video format Windows can't play and that has no Store extension we know.</summary>
+    public const string UnknownCodecText = "Windows can't play this video's format. The file itself is fine.";
 
     /// <summary>How far Left and Right seek.</summary>
     public static readonly TimeSpan SeekStep = TimeSpan.FromSeconds(5);
@@ -42,6 +48,8 @@ internal sealed class PlayerPage : Observable, IDisposable
 
     private readonly Func<string, Stream> _openRead;
     private readonly Action<string> _openInDefaultPlayer;
+    private readonly Action<string> _openLink;
+    private readonly Action<string> _log;
     private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
     private Stream? _stream;
     private PlayerState _state = PlayerState.Opening;
@@ -53,22 +61,35 @@ internal sealed class PlayerPage : Observable, IDisposable
     private bool _isScrubbing;
     private TimeSpan? _pendingScrub;
     private PlayerTrack? _selectedTrack;
+    private string? _failure;
+    private CodecExtension? _missing;
 
     /// <param name="path">The file's absolute path.</param>
     /// <param name="title">The row's name, shown in the breadcrumb.</param>
     /// <param name="player">The player; the page owns and disposes it.</param>
     /// <param name="openRead">Opens the file; read-only and shared for read, write and delete without it (AD-27).</param>
     /// <param name="openInDefaultPlayer">Hands the path to the shell's default player, offered when this page can't play it.</param>
-    public PlayerPage(string path, string title, IPlayer player, Func<string, Stream>? openRead = null, Action<string>? openInDefaultPlayer = null)
+    /// <param name="openLink">Opens a Microsoft Store page through the shell (story 14.6).</param>
+    /// <param name="log">Writes a line to the App's log: what was opened, its codec and why it can't play.</param>
+    public PlayerPage(string path, string title, IPlayer player, Func<string, Stream>? openRead = null, Action<string>? openInDefaultPlayer = null, Action<string>? openLink = null, Action<string>? log = null)
     {
         Path = path ?? throw new ArgumentNullException(nameof(path));
         Title = title ?? "";
         Player = player ?? throw new ArgumentNullException(nameof(player));
         _openRead = openRead ?? OpenShared;
         _openInDefaultPlayer = openInDefaultPlayer ?? (_ => { });
+        _openLink = openLink ?? (_ => { });
+        _log = log ?? (_ => { });
         PlayPauseCommand = new RelayCommand(PlayPause, () => State is PlayerState.Paused or PlayerState.Playing);
         MuteCommand = new RelayCommand(() => IsMuted = !IsMuted);
         OpenInDefaultPlayerCommand = new RelayCommand(() => _openInDefaultPlayer(Path));
+        OpenStoreCommand = new RelayCommand(() =>
+        {
+            if (_missing is { } extension)
+            {
+                _openLink(extension.StoreLink);
+            }
+        });
         Player.Ended += OnEnded;
     }
 
@@ -111,6 +132,8 @@ internal sealed class PlayerPage : Observable, IDisposable
                 OnPropertyChanged(nameof(IsFailed));
                 OnPropertyChanged(nameof(PlayPauseLabel));
                 OnPropertyChanged(nameof(Message));
+                OnPropertyChanged(nameof(StoreLinkText));
+                OnPropertyChanged(nameof(HasStoreLink));
                 OnPropertyChanged(nameof(CanSeek));
                 OnPropertyChanged(nameof(HasControls));
                 OnPropertyChanged(nameof(HasTracks));
@@ -133,9 +156,15 @@ internal sealed class PlayerPage : Observable, IDisposable
     public string? Message => State switch
     {
         PlayerState.Opening => "Opening…",
-        PlayerState.Failed => FailedText,
+        PlayerState.Failed => _failure ?? FailedText,
         _ => null,
     };
+
+    /// <summary>The Store link's text when an extension is missing: "Get the HEVC Video Extension"; null otherwise.</summary>
+    public string? StoreLinkText => IsFailed && _missing is { } extension ? $"Get the {extension.Name}" : null;
+
+    /// <summary>Whether the Store link shows.</summary>
+    public bool HasStoreLink => StoreLinkText is not null;
 
     /// <summary>Whether the file's length is known; a crash-cut Recording's isn't.</summary>
     public bool HasDuration => Media?.Duration is not null;
@@ -250,7 +279,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         get => _selectedTrack;
         set
         {
-            if (value is null || IsClosed || !HasControls || ReferenceEquals(value, _selectedTrack) || !Tracks.Contains(value))
+            if (value is null || IsClosed || !HasControls || ReferenceEquals(value, _selectedTrack) || !Tracks.Contains(value) || !value.IsAvailable)
             {
                 // Re-raised so a list that tried to clear or change it shows the Track that plays.
                 OnPropertyChanged();
@@ -272,6 +301,9 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>"Open in default player", offered when the page can't play the file.</summary>
     public ICommand OpenInDefaultPlayerCommand { get; }
 
+    /// <summary>Opens the missing extension's Microsoft Store page.</summary>
+    public ICommand OpenStoreCommand { get; }
+
     /// <summary>Opens the file, then shows its first frame, paused, with the first Track.</summary>
     public async Task OpenAsync()
     {
@@ -286,6 +318,18 @@ internal sealed class PlayerPage : Observable, IDisposable
                 return;
             }
 
+            _log($"player: opened {System.IO.Path.GetFileName(Path)}: video {Describe(media.VideoCodec)} {(media.VideoDecodable ? "decodable" : "NOT decodable")}, "
+                + $"{media.TrackNames.Count} tracks, {media.TracksPlayable?.Count(p => !p) ?? 0} not decodable");
+            if (!media.VideoDecodable)
+            {
+                // Windows can't decode the picture: say which extension is missing, never a black page (14.6).
+                Media = media;
+                Fail(CodecExtension.For(media.VideoCodec) is { } extension
+                    ? (Missing(extension), extension)
+                    : (UnknownCodecText, null));
+                return;
+            }
+
             if (media.TrackNames.Count > 0)
             {
                 Player.SelectedTrack = 0;
@@ -294,7 +338,7 @@ internal sealed class PlayerPage : Observable, IDisposable
             Player.ShowFirstFrame();
             for (var i = 0; i < media.TrackNames.Count; i++)
             {
-                Tracks.Add(new PlayerTrack(i, media.TrackNames[i]));
+                Tracks.Add(new PlayerTrack(i, media.TrackNames[i], media.TracksPlayable is not { } playable || i >= playable.Count || playable[i]));
             }
 
             Media = media;
@@ -305,10 +349,11 @@ internal sealed class PlayerPage : Observable, IDisposable
             }
         }
 #pragma warning disable CA1031 // Any failure to open is the page's plain message, never a crash.
-        catch (Exception) when (!IsClosed)
+        catch (Exception e) when (!IsClosed)
 #pragma warning restore CA1031
         {
-            State = PlayerState.Failed;
+            _log($"player: couldn't open {System.IO.Path.GetFileName(Path)}: {e.GetType().Name}: {e.Message}");
+            Fail((FailedText, null));
         }
 #pragma warning disable CA1031 // A failure after the page closed has nothing to show.
         catch (Exception)
@@ -379,7 +424,8 @@ internal sealed class PlayerPage : Observable, IDisposable
         }
 
         Player.Pause();
-        State = PlayerState.Failed;
+        _log($"player: no picture for {System.IO.Path.GetFileName(Path)}");
+        Fail((FailedText, null));
     }
 
     /// <summary>Stops the player and releases the file; safe to call twice.</summary>
@@ -395,6 +441,22 @@ internal sealed class PlayerPage : Observable, IDisposable
         Player.Dispose();
         _stream?.Dispose();
         _stream = null;
+    }
+
+    // The plain words for a missing extension (story 14.6, epic 10's glossary).
+    private static string Missing(CodecExtension extension) =>
+        $"This video is {extension.Codec}, which Windows can't play without the {extension.Name}. "
+        + "Get it from the Microsoft Store, then open the file again. The file itself is fine.";
+
+    private static string Describe(string codec) => string.IsNullOrEmpty(codec) ? "(none)" : codec;
+
+    private void Fail((string Text, CodecExtension? Missing) why)
+    {
+        (_failure, _missing) = why;
+        State = PlayerState.Failed;
+        OnPropertyChanged(nameof(Message));
+        OnPropertyChanged(nameof(StoreLinkText));
+        OnPropertyChanged(nameof(HasStoreLink));
     }
 
     // Marks the Track that plays, in the list and on each item.

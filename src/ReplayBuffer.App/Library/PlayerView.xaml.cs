@@ -17,7 +17,8 @@ namespace ReplayBuffer.App.Library;
 /// <item>The surface's two devices are made once per page. Its texture is sized to the picture's pixels,
 /// with the video's aspect and never above the video's own size. It's remade only after a resize settles,
 /// and until then the old one is drawn scaled, so a paused picture never blanks.</item>
-/// <item>A GPU failure building the surface puts the page in its Failed state rather than leaving a blank picture.</item>
+/// <item>A GPU failure building the surface, or no picture within 5 s of opening (story 14.6), puts the page in its
+/// Failed state rather than leaving a blank picture.</item>
 /// <item>After a lost front buffer (a lock screen, a display change) the surface is remade and the current frame redrawn.</item>
 /// <item>Leaving the page drops its frames before the back buffer goes (the proof's close order).</item>
 /// <item>The transport (story 14.5): the position is read for the seek bar about ten times a second while playing,
@@ -30,12 +31,16 @@ internal partial class PlayerView
     // How long the picture's size must hold before the texture is remade at it.
     private static readonly TimeSpan ResizeSettle = TimeSpan.FromMilliseconds(150);
 
+    // How long the page waits for its first picture before saying the file can't be played (story 14.6).
+    private static readonly TimeSpan NoPictureTimeout = TimeSpan.FromSeconds(5);
+
     // How often the seek bar and time follow the player while it plays.
     private static readonly TimeSpan PositionInterval = TimeSpan.FromMilliseconds(100);
 
     private readonly D3DImage _image = new();
     private readonly DispatcherTimer _settle;
     private readonly DispatcherTimer _position;
+    private readonly DispatcherTimer _noPicture;
     private PlayerPage? _page;
     private VideoSurface? _surface;
     private int _presentPending;
@@ -46,6 +51,7 @@ internal partial class PlayerView
         Picture.Source = _image;
         _settle = new DispatcherTimer(ResizeSettle, DispatcherPriority.Render, OnResizeSettled, Dispatcher) { IsEnabled = false };
         _position = new DispatcherTimer(PositionInterval, DispatcherPriority.Background, (_, _) => _page?.RefreshPosition(), Dispatcher) { IsEnabled = false };
+        _noPicture = new DispatcherTimer(NoPictureTimeout, DispatcherPriority.Background, OnNoPicture, Dispatcher) { IsEnabled = false };
         SeekBar.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnScrubStarted));
         SeekBar.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnScrubCompleted));
         _image.IsFrontBufferAvailableChanged += OnFrontBufferAvailableChanged;
@@ -98,6 +104,7 @@ internal partial class PlayerView
         _page = null;
         _settle.Stop();
         _position.Stop();
+        _noPicture.Stop();
         StopScrub();
         ReleaseSurface();
         if (page is not null && IsLoaded)
@@ -176,6 +183,7 @@ internal partial class PlayerView
 
     private void Show(VideoSurface surface)
     {
+        _noPicture.Stop();
         surface.Flush();
         _image.Lock();
         _image.AddDirtyRect(new Int32Rect(0, 0, surface.Width, surface.Height));
@@ -226,6 +234,16 @@ internal partial class PlayerView
         _surface = null;
     }
 
+    // No picture since the file opened (a truncated file, say): the page says it can't be played (story 14.6).
+    private void OnNoPicture(object? sender, EventArgs e)
+    {
+        _noPicture.Stop();
+        if (_page is { IsClosed: false, IsFailed: false } page)
+        {
+            page.ShowFailure();
+        }
+    }
+
     // The size held: redraw at it (the present remakes the texture).
     private void OnResizeSettled(object? sender, EventArgs e)
     {
@@ -238,6 +256,7 @@ internal partial class PlayerView
     {
         if (e.PropertyName == nameof(PlayerPage.Media))
         {
+            _noPicture.Start();
             OnFrameAvailable();
         }
         else if (e.PropertyName == nameof(PlayerPage.IsPlaying) && _page is { } page)

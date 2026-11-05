@@ -59,6 +59,7 @@ internal sealed class LibraryPage : Observable
     private readonly Func<string?> _pickFolder;
     private readonly Func<IPlayer> _newPlayer;
     private readonly Func<string, Stream>? _openRead;
+    private readonly Action<string> _log;
     private PlayerPage? _player;
     private double _playerVolume = 1.0;
     private bool _playerMuted;
@@ -103,6 +104,7 @@ internal sealed class LibraryPage : Observable
     /// <param name="pickFolder">Picks the folder Copy to folder copies into, null on a cancel; the Windows folder dialog without it.</param>
     /// <param name="player">Makes the in-app player; Windows' own media player without it (AD-27).</param>
     /// <param name="openRead">Opens a file for the player; read-only and shared for read, write and delete without it (AD-27).</param>
+    /// <param name="log">Writes a line to the App's log; the player page logs what it opened and why it can't play (story 14.6).</param>
     public LibraryPage(
         IEngineSession engine,
         LibraryThumbnails? thumbnails = null,
@@ -112,7 +114,8 @@ internal sealed class LibraryPage : Observable
         Func<string, bool>? confirmDelete = null,
         Func<string?>? pickFolder = null,
         Func<IPlayer>? player = null,
-        Func<string, Stream>? openRead = null)
+        Func<string, Stream>? openRead = null,
+        Action<string>? log = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         PropertyChanged += (_, e) =>
@@ -131,6 +134,7 @@ internal sealed class LibraryPage : Observable
         _pickFolder = pickFolder ?? PickFolder;
         _newPlayer = player ?? (() => new WindowsMediaPlayer());
         _openRead = openRead;
+        _log = log ?? (_ => { });
         DrillIn = new DrillIn(MainViewModel.LibraryTitle);
         DrillIn.Closed += _ => ClosePlayer();
         AcknowledgeCommand = new RelayCommand(() => _ = AcknowledgeAsync());
@@ -1053,7 +1057,14 @@ internal sealed class LibraryPage : Observable
 
         DrillIn.Close();
         ClearActionError();
-        var page = new PlayerPage(path, row.Name, _newPlayer(), _openRead, p => Shell(row.Path, () => _shell.Open(p), "Couldn't open the file."))
+        var page = new PlayerPage(
+            path,
+            row.Name,
+            _newPlayer(),
+            _openRead,
+            p => Shell(row.Path, () => _shell.Open(p), "Couldn't open the file."),
+            link => Shell(row.Path, () => _shell.Open(link), "Couldn't open the Microsoft Store."),
+            _log)
         {
             Volume = _playerVolume,
             IsMuted = _playerMuted,
