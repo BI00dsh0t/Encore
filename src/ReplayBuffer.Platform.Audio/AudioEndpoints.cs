@@ -89,6 +89,39 @@ public static unsafe class AudioEndpoints
         }
     }
 
+    /// <summary>The id of the default (eConsole) endpoint of one flow, or <c>null</c> when the flow has none.</summary>
+    public static string? DefaultId(AudioFlow flow)
+    {
+        using var enumerator = Enumerator.Create();
+        IMMDevice* device = null;
+        try
+        {
+            enumerator.Value->GetDefaultAudioEndpoint(ToDataFlow(flow), ERole.eConsole, &device);
+        }
+        catch (Exception e) when (e.HResult == ENotFound)
+        {
+            return null;
+        }
+
+        try
+        {
+            PWSTR id = default;
+            device->GetId(&id);
+            try
+            {
+                return id.ToString();
+            }
+            finally
+            {
+                PInvoke.CoTaskMemFree(id.Value);
+            }
+        }
+        finally
+        {
+            device->Release();
+        }
+    }
+
     /// <summary>The default communications (eCommunications) render endpoint, or <c>null</c> when there is none.</summary>
     public static AudioEndpoint? DefaultCommunications()
     {

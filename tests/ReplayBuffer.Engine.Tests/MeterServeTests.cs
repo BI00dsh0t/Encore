@@ -6,6 +6,7 @@ using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Engine.Audio;
 
 namespace ReplayBuffer.Engine.Tests;
 
@@ -127,6 +128,59 @@ public sealed class MeterServeTests : IAsyncLifetime
         Assert.Equal(1, _tones.ActiveSubscriptions);
         levels = await LevelsAsync(events, l => Near(l[0].Peak), tracks: 1);
         Assert.Equal(both.Id, levels[0].TrackId);
+    }
+
+    [Fact]
+    public async Task ProbeTracksGiveALevelPerDeviceAndOpenEachDeviceOnce()
+    {
+        // Story 10.4: the card's source T and the picker's M, each probed; M isn't on any Track.
+        var (client, events) = await ConnectAsync();
+        var picker = new AudioDevice("M", "Microphone", "Realtek", AudioFlow.Input, Available: true, IsDefault: true);
+        var watched = MeterProbes.WithProbes(new TrackLayout([Tone], [Game]), [picker]);
+
+        await client.SendAsync(AudioMessages.Watch, new MetersWatch(watched), Token);
+
+        // Mic mute is on, but a probe shows the device as it sounds.
+        var levels = new MeterLevels(await LevelsAsync(events, l => Near(l[0]) && Near(l[1]) && Near(l[2]), tracks: 3));
+        Assert.Equal(Game.Id, levels.Tracks[0].TrackId);
+        Assert.True(Near(MeterProbes.LevelOf(levels, "T", AudioFlow.Output)));
+        Assert.True(Near(MeterProbes.LevelOf(levels, "m", AudioFlow.Input)));
+        Assert.Equal(2, _tones.ActiveSubscriptions);
+    }
+
+    [Fact]
+    public async Task TheWatchStopsWhenTheLastClientDisconnects()
+    {
+        // Story 10.4: a crashed App leaves no probed device open.
+        var (client, events) = await ConnectAsync();
+        await client.SendAsync(AudioMessages.Watch, new MetersWatch(Draft), Token);
+        await LevelsAsync(events, l => Near(l[0]));
+        Assert.Equal(2, _tones.ActiveSubscriptions);
+
+        await client.DisposeAsync();
+
+        var clock = Stopwatch.StartNew();
+        while (_tones.ActiveSubscriptions > 0 && clock.Elapsed < Within)
+        {
+            await Task.Delay(20, Token);
+        }
+
+        Assert.Equal(0, _tones.ActiveSubscriptions);
+    }
+
+    [Fact]
+    public void ALateDisconnectUnwatchKeepsANewerWatch()
+    {
+        // QA 10.4: the disconnect's queued unwatch runs after a new client watched.
+        using var meters = new TrackMeters(_tones, _ => { }, NullLogger.Instance);
+        meters.Watch(Draft);
+        var departed = meters.Generation;
+        meters.Watch(Draft);
+
+        Assert.False(meters.UnwatchIf(departed));
+        Assert.Equal(2, _tones.ActiveSubscriptions);
+        Assert.True(meters.UnwatchIf(meters.Generation));
+        Assert.Equal(0, _tones.ActiveSubscriptions);
     }
 
     private static bool Near(TrackLevel level) => Near(level.Peak);

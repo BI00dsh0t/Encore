@@ -51,11 +51,7 @@ internal sealed class WindowsEndpointSource(ILogger log) : IAudioEndpointSource,
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<AudioDevice> ListPresent() =>
-    [
-        .. AudioEndpoints.List(AudioFlow.Output).Select(e => ToDevice(e, SettingsFlow.Output)),
-        .. AudioEndpoints.List(AudioFlow.Input).Select(e => ToDevice(e, SettingsFlow.Input)),
-    ];
+    public IReadOnlyList<AudioDevice> ListPresent() => [.. List(AudioFlow.Output, SettingsFlow.Output), .. List(AudioFlow.Input, SettingsFlow.Input)];
 
     public void Dispose()
     {
@@ -76,8 +72,19 @@ internal sealed class WindowsEndpointSource(ILogger log) : IAudioEndpointSource,
         watcher?.Dispose();
     }
 
-    private static AudioDevice ToDevice(AudioEndpoint endpoint, SettingsFlow flow) =>
-        new(endpoint.Id, endpoint.FriendlyName, endpoint.ParentName, flow, Available: true);
+    /// <summary>One flow's active endpoints, its Windows default (console role) marked <see cref="AudioDevice.IsDefault"/> (story 10.4).</summary>
+    private static IEnumerable<AudioDevice> List(AudioFlow flow, SettingsFlow settingsFlow)
+    {
+        var endpoints = AudioEndpoints.List(flow);
+        var defaultId = endpoints.Count > 0 ? AudioEndpoints.DefaultId(flow) : null;
+        return endpoints.Select(e => new AudioDevice(
+            e.Id,
+            e.FriendlyName,
+            e.ParentName,
+            settingsFlow,
+            Available: true,
+            IsDefault: string.Equals(e.Id, defaultId, StringComparison.OrdinalIgnoreCase)));
+    }
 
     // On the watcher's thread; reads the handlers without the gate, so disposal can join it.
     private void RaiseEndpointsChanged() => Volatile.Read(ref _endpointsChanged)?.Invoke();

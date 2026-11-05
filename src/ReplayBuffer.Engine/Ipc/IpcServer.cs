@@ -66,6 +66,12 @@ internal sealed class IpcServer : IAsyncDisposable
 
     public int ConnectionCount => _connections.Count;
 
+    /// <summary>
+    /// Raised, on the closing connection's thread, when a connection closes and none is left; handlers
+    /// must not block. The meter watch stops on it (story 10.4), so a crashed App leaves no device open.
+    /// </summary>
+    public event Action? LastDisconnected;
+
     /// <summary>Ends every connection at once; their clients may connect again.</summary>
     public void DropAll(string reason)
     {
@@ -134,7 +140,13 @@ internal sealed class IpcServer : IAsyncDisposable
                 _connections[connection.Id] = connection;
                 connection.Start();
                 _ = connection.Completion.ContinueWith(
-                    (_, state) => _connections.TryRemove((int)state!, out Connection? _),
+                    (_, state) =>
+                    {
+                        if (_connections.TryRemove((int)state!, out Connection? _) && _connections.IsEmpty)
+                        {
+                            LastDisconnected?.Invoke();
+                        }
+                    },
                     connection.Id,
                     CancellationToken.None,
                     TaskContinuationOptions.ExecuteSynchronously,
