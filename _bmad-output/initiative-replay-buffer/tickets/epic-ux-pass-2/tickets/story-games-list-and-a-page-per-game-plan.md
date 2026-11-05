@@ -1,7 +1,7 @@
 ---
 title: "Games list and a page per game"
 ticket: 10
-status: review
+status: done
 ---
 
 # Plan: 10.10 Games list and a page per game
