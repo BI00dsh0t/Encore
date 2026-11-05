@@ -10,7 +10,6 @@ internal enum WelcomeLink
 {
     AudioTracks,
     Storage,
-    Games,
 }
 
 /// <summary>
@@ -31,7 +30,6 @@ internal sealed class LibraryWelcome : Observable
     {
         ChangeAudioCommand = new RelayCommand(() => Navigate?.Invoke(WelcomeLink.AudioTracks));
         ChangeFolderCommand = new RelayCommand(() => Navigate?.Invoke(WelcomeLink.Storage));
-        OpenGamesCommand = new RelayCommand(() => Navigate?.Invoke(WelcomeLink.Games));
     }
 
     /// <summary>Opens a link's page; set by the shell.</summary>
@@ -89,8 +87,6 @@ internal sealed class LibraryWelcome : Observable
     public ICommand ChangeAudioCommand { get; }
 
     public ICommand ChangeFolderCommand { get; }
-
-    public ICommand OpenGamesCommand { get; }
 
     /// <summary>Takes the snapshot's settings and Clips folder.</summary>
     public void Show(StateSnapshot state)

@@ -56,8 +56,7 @@ internal sealed class MainViewModel : Observable
         Library.Welcome.Navigate = link => SelectedNavItem = NavItems.First(i => i.Page == link switch
         {
             WelcomeLink.AudioTracks => (SettingsPage)TrackLayout,
-            WelcomeLink.Storage => LibrarySettings,
-            _ => GameProfiles,
+            _ => LibrarySettings,
         });
 
         // Edit the main setting, from a game's page: the page that holds the key.
