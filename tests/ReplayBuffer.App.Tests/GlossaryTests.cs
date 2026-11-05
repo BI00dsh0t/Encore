@@ -79,7 +79,7 @@ public sealed partial class GlossaryTests
         Assert.True(found.Count == 0, string.Join(Environment.NewLine, found));
     }
 
-    // Logs, exceptions, comments and argument checks keep the internal names (AD-22).
+    // Logs, exceptions, comments, argument checks and folder names keep the internal names (AD-22).
     private static bool IsSkipped(string line)
     {
         var text = line.TrimStart();
@@ -87,7 +87,8 @@ public sealed partial class GlossaryTests
             || text.StartsWith('*')
             || LogCall().IsMatch(line)
             || line.Contains("Exception(", StringComparison.Ordinal)
-            || line.Contains("nameof(", StringComparison.Ordinal);
+            || line.Contains("nameof(", StringComparison.Ordinal)
+            || line.Contains("Path.Combine(", StringComparison.Ordinal);
     }
 
     [Fact]
