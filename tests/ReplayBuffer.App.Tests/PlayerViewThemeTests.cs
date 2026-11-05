@@ -79,6 +79,11 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.True(((FrameworkElement)player.FindName("SeekBar")).IsVisible);
                 Assert.True(((FrameworkElement)player.FindName("VolumeBar")).IsVisible);
                 Assert.Contains(Descendants<TextBlock>(player), t => t.Text == "0:04 / 0:10" && t.IsVisible);
+
+                // Story 14.4: the Track list, by name, with the playing Track shown.
+                var tracks = (ComboBox)player.FindName("TrackList");
+                Assert.True(tracks.IsVisible);
+                Assert.Equal("Game", ((PlayerTrack)tracks.SelectedItem).Name);
                 Save(window, file);
 
                 // The page's keys: Right seeks 5 s, Down lowers the volume 5 %, Space plays.

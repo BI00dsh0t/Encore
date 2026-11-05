@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Windows.Input;
@@ -21,6 +22,8 @@ internal enum PlayerState
 /// <item>The transport: play and pause, a seek bar over the file's length with the elapsed and total time,
 /// keys that seek 5 s and change the volume 5 %, and one volume with mute, kept by the Library.</item>
 /// <item>A file with no known length (a crash-cut Recording) shows the elapsed time only, and can't be sought.</item>
+/// <item>The Track list (story 14.4): the file's Tracks by name, in file order, one playing at a time, the
+/// first at open. Choosing another switches mid-play, with no restart and no jump in position.</item>
 /// <item>At the end it stops on the last frame, and Play starts again from the beginning.</item>
 /// <item>Disposing it stops the player and releases the file.</item>
 /// </list>
@@ -49,6 +52,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     private bool _atEnd;
     private bool _isScrubbing;
     private TimeSpan? _pendingScrub;
+    private PlayerTrack? _selectedTrack;
 
     /// <param name="path">The file's absolute path.</param>
     /// <param name="title">The row's name, shown in the breadcrumb.</param>
@@ -109,6 +113,7 @@ internal sealed class PlayerPage : Observable, IDisposable
                 OnPropertyChanged(nameof(Message));
                 OnPropertyChanged(nameof(CanSeek));
                 OnPropertyChanged(nameof(HasControls));
+                OnPropertyChanged(nameof(HasTracks));
                 ((RelayCommand)PlayPauseCommand).RaiseCanExecuteChanged();
             }
         }
@@ -230,6 +235,33 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>The mute button's name for screen readers.</summary>
     public string MuteName => IsMuted ? "Unmute" : "Mute";
 
+    /// <summary>The file's Tracks, in file order (story 14.4).</summary>
+    public ObservableCollection<PlayerTrack> Tracks { get; } = [];
+
+    /// <summary>Whether the Track list shows: an open, playable file with at least one Track.</summary>
+    public bool HasTracks => HasControls && Tracks.Count > 0;
+
+    /// <summary>
+    /// The Track that plays. Choosing another switches to it mid-play (AD-27: one at a time); the position
+    /// doesn't change, and Windows leaves a gap of about 0.1 s.
+    /// </summary>
+    public PlayerTrack? SelectedTrack
+    {
+        get => _selectedTrack;
+        set
+        {
+            if (value is null || IsClosed || !HasControls || ReferenceEquals(value, _selectedTrack) || !Tracks.Contains(value))
+            {
+                // Re-raised so a list that tried to clear or change it shows the Track that plays.
+                OnPropertyChanged();
+                return;
+            }
+
+            Player.SelectedTrack = value.Index;
+            ShowSelected(value);
+        }
+    }
+
     /// <summary>Whether the page has been closed; a late frame or event is then ignored.</summary>
     public bool IsClosed { get; private set; }
 
@@ -260,8 +292,17 @@ internal sealed class PlayerPage : Observable, IDisposable
             }
 
             Player.ShowFirstFrame();
+            for (var i = 0; i < media.TrackNames.Count; i++)
+            {
+                Tracks.Add(new PlayerTrack(i, media.TrackNames[i]));
+            }
+
             Media = media;
             State = PlayerState.Paused;
+            if (Tracks.Count > 0)
+            {
+                ShowSelected(Tracks[0]);
+            }
         }
 #pragma warning disable CA1031 // Any failure to open is the page's plain message, never a crash.
         catch (Exception) when (!IsClosed)
@@ -354,6 +395,18 @@ internal sealed class PlayerPage : Observable, IDisposable
         Player.Dispose();
         _stream?.Dispose();
         _stream = null;
+    }
+
+    // Marks the Track that plays, in the list and on each item.
+    private void ShowSelected(PlayerTrack track)
+    {
+        foreach (var each in Tracks)
+        {
+            each.IsPlaying = ReferenceEquals(each, track);
+        }
+
+        _selectedTrack = track;
+        OnPropertyChanged(nameof(SelectedTrack));
     }
 
     // m:ss, or h:mm:ss when the file runs an hour or more.

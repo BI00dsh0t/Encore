@@ -94,6 +94,46 @@ public sealed class PlayerPlaybackTests : IDisposable
         });
     }
 
+    // Story 14.4: the research's check. At an inaudible volume, this process's own audio says which Track plays
+    // after each of ten switches while playing; and a switch while paused then Play resumes in place (the 14.5 probe).
+    [Fact(Explicit = true)]
+    [Trait("Category", "Heavy")]
+    public void TheChosenTrackIsTheOneHeardAndAPausedSwitchResumesInPlace()
+    {
+        double[] tones = [300, 600, 900, 1200];
+        var absolute = MakeFixture("-f lavfi -i testsrc2=size=1280x720:rate=60:duration=12", "-c:v libx264 -preset ultrafast -g 60 -pix_fmt yuv420p", "-movflags +faststart", seconds: 12);
+        Run(absolute, (model, view) =>
+        {
+            var page = model.Library.Player!;
+            page.Volume = 0.001;
+            page.IsMuted = false;
+            using var loopback = ProcessLoopback.Start();
+            page.PlayPauseCommand.Execute(null);
+            Sta.Pump(TimeSpan.FromMilliseconds(500));
+
+            var marks = new List<(TimeSpan At, int Track)>();
+            foreach (var track in new[] { 2, 0, 1, 3, 0, 2, 0, 3, 1, 0 })
+            {
+                marks.Add((loopback.Now, track));
+                page.SelectedTrack = page.Tracks[track];
+                Sta.Pump(TimeSpan.FromMilliseconds(700));
+            }
+
+            var heard = marks.Select(m => loopback.Loudest(m.At + TimeSpan.FromMilliseconds(450), tones)).ToList();
+            Assert.Equal(marks.Select(m => m.Track), heard);
+
+            // Paused at 3 s, a switch, then Play: it plays on from 3 s, not from the start.
+            page.PlayPauseCommand.Execute(null);
+            page.SeekTo(TimeSpan.FromSeconds(3));
+            Sta.Pump(TimeSpan.FromMilliseconds(300));
+            page.SelectedTrack = page.Tracks[1];
+            Sta.Pump(TimeSpan.FromMilliseconds(300));
+            page.PlayPauseCommand.Execute(null);
+            Sta.Pump(TimeSpan.FromMilliseconds(500));
+            Assert.True(page.Player.Position > TimeSpan.FromSeconds(3), $"resumed at {page.Player.Position}");
+        });
+    }
+
     // Opens the fixture's row in the Main App window, muted, paused on its first frame, then runs the checks and goes back.
     private void Run(string absolute, Action<MainViewModel, PlayerView> check) => Sta.Run(() =>
     {

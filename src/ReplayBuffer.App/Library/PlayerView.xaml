@@ -1,8 +1,8 @@
 <!--
     The in-app player's page (stories 14.2 and 14.5, AD-27): the video fills the page under the breadcrumb, letterboxed
     with its aspect kept, and the transport bar runs over its bottom edge: play and pause, the elapsed and total time,
-    the seek bar, mute and volume. The picture is a WPF D3DImage, so the bar and the looks draw over it. Keys bubble
-    to the page (KeyDown, not PreviewKeyDown), so a focused control's own keys win. 14.4 adds the Track list.
+    the seek bar, the Track list (14.4), mute and volume. The picture is a WPF D3DImage, so the bar and the looks draw over it. Keys bubble
+    to the page (KeyDown, not PreviewKeyDown), so a focused control's own keys win.
 -->
 <UserControl x:Class="ReplayBuffer.App.Library.PlayerView"
              x:ClassModifier="internal"
@@ -28,6 +28,7 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
@@ -60,8 +61,21 @@
                             SmallChange="5"
                             Value="{Binding PositionSeconds, Mode=TwoWay}"
                             Visibility="{Binding CanSeek, Converter={StaticResource Visible}}" />
+                    <!-- Story 14.4: the Track list, by name in file order; choosing one switches to it mid-play. -->
+                    <ComboBox x:Name="TrackList"
+                              Grid.Column="3"
+                              MinWidth="120"
+                              MaxWidth="200"
+                              Margin="12,0,0,0"
+                              VerticalAlignment="Center"
+                              AutomationProperties.Name="Audio track"
+                              DisplayMemberPath="Name"
+                              ItemsSource="{Binding Tracks}"
+                              SelectedItem="{Binding SelectedTrack, Mode=TwoWay}"
+                              ToolTip="Audio track"
+                              Visibility="{Binding HasTracks, Converter={StaticResource Visible}}" />
                     <Button x:Name="Mute"
-                            Grid.Column="3"
+                            Grid.Column="4"
                             Margin="12,0,4,0"
                             VerticalAlignment="Center"
                             AutomationProperties.Name="{Binding MuteName}"
@@ -71,7 +85,7 @@
                             ToolTip="{Binding MuteName}"
                             Visibility="{Binding HasControls, Converter={StaticResource Visible}}" />
                     <Slider x:Name="VolumeBar"
-                            Grid.Column="4"
+                            Grid.Column="5"
                             Width="96"
                             VerticalAlignment="Center"
                             AutomationProperties.Name="Volume"
