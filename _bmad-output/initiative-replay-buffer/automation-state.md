@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 10.2 (8.8 is held on its branch at e3822aa) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (holds 8.7 for its pending fps run) |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with QA 11.1 (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.5 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 10.5 |
@@ -192,7 +192,7 @@ The coordinator logs each QA round in the Log below.
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
-| 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress (GPU runs allowed) |
+| 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA (slice-epic-8) |
 | 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | | pending |
 | 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | | pending |
 | 32.4 | 11.4 Screens to record: the picker on Hotkeys | | pending |
@@ -828,3 +828,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.4 merged (`3bec10b`, marked done `4606533`; race fix `6773990` with `MeterServeTests.ALateDisconnectUnwatchKeepsANewerWatch`), and its card is Done. 10.5 (the Audio Tracks editor) went to qa-1-14, which built 10.4 (Opus, medium effort; context kept), with its card In progress.
 - 2026-11-05: 10.2 READY FOR QA at `90f1d5e`: App 158, Core 161, Contracts 125 and Platform.Desktop 13 passed; no engine change. QA went to slice-epic-5 (Sonnet, high effort). Human Check at merge: select, star, copy to Discord, copy to a folder, show in Explorer and delete a batch of real Clips by mouse and keyboard, and check the Fluent selected-row fill on the grey accent.
 - 2026-11-05: 10.5 READY FOR QA at `11eab9a`: Contracts 128, Core 161 and App 156 passed; App files only. QA went to 2-1-tracer, which designed epic 10 (Sonnet, medium effort). Human Check at merge: the builder rebuilds the BEACN layout from a preset with the meters moving, saves it, and checks the next Clip's tracks in DaVinci Resolve.
+- 2026-11-05: 11.1 spike READY at `96abe48`: **GO** for 11.3, with changes. PC correction: DISPLAY2 is 3840x2160@144 Hz and DISPLAY1 2560x1440@240 Hz, so the canvas is 6400x2160. FPS loss on the synthetic 80 fps load: Replay Buffer alone 2.85 %; plus one-monitor Monitor Recording 5.15 %; plus two composited, HEVC 8.83 %, AV1 8.80 %, H.264 at 4096x1382 9.27 %, Desktop Duplication with HEVC 7.06 %. 2 NVENC sessions; codec limits H.264 4096, HEVC and AV1 8192; push once per output slot. **Decisions awaiting review:** dropping AD-25's 4K budget (a spine edit needed before 11.3), and **no Monitor Recording beside a game meets NFR-1's 3 %, not even today's one-monitor one** (this ties to the pending NFR-1 re-baseline). The spike says VLC isn't installed, but the builder's log shows it is, so QA is checking. QA went to slice-epic-8 (Sonnet, high effort).
