@@ -1,7 +1,7 @@
 ---
 title: "Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed"
 ticket: 9
-status: review
+status: done
 ---
 
 # Plan: 10.9 Settings reorganised
