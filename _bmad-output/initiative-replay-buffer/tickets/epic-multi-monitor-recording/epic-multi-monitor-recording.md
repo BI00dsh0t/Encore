@@ -61,6 +61,8 @@ The builder presses the Monitor Recording key and gets one playable file holding
 
 ## Notes
 
+- Decision: 2026-11-05, the builder chose **full width with HEVC or AV1** for several screens: when a Monitor Recording covers more than H.264's 4096 px, it uses HEVC (or AV1) so each screen keeps its native resolution in one file (this PC: two 2560x1440 side by side, 5120x1440, on one RTX 5090). H.264 stays for a single screen, or when the canvas fits. The builder accepted (b), one composited file. 11.1 (the spike) runs now with GPU runs allowed, while 8.7's fps and the 8.8 soaks stay paused.
+
 - Decision: 2026-11-05, the builder's words: "monitor recording needs to allow selecting which monitors to record, or capture all monitors. Plan that feature out."
 - Decision: 2026-11-05, option (b), one composited file, over (a) one file per monitor and (c) both: (a) needs one encoder chain per monitor, which breaks AD-7's two-chain budget, multiplies disk use and audio, and needs grouped Library items and cross-file sync; (b) keeps one chain, one file, one set of Tracks and one Library item, and adds only a compositor. Unattended default, awaiting review.
 - Parked: per-monitor files (option (a)), for full-resolution editing of each screen. It would be its own epic, after an AD-7 budget change, with Library grouping. The builder decides whether it's ever wanted.
