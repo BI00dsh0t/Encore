@@ -228,7 +228,8 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             (width, height) = (even.Width, even.Height);
         }
 
-        var video = new VideoSettings(command.Codec, width, height, command.Fps, command.BitrateKbps, RateControl.Cbr);
+        // --match-source (story 12.1): the chain takes the window's own size at its first frame; width and height are the fallback.
+        var video = new VideoSettings(command.Codec, width, height, command.Fps, command.BitrateKbps, RateControl.Cbr, command.MatchSource);
         _log.LogInformation("Video: {Codec} {Width}x{Height} at {Fps} fps, CBR {Kbps} kbps{Forced}",
             video.Codec, width, height, video.Fps, video.BitrateKbps, command.Encoder is { } forced ? $", encoder forced to {forced}" : "");
         return video;

@@ -87,6 +87,21 @@ public sealed partial class KeysTests
     }
 
     [Fact]
+    public void AVideoValueWithoutMatchSourceReadsAsOffAndOneWithItRoundTrips()
+    {
+        // Story 12.1: an existing value has no matchSource, and writes back without one.
+        using var old = JsonDocument.Parse("""{"codec":"h264","width":1920,"height":1080,"fps":60,"bitrateKbps":40000,"rateControl":"cbr"}""");
+        Assert.True(Keys.Video.TryRead(old.RootElement, out var read));
+        Assert.False(read.MatchSource);
+        Assert.Equal(old.RootElement.GetRawText(), Keys.Video.ToJson(read).GetRawText());
+
+        var on = Keys.Video.Default with { MatchSource = true };
+        Assert.Contains("\"matchSource\":true", Keys.Video.ToJson(on).GetRawText(), StringComparison.Ordinal);
+        Assert.True(Keys.Video.TryRead(Keys.Video.ToJson(on), out var back));
+        Assert.Equal(on, back);
+    }
+
+    [Fact]
     public void ValuesAreCamelCaseWithEnumsAsCamelCaseStrings()
     {
         Assert.Equal(
