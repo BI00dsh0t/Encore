@@ -22,7 +22,7 @@ status: review
   - Keys: Ctrl+S saves. On a card, F2 renames and Alt+↑/↓ move it. Delete removes a focused source row. In the picker, ↑ and ↓ move, Enter adds, Ctrl+Enter or Ctrl+click adds and keeps it open, Esc closes, and typing goes to the search box.
   - A page embedded in Game Profiles drops its ScrollViewer (`Unscroll`).
 - [x] **Styles** in their own dictionary, `Theme/AudioTracksTheme.xaml`, placed by `ThemeService`: the save bar, card, number, name outline, summary, glyph, caption, source row, picker surface, picker caption and picker item. Every colour is a token by `DynamicResource`. The meters reuse `RbLevelMeterStyle` at 160 and 80 × 4.
-- [x] **Nav dot:** a 6 px accent dot after the item's text in both nav templates, round in Fluent and square in Gaming dark.
+- [x] **Nav dot:** a 6 px accent dot after the item's text in both nav templates, with its radius from the corner tokens (round-cornered in Fluent, square in Gaming dark).
 - [x] **Strings** follow the glossary: the page and Game Profiles section are "Audio Tracks", and every string in EXPERIENCE.md's Audio Tracks wording table is used.
 
 ## Deviations
@@ -53,3 +53,4 @@ status: review
 ## Log
 
 - 2026-11-05: built and verified; READY FOR QA.
+- 2026-11-05: QA round 1, 2 findings fixed: a reload closes the sound picker (its Track belonged to the old draft), and the nav dot takes its radius from RbSmallCornerRadius and RbNavItemCornerRadius.

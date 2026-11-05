@@ -84,7 +84,7 @@
                                     Margin="8,0,0,0"
                                     VerticalAlignment="Center"
                                     Background="{DynamicResource AccentFillColorDefaultBrush}"
-                                    CornerRadius="3"
+                                    CornerRadius="{DynamicResource RbSmallCornerRadius}"
                                     DockPanel.Dock="Left"
                                     Visibility="Collapsed" />
                         </DockPanel>

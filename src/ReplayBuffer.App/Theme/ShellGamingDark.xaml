@@ -82,7 +82,7 @@
                                     Margin="8,0,0,0"
                                     VerticalAlignment="Center"
                                     Background="{DynamicResource AccentFillColorDefaultBrush}"
-                                    CornerRadius="0"
+                                    CornerRadius="{DynamicResource RbNavItemCornerRadius}"
                                     DockPanel.Dock="Left"
                                     Visibility="Collapsed" />
                         </DockPanel>

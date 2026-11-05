@@ -450,6 +450,8 @@ internal sealed class TrackLayoutPage : SettingsPage
 
     private void Load(TrackLayout layout)
     {
+        // The picker's Track belongs to the draft being replaced (QA 10.5).
+        ClosePicker();
         _draft = AudioTracksDraft.From(layout);
         SaveProblem = null;
         Tracks.Clear();

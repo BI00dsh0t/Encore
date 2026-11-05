@@ -392,6 +392,23 @@ public sealed class TrackLayoutPageTests
     }
 
     [Fact]
+    public void AReloadClosesThePickerSoNoPickLandsOnAStaleTrack()
+    {
+        // QA 10.5: a settings.changed on a clean page rebuilds the cards.
+        SetState(revision: 1, layout: null, Speakers);
+        var page = Create().TrackLayout;
+        page.OpenPicker(page.Tracks[0]);
+
+        _engine.State = _engine.State! with { Seq = 2, Settings = Document(2, null) with { Global = SettingsMaps.EmptyValues.Add(Keys.StartWithWindows.Name, Keys.StartWithWindows.ToJson(true)) } };
+        _engine.RaiseChanged();
+
+        Assert.False(page.IsPickerOpen);
+        page.OpenPicker(page.Tracks[0]);
+        page.Pick(page.PickerRows.Single());
+        Assert.Single(page.ToLayout().Tracks[0].DeviceKeys);
+    }
+
+    [Fact]
     public void AnotherKeyChangingKeepsTheDraftAndTheNextSaveUsesTheNewRevision()
     {
         var page = Create().TrackLayout;
