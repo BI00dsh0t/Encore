@@ -51,6 +51,10 @@ status: review
 - `SettingsLayoutTests`: Clips, Hotkeys, Sounds, Storage and Cleanup and Game Profiles load in both themes with their sections as cards. Every theme key the changed views use resolves under each theme. They're saved as `settings-{clips,hotkeys,sounds,storage-and-cleanup}-{fluent,gaming-dark}.png` beside the App test binary.
 - Existing tests were updated only for moved controls and renamed strings.
 
+## Follow-ups
+
+- For 10.10 (coordinator review of `a9ead21`): a game's own folder, or any per-game output folder, isn't checked against the cache folder; the engine guard covers only the Global `ringPath` and `outputFolder`. 10.10 should check that games' folders keep clear of the cache folder too.
+
 ## Log
 
 - 2026-11-05: built and verified; READY FOR QA.
