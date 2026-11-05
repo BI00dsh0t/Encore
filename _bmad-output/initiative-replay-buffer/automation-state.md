@@ -41,9 +41,9 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy with 8.8 smokes then soaks (holds the GPU) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 11.5 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy merging 10.7 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.5 |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; 11.5 in QA |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
@@ -196,7 +196,7 @@ The coordinator logs each QA round in the Log below.
 | 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `5ae65e3`) |
 | 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `79e227b`) |
 | 32.4 | 11.4 Screens to record: the picker on Hotkeys | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
-| 32.5 | 11.5 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
+| 32.5 | 11.5 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA; Heavy rerun pending after 8.8's soaks |
 | 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
@@ -914,3 +914,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 11.3 merged into develop (`79e227b`, `feat(engine): merge 11.3-composited-monitor-recording`) and marked done, after QA PASS in round 2 at `8379a74`. Synced develop (8.7's fps run) first; QA's summary nit fixed. 0-warning build; Contracts 135, Core 169, Media 102, Platform.Capture 8, Engine 196 and App 193 passed, 0 failed; publish clean (12.1 MB). No Heavy or GPU runs in the merge (8.8's soaks hold the GPU); 11.3's Heavy runs (13/13) and the cost run were done earlier: two screens cost 7.00 % in total, the extra being the second screen's capture. Human Check added: a screen's resolution change during a two-screen Monitor Recording.
 - 2026-11-05: 11.3 merged (`79e227b`) and done (`2028c8b`) after its post-sync run: 0-warning build; Contracts 135, Core 169, Media 102, Platform.Capture 8, Engine 196 and App 193 passed; publish clean. Human Check row added (change a recorded screen's resolution mid-recording). Card moved to Done. **11.5 (refactor sweep)** started on qa-2-1. Its Heavy verify (one-screen and two-screen recordings play) is queued after 8.8's soaks.
 - 2026-11-05: 10.7 merged (`caf3af2`, `refactor(app): merge 10.7-refactor-sweep`) and marked done, after QA passed `500157f`. QA's two glossary-test fixes landed: it skips only real logger calls and now scans `LibraryPage.cs` and `ShellApp.cs`. After the sync it also skips path-building lines (ShellApp's on-disk "ring" folder). Develop synced: 0-warning build; Contracts 135, Core 166, Media 104, Platform.Audio 29, Platform.Capture 7, Platform.Desktop 13, Platform.FFmpeg 42, Platform.Windows 32, Engine 238 and App 214 passed, 0 failed; publish clean (12.0 MB). Bench wasn't rerun after the sync: 8.8's soak engine holds its Hotkey, and 10.7 touches no Bench code (Bench 161 passed at `500157f`). No renders. qa-1-14 takes 10.8 next.
+- 2026-11-05: 11.5 READY FOR QA at `f3be508`. `CaptureSession.Open`'s two one-screen branches are now one pass-through; the unused `CompositeCapture.AnyDuplication` and `Compositor` and a dead dev-path branch are removed. The spike's dev path is kept on purpose (it reproduces the NFR-1 figures). Contracts 135, Core 169, Media 102, Platform.Capture 8, Engine 196 and App 193 passed; publish clean. **GPU queue after 8.8's soaks:** `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-class "*MonitorRecordingCaptureTests"` (13 tests: one-screen and two-screen), then the two Heavy follow-ups (fragment cadence, short video). QA went to slice-epic-8 (Sonnet, medium effort). 10.7 is told to merge without a Bench rerun if its diff doesn't touch Bench (the soak holds the lock).
