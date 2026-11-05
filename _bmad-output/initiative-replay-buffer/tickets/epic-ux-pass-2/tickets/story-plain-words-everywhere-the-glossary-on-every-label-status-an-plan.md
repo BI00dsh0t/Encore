@@ -1,7 +1,7 @@
 ---
 title: "Plain words everywhere: the glossary on every label, status and warning"
 ticket: 11
-status: review
+status: done
 ---
 
 # Plan: 10.11 Plain words everywhere
