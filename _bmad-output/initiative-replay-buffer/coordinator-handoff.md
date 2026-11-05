@@ -34,7 +34,7 @@ You coordinate the ReplayBuffer initiative, built unattended by a pool of Claude
   - 11.1–11.5, and 12.1–12.4 with 12.6;
   - 14.1–14.7, merged as 14.2 `de6f653`, 14.3 `6a8340a`, 14.5 `8ed5775`, 14.4 `de23206`, 14.6 `d2273f9`, 14.7 `2a1f913`.
 - **Develop:** at `0841503` or later; it builds Release with 0 warnings. **No test suite has run since these merges.** See `test-backlog.md` §1, then the 10 night runs in §2.
-- **In progress: 14.9 "Player controls restyled, with full screen."** Worker story-2-7 (`local_12351eee-812a-4dcb-8f13-6b288e96bce5`) is on `feature/14.9-player-restyle`. The spec is the builder-approved mockup at https://claude.ai/artifact/4CCgWPDzuYpDAxFJWsZdxz: two boards, gaming and Fluent; a thin seek bar; Play, speaker with hover slider, time; a gear menu (Audio track and Open in default player) and full screen. No logo button. It reported READY FOR REVIEW at `4d3066f`, and the code review went to slice-epic-8. Expect "REVIEW PASSED/FAILED: 14.9". On a pass, merge it, mark it done, move card `6aed0412e7856cbfde24bfc7` to Done, and add its unrun tests to `test-backlog.md`.
+- **14.9 "Player controls restyled, with full screen" is merged and done** (its review passed at `4d3066f`). Five small follow-ups from its review are in the state file's last Log line; fold them into a small fix or into 14.8. Nothing is in progress; every worker is idle.
 - **Waiting on the builder or the test backlog:**
   - 8.8's 8-hour Disk soak (the Memory soak ran 5 h 9 min; engine growth was 1.87 MB/h against a 2 MB/h limit, so watch it). Then 8.9–8.11.
   - The HITL end-to-end stories 11.6, 12.5 and 14.8.

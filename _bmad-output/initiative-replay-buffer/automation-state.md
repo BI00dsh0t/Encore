@@ -47,7 +47,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.9 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -215,7 +215,7 @@ The coordinator logs each QA round in the Log below.
 | 35.6 | 14.6 When Windows can't play the file | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `d2273f9`) |
 | 35.7 | 14.7 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged; tests in the backlog) |
 | 35.8 | 14.8 The in-app player end to end on the builder's PC | | pending |
-| 35.9 | 14.9 Player controls restyled, with full screen | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress (build only, tests deferred) |
+| 35.9 | 14.9 Player controls restyled, with full screen | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged; tests in the backlog) |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
 Epic 2 (row 4 on) may start before rows 1–3 finish: the builder said so on 2026-11-01, and 2.1 no longer waits on 1.14 or 1.15. The order follows `tickets.py next`; a session that finds the board disagrees follows the board and fixes this table.
@@ -1037,3 +1037,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: **Builder (low on tokens): "create the necessary files for another agent to pick this task up."** The coordinator wrote `coordinator-handoff.md` beside this file: the job, standing rules, where things stand (14.9 in progress on story-2-7), the pool with session ids, and how to resume tests. The 23:03 GPU timer was session-only and is lost with this session; tests stay deferred.
 - 2026-11-05: **Builder: "stop the scheduled tests from running too."** The coordinator's 23:03 night-queue timer is deleted. No scheduled test or GPU run remains. Nothing runs until the builder says so.
 - 2026-11-05: 14.9 READY FOR REVIEW at `4d3066f` (0-warning build, no tests). The code review went to slice-epic-8. Its rewritten `PlayerViewThemeTests` and the six PNGs it renders are in the test backlog.
+- 2026-11-05: The code review of 14.9 passed at `4d3066f`. It was merged into develop and marked done, and develop builds Release with 0 warnings. **Follow-ups for 14.8 or a small fix** (unverified, the app wasn't run): (1) clicking the gear while its menu is open may close then reopen it (`PlayerView.xaml.cs:404-416`); (2) a hardcoded `Page.Margin` in full screen (`MainWindow.xaml.cs:646`); (3) Alt+F4 to the tray while in full screen stays full screen when shown again; (4) the gear menu's heading is left-aligned and its tick is a left check, not the mockup's centred heading and accent tick on the right (`LibraryTheme.xaml:829`); (5) `Brushes.Black` for the full-screen background.

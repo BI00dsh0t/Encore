@@ -3,7 +3,7 @@ title: 'Player controls restyled, with full screen'
 type: 'feature'
 ticket: '9'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: 'a639f57'
 route: 'quick'
 risk: 'medium'
