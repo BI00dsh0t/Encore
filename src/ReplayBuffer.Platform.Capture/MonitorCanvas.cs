@@ -1,3 +1,4 @@
+using ReplayBuffer.Core.Monitors;
 using Windows.Win32;
 using Windows.Win32.Graphics.Gdi;
 
@@ -20,12 +21,6 @@ public sealed record MonitorPlacement(MonitorInfo Monitor, int X, int Y, int Wid
 /// </summary>
 public static class MonitorCanvas
 {
-    /// <summary>NVENC's largest H.264 side, measured in spike 11.1 (the encoder probe reports no limit).</summary>
-    public const int H264MaxSide = 4096;
-
-    /// <summary>NVENC's largest HEVC and AV1 side, measured in spike 11.1.</summary>
-    public const int HevcAv1MaxSide = 8192;
-
     /// <summary>
     /// Every attached monitor named in <paramref name="deviceNames"/> (ignoring case), or every one when
     /// it is null or empty, placed by its current display mode; the primary first.
@@ -69,8 +64,7 @@ public static class MonitorCanvas
     /// </summary>
     public static VideoSize Fit(VideoSize native, int maxSide)
     {
-        var scale = Math.Min(1.0, Math.Min((double)maxSide / native.Width, (double)maxSide / native.Height));
-        // The epsilon keeps an exact fit (5120 × 0.8 = 4096) from flooring to 4095.
-        return VideoSize.EvenFloor((int)Math.Floor((native.Width * scale) + 1e-6), (int)Math.Floor((native.Height * scale) + 1e-6));
+        var (width, height) = MonitorCanvasRule.Fit(native.Width, native.Height, maxSide);
+        return new VideoSize(width, height);
     }
 }

@@ -216,7 +216,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             }
 
             var native = MonitorCanvas.Bounds(placements).Size;
-            var maxSide = command.Codec == VideoCodec.H264 ? MonitorCanvas.H264MaxSide : MonitorCanvas.HevcAv1MaxSide;
+            var maxSide = Core.Monitors.MonitorCanvasRule.MaxSide(command.Codec);
             var fitted = MonitorCanvas.Fit(native, maxSide);
             (width, height) = (fitted.Width, fitted.Height);
             _log.LogInformation("Monitors {Monitors}: canvas {Native}, encoded at {Fitted}", string.Join("; ", placements), native, fitted);

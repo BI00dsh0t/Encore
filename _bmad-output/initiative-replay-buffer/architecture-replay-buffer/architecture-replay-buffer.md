@@ -362,6 +362,7 @@ graph LR
     - The earlier area budget (the Output area or 3840×2160) is dropped, by the builder's 2026-11-05 decision that several screens are recorded at full width.
     - **Even sides.** Both sides are rounded down to even numbers.
     - **Codec choice:** a canvas wider or taller than H.264's 4096 px is encoded with HEVC, else AV1, whichever the encoder probe found, at full size. It never falls back to H.264. H.264, when it's the Output codec, stays for a single screen or a canvas that fits. A canvas over 8192 px a side is fitted to 8192.
+      - With no HEVC or AV1 encoder on the PC at all, a canvas over 4096 px stays H.264, fitted to 4096, and the engine raises a warning that the Recording is scaled down rather than scaling silently (story 11.2, accepted at QA).
     - **Fixed per file:** the canvas never changes inside a file. A removed monitor's area turns black, an arriving monitor waits for the next Recording, and a mode change scales into the same area.
   - **Device:** the Monitor session keeps its own D3D11 device, on the adapter of the primary recorded monitor. This is an explicit exception to AD-7's one device, which settles 6.9's open decision.
   - **Encoder sessions:** the session's chain counts toward AD-7's two-chain budget as before. Spike 11.1 saw 2 NVENC sessions with the Replay Buffer and a two-screen Monitor Recording running. At 6400×2160, 60 fps, NVENC use was about 30 % in total.
