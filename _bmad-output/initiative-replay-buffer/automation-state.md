@@ -41,8 +41,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy with 8.8 smokes then soaks (holds the GPU) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 10.8 |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle; 10.8 in QA |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (QA 10.8 round 2 comes back here) |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.8 round 1 fix |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; runs 11.5's Heavy rerun after 8.8's soaks |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
@@ -191,7 +191,7 @@ The coordinator logs each QA round in the Log below.
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.10 | 10.7 Refactor sweep | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.11 | 10.8 UX pass 2 end to end on the builder's PC | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA |
+| 31.11 | 10.8 UX pass 2 end to end on the builder's PC | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA round 1 failed; fixing |
 | 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `3fd6ed4`) |
 | 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `5ae65e3`) |
 | 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `79e227b`) |
@@ -919,3 +919,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 11.5 passed at `f3be508`: cleanup only (the merged one-screen branch makes the same `MonitorFinder.Find` call); the removals are unused; the plan table is complete; Contracts 135, Core 169, Media 102, Platform.Capture 8, Engine 196 and App 193 passed. Gap (a plan follow-up): no default test covers the legacy-key fallback to the primary. qa-2-1 is merging, with the ticket open until the Heavy rerun after the soaks. 8.8's Disk smoke runs until about 03:16.
 - 2026-11-05: 11.5 merged into develop (`ae8ad66`, `refactor(engine): merge 11.5-refactor-sweep`) after QA PASS at `f3be508`; **the ticket stays open** until the Heavy rerun passes once 8.8's soaks free the GPU: `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-class "*MonitorRecordingCaptureTests"` (13 tests; qa-2-1 runs it). Synced develop (10.7) first: 0-warning build; Contracts 135, Core 169, Media 102, Platform.Capture 8, Engine 196 and App 194 passed, 0 failed; publish clean (12.1 MB). QA's test gap (no default test of the legacy-key fallback to the primary) is in 11.5's plan Follow-ups.
 - 2026-11-05: 10.8 READY FOR QA at `0382327`: a default-suite `UxPass2EndToEndTests` (about 2.5 s), with the engine in-process on a test instance in temp folders and fake endpoints, as 9.9 did. It covers seeding, no Recordings nav, the For editing preset, Library sort, search, selection, bulk Favourite, Copy and a delete that keeps Favourites, and a game's Clip length changed and reset. A new `EngineHostOptions.Recycle` test seam keeps deletes out of the builder's Recycle Bin. There's no Heavy part. 10 builder Human Check rows are in the plan and go to the queue at the merge. Every default suite except Bench passed (App 215, Engine 243); publish clean. QA went to slice-epic-8 (Sonnet, medium effort).
+- 2026-11-05: QA 10.8 round 1 failed at `0382327` with 1 finding: `UxPass2EndToEndTests` fails every time it runs alone (the Newest first order is wrong at line 104) but passes in the full App suite, so it depends on another test's state. Everything else passed: the in-process engine is acceptable as in 9.9; the `Recycle` seam is harmless; coverage and the 10 Human Check rows are complete. Sent back to qa-1-14 to find the cause, then 5 lone runs.
