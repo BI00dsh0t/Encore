@@ -4,11 +4,11 @@ type: architecture-spine
 purpose: build-substrate
 altitude: initiative
 paradigm: 'ports-and-adapters engine with a single-threaded orchestrator, hosting a pipes-and-filters media pipeline; MVVM thin client over IPC'
-scope: 'initiative-replay-buffer: the engine process and the Main App, all 11 epics'
+scope: 'initiative-replay-buffer: the engine process and the Main App, all 13 epics'
 status: final
 created: '2026-10-25'
-updated: '2026-11-04'
-binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39]
+updated: '2026-11-05'
+binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39, R40]
 sources:
   - _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md
   - PLAN.md
@@ -134,7 +134,7 @@ graph LR
 
 ### AD-7 — Media graph, encoder sharing, resource budget
 
-- **Binds:** R4, R5, R10, R15, R16, R20, R21, R22, R36; NFR-2
+- **Binds:** R4, R5, R10, R15, R16, R20, R21, R22, R36, R40; NFR-2
 - **Prevents:** needless or unbounded encoder chains; gaps hidden at a Reset; the GPU starving the game
 - **Rule:**
   - **Pipeline:** Source → Processor → Encoder → encoded-packet bus → Sink. Nothing allocates managed memory per frame or per audio buffer.
@@ -145,6 +145,7 @@ graph LR
     - File I/O runs at low I/O priority.
     - Both processes run unelevated, and GPU priority uses only `SetGPUThreadPriority`.
   - **Chain changes at a Reset:** when a pending settings change alters the Replay Buffer's `ChainKey`, the orchestrator builds the next chain in advance and switches to it at the press frame. If a gap can't be avoided, it raises `warning.raised { code: reset-gap }`.
+    - A source-size move (AD-26) uses the same build-ahead switch, started by the engine on a held size change rather than by a `ChainKey` comparison.
 
 ### AD-8 — Replay ring of encoded packets [ADOPTED]
 
@@ -364,6 +365,7 @@ graph LR
     - **Even sides.** Both sides are rounded down to even numbers.
     - **Codec choice:** a canvas wider or taller than H.264's 4096 px is encoded with HEVC, else AV1, whichever the encoder probe found, at full size. It never falls back to H.264. H.264, when it's the Output codec, stays for a single screen or a canvas that fits. A canvas over 8192 px a side is fitted to 8192.
       - With no HEVC or AV1 encoder on the PC at all, a canvas over 4096 px stays H.264, fitted to 4096, and the engine raises a warning that the Recording is scaled down rather than scaling silently (story 11.2, accepted at QA).
+    - **One screen at source size:** with `video.matchSource` on, a one-screen Monitor Recording also takes this rule, at the screen's native size (AD-26).
     - **Fixed per file:** the canvas never changes inside a file. A removed monitor's area turns black, an arriving monitor waits for the next Recording, and a mode change scales into the same area.
   - **Device:** the Monitor session keeps its own D3D11 device, on the adapter of the primary recorded monitor. This is an explicit exception to AD-7's one device, which settles 6.9's open decision.
   - **Encoder sessions:** the session's chain counts toward AD-7's two-chain budget as before. Spike 11.1 saw 2 NVENC sessions with the Replay Buffer and a two-screen Monitor Recording running. At 6400×2160, 60 fps, NVENC use was about 30 % in total.
@@ -374,6 +376,28 @@ graph LR
     - two screens at full width: 7.6 to 10 %.
     - The extra isn't the encode or the blits. Story 11.3 splits the cost by stage and re-measures after per-slot compositing.
     - Whether a Monitor Recording needs a cap while a game runs is the builder's decision (epic 11's Notes).
+
+### AD-26 — Source output size: the chain follows the source, a file never changes size
+
+- **Binds:** R20, R40; R12, R17, R21, R33
+- **Prevents:** a whole session's Clips at a launcher window's size; a Recording split or resized by a window change; a Clip switched to a codec Discord can't play; a chain rebuilt on every brief resize or alt-tab; an odd or oversized frame the encoder refuses; a source-size move that never fires because nothing in the `ChainKey` changed
+- **Rule:**
+  - **Setting:** `video.matchSource` (bool, default false) is added to the `video` key under AD-22. It is overridable per game like the rest of `video` (R17), and snapshotted per session (AD-5).
+    - With it on, `width` and `height` are only the fallback size, used before a usable source size is known and kept for when it's turned off.
+    - Frame rate, codec, bitrate and rate control always come from `video`: source means resolution only (the builder's 2026-11-05 decision). The storage estimate (R2) is unchanged, since it follows the bitrate.
+  - **Game capture size:** the chain's output size is resolved at the first frame, before the chain is built, from the content size WGC delivers:
+    - fitted by `MonitorCanvasRule.Fit` to the codec's largest side (AD-25's constants: H.264 4096 px, HEVC and AV1 8192 px), aspect kept, both sides rounded down to even;
+    - a content size under 640×360 is never used; the fallback size stands until a usable one holds (below).
+    - **No codec switch for games:** a source over 4096 px under H.264 is scaled to fit and stays H.264, so Clips still paste into Discord (R33). This differs from AD-25's Monitor Recording rule on purpose (the builder's 2026-11-05 decision).
+    - When the content matches the output size, the scaler copies 1:1; otherwise it letterboxes, as R20 says.
+  - **Held size change:** when the content size differs from the chain's and holds for 3 s, the engine moves the Replay Buffer to a chain at the new size through AD-7's build-ahead switch, as at a Reset.
+    - It raises `reset-gap` if a gap can't be avoided. The next Clip starts at the move: a Clip is cut from one ring generation (AD-8, AD-10).
+    - **Engine-initiated:** with `matchSource` on, the `ChainKey`'s width and height are the fallback and don't change, so AD-7's key comparison never sees the move. The resolved output size belongs to the chain, not to the key.
+    - **Never during a Recording:** while a game Recording shares the chain (AD-7), the size stays fixed and new content is letterboxed into it (R12). The move waits for the Recording to end.
+    - **Budget:** a move replaces the Replay Buffer's chain and never adds one, within AD-7's two chains.
+    - A GPU reset (8.3) rebuilds at the current content size.
+  - **Monitor Recording:** with `matchSource` on, one screen records at its physical mode size through `MonitorCanvasRule.Plan`. That is AD-25's canvas rule for one screen, its switch to HEVC or AV1 over 4096 px included. Several screens keep AD-25's canvas, which is already full size. The size is fixed per file (AD-25).
+  - **Cost:** encoder load grows with the pixel count. Story 12.2 measures the Replay Buffer at 2560×1440 source size against NFR-1 (R36) and records the result in epic 12's Notes.
 
 ## Consistency Conventions
 
@@ -487,6 +511,7 @@ ReplayBuffer/
 | R27–R29 Library, Cleanup | Core (LibraryActor), App (shell actions) | AD-17, AD-1 |
 | R31, R34, R35 startup, supervision, hands-off | App (supervisor), Engine | AD-16, AD-22 |
 | R37 themes | App (ThemeService, theme dictionaries), Contracts (key catalog) | AD-23, AD-4 |
+| R40 source-resolution output | Contracts (`video` key), Core (size rule), Engine (chain sizing and moves), App (Video quality) | AD-26, AD-7, AD-25, AD-4, AD-22 |
 | R39 multi-monitor Monitor Recording | Media (MonitorCompositor), Platform.Capture, Core (screen resolver, canvas rule), App (Hotkeys picker) | AD-25, AD-7, AD-12, AD-22 |
 | R38 Library selection and bulk actions, audio-tracks editor, first-run seed, Games, settings pages, plain labels | App (Library, Audio Tracks, Games and settings view models), Engine (settings seed, warning texts), Core (LibraryActor kind), Platform.Audio (default device) | AD-24, AD-17, AD-4, AD-20, AD-21, AD-22 |
 | R32 Hotkeys | Platform.Windows | AD-11 |
