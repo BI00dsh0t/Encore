@@ -559,7 +559,18 @@ internal sealed class EngineHost : IAsyncDisposable
                     game =>
                     {
                         // The profile exists before anything names it (story 3.4).
-                        GameProfiles.EnsureProfile(load.Store, game.ProfileId, game.Name, gameLog);
+                        GameProfiles.EnsureProfile(
+                            load.Store,
+                            game.ProfileId,
+                            game.Name,
+                            gameLog,
+                            // Story 13.1: once per game, as its profile is created not captured.
+                            name => warnings.Raise(
+                                ErrorCodes.NewGameNotCaptured,
+                                WarningSeverity.Info,
+                                "games",
+                                $"{name} was found but isn't captured. Turn it on in Games.",
+                                overlay: true));
                         hub.Publish(GameMessages.Detected, game);
                     },
                     game => hub.Publish(GameMessages.Exited, game),
