@@ -196,7 +196,14 @@ internal sealed class TrackLayoutPage : SettingsPage
         ArgumentNullException.ThrowIfNull(levels);
         _levels = levels;
         _engineInstanceId = engineInstanceId;
-        if (IsOpen && _watchedInstanceId != engineInstanceId)
+
+        // The engine stops a watch when its last client leaves (story 10.4), so a reconnect watches again.
+        if (_engine.Status != EngineStatus.Connected)
+        {
+            _watchedInstanceId = null;
+            _watchedJson = null;
+        }
+        else if (IsOpen && _watchedInstanceId != engineInstanceId)
         {
             Watch();
         }

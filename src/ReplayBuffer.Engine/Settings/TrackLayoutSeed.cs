@@ -14,7 +14,10 @@ namespace ReplayBuffer.Engine.Settings;
 internal static class TrackLayoutSeed
 {
     /// <summary>Seeds <paramref name="store"/> when its document has no Global <c>trackLayout</c>.</summary>
-    /// <returns>The seeded layout, or <c>null</c> when the document has one already or the write failed (logged).</returns>
+    /// <returns>
+    /// The seeded layout, or <c>null</c> when the document has one already, no default device is
+    /// listed (nothing is written, so a later start retries), or the write failed (logged).
+    /// </returns>
     public static TrackLayout? Apply(SettingsStore store, IReadOnlyList<AudioDevice> devices, ILogger log)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -25,7 +28,15 @@ internal static class TrackLayoutSeed
             return null;
         }
 
+        // No default device (or a failed listing): the seed would equal the catalog default, so
+        // nothing is written and a later start tries again.
         var layout = TrackLayoutPresets.Seed(devices);
+        if (layout.Devices.Count == 0)
+        {
+            log.LogInformation("First run: no default audio device to seed the Track Layout with; trying again at the next start");
+            return null;
+        }
+
         try
         {
             store.Update(new SettingsUpdate(current.Revision, [SettingsOp.SetGlobal(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(layout))]));

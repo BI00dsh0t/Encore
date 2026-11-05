@@ -147,6 +147,26 @@ public sealed class MeterServeTests : IAsyncLifetime
         Assert.Equal(2, _tones.ActiveSubscriptions);
     }
 
+    [Fact]
+    public async Task TheWatchStopsWhenTheLastClientDisconnects()
+    {
+        // Story 10.4: a crashed App leaves no probed device open.
+        var (client, events) = await ConnectAsync();
+        await client.SendAsync(AudioMessages.Watch, new MetersWatch(Draft), Token);
+        await LevelsAsync(events, l => Near(l[0]));
+        Assert.Equal(2, _tones.ActiveSubscriptions);
+
+        await client.DisposeAsync();
+
+        var clock = Stopwatch.StartNew();
+        while (_tones.ActiveSubscriptions > 0 && clock.Elapsed < Within)
+        {
+            await Task.Delay(20, Token);
+        }
+
+        Assert.Equal(0, _tones.ActiveSubscriptions);
+    }
+
     private static bool Near(TrackLevel level) => Near(level.Peak);
 
     private static bool Near(float peak) => Math.Abs(peak - Amplitude) < 0.05;

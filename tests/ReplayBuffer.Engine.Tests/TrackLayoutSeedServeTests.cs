@@ -66,6 +66,17 @@ public sealed class TrackLayoutSeedServeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task NoDefaultDeviceWritesNothingSoALaterStartRetries()
+    {
+        // A failed or empty listing would seed the catalog default; QA 10.4 finding 1.
+        var document = await StartAsync();
+
+        Assert.Equal(0, document.Revision);
+        Assert.False(document.Global.ContainsKey(Keys.TrackLayout.Name));
+        Assert.False(File.Exists(Path.Combine(TestInstance.RoamingDataFolder, SettingsStore.FileName)));
+    }
+
+    [Fact]
     public async Task AnExistingLayoutIsLeftUnchanged()
     {
         var mine = new TrackLayout([], [new Track(Guid.NewGuid(), "Mine", [], MuteAffected: false)]);
