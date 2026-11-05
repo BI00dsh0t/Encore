@@ -32,6 +32,9 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
 
     public FrameworkElement View => _view ??= CreateView();
 
+    /// <summary>The page's drill-in, when it opens item pages (story 10.10's Games); null for a plain page.</summary>
+    public virtual DrillIn? DrillIn => null;
+
     /// <summary>Whether the page holds an unsaved draft: the nav item shows a dot (story 10.5). Raised as a property change.</summary>
     public virtual bool HasUnsavedChanges => false;
 
@@ -129,13 +132,14 @@ internal static class SettingsPages
     /// Storage and Cleanup. The Recordings page is gone; its screen picker is on Hotkeys.
     /// </summary>
     /// <param name="defaultCacheFolder">The engine's default cache folder, shown as the cache folder's default.</param>
-    public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null) =>
+    /// <param name="gameShell">The shell the Games pages use; null for Windows'.</param>
+    public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null, IGameShell? gameShell = null) =>
     [
         new GeneralSettingsPage(sender),
         new ReplayBufferSettingsPage(sender, defaultCacheFolder: defaultCacheFolder),
         new HotkeysPage(sender, engine),
         new TrackLayoutPage(sender, engine),
-        new GameProfilesPage(sender, engine),
+        new GameProfilesPage(sender, engine, gameShell),
         new FeedbackSoundsPage(sender, engine),
         new LibrarySettingsPage(sender, engine, defaultCacheFolder),
     ];

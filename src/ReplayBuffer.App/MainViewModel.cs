@@ -4,6 +4,7 @@ using ReplayBuffer.App.Library;
 using ReplayBuffer.App.Settings;
 using ReplayBuffer.App.Status;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App;
 
@@ -24,11 +25,11 @@ internal sealed class MainViewModel : Observable
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
     /// <param name="libraryViewFile">Where the Library remembers its view choices; without it, they last only this run.</param>
     /// <param name="defaultCacheFolder">The engine's default cache folder, shown on the Clips page.</param>
-    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null)
+    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null, IGameShell? gameShell = null)
     {
         _engine = engine;
         StatusLine = new StatusLine(engine);
-        Pages = SettingsPages.Create(new SettingsSender(engine), engine, defaultCacheFolder);
+        Pages = SettingsPages.Create(new SettingsSender(engine), engine, defaultCacheFolder, gameShell);
         General = Pages.OfType<GeneralSettingsPage>().Single();
         ReplayBuffer = Pages.OfType<ReplayBufferSettingsPage>().Single();
         Hotkeys = Pages.OfType<HotkeysPage>().Single();
@@ -40,6 +41,19 @@ internal sealed class MainViewModel : Observable
         Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile);
         LibraryNav = new NavItem(LibraryTitle, null, isSection: false);
         NavItems = [LibraryNav, new NavItem(SettingsLabel, null, isSection: true), .. Pages.Select(p => new NavItem(p.Title, p, isSection: false))];
+        foreach (var drillIn in Pages.Select(p => p.DrillIn).OfType<DrillIn>())
+        {
+            drillIn.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(DrillIn.IsOpen))
+                {
+                    OnPropertyChanged(nameof(IsDrilledIn));
+                }
+            };
+        }
+
+        // Edit the main setting, from a game's page: the page that holds the key.
+        GameProfiles.EditMain = key => SelectedNavItem = NavItems.First(i => i.Page == (key == Keys.TrackLayout ? TrackLayout : (SettingsPage)ReplayBuffer));
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -109,6 +123,12 @@ internal sealed class MainViewModel : Observable
             }
         }
     }
+
+    /// <summary>The shown page's drill-in (story 10.10), or null: the shell's breadcrumb binds to it.</summary>
+    public DrillIn? CurrentDrillIn => IsSettingsTabSelected ? SelectedPage.DrillIn : null;
+
+    /// <summary>Whether an item page is open, so the page header is a breadcrumb.</summary>
+    public bool IsDrilledIn => CurrentDrillIn?.IsOpen == true;
 
     /// <summary>The page header's title: "Library" or the settings page's.</summary>
     public string CurrentTitle => SelectedNavItem.Title;
@@ -196,6 +216,17 @@ internal sealed class MainViewModel : Observable
 
     private void NavigationChanged()
     {
+        // Leaving a page shows its list when it's shown again (story 10.10's drill-in).
+        foreach (var page in Pages)
+        {
+            if (!IsSettingsTabSelected || !ReferenceEquals(page, SelectedPage))
+            {
+                page.DrillIn?.Close();
+            }
+        }
+
+        OnPropertyChanged(nameof(CurrentDrillIn));
+        OnPropertyChanged(nameof(IsDrilledIn));
         OnPropertyChanged(nameof(SelectedNavItem));
         OnPropertyChanged(nameof(CurrentTitle));
         OnPropertyChanged(nameof(CurrentView));

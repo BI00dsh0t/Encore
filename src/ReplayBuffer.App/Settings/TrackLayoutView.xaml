@@ -52,11 +52,7 @@
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
             <theme:SettingsContent x:Name="Column" Style="{DynamicResource RbSettingsContentStyle}">
-                <CheckBox Margin="0,0,0,12"
-                          Content="Use the main audio tracks"
-                          FontSize="{DynamicResource BodyTextBlockFontSize}"
-                          IsChecked="{Binding UsesGlobal}"
-                          Visibility="{Binding IsProfile, Converter={StaticResource Visible}}" />
+
 
                 <!-- The read-only summary, for a game that uses the main tracks. -->
                 <ItemsControl Margin="0,0,0,12"
