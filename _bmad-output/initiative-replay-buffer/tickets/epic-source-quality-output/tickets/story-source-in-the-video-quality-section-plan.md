@@ -3,7 +3,7 @@ title: 'Source in the Video quality section'
 type: 'feature'
 ticket: '3'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: 'fea3ac6'
 route: 'quick'
 risk: 'low'
@@ -33,6 +33,7 @@ A game's own Video quality and its reset are unchanged in code. "Change for this
   - `SourceResolutionViewTests`: the Clips page and a game's Video quality editor (`GameVideoEditor`, added at QA) show Source selected and its help line in Fluent and Gaming dark.
 - PNGs for the builder, beside the App test binary (`tests/ReplayBuffer.App.Tests/bin/Release/net10.0-windows10.0.26100.0/`): `clips-source-fluent.png`, `clips-source-gaming.png`, `game-video-source-fluent.png` and `game-video-source-gaming.png`.
 - No Heavy, GPU or bench runs: none apply.
+- Merged as `edf675f` after QA passed at `af6212f`. The QA request is in `6edfa69` (the game Video editor rendered in both themes); after the sync, App 201, Core 170 and Contracts 137 passed. The Clips PNGs are copied beside the epic file: `clips-source-fluent.png`, `clips-source-gaming.png`.
 
 ## Follow-ups
 

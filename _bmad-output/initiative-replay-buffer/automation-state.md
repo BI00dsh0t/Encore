@@ -202,7 +202,7 @@ The coordinator logs each QA round in the Log below.
 | 33.1 | 12.1 Tracer: the matchSource key and a game chain at the source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | merged (`735a52d`); open until tonight's Heavy 2560x1440 match-source capture passes |
 | 33.2 | 12.6 Architecture: AD-26, the source output size | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 33.3 | 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA (code); Heavy and cost tonight; merges after them |
-| 33.4 | 12.3 Source in the Video quality section | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
+| 33.4 | 12.3 Source in the Video quality section | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `edf675f`) |
 | 33.5 | 12.4 Refactor sweep | | pending |
 | 33.6 | 12.5 Source-resolution output end to end on the builder's PC | | pending |
 | 34.1 | 13.1 Capture new games: the key, the engine default and the General switch | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `4f06c58`) |
@@ -977,3 +977,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   4. 12.2's three Heavy tests (qa-2-1).
   5. 12.2's cost run, `bench fps --conditions baseline,capture,capture-ms --seconds 45 --passes 2`, with every session paused and an overlap log.
   6. The two Heavy follow-ups (fragment cadence, short video).
+- 2026-11-05: 12.3 merged into develop (`edf675f`, `feat(app): merge 12.3-source-in-video-quality`) after QA passed at `af6212f`, and marked done. Before the merge, QA's request was added in `6edfa69`: `SourceResolutionViewTests` also renders the game's `GameVideoEditor` with Source in both themes (`game-video-source-*.png`). Develop (`b8aa00d`, docs only) was synced: 0-warning build; App 201 (20 skipped), Core 170 and Contracts 137 passed, 0 failed. The Clips PNGs are copied to `epic-source-quality-output/` (`clips-source-fluent.png`, `clips-source-gaming.png`). No Heavy or GPU runs.
