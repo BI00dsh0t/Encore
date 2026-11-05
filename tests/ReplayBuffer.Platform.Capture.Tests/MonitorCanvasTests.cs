@@ -2,11 +2,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ReplayBuffer.Platform.Capture.Tests;
 
-/// <summary>Spike 11.1: the canvas rule (AD-25) and the GPU cost of a monitor's blit into the canvas.</summary>
+/// <summary>Spike 11.1: the canvas bounding box from placements (the rule itself is Core's <c>MonitorCanvasRule</c>) and the GPU cost of a monitor's blit into the canvas.</summary>
 public sealed class MonitorCanvasTests
 {
     [Fact]
-    public void TheCanvasIsTheMonitorsBoundingBoxFittedToTheCodecsLargestSide()
+    public void TheCanvasIsTheMonitorsBoundingBox()
     {
         // The builder's PC: 2560x1440 primary at (0,0), 3840x2160 at (2560,0).
         var monitor = new MonitorInfo(1, @"\\.\DISPLAY1", true);
@@ -19,9 +19,7 @@ public sealed class MonitorCanvasTests
         var (native, left, top) = MonitorCanvas.Bounds(placements);
 
         Assert.Equal((new VideoSize(6400, 2160), 0, 0), (native, left, top));
-        Assert.Equal(new VideoSize(6400, 2160), MonitorCanvas.Fit(native, MonitorCanvas.HevcAv1MaxSide));
-        Assert.Equal(new VideoSize(4096, 1382), MonitorCanvas.Fit(native, MonitorCanvas.H264MaxSide));
-        Assert.Equal(new VideoSize(4096, 1152), MonitorCanvas.Fit(new VideoSize(5120, 1440), MonitorCanvas.H264MaxSide));
+        Assert.Equal(new VideoSize(4096, 1382), MonitorCanvas.Fit(native, 4096));
     }
 
     /// <summary>The blit's GPU time, written to the test output; a measurement, so it's Heavy.</summary>

@@ -13,9 +13,21 @@ public sealed record MonitorInfo(nint Handle, string DeviceName, bool IsPrimary)
 
 /// <summary>
 /// A display monitor as the Main App lists it (6.11): its GDI device name, its friendly name, and its
-/// current resolution in pixels.
+/// current resolution in physical pixels; since story 11.2 also DisplayConfig's monitor device path,
+/// its physical position on the virtual desktop, its refresh rate and whether HDR is on. A value that
+/// can't be read is null (false for HDR).
 /// </summary>
-public sealed record MonitorDescription(string DeviceName, string FriendlyName, int Width, int Height, bool IsPrimary);
+public sealed record MonitorDescription(
+    string DeviceName,
+    string FriendlyName,
+    int Width,
+    int Height,
+    bool IsPrimary,
+    string? MonitorId = null,
+    int? X = null,
+    int? Y = null,
+    int? RefreshHz = null,
+    bool Hdr = false);
 
 /// <summary>
 /// Finds the monitor a Monitor Recording captures (6.9) by its device name, and describes the
@@ -74,28 +86,39 @@ public static unsafe class MonitorFinder
     /// <summary>
     /// Every attached display monitor, the primary first, then <c>EnumDisplayMonitors</c> order. A friendly
     /// name comes from DisplayConfig, else the monitor's <c>EnumDisplayDevices</c> description, else the
-    /// device name; the size is the current display mode, whatever the caller's DPI awareness.
+    /// device name. The size, position and refresh rate are the current display mode's, whatever the
+    /// caller's DPI awareness (AD-25: never GDI's DPI-virtualized <c>rcMonitor</c>); the monitor id and
+    /// HDR come from DisplayConfig.
     /// </summary>
     public static IReadOnlyList<MonitorDescription> Describe()
     {
-        var friendly = FriendlyNames();
+        var targets = Targets();
         return
         [
             .. All()
                 .OrderBy(m => m.IsPrimary ? 0 : 1)
                 .Select(m =>
                 {
-                    var (width, height) = CurrentSize(m.DeviceName);
-                    var name = friendly.TryGetValue(m.DeviceName, out var f) ? f : DeviceString(m.DeviceName);
-                    return new MonitorDescription(m.DeviceName, name ?? m.DeviceName, width, height, m.IsPrimary);
+                    var mode = CurrentMode(m.DeviceName);
+                    targets.TryGetValue(m.DeviceName, out var target);
+                    var name = target?.FriendlyName is { Length: > 0 } f ? f : DeviceString(m.DeviceName);
+                    return new MonitorDescription(
+                        m.DeviceName, name ?? m.DeviceName, mode?.Width ?? 0, mode?.Height ?? 0, m.IsPrimary,
+                        target?.MonitorId, mode?.X, mode?.Y, mode?.RefreshHz, target?.Hdr ?? false);
                 }),
         ];
     }
 
-    /// <summary>The DisplayConfig friendly name of each active source's monitor, by GDI device name; empty on any failure.</summary>
-    private static Dictionary<string, string> FriendlyNames()
+    /// <summary>One active source's monitor as DisplayConfig names it.</summary>
+    private sealed record DisplayTarget(string? FriendlyName, string? MonitorId, bool Hdr);
+
+    /// <summary>
+    /// The DisplayConfig friendly name, monitor device path and HDR state of each active source's
+    /// monitor, by GDI device name; empty on any failure.
+    /// </summary>
+    private static Dictionary<string, DisplayTarget> Targets()
     {
-        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var names = new Dictionary<string, DisplayTarget>(StringComparer.OrdinalIgnoreCase);
         try
         {
             DISPLAYCONFIG_PATH_INFO[] paths;
@@ -140,9 +163,16 @@ public static unsafe class MonitorFinder
 
                 var device = source.viewGdiDeviceName.AsReadOnlySpan().SliceAtNull().ToString();
                 var name = target.monitorFriendlyDeviceName.AsReadOnlySpan().SliceAtNull().ToString();
-                if (device.Length > 0 && name.Length > 0)
+                var devicePath = target.monitorDevicePath.AsReadOnlySpan().SliceAtNull().ToString();
+                var color = new DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO();
+                color.header.type = DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+                color.header.size = (uint)sizeof(DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO);
+                color.header.adapterId = path.targetInfo.adapterId;
+                color.header.id = path.targetInfo.id;
+                var hdr = PInvoke.DisplayConfigGetDeviceInfo(&color.header) == 0 && color.advancedColorEnabled;
+                if (device.Length > 0)
                 {
-                    names.TryAdd(device, name);
+                    names.TryAdd(device, new DisplayTarget(name.Length > 0 ? name : null, devicePath.Length > 0 ? devicePath : null, hdr));
                 }
             }
         }
@@ -164,13 +194,13 @@ public static unsafe class MonitorFinder
             : null;
     }
 
-    /// <summary>The current display mode's size in pixels, or zero when it can't be read.</summary>
-    private static (int Width, int Height) CurrentSize(string deviceName)
+    /// <summary>The current display mode: physical size, virtual-desktop position and refresh rate; null when it can't be read.</summary>
+    private static (int Width, int Height, int X, int Y, int RefreshHz)? CurrentMode(string deviceName)
     {
         var mode = new DEVMODEW { dmSize = (ushort)sizeof(DEVMODEW) };
         return PInvoke.EnumDisplaySettings(deviceName, ENUM_DISPLAY_SETTINGS_MODE.ENUM_CURRENT_SETTINGS, ref mode)
-            ? ((int)mode.dmPelsWidth, (int)mode.dmPelsHeight)
-            : (0, 0);
+            ? ((int)mode.dmPelsWidth, (int)mode.dmPelsHeight, mode.dmPosition.x, mode.dmPosition.y, (int)mode.dmDisplayFrequency)
+            : null;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]

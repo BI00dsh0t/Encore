@@ -157,6 +157,34 @@ public sealed record FeedbackSounds(bool ClipSaved, bool SaveFailed, bool Record
     };
 }
 
+/// <summary>The <c>monitorRecordingScreens</c> key's mode (AD-25).</summary>
+[JsonConverter(typeof(CamelCaseEnumConverter<MonitorScreensMode>))]
+public enum MonitorScreensMode
+{
+    /// <summary>Every monitor attached when a Monitor Recording starts.</summary>
+    All,
+
+    /// <summary>The monitors in <see cref="MonitorRecordingScreens.Monitors"/> that are attached.</summary>
+    Selected,
+}
+
+/// <summary>
+/// The <c>monitorRecordingScreens</c> key (AD-25, story 11.2): which screens a Monitor Recording
+/// composites. <c>{ "mode": "all" }</c>, or <c>{ "mode": "selected", "monitors": [ ... ] }</c> with at
+/// least one monitor id: DisplayConfig's monitor device path (<c>DisplayMonitor.MonitorId</c>), stable
+/// across reboots, or a GDI device name carried over from <c>monitorRecordingMonitor</c>. While the key
+/// is null, the old <c>monitorRecordingMonitor</c> is read as before.
+/// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record MonitorRecordingScreens(MonitorScreensMode Mode, IReadOnlyList<string>? Monitors = null)
+{
+    /// <summary>Every attached monitor.</summary>
+    public static MonitorRecordingScreens AllScreens { get; } = new(MonitorScreensMode.All);
+
+    /// <summary>The monitors <paramref name="monitorIds"/> names.</summary>
+    public static MonitorRecordingScreens Selected(params IReadOnlyList<string> monitorIds) => new(MonitorScreensMode.Selected, monitorIds);
+}
+
 /// <summary>The <c>cleanup</c> key: each limit null means that limit is off.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CleanupSettings(long? MaxBytes, long? MaxAgeSeconds);

@@ -55,9 +55,27 @@ public static class RecordingStopReasons
 /// <summary>
 /// One attached display monitor, as <c>monitors.list</c> reports it: its GDI device name (such as
 /// <c>\\.\DISPLAY1</c>, the value <c>monitorRecordingMonitor</c> holds), its friendly name, and its
-/// current resolution in pixels.
+/// current resolution in physical pixels.
 /// </summary>
-public sealed record DisplayMonitor(string DeviceName, string FriendlyName, int Width, int Height, bool Primary);
+/// <param name="MonitorId">
+/// Story 11.2 (AD-25), optional: DisplayConfig's monitor device path, stable for the same monitor on the
+/// same port; what <c>monitorRecordingScreens</c> stores. Null from an engine that doesn't fill it.
+/// </param>
+/// <param name="X">Optional: the left edge on the virtual desktop, in physical pixels (the display mode's position, not GDI's DPI-virtualized rectangle).</param>
+/// <param name="Y">Optional: the top edge on the virtual desktop, in physical pixels.</param>
+/// <param name="RefreshHz">Optional: the display mode's refresh rate.</param>
+/// <param name="Hdr">Optional: whether Windows HDR (advanced colour) is on for it; recorded in SDR either way.</param>
+public sealed record DisplayMonitor(
+    string DeviceName,
+    string FriendlyName,
+    int Width,
+    int Height,
+    bool Primary,
+    string? MonitorId = null,
+    int? X = null,
+    int? Y = null,
+    int? RefreshHz = null,
+    bool Hdr = false);
 
 /// <summary><c>monitors.list</c>'s reply: every attached monitor, the primary first.</summary>
 public sealed record MonitorList(IReadOnlyList<DisplayMonitor> Monitors);

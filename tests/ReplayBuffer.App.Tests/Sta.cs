@@ -42,4 +42,15 @@ internal static class Sta
         Dispatcher.PushFrame(frame);
         timer.Stop();
     }
+
+    /// <summary>Pumps the dispatcher until <paramref name="condition"/> holds, failing after five seconds; a loaded machine can take longer than a fixed pump.</summary>
+    public static void PumpUntil(Func<bool> condition, string what)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"Timed out waiting for {what}.");
+            Pump(TimeSpan.FromMilliseconds(20));
+        }
+    }
 }
