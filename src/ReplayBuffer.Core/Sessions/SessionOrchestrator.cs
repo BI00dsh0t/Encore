@@ -146,6 +146,11 @@ public sealed record RunningSession(SessionSpec Spec, Task<SessionOutcome> Ended
 /// <see cref="RecordingStopReasons.MonitorRemoved"/> and <see cref="ErrorCodes.MonitorRemoved"/> raised;
 /// a Monitor session that closes or fails while its monitor is gone ends the same way. Game capture is
 /// of a window, so a display change never touches the game session.
+/// With <see cref="TargetCapture.Wait"/>, the game session doesn't start on a Target window that
+/// can't be captured yet (a startup placeholder, minimized, cloaked): the window is polled until it
+/// can. A game session on the Target that fails before its first frame (WGC delivered none) is
+/// started again after a bounded backoff while the Target stays the same process, rather than staying
+/// off for the rest of its run (<see cref="CaptureWait"/>).
 /// </summary>
 public sealed class SessionOrchestrator : IDisposable
 {
@@ -187,6 +192,13 @@ public sealed class SessionOrchestrator : IDisposable
     // posts its rechecks; null when nothing waits.
     private TargetCandidate? _ringWait;
     private Timer? _ringTimer;
+
+    // A run of waits for the Target's window (TargetCapture.Wait): the Target it waits on, the
+    // one-shot timer posting its next try (null while a session on it runs), and how many sessions
+    // on it failed before their first frame. Null when nothing waits.
+    private TargetCandidate? _captureWait;
+    private Timer? _captureTimer;
+    private int _captureFailures;
     private CaptureState _state = CaptureState.Initial;
     private long _nextSessionId;
 
@@ -419,6 +431,8 @@ public sealed class SessionOrchestrator : IDisposable
         // No callback: the engine is stopping.
         _ringTimer?.Dispose();
         _ringTimer = null;
+        _captureTimer?.Dispose();
+        _captureTimer = null;
     }
 
     private void Handle(SessionMessage message)
@@ -541,7 +555,15 @@ public sealed class SessionOrchestrator : IDisposable
                 break;
 
             case SessionFailed failed when _active?.Id == failed.SessionId:
-                EndActive("failure: " + failed.Failure.Message, failed.Failure);
+                OnActiveFailed(_active, failed.Failure);
+                break;
+
+            case SessionAnchored anchored when _active?.Id == anchored.SessionId:
+                OnActiveAnchored(_active);
+                break;
+
+            case CaptureRetry when _captureWait is { } waiting:
+                RetryCapture(waiting);
                 break;
 
             case SessionChainRestarted restarted when _active?.Id == restarted.SessionId:
@@ -876,8 +898,9 @@ public sealed class SessionOrchestrator : IDisposable
         // A Replay Buffer given up on a GPU reset stays off only for the Target it stopped on.
         _gpuStoppedPid = null;
 
-        // A wait for room for the ring belongs to the Target it stopped on.
+        // A wait for room for the ring belongs to the Target it stopped on, as does a wait for its window.
         ClearRingWait();
+        EndCaptureWait(captured: false);
         _targetChanged?.Invoke(new TargetChanged(current?.ToTargetGame(), to?.ToTargetGame(), propose.Reason));
         if (_targetCapture is null)
         {
@@ -950,17 +973,147 @@ public sealed class SessionOrchestrator : IDisposable
         }
     }
 
+    /// <summary>
+    /// Starts the game session on the Target, unless <see cref="TargetCapture.Wait"/> finds its
+    /// window not ready yet: then it waits, and the window is checked again after
+    /// <see cref="CaptureWait.Poll"/>. A start that fails with a failure the wait retries is retried
+    /// after its backoff.
+    /// </summary>
     private void StartOnTarget(TargetCandidate target)
     {
+        var capture = _targetCapture!;
+        var wait = capture.Wait;
+
+        // A new window, a ring recheck or the timer: this try replaces any one still pending.
+        _captureTimer?.Dispose();
+        _captureTimer = null;
+        if (wait is not null && NotReady(wait, target) is { } why)
+        {
+            WaitForCapture(wait, target, why, failed: false);
+            return;
+        }
+
         try
         {
-            Start(SessionKind.Game, new CaptureTarget(target.ProcessId, target.Window, target.ProfileId), _targetCapture!.Audio, target.Name);
+            Start(SessionKind.Game, new CaptureTarget(target.ProcessId, target.Window, target.ProfileId), capture.Audio, target.Name);
+        }
+        catch (Exception e) when (wait is not null && wait.Retry(e))
+        {
+            WaitForCapture(wait, target, e.Message, failed: true);
         }
         catch (Exception e)
         {
             // The Target stays committed; only its capture failed.
-            _targetCapture!.Failed(target, e);
+            capture.Failed(target, e);
         }
+    }
+
+    /// <summary>Why <paramref name="target"/>'s window can't be captured yet, or null when it can; a check that throws lets the start go ahead.</summary>
+    private static string? NotReady(CaptureWait wait, TargetCandidate target)
+    {
+        try
+        {
+            return wait.NotReady(target);
+        }
+        catch (Exception)
+        {
+            // The session's own start reports a window it can't capture.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The game session failed. One on the Target that failed before its first frame, with a failure
+    /// <see cref="TargetCapture.Wait"/> retries, while the Target is still that process, is retried
+    /// after its backoff instead of staying off for the rest of the Target's run.
+    /// </summary>
+    private void OnActiveFailed(Active active, Exception failure)
+    {
+        var retry = Volatile.Read(ref _disposed) == 0
+            && _targetCapture?.Wait is { } wait
+            && wait.Retry(failure)
+            && active is { Spec.Kind: SessionKind.Game, Anchored: false, GameName: not null }
+            && _target is { } target
+            && target.ProcessId == active.Spec.Target.ProcessId;
+        EndActive("failure: " + failure.Message, failure);
+        if (retry)
+        {
+            WaitForCapture(_targetCapture!.Wait!, _target!, failure.Message, failed: true);
+        }
+    }
+
+    /// <summary>The game session got its first frame: a wait for its Target's window is over.</summary>
+    private void OnActiveAnchored(Active active)
+    {
+        active.Anchored = true;
+        if (_captureWait is { } waiting && waiting.ProcessId == active.Spec.Target.ProcessId)
+        {
+            EndCaptureWait(captured: true);
+        }
+    }
+
+    /// <summary>
+    /// Waits for <paramref name="target"/>'s window: the run's first wait is reported, and the next
+    /// try is posted after <see cref="CaptureWait.Poll"/>, or after the backoff for a failed start.
+    /// </summary>
+    private void WaitForCapture(CaptureWait wait, TargetCandidate target, string why, bool failed)
+    {
+        if (_captureWait is { } running && running.ProcessId != target.ProcessId)
+        {
+            EndCaptureWait(captured: false);
+        }
+
+        if (_captureWait is null)
+        {
+            _captureFailures = 0;
+            wait.Waiting(target, why);
+        }
+
+        _captureWait = target;
+        if (failed)
+        {
+            _captureFailures++;
+        }
+
+        _captureTimer?.Dispose();
+        _captureTimer = new Timer(_ => Post(new CaptureRetry()), null, failed ? wait.Backoff(_captureFailures) : wait.Poll, System.Threading.Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>The capture wait's timer fired: the game session starts on the Target if it is still the one waited for.</summary>
+    private void RetryCapture(TargetCandidate waiting)
+    {
+        _captureTimer?.Dispose();
+        _captureTimer = null;
+        if (_active is not null || _targetCapture is null || _target is not { } target || target.ProcessId != waiting.ProcessId)
+        {
+            // A session runs (one started by hand), or the Target moved on without a commit ending the wait.
+            EndCaptureWait(captured: false);
+            return;
+        }
+
+        if (_ringWait is not null || _gpuStoppedPid == target.ProcessId)
+        {
+            // A full disk or a given-up GPU reset holds the Replay Buffer off; their own waits restart it.
+            EndCaptureWait(captured: false);
+            return;
+        }
+
+        StartOnTarget(target);
+    }
+
+    /// <summary>Ends a wait for the Target's window, if any, and reports how it ended.</summary>
+    private void EndCaptureWait(bool captured)
+    {
+        if (_captureWait is not { } waiting)
+        {
+            return;
+        }
+
+        _captureWait = null;
+        _captureFailures = 0;
+        _captureTimer?.Dispose();
+        _captureTimer = null;
+        _targetCapture?.Wait?.Ended(waiting, captured);
     }
 
     /// <summary>
@@ -2265,6 +2418,9 @@ public sealed class SessionOrchestrator : IDisposable
         /// <summary>The Target's display name at <see cref="StartOnTarget"/>; null for a session started otherwise.</summary>
         public string? GameName { get; init; }
 
+        /// <summary>Whether its output anchored at its first frame.</summary>
+        public bool Anchored { get; set; }
+
         /// <summary>The press QPC of the session's last Reset (R5); null before its first Clip.</summary>
         public long? ResetQpc { get; set; }
 
@@ -2332,6 +2488,9 @@ public sealed class SessionOrchestrator : IDisposable
 
     /// <summary>The ring recheck timer fired; ignored once no Replay Buffer waits for room.</summary>
     private sealed record RingRecheck : SessionMessage;
+
+    /// <summary>The capture wait's timer fired; ignored once nothing waits for the Target's window.</summary>
+    private sealed record CaptureRetry : SessionMessage;
 
     /// <summary>The drain timer of session <paramref name="SessionId"/> fired; ignored once that drain is gone.</summary>
     private sealed record DrainExpired(long SessionId) : SessionMessage;

@@ -63,6 +63,47 @@ public static unsafe class WindowFinder
     }
 
     /// <summary>
+    /// Why the window can't be captured yet, or null when it can: it must exist, be visible, not be
+    /// minimized or cloaked, and have a client area of at least <paramref name="minWidth"/> ×
+    /// <paramref name="minHeight"/>. A game still starting can show a tiny placeholder window that
+    /// WGC never delivers a frame from.
+    /// </summary>
+    public static string? NotCapturable(nint handle, int minWidth, int minHeight)
+    {
+        var hwnd = new HWND((void*)handle);
+        if (!PInvoke.IsWindow(hwnd))
+        {
+            return "the window is gone";
+        }
+
+        if (!PInvoke.IsWindowVisible(hwnd))
+        {
+            return "the window is hidden";
+        }
+
+        if (PInvoke.IsIconic(hwnd))
+        {
+            return "the window is minimized";
+        }
+
+        if (IsCloaked(hwnd))
+        {
+            return "the window is cloaked";
+        }
+
+        if (!PInvoke.GetClientRect(hwnd, out var client))
+        {
+            return "the window's size can't be read";
+        }
+
+        var width = client.right - client.left;
+        var height = client.bottom - client.top;
+        return width < minWidth || height < minHeight
+            ? $"the window is {width}x{height}, under {minWidth}x{minHeight}"
+            : null;
+    }
+
+    /// <summary>
     /// Matches <paramref name="query"/> against window titles: a single exact title
     /// (ignoring case) wins, otherwise the title must contain the query exactly once.
     /// </summary>

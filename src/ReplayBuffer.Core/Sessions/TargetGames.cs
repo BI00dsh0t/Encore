@@ -1,3 +1,4 @@
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Library;
@@ -33,8 +34,67 @@ public sealed record RecordingRunning(bool Running) : SessionMessage;
 /// Target's window.
 /// </summary>
 /// <param name="Audio">The audio of each session it starts, from the snapshot its Start resolved.</param>
-/// <param name="Failed">Called on the orchestrator thread when a session on the Target couldn't be started or retargeted.</param>
-public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, Action<TargetCandidate, Exception> Failed);
+/// <param name="Failed">
+/// Called on the orchestrator thread when a session on the Target couldn't be started or retargeted;
+/// not for a failure <paramref name="Wait"/> retries.
+/// </param>
+/// <param name="Wait">
+/// How a Target whose window can't be captured yet is waited for and retried; null starts each
+/// session at once and treats a failed one as final for the Target.
+/// </param>
+public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, Action<TargetCandidate, Exception> Failed, CaptureWait? Wait = null);
+
+/// <summary>
+/// The wait for a Target Game's window. A game still starting can show a placeholder window (156×27
+/// for Rocket League) that WGC never delivers a frame from. So no game session starts on a window
+/// <paramref name="NotReady"/> refuses: it is polled every <see cref="Poll"/> until it is ready. A
+/// session on the Target that fails before its first frame with a failure <see cref="Retries"/>
+/// accepts is started again after a backoff, from <see cref="FirstRetry"/> doubling up to
+/// <see cref="MaxRetry"/>, while the Target stays the same process. A run of waits and retries is
+/// reported once, by <paramref name="Waiting"/>, and its end once, by <paramref name="Ended"/>.
+/// All calls are on the orchestrator thread.
+/// </summary>
+/// <param name="NotReady">Why the Target's window can't be captured yet (minimized, cloaked, too small), or null when it can.</param>
+/// <param name="Waiting">The first wait or retry of a run, with its reason.</param>
+/// <param name="Ended">The run is over: true once a session on the Target got its first frame, false when the Target changed or went.</param>
+/// <param name="Retries">Which failures before the first frame are retried; null is <see cref="ErrorCodes.CaptureFailed"/> only.</param>
+public sealed record CaptureWait(
+    Func<TargetCandidate, string?> NotReady,
+    Action<TargetCandidate, string> Waiting,
+    Action<TargetCandidate, bool> Ended,
+    Func<Exception, bool>? Retries = null)
+{
+    public static readonly TimeSpan DefaultPoll = TimeSpan.FromSeconds(1);
+
+    public static readonly TimeSpan DefaultFirstRetry = TimeSpan.FromSeconds(2);
+
+    public static readonly TimeSpan DefaultMaxRetry = TimeSpan.FromSeconds(30);
+
+    /// <summary>How often a window <see cref="NotReady"/> refused is checked again.</summary>
+    public TimeSpan Poll { get; init; } = DefaultPoll;
+
+    /// <summary>The wait before the first retry of a session that failed before its first frame.</summary>
+    public TimeSpan FirstRetry { get; init; } = DefaultFirstRetry;
+
+    /// <summary>The longest wait between retries.</summary>
+    public TimeSpan MaxRetry { get; init; } = DefaultMaxRetry;
+
+    /// <summary>Whether <paramref name="failure"/>, before the first frame, is retried.</summary>
+    public bool Retry(Exception failure) =>
+        Retries?.Invoke(failure) ?? failure is ErrorCodeException { Code: ErrorCodes.CaptureFailed };
+
+    /// <summary>The wait before retry <paramref name="failures"/> (1 for the first) of a run.</summary>
+    public TimeSpan Backoff(int failures)
+    {
+        var wait = FirstRetry;
+        for (var i = 1; i < failures && wait < MaxRetry; i++)
+        {
+            wait += wait;
+        }
+
+        return wait < MaxRetry ? wait : MaxRetry;
+    }
+}
 
 /// <summary>
 /// How the orchestrator turns a <c>save</c> press into a Clip (R4, AD-19, AD-21).
