@@ -155,5 +155,12 @@ Label ids take the form `ari:cloud:trello::label/workspace/6ae9f97af5eb2665e5252
 | 11.4 Screens to record: the picker on Hotkeys | `6aebf204c0e7fde5a029d23a` |
 | 11.5 Refactor sweep | `6aebf205ffd2a5e5e17eb51b` |
 | 11.6 Multi-monitor recording end to end on the builder's PC | `6aebf2059d0aba071d507faa` |
+| 12.1 Tracer: the matchSource key and a game chain at the source size | `6aec8e63d78f11e6df4de944` |
+| 12.6 Architecture: AD-26, the source output size | `6aec8e65c1f33e56c8a0c19b` |
+| 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | `6aec8e66845d0a88b241ff15` |
+| 12.3 Source in the Video quality section | `6aec8e67efd10e7a06aa873a` |
+| 12.4 Refactor sweep | `6aec8e689f9e57da99d21004` |
+| 12.5 Source-resolution output end to end on the builder's PC | `6aec8e6987dad06b8fef18f7` |
+| 13.1 Capture new games: the key, the engine default and the General switch | `6aec8e6bed61cfb0536e8df8` |
 
 The legend card at the top of Backlog is `6ae9fa9bd7f70d53c9518fbf`.
