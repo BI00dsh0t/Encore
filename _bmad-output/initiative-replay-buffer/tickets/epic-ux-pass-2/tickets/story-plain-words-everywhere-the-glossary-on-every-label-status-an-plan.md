@@ -45,3 +45,4 @@ status: review
 ## Log
 
 - 2026-11-05: built and verified; READY FOR QA.
+- 2026-11-05: QA passed at 2967259. Its gap (C#-set strings are covered by spot checks only) is noted on 10.7 for the refactor sweep.
