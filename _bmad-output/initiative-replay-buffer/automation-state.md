@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy merging full-run-flaky-tests (8.8 held at e3822aa) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; full-run-flaky-tests merge held at `58a374d` until tests resume (8.8 held at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
@@ -889,3 +889,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA round 2 passed for full-run-flaky-tests at `ae7287a`: the regression test passes alone and fails with the file protocol restored; the seam is harmless; IpcServer disposes in a finally. FFmpeg 42, Engine 194 and App 182 passed. slice-epic-5 is merging.
 - 2026-11-05: **Builder: "stop all tests".** The "Tests stopped" rule is added. The coordinator sent stop messages and interrupted the turns of qa-1-14 (10.11, was running its post-sync suites before merging), qa-2-1 (11.3) and slice-epic-5 (full-run-flaky-tests, was syncing to merge). Both merges are held until tests resume. Each session stops only the test processes it started and replies TESTS STOPPED.
 - 2026-11-05: TESTS STOPPED for 10.11: qa-1-14's post-sync run was interrupted, and no process from its worktree is left. It's not merged; `feature/10.11-plain-words` is at `d824347` (the 10.7 glossary note plus a state-only sync). Its post-sync suites and publish run when tests resume, then it merges.
+- 2026-11-05: TESTS STOPPED for full-run-flaky-tests: the post-sync run stopped during Engine (FFmpeg 40/40 had passed), and no process from its worktree is left. It's not merged; `bugfix/full-run-flaky-tests` is at `58a374d` (develop synced, 0-warning build). Engine, App and the publish run when tests resume, then it merges.
