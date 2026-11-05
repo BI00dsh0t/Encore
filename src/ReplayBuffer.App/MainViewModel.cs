@@ -79,10 +79,10 @@ internal sealed class MainViewModel : Observable
     /// <summary>The Hotkeys page, which takes the snapshot's <c>hotkey.status</c> as well as its settings.</summary>
     public HotkeysPage Hotkeys { get; }
 
-    /// <summary>The Track Layout page, which takes the snapshot's device list as well as its settings.</summary>
+    /// <summary>Audio Tracks, which takes the snapshot's device list and meters as well as its settings.</summary>
     public TrackLayoutPage TrackLayout { get; }
 
-    /// <summary>The Game Profiles page.</summary>
+    /// <summary>Games: the list, and a page per game.</summary>
     public GameProfilesPage GameProfiles { get; }
 
     /// <summary>The Feedback Sounds page, which takes the snapshot's device list and warnings as well as its settings.</summary>
@@ -254,7 +254,7 @@ internal sealed class MainViewModel : Observable
         OnPropertyChanged(nameof(CurrentView));
     }
 
-    // The Track Layout pages meter only while on screen, so a hidden window doesn't keep the engine metering.
+    // Audio Tracks and a game's page meter only while on screen, so a hidden window doesn't keep the engine metering.
     // The closing page goes first, so its meters.unwatch doesn't stop the opening page's watch.
     private void UpdateOpenPage()
     {
