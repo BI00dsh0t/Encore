@@ -62,7 +62,7 @@ The builder opens a Clip or Recording in the Library and hears each Track on its
 
 - parent — _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md, Requirements R42 (and R11, R12, R15, R21, R28, R34, R38)
 - research — _bmad-output/initiative-replay-buffer/research/in-app-player.md (measured results; Media Foundation gotchas §5; the frame-server design §6.1)
-- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-1, AD-2, AD-9, AD-14, AD-17, AD-22, AD-24, AD-27 (to be written by entry 1)
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, AD-1, AD-2, AD-9, AD-14, AD-17, AD-22, AD-24, [AD-27](../../architecture-replay-buffer/architecture-replay-buffer.md#ad-27--in-app-player-winrt-mediaplayer-into-a-d3dimage-app-side-and-read-only)
 - design — _bmad-output/initiative-replay-buffer/tickets/epic-ux-pass-2/ux-pass-2/EXPERIENCE.md (Drill-in pages, the Library, the glossary)
 - code — `src/ReplayBuffer.App/Library/LibraryPage.cs` (`OpenSelection`, `OpenFocused`), `LibraryView.xaml(.cs)` (Enter and double-click), `LibraryShell.cs`, `LibraryViewState.cs`; `src/ReplayBuffer.App/Settings/DrillIn.cs`, `DrillInHeader.xaml`; `src/ReplayBuffer.Platform.Desktop/`; `src/ReplayBuffer.Platform.FFmpeg/FragmentedMp4Muxer.cs`
 
@@ -70,22 +70,24 @@ The builder opens a Clip or Recording in the Library and hears each Track on its
 
 - Decision: 2026-11-05, the builder's words: "add a new feature request. first research easiest approach for an in app media player that also allows us to switch audio tracks." Then, of the research's recommendation: "use the windows media player."
 - Decision: 2026-11-05, its own epic: it adds a page, a rendering path and an engine file-format change. It runs before 8.11, so the hands-off run uses it, and it waits on nothing left in epics 11 to 13.
-- Decision for the builder (unattended default): 2026-11-05, the player is a drill-in page from the Library, reusing 10.10's drill-in, opened by a double-click or Enter on a row. "Open in default player" stays as a row action.
-- Decision for the builder (unattended default): 2026-11-05, one Track at a time, the first Track ("Everything" in a new layout) at open. Mixing several Tracks is parked as a later story.
-- Decision for the builder (unattended default): 2026-11-05, one volume control. A volume per Track is parked; it needs mixing.
-- Decision for the builder (unattended default): 2026-11-05, it plays Clips, Recordings and Monitor Recordings.
-- Decision for the builder (unattended default): 2026-11-05, controls: play and pause, a seek bar with time, volume, and keys (Space, Left and Right, Up and Down, Esc). Frame step, speed and full screen are parked.
-- Decision for the builder (unattended default): 2026-11-05, a missing codec gets a plain-words message with a link to the Store extension and "Open in default player".
-- Decision for the builder (unattended default): 2026-11-05, trimming is parked and out of scope.
-- Decision for the builder (unattended default): 2026-11-05, a row still being written isn't played, as it can't be renamed; the default player is still offered for it.
-- Decision for the builder (unattended default): 2026-11-05, the volume is kept across runs in the Library's view state, App-side, with no settings key.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, the player is a drill-in page from the Library, reusing 10.10's drill-in, opened by a double-click or Enter on a row. "Open in default player" stays as a row action.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, one Track at a time, the first Track ("Everything" in a new layout) at open. Mixing several Tracks is parked as a later story.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, one volume control. A volume per Track is parked; it needs mixing.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, it plays Clips, Recordings and Monitor Recordings.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, controls: play and pause, a seek bar with time, volume, and keys (Space, Left and Right, Up and Down, Esc). Frame step, speed and full screen are parked.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, a missing codec gets a plain-words message with a link to the Store extension and "Open in default player".
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, trimming is parked and out of scope.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, a row still being written isn't played, as it can't be renamed; the default player is still offered for it.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, the volume is kept across runs in the Library's view state, App-side, with no settings key.
 - Decision: 2026-11-05, the research measured Media Foundation picking the *last* Track at open and ending fragmented MP4 at its last `mfra` entry (up to one fragment early). R4 and R5 cover both; a hand-patched `mehd` fixed the second.
 - Decision: 2026-11-05, entry 1 (hitl) is the AD-27 spine edit, run by the coordinator as an architecture update session, as with AD-26. It amends AD-1 (the App may read a finished file to play it) and AD-9 (`mehd` at finalize), so the tracer and entry 3 wait on it.
 - Decision: 2026-11-05, the tracer is entry 2: a row's Enter opens the page, a Clip plays with its first Track forced, through the frame server, the `Platform.Desktop` interop and a `D3DImage`, with play and pause, and Back releases the file. Next is entry 3, the least certain part: an in-place `mehd` patch at finalize on real Recordings, with a plan checkpoint. It runs in the engine lane, in parallel with the App lane.
 - Decision: 2026-11-05, the App lane is one ordered line, since every story edits the player page: tracer, Track picker (4), transport (5), missing codec (6). Then a Refactor sweep (7) and an end-to-end check on the builder's PC (8, hitl).
+- Decision: 2026-11-05, the builder's words: "Yes, start epic 14." Every unattended default above is now the builder's decision.
+- Decision: 2026-11-05 (14.1), the rule is recorded as [AD-27 — In-app player](../../architecture-replay-buffer/architecture-replay-buffer.md#ad-27--in-app-player-winrt-mediaplayer-into-a-d3dimage-app-side-and-read-only). AD-1 (the App may read a finished file to play it, shared for read, write and delete), AD-2 (the D3D interop in `Platform.Desktop`), AD-9 (`mehd` at finalize) and AD-17 (a playing file never blocks a delete) point to it. R42 is in the spine's binds and capability map, and the Stack lists Windows' playback and the codec extensions. 14.2 and 14.3 build on it.
 - Parked: mixing several Tracks. The research's cheap idea is one extra `MediaPlayer` per extra Track on a shared `MediaTimelineController`; it's untested. Otherwise it needs our own FFmpeg decode (research §6.6).
-- Decision for the builder (unattended default): 2026-11-05, 8.11's hands-off run waits on 14.8, like epics 12 and 13; 8.7 to 8.10 don't wait.
-- Decision for the builder (unattended default): 2026-11-05, the page layout. The video fills the page under the breadcrumb header. A control bar runs along its bottom edge, over the video: play and pause, the seek bar with elapsed and total time, the Track list as a menu button, and volume. The controls always show; hiding them while playing is parked. No `bmad-ux` pass, since it reuses the drill-in page and the looks' existing controls.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, 8.11's hands-off run waits on 14.8, like epics 12 and 13; 8.7 to 8.10 don't wait.
+- Decision (builder, accepted 2026-11-05; was an unattended default): 2026-11-05, the page layout. The video fills the page under the breadcrumb header. A control bar runs along its bottom edge, over the video: play and pause, the seek bar with elapsed and total time, the Track list as a menu button, and volume. The controls always show; hiding them while playing is parked. No `bmad-ux` pass, since it reuses the drill-in page and the looks' existing controls.
 - Decision: 2026-11-05 (set check), keys: a focused control's own keys win (the Track list's and the seek bar's arrows); the page's keys apply otherwise.
 - Decision: 2026-11-05 (set check), the player sits behind a small seam that 14.2 adds, so 14.5 and 14.6 test against a fake player.
 - Decision: 2026-11-05 (set check), the missing-codec page is checked by a dev-instance switch that forces an unsupported decoder status. It's never on in a normal run. 14.6 adds it, and 14.8 and the Done-when check use it.
