@@ -83,6 +83,22 @@ after = [
 ]
 
 [[epic]]
+id = 10
+slug = "epic-ux-pass-2"
+title = "UX pass 2"
+description = "The Main App works the way a gamer who isn't a developer expects. The Library selects several Clips and Recordings with the usual Windows mouse and keys, acts on them together (Favourite, copy, copy to a folder, show in Explorer, and delete with one confirmation that never deletes a Favourite or a file being written), and sorts and searches them. Track Layout becomes Audio Tracks: one card per Track, sounds picked by name with a live level beside each, two presets, and a first-run layout that records the default playback device and microphone with no setup. Plain page names, a welcome card, a richer tray menu and a save hint close the smaller gaps. A bmad-ux gap review sets the design first."
+covers = ["R38"]
+after = [{ epic = 9, needs = "the restyled App, its tokens and components, and the themed dialog to build the new Library and Audio Tracks surfaces on" }]
+
+[[epic]]
+id = 11
+slug = "epic-multi-monitor-recording"
+title = "Multi-monitor recording"
+description = "A Monitor Recording records the screens the builder chooses, or every attached screen, composited into one video laid out as Windows arranges them and scaled to fit, on one encoder chain with one set of Tracks. Screens are chosen by a stable id beside the Monitor Recording key on Hotkeys, with a layout preview; the old single-monitor setting keeps working. Removing a recorded monitor blacks its area and the file continues."
+covers = ["R39"]
+after = [{ epic = 10, needs = "10.9's Hotkeys page, where the screen picker moves, for story 11.4's picker" }]
+
+[[epic]]
 id = 8
 slug = "epic-hardening"
 title = "Hardening and hands-off operation"
@@ -97,4 +113,6 @@ after = [
   { epic = 2, needs = "device rebinding for resume and mixer restarts, and the named-Track checks for the conformance run" },
   { epic = 3, needs = "Game Profiles to check for persistence across restarts" },
   { epic = 9, needs = "the finished, restyled App, so the final conformance run and the soaks run against the UI that ships" },
+  { epic = 10, needs = "the final UI (Library selection, Audio Tracks and the first-run seed), so 8.11's hands-off run on the builder's PC uses what ships; 8.7 to 8.9 measure the engine and don't wait" },
+  { epic = 11, needs = "multi-monitor Monitor Recording, finished, so 8.11's hands-off run uses it" },
 ]

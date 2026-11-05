@@ -1,8 +1,8 @@
 namespace ReplayBuffer.App.Settings;
 
-internal partial class RecordingsSettingsView
+internal partial class GameVideoEditor
 {
-    public RecordingsSettingsView()
+    public GameVideoEditor()
     {
         InitializeComponent();
     }

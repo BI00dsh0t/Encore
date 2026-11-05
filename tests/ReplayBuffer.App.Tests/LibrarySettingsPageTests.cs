@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ReplayBuffer.App.Settings;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 
@@ -120,16 +121,17 @@ public sealed class LibrarySettingsPageTests
         };
         var page = Create();
         Assert.Equal("1.2 GB in 2 files", page.FolderSizeText);
-        Assert.Equal("the default folder under Videos", page.OutputFolderText);
+        Assert.Equal("Storage and Cleanup", page.Title);
         Assert.NotNull(page.CleanupBlockedText);
-        Assert.False(page.CanUseDefaultFolder);
+        Assert.False(page.ClipsFolder.CanUseDefault);
 
-        page.ChooseOutputFolder("Clips");
+        page.ClipsFolder.Choose("Clips");
         Assert.Empty(_engine.Sent);
-        Assert.NotNull(page.Message);
+        Assert.NotNull(page.ClipsFolder.Problem);
 
         _answer = true;
-        page.ChooseOutputFolder(@"D:\Clips");
+        page.ClipsFolder.Validate = _ => null;
+        page.ClipsFolder.Choose(@"D:\Clips");
         Assert.Contains("Existing files aren't moved.", Assert.Single(_prompts), StringComparison.Ordinal);
         var op = Assert.Single(Assert.Single(_updates).Ops);
         Assert.Equal((Keys.OutputFolder.Name, "\"D:\\\\Clips\""), (op.Key, op.Value.GetRawText()));
@@ -201,6 +203,48 @@ public sealed class LibrarySettingsPageTests
         Assert.Single(_prompts);
         Assert.False(page.SizeLimitEnabled);
         Assert.NotNull(page.Message);
+    }
+
+    [Fact]
+    public void AClipsFolderContainingTheCacheFolderIsRefused()
+    {
+        // QA 10.9: the cache folder can't be inside the Clips folder, from this side too.
+        var global = SettingsDocument.Empty.Global.Add(Keys.RingPath.Name, Keys.RingPath.ToJson(@"D:\ReplayBuffer Cache"));
+        _engine.State = _engine.State! with { Settings = SettingsDocument.Empty with { Revision = 1, Global = global } };
+        var page = Create();
+        _answer = true;
+
+        page.ClipsFolder.Choose(@"D:\");
+
+        Assert.Equal("The Clips folder can't contain the cache folder.", page.ClipsFolder.Problem);
+        Assert.Empty(_updates);
+
+        // With no ringPath, the engine's default cache folder counts.
+        _engine.State = _engine.State with { Settings = SettingsDocument.Empty with { Revision = 2 } };
+        var clips = new MainViewModel(_engine, action => action(), defaultCacheFolder: @"C:\Users\sam\AppData\Local\ReplayBuffer\ring").LibrarySettings.ClipsFolder;
+        clips.Choose(@"C:\Users\sam\AppData");
+        Assert.Equal("The Clips folder can't contain the cache folder.", clips.Problem);
+    }
+
+    [Fact]
+    public void BothFolderPickersWordTheEnginesNestingRefusal()
+    {
+        // Story 10.9: another client set the cache folder, so only the engine knows; each picker says it plainly.
+        _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.RingPathInvalid, "The cache folder and the Clips folder can't be inside each other.");
+        var model = new MainViewModel(_engine, action => action());
+        var clips = model.LibrarySettings.ClipsFolder;
+        clips.Validate = _ => null;
+        model.LibrarySettings.Confirm = _ => true;
+        clips.Choose(@"D:\");
+        Assert.Equal("The Clips folder can't contain the cache folder.", clips.Problem);
+        Assert.Null(model.LibrarySettings.Message);
+
+        var cache = model.ReplayBuffer.CacheFolder;
+        model.ReplayBuffer.IsDisk = true;
+        cache.Validate = _ => null;
+        cache.Choose(@"D:\Clips\Cache");
+        Assert.Equal("The cache folder can't be inside the Clips folder.", cache.Problem);
+        Assert.Null(model.ReplayBuffer.Message);
     }
 
     private LibrarySettingsPage Create(CleanupSettings? cleanup = null)

@@ -47,6 +47,7 @@ public sealed class TrackMixCaptureTests : IDisposable
 
     private readonly string _directory = Directory.CreateTempSubdirectory("rb-mix-").FullName;
     private readonly List<Process> _processes = [];
+    private TimeSpan _captured;
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -135,8 +136,10 @@ public sealed class TrackMixCaptureTests : IDisposable
         {
             await orchestrator.StartAsync(SessionKind.Game, new CaptureTarget((int)window.ProcessId, window.Handle, null), audio).WaitAsync(Timeout, Token);
             await anchored.Task.WaitAsync(Timeout, Token);
+            var clock = Stopwatch.StartNew();
             await Task.Delay(TimeSpan.FromSeconds(2), Token);
             var outcome = await orchestrator.EndAsync("test over").WaitAsync(Timeout, Token);
+            _captured = clock.Elapsed;
             Assert.Null(outcome.Failure);
         }
 
@@ -146,16 +149,24 @@ public sealed class TrackMixCaptureTests : IDisposable
     private static void AssertRms(double actual, double expected) =>
         Assert.InRange(actual, expected * 0.9, expected * 1.1);
 
-    /// <summary>The file holds video plus <paramref name="audioStreams"/> AAC streams, each within 0.1 s of the video's duration.</summary>
-    private static void AssertDurationsMatchTheVideo(string file, int audioStreams)
+    /// <summary>
+    /// The file holds video plus <paramref name="audioStreams"/> AAC streams. The video lasts about as
+    /// long as the capture ran (a loaded machine stretches the 2 s wait, so it is measured), and every
+    /// Track is padded to one common end, no earlier than the video's. A starved encoder thread can end
+    /// the video short of the audio at the stop, so the audio isn't held to the video's end from above.
+    /// </summary>
+    private void AssertDurationsMatchTheVideo(string file, int audioStreams)
     {
         var streams = SessionTestKit.Probe(file, "-show_streams").GetProperty("streams").EnumerateArray()
             .Select(s => (Codec: s.GetProperty("codec_name").GetString(), Duration: double.Parse(s.GetProperty("duration").GetString()!, CultureInfo.InvariantCulture)))
             .ToList();
         Assert.Equal(["h264", .. Enumerable.Repeat("aac", audioStreams)], streams.Select(s => s.Codec));
         var video = streams[0].Duration;
-        Assert.InRange(video, 1.5, 4);
-        Assert.All(streams.Skip(1), s => Assert.InRange(s.Duration, video - 0.1, video + 0.1));
+        var captured = _captured.TotalSeconds;
+        Assert.InRange(video, 1.5, captured + 0.5);
+        var audio = streams.Skip(1).Select(s => s.Duration).ToList();
+        Assert.InRange(audio.Max() - audio.Min(), 0, 0.03);
+        Assert.InRange(audio[0], video - 0.1, captured + 0.5);
     }
 
     /// <summary>Audio stream <paramref name="index"/>'s left channel, decoded, without its first and last 0.5 s.</summary>

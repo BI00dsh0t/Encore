@@ -377,7 +377,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
                     return;
                 }
 
-                _problem = $"The engine exited with code {code}.";
+                _problem = $"ReplayBuffer's background service exited with code {code}.";
                 restart = await RestartAsync(EngineRestartReason.Crashed, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -415,7 +415,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         var restartRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Volatile.Write(ref _restartRequested, restartRequested);
         var what = reason == EngineRestartReason.Hung ? "hung" : "crashed";
-        _problem = $"The engine keeps crashing ({ErrorCodes.EngineCrashLoop}), so it isn't being restarted. Restart it from the tray menu.";
+        _problem = $"ReplayBuffer's background service keeps crashing ({ErrorCodes.EngineCrashLoop}), so it isn't being restarted. Restart it from the tray menu.";
         options.Log?.Invoke(
             $"{ErrorCodes.EngineCrashLoop}: the engine {what} again after {Supervision.CrashLoopRestarts} restarts "
             + $"within {Supervision.CrashLoopWindow.TotalMinutes:0} min; not relaunching it");
@@ -440,7 +440,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
     /// <summary>The engine exited with code 0, not from this App's Quit: the App quits too.</summary>
     private void EndedCleanly()
     {
-        _problem = "The engine shut down.";
+        _problem = "ReplayBuffer's background service shut down.";
         SetStatus(EngineStatus.NotRunning);
         EngineEnded?.Invoke();
     }
@@ -533,14 +533,14 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
             {
                 if (!IsAlive(live))
                 {
-                    _problem = "The engine exited while reconnecting.";
+                    _problem = "ReplayBuffer's background service exited while reconnecting.";
                     SetStatus(EngineStatus.NotRunning);
                     return Outcome.Failed;
                 }
 
                 if (options.Time.GetElapsedTime(since) >= Supervision.ReplyLimit)
                 {
-                    _problem = $"The engine didn't take a new connection within {Supervision.ReplyLimit.TotalSeconds:0} s.";
+                    _problem = $"ReplayBuffer's background service didn't take a new connection within {Supervision.ReplyLimit.TotalSeconds:0} s.";
                     return Outcome.Unanswered;
                 }
             }
@@ -555,7 +555,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
             }
             else if (_launched.HasExited)
             {
-                _problem = $"The engine exited with code {_launched.ExitCode}.";
+                _problem = $"ReplayBuffer's background service exited with code {_launched.ExitCode}.";
                 _launchFailure = _launched.ExitCode != 0 ? EngineRestartReason.Crashed : null;
                 break;
             }
@@ -571,7 +571,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
                     // It exited meanwhile.
                 }
 
-                _problem = $"The engine didn't answer within {options.LaunchTimeout.TotalSeconds:0} s.";
+                _problem = $"ReplayBuffer's background service didn't answer within {options.LaunchTimeout.TotalSeconds:0} s.";
                 _launchFailure = EngineRestartReason.Hung;
                 break;
             }
@@ -612,7 +612,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
                 await client.DisposeAsync().ConfigureAwait(false);
                 throw new ErrorCodeException(
                     ErrorCodes.EngineUntrusted,
-                    $"The engine's snapshot names process {client.State.Pid}, but process {verified.Id} serves its pipe.");
+                    $"The background service's first message names process {client.State.Pid}, but process {verified.Id} serves its pipe.");
             }
 
             // The snapshot is the connection's first event.
@@ -696,7 +696,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         }
         catch (Win32Exception e)
         {
-            _problem = $"The engine at '{options.EnginePath}' couldn't be started: {e.Message}";
+            _problem = $"ReplayBuffer's background service at '{options.EnginePath}' couldn't be started: {e.Message}";
             return false;
         }
     }

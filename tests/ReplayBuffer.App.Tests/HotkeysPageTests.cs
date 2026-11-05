@@ -108,14 +108,14 @@ public sealed class HotkeysPageTests
         var page = Create().Hotkeys;
         string[] Shown() => [.. page.Rows.Where(r => r.IsShown).Select(r => r.Label)];
 
-        Assert.Equal(["Save Clip", "Mic mute", "Record (toggle)", "Monitor Recording (toggle)"], Shown());
+        Assert.Equal(["Save Clip", "Mic mute", "Record", "Monitor Recording"], Shown());
         page.StartCapture(HotkeyAction.RecordToggle);
 
         page.IsSeparateMode = true;
 
         Assert.Null(page.CapturingRow);
 
-        Assert.Equal(["Save Clip", "Mic mute", "Record start", "Record stop", "Monitor Recording (start)", "Monitor Recording (stop)"], Shown());
+        Assert.Equal(["Save Clip", "Mic mute", "Record start", "Record stop", "Monitor Recording start", "Monitor Recording stop"], Shown());
     }
 
     [Fact]

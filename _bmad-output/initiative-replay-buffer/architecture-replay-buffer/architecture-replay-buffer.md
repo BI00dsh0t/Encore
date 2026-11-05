@@ -4,11 +4,11 @@ type: architecture-spine
 purpose: build-substrate
 altitude: initiative
 paradigm: 'ports-and-adapters engine with a single-threaded orchestrator, hosting a pipes-and-filters media pipeline; MVVM thin client over IPC'
-scope: 'initiative-replay-buffer: the engine process and the Main App, all 9 epics'
+scope: 'initiative-replay-buffer: the engine process and the Main App, all 11 epics'
 status: final
 created: '2026-10-25'
 updated: '2026-11-04'
-binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37]
+binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39]
 sources:
   - _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md
   - PLAN.md
@@ -68,6 +68,7 @@ graph LR
   - The diagram above is the only allowed reference graph; `App` and `Engine` never reference each other.
   - `Platform.Desktop` holds the App's own Win32 calls and references nothing; only the App references it. (Story 1.7, 2026-10-25.)
   - Only `ReplayBuffer.Platform.*` contains `unsafe` code, P/Invoke, COM or FFmpeg calls.
+  - **Exception (story 11.4, 2026-11-05):** the App compiles `Core/Monitors/MonitorCanvasRule.cs` as a linked source file, so the engine and the Hotkeys screen picker share one canvas rule (AD-25) without an App → Core edge. That file may use only Contracts types. App.Tests sees the type twice (App's copy and, through the engine, Core's), so it must not name it, or it gets CS0433.
 
 ### AD-3 — IPC protocol [ADOPTED]
 
@@ -140,7 +141,7 @@ graph LR
   - **Sharing:** Sinks share an encoder chain exactly when they share a `ChainKey = (source identity, video keys, Track structure)`. Live mute and profile attributes are not part of the key.
   - **Budget:**
     - At most 2 video encoder chains run at once; a request for a third is refused with `encoder-budget`.
-    - The engine uses one D3D11 device, on the Target Game's adapter.
+    - The engine uses one D3D11 device, on the Target Game's adapter. The one exception is the Monitor session's own device (AD-25).
     - File I/O runs at low I/O priority.
     - Both processes run unelevated, and GPU priority uses only `SetGPUThreadPriority`.
   - **Chain changes at a Reset:** when a pending settings change alters the Replay Buffer's `ChainKey`, the orchestrator builds the next chain in advance and switches to it at the press frame. If a gap can't be avoided, it raises `warning.raised { code: reset-gap }`.
@@ -330,6 +331,50 @@ graph LR
   - **Switching** swaps the merged dictionaries on the UI thread. Every window, the tray context menu, the App's dialogs and the Overlay take their resources from `Application.Resources`, so they restyle with no restart. The theme is applied before the first window shows.
   - **Dialogs** are App windows, never `MessageBox`, so they follow the theme and keep `WDA_EXCLUDEFROMCAPTURE` (AD-15).
 
+### AD-24 — List and audio editing stay App-side, over the existing commands
+
+- **Binds:** R38
+- **Prevents:** a second delete path that skips the LibraryActor's checks; a new Track Layout shape for the editor; a first-run layout that differs between the engine and the App
+- **Rule:**
+  - **Library selection and bulk actions** live in the App's view model, as a set of item paths. A bulk action sends today's per-item commands (`library.setFavourite`, `library.delete`) one at a time, each with its identity as shown (AD-3), so the LibraryActor still re-checks Favourite and being-written status before each delete (AD-17). There is no bulk message.
+    - The App leaves Favourites out of a delete, single or many (R38). The engine's rules don't change.
+    - Copy to folder hands the files to the Windows shell's file operation; the App never opens the media itself (AD-1).
+  - **The audio-tracks editor** edits the AD-4 `trackLayout` shape as it is. Its `devices` list is derived from the Tracks' sources, and a device on no Track is dropped at save.
+  - **Default devices:** `AudioDevice` gains an optional `isDefault` (the Windows default endpoint of its flow, console role), added under AD-22 and filled by the AudioDeviceHub.
+  - **First-run seed:** when `settings.json` has no Global `trackLayout`, the engine writes one at start, once, through its own settings queue (AD-4): an "Everything" Track holding the default Output and Input Devices, the input marked as a Mic Device. The catalog default is unchanged, and an existing value is never touched.
+  - **Labels only:** the user-facing names (the glossary in epic 10's EXPERIENCE.md: Clips for the Replay Buffer, Cache folder for the ring path, Games for Game Profiles) change text, never a settings key, error code, message name or Contracts type. The engine's `warning.raised` texts follow the glossary; their codes don't change.
+  - **Games:** the list and a game's page are App view models over the settings document and snapshot. "Added by hand" comes from `manualGames`, and the icon is read from the program file (the profile id, AD-18) through the shell. A game's own settings are AD-4's overridable keys, set and removed as today, and its folder is shown, never changed (AD-21).
+  - **Library kind:** `LibraryItem` gains an optional `kind` (`clip` | `recording` | `monitorRecording`), set by the LibraryActor at `BeginWrite` and kept in `library.json`; scanned files have none (AD-22).
+  - **Per-device meters** reuse `meters.watch` (AD-20): the App adds one probe Track per device to the watched draft and never saves the probes. Should that cost too much, an optional per-device level list is added to `meters.levels` under AD-22 instead.
+
+### AD-25 — Multi-monitor Monitor Recording: one compositor, one chain
+
+- **Binds:** R21, R39; NFR-1
+- **Prevents:** one encoder chain per monitor breaking the budget; files of one Recording out of sync; a saved monitor choice pointing at a different monitor after a replug; the canvas changing inside a file; screens recorded below their native resolution; GDI's DPI-virtualized sizes placing screens wrongly
+- **Rule:**
+  - **One video:** a Monitor Recording of several monitors is one file.
+    - Each monitor's source (a WGC monitor item, else its own Desktop Duplication fallback, AD-12) keeps its latest frame.
+    - A `MonitorCompositor` in Media blits them into one canvas, laid out by virtual-desktop position, ahead of the existing pacer, scaler, **one** encoder chain and the RecordingWriter.
+    - It hands the pacer **one canvas per output slot, from its own slot clock**, never one per source frame. Spike 11.1's per-frame push gave hundreds of hand-off drops and about 2,000 non-increasing stamps per 50 s.
+    - A blit costs 11 to 22 µs of GPU time (1440p to 2160p). A single monitor passes straight through.
+  - **Canvas:**
+    - **Native size:** the canvas is the bounding box of the recorded monitors at their **physical** sizes and positions, from each display's current mode (`EnumDisplaySettings`), never GDI's `rcMonitor`. The engine declares no DPI awareness, so `rcMonitor` is DPI-virtualized; on the builder's PC it reports a 3840×2160 screen as 2560×1440.
+    - **Codec limit, no pixel budget:** the canvas is scaled down, with its aspect kept, only to fit the codec's largest frame side: H.264 4096 px, HEVC and AV1 8192 px. These are constants measured on NVENC (spike 11.1), because the encoder probe opens at 1280×720 and reports no limit.
+    - The earlier area budget (the Output area or 3840×2160) is dropped, by the builder's 2026-11-05 decision that several screens are recorded at full width.
+    - **Even sides.** Both sides are rounded down to even numbers.
+    - **Codec choice:** a canvas wider or taller than H.264's 4096 px is encoded with HEVC, else AV1, whichever the encoder probe found, at full size. It never falls back to H.264. H.264, when it's the Output codec, stays for a single screen or a canvas that fits. A canvas over 8192 px a side is fitted to 8192.
+      - With no HEVC or AV1 encoder on the PC at all, a canvas over 4096 px stays H.264, fitted to 4096, and the engine raises a warning that the Recording is scaled down rather than scaling silently (story 11.2, accepted at QA).
+    - **Fixed per file:** the canvas never changes inside a file. A removed monitor's area turns black, an arriving monitor waits for the next Recording, and a mode change scales into the same area.
+  - **Device:** the Monitor session keeps its own D3D11 device, on the adapter of the primary recorded monitor. This is an explicit exception to AD-7's one device, which settles 6.9's open decision.
+  - **Encoder sessions:** the session's chain counts toward AD-7's two-chain budget as before. Spike 11.1 saw 2 NVENC sessions with the Replay Buffer and a two-screen Monitor Recording running. At 6400×2160, 60 fps, NVENC use was about 30 % in total.
+  - **Selection:** `monitorRecordingScreens` (`all`, or `selected` monitor ids; Global-only; additive, AD-22) names the monitors by DisplayConfig's monitor device path. While it's null, the old `monitorRecordingMonitor` (a GDI device name, null for the primary) is read as before. Core's one resolver turns either into the attached monitors and the missing ones.
+  - **Faults:** GPU reset follows 8.3 and 6.6, rebuilding every source and continuing in a new file. Monitor removal follows 8.5, except that the Recording ends only when no recorded monitor is left.
+  - **Cost against NFR-1 (open):** NFR-1's 3 % binds game capture: the Replay Buffer measured 2.85 % on the synthetic load. A Monitor Recording beside a GPU-bound game is a known extra cost and doesn't meet 3 %:
+    - today's one monitor: 5.15 % in total;
+    - two screens at full width: 7.6 to 10 %.
+    - The extra isn't the encode or the blits. Story 11.3 splits the cost by stage and re-measures after per-slot compositing.
+    - Whether a Monitor Recording needs a cap while a game runs is the builder's decision (epic 11's Notes).
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -442,6 +487,8 @@ ReplayBuffer/
 | R27–R29 Library, Cleanup | Core (LibraryActor), App (shell actions) | AD-17, AD-1 |
 | R31, R34, R35 startup, supervision, hands-off | App (supervisor), Engine | AD-16, AD-22 |
 | R37 themes | App (ThemeService, theme dictionaries), Contracts (key catalog) | AD-23, AD-4 |
+| R39 multi-monitor Monitor Recording | Media (MonitorCompositor), Platform.Capture, Core (screen resolver, canvas rule), App (Hotkeys picker) | AD-25, AD-7, AD-12, AD-22 |
+| R38 Library selection and bulk actions, audio-tracks editor, first-run seed, Games, settings pages, plain labels | App (Library, Audio Tracks, Games and settings view models), Engine (settings seed, warning texts), Core (LibraryActor kind), Platform.Audio (default device) | AD-24, AD-17, AD-4, AD-20, AD-21, AD-22 |
 | R32 Hotkeys | Platform.Windows | AD-11 |
 | R33, R36 drift, FPS | Bench, Media | AD-6, AD-13, AD-7 |
 | NFR-2, NFR-3 constraints | all | AD-1, AD-2, AD-7, AD-11, AD-12, AD-16 |

@@ -32,6 +32,12 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
 
     public FrameworkElement View => _view ??= CreateView();
 
+    /// <summary>The page's drill-in, when it opens item pages (story 10.10's Games); null for a plain page.</summary>
+    public virtual DrillIn? DrillIn => null;
+
+    /// <summary>Whether the page holds an unsaved draft: the nav item shows a dot (story 10.5). Raised as a property change.</summary>
+    public virtual bool HasUnsavedChanges => false;
+
     /// <summary>The document the page shows, and the basis of its updates.</summary>
     protected SettingsDocument Document { get; private set; } = SettingsDocument.Empty;
 
@@ -71,24 +77,43 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
     /// Sends <paramref name="ops"/>. On success the <c>settings.changed</c> event renders the result; on a
     /// conflict the page reloads the current document, and on a refusal it shows its document again.
     /// </summary>
-    protected async Task SendAsync(IReadOnlyList<SettingsOp> ops)
+    /// <returns>The refusal's error code, or null when the update committed.</returns>
+    protected async Task<string?> SendAsync(IReadOnlyList<SettingsOp> ops)
     {
         switch (await sender.UpdateAsync(Document, ops))
         {
             case SettingsSendResult.Committed:
                 Message = null;
-                break;
+                return null;
 
             case SettingsSendResult.Conflict conflict:
                 Message = "The settings changed elsewhere, so this page reloaded. Make the change again if you still want it.";
                 Show(conflict.Current);
-                break;
+                return Contracts.ErrorCodes.SettingsConflict;
 
             case SettingsSendResult.Failed failed:
                 Message = $"Not saved ({failed.Code}): {failed.Message}";
                 Show(Document);
-                break;
+                return failed.Code;
+
+            default:
+                return null;
         }
+    }
+
+    /// <summary>
+    /// A folder picker's send: as <see cref="SendAsync"/>, but a refusal the picker words itself
+    /// (<paramref name="pickerCode"/>) shows on the picker instead of the page's error bar.
+    /// </summary>
+    protected async Task<string?> SendForPickerAsync(IReadOnlyList<SettingsOp> ops, string pickerCode)
+    {
+        var code = await SendAsync(ops);
+        if (code == pickerCode)
+        {
+            Message = null;
+        }
+
+        return code;
     }
 
     private void Show(SettingsDocument document)
@@ -103,18 +128,19 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
 internal static class SettingsPages
 {
     /// <summary>
-    /// Every page. An epic adds its page here, one line each: epic 2 the Track Layout editor,
-    /// epic 3 Game Profiles, epic 5 Feedback Sounds, epic 7 Library and Cleanup.
+    /// Every page, in story 10.9's order: General, Clips, Hotkeys, Audio Tracks, Games, Sounds, and
+    /// Storage and Cleanup. The Recordings page is gone; its screen picker is on Hotkeys.
     /// </summary>
-    public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine) =>
+    /// <param name="defaultCacheFolder">The engine's default cache folder, shown as the cache folder's default.</param>
+    /// <param name="gameShell">The shell the Games pages use; null for Windows'.</param>
+    public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null, IGameShell? gameShell = null) =>
     [
         new GeneralSettingsPage(sender),
-        new ReplayBufferSettingsPage(sender),
-        new HotkeysPage(sender),
+        new ReplayBufferSettingsPage(sender, defaultCacheFolder: defaultCacheFolder),
+        new HotkeysPage(sender, engine),
         new TrackLayoutPage(sender, engine),
-        new GameProfilesPage(sender, engine),
+        new GameProfilesPage(sender, engine, gameShell),
         new FeedbackSoundsPage(sender, engine),
-        new RecordingsSettingsPage(sender, engine),
-        new LibrarySettingsPage(sender, engine),
+        new LibrarySettingsPage(sender, engine, defaultCacheFolder),
     ];
 }

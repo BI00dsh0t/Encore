@@ -14,10 +14,23 @@ public sealed class MainViewModelTests
     private readonly List<Action> _posted = [];
 
     [Fact]
+    public void TheNavListsTheEightPagesInOrderWithNoRecordingsPage()
+    {
+        // Story 10.9: the builder's approved order; Games has its own title since story 10.10.
+        var model = Create();
+
+        Assert.Equal(
+            ["Library", "Settings", "General", "Clips", "Hotkeys", "Audio Tracks", "Games", "Sounds", "Storage and Cleanup"],
+            model.NavItems.Select(i => i.Title));
+        Assert.Equal(8, model.NavItems.Count(i => !i.IsSection));
+        Assert.DoesNotContain(model.NavItems, i => i.Title == "Recordings");
+    }
+
+    [Fact]
     public void ARefreshRendersTheSnapshotAndTheSettingsPages()
     {
         var model = Create();
-        Assert.Equal("Replay Buffer off · Mic muted", model.StatusLine.State);
+        Assert.Equal("Waiting for a game · Mic muted", model.StatusLine.State);
         _engine.State = _engine.State! with
         {
             Seq = 7,
@@ -31,7 +44,7 @@ public sealed class MainViewModelTests
         Assert.False(model.General.StartWithWindows);
         RunPosted();
 
-        Assert.Equal("Buffering on Game.exe", model.StatusLine.State);
+        Assert.Equal("Ready to save Clips in Game.exe", model.StatusLine.State);
         Assert.Equal("Defaults in use.", Assert.Single(model.StatusLine.Warnings).Message);
         Assert.True(model.General.StartWithWindows);
         Assert.Same(model.General, model.SelectedPage);
@@ -41,12 +54,12 @@ public sealed class MainViewModelTests
     public void TheStatusSaysWhyTheEngineIsNotRunning()
     {
         _engine.Status = EngineStatus.NotRunning;
-        _engine.Problem = "No engine answered.";
+        _engine.Problem = "Nothing answered.";
         _engine.State = null;
 
         var model = Create();
 
-        Assert.Equal("The engine isn't running. No engine answered.", model.StatusLine.State);
+        Assert.Equal("ReplayBuffer's background service isn't running. Nothing answered.", model.StatusLine.State);
         Assert.Empty(model.StatusLine.Warnings);
     }
 
@@ -54,11 +67,11 @@ public sealed class MainViewModelTests
     public void TheStatusSaysTheEngineIsRestartingAndWhy()
     {
         _engine.Status = EngineStatus.Restarting;
-        _engine.Problem = "The engine exited with code 1.";
+        _engine.Problem = "ReplayBuffer's background service exited with code 1.";
 
         var model = Create();
 
-        Assert.Equal("Restarting the engine… The engine exited with code 1.", model.StatusLine.State);
+        Assert.Equal("Restarting ReplayBuffer's background service… ReplayBuffer's background service exited with code 1.", model.StatusLine.State);
     }
 
     [Fact]

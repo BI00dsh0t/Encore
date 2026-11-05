@@ -99,7 +99,7 @@ public sealed class FeedbackSoundsPageTests
             ],
         };
         var model = Create();
-        Assert.Contains(model.Pages, p => p.Title == "Feedback Sounds");
+        Assert.Contains(model.Pages, p => p.Title == "Sounds");
         model.SelectedPage = model.FeedbackSounds;
         Assert.Equal("Another app has the sound device to itself.", model.FeedbackSounds.CapturedWarning);
 

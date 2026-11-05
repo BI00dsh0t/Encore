@@ -23,6 +23,7 @@ internal sealed class BenchOptions
                                       [--load-exe <ReplayBuffer.Bench.GpuLoad.exe>]
                                       [--presentmon <exe>] [--pwsh <exe>] [--no-gpu-sampler] <capture options>
                                       [--overlay [--overlay-dot auto|always|onChange] [--app-exe <ReplayBuffer.App.exe>] [--recording]]
+                                      [--conditions baseline,capture,...] (spike 11.1, e.g. capture-monhevc; see measure-path-a.ps1)
           ReplayBuffer.Bench drift    [--minutes 60] [--tone-dbfs -30] [--bucket-seconds 60] [--burst-track 0]
                                       [--reanalyze] <capture options>
           ReplayBuffer.Bench drift --app [--minutes 30] [--save-seconds 300] [--device-a <Output Device>] [--device-b <Output Device>]
@@ -113,7 +114,7 @@ internal sealed class BenchOptions
     private static readonly Dictionary<string, string[]> Allowed = new(StringComparer.Ordinal)
     {
         ["fps"] = [.. Common, .. Capture, "game", "seconds", "passes", "settle", "presentmon", "pwsh", "no-gpu-sampler",
-            "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe", "overlay", "overlay-dot", "app-exe", "recording"],
+            "target-fps", "load-size", "load-timeout", "load-warmup", "load-exe", "overlay", "overlay-dot", "app-exe", "recording", "conditions"],
         ["drift"] = [.. Common, .. Capture, "minutes", "tone-dbfs", "bucket-seconds", "burst-track", "reanalyze",
             "app", "save-seconds", "device-a", "device-b", "layout", "key", "record-key", "app-exe", "lock"],
         ["playback"] = [.. Common, .. Capture, "seconds", "players", "tone-dbfs", "auto", "chrome", "play-seconds", "player-timeout", "codecs", "recording-file"],

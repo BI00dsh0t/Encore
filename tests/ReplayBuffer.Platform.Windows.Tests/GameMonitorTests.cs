@@ -172,6 +172,47 @@ public sealed class GameMonitorTests : IDisposable
     }
 
     [Fact]
+    public void AFullscreenVlcWindowIsNotDetected()
+    {
+        var vlc = Path.Combine(_folder, "vlc.exe");
+        File.WriteAllBytes(vlc, []);
+        _probe.Add(GamePid, vlc);
+        _probe.Foreground = new GameWindow(1, GamePid);
+
+        _monitor.Poll();
+        PollAfter(_monitor, 1);
+
+        Assert.Empty(_detected);
+        Assert.Empty(_proposals);
+    }
+
+    [Fact]
+    public void ABorderlessUnknownAppFocusedWhileAListedGameRunsDoesNotStealTheTargetButAListedOneDoes()
+    {
+        var other = Path.Combine(_folder, "Other.exe");
+        _probe.Add(GamePid, GamePath);
+        _probe.Add(GamePid + 1, other);
+        _listed.Add(ExpectedProfileId);
+        _probe.Windows.Add(new GameWindow(1, GamePid));
+        _probe.Front = new GameWindow(1, GamePid);
+        _monitor.Poll();
+
+        // An unknown app goes borderless fullscreen in front: detected, but it holds the focus in vain.
+        _probe.Front = null;
+        _probe.Foreground = new GameWindow(2, GamePid + 1);
+        PollAfter(_monitor, 1);
+        PollAfter(_monitor, 11);
+        Assert.Equal([GamePid, GamePid + 1], _detected);
+        Assert.Equal([(GamePid, TargetChangeReason.Detected)], Proposed());
+
+        // Once it is a listed game too, its focus takes the Target.
+        _listed.Add(GamePaths.Canonicalize(other));
+        PollAfter(_monitor, 1);
+
+        Assert.Equal([(GamePid, TargetChangeReason.Detected), (GamePid + 1, TargetChangeReason.Focus)], Proposed());
+    }
+
+    [Fact]
     public void ABrokenFocusStreakDoesNotSwitch()
     {
         _probe.Add(GamePid, GamePath);

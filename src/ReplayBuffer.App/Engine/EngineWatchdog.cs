@@ -42,7 +42,7 @@ internal sealed class EngineWatchdog
         var silent = _time.GetElapsedTime(Interlocked.Read(ref _lastEvent), now);
         if (silent >= Supervision.SilenceLimit)
         {
-            return $"The engine sent nothing for {silent.TotalSeconds:0.#} s.";
+            return $"ReplayBuffer's background service sent nothing for {silent.TotalSeconds:0.#} s.";
         }
 
         foreach (var started in _pending.Values)

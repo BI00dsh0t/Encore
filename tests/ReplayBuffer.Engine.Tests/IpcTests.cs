@@ -231,6 +231,25 @@ public sealed class IpcTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AClientThatLeavesBeforeItIsAcceptedDoesNotStopTheServerAccepting()
+    {
+        // The bug that bit (full-run-flaky-tests): an App's connect attempt that timed out on a loaded
+        // machine left before the server's wait took it, and the accept loop ended for good.
+        StartHost();
+        var pipe = _host.PipeName + "-early";
+        await using var server = new IpcServer(pipe, new IpcServerOptions(), NullLogger.Instance);
+        using (var early = new NamedPipeClientStream(".", pipe, PipeDirection.InOut))
+        {
+            await early.ConnectAsync(Token);
+        }
+
+        server.Start(_host.Hub, _host.Router);
+
+        await using var client = await EngineClient.ConnectAsync(pipe, cancellationToken: Token);
+        Assert.True(client.IsConnected);
+    }
+
+    [Fact]
     public async Task DismissingAWarningPublishesWarningDismissed()
     {
         StartHost();

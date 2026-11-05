@@ -1,0 +1,125 @@
+# Stories of epic-ux-pass-2, in build order. `id` is permanent, never reused.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Design pass: renders and the builder's approval of ux-pass-2"
+description = "The gap review's spines (ux-pass-2/EXPERIENCE.md and its DESIGN.md addendum, written headless at planning) are put to the builder. Renders go in ux-pass-2/renders/, made the way 9.1's were (the renders/source program, both themes): the Library with nothing selected (the summary bar), with a multi-selection (the command bar, selected and focused rows, and a selection partly hidden by a filter), its context menu, the bulk delete confirmation with Favourites kept, sort and search in the filter row, and the welcome card; Audio Tracks with two Track cards, a not-connected source, the double-counting line, the save bar and the nav dot, the sound picker open with meters, and the presets menu; the Games list and a game's page (the breadcrumb header, a section using the main setting and one changed for the game, the Capturing now and Not captured pills); the Clips page with the folder picker under Disk; the grouped Hotkeys page with the screen picker; Storage and Cleanup; and the tray menu with its status item. The builder reviews the spines, the glossary and the renders and answers their Open questions: the tray's Save Clip now, Favourites protected from Delete, the page names (Clips, Audio Tracks, Games, Sounds, Storage and Cleanup), the Recordings page's removal, and the glossary's labels (Cache folder, Clip length). Each answer becomes a Decision line in the epic's Notes; a change to the spines is made here, before stories 2 to 11 start. R1 to R7 and R9 to R11: the design."
+verify = "The renders exist in ux-pass-2/renders/ for every surface listed, in both themes, every new component in DESIGN.md's addendum appears in at least one, and the builder has approved the spines (a Decision line in the epic's Notes per open question)."
+covers = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R9", "R10", "R11"]
+after = ["9.9"]
+hitl = true
+risk = "low"
+plan_checkpoint = true
+
+[[entry]]
+id = 2
+type = "story"
+title = "Library selection, bulk actions, context menu and shortcuts"
+description = "The Library list becomes selectable to EXPERIENCE.md's Library list section: the rows and group headers in a list with Explorer's extended selection (click, Ctrl+click, Shift+click, Ctrl+Shift+click, Ctrl+A, arrows, Page Up/Down, Home and End with Shift and Ctrl, Ctrl+Space, Esc), still virtualized with recycling and grouped, group headers not selectable, and the star's click not changing the selection. LibraryPage holds the selection as a set of paths, with an anchor and a focused path: a filter keeps hidden items selected while actions act only on the shown ones; a new item keeps the selection, focus and scroll; an item that leaves drops out; the App's own rename carries the selection to the new path; a removed focused row moves focus on. The command bar from DESIGN.md's addendum shows the summary with nothing selected and the actions with a selection: Open and Rename for one item; Favourite or Remove from Favourites (one library.setFavourite per item that changes); Copy (one clipboard file drop of every shown, selected, not-being-written file); Copy to folder (a folder picker, then the Windows shell's file operation through ILibraryShell); Show in Explorer (one window per folder with its files selected, else the Clips folder (the Output Folder) past three); and Delete. Delete asks one confirmation through Prompts naming the count and size, leaves out Favourites and files being written and says so, sends one library.delete per item in order with its identity as shown (AD-3, AD-24), shows progress past ten items, and reports a partial failure once with today's refusal texts. Deleting a single Favourite is refused the same way (a change to 7.7). The context menu acts on the selection, or selects the right-clicked row first, and shows each item's key. Shortcuts: Enter, Delete, F2, Ctrl+C, Ctrl+A, Ctrl+F (focuses the search box once story 3 adds it), Space and Esc; the list's letter-key text search is off. Selected rows and the focus visual look different in both themes. R1, R2, R3, R8."
+verify = "Automated tests on LibraryPage with fabricated snapshots: Shift and Ctrl selection select the expected paths across a group header; the selection survives a filter change, a new item and the App's own rename, and an item removed by the snapshot leaves it; a bulk Favourite sends one setFavourite per changing item; a bulk delete of five items with a Favourite and a being-written one asks one confirmation naming three and sends three deletes, and a refused one is reported as 'Deleted 2 of 3'; Copy builds one file drop of the shown, unlocked files; deleting a single Favourite sends nothing. The Library view loads in both themes with a selection and the command bar, with no missing resource, and stays virtualized. The builder selects, stars, copies to Discord, copies to a folder, shows in Explorer and deletes a batch of real Clips with the mouse and with the keyboard."
+covers = ["R1", "R2", "R3", "R8"]
+after = [1]
+hitl = true
+risk = "high"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Library sort and search"
+description = "The filter row gains the Search box at its start and the Sort combo after Group by, to EXPERIENCE.md's Sort and search section: Newest first (the default), Oldest first, Name (case-insensitive, natural number order), Largest first, Longest first (unknown length last) and Game, each tied by date then path; Group by gains None, and Group by Day follows Oldest first. Search filters by file name as you type (case-insensitive substring, applied at most every 150 ms) on top of the other filters, with a clear button, Esc to clear and Ctrl+F to focus it, and 'No items match “{text}”.' when nothing matches. LibraryViewState keeps Sort and Group by across restarts, reading an older file with the defaults; the search text isn't kept. Story 2's selection and Ctrl+A follow the sorted, searched order. R4, R8."
+verify = "Automated tests on LibraryPage: each sort orders a fabricated Library as specified, with unknown length last; Group by None gives no headers; a search narrows the rows and keeps a selected, now-hidden item selected; Sort and Group by round-trip through LibraryViewState, and a file from before this story loads with the defaults."
+covers = ["R4", "R8"]
+after = [2]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Audio Tracks: default devices, the first-run seed, presets and per-device meters"
+description = "The model work the editor binds to (AD-24). Contracts: AudioDevice gains an optional isDefault (AD-22), which the AudioDeviceHub fills from the Windows default endpoint of each flow (console role) and refreshes on a default-device change in devices.changed. Engine: at start, when settings.json has no Global trackLayout, the settings store writes one through its own queue: an 'Everything' Track (muteAffected true) holding the default Output Device and the default Input Device as a Mic Device, whichever exist; an existing value is never touched, and the catalog default is unchanged. App: a preset builder for Simple and For editing (EXPERIENCE.md's Presets: Track 1's id kept, the default devices reused or added, a missing default left out); the editor's draft model (each Track's sources, a device's layout record reused across Tracks, a device on no Track dropped at save, an added input marked as a Mic Device); and the per-device meters: the watched layout gains one hidden probe Track per wanted device, with ids derived from the device key and flow, never saved, and each source's and picker row's level read from its probe's entry. Measure the engine's meter cost with every listed device probed on the builder's devices (CPU and the meter update rate); if it's too high, add an optional per-device level list to meters.levels instead, additively, and record the choice in the epic's Notes. Check that a saved layout applies at the next Reset as the hint says (R17), and correct the hint in EXPERIENCE.md if not. R5 part: the model; R6."
+verify = "Automated tests: a fake device hub's default endpoints show as isDefault and follow a default change; an engine started on an empty settings folder writes the seeded layout, one started on a document with a trackLayout leaves it unchanged, and one with no default input seeds playback only; each preset builds the specified Tracks from a fabricated device list, keeping Track 1's id; the draft drops a device on no Track at save and reuses a device's record across Tracks; a watch with probes returns a level per probed device and the saved layout has no probe. The meter-cost measurement is recorded in the epic's Notes."
+covers = ["R5", "R6"]
+after = [1]
+hitl = false
+risk = "high"
+plan_checkpoint = true
+
+[[entry]]
+id = 5
+type = "story"
+title = "Audio Tracks editor"
+description = "The Track Layout page rebuilt as Audio Tracks to EXPERIENCE.md's Audio Tracks section and the addendum's Track card, source row, sound picker, save bar and nav dirty dot, on story 4's model: the intro line; one card per Track in file order with its number, an inline-renamable name, its level meter, its summary ('{n} sounds' or the silent line), its source rows (glyph, Windows name with the parent when shared, playback or microphone, its own meter, 'Not connected — records silence until it's back'), the ⋯ menus (Rename, Move up, Move down, Remove track; Remove from this track, Treat as a microphone), + Add sound, the mute switch shown only with a microphone, and the reworded double-counting line; + Add a track; the Use a preset menu with its confirmation; the sticky save bar (Save changes, Discard, the applies hint, Ctrl+S, the empty-name message) and the nav item's dot. The sound picker is a flyout with search, the playback and microphone sections, Windows default captions, live meters, already-added rows disabled, click to add and Ctrl+click to keep it open, and live device updates. Keyboard: Tab through each card, F2 renames, Alt+Up and Alt+Down move a card, Delete removes a focused source. The editor also has a read-only summary mode (the Tracks and their sounds as text) for story 10.10's 'Uses the main setting' state; until 10.10 replaces it, the Game Profiles page keeps embedding the editor under today's Use Global check box, working as before. The page's title and nav item become Audio Tracks, and its strings follow the glossary. The save bar's and cards' styles go in their own Audio Tracks dictionary, not the shared settings layout, which 10.9 changes. Both themes. R5, R8, R11 part: Audio Tracks."
+verify = "Automated tests on the page's view model: adding a sound from the picker puts it on that Track only, and removing it from its last Track drops it from the saved layout; Treat as a microphone and the mute switch set isMic and muteAffected; Move up and down reorder the Tracks with ids kept; a preset replaces the draft only after its confirmation; the save bar shows while dirty and Discard restores the saved layout; the read-only summary lists each Track's sounds; the existing Track Layout view-model tests still pass, updated only for the renamed strings. The view loads in both themes with fabricated Tracks, devices and levels, and the picker open, with no missing resource. The builder rebuilds their BEACN layout from a preset with the meters moving, saves it, and checks the next Clip's tracks in DaVinci Resolve."
+covers = ["R5", "R8", "R11"]
+after = [4]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 9
+type = "story"
+title = "Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed"
+description = "The settings pages rearranged to EXPERIENCE.md's Information Architecture and Settings pages sections, with the folder picker from its Folder picker section. A reusable folder picker control in the shared settings layout: a read-only, selectable path with a middle ellipsis and a full-path tooltip ('Default ({path})' when unset), Browse… opening the Windows folder dialog (OpenFolderDialog) and sending the key's settings.update on a pick, Open in Explorer through the shell (disabled while the folder is missing), Use default for a nullable key (a remove op), the drive's free space, and a danger line with the glossary's refusal text (ring-path-invalid, an unwritable folder); plus a file variant (a file dialog with a filter) for story 10's Add a game. The Replay Buffer page becomes Clips: the intro, Clip length (Save the last N seconds, Time between saves), Where recent gameplay is kept (Memory and Disk with their estimate figures, and the cache folder as a folder picker, enabled only under Disk) and Video quality for Clips and Recordings, with the glossary's labels and help, on the same keys and validation. Hotkeys is grouped into Clips, Recordings (with Record mode), Monitor Recording (with the screen picker and Refresh moved from the Recordings page) and Microphone, each with its sentence. The Recordings page and its nav item are removed, keeping monitorRecordingMonitor; the tray's open-Settings path that reached it opens Hotkeys. Library and Cleanup becomes Storage and Cleanup, with the Clips folder as a folder picker; Feedback Sounds becomes Sounds; the nav order becomes Library, General, Clips, Hotkeys, Audio Tracks, Games, Sounds, Storage and Cleanup. Every label and help line on these pages follows the glossary. The Game Profiles page stays as it is until story 10. Both themes. R10, R11 part: these pages, R8."
+verify = "Automated tests: the folder picker sends set on a picked folder, remove on Use default and nothing on a cancel, shows a refused pick's text and keeps the old path, and disables Open in Explorer for a missing folder; the Clips page sends bufferWindow, saveCooldown, replayStorage, ringPath and video as the Replay Buffer page did, and its cache folder picker is enabled only under Disk; the Hotkeys page holds the monitor picker and sends monitorRecordingMonitor; the nav lists the eight pages in order and has no Recordings page; the existing settings view-model tests pass, updated only for moved controls and renamed strings. Each changed view loads in both themes with no missing resource."
+covers = ["R10", "R11", "R8"]
+after = [5]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 10
+type = "story"
+title = "Games list and a page per game"
+description = "The Game Profiles page rebuilt as Games, to EXPERIENCE.md's Drill-in pages and Games sections and the addendum's breadcrumb header, game row, pills and inheritance section. The drill-in pattern as a reusable shell piece: an item page replaces the page content with the nav selection kept on its parent, a breadcrumb header (Back, the parent link, the item's name), opening on click or Enter, closing on Back, the parent link, Esc (after a control's own Esc), Alt+Left, the mouse's Back button or the parent's nav item, focus on the item page's first control and back on its row with the scroll restored, item view models kept per id for the run so drafts survive, and a return to the list when the item goes. The games list: one keyboard list by name with letter jump, Ignored games grouped last, each row with the program's icon (read from the program file through the shell, else a generic glyph), the name, Detected automatically or Added by hand (from manualGames), Capturing now (the snapshot's game being captured), '{n} settings changed', Not captured, the unsaved dot and a chevron, and no profile id; the empty state; Add a game… with 10.9's file picker filtered to programs, sending game.add. A game's page: the header with inline rename (F2) and the program's location with Show in Explorer; Capture (ignored, inverted); Clips, Video quality and Audio tracks as inheritance sections (the chip, a readable summary of the main value with Change for this game and Edit the main setting, or the editor from the Clips page or story 5 with Reset to the main setting after a confirmation), using today's override set and remove ops and keeping Track ids; Recordings (recordingsEnabled) with its sentence; Files, read-only (the profile's folder with Open in Explorer and a file-name example from the current name, per R26 and AD-21); and, for a hand-added game, Stop detecting it by hand, which removes it from manualGames. The Use Global check boxes are gone. R23 to R26 behave as before. Both themes. R9, R11 part: Games, R8."
+verify = "Automated tests on the Games view models with a fabricated settings document and snapshot: the list groups and orders games, shows Added by hand for a manualGames program, Capturing now for the game being captured and the count of a game's own settings, and holds no profile id; Enter opens a game's page and Back returns with that row focused; Change for this game sets the override from the main value (Track ids kept), Reset after its confirmation removes it, and a main change shows at once in a game that uses it; Capture off sets ignored; Stop detecting removes the program from manualGames; a draft on a game's page survives going back; a game removed from the document returns its page to the list. The views load in both themes with no missing resource. The builder walks their real games, gives one game longer Clips and resets it, Ignores one, and adds one by hand."
+covers = ["R9", "R11", "R8"]
+after = [5, 9]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 11
+type = "story"
+title = "Plain words everywhere: the glossary on every label, status and warning"
+description = "Apply EXPERIENCE.md's plain-language rule to everything the earlier stories didn't rewrite: the General and Sounds pages, the status header's state texts ('Ready to save Clips in {game}', 'Finishing the save…', 'Waiting for a game', and 'ReplayBuffer's background service' for the engine states), the warning texts the engine raises with warning.raised (memory margin, device dropout, encoder restarts, Recording stops, Disk mode's drive, Library and Cleanup notices and the rest), the refusal texts the App shows, the dialogs' wording, the tray's tooltip, and the Overlay's message cards. Only text changes: settings keys, error codes, message names, Contracts, logs and automation ids keep the internal names (AD-22, AD-24). A default-run App test reads every user-facing string attribute in the App's XAML (Text, Content, Header, ToolTip) and fails on a glossary term outside its allowed list, so a later page can't bring one back. R11, R8."
+verify = "Automated tests: the glossary test passes on the App's XAML and fails on a fabricated view holding 'Ring folder'; the status line's texts for Buffering, Draining, Replay Buffer off and the engine states match the glossary; three engine warnings (memory margin, device dropout, an encoder restart during a Recording) carry the new texts with their codes unchanged; every existing test passes, updated only for the reworded strings."
+covers = ["R11", "R8"]
+after = [10]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Welcome card, Library kind badge, tray menu and status hint"
+description = "The remaining small gaps, to EXPERIENCE.md's Welcome, Clips and Recordings explained, Tray menu and Status header sections. The welcome card in the Library replaces 'No Clips or Recordings yet.' on an empty, unfiltered, unsearched Library: the live Save Hotkey and Clip length, Track 1's sources (or the silent line), the Clips folder, and the Recordings line, each linking to its page in the nav. Contracts: LibraryItem gains an optional kind (clip, recording or monitorRecording; AD-22), set by the engine when a writer begins and kept in library.json, absent on files the folder scan finds; the Library row shows a 'Recording' or 'Monitor Recording' badge, and a scanned file in the Monitor Recordings folder shows its badge too. The tray menu adds the live status item at the top, Open Library and Open the Clips folder, keeping Open, Start with Windows, Restart, Quit and the dev gallery item. While capturing, the status header adds '· {Save Hotkey} saves the last {Clip length}', hidden during a Recording and when the Save Hotkey failed to register. If the builder approved the tray's Save Clip now at 10.1, it's added here with its additive engine command; otherwise it stays out. Both themes. R7, R8."
+verify = "Automated tests: the welcome card shows only on an empty, unfiltered Library and its texts follow a Hotkey and Clip length change; a Recording's and a Clip's library items carry their kinds through library.json and a restart, and a scanned file has none; the Library row shows the badge for a Recording only; the tray menu built by CreateTrayMenu has the status item, Open Library and Open the Clips folder in order, and the status item follows a snapshot; the status header's hint shows while capturing and hides during a Recording and with a failed Save Hotkey. Each changed view loads in both themes with no missing resource."
+covers = ["R7", "R8"]
+after = [3, 11]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup only, scoped at its start from plans and review findings the epic deferred, including the old Track Layout view's styles and view-model members left unused by story 5, the Recordings page's leftovers after story 9, the Game Profiles page's old view after story 10, and any duplicated per-item action code left beside story 2's bulk path. Grep the ticket tree before removing anything a later ticket names."
+verify = "All tests pass, and a batch delete, a sort and a search in the Library, a preset saved on Audio Tracks, a game's own Clip length set and reset, and a cache folder picked still work after the sweep; every deferred cleanup item is closed or recorded."
+covers = []
+after = [1, 2, 3, 4, 5, 6, 9, 10, 11]
+hitl = false
+risk = "low"
+notes = ["QA 10.11, 2026-11-05: the glossary test checks the App's XAML only. Extend it to the user-facing strings set in C#: the engine's warning.raised texts, the Overlay notices and the view models' strings (status, refusals, dialogs, tray)."]
+
+[[entry]]
+id = 8
+type = "story"
+title = "UX pass 2 end to end on the builder's PC"
+description = "The closing end-to-end check of the epic's Done when, integrated. An automated suite runs against the installed build on a dev instance. It starts from an empty settings folder and checks the seeded layout records the default devices; it fabricates a Library and drives the selection, a bulk Favourite, Copy and a delete with a Favourite kept through the view models; it checks sort and search; it applies a preset and saves it; it opens a game's page, changes and resets its Clip length, and checks the nav has no Recordings page; and it runs every App test, the glossary test included. The builder then uses the installed App for a session in each theme. They clear out and share a batch of real Clips with the mouse and keyboard, search and sort the Library, and set up Audio Tracks from a preset on their BEACN devices. They walk Games and a game's page, move the cache folder with the folder picker, find the screen picker on Hotkeys, save a Clip and a Recording in a game and check their tracks and badges, read the welcome card on a fresh dev instance, and use the new tray items."
+verify = "The automated suite passes against the installed build, and the builder's session confirms each Done-when line."
+covers = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11"]
+after = [7]
+hitl = true
+risk = "low"

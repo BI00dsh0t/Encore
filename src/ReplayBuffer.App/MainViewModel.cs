@@ -4,6 +4,7 @@ using ReplayBuffer.App.Library;
 using ReplayBuffer.App.Settings;
 using ReplayBuffer.App.Status;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App;
 
@@ -23,23 +24,43 @@ internal sealed class MainViewModel : Observable
 
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
     /// <param name="libraryViewFile">Where the Library remembers its view choices; without it, they last only this run.</param>
-    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null)
+    /// <param name="defaultCacheFolder">The engine's default cache folder, shown on the Clips page.</param>
+    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null, IGameShell? gameShell = null)
     {
         _engine = engine;
         StatusLine = new StatusLine(engine);
-        Pages = SettingsPages.Create(new SettingsSender(engine), engine);
+        Pages = SettingsPages.Create(new SettingsSender(engine), engine, defaultCacheFolder, gameShell);
         General = Pages.OfType<GeneralSettingsPage>().Single();
         ReplayBuffer = Pages.OfType<ReplayBufferSettingsPage>().Single();
         Hotkeys = Pages.OfType<HotkeysPage>().Single();
         TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
         GameProfiles = Pages.OfType<GameProfilesPage>().Single();
         FeedbackSounds = Pages.OfType<FeedbackSoundsPage>().Single();
-        Recordings = Pages.OfType<RecordingsSettingsPage>().Single();
         LibrarySettings = Pages.OfType<LibrarySettingsPage>().Single();
         _selectedPage = Pages[0];
         Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile);
         LibraryNav = new NavItem(LibraryTitle, null, isSection: false);
         NavItems = [LibraryNav, new NavItem(SettingsLabel, null, isSection: true), .. Pages.Select(p => new NavItem(p.Title, p, isSection: false))];
+        foreach (var drillIn in Pages.Select(p => p.DrillIn).OfType<DrillIn>())
+        {
+            drillIn.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(DrillIn.IsOpen))
+                {
+                    OnPropertyChanged(nameof(IsDrilledIn));
+                }
+            };
+        }
+
+        // The welcome card's links (story 10.6).
+        Library.Welcome.Navigate = link => SelectedNavItem = NavItems.First(i => i.Page == link switch
+        {
+            WelcomeLink.AudioTracks => (SettingsPage)TrackLayout,
+            _ => LibrarySettings,
+        });
+
+        // Edit the main setting, from a game's page: the page that holds the key.
+        GameProfiles.EditMain = key => SelectedNavItem = NavItems.First(i => i.Page == (key == Keys.TrackLayout ? TrackLayout : (SettingsPage)ReplayBuffer));
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -66,9 +87,6 @@ internal sealed class MainViewModel : Observable
 
     /// <summary>The Feedback Sounds page, which takes the snapshot's device list and warnings as well as its settings.</summary>
     public FeedbackSoundsPage FeedbackSounds { get; }
-
-    /// <summary>The Recordings page, which lists the engine's monitors as well as taking its settings.</summary>
-    public RecordingsSettingsPage Recordings { get; }
 
     /// <summary>The Library and Cleanup page, which takes the snapshot's Library folder, items and Cleanup block as well as its settings.</summary>
     public LibrarySettingsPage LibrarySettings { get; }
@@ -110,6 +128,27 @@ internal sealed class MainViewModel : Observable
             {
                 IsSettingsTabSelected = false;
             }
+        }
+    }
+
+    /// <summary>The Clips folder the engine uses, or null before it says: the tray's Open the Clips folder.</summary>
+    public string? ClipsFolder => _engine.State?.LibraryFolder;
+
+    /// <summary>The shown page's drill-in (story 10.10), or null: the shell's breadcrumb binds to it.</summary>
+    public DrillIn? CurrentDrillIn => IsSettingsTabSelected ? SelectedPage.DrillIn : null;
+
+    /// <summary>Whether an item page is open, so the page header is a breadcrumb.</summary>
+    public bool IsDrilledIn => CurrentDrillIn?.IsOpen == true;
+
+    /// <summary>
+    /// The nav item chosen again, by click, Enter or Space: on the page already shown, an open drill-in
+    /// item page goes back to its list (story 10.10).
+    /// </summary>
+    public void ReselectNavItem(NavItem item)
+    {
+        if (ReferenceEquals(item, SelectedNavItem))
+        {
+            CurrentDrillIn?.Close();
         }
     }
 
@@ -185,7 +224,7 @@ internal sealed class MainViewModel : Observable
         GameProfiles.ShowState(state);
         Hotkeys.ShowStatus(state.Hotkeys);
         FeedbackSounds.ShowState(state);
-        Recordings.ShowState(state);
+        Hotkeys.ShowMonitors(state);
         LibrarySettings.ShowState(state);
         Library.Render(state);
 
@@ -199,6 +238,17 @@ internal sealed class MainViewModel : Observable
 
     private void NavigationChanged()
     {
+        // Leaving a page shows its list when it's shown again (story 10.10's drill-in).
+        foreach (var page in Pages)
+        {
+            if (!IsSettingsTabSelected || !ReferenceEquals(page, SelectedPage))
+            {
+                page.DrillIn?.Close();
+            }
+        }
+
+        OnPropertyChanged(nameof(CurrentDrillIn));
+        OnPropertyChanged(nameof(IsDrilledIn));
         OnPropertyChanged(nameof(SelectedNavItem));
         OnPropertyChanged(nameof(CurrentTitle));
         OnPropertyChanged(nameof(CurrentView));
@@ -227,16 +277,36 @@ internal sealed class MainViewModel : Observable
 }
 
 /// <summary>One item of the shell's navigation: the Library, the Settings section label, or a settings page.</summary>
-internal sealed class NavItem(string title, SettingsPage? page, bool isSection)
+internal sealed class NavItem : Observable
 {
+    public NavItem(string title, SettingsPage? page, bool isSection)
+    {
+        Title = title;
+        Page = page;
+        IsSection = isSection;
+        if (page is not null)
+        {
+            page.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(SettingsPage.HasUnsavedChanges))
+                {
+                    OnPropertyChanged(nameof(HasUnsavedChanges));
+                }
+            };
+        }
+    }
+
+    /// <summary>The nav item's dot: its page holds unsaved changes.</summary>
+    public bool HasUnsavedChanges => Page?.HasUnsavedChanges ?? false;
+
     /// <summary>The page's title, in sentence case; Gaming dark uppercases it in its template only.</summary>
-    public string Title { get; } = title;
+    public string Title { get; }
 
     /// <summary>The settings page it opens; null for the Library and the section label.</summary>
-    public SettingsPage? Page { get; } = page;
+    public SettingsPage? Page { get; }
 
     /// <summary>The non-selectable Settings label above the settings pages.</summary>
-    public bool IsSection { get; } = isSection;
+    public bool IsSection { get; }
 
     public override string ToString() => Title;
 }

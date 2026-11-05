@@ -1,3 +1,4 @@
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Library;
@@ -33,8 +34,74 @@ public sealed record RecordingRunning(bool Running) : SessionMessage;
 /// Target's window.
 /// </summary>
 /// <param name="Audio">The audio of each session it starts, from the snapshot its Start resolved.</param>
-/// <param name="Failed">Called on the orchestrator thread when a session on the Target couldn't be started or retargeted.</param>
-public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, Action<TargetCandidate, Exception> Failed);
+/// <param name="Failed">
+/// Called on the orchestrator thread when a session on the Target couldn't be started or retargeted;
+/// not for a failure <paramref name="Wait"/> retries.
+/// </param>
+/// <param name="Wait">
+/// How a Target whose window can't be captured yet is waited for and retried; null starts each
+/// session at once and treats a failed one as final for the Target.
+/// </param>
+public sealed record TargetCapture(Func<EffectiveSettings, SessionAudio> Audio, Action<TargetCandidate, Exception> Failed, CaptureWait? Wait = null);
+
+/// <summary>
+/// How the game session follows the Target Game's process rather than one window. A game still
+/// starting can show a placeholder window (156×27 for Rocket League) that WGC never delivers a frame
+/// from, then swap it for a splash and its real window. So no game session starts until
+/// <paramref name="Find"/> names a window of the process that can be captured: it is polled every
+/// <see cref="Poll"/>. A session on the Target that fails with a failure <see cref="Retries"/>
+/// accepts, or whose window closes before its first frame, is started again (after a backoff for a
+/// failure, from <see cref="FirstRetry"/> doubling up to <see cref="MaxRetry"/>) while the Target
+/// stays the same process. Once a session has its first frame, its window is checked every
+/// <see cref="Poll"/>: when it closes or can no longer be captured, the session is retargeted to the
+/// process's window <paramref name="Find"/> names, so its Replay Buffer is kept; while there is none
+/// it waits, its last frame repeated. A run of waits is reported once, by <paramref name="Waiting"/>,
+/// and its end once, by <paramref name="Ended"/>. All calls are on the orchestrator thread.
+/// </summary>
+/// <param name="Find">
+/// The window of the Target's process to capture: the given window when it can be captured, else the
+/// process's largest window that can; <see cref="CaptureWindow.None"/>, with why, when none can.
+/// </param>
+/// <param name="Waiting">The first wait or retry of a run, with its reason.</param>
+/// <param name="Ended">The run is over: true once the Target is captured again, false when the Target changed or went.</param>
+/// <param name="Retries">Which failures of a session on the Target are retried; null is <see cref="ErrorCodes.CaptureFailed"/> only.</param>
+public sealed record CaptureWait(
+    Func<TargetCandidate, CaptureWindow> Find,
+    Action<TargetCandidate, string> Waiting,
+    Action<TargetCandidate, bool> Ended,
+    Func<Exception, bool>? Retries = null)
+{
+    public static readonly TimeSpan DefaultPoll = TimeSpan.FromSeconds(1);
+
+    public static readonly TimeSpan DefaultFirstRetry = TimeSpan.FromSeconds(2);
+
+    public static readonly TimeSpan DefaultMaxRetry = TimeSpan.FromSeconds(30);
+
+    /// <summary>How often the Target's windows are checked while none can be captured, and the captured one while a session runs.</summary>
+    public TimeSpan Poll { get; init; } = DefaultPoll;
+
+    /// <summary>The wait before the first retry of a failed session or retarget.</summary>
+    public TimeSpan FirstRetry { get; init; } = DefaultFirstRetry;
+
+    /// <summary>The longest wait between retries.</summary>
+    public TimeSpan MaxRetry { get; init; } = DefaultMaxRetry;
+
+    /// <summary>Whether <paramref name="failure"/> of a session on the Target is retried.</summary>
+    public bool Retry(Exception failure) =>
+        Retries?.Invoke(failure) ?? failure is ErrorCodeException { Code: ErrorCodes.CaptureFailed };
+
+    /// <summary>The wait before retry <paramref name="failures"/> (1 for the first) of a run.</summary>
+    public TimeSpan Backoff(int failures)
+    {
+        var wait = FirstRetry;
+        for (var i = 1; i < failures && wait < MaxRetry; i++)
+        {
+            wait += wait;
+        }
+
+        return wait < MaxRetry ? wait : MaxRetry;
+    }
+}
 
 /// <summary>
 /// How the orchestrator turns a <c>save</c> press into a Clip (R4, AD-19, AD-21).
@@ -311,4 +378,14 @@ public sealed record ChainKey(SessionKind Kind, int ProcessId, VideoSettings Vid
         target.ProcessId,
         video,
         [.. audio.Tracks.Select(t => new ChainTrack(t.Name, [.. t.DeviceIndexes.Select(i => new ChainDevice(audio.Devices[i].EndpointId, audio.Devices[i].Flow))]))]);
+}
+
+/// <summary>The window <see cref="CaptureWait.Find"/> names: <see cref="Window"/>, or none, with <see cref="Why"/>.</summary>
+public readonly record struct CaptureWindow(nint Window, string? Why)
+{
+    public bool Found => Window != 0;
+
+    public static CaptureWindow Of(nint window) => new(window, null);
+
+    public static CaptureWindow None(string why) => new(0, why);
 }

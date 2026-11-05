@@ -37,7 +37,7 @@ internal sealed class MemoryMarginReporter : IDisposable
             WarningSeverity.Warning,
             "replay",
             raised == MemoryMarginEvent.ShortRing
-                ? "Memory is so low that the Replay Buffer holds under 1 s. A save makes no Clip until memory frees up."
-                : "Memory is low, so the Replay Buffer stopped growing. Clips may be shorter than the Buffer Window.",
+                ? "Memory is so low that ReplayBuffer keeps less than 1 s of gameplay. Saving makes no Clip until memory frees up."
+                : "Memory is low, so ReplayBuffer stopped keeping more gameplay. Clips may be shorter than your Clip length.",
             overlay: false);
 }

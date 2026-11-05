@@ -1,9 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
+using System.IO;
 using System.Windows;
-using System.Windows.Input;
+using System.Windows.Media;
 using ReplayBuffer.App.Engine;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
@@ -12,137 +11,162 @@ using ReplayBuffer.Contracts.Settings;
 namespace ReplayBuffer.App.Settings;
 
 /// <summary>
-/// The document's Game Profiles (story 3.6): each one's name, Ignored and Recordings, every edit sent at
-/// once as one profile op. Add hands an executable to <c>game.add</c>, which writes <c>manualGames</c>.
-/// "Overrides for" hosts a profile-scoped Replay Buffer page and Track Layout page for the selected
-/// profile (story 4.11), whose notes show as this page's <see cref="SettingsPage.Message"/>.
-/// Members run on the UI thread.
+/// Games (story 10.10, was Game Profiles): every game in the document, Ignored ones last, each opening its
+/// own <see cref="GamePage"/> through the <see cref="DrillIn"/> pattern. Add a game… picks a program with
+/// 10.9's file picker and sends <c>game.add</c>, which writes <c>manualGames</c>. Each game page is kept
+/// for the run, keyed by its profile id, so a draft survives going back. R23 to R26 are unchanged; the
+/// engine still detects, chooses, profiles and folders games. Members run on the UI thread.
 /// </summary>
 internal sealed class GameProfilesPage : SettingsPage
 {
+    public const string PageTitle = "Games";
+
     private readonly SettingsSender _sender;
     private readonly IEngineSession _engine;
-    private string _addPath = "";
-    private GameProfileItem? _selectedProfile;
-    private TrackLayoutPage? _overrideTrackLayout;
-    private ReplayBufferSettingsPage? _overrideOutput;
+    private readonly IGameShell _shell;
+    private readonly Dictionary<string, GamePage> _pages = new(StringComparer.Ordinal);
     private StateSnapshot? _state;
     private bool _isOpen;
+    private GamePage? _openGame;
 
-    public GameProfilesPage(SettingsSender sender, IEngineSession engine)
+    public GameProfilesPage(SettingsSender sender, IEngineSession engine, IGameShell? shell = null)
         : base(sender)
     {
         _sender = sender;
         _engine = engine;
-        AddCommand = new RelayCommand(() => _ = AddAsync());
+        _shell = shell ?? WindowsGameShell.Instance;
+        DrillIn = new DrillIn(PageTitle);
+        DrillIn.Closed += _ => CloseGame();
+        AddGame = new FolderPicker(Keys.OutputFolder, _ => Task.FromResult<string?>(null))
+        {
+            IsFile = true,
+            DialogTitle = "Choose the game's program",
+            FileFilter = "Programs (*.exe)|*.exe",
+            Pick = AddAsync,
+        };
     }
 
-    public override string Title => "Game Profiles";
+    public override string Title => PageTitle;
 
-    /// <summary>The document's profiles, by name (ordinal ignore-case).</summary>
+    /// <inheritdoc/>
+    public override DrillIn DrillIn { get; }
+
+    /// <summary>The games: by name, with Ignored games after the others.</summary>
     public ObservableCollection<GameProfileItem> Profiles { get; } = [];
 
-    /// <summary>The executable path Add sends, typed or browsed.</summary>
-    public string AddPath
-    {
-        get => _addPath;
-        set => Set(ref _addPath, value ?? "");
-    }
+    public bool IsEmpty => Profiles.Count == 0;
 
-    public ICommand AddCommand { get; }
+    /// <summary>Add a game…: the file variant of the folder picker, filtered to programs.</summary>
+    public FolderPicker AddGame { get; }
 
-    /// <summary>The profile whose overrides the hosted editors show; null hosts none.</summary>
-    public GameProfileItem? SelectedProfile
+    /// <summary>The game page on screen, or null on the list.</summary>
+    public GamePage? OpenGame
     {
-        get => _selectedProfile;
-        set
+        get => _openGame;
+        private set
         {
-            if (ReferenceEquals(value, _selectedProfile))
+            if (ReferenceEquals(_openGame, value))
             {
                 return;
             }
 
-            if (_overrideTrackLayout is { } oldLayout)
+            if (_openGame is { } old)
             {
-                oldLayout.PropertyChanged -= ChildChanged;
-                oldLayout.IsOpen = false;
+                old.IsOpen = false;
             }
 
-            if (_overrideOutput is { } oldOutput)
-            {
-                oldOutput.PropertyChanged -= ChildChanged;
-            }
-
-            _selectedProfile = value;
-            TrackLayoutPage? layout = null;
-            ReplayBufferSettingsPage? output = null;
+            _openGame = value;
             if (value is not null)
             {
-                layout = new TrackLayoutPage(_sender, _engine, value.ProfileId);
-                output = new ReplayBufferSettingsPage(_sender, value.ProfileId);
-                if (_state is { } state)
-                {
-                    layout.ShowDevices(state.Devices);
-                    layout.ShowMeters(state.Meters, state.EngineInstanceId);
-                    output.ShowState(state);
-                }
-
-                // A new page shows nothing until rendered, and Render skips a revision already shown.
-                layout.Render(Document);
-                output.Render(Document);
-                layout.PropertyChanged += ChildChanged;
-                output.PropertyChanged += ChildChanged;
-                layout.IsOpen = _isOpen;
+                value.IsOpen = _isOpen;
             }
 
-            _overrideTrackLayout = layout;
-            _overrideOutput = output;
-            Message = null;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(HasSelectedProfile));
-            OnPropertyChanged(nameof(OverrideTrackLayout));
-            OnPropertyChanged(nameof(OverrideOutput));
         }
     }
 
-    public bool HasSelectedProfile => _selectedProfile is not null;
+    /// <summary>The row whose page was open last: the list focuses it on going back.</summary>
+    public string? LastOpenedId { get; private set; }
 
-    /// <summary>The selected profile's Track Layout override editor.</summary>
-    public TrackLayoutPage? OverrideTrackLayout => _overrideTrackLayout;
+    /// <summary>Edit the main setting: shows the main page that holds the key. Set by the shell.</summary>
+    public Action<SettingKey>? EditMain { get; set; }
 
-    /// <summary>The selected profile's Buffer Window and Output Settings override editor.</summary>
-    public ReplayBufferSettingsPage? OverrideOutput => _overrideOutput;
+    /// <inheritdoc/>
+    public override bool HasUnsavedChanges => _pages.Values.Any(p => p.HasUnsavedChanges);
 
-    /// <summary>Whether the page is on screen; the hosted Track Layout editor meters only then.</summary>
+    /// <summary>Whether the page is on screen; the open game's audio tracks meter only then.</summary>
     public bool IsOpen
     {
         get => _isOpen;
         set
         {
-            if (Set(ref _isOpen, value) && _overrideTrackLayout is { } layout)
+            if (!Set(ref _isOpen, value))
             {
-                layout.IsOpen = value;
+                return;
+            }
+
+            if (_openGame is { } game)
+            {
+                game.IsOpen = value;
             }
         }
     }
 
-    /// <summary>Takes the snapshot's devices, meters and video options for the hosted editors. Called before <see cref="SettingsPage.Render"/>.</summary>
+    /// <summary>Opens a game's page in place of the list (click or Enter on its row).</summary>
+    public void Open(GameProfileItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        var page = Page(item.ProfileId);
+        LastOpenedId = item.ProfileId;
+        OpenGame = page;
+        DrillIn.Open(item.ProfileId, page.Title);
+    }
+
+    /// <summary>The game's page, kept for the run so a draft survives going back.</summary>
+    public GamePage Page(string profileId)
+    {
+        if (!_pages.TryGetValue(profileId, out var page))
+        {
+            page = new GamePage(_sender, _engine, profileId, this, _shell);
+            if (_state is { } state)
+            {
+                page.ShowState(state);
+            }
+
+            // A new page shows nothing until rendered, and Render skips a revision already shown.
+            page.Render(Document);
+            page.PropertyChanged += GameChanged;
+            _pages.Add(profileId, page);
+        }
+
+        return page;
+    }
+
+    /// <summary>Takes the snapshot: the game being captured, and each game page's devices and meters. Called before <see cref="SettingsPage.Render"/>.</summary>
     public void ShowState(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);
         _state = state;
-        _overrideTrackLayout?.ShowDevices(state.Devices);
-        _overrideTrackLayout?.ShowMeters(state.Meters, state.EngineInstanceId);
-        _overrideOutput?.ShowState(state);
+        foreach (var item in Profiles)
+        {
+            item.IsCapturing = string.Equals(item.ProfileId, state.TargetGame?.ProfileId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        foreach (var page in _pages.Values)
+        {
+            page.ShowState(state);
+        }
     }
 
     protected override FrameworkElement CreateView() => new GameProfilesView { DataContext = this };
 
     protected override void OnRender(SettingsDocument document)
     {
+        var manual = SettingsValues.Global(document, Keys.ManualGames);
         var existing = Profiles.ToDictionary(p => p.ProfileId, StringComparer.Ordinal);
         var ordered = document.Profiles
-            .OrderBy(p => p.Value.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p.Value.Ignored)
+            .ThenBy(p => p.Value.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(p => p.Key, StringComparer.Ordinal)
             .ToList();
 
@@ -156,7 +180,8 @@ internal sealed class GameProfilesPage : SettingsPage
             var (id, profile) = (ordered[index].Key, ordered[index].Value);
             if (!existing.TryGetValue(id, out var item))
             {
-                item = new GameProfileItem(id, this);
+                item = new GameProfileItem(id);
+                _shell.LoadIcon(id, icon => item.Icon = icon);
                 Profiles.Insert(index, item);
             }
             else if (Profiles.IndexOf(item) != index)
@@ -164,100 +189,167 @@ internal sealed class GameProfilesPage : SettingsPage
                 Profiles.Move(Profiles.IndexOf(item), index);
             }
 
-            item.Show(profile);
+            item.Show(
+                profile,
+                manual.Any(p => string.Equals(p, id, StringComparison.OrdinalIgnoreCase)),
+                new[] { Keys.BufferWindow.Name, Keys.Video.Name, Keys.TrackLayout.Name }.Count(profile.Overrides.ContainsKey));
+            item.IsCapturing = string.Equals(id, _state?.TargetGame?.ProfileId, StringComparison.OrdinalIgnoreCase);
+            item.HasUnsavedChanges = _pages.TryGetValue(id, out var cached) && cached.HasUnsavedChanges;
         }
 
-        if (_selectedProfile is { } selected && !document.Profiles.ContainsKey(selected.ProfileId))
+        OnPropertyChanged(nameof(IsEmpty));
+
+        // A game that went away takes its page with it; an open one returns to the list.
+        foreach (var gone in _pages.Keys.Where(id => !document.Profiles.ContainsKey(id)).ToList())
         {
-            SelectedProfile = null;
+            var page = _pages[gone];
+            page.PropertyChanged -= GameChanged;
+            _pages.Remove(gone);
+            if (ReferenceEquals(page, _openGame))
+            {
+                DrillIn.Close();
+                Message = $"{page.Title} is no longer in the list.";
+            }
         }
 
-        _overrideOutput?.Render(document);
-        _overrideTrackLayout?.Render(document);
+        foreach (var page in _pages.Values)
+        {
+            page.Render(document);
+        }
+
+        if (_openGame is { } open)
+        {
+            DrillIn.ItemTitle = open.Title;
+        }
+
+        OnPropertyChanged(nameof(HasUnsavedChanges));
     }
 
-    /// <summary>Sends one attribute of one profile against the rendered revision.</summary>
-    internal void Send(string profileId, string attribute, JsonElement value) =>
-        _ = SendAsync([SettingsOp.SetProfile(profileId, attribute, value)]);
+    private void CloseGame() => OpenGame = null;
 
-    private void ChildChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(Message) && sender is SettingsPage page)
-        {
-            Message = page.Message;
-        }
-    }
-
-    private async Task AddAsync()
+    private async Task<string?> AddAsync(string path)
     {
         try
         {
-            await _engine.SendAsync(GameMessages.Add, new GameAdd(AddPath));
-            AddPath = "";
-            Message = "Added. The game appears in this list once it is detected.";
+            await _engine.SendAsync(GameMessages.Add, new GameAdd(path));
+            Message = $"Added. {Path.GetFileNameWithoutExtension(path)} appears here the next time it runs.";
+            return null;
         }
         catch (ErrorCodeException e)
         {
-            Message = $"Not added ({e.Code}): {e.Message}";
+            Message = $"Not added: {e.Message}";
+            return e.Code;
+        }
+    }
+
+    private void GameChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is not GamePage page)
+        {
+            return;
+        }
+
+        switch (e.PropertyName)
+        {
+            case nameof(Message):
+                Message = page.Message;
+                break;
+            case nameof(HasUnsavedChanges):
+                if (Profiles.FirstOrDefault(p => p.ProfileId == page.ProfileId) is { } row)
+                {
+                    row.HasUnsavedChanges = page.HasUnsavedChanges;
+                }
+
+                OnPropertyChanged(nameof(HasUnsavedChanges));
+                break;
+            case nameof(Title) when ReferenceEquals(page, _openGame):
+                DrillIn.ItemTitle = page.Title;
+                break;
         }
     }
 }
 
-/// <summary>One Game Profile. Its setters send the edit; <see cref="Show"/> renders the document's values silently.</summary>
-internal sealed class GameProfileItem(string profileId, GameProfilesPage page) : Observable
+/// <summary>A row of the Games list. It holds no profile id the user can see; the page shows the program's location.</summary>
+internal sealed class GameProfileItem(string profileId) : Observable
 {
     private string _name = "";
     private bool _ignored;
-    private bool _recordingsEnabled;
+    private bool _isManual;
+    private int _changed;
+    private bool _isCapturing;
+    private bool _unsaved;
+    private ImageSource? _icon;
 
-    /// <summary>The profile id: the executable's canonical path (AD-18).</summary>
+    /// <summary>The profile id: the program's canonical path (AD-18); never shown in the list.</summary>
     public string ProfileId { get; } = profileId;
 
-    /// <summary>A non-blank name that differs from the rendered one is sent trimmed; a blank one shows the old name again.</summary>
-    public string Name
+    public string Name => _name;
+
+    /// <summary>The letter of the generic tile shown until, or instead of, the program's icon.</summary>
+    public string Initial => _name.Length > 0 ? char.ToUpperInvariant(_name[0]).ToString() : "?";
+
+    public bool Ignored => _ignored;
+
+    /// <summary>The group: the games, then Ignored games.</summary>
+    public string Group => _ignored ? "Ignored games" : "";
+
+    public bool IsManual => _isManual;
+
+    /// <summary>"Detected automatically" or "Added by hand", then "· {n} settings changed".</summary>
+    public string Caption =>
+        (_isManual ? "Added by hand" : "Detected automatically")
+        + (_changed switch { 0 => "", 1 => " · 1 setting changed", var n => $" · {n} settings changed" });
+
+    /// <summary>How many of the game's three overridable settings it changes.</summary>
+    public int ChangedCount => _changed;
+
+    /// <summary>The Capturing now pill: the snapshot's game being captured.</summary>
+    public bool IsCapturing
     {
-        get => _name;
+        get => _isCapturing;
+        set => Set(ref _isCapturing, value);
+    }
+
+    /// <summary>The unsaved dot: the game's page holds a draft.</summary>
+    public bool HasUnsavedChanges
+    {
+        get => _unsaved;
+        set => Set(ref _unsaved, value);
+    }
+
+    /// <summary>The program's icon from the shell, or null for the letter tile.</summary>
+    public ImageSource? Icon
+    {
+        get => _icon;
         set
         {
-            var name = value?.Trim() ?? "";
-            if (name.Length == 0 || name == _name)
+            if (Set(ref _icon, value))
             {
-                OnPropertyChanged();
-                return;
+                OnPropertyChanged(nameof(HasIcon));
             }
-
-            _name = name;
-            OnPropertyChanged();
-            page.Send(ProfileId, ProfileAttributes.Name, JsonSerializer.SerializeToElement(name, SettingsJsonContext.Default.String));
         }
     }
 
-    public bool Ignored
-    {
-        get => _ignored;
-        set => SendFlag(ref _ignored, value, ProfileAttributes.Ignored);
-    }
+    public bool HasIcon => _icon is not null;
 
-    public bool RecordingsEnabled
+    /// <summary>Renders the document's values; raises only what changed.</summary>
+    public void Show(GameProfile profile, bool isManual, int changed)
     {
-        get => _recordingsEnabled;
-        set => SendFlag(ref _recordingsEnabled, value, ProfileAttributes.RecordingsEnabled);
-    }
-
-    /// <summary>Raises only for values that changed, so another profile's commit doesn't reset a name being typed.</summary>
-    public void Show(GameProfile profile)
-    {
-        Set(ref _name, profile.Name, nameof(Name));
-        Set(ref _ignored, profile.Ignored, nameof(Ignored));
-        Set(ref _recordingsEnabled, profile.RecordingsEnabled, nameof(RecordingsEnabled));
-    }
-
-    // Sets a flag and, when it changed, sends it as the profile's attribute.
-    private void SendFlag(ref bool field, bool value, string attribute, [CallerMemberName] string? property = null)
-    {
-        if (Set(ref field, value, property))
+        if (Set(ref _name, profile.Name, nameof(Name)))
         {
-            page.Send(ProfileId, attribute, JsonSerializer.SerializeToElement(value, SettingsJsonContext.Default.Boolean));
+            OnPropertyChanged(nameof(Initial));
+        }
+
+        if (Set(ref _ignored, profile.Ignored, nameof(Ignored)))
+        {
+            OnPropertyChanged(nameof(Group));
+        }
+
+        var captionChanged = Set(ref _isManual, isManual, nameof(IsManual));
+        captionChanged |= Set(ref _changed, changed, nameof(ChangedCount));
+        if (captionChanged)
+        {
+            OnPropertyChanged(nameof(Caption));
         }
     }
 }

@@ -8,7 +8,8 @@ namespace ReplayBuffer.Core.Tests;
 public sealed class LibraryActorTests : IDisposable
 {
     private const string ProfileId = @"c:\games\a.exe";
-    private static readonly TimeSpan Within = TimeSpan.FromSeconds(2);
+    // A ceiling, not a wait: lengths are read on a lowest-priority thread, which a loaded machine can starve for seconds.
+    private static readonly TimeSpan Within = TimeSpan.FromSeconds(10);
 
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "rb-library-" + Guid.NewGuid().ToString("N"));
 
@@ -257,6 +258,35 @@ public sealed class LibraryActorTests : IDisposable
         File.WriteAllBytes(clip, Mp4(64));
         restarted.WaitFor(index => index[@"Game\clip.mp4"] is { Size: 96, LengthSeconds: 12 });
         Assert.Equal(1, Volatile.Read(ref second));
+    }
+
+    [Fact]
+    public void KindsAreKeptThroughTheIndexAndARestartAndAScannedFileHasNoneOutsideMonitorRecordings()
+    {
+        // Story 10.6 (AD-22): the writer says what it writes; the scan can't tell, except in Monitor Recordings.
+        var clip = Path.Combine(Output, "Game", "clip.mp4");
+        var recording = Path.Combine(Output, "Game", "match.mp4");
+        Directory.CreateDirectory(Path.Combine(Output, "Monitor Recordings"));
+        Directory.CreateDirectory(Path.Combine(Output, "Game"));
+        File.WriteAllBytes(Path.Combine(Output, "Monitor Recordings", "desk.mp4"), Mp4());
+        File.WriteAllBytes(Path.Combine(Output, "Game", "found.mp4"), Mp4());
+        using (var library = new Harness(this, LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items))
+        {
+            library.Actor.Watching = true;
+            library.Actor.BeginWrite(clip, ProfileId, LibraryItemKinds.Clip);
+            library.Actor.BeginWrite(recording, ProfileId, LibraryItemKinds.Recording);
+            File.WriteAllBytes(clip, Mp4());
+            File.WriteAllBytes(recording, Mp4());
+            library.Actor.EndWrite(clip, WriteOutcome.Written);
+            library.Actor.EndWrite(recording, WriteOutcome.Written);
+            library.WaitFor(index => index.TryGetValue(@"Game\match.mp4", out var r) && !r.BeingWritten && index.TryGetValue(@"Game\clip.mp4", out var c) && !c.BeingWritten);
+        }
+
+        var kinds = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items.ToDictionary(i => i.Path, i => i.Kind);
+        Assert.Equal(LibraryItemKinds.Clip, kinds[@"Game\clip.mp4"]);
+        Assert.Equal(LibraryItemKinds.Recording, kinds[@"Game\match.mp4"]);
+        Assert.Null(kinds[@"Game\found.mp4"]);
+        Assert.Equal(LibraryItemKinds.MonitorRecording, kinds[@"Monitor Recordings\desk.mp4"]);
     }
 
     [Fact]
@@ -549,7 +579,7 @@ public sealed class LibraryActorTests : IDisposable
 
         public void Dispose() => Actor.Dispose();
 
-        /// <summary>The index once <paramref name="done"/> holds, within 2 s.</summary>
+        /// <summary>The index once <paramref name="done"/> holds, within <see cref="Within"/>.</summary>
         public Dictionary<string, LibraryItem> WaitFor(Func<Dictionary<string, LibraryItem>, bool> done)
         {
             var until = DateTime.UtcNow + Within;
@@ -563,7 +593,7 @@ public sealed class LibraryActorTests : IDisposable
                     }
                 }
 
-                Assert.True(DateTime.UtcNow < until, "The index didn't reach the expected state within 2 s.");
+                Assert.True(DateTime.UtcNow < until, $"The index didn't reach the expected state within {Within.TotalSeconds:0} s.");
                 Thread.Sleep(20);
             }
         }
@@ -578,7 +608,7 @@ public sealed class LibraryActorTests : IDisposable
                     return found;
                 }
 
-                Assert.True(DateTime.UtcNow < until, "The event didn't arrive within 2 s.");
+                Assert.True(DateTime.UtcNow < until, $"The event didn't arrive within {Within.TotalSeconds:0} s.");
                 Thread.Sleep(20);
             }
         }

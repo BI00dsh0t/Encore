@@ -3,7 +3,9 @@ using System.Windows;
 using System.Windows.Input;
 using ReplayBuffer.App.Engine;
 using ReplayBuffer.Contracts;
+using ReplayBuffer.App.Settings;
 using ReplayBuffer.Contracts.Messages;
+using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Status;
 
@@ -15,6 +17,7 @@ namespace ReplayBuffer.App.Status;
 internal sealed class StatusLine(IEngineSession engine) : Observable
 {
     private string _state = "";
+    private string _hint = "";
     private StatusDot _dot;
     private IReadOnlyList<StatusWarning> _warnings = [];
     private IReadOnlyList<Warning> _rendered = [];
@@ -25,6 +28,16 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
     {
         get => _state;
         private set => Set(ref _state, value);
+    }
+
+    /// <summary>
+    /// "· Alt+F10 saves the last 30 s" while capturing (story 10.6); empty during a Recording, when the
+    /// Save Hotkey isn't set or failed to register, and while not capturing.
+    /// </summary>
+    public string Hint
+    {
+        get => _hint;
+        private set => Set(ref _hint, value);
     }
 
     /// <summary>The status header's dot, from the same capture state as <see cref="State"/>.</summary>
@@ -51,6 +64,7 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
             ? CaptureText(connected)
             : ConnectionText(status, problem);
         Dot = connected is null ? StatusDot.Idle : DotFor(connected.Capture);
+        Hint = connected is null ? "" : HintText(connected);
 
         // Like the Overlay: a session that isn't connected has no warnings to show or dismiss.
         var warnings = connected?.Warnings ?? [];
@@ -65,13 +79,28 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
 
     private static string ConnectionText(EngineStatus status, string? problem) => status switch
     {
-        EngineStatus.Connecting => "Connecting to the engine…",
-        EngineStatus.Connected => "Connected to the engine.",
-        EngineStatus.Restarting => "Restarting the engine…" + (problem is { } why ? " " + why : ""),
-        EngineStatus.NotRunning => "The engine isn't running." + (problem is { } reason ? " " + reason : ""),
-        EngineStatus.CrashLoop => problem ?? "The engine keeps crashing, so it isn't being restarted. Restart it from the tray menu.",
-        _ => "The engine disconnected. Reconnecting…",
+        EngineStatus.Connecting => "Connecting to ReplayBuffer's background service…",
+        EngineStatus.Connected => "Connected to ReplayBuffer's background service.",
+        EngineStatus.Restarting => "Restarting ReplayBuffer's background service…" + (problem is { } why ? " " + why : ""),
+        EngineStatus.NotRunning => "ReplayBuffer's background service isn't running." + (problem is { } reason ? " " + reason : ""),
+        EngineStatus.CrashLoop => problem ?? "ReplayBuffer's background service keeps crashing, so it isn't being restarted. Restart it from the tray menu.",
+        _ => "ReplayBuffer's background service disconnected. Reconnecting…",
     };
+
+    private static string HintText(StateSnapshot state)
+    {
+        var capture = state.Capture;
+        if (capture.Replay != ReplayState.Buffering
+            || capture.Recording == RecordingState.Running
+            || capture.MonitorRecording == RecordingState.Running
+            || SettingsValues.Global(state.Settings, Keys.Hotkeys).Save is not { } save
+            || state.Hotkeys.Bindings.FirstOrDefault(b => b.Action == HotkeyAction.Save) is { Registered: false, Code: not (ErrorCodes.HotkeyUnbound or ErrorCodes.HotkeyInactive) })
+        {
+            return "";
+        }
+
+        return $"· {HotkeysPage.Describe(save)} saves the last {HotkeysPage.ClipLength(SettingsValues.Global(state.Settings, Keys.BufferWindow))}";
+    }
 
     private static StatusDot DotFor(CaptureState capture) =>
         capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running ? StatusDot.Recording
@@ -85,9 +114,9 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
         [
             capture.Replay switch
             {
-                ReplayState.Buffering => state.TargetGame is { } game ? $"Buffering on {game.Name}" : "Buffering",
-                ReplayState.Draining => "Draining",
-                _ => "Replay Buffer off",
+                ReplayState.Buffering => state.TargetGame is { } game ? $"Ready to save Clips in {game.Name}" : "Ready to save Clips",
+                ReplayState.Draining => "Finishing the save…",
+                _ => "Waiting for a game",
             },
         ];
         if (capture.Recording == RecordingState.Running)

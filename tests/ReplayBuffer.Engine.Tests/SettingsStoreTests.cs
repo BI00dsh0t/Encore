@@ -19,6 +19,30 @@ public sealed class SettingsStoreTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
     [Fact]
+    public void AnUpdateThatNestsTheCacheAndClipsFoldersIsRefusedEitherWay()
+    {
+        // Story 10.9 (AD-17): the engine, as the one settings writer, keeps the two folders apart.
+        var store = Open();
+        store.FolderDefaults = (@"C:\Users\sam\AppData\Local\ReplayBuffer\ring", @"C:\Users\sam\Videos\ReplayBuffer");
+
+        var clipsAroundDefaultCache = Assert.Throws<ErrorCodeException>(() => store.Update(Set(0, Keys.OutputFolder, @"C:\Users\sam\AppData")));
+        Assert.Equal(ErrorCodes.RingPathInvalid, clipsAroundDefaultCache.Code);
+
+        var cacheInsideDefaultClips = Assert.Throws<ErrorCodeException>(() => store.Update(Set(0, Keys.RingPath, @"C:\Users\sam\Videos\ReplayBuffer\cache")));
+        Assert.Equal(ErrorCodes.RingPathInvalid, cacheInsideDefaultClips.Code);
+        Assert.Equal(0, store.Current.Revision);
+
+        store.Update(Set(0, Keys.OutputFolder, @"D:\Clips"));
+        var cacheInsideClips = Assert.Throws<ErrorCodeException>(() => store.Update(Set(1, Keys.RingPath, @"d:\clips\Cache")));
+        Assert.Equal(ErrorCodes.RingPathInvalid, cacheInsideClips.Code);
+        store.Update(Set(1, Keys.RingPath, @"E:\Cache"));
+        Assert.Equal(2, store.Current.Revision);
+    }
+
+    private static SettingsUpdate Set(long revision, SettingKey<string?> key, string value) =>
+        new(revision, [SettingsOp.SetGlobal(key.Name, key.ToJson(value))]);
+
+    [Fact]
     public void AFirstRunIsTheEmptyDocumentAndWritesNothing()
     {
         var (store, code) = SettingsStore.Open(_folder);

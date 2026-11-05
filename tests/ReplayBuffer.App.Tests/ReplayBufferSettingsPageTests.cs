@@ -62,7 +62,7 @@ public sealed class ReplayBufferSettingsPageTests
 
         Show(model, new StorageEstimate(ReplayStorage.Disk, 2_400_000_000, WorstCase: true, 900_000_000, ExceedsFree: true));
         Assert.Equal("Estimated disk use: 2.4 GB (worst case for VBR)", page.EstimateText);
-        Assert.Equal("More than the free space on the ring folder's drive (900.0 MB). The value is kept.", page.EstimateWarning);
+        Assert.Equal("More than the free space on the cache folder's drive (900.0 MB). The value is kept.", page.EstimateWarning);
 
         Show(model, new StorageEstimate(ReplayStorage.Memory, 2_400_000_000, WorstCase: false, 1_000_000_000, ExceedsFree: true));
         Assert.Equal("More than the free RAM (1.0 GB). The value is kept; Clips may be shorter.", page.EstimateWarning);
@@ -76,9 +76,45 @@ public sealed class ReplayBufferSettingsPageTests
             ]),
         };
         model.Refresh();
-        Assert.Equal(["H.264", "HEVC (may not play everywhere)"], page.Codecs.Select(c => c.Label));
+        Assert.Equal(["H.264 (plays everywhere)", "HEVC (smaller files) — may not play everywhere"], page.Codecs.Select(c => c.Label));
         Assert.Equal(VideoCodec.H264, page.SelectedCodec?.Codec);
         Assert.Contains(page.Resolutions, r => r.Label == "1920 × 1080");
+    }
+
+    [Fact]
+    public void TheCacheFolderIsEnabledOnlyUnderDiskAndSendsRingPathAndTimeBetweenSaves()
+    {
+        // Story 10.9: the ring path is the cache folder's picker; the Clips folder is D:\Clips.
+        _engine.State = _engine.State! with
+        {
+            Settings = SettingsDocument.Empty with { Revision = 2, Global = SettingsMaps.EmptyValues.Add(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(@"D:\Clips")) },
+        };
+        var updates = new List<SettingsUpdate>();
+        _engine.Reply = (_, args) =>
+        {
+            updates.Add((SettingsUpdate)args);
+            return new SettingsUpdateResult(3);
+        };
+        var page = Create().ReplayBuffer;
+        Assert.Equal("Clips", page.Title);
+        Assert.False(page.CacheFolder.IsEnabled);
+        Assert.Equal("Used only in Disk mode", page.CacheFolder.Caption);
+
+        page.IsDisk = true;
+        Assert.True(page.CacheFolder.IsEnabled);
+
+        page.CacheFolder.Dialog = _ => @"D:\Clips\cache";
+        page.CacheFolder.BrowseCommand.Execute(null);
+        Assert.Equal("The cache folder can't be inside the Clips folder.", page.CacheFolder.Problem);
+
+        var cache = Path.TrimEndingDirectorySeparator(Path.GetTempPath());
+        page.CacheFolder.Dialog = _ => cache;
+        page.CacheFolder.BrowseCommand.Execute(null);
+        page.SaveCooldownText = "7";
+
+        Assert.Equal(
+            [(Keys.ReplayStorage.Name, "\"disk\""), (Keys.RingPath.Name, Keys.RingPath.ToJson(cache).GetRawText()), (Keys.SaveCooldown.Name, "7")],
+            updates.Select(u => Assert.Single(u.Ops)).Select(o => (o.Key, o.Value.GetRawText())));
     }
 
     [Fact]

@@ -5,76 +5,96 @@
              xmlns:theme="clr-namespace:ReplayBuffer.App.Theme">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
+        <theme:EmptyToCollapsedConverter x:Key="GroupHeaderVisible" />
     </UserControl.Resources>
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
-            <HeaderedContentControl Header="Games" Style="{DynamicResource RbSettingsSectionStyle}">
-                <ItemsControl ItemsSource="{Binding Profiles}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBox Text="{Binding Name}" />
-                                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}"
-                                               Text="{Binding ProfileId}"
-                                               TextTrimming="CharacterEllipsis"
-                                               TextWrapping="NoWrap"
-                                               ToolTip="{Binding ProfileId}" />
-                                </StackPanel>
-                                <CheckBox Grid.Column="1"
-                                          FontSize="{DynamicResource BodyTextBlockFontSize}"
-                                          Margin="12,4,0,0"
-                                          VerticalAlignment="Top"
-                                          Content="Ignored"
-                                          IsChecked="{Binding Ignored}" />
-                                <CheckBox Grid.Column="2"
-                                          FontSize="{DynamicResource BodyTextBlockFontSize}"
-                                          Margin="12,4,0,0"
-                                          VerticalAlignment="Top"
-                                          Content="Recordings"
-                                          IsChecked="{Binding RecordingsEnabled}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </HeaderedContentControl>
-
-            <HeaderedContentControl Header="Add a game by hand" Style="{DynamicResource RbSettingsSectionStyle}">
-                <DockPanel>
-                    <Button Command="{Binding AddCommand}"
-                            Content="Add"
-                            DockPanel.Dock="Right"
-                            Margin="6,0,0,0" />
-                    <Button Click="Browse"
-                            Content="Browse..."
-                            DockPanel.Dock="Right"
-                            Margin="6,0,0,0" />
-                    <TextBox Text="{Binding AddPath, UpdateSourceTrigger=PropertyChanged}" />
+    <Grid>
+        <!-- The list; hidden, not removed, while a game's page is open, so its scroll and selection stay. -->
+        <ScrollViewer x:Name="ListScroller"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
+                <DockPanel Margin="0,0,0,12">
+                    <Button Margin="12,0,0,0"
+                            VerticalAlignment="Top"
+                            Command="{Binding AddGame.BrowseCommand}"
+                            Content="Add a game…"
+                            DockPanel.Dock="Right" />
+                    <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="Games are found when you play them. Each one uses the main settings unless you change them on its page."
+                               TextWrapping="Wrap" />
                 </DockPanel>
-            </HeaderedContentControl>
+                <TextBlock Margin="0,8"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="No games yet. Play a game and it appears here, or add one by hand."
+                           TextWrapping="Wrap"
+                           Visibility="{Binding IsEmpty, Converter={StaticResource Visible}}" />
+                <ListBox x:Name="GameList"
+                         AutomationProperties.Name="Games"
+                         Background="{DynamicResource SubtleFillColorTransparentBrush}"
+                         BorderThickness="0"
+                         ItemContainerStyle="{DynamicResource RbGameRowStyle}"
+                         ItemsSource="{Binding Profiles}"
+                         KeyDown="OnListKeyDown"
+                         MouseLeftButtonUp="OnListClick"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                         SelectionMode="Single"
+                         TextSearch.TextPath="Name">
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <ItemsPresenter />
+                        </ControlTemplate>
+                    </ListBox.Template>
+                    <ListBox.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <ContentControl Margin="0,12,0,8"
+                                                    Content="{Binding Name}"
+                                                    Style="{DynamicResource RbSectionHeaderStyle}"
+                                                    Visibility="{Binding Name, Converter={StaticResource GroupHeaderVisible}}" />
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListBox.GroupStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel>
+                                <Border DockPanel.Dock="Left" Style="{DynamicResource RbGameIconTileStyle}">
+                                    <Grid>
+                                        <TextBlock HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                                   Text="{Binding Initial}" />
+                                        <Image Source="{Binding Icon}" Stretch="Uniform" Visibility="{Binding HasIcon, Converter={StaticResource Visible}}" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock DockPanel.Dock="Right" Style="{DynamicResource RbGamesChevronStyle}" />
+                                <Border DockPanel.Dock="Right"
+                                        Style="{DynamicResource RbGamesUnsavedDotStyle}"
+                                        ToolTip="Unsaved changes"
+                                        Visibility="{Binding HasUnsavedChanges, Converter={StaticResource Visible}}" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{DynamicResource RbGameNameStyle}" Text="{Binding Name}" />
+                                    <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
+                                        <TextBlock Style="{DynamicResource RbGameCaptionStyle}" Text="{Binding Caption}" />
+                                        <Border Style="{DynamicResource RbPillAccentStyle}" Visibility="{Binding IsCapturing, Converter={StaticResource Visible}}">
+                                            <TextBlock Text="Capturing now" />
+                                        </Border>
+                                        <Border Style="{DynamicResource RbPillNeutralStyle}" Visibility="{Binding Ignored, Converter={StaticResource Visible}}">
+                                            <TextBlock Text="Not captured" />
+                                        </Border>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </theme:SettingsContent>
+        </ScrollViewer>
 
-            <HeaderedContentControl Header="Overrides for" Style="{DynamicResource RbSettingsSectionStyle}">
-                <StackPanel>
-                    <ComboBox DisplayMemberPath="Name"
-                              ItemsSource="{Binding Profiles}"
-                              SelectedItem="{Binding SelectedProfile}" />
-                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}"
-                               Text="Changes to a game's settings apply at the next Reset of its Replay Buffer."
-                               Visibility="{Binding HasSelectedProfile, Converter={StaticResource Visible}}" />
-                </StackPanel>
-            </HeaderedContentControl>
-
-            <!-- The embedded views carry their own section cards, so they follow the Overrides card, not inside it. -->
-            <StackPanel Visibility="{Binding HasSelectedProfile, Converter={StaticResource Visible}}">
-                <ContentControl Content="{Binding OverrideOutput.View}" />
-                <ContentControl Margin="0,0,0,8" Content="Track Layout" Style="{DynamicResource RbSectionHeaderStyle}" />
-                <ContentControl Content="{Binding OverrideTrackLayout.View}" />
-            </StackPanel>
-        </theme:SettingsContent>
-    </ScrollViewer>
+        <!-- A game's page, in place of the list. -->
+        <ContentControl x:Name="GameHost" Focusable="False" />
+    </Grid>
 </UserControl>

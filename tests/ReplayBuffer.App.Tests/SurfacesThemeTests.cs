@@ -137,7 +137,8 @@ public sealed class SurfacesThemeTests
             var library = new LibraryPage(engine);
             var item = new LibraryItem(@"Game\clip.mp4", null, 48, DateTimeOffset.UnixEpoch, false);
             library.Render(engine.State! with { LibraryFolder = folder, Library = [item] });
-            library.Rows[0].DeleteCommand.Execute(null);
+            library.Click(library.Rows[0], ctrl: false, shift: false);
+            library.DeleteCommand.Execute(null);
             Sta.Pump(TimeSpan.FromMilliseconds(50));
             Assert.IsType<LibraryDelete>(Assert.Single(engine.Sent));
 
@@ -150,7 +151,7 @@ public sealed class SurfacesThemeTests
             Directory.Delete(folder, recursive: true);
         }
 
-        Assert.Equal([("Delete", "Move “clip.mp4” to the Recycle Bin?", null), ("Library and Cleanup", "Delete 3 Clips?", null)], asked);
+        Assert.Equal([("Delete", "Move “clip.mp4” to the Recycle Bin?", null), ("Storage and Cleanup", "Delete 3 Clips?", null)], asked);
     });
 
     [Fact]

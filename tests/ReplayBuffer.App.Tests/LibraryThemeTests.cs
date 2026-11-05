@@ -16,7 +16,7 @@ using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Tests;
 
-/// <summary>The Library restyled (story 9.4): its rows, banner and empty state, in both themes.</summary>
+/// <summary>The Library restyled (story 9.4) and selectable (story 10.2): its rows, banner, empty state, selection and command bar, in both themes.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class LibraryThemeTests
 {
@@ -55,28 +55,61 @@ public sealed class LibraryThemeTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
+            var page = model.Library;
             foreach (var which in new[] { AppTheme.Fluent, AppTheme.GamingDark })
             {
+                var name = which == AppTheme.Fluent ? "fluent" : "gaming-dark";
+                page.ClearSelection();
                 theme.Apply(which);
                 window.Show();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
 
-                var view = (LibraryView)model.Library.View;
-                Assert.True(view.IsLoaded, $"The Library didn't load under {which}");
+                var view = (LibraryView)page.View;
+                Sta.PumpUntil(() => view.IsLoaded, $"the Library to load under {which}");
                 Assert.Equal(Visibility.Visible, ((FrameworkElement)view.FindName("Banner")).Visibility);
+                var bar = (FrameworkElement)view.FindName("CommandBar");
+                Assert.Equal((true, 40.0), (bar.IsVisible, bar.ActualHeight));
 
-                var list = (ItemsControl)view.FindName("List");
+                var list = (ListBox)view.FindName("List");
                 Assert.True(VirtualizingPanel.GetIsVirtualizing(list));
                 Assert.Single(Descendants<VirtualizingStackPanel>(list));
 
-                var rows = model.Library.Rows.ToDictionary(r => r.Name);
+                var rows = page.Rows.ToDictionary(r => r.Name);
                 var ace = RowCard(list, rows["ace.mp4"]);
                 Assert.Same(window.FindResource("RbLibraryRowStyle"), ace.Style);
                 Assert.True(Descendants<ToggleButton>(ace).Single().IsChecked);
                 Assert.False(Descendants<ToggleButton>(RowCard(list, rows["no-thumbnail.mp4"])).Single().IsChecked);
                 Assert.Contains(Descendants<TextBlock>(RowCard(list, rows["saving.mp4"])), t => t.Text == "Saving…" && t.IsVisible);
 
-                Save(window, $"library-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
+                Save(window, $"library-{name}.png");
+
+                // Story 10.2: two rows selected, the second focused, with keyboard focus in the list.
+                page.Click(rows["ace.mp4"], ctrl: false, shift: false);
+                page.Click(rows["no-thumbnail.mp4"], ctrl: true, shift: false);
+                window.Activate();
+                Container(list, rows["no-thumbnail.mp4"]).Focus();
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+                Sta.PumpUntil(() => Descendants<TextBlock>(bar).Any(t => t.Text == "2 selected" && t.IsVisible), "\"2 selected\" in the command bar");
+
+                Assert.Equal((true, 40.0), (bar.IsVisible, bar.ActualHeight));
+                var selected = (SolidColorBrush)window.FindResource("RbLibraryRowSelectedBrush");
+                Assert.Equal((selected.Color, selected.Opacity), Fill(RowCard(list, rows["ace.mp4"])));
+                Assert.NotEqual(Fill(RowCard(list, rows["saving.mp4"])), Fill(RowCard(list, rows["ace.mp4"])));
+                Assert.True(VirtualizingPanel.GetIsVirtualizing(list));
+                Assert.Single(Descendants<VirtualizingStackPanel>(list));
+
+                Save(window, $"library-selected-{name}.png");
+
+                // Story 10.3: a search with Largest first and Group by None, nothing selected.
+                page.ClearSelection();
+                (page.GroupBy, page.Sort, page.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "a");
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+                Assert.Equal("a", ((TextBox)view.FindName("SearchBox")).Text);
+                Assert.Equal(["ace.mp4", "no-thumbnail.mp4", "saving.mp4"], page.Entries.Cast<LibraryRow>().Select(r => r.Name));
+                Assert.Equal(Visibility.Collapsed, ((FrameworkElement)view.FindName("NoResultsMessage")).Visibility);
+                Save(window, $"library-search-{name}.png");
+                (page.GroupBy, page.Sort, page.SearchText) = (LibraryGrouping.Game, LibrarySort.NewestFirst, "");
+                list.ScrollIntoView(page.Entries[0]);
             }
         }
         finally
@@ -96,7 +129,7 @@ public sealed class LibraryThemeTests
         var page = new LibraryPage(engine);
         var view = (LibraryView)page.View;
         Layout(view);
-        var empty = (TextBlock)view.FindName("EmptyMessage");
+        var empty = (FrameworkElement)view.FindName("EmptyMessage");
 
         Assert.Equal(Visibility.Visible, empty.Visibility);
         page.FavouritesOnly = true;
@@ -106,6 +139,16 @@ public sealed class LibraryThemeTests
         page.Render(engine.State! with { Library = [new LibraryItem("clip.mp4", null, 1024, Day, false, 10, Modified: Day)] });
         Layout(view);
         Assert.Equal(Visibility.Collapsed, empty.Visibility);
+
+        // Story 10.3: a search that matches nothing says so, apart from the empty Library's message.
+        var noResults = (TextBlock)view.FindName("NoResultsMessage");
+        Assert.Equal(Visibility.Collapsed, noResults.Visibility);
+        page.SearchText = "zzz";
+        Layout(view);
+        Assert.Equal((Visibility.Visible, "No items match \u201czzz\u201d.", Visibility.Collapsed), (noResults.Visibility, noResults.Text, empty.Visibility));
+        page.SearchText = "";
+        Layout(view);
+
         var star = Descendants<ToggleButton>((ItemsControl)view.FindName("List")).Single();
         Assert.False(star.IsChecked);
 
@@ -122,6 +165,57 @@ public sealed class LibraryThemeTests
         Assert.True(star.IsChecked);
     });
 
+    [Fact]
+    public void TheWelcomeCardABadgedRowAndTheStatusHintLoadInBothThemes() => Sta.Run(() =>
+    {
+        // Story 10.6: the welcome card on an empty Library, then a Recording's badge and the header's hint.
+        var engine = new FakeEngineSession { Reply = (_, _) => Empty.Value };
+        var settings = SettingsDocument.Empty with
+        {
+            Global = SettingsMaps.EmptyValues
+                .Add(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(30))
+                .Add(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(new HotkeySettings(new HotkeyBinding(0x79, HotkeyModifiers.Alt), null, null, null, null, null))),
+        };
+        engine.State = engine.State! with { Settings = settings, LibraryFolder = @"C:\Users\sam\Videos\ReplayBuffer" };
+        var model = new MainViewModel(engine, action => action());
+        var window = new MainWindow { DataContext = model, WindowStartupLocation = WindowStartupLocation.Manual, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
+        var theme = ThemeService.ForWindow(window);
+        try
+        {
+            foreach (var which in new[] { AppTheme.Fluent, AppTheme.GamingDark })
+            {
+                var name = which == AppTheme.Fluent ? "fluent" : "gaming-dark";
+                engine.State = engine.State! with { Library = [], Capture = CaptureState.Initial };
+                engine.RaiseChanged();
+                theme.Apply(which);
+                window.Show();
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+                var view = (LibraryView)model.Library.View;
+                Sta.PumpUntil(() => view.IsLoaded, $"the Library to load under {which}");
+                Assert.True(((FrameworkElement)view.FindName("EmptyMessage")).IsVisible);
+                Save(window, $"library-welcome-{name}.png");
+
+                engine.State = engine.State with
+                {
+                    Seq = engine.State.Seq + 1,
+                    TargetGame = new TargetGame(@"c:\g\valorant.exe", "Valorant", 7),
+                    Capture = CaptureState.Initial with { Replay = ReplayState.Buffering, MicMuted = false },
+                    Library = [new LibraryItem(@"Valorant\match.mp4", null, 48L << 20, Day, false, 1800, Modified: Day, Kind: LibraryItemKinds.Recording)],
+                };
+                engine.RaiseChanged();
+                Sta.Pump(TimeSpan.FromMilliseconds(100));
+                Assert.False(((FrameworkElement)view.FindName("EmptyMessage")).IsVisible);
+                Assert.Equal("· Alt+F10 saves the last 30 s", model.StatusLine.Hint);
+                Assert.Contains(Descendants<TextBlock>(view), t => t.Text == "Recording" && t.IsVisible);
+                Save(window, $"library-badge-hint-{name}.png");
+            }
+        }
+        finally
+        {
+            window.CloseForQuit();
+        }
+    });
+
     private static void Layout(FrameworkElement view)
     {
         view.Measure(new Size(600, 400));
@@ -129,11 +223,30 @@ public sealed class LibraryThemeTests
         view.UpdateLayout();
     }
 
-    private static Border RowCard(ItemsControl list, LibraryRow row)
+    // The row's card: the first child of its template's root, inside the ListBoxItem container.
+    private static Border RowCard(ListBox list, LibraryRow row)
     {
-        var container = (ContentPresenter)list.ItemContainerGenerator.ContainerFromItem(row);
-        return (Border)VisualTreeHelper.GetChild(container, 0);
+        var root = (Grid)VisualTreeHelper.GetChild(Descendants<ContentPresenter>(Container(list, row))[0], 0);
+        return (Border)root.Children[0];
     }
+
+    // The row's ListBoxItem once it's realised with its template applied; under load that can take longer than a fixed pump.
+    private static ListBoxItem Container(ListBox list, LibraryRow row)
+    {
+        ListBoxItem? container = null;
+        Sta.PumpUntil(
+            () =>
+            {
+                list.UpdateLayout();
+                container = list.ItemContainerGenerator.ContainerFromItem(row) as ListBoxItem;
+                return container is not null && Descendants<ContentPresenter>(container) is [var presenter, ..] && VisualTreeHelper.GetChildrenCount(presenter) > 0;
+            },
+            $"the row container for {row.Name}");
+        return container!;
+    }
+
+    private static (Color Color, double Opacity) Fill(Border card) =>
+        card.Background is SolidColorBrush brush ? (brush.Color, brush.Opacity) : default;
 
     private static List<T> Descendants<T>(DependencyObject root)
         where T : DependencyObject

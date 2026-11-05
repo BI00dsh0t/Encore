@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -11,12 +10,13 @@ using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Tests;
 
+/// <summary>Audio Tracks (story 10.5; the Track Layout page of story 2.5 before it): the cards, the picker, presets, save bar and meters.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class TrackLayoutPageTests
 {
-    private static readonly AudioDevice Speakers = new("{out-1}", "Speakers", "USB DAC", AudioFlow.Output, true);
+    private static readonly AudioDevice Speakers = new("{out-1}", "Speakers", "USB DAC", AudioFlow.Output, true, IsDefault: true);
     private static readonly AudioDevice Headset = new("{out-2}", "Headset", "Arctis", AudioFlow.Output, true);
-    private static readonly AudioDevice Mic = new("{in-1}", "Microphone", "Arctis", AudioFlow.Input, true);
+    private static readonly AudioDevice Mic = new("{in-1}", "Microphone", "Arctis", AudioFlow.Input, true, IsDefault: true);
 
     private readonly FakeEngineSession _engine = new();
 
@@ -25,102 +25,205 @@ public sealed class TrackLayoutPageTests
     {
         var page = Create().TrackLayout;
 
-        Assert.Empty(page.Devices);
         var track = Assert.Single(page.Tracks);
-        Assert.Equal((Keys.EverythingTrackId, "Everything"), (track.Id, track.Name));
+        Assert.Equal((Keys.EverythingTrackId, "Everything", 1), (track.Id, track.Name, track.Number));
+        Assert.Empty(track.Sources);
+        Assert.Equal("No sounds — this track will be silent", track.Summary);
         Assert.False(page.IsDirty);
-        Assert.Equal("Track Layout", page.Title);
+        Assert.Equal("Audio Tracks", page.Title);
     }
 
     [Fact]
-    public void AddingADeviceJoinsEverythingAndLeavesThePicker()
+    public void ASoundFromThePickerGoesOnThatTrackOnlyAndAnInputIsAMicrophone()
     {
-        SetState(revision: 1, layout: null, Speakers, Headset);
+        SetState(revision: 1, layout: null, Speakers, Headset, Mic);
         var page = Create().TrackLayout;
-        Assert.Equal(2, page.Choices.Count);
+        page.AddTrackCommand.Execute(null);
+        var chat = page.Tracks[1];
 
-        Add(page, Speakers);
+        page.OpenPicker(chat);
+        Assert.Equal(["Sounds from your PC (playback)", "Sounds from your PC (playback)", "Microphones and other inputs"], page.PickerRows.Select(r => r.Section));
+        Assert.Equal(["Windows default", "Arctis", "Windows default"], page.PickerRows.Select(r => r.Caption));
+        page.Pick(page.PickerRows.Single(r => r.Device == Mic));
 
-        var device = Assert.Single(page.Devices);
-        Assert.Equal(("{out-1}", "Speakers", "USB DAC", AudioFlow.Output, false), (device.Device.EndpointId, device.Device.FriendlyName, device.Device.ParentName, device.Device.Flow, device.Device.IsMic));
-        Assert.NotEqual(Guid.Empty, device.Device.Key);
-        Assert.True(device.Available);
-        Assert.Equal([device.Device.Key], page.Tracks[0].DeviceKeys);
-        Assert.Equal([Headset], page.Choices.Select(c => c.Device));
+        Assert.False(page.IsPickerOpen);
+        var layout = page.ToLayout();
+        var mic = Assert.Single(layout.Devices);
+        Assert.True(mic.IsMic);
+        Assert.Empty(layout.Tracks[0].DeviceKeys);
+        Assert.Equal([mic.Key], layout.Tracks[1].DeviceKeys);
+        Assert.Equal(("Microphone", "microphone", "1 sound"), (chat.Sources[0].Label, chat.Sources[0].Kind, chat.Summary));
+        Assert.True(chat.HasMicrophone);
+        Assert.True(page.IsDirty);
+
+        // Ctrl+click keeps the picker open; a sound already on the Track is listed but can't be added.
+        page.OpenPicker(chat);
+        Assert.False(page.PickerRows.Single(r => r.Device == Mic).CanAdd);
+        page.Pick(page.PickerRows.Single(r => r.Device == Speakers), keepOpen: true);
+        Assert.True(page.IsPickerOpen);
+        Assert.True(page.PickerRows.Single(r => r.Device == Speakers).IsAdded);
+        Assert.Equal(2, chat.Sources.Count);
+    }
+
+    [Fact]
+    public void RemovingASoundFromItsLastTrackDropsItFromTheSavedLayout()
+    {
+        SetState(revision: 1, layout: null, Speakers);
+        var page = Create().TrackLayout;
+        page.AddTrackCommand.Execute(null);
+        page.AddSound(page.Tracks[0], Speakers);
+        page.AddSound(page.Tracks[1], Speakers);
+        var key = Assert.Single(page.ToLayout().Devices).Key;
+        Assert.Equal([key], page.ToLayout().Tracks[1].DeviceKeys);
+
+        page.RemoveSound(page.Tracks[0], page.Tracks[0].Sources[0]);
+        Assert.Single(page.ToLayout().Devices);
+
+        page.RemoveSound(page.Tracks[1], page.Tracks[1].Sources[0]);
+        Assert.Empty(page.ToLayout().Devices);
+    }
+
+    [Fact]
+    public void MoveUpAndDownReorderTheTracksKeepingTheirIds()
+    {
+        var page = Create().TrackLayout;
+        page.AddTrackCommand.Execute(null);
+        var a = page.Tracks[1];
+        Assert.Equal("Track 2", a.Name);
+        page.AddTrackCommand.Execute(null);
+        var b = page.Tracks[2];
+        b.Name = "Chat";
+
+        b.MoveUpCommand.Execute(null);
+        Assert.Equal([Keys.EverythingTrackId, b.Id, a.Id], page.ToLayout().Tracks.Select(t => t.Id));
+        Assert.Equal([1, 2, 3], page.Tracks.Select(t => t.Number));
+        page.Tracks[0].MoveUpCommand.Execute(null);
+        a.MoveDownCommand.Execute(null);
+        Assert.Equal([Keys.EverythingTrackId, b.Id, a.Id], page.ToLayout().Tracks.Select(t => t.Id));
+
+        // An empty Track is removed without asking.
+        page.Confirm = (_, _) => throw new InvalidOperationException("Asked.");
+        a.RemoveCommand.Execute(null);
+        Assert.Equal([(Keys.EverythingTrackId, "Everything", true), (b.Id, "Chat", false)], page.ToLayout().Tracks.Select(t => (t.Id, t.Name, t.MuteAffected)));
+    }
+
+    [Fact]
+    public void RemovingATrackWithSoundsAsksFirst()
+    {
+        SetState(revision: 1, layout: null, Speakers);
+        var page = Create().TrackLayout;
+        page.AddSound(page.Tracks[0], Speakers);
+        var asked = new List<string>();
+        page.Confirm = (message, _) =>
+        {
+            asked.Add(message);
+            return false;
+        };
+
+        page.Tracks[0].RemoveCommand.Execute(null);
+        Assert.Single(page.Tracks);
+        page.Confirm = (_, _) => true;
+        page.Tracks[0].RemoveCommand.Execute(null);
+
+        Assert.Equal(["Remove \"Everything\" and its 1 sound?"], asked);
+        Assert.True(page.HasNoTracks);
+    }
+
+    [Fact]
+    public void TreatAsAMicrophoneAndTheMuteSwitchSetIsMicAndMuteAffected()
+    {
+        SetState(revision: 1, layout: null, Speakers, Mic);
+        _engine.Reply = (_, _) => new SettingsUpdateResult(2);
+        var page = Create().TrackLayout;
+        page.AddTrackCommand.Execute(null);
+        var chat = page.Tracks[1];
+        chat.Name = "Chat";
+        page.AddSound(page.Tracks[0], Mic);
+        page.AddSound(chat, Mic);
+        page.AddSound(chat, Speakers);
+        Assert.Equal([true, false], chat.Sources.Select(s => s.CanBeMic));
+
+        // One record: unmarking it on one Track unmarks it on both, and hides the mute switch.
+        chat.Sources[0].IsMic = false;
+        Assert.False(page.Tracks[0].Sources[0].IsMic);
+        Assert.Equal("input", page.Tracks[0].Sources[0].Kind);
+        Assert.False(chat.HasMicrophone);
+        chat.Sources[0].IsMic = true;
+        Assert.True(chat.HasMicrophone);
+        chat.MuteAffected = true;
+        page.SaveCommand.Execute(null);
+
+        var op = Assert.Single(Assert.IsType<SettingsUpdate>(Assert.Single(_engine.Sent)).Ops);
+        Assert.True(Keys.TrackLayout.TryRead(op.Value, out var saved));
+        Assert.Equal([("{in-1}", true), ("{out-1}", false)], saved.Devices.Select(d => (d.EndpointId, d.IsMic)));
+        Assert.Equal([(Keys.EverythingTrackId, true), (chat.Id, true)], saved.Tracks.Select(t => (t.Id, t.MuteAffected)));
+    }
+
+    [Fact]
+    public void APresetReplacesTheDraftOnlyAfterItsConfirmation()
+    {
+        SetState(revision: 1, layout: null, Speakers, Headset, Mic);
+        var page = Create().TrackLayout;
+        string? asked = null;
+        page.Confirm = (message, _) =>
+        {
+            asked = message;
+            return false;
+        };
+
+        page.ApplyPresetCommand.Execute(TrackLayoutPreset.ForEditing);
+        Assert.Equal("Replace your audio tracks with For editing?", asked);
+        Assert.Single(page.Tracks);
+        Assert.False(page.IsDirty);
+
+        page.Confirm = (_, _) => true;
+        page.ApplyPresetCommand.Execute(TrackLayoutPreset.ForEditing);
+
+        Assert.Equal(["Everything", "Game and chat", "Microphone"], page.Tracks.Select(t => t.Name));
+        Assert.Equal(Keys.EverythingTrackId, page.Tracks[0].Id);
+        Assert.Equal([["Speakers", "Microphone"], ["Speakers"], ["Microphone"]], page.Tracks.Select(t => t.Sources.Select(s => s.Label).ToArray()));
         Assert.True(page.IsDirty);
     }
 
     [Fact]
-    public void UncheckingADeviceOnEverythingKeepsItInTheLayout()
+    public void TheSaveBarAndNavDotShowWhileDirtyAndDiscardRestoresTheSavedLayout()
     {
-        SetState(revision: 1, layout: null, Speakers);
-        var page = Create().TrackLayout;
-        Add(page, Speakers);
+        var device = new LayoutDevice(Guid.NewGuid(), "{out-1}", "Speakers", "USB DAC", AudioFlow.Output, IsMic: false);
+        var rendered = new TrackLayout([device], [new Track(Keys.EverythingTrackId, "All", [device.Key], MuteAffected: true)]);
+        SetState(revision: 3, layout: rendered, Speakers);
+        var model = Create();
+        var page = model.TrackLayout;
+        var nav = model.NavItems.Single(i => i.Page == page);
+        Assert.False(page.IsDirty);
+        Assert.False(nav.HasUnsavedChanges);
 
-        page.Tracks[0].Checks.Single().IsChecked = false;
+        page.Tracks[0].Name = "Renamed";
+        page.AddTrackCommand.Execute(null);
+        Assert.True(page.IsDirty);
+        Assert.True(nav.HasUnsavedChanges);
 
-        Assert.Empty(page.ToLayout().Tracks[0].DeviceKeys);
-        Assert.Single(page.ToLayout().Devices);
+        page.DiscardCommand.Execute(null);
+
+        Assert.False(page.IsDirty);
+        Assert.False(nav.HasUnsavedChanges);
+        Assert.Equal(Json(rendered), Json(page.ToLayout()));
     }
 
     [Fact]
-    public void RemovingADeviceTakesItOutOfEveryTrack()
+    public void AGameUsingTheMainTracksShowsAReadOnlySummary()
     {
-        SetState(revision: 1, layout: null, Speakers, Headset);
-        var page = Create().TrackLayout;
-        Add(page, Speakers);
-        Add(page, Headset);
-        page.AddTrackCommand.Execute(null);
-        page.SelectedTrack!.Checks[0].IsChecked = true;
+        var speakers = new LayoutDevice(Guid.NewGuid(), "{out-1}", "Speakers", "USB DAC", AudioFlow.Output, IsMic: false);
+        var mic = new LayoutDevice(Guid.NewGuid(), "{in-1}", "Microphone", "Arctis", AudioFlow.Input, IsMic: true);
+        var main = new TrackLayout(
+            [speakers, mic],
+            [new Track(Keys.EverythingTrackId, "Everything", [speakers.Key, mic.Key], true), new Track(Guid.NewGuid(), "Chat", [], false)]);
+        var profile = new TrackLayoutPage(new SettingsSender(_engine), _engine, @"c:\games\game.exe");
 
-        page.SelectedDevice = page.Devices[0];
-        page.RemoveDeviceCommand.Execute(null);
+        profile.Render(Document(1, main));
 
-        var layout = page.ToLayout();
-        var remaining = Assert.Single(layout.Devices);
-        Assert.Equal("{out-2}", remaining.EndpointId);
-        Assert.All(layout.Tracks, t => Assert.DoesNotContain(t.DeviceKeys, k => k != remaining.Key));
-        Assert.Single(page.Tracks[1].Checks);
-        Assert.Contains(page.Choices, c => c.Device == Speakers);
-    }
-
-    [Fact]
-    public void TrackEditsKeepIdsAndOrder()
-    {
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
-        var a = page.SelectedTrack!;
-        Assert.Equal("Track 2", a.Name);
-        page.AddTrackCommand.Execute(null);
-        var b = page.SelectedTrack!;
-        b.Name = "Chat";
-
-        page.MoveDownCommand.Execute(null);
-        Assert.Equal(2, page.Tracks.IndexOf(b));
-        page.MoveUpCommand.Execute(null);
-        page.SelectedTrack = page.Tracks[0];
-        page.MoveUpCommand.Execute(null);
-        Assert.Equal([Keys.EverythingTrackId, b.Id, a.Id], page.ToLayout().Tracks.Select(t => t.Id));
-
-        page.SelectedTrack = a;
-        page.DeleteTrackCommand.Execute(null);
-
-        var tracks = page.ToLayout().Tracks;
-        Assert.Equal([(Keys.EverythingTrackId, "Everything", true), (b.Id, "Chat", false)], tracks.Select(t => (t.Id, t.Name, t.MuteAffected)));
-    }
-
-    [Fact]
-    public void CheckingADeviceOnATrackAddsItsKey()
-    {
-        SetState(revision: 1, layout: null, Speakers);
-        var page = Create().TrackLayout;
-        Add(page, Speakers);
-        page.AddTrackCommand.Execute(null);
-
-        page.SelectedTrack!.Checks[0].IsChecked = true;
-
-        Assert.Equal([page.Devices[0].Device.Key], page.ToLayout().Tracks[1].DeviceKeys);
-        Assert.True(page.SelectedTrack.Checks[0].IsChecked);
+        Assert.True(profile.ShowsSummary);
+        Assert.False(profile.CanEdit);
+        Assert.Equal(["1  Everything: Speakers, Microphone", "2  Chat: no sounds"], profile.Summary);
     }
 
     [Fact]
@@ -131,45 +234,31 @@ public sealed class TrackLayoutPageTests
         SetState(revision: 1, layout: null, a, b, Mic);
         var page = Create().TrackLayout;
 
-        Assert.Equal(["Speakers — Realtek (Output)", "speakers — USB DAC (Output)", "Microphone (Input)"], page.Choices.Select(c => c.Label));
+        page.OpenPicker(page.Tracks[0]);
+        Assert.Equal(["Speakers (Realtek)", "speakers (USB DAC)", "Microphone"], page.PickerRows.Select(r => r.Label));
 
-        Add(page, a);
-        Assert.Equal("Speakers — Realtek (Output)", page.Devices[0].Label);
+        page.Pick(page.PickerRows[0]);
+        Assert.Equal("Speakers (Realtek)", page.Tracks[0].Sources[0].Label);
     }
 
     [Fact]
-    public void AnUnpluggedLayoutDeviceShowsAsUnavailableAndTheDraftIsKept()
+    public void AnUnpluggedSourceShowsAsNotConnectedAndTheDraftIsKept()
     {
         SetState(revision: 1, layout: null, Speakers, Headset, Mic);
-        var model = Create();
-        var page = model.TrackLayout;
-        Add(page, Speakers);
-        Add(page, Headset);
+        var page = Create().TrackLayout;
+        page.AddSound(page.Tracks[0], Speakers);
+        page.AddSound(page.Tracks[0], Headset);
         var draft = page.ToLayout();
 
         _engine.State = _engine.State! with { Seq = 2, Devices = new AudioDeviceList([Speakers, Mic]) };
         _engine.RaiseChanged();
 
-        Assert.False(page.Devices[1].Available);
-        Assert.Equal("unavailable", page.Devices[1].Note);
-        Assert.True(page.Devices[0].Available);
+        var sources = page.Tracks[0].Sources;
+        Assert.False(sources[1].Available);
+        Assert.Equal("Not connected — records silence until it's back", sources[1].Note);
+        Assert.True(sources[0].Available);
         Assert.Equal(Json(draft), Json(page.ToLayout()));
-
-        _engine.State = _engine.State with { Seq = 3, Devices = new AudioDeviceList([Speakers, Headset with { Available = false }, Mic]) };
-        _engine.RaiseChanged();
-
-        Assert.False(page.Devices[1].Available);
         Assert.True(page.IsDirty);
-    }
-
-    [Fact]
-    public void AnAbsentListedDeviceIsOfferedAsUnavailable()
-    {
-        SetState(revision: 1, layout: null, Speakers with { Available = false });
-        var page = Create().TrackLayout;
-
-        var choice = Assert.Single(page.Choices);
-        Assert.Equal("unavailable", choice.Note);
     }
 
     [Fact]
@@ -178,14 +267,16 @@ public sealed class TrackLayoutPageTests
         SetState(revision: 4, layout: null, Speakers, Headset, Mic);
         _engine.Reply = (_, _) => new SettingsUpdateResult(5);
         var page = Create().TrackLayout;
-        Add(page, Speakers);
-        Add(page, Headset);
-        Add(page, Mic);
-        foreach (var (name, device) in new[] { ("Game", 0), ("Chat", 1), ("Mic", 2) })
+        foreach (var device in new[] { Speakers, Headset, Mic })
+        {
+            page.AddSound(page.Tracks[0], device);
+        }
+
+        foreach (var (name, device) in new[] { ("Game", Speakers), ("Chat", Headset), ("Mic", Mic) })
         {
             page.AddTrackCommand.Execute(null);
-            page.SelectedTrack!.Name = name;
-            page.SelectedTrack.Checks[device].IsChecked = true;
+            page.Tracks[^1].Name = name;
+            page.AddSound(page.Tracks[^1], device);
         }
 
         page.SaveCommand.Execute(null);
@@ -199,9 +290,7 @@ public sealed class TrackLayoutPageTests
         Assert.Equal(["{out-1}", "{out-2}", "{in-1}"], saved.Devices.Select(d => d.EndpointId));
         Assert.Equal(["Everything", "Game", "Chat", "Mic"], saved.Tracks.Select(t => t.Name));
         Assert.Equal(keys, saved.Tracks[0].DeviceKeys);
-        Assert.Equal([keys[0]], saved.Tracks[1].DeviceKeys);
-        Assert.Equal([keys[1]], saved.Tracks[2].DeviceKeys);
-        Assert.Equal([keys[2]], saved.Tracks[3].DeviceKeys);
+        Assert.Equal([[keys[0]], [keys[1]], [keys[2]]], saved.Tracks.Skip(1).Select(t => t.DeviceKeys.ToArray()));
         Assert.Equal(Keys.EverythingTrackId, saved.Tracks[0].Id);
         Assert.True(page.IsDirty);
 
@@ -233,7 +322,7 @@ public sealed class TrackLayoutPageTests
     }
 
     [Fact]
-    public void ABlankTrackNameRefusesTheSave()
+    public void ABlankTrackNameRefusesTheSaveOnTheBarAndOutlinesTheName()
     {
         var page = Create().TrackLayout;
         page.Tracks[0].Name = "  ";
@@ -241,8 +330,13 @@ public sealed class TrackLayoutPageTests
         page.SaveCommand.Execute(null);
 
         Assert.Empty(_engine.Sent);
-        Assert.Contains("needs a name", page.Message);
+        Assert.Equal("Give every track a name to save.", page.SaveProblem);
+        Assert.True(page.Tracks[0].HasNameProblem);
         Assert.True(page.IsDirty);
+
+        page.Tracks[0].Name = "All";
+        Assert.Null(page.SaveProblem);
+        Assert.False(page.Tracks[0].HasNameProblem);
     }
 
     [Fact]
@@ -294,7 +388,24 @@ public sealed class TrackLayoutPageTests
 
         Assert.Equal(Json(elsewhere), Json(page.ToLayout()));
         Assert.False(page.IsDirty);
-        Assert.Equal("The Track Layout changed elsewhere, so this page reloaded it.", page.Message);
+        Assert.Equal("Audio tracks were changed somewhere else, so this page shows the new ones.", page.Message);
+    }
+
+    [Fact]
+    public void AReloadClosesThePickerSoNoPickLandsOnAStaleTrack()
+    {
+        // QA 10.5: a settings.changed on a clean page rebuilds the cards.
+        SetState(revision: 1, layout: null, Speakers);
+        var page = Create().TrackLayout;
+        page.OpenPicker(page.Tracks[0]);
+
+        _engine.State = _engine.State! with { Seq = 2, Settings = Document(2, null) with { Global = SettingsMaps.EmptyValues.Add(Keys.StartWithWindows.Name, Keys.StartWithWindows.ToJson(true)) } };
+        _engine.RaiseChanged();
+
+        Assert.False(page.IsPickerOpen);
+        page.OpenPicker(page.Tracks[0]);
+        page.Pick(page.PickerRows.Single());
+        Assert.Single(page.ToLayout().Tracks[0].DeviceKeys);
     }
 
     [Fact]
@@ -322,53 +433,6 @@ public sealed class TrackLayoutPageTests
     }
 
     [Fact]
-    public void RevertReturnsToTheRenderedLayout()
-    {
-        var device = new LayoutDevice(Guid.NewGuid(), "{out-1}", "Speakers", "USB DAC", AudioFlow.Output, IsMic: true);
-        var rendered = new TrackLayout([device], [new Track(Keys.EverythingTrackId, "All", [device.Key], MuteAffected: true)]);
-        SetState(revision: 3, layout: rendered, Speakers);
-        var page = Create().TrackLayout;
-        Assert.False(page.IsDirty);
-
-        page.Tracks[0].Name = "Renamed";
-        page.AddTrackCommand.Execute(null);
-        Assert.True(page.IsDirty);
-        page.RevertCommand.Execute(null);
-
-        Assert.False(page.IsDirty);
-        Assert.Equal(Json(rendered), Json(page.ToLayout()));
-    }
-
-    [Fact]
-    public void MarkingAMicAndAMuteAffectedTrackSavesThemWithTheSameKeysAndIds()
-    {
-        SetState(revision: 1, layout: null, Speakers, Headset, Mic);
-        _engine.Reply = (_, _) => new SettingsUpdateResult(2);
-        var page = Create().TrackLayout;
-        Add(page, Speakers);
-        Add(page, Headset);
-        Add(page, Mic);
-        var keys = page.Devices.Select(d => d.Device.Key).ToArray();
-        Assert.Equal([false, false, true], page.Devices.Select(d => d.CanBeMic));
-
-        page.Devices[2].IsMic = true;
-        page.AddTrackCommand.Execute(null);
-        var chat = page.SelectedTrack!;
-        chat.Name = "Chat";
-        chat.Checks[2].IsChecked = true;
-        chat.MuteAffected = true;
-        Assert.True(page.IsDirty);
-        page.SaveCommand.Execute(null);
-
-        var op = Assert.Single(Assert.IsType<SettingsUpdate>(Assert.Single(_engine.Sent)).Ops);
-        Assert.True(Keys.TrackLayout.TryRead(op.Value, out var saved));
-        Assert.Equal(keys, saved.Devices.Select(d => d.Key));
-        Assert.Equal([false, false, true], saved.Devices.Select(d => d.IsMic));
-        var everything = Keys.TrackLayout.Default.Tracks[0];
-        Assert.Equal([(everything.Id, everything.MuteAffected), (chat.Id, true)], saved.Tracks.Select(t => (t.Id, t.MuteAffected)));
-    }
-
-    [Fact]
     public void OutputsFromTwoParentsOnATrackWarnButStillSave()
     {
         var speakers = new LayoutDevice(Guid.NewGuid(), "{out-1}", "Speakers", "USB DAC", AudioFlow.Output, IsMic: false);
@@ -385,7 +449,7 @@ public sealed class TrackLayoutPageTests
         _engine.Reply = (_, _) => new SettingsUpdateResult(2);
         var page = Create().TrackLayout;
 
-        Assert.Equal("May count audio twice: mixes outputs from USB DAC, Arctis.", page.Tracks[0].Warning);
+        Assert.Equal("You may hear some sounds twice: USB DAC and Arctis can both carry the same audio.", page.Tracks[0].Warning);
         Assert.True(page.Tracks[0].HasWarning);
         Assert.Equal(["", ""], page.Tracks.Skip(1).Select(t => t.Warning));
 
@@ -393,7 +457,7 @@ public sealed class TrackLayoutPageTests
         page.SaveCommand.Execute(null);
         Assert.Single(_engine.Sent);
 
-        page.Tracks[0].Checks[1].IsChecked = false;
+        page.RemoveSound(page.Tracks[0], page.Tracks[0].Sources[1]);
         Assert.Equal("", page.Tracks[0].Warning);
     }
 
@@ -413,7 +477,7 @@ public sealed class TrackLayoutPageTests
         Assert.Equal(3, draft.Tracks.Count);
         Assert.Equal(Json(page.ToLayout()), Json(draft));
 
-        page.SelectedTrack!.Name = "Renamed";
+        page.Tracks[^1].Name = "Renamed";
         Assert.Equal(2, _engine.Sent.Count);
 
         _engine.State = _engine.State! with
@@ -431,6 +495,55 @@ public sealed class TrackLayoutPageTests
         _engine.RaiseChanged();
         Assert.Equal(3, _engine.Sent.Count);
         Assert.Equal(Json(page.ToLayout()), Json(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout));
+    }
+
+    [Fact]
+    public void EachSourceAndPickerRowShowsItsOwnLevelFromItsProbe()
+    {
+        var model = CreateMetered(out _);
+        _engine.State = _engine.State! with { Devices = new AudioDeviceList([Speakers, Headset, Mic]) };
+        _engine.RaiseChanged();
+        Open(model);
+        var page = model.TrackLayout;
+        page.AddSound(page.Tracks[0], Speakers);
+
+        // A probe per source; the picker adds one per listed device, and the saved layout has none.
+        Assert.Single(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout.Tracks, t => t.Name == MeterProbes.ProbeName);
+        page.OpenPicker(page.Tracks[1]);
+        var watched = Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout;
+        Assert.Equal(3, watched.Tracks.Count(t => t.Name == MeterProbes.ProbeName));
+        Assert.DoesNotContain(page.ToLayout().Tracks, t => t.Name == MeterProbes.ProbeName);
+
+        _engine.State = _engine.State! with
+        {
+            Seq = 3,
+            Meters = new MeterLevels([new TrackLevel(MeterProbes.TrackId("{out-1}", AudioFlow.Output), 0.5f), new TrackLevel(MeterProbes.TrackId("{in-1}", AudioFlow.Input), 1f)]),
+        };
+        _engine.RaiseChanged();
+
+        Assert.True(page.Tracks[0].Sources[0].Level > 0);
+        Assert.Equal(1, page.PickerRows.Single(r => r.Device == Mic).Level);
+        Assert.Equal(0, page.PickerRows.Single(r => r.Device == Headset).Level);
+
+        page.ClosePicker();
+        Assert.Single(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout.Tracks, t => t.Name == MeterProbes.ProbeName);
+    }
+
+    [Fact]
+    public void AnOpenPageWatchesAgainAfterAReconnectToTheSameEngineRun()
+    {
+        // Story 10.4: the engine stops a watch when its last client leaves.
+        var model = CreateMetered(out _);
+        Open(model);
+        Assert.Single(_engine.Sent);
+
+        _engine.Status = EngineStatus.Disconnected;
+        _engine.RaiseChanged();
+        _engine.Status = EngineStatus.Connected;
+        _engine.RaiseChanged();
+
+        Assert.Equal(2, _engine.Sent.Count);
+        Assert.IsType<MetersWatch>(_engine.Sent[^1]);
     }
 
     [Fact]
@@ -469,17 +582,15 @@ public sealed class TrackLayoutPageTests
     {
         SetState(revision: 1, layout: null, Speakers, Headset with { Available = false }, Mic, new AudioDevice("{out-3}", "Line Out", "Realtek", AudioFlow.Output, true));
         var model = new MainViewModel(_engine, action => action());
-        Assert.Equal(["General", "Replay Buffer", "Hotkeys", "Track Layout", "Game Profiles", "Feedback Sounds", "Recordings", "Library and Cleanup"], model.Pages.Select(p => p.Title));
+        Assert.Equal(["General", "Clips", "Hotkeys", "Audio Tracks", "Games", "Sounds", "Storage and Cleanup"], model.Pages.Select(p => p.Title));
         model.SelectedPage = model.TrackLayout;
         var page = model.TrackLayout;
-        Add(page, Speakers);
-        Add(page, Headset with { Available = false });
-        Add(page, Mic);
-        page.Devices[2].IsMic = true;
+        page.AddSound(page.Tracks[0], Speakers);
+        page.AddSound(page.Tracks[0], Headset with { Available = false });
+        page.AddSound(page.Tracks[0], Mic);
         page.AddTrackCommand.Execute(null);
-        page.SelectedTrack!.MuteAffected = true;
+        page.Tracks[1].MuteAffected = true;
         Assert.True(page.Tracks[0].HasWarning);
-        page.SelectedChoice = page.Choices[0];
 
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
@@ -503,7 +614,7 @@ public sealed class TrackLayoutPageTests
             PresentationTraceSources.DataBindingSource.Switch.Level = level;
         }
 
-        Assert.DoesNotContain(errors.Messages, m => m.Contains("TrackLayout", StringComparison.Ordinal));
+        Assert.DoesNotContain(errors.Messages, m => m.Contains("TrackLayout", StringComparison.Ordinal) || m.Contains("Audio", StringComparison.Ordinal));
     });
 
     private static string Json(TrackLayout layout) => Keys.TrackLayout.ToJson(layout).GetRawText();
@@ -515,12 +626,6 @@ public sealed class TrackLayoutPageTests
             ? SettingsMaps.EmptyValues
             : SettingsMaps.EmptyValues.Add(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(layout)),
     };
-
-    private static void Add(TrackLayoutPage page, AudioDevice device)
-    {
-        page.SelectedChoice = page.Choices.Single(c => c.Device == device);
-        page.AddDeviceCommand.Execute(null);
-    }
 
     private void SetState(long revision, TrackLayout? layout, params AudioDevice[] devices) =>
         _engine.State = _engine.State! with { Settings = Document(revision, layout), Devices = new AudioDeviceList(devices) };

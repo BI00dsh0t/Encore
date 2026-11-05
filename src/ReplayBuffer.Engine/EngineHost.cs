@@ -70,6 +70,12 @@ internal sealed record EngineHostOptions
     /// </summary>
     public EngineRestartReason? Restarted { get; init; }
 
+    /// <summary>
+    /// Whether the engine seeds a first-run Track Layout from the default devices when settings.json
+    /// has none (R6, story 10.4); null is on for every instance but a test one.
+    /// </summary>
+    public bool? SeedTrackLayout { get; init; }
+
     /// <summary>The time between Game Detection polls.</summary>
     public TimeSpan GameScanInterval { get; init; } = TimeSpan.FromSeconds(1);
 
@@ -248,6 +254,7 @@ internal sealed class EngineHost : IAsyncDisposable
         try
         {
             var load = SettingsStore.Open(instance.RoamingDataFolder);
+            load.Store.FolderDefaults = (Path.Combine(instance.LocalDataFolder, "ring"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name));
 
             // The Library at start seeds the hub's initial state, as the device list does.
             string OutputFolder() =>
@@ -275,6 +282,12 @@ internal sealed class EngineHost : IAsyncDisposable
                 () => load.Store.Current,
                 list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
                 loggers.CreateLogger("Audio"));
+            // R6: a first run records the default devices; before the snapshot, so it starts seeded.
+            if (hostOptions.SeedTrackLayout ?? !instance.IsTest)
+            {
+                TrackLayoutSeed.Apply(load.Store, devices.Current.Devices, loggers.CreateLogger("Settings"));
+            }
+
             // The storage estimate (R2) seeds the initial state likewise.
             estimates = new EstimatePublisher(
                 () => load.Store.Current,
@@ -390,12 +403,14 @@ internal sealed class EngineHost : IAsyncDisposable
 
             var defaultOutputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
             var displays = hostOptions.Displays ?? new DisplayMonitors(loggers.CreateLogger<DisplayMonitors>());
+            var captureWait = new CaptureWaitWarnings(warnings, gameLog);
             sessions = new SessionOrchestrator(
                 new CaptureSessionFactory(
                     new CaptureSessionOptions
                     {
                         OutputFolder = Path.Combine(instance.LocalDataFolder, "sessions"),
                         Replay = replay,
+                        FollowWindow = true,
                         RingFolder = ringFolder,
                         Margin = margin,
                         ResetGap = message => warnings.Raise(ErrorCodes.ResetGap, WarningSeverity.Warning, "replay", message, overlay: false),
@@ -425,11 +440,13 @@ internal sealed class EngineHost : IAsyncDisposable
                 hostOptions.DebugCapture
                     ? new TargetCapture(
                         _ => SessionAudio.None,
-                        (target, e) => gameLog.LogWarning(e, "The debug capture of {Name} (process {Pid}) failed", target.Name, target.ProcessId))
+                        (target, e) => gameLog.LogWarning(e, "The debug capture of {Name} (process {Pid}) failed", target.Name, target.ProcessId),
+                        captureWait.Wait)
                     : replay
                         ? new TargetCapture(
                             snapshot => SessionAudio.FromLayout(snapshot.TrackLayout),
-                            (target, e) => gameLog.LogWarning(e, "The Replay Buffer of {Name} (process {Pid}) failed", target.Name, target.ProcessId))
+                            (target, e) => gameLog.LogWarning(e, "The Replay Buffer of {Name} (process {Pid}) failed", target.Name, target.ProcessId),
+                            captureWait.Wait)
                         : null,
                 replay
                     ? new ReplayClips(
@@ -556,6 +573,26 @@ internal sealed class EngineHost : IAsyncDisposable
                 trackMeters.Watch(watch.Layout);
                 return ValueTask.FromResult(Empty.Value);
             });
+            // A watch outlives no client: a crashed or killed App would leave every probed device open.
+            // Queued, so it re-checks: a client that connected and watched since keeps its watch.
+            server.LastDisconnected += () =>
+            {
+                var generation = trackMeters.Generation;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        if (server.ConnectionCount == 0)
+                        {
+                            trackMeters.UnwatchIf(generation);
+                        }
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // The engine is stopping; its dispose closes the watch.
+                    }
+                });
+            };
             router.Register(AudioMessages.Unwatch, (_, _) =>
             {
                 trackMeters.Unwatch();
@@ -682,7 +719,7 @@ internal sealed class EngineHost : IAsyncDisposable
                     ErrorCodes.LibraryCorrupt,
                     WarningSeverity.Warning,
                     "library",
-                    "The Library index was unreadable and was rebuilt from the Output Folder; Favourites may be lost. Cleanup stays off until this is acknowledged.",
+                    "The Library index couldn't be read, so it was rebuilt from the Clips folder; Favourites may be lost. Cleanup stays off until you acknowledge this.",
                     overlay: false).Id;
             }
 

@@ -128,6 +128,9 @@ public sealed record EffectiveSettings
     public required HotkeySettings Hotkeys { get; init; }
     public required RecordHotkeyMode RecordHotkeyMode { get; init; }
     public required string? MonitorRecordingMonitor { get; init; }
+
+    /// <summary>The screens a Monitor Recording composites (story 11.2); null reads <see cref="MonitorRecordingMonitor"/>.</summary>
+    public MonitorRecordingScreens? MonitorRecordingScreens { get; init; }
     public required FeedbackSounds FeedbackSounds { get; init; }
     public required string? FeedbackSoundDevice { get; init; }
     public required CleanupSettings Cleanup { get; init; }

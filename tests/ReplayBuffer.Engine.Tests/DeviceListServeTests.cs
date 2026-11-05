@@ -102,6 +102,19 @@ public sealed class DeviceListServeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheWindowsDefaultsAreMarkedAndFollowADefaultChange()
+    {
+        // Story 10.4: each flow's default is isDefault, and a default change re-lists.
+        var source = new FakeEndpointSource(Realtek with { IsDefault = true }, Dac, Mic with { IsDefault = true });
+        StartHost(source);
+        var (client, events) = await ConnectAsync();
+        Assert.Equal([Realtek.EndpointId, Mic.EndpointId], client.State.Devices.Devices.Where(d => d.IsDefault).Select(d => d.EndpointId));
+
+        source.Change(Realtek, Dac with { IsDefault = true }, Mic with { IsDefault = true });
+        await AssertChangedAsync(client, events, 1, [Realtek, Dac with { IsDefault = true }, Mic with { IsDefault = true }]);
+    }
+
+    [Fact]
     public async Task AFailedListingKeepsThePreviousListAndTheEngineServes()
     {
         var source = new FakeEndpointSource(Realtek, Mic);

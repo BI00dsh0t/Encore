@@ -83,7 +83,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                 // The smallest file the Library takes as a complete MP4: an ftyp box, then an empty moov.
                 File.WriteAllBytes(Path.Combine(output, "clip.mp4"), [0, 0, 0, 16, .. "ftypisom"u8, 0, 0, 2, 0, 0, 0, 0, 8, .. "moov"u8]);
                 first.Main.LibrarySettings.Confirm = _ => true;
-                first.Main.LibrarySettings.ChooseOutputFolder(output);
+                first.Main.LibrarySettings.ClipsFolder.Choose(output);
                 Until(() => first.Engine.State!.LibraryFolder == output, "the chosen Output Folder");
                 Until(() => first.Engine.State!.Library.Count == 1, "the Clip listed from the chosen folder");
                 Until(() => first.Main.Library.Rows.Count == 1, "the Clip's Library row");
@@ -143,7 +143,8 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                 PromptDialog.Showing += OnShowing;
                 try
                 {
-                    first.Main.Library.Rows[0].DeleteCommand.Execute(null);
+                    first.Main.Library.Click(first.Main.Library.Rows[0], ctrl: false, shift: false);
+                    first.Main.Library.DeleteCommand.Execute(null);
                 }
                 finally
                 {

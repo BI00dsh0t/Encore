@@ -114,6 +114,13 @@ internal sealed record CaptureSessionOptions
     /// </summary>
     public Action<string>? CaptureFallback { get; init; }
 
+    /// <summary>
+    /// When set, a game session whose window closes keeps running with no capture, the pacer
+    /// repeating its last frame, and posts <c>Closed</c>: the orchestrator retargets it to the
+    /// process's next window (keeping its Replay Buffer) or ends it. When not set, it stops.
+    /// </summary>
+    public bool FollowWindow { get; init; }
+
     /// <summary>With no first frame by then, the session posts a <see cref="ErrorCodes.CaptureFailed"/> failure.</summary>
     public TimeSpan FirstFrameTimeout { get; init; } = DefaultFirstFrameTimeout;
 
@@ -123,6 +130,16 @@ internal sealed record CaptureSessionOptions
     /// null ignores it.
     /// </summary>
     public Action<string>? ResetGap { get; init; }
+
+    /// <summary>
+    /// Spike 11.1, dev only (<c>debug-capture --monitors</c>): the session captures these monitors
+    /// (GDI device names; empty for every attached monitor) composited into one canvas
+    /// (<see cref="CompositeCapture"/>) instead of its window or its one monitor; null for the normal path.
+    /// </summary>
+    public IReadOnlyList<string>? CompositeMonitors { get; init; }
+
+    /// <summary>Spike 11.1, dev only: <see cref="CompositeMonitors"/> captures every monitor through Desktop Duplication.</summary>
+    public bool CompositeDuplication { get; init; }
 }
 
 /// <summary>
@@ -237,6 +254,7 @@ internal sealed class CaptureSession : ICaptureSession
 
     private WindowInfo? _window;
     private MonitorInfo? _monitor;
+    private IReadOnlyList<MonitorPlacement>? _composite;
     private string? _path;
     private D3D11Device? _device;
     private ICaptureSource? _capture;
@@ -327,7 +345,21 @@ internal sealed class CaptureSession : ICaptureSession
         // Before anything is opened: the first codec use may run the probe.
         var (encoder, codec) = ResolveEncoder(_spec);
         var target = _spec.Target;
-        if (IsMonitor)
+        if (_options.CompositeMonitors is { } names)
+        {
+            // Spike 11.1: the device goes on the primary composited monitor's adapter.
+            _composite = MonitorCanvas.Place(names);
+            if (_composite.Count == 0)
+            {
+                throw new EngineFailure(ErrorCodes.CaptureFailed, $"None of the monitors '{string.Join(", ", names)}' is attached.");
+            }
+
+            if (IsMonitor)
+            {
+                _monitor = _composite[0].Monitor;
+            }
+        }
+        else if (IsMonitor)
         {
             _monitor = MonitorFinder.Find(_spec.Snapshot.MonitorRecordingMonitor, _log);
             _log.LogInformation("Monitor capture of {Device}", _monitor.DeviceName);
@@ -345,7 +377,7 @@ internal sealed class CaptureSession : ICaptureSession
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         }
 
-        _device = _monitor is { } monitor
+        _device = (_monitor ?? _composite?[0].Monitor) is { } monitor
             ? D3D11Device.CreateForMonitor(monitor.Handle, _loggers.CreateLogger<D3D11Device>())
             : D3D11Device.Create(target.Window, _loggers.CreateLogger<D3D11Device>());
         if (_options.GpuPriority is { } priority)
@@ -375,7 +407,7 @@ internal sealed class CaptureSession : ICaptureSession
             return;
         }
 
-        var capture = NewCapture(target.Window, _device, first.Fps);
+        ICaptureSource capture = _composite is not null ? NewComposite(_device, first.Fps) : NewCapture(target.Window, _device, first.Fps);
         lock (_gate)
         {
             _capture = capture;
@@ -1696,6 +1728,22 @@ internal sealed class CaptureSession : ICaptureSession
     /// </summary>
     private ICaptureSource StartMonitorCapture(D3D11Device device, int fps, Action<ICaptureSource> start)
     {
+        if (_composite is not null)
+        {
+            var composite = NewComposite(device, fps);
+            try
+            {
+                start(composite);
+            }
+            catch
+            {
+                composite.Dispose();
+                throw;
+            }
+
+            return composite;
+        }
+
         var monitor = _monitor!;
         WindowCapture? wgc = null;
         try
@@ -1756,6 +1804,14 @@ internal sealed class CaptureSession : ICaptureSession
 
             throw;
         }
+    }
+
+    /// <summary>Spike 11.1: the composited capture of <see cref="_composite"/> on <paramref name="device"/>, not started.</summary>
+    private CompositeCapture NewComposite(D3D11Device device, int fps)
+    {
+        var composite = Wire(new CompositeCapture(device, _composite!, fps, _options.CompositeDuplication, OnFrame, _loggers.CreateLogger<CompositeCapture>()));
+        CaptureApi = _options.CompositeDuplication ? "composite-desktop-duplication" : "composite";
+        return composite;
     }
 
     private void ThrowWgcFault()
@@ -2075,8 +2131,8 @@ internal sealed class CaptureSession : ICaptureSession
         }
 
         var message = first == long.MaxValue
-            ? $"The Replay Buffer's new encoder chain had no frame {(MicrosAt(Stopwatch.GetTimestamp()) - end) / 1000} ms after the last Clip's end; the next Clip starts at its first frame."
-            : $"The Replay Buffer's new encoder chain started {(first - end) / 1000} ms after the last Clip's end; the next Clip starts that much later.";
+            ? $"After your last saved Clip, the video didn't restart for {(MicrosAt(Stopwatch.GetTimestamp()) - end) / 1000} ms; the next Clip starts when it does."
+            : $"After your last saved Clip, the video restarted {(first - end) / 1000} ms late; the next Clip starts that much later.";
         _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
         _options.ResetGap?.Invoke(message);
     }
@@ -2109,8 +2165,8 @@ internal sealed class CaptureSession : ICaptureSession
         var reset = Volatile.Read(ref _resetUs);
         var first = ring.FirstKeyUs;
         var message = first == long.MaxValue
-            ? "The Replay Buffer switched to its new encoder chain at the Reset, tearing the old one down first while a Monitor Recording runs; no frame came within 1 s, so the next Clip starts at its first frame."
-            : $"The Replay Buffer switched to its new encoder chain at the Reset, tearing the old one down first while a Monitor Recording runs; the next Clip starts {(reset == long.MinValue ? 0 : Math.Max(0, first - reset)) / 1000} ms after the last Clip's end.";
+            ? "Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; the video didn't restart within 1 s, so the next Clip starts when it does."
+            : $"Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; the next Clip starts {(reset == long.MinValue ? 0 : Math.Max(0, first - reset)) / 1000} ms after the last one ended.";
         _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
         _options.ResetGap?.Invoke(message);
     }
@@ -2390,7 +2446,15 @@ internal sealed class CaptureSession : ICaptureSession
                 return;
             }
 
-            RequestStop("window closed");
+            if (_options.FollowWindow && !IsMonitor)
+            {
+                // The closed capture stays until a retarget or the end disposes it.
+                _log.LogInformation("Window 0x{Handle:X} closed; the session waits for a retarget", _window?.Handle ?? 0);
+            }
+            else
+            {
+                RequestStop("window closed");
+            }
         }
 
         _events.Closed("window closed");
@@ -2677,7 +2741,7 @@ internal sealed class CaptureSession : ICaptureSession
                 {
                     throw new ErrorCodeException(
                         ErrorCodes.ClipTooShort,
-                        "The Replay Buffer holds no keyframe before the cut yet, or less than 1 s since a ring generation began; there is nothing to save.");
+                        "There's nothing to save yet: ReplayBuffer has kept less than 1 s of gameplay since the game started or the last save.");
                 }
 
                 if (session._options.ClipWriteFault?.Invoke(path) is { } fault)

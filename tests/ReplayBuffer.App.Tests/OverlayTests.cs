@@ -283,7 +283,7 @@ public sealed class OverlayTests
         Assert.Equal("Not capturing", TrayCapture.Describe(TrayCapture.For(engine)));
 
         engine.State = engine.State! with { Capture = Buffering };
-        Assert.Equal("Replay Buffer on", TrayCapture.Describe(TrayCapture.For(engine)));
+        Assert.Equal("Ready to save Clips", TrayCapture.Describe(TrayCapture.For(engine)));
         engine.State = engine.State with { Capture = Buffering with { Recording = RecordingState.Running } };
         Assert.Equal("Recording", TrayCapture.Describe(TrayCapture.For(engine)));
 

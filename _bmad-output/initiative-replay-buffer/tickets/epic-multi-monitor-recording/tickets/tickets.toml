@@ -1,0 +1,72 @@
+# Stories of epic-multi-monitor-recording, in build order. `id` is permanent, never reused.
+
+[[entry]]
+id = 1
+type = "spike"
+title = "Spike: composite several monitors into one encoded video"
+description = "Answer the least certain part before the engine story: in a scratch path behind a dev-only flag on the Monitor session (removed or kept as the base for story 3), capture two or three of the builder's monitors with WGC monitor items on the Monitor session's own D3D11 device, blit each latest frame into one canvas texture laid out by virtual-desktop position (design-multi-monitor.md), scale it by the canvas rule, and encode it on one chain to a playable file. Measure with bench fps on the synthetic GPU load (one run, about 2.5 minutes, coordinated with the GPU runner): the FPS cost against one-monitor Monitor Recording and against NFR-1, and the GPU time of the blits. Record: the encoder's real maximum frame size per codec from the probe (story 1.13), whether WGC's frames from a monitor on another adapter arrive (if the PC has one), whether a 60 Hz and a high-refresh monitor composite without stutter at the Output frame rate, and whether Desktop Duplication frames composite the same. The findings, the confirmed pixel budget and any change to the design go into the epic's Notes and design-multi-monitor.md. R2, R3 part: the measurements."
+verify = "A spike report in the epic's Notes gives the FPS cost with numbers against NFR-1, the per-codec maximum sizes, the cross-adapter and mixed-refresh results, and a decision line on the pixel budget; a two-monitor composited file plays in VLC with both monitors in their Windows positions."
+covers = ["R2", "R3"]
+after = []
+hitl = false
+risk = "high"
+plan_checkpoint = true
+
+[[entry]]
+id = 2
+type = "story"
+title = "Screen selection: the monitorRecordingScreens key and richer monitor list"
+description = "Contracts and settings, additively (AD-22, AD-25): a Global-only monitorRecordingScreens key ({ mode: all } or { mode: selected, monitors: [monitor id, …] } with at least one id; default null; applied at the next session) in Contracts.Settings.Keys with its validation; DisplayMonitor gains optional MonitorId (DisplayConfig's monitorDevicePath), X and Y (virtual-desktop position), RefreshHz and Hdr, filled by the engine's monitor list in Platform.Capture (MonitorFinder and DisplayMonitors, where monitors.list comes from) and carried by monitors.list and monitors.changed; new warning codes monitor-missing, monitor-recording-no-screens and monitor-added-next-recording in Contracts.ErrorCodes. Core resolves the screens a Monitor Recording will use: the new key when set (All: every attached monitor; Selected: the attached ones by id, the rest reported missing), else the old monitorRecordingMonitor as today (its device name, null for the primary), matched by id then by device name. The canvas rule (the bounding box from each display's physical mode, scaled only to fit the codec's largest side: H.264 4096 px, HEVC and AV1 8192 px, as constants since the probe reports no limit; even sizes; no pixel budget, per spike 11.1 and the builder's full-width decision) is a pure Core function the engine and the picker share. No capture change yet. R1, R2 part: the layout rule."
+verify = "Automated tests: monitorRecordingScreens round-trips through settings.update, refuses an empty selection, and is read back after an engine restart; with the new key null, a saved monitorRecordingMonitor still resolves to that monitor and null to the primary; a selection by id survives a fake monitor list whose device names were swapped; a missing selected monitor is reported and an all-missing selection resolves to none; the canvas rule gives 5120×1440 for two 1440p monitors under HEVC, 6400×2160 for a 1440p beside a 2160p monitor under HEVC (4096×1382 under H.264), and fits three within H.264's limit, all even."
+covers = ["R1", "R2"]
+after = [1]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Engine: a Monitor Recording of several screens, composited"
+description = "The Monitor session records story 2's resolved screens (AD-25, design-multi-monitor.md's engine shape): one ICaptureSource per screen (WGC, else that screen's Desktop Duplication fallback, story 6.10), each keeping its latest frame on the Monitor session's device; a MonitorCompositor in Media blitting them into the canvas at their rectangles and handing the pacer one canvas per output slot from its own slot clock at the Output Settings' fps, never one per source frame (spike 11.1's per-frame push gave hundreds of hand-off drops and non-increasing stamps), a pass-through for one screen so today's output is unchanged, feeding the existing pacer, scaler, one encoder chain and RecordingWriter, with the Global Track Layout's Tracks as today. The canvas follows AD-25: the physical bounding box from each display's current mode (EnumDisplaySettings, never rcMonitor), fitted only to the codec's largest side, with no pixel budget; when it is over H.264's 4096 px, the session encodes it with HEVC, else AV1, at full size, never H.264, and H.264 stays for a single screen or a canvas that fits. The spike's MonitorCanvas, CompositeCapture and D3D11Device.CopyFrameTo are the base: the canvas rule moves to Core (story 2) and the compositor to Media. Mixed refresh rates sample the latest frame; mixed resolutions and DPI follow the virtual-desktop layout with black gaps; HDR sources take today's SDR colour path. Removal (story 8.5's display port): the source ends, its area turns black, monitor-removed is raised, and the Recording ends at its last frame only when no source is left. Arrival under All screens raises monitor-added-next-recording and joins next time. A mode change keeps the area and scales into it. A missing selected screen raises monitor-missing; none present refuses the start with monitor-recording-no-screens and the failure notices. GPU reset (story 8.3): all sources and the compositor are rebuilt and the Recording continues in a new file (6.6's rule). The encoder budget stays at one chain for the Monitor Recording. Cost: split the composite's FPS cost by stage (bench --stages) and re-measure it on the synthetic load after per-slot compositing, against spike 11.1's 7.6 to 10 %, recording the result and the stage split in the epic's Notes for the builder's NFR-1 decision. R2, R3, R4."
+verify = "Automated tests with fake capture sources and a fake display port: two sources composite into the canvas at their layout positions with the right scaling, and the pacer gets one canvas per slot whatever the source rates; a canvas over 4096 px with H.264 as the Output codec is encoded with HEVC at full size; a removed source blacks its area and the Recording continues until the last is removed; an arrival under All screens raises its notice and doesn't change the canvas; none present refuses the start; a simulated GPU reset (dev.simulate) gives a second file; the session holds one encoder chain. Heavy (explicit): a real two-monitor Monitor Recording of 60 s on the builder's PC plays to the end with every Track and both monitors placed correctly, and a forced Desktop Duplication fallback on one monitor still composites."
+covers = ["R2", "R3", "R4"]
+after = [2]
+hitl = false
+risk = "high"
+notes = [
+  "From 11.2's QA: when MonitorCanvasRule.Plan keeps a canvas over 4096 px on H.264 (no HEVC or AV1 encoder on the PC), raise a warning that the Recording is scaled down, rather than scaling silently (AD-25).",
+  "From 11.2's QA: skip a monitor whose display mode reads as 0x0 (EnumDisplaySettings failed) when building the plan, as if it weren't attached, rather than giving it an empty area.",
+]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Screens to record: the picker on Hotkeys"
+description = "Story 10.9's 'Screen to record' combo box on Hotkeys → Monitor Recording becomes design-multi-monitor.md's picker, in both themes and to epic 10's glossary: All screens or Chosen screens; one checkbox per screen with its Windows number, friendly name, resolution, refresh rate, primary and HDR ('Recorded in SDR'), the last ticked one not untickable; a layout preview drawn from the screens' positions, selected ones in the accent fill, each clickable and a tab stop toggled with Space; the output line from story 2's canvas rule ('Recorded as one W × H video', '(scaled down)' and the HEVC hint); a chosen screen that isn't attached listed greyed as 'Not connected — skipped'; Refresh, and live updates from monitors.changed. Choices send monitorRecordingScreens through the settings.update sender; the App never writes monitorRecordingMonitor. With an engine that doesn't fill the new DisplayMonitor fields, the preview is hidden. R5."
+verify = "Automated tests on the Hotkeys view model with a fabricated monitor list: All screens and a ticked set send the expected monitorRecordingScreens; the last ticked screen can't be unticked; the preview's rectangles follow the screens' positions and toggle the same selection; the output line matches the canvas rule; a monitors.changed removing a chosen screen shows it as not connected; with no position data the preview is hidden. The view loads in both themes with no missing resource. The builder chooses two screens and All screens on their PC and checks the preview against Windows' Display settings."
+covers = ["R5"]
+after = [2, "10.9"]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup only, scoped at its start from plans and review findings the epic deferred, including the spike's dev-only flag if story 3 didn't absorb it, and any one-monitor code path left beside the compositor. Grep the ticket tree before removing anything a later ticket names."
+verify = "All tests pass, and a one-monitor and a two-monitor Monitor Recording still record playable files after the sweep; every deferred cleanup item is closed or recorded."
+covers = []
+after = [1, 2, 3, 4]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Multi-monitor recording end to end on the builder's PC"
+description = "The closing end-to-end check of the epic's Done when, integrated: an automated suite against the installed build on a dev instance sets monitorRecordingScreens to two screens and to All screens, starts and stops Monitor Recordings with the injected key with and without a synthetic game, checks each file with ffprobe (one video at the canvas size, every Track, plays to the end) and the encoder-chain count with the Replay Buffer running, reruns story 8.5's monitor-change tests and 8.3's simulated GPU reset against the multi-screen path, and confirms an old single-monitor setting still records that monitor. The builder then records their screens for a few minutes during a game, unplugs one recorded monitor mid-Recording and plugs it back, checks the file and the FPS cost in their game, and uses the picker in both themes."
+verify = "The automated suite passes against the installed build, and the builder's session confirms each Done-when line."
+covers = ["R1", "R2", "R3", "R4", "R5"]
+after = [5]
+hitl = true
+risk = "medium"
