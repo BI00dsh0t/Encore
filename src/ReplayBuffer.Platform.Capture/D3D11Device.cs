@@ -203,6 +203,95 @@ public sealed unsafe class D3D11Device : IDisposable
         _context->CopySubresourceRegion((ID3D11Resource*)target, targetSubresource, 0, 0, 0, (ID3D11Resource*)src, 0, &box);
     }
 
+    /// <summary>
+    /// Spike 11.1: copies a captured frame into <paramref name="target"/> (slice 0) with its top-left
+    /// at (<paramref name="x"/>, <paramref name="y"/>), clipped to <paramref name="area"/>, the
+    /// monitor's place in a composited canvas. Same format only; a resize clips, never scales.
+    /// </summary>
+    public void CopyFrameTo(nint source, VideoSize contentSize, nint target, int x, int y, VideoSize area)
+    {
+        var src = (ID3D11Texture2D*)source;
+        src->GetDesc(out var srcDesc);
+        var copy = contentSize.Intersect(area).Intersect(new VideoSize((int)srcDesc.Width, (int)srcDesc.Height));
+        var box = new D3D11_BOX { left = 0, top = 0, front = 0, right = (uint)copy.Width, bottom = (uint)copy.Height, back = 1 };
+        _context->CopySubresourceRegion((ID3D11Resource*)target, 0, (uint)x, (uint)y, 0, (ID3D11Resource*)src, 0, &box);
+    }
+
+    /// <summary>
+    /// Spike 11.1: the GPU time, in microseconds, of one <see cref="CopyFrameTo"/> of all of
+    /// <paramref name="source"/> into <paramref name="target"/> at (<paramref name="x"/>, <paramref name="y"/>),
+    /// averaged over <paramref name="count"/> copies between two timestamp queries. Null when the
+    /// timestamps were disjoint. Blocks until the GPU has run them.
+    /// </summary>
+    public double? TimeCopies(nint source, nint target, int x, int y, int count)
+    {
+        ((ID3D11Texture2D*)source)->GetDesc(out var desc);
+        var size = new VideoSize((int)desc.Width, (int)desc.Height);
+        ID3D11Query* disjoint = null, begin = null, end = null;
+        try
+        {
+            var disjointDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_TIMESTAMP_DISJOINT };
+            var stampDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_TIMESTAMP };
+            _device->CreateQuery(&disjointDesc, &disjoint);
+            _device->CreateQuery(&stampDesc, &begin);
+            _device->CreateQuery(&stampDesc, &end);
+
+            _context->Begin((ID3D11Asynchronous*)disjoint);
+            _context->End((ID3D11Asynchronous*)begin);
+            for (var i = 0; i < count; i++)
+            {
+                CopyFrameTo(source, size, target, x, y, size);
+            }
+
+            _context->End((ID3D11Asynchronous*)end);
+            _context->End((ID3D11Asynchronous*)disjoint);
+
+            TimestampDisjoint data;
+            while (GetData((ID3D11Asynchronous*)disjoint, &data, (uint)sizeof(TimestampDisjoint)) != HRESULT.S_OK)
+            {
+                Thread.Yield();
+            }
+
+            ulong t0, t1;
+            while (GetData((ID3D11Asynchronous*)begin, &t0, sizeof(ulong)) != HRESULT.S_OK)
+            {
+                Thread.Yield();
+            }
+
+            while (GetData((ID3D11Asynchronous*)end, &t1, sizeof(ulong)) != HRESULT.S_OK)
+            {
+                Thread.Yield();
+            }
+
+            return data.Disjoint != 0 ? null : (t1 - t0) * 1e6 / data.Frequency / count;
+        }
+        finally
+        {
+            if (end is not null) ((IUnknown*)end)->Release();
+            if (begin is not null) ((IUnknown*)begin)->Release();
+            if (disjoint is not null) ((IUnknown*)disjoint)->Release();
+        }
+    }
+
+    /// <summary>
+    /// <c>ID3D11DeviceContext::GetData</c> by its vtable slot, for its HRESULT: S_FALSE (not ready
+    /// yet) is a success CsWin32's wrapper can't tell from S_OK.
+    /// </summary>
+    private HRESULT GetData(ID3D11Asynchronous* query, void* data, uint size)
+    {
+        const int getDataSlot = 29; // IUnknown 3, ID3D11DeviceChild 4, then ID3D11DeviceContext's 22 before it
+        var context = _context;
+        return ((delegate* unmanaged[Stdcall]<ID3D11DeviceContext*, ID3D11Asynchronous*, void*, uint, uint, HRESULT>)
+            (*(void***)context)[getDataSlot])(context, query, data, size, 0);
+    }
+
+    /// <summary>D3D11_QUERY_DATA_TIMESTAMP_DISJOINT.</summary>
+    private struct TimestampDisjoint
+    {
+        public ulong Frequency;
+        public int Disjoint;
+    }
+
     /// <summary>Submits the queued GPU work, as an encode of the copied frame would.</summary>
     public void Flush() => _context->Flush();
 

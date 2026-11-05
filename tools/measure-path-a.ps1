@@ -23,6 +23,14 @@
       -x2            BGRA -> NV12 on the D3D11 VideoProcessor (--color x2)
       -fast          --nvenc-preset p1 --nvenc-tune ll
       -thread        --encode-thread (no effect since story 1.11: the encoder thread is always on)
+      -mon<mode>     spike 11.1: a second engine records a Monitor Recording beside the capture,
+                     debug-capture --monitors, for the same span, at -Fps; <mode> is one of
+                       one     the primary monitor alone, H.264 at its size (today's Monitor Recording)
+                       hevc    every monitor composited, HEVC at the full canvas size
+                       av1     every monitor composited, AV1 at the full canvas size
+                       h264    every monitor composited, H.264 fitted to 4096 px a side
+                       dd      as hevc, every monitor through Desktop Duplication
+                     The GPU sampler then sums both engines.
 
     Writes into -OutDir: per run a PresentMon CSV, and for capture runs the engine's stats
     JSON, MP4, console log and GPU counter samples; then summary.csv, summary.json and
@@ -96,7 +104,9 @@ param(
     [string] $OutDir = '',
 
     # Skip the 1 s GPU Engine counter sampling: querying those counters can itself make a game stutter.
-    [switch] $NoGpuSampler
+    [switch] $NoGpuSampler,
+    # Spike 11.1 (-mon<mode>): the second engine's bitrate for a composited canvas.
+    [int] $MonitorBitrate = 40000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -115,8 +125,57 @@ function Fail([string] $Message) {
     exit 1
 }
 
+# Spike 11.1: the second engine's debug-capture options for a -mon<mode> suffix.
+function Resolve-MonitorOptions([string] $Mode, [string] $Name) {
+    $all = Get-MonitorCanvas
+    $bitrate = @('--bitrate', [string] $MonitorBitrate)
+    switch ($Mode) {
+        'one' { return @('--monitors', $all.Primary, '--codec', 'h264') }
+        'hevc' { return @('--monitors', 'all', '--codec', 'hevc', '--size', $all.Size) + $bitrate }
+        'av1' { return @('--monitors', 'all', '--codec', 'av1', '--size', $all.Size) + $bitrate }
+        'h264' { return @('--monitors', 'all', '--codec', 'h264') + $bitrate }
+        'dd' { return @('--monitors', 'all', '--monitor-api', 'dd', '--codec', 'hevc', '--size', $all.Size) + $bitrate }
+        default { Fail "Unknown monitor mode '$Mode' in condition '$Name'. Use -monone, -monhevc, -monav1, -monh264 or -mondd." }
+    }
+}
+
+# Spike 11.1: the primary monitor's device name and the physical bounding box of every monitor
+# (even sides), from each display's current mode, whatever this process's DPI awareness.
+function Get-MonitorCanvas {
+    if (-not ('ReplayBuffer.Displays' -as [type])) {
+        Add-Type -Namespace ReplayBuffer -Name Displays -MemberDefinition @'
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public struct DEVMODE {
+    [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+    public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra; public int dmFields;
+    public int dmPositionX, dmPositionY; public int dmDisplayOrientation, dmDisplayFixedOutput;
+    public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+    [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+    public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+    public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+}
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern bool EnumDisplaySettings(string device, int mode, ref DEVMODE devMode);
+'@
+    }
+
+    Add-Type -AssemblyName System.Windows.Forms
+    $left = [int]::MaxValue; $top = [int]::MaxValue; $right = [int]::MinValue; $bottom = [int]::MinValue
+    $primary = $null
+    foreach ($screen in [System.Windows.Forms.Screen]::AllScreens) {
+        $mode = New-Object ReplayBuffer.Displays+DEVMODE
+        $mode.dmSize = [Runtime.InteropServices.Marshal]::SizeOf($mode)
+        if (-not [ReplayBuffer.Displays]::EnumDisplaySettings($screen.DeviceName, -1, [ref] $mode)) { continue }
+        if ($screen.Primary) { $primary = $screen.DeviceName }
+        $left = [math]::Min($left, $mode.dmPositionX); $top = [math]::Min($top, $mode.dmPositionY)
+        $right = [math]::Max($right, $mode.dmPositionX + $mode.dmPelsWidth); $bottom = [math]::Max($bottom, $mode.dmPositionY + $mode.dmPelsHeight)
+    }
+
+    return [pscustomobject]@{ Primary = $primary; Size = ('{0}x{1}' -f (($right - $left) -band -2), (($bottom - $top) -band -2)) }
+}
+
 function Resolve-Condition([string] $Name) {
-    $condition = [pscustomobject]@{ Name = $Name; Capture = $false; Priority = $null; Stages = $null; EngineOptions = @() }
+    $condition = [pscustomobject]@{ Name = $Name; Capture = $false; Priority = $null; Stages = $null; EngineOptions = @(); MonitorOptions = $null }
     if ($Name -in 'baseline', 'app') { return $condition }
 
     $parts = $Name -split '-'
@@ -127,7 +186,7 @@ function Resolve-Condition([string] $Name) {
     $condition.Capture = $true
     $seen = @{}
     foreach ($suffix in $parts | Select-Object -Skip 1) {
-        $kind = if ($suffix -match '^[pm][0-7]$') { 'priority' } elseif ($suffix -in 'copy', 'wgc') { 'stages' } else { $suffix }
+        $kind = if ($suffix -match '^[pm][0-7]$') { 'priority' } elseif ($suffix -in 'copy', 'wgc') { 'stages' } elseif ($suffix -like 'mon*') { 'monitor' } else { $suffix }
         if ($seen.ContainsKey($kind)) { Fail "Condition '$Name' gives '$($seen[$kind])' and '$suffix'; use one." }
         $seen[$kind] = $suffix
 
@@ -140,7 +199,8 @@ function Resolve-Condition([string] $Name) {
             '^x2$' { $condition.EngineOptions += @('--color', 'x2') }
             '^fast$' { $condition.EngineOptions += @('--nvenc-preset', 'p1', '--nvenc-tune', 'll') }
             '^thread$' { $condition.EngineOptions += @('--encode-thread') }
-            default { Fail "Unknown suffix '$suffix' in condition '$Name'. Use -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast or -thread." }
+            '^mon' { $condition.MonitorOptions = Resolve-MonitorOptions $suffix.Substring(3) $Name }
+            default { Fail "Unknown suffix '$suffix' in condition '$Name'. Use -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast, -thread or -mon<mode>." }
         }
     }
 
@@ -313,12 +373,12 @@ Write-Host "Runs:       $($plan.Count), output in $OutDir"
 
 # --- One run -------------------------------------------------------------------------------
 
-function Start-GpuSampler([int] $EnginePid, [int] $Samples) {
+function Start-GpuSampler([int[]] $EnginePid, [int] $Samples) {
     Start-Job -ArgumentList $EnginePid, $Samples -ScriptBlock {
         param($EnginePid, $Samples)
         $ErrorActionPreference = 'Stop'
         try {
-            $path = "\GPU Engine(pid_$($EnginePid)_*)\Utilization Percentage"
+            $path = @($EnginePid | ForEach-Object { "\GPU Engine(pid_$($_)_*)\Utilization Percentage" })
             Get-Counter -Counter $path -SampleInterval 1 -MaxSamples $Samples | ForEach-Object {
                 $time = $_.Timestamp
                 foreach ($sample in $_.CounterSamples) {
@@ -368,6 +428,7 @@ function Invoke-Run($Run, [int] $Index) {
     $condition = $Run.Condition
     $tag = '{0:D2}-{1}-{2}' -f $Index, $condition.Name, $Run.Pass
     $engineProcess = $null
+    $monitorProcess = $null
     $sampler = $null
     $pm = $null
     try {
@@ -405,8 +466,29 @@ function Invoke-Run($Run, [int] $Index) {
                 throw "[$tag] the engine exited early with code $($engineProcess.ExitCode): $("$err".Trim())"
             }
 
+            # Spike 11.1: the Monitor Recording's engine, beside the capture, ending with it.
+            if ($condition.MonitorOptions) {
+                $monitorArgs = @('debug-capture') + $condition.MonitorOptions + @(
+                    '--seconds', [string] ($Run.Seconds + $EngineTailSeconds),
+                    '--output', (Join-Path $OutDir "$tag-monitors.mp4"), '--stats', (Join-Path $OutDir "$tag-monitors.json"))
+                if ($OutputDevice) { $monitorArgs += @('--output-device', $OutputDevice) }
+                if ($InputDevice) { $monitorArgs += @('--input-device', $InputDevice) }
+                if ($Fps -gt 0) { $monitorArgs += @('--fps', [string] $Fps) }
+                Write-Host "[$tag] monitor engine $($monitorArgs -join ' ')"
+                $monitorProcess = Start-Process -FilePath $Engine -ArgumentList (Format-Arguments $monitorArgs) `
+                    -RedirectStandardOutput (Join-Path $OutDir "$tag-monitors.out.log") -RedirectStandardError (Join-Path $OutDir "$tag-monitors.err.log") `
+                    -NoNewWindow -PassThru
+                $null = $monitorProcess.Handle
+                Start-Sleep -Seconds 3
+                if ($monitorProcess.HasExited) {
+                    $err = Get-Content (Join-Path $OutDir "$tag-monitors.err.log") -Raw -ErrorAction SilentlyContinue
+                    throw "[$tag] the monitor engine exited early with code $($monitorProcess.ExitCode): $("$err".Trim())"
+                }
+            }
+
             if (-not $NoGpuSampler) {
-                $sampler = Start-GpuSampler -EnginePid $engineProcess.Id -Samples $Run.Seconds
+                $pids = @($engineProcess.Id) + @(if ($monitorProcess) { $monitorProcess.Id })
+                $sampler = Start-GpuSampler -EnginePid $pids -Samples $Run.Seconds
             }
         }
 
@@ -439,15 +521,26 @@ function Invoke-Run($Run, [int] $Index) {
             $engineExit = $engineProcess.ExitCode
         }
 
+        $monitorExit = $null
+        if ($monitorProcess) {
+            if (-not $monitorProcess.WaitForExit(($EngineTailSeconds + 60) * 1000)) {
+                $monitorProcess.Kill()
+                Write-Warning "[$tag] the monitor engine did not stop on its own and was killed."
+            }
+
+            $monitorExit = $monitorProcess.ExitCode
+        }
+
         $stats = if ($condition.Capture -and (Test-Path $statsPath)) { Get-Content $statsPath -Raw | ConvertFrom-Json } else { $null }
         return [pscustomobject]@{
             Tag = $tag; Condition = $condition.Name; Pass = $Run.Pass; Seconds = $Run.Seconds
-            Fps = Measure-PresentMon $csv; Gpu = $gpu; Stats = $stats; EngineExit = $engineExit
+            Fps = Measure-PresentMon $csv; Gpu = $gpu; Stats = $stats; EngineExit = $engineExit; MonitorExit = $monitorExit
         }
     }
     catch {
         # Leave nothing running: a later run, or the builder, must not find a stray engine.
         if ($engineProcess -and -not $engineProcess.HasExited) { $engineProcess.Kill() }
+        if ($monitorProcess -and -not $monitorProcess.HasExited) { $monitorProcess.Kill() }
         if ($pm -and -not $pm.HasExited) { $pm.Kill() }
         if ($sampler) { Remove-Job -Job $sampler -Force -ErrorAction SilentlyContinue }
         Stop-OwnSession

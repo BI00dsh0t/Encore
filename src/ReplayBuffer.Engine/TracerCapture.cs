@@ -44,7 +44,8 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         var stored = command.TrackLayout ? SettingsStore.ReadDocument(instance.RoamingDataFolder) : SettingsDocument.Empty;
         var audio = command.TrackLayout ? LayoutAudio(stored) : null;
 
-        var window = ResolveWindow();
+        // Spike 11.1: --monitors captures the composited monitors, with no window.
+        var window = command.Monitors is null ? ResolveWindow() : null;
         if (audio is null)
         {
             var output = ResolveEndpoint(AudioFlow.Output, command.OutputDevice);
@@ -57,13 +58,13 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         }
 
         _log.LogInformation("Window '{Title}' (0x{Handle:X}, {Process}); Tracks {Tracks}",
-            window.Title, window.Handle, window.ProcessName,
+            window?.Title ?? "(monitors)", window?.Handle ?? 0, window?.ProcessName,
             string.Join(", ", audio.Tracks.Select(t => $"'{t.Name}' = {string.Join(" + ", t.DeviceIndexes.Select(i => $"'{audio.Devices[i].FriendlyName}'"))}")));
 
         var debugFolder = Path.Combine(instance.LocalDataFolder, "debug");
         var path = command.Output is { } explicitPath
             ? Path.GetFullPath(explicitPath)
-            : OutputNaming.Allocate(debugFolder, window.Title, DateTime.Now, File.Exists);
+            : OutputNaming.Allocate(debugFolder, window?.Title ?? "Monitors", DateTime.Now, File.Exists);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
         string? statsPath = null;
@@ -98,6 +99,8 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             NvencTune = command.NvencTune,
             Color = command.Color,
             Encoder = command.Encoder,
+            CompositeMonitors = command.Monitors,
+            CompositeDuplication = command.MonitorDuplication,
             Anchored = qpc => anchored.TrySetResult(qpc),
         };
 
@@ -112,7 +115,9 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             () => document,
             _ => { },
             micMute: new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Audio")));
-        var target = new CaptureTarget((int)window.ProcessId, window.Handle, ProfileId: null);
+        var target = window is null
+            ? new CaptureTarget(Environment.ProcessId, 0, ProfileId: null)
+            : new CaptureTarget((int)window.ProcessId, window.Handle, ProfileId: null);
         var session = orchestrator.StartAsync(SessionKind.Game, target, audio).GetAwaiter().GetResult();
         LogMicMute(session.Spec);
         var outcome = Wait(orchestrator, session, anchored.Task, stats, cancellation);
@@ -194,12 +199,27 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     /// The session's <c>video</c> value from the command line, sized to the window (made even) when
     /// no <c>--size</c> is given.
     /// </summary>
-    private VideoSettings VideoFor(WindowInfo window)
+    private VideoSettings VideoFor(WindowInfo? window)
     {
         int width, height;
         if (command.Size is { } size)
         {
             (width, height) = (size.Width, size.Height);
+        }
+        else if (window is null)
+        {
+            // Spike 11.1: the canvas rule, fitted to the codec's largest side only (no pixel budget).
+            var placements = MonitorCanvas.Place(command.Monitors!);
+            if (placements.Count == 0)
+            {
+                throw new EngineFailure(ErrorCodes.CaptureFailed, $"None of the monitors '{string.Join(", ", command.Monitors!)}' is attached.");
+            }
+
+            var native = MonitorCanvas.Bounds(placements).Size;
+            var maxSide = command.Codec == VideoCodec.H264 ? MonitorCanvas.H264MaxSide : MonitorCanvas.HevcAv1MaxSide;
+            var fitted = MonitorCanvas.Fit(native, maxSide);
+            (width, height) = (fitted.Width, fitted.Height);
+            _log.LogInformation("Monitors {Monitors}: canvas {Native}, encoded at {Fitted}", string.Join("; ", placements), native, fitted);
         }
         else
         {
