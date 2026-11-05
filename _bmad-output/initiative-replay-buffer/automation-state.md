@@ -46,7 +46,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy reviewing 14.7 round 2 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 12.4's doc nits |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with the 14.7 review fixes |
 
@@ -205,7 +205,7 @@ The coordinator logs each QA round in the Log below.
 | 33.2 | 12.6 Architecture: AD-26, the source output size | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 33.3 | 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `242e947`; Heavy and cost in the test backlog) |
 | 33.4 | 12.3 Source in the Video quality section | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `edf675f`) |
-| 33.5 | 12.4 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | review passed; two doc nits, then merge |
+| 33.5 | 12.4 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged; tests in the backlog) |
 | 33.6 | 12.5 Source-resolution output end to end on the builder's PC | | pending |
 | 34.1 | 13.1 Capture new games: the key, the engine default and the General switch | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `4f06c58`) |
 | 35.1 | 14.1 Architecture: AD-27, the in-app player | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
@@ -1030,3 +1030,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: The code review of 14.7 at `fd4a77a` failed with 4 findings: (1, regression) a volume change while muted at a clamp (Up at 1.0, Down at 0) no longer unmutes; (2) the volume rounding doesn't snap the slider thumb; (3, risk) the no-picture timer never starts if `Media` is set before the view attaches, which could hang the new test; (4) the test and the code read different front-buffer signals. Saving on close (Quit included), the scrub stop and the frame-only count were confirmed. Sent back to story-2-7, no tests. Unrun 14.7 default tests (for the backlog): `PlayerTransportTests.AViewFileFromBeforeThePlayerLoadsFullAndUnmuted`, `TheVolumeStepsWithoutDriftAndAnyChangeUnmutes`, `TheVolumeAndMuteAreKeptAcrossRuns`; `PlayerViewThemeTests.APageWithNoPictureInTimeSaysTheFileCantBePlayed`, `ThePlayerPageShowsInBothLooksAndTheHiddenListIgnoresItsKeys`.
 - 2026-11-05: The code review of 12.4 passed at `8af0e1f`: the same arguments at all five sites; the first chain at Open is a no-op through `SizedToSource`; matchSource off never acts; `MoveArmDelay` is only set by the test rig; the Heavy test now deterministically hits the cancel, including during the build. Two doc nits (`NewChain` and `SizedToSource` summaries swapped; the `MovePending` wording) are being fixed; then the coordinator merges.
 - 2026-11-05: 14.7 round 2 at `118d583`: any volume request while muted unmutes (clamps included); rounding before the compare, with a PropertyChanged snap; the no-picture wait starts on attach when `Media` is already set; one `_frontBufferAvailable` signal. The coordinator asked the reviewer to check that no non-user path (restore at open, the slider's write-back, a theme re-template) sets `Volume` while muted.
+- 2026-11-05: 12.4 merged into develop by the coordinator (in `coord-develop`) at `ed567a6` (doc nits fixed) and marked done. Develop builds Release with 0 warnings. Epic 12 has only 12.5 left (end to end on the builder's PC, HITL), which waits on the test backlog's night runs.
