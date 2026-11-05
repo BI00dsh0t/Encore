@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; bugfix full-run-flaky-tests in QA (8.8 held at e3822aa) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy with full-run-flaky-tests QA round 1 fixes (8.8 held at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
@@ -881,3 +881,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 11.4 passed at `feb8f94`: every acceptance criterion is covered; AD-4 and AD-22 hold; the keyboard guard was checked on the real controls; App 187, Core 165 and Contracts 135 passed. The coordinator accepted the linked `MonitorCanvasRule.cs` (it uses only Contracts types, and App and engine compile the same source), with a line recorded in AD-2. EXPERIENCE.md's one-screen rows are being updated to the picker. slice-epic-4 is merging.
 - 2026-11-05: 11.4 merged (`4356516`, `feat(app): merge 11.4-screens-picker`) after QA passed `feb8f94`. First, the QA doc fixes at `4de6f52`: EXPERIENCE.md's Monitor Recording rows describe the picker and say "your screens", and AD-2 records the linked `MonitorCanvasRule.cs` exception (Contracts types only; App.Tests must not name it, CS0433). Synced with develop, docs commits only (10.11's glossary test hasn't landed). 0-warning build; Contracts 135, Core 165 and App 187 passed, 0 failed. Marked done; the two picker renders were copied to `epic-multi-monitor-recording/`, and the builder's check of the preview against Windows' Display settings was added to the Human Check Queue.
 - 2026-11-05: 11.4 merged (`4356516`) and done (`64dded2`); card moved to Done. 10.11 must bring the picker's strings under its glossary test when it merges.
+- 2026-11-05: QA round 1 for full-run-flaky-tests failed at `0ad3fd7` with 2 findings, both in the new `MediaLengthTests`: (1) the test depends on order (FFmpeg isn't initialised when it runs alone); (2) it doesn't guard `MediaLength`'s wiring, so reverting to the file protocol still passes. Both product fixes check out (the IpcServer test fails without its fix; SharedInput's callbacks and frees are right and NativeAOT-safe), and the relaxations are accepted. Sent back to slice-epic-5, with two small ones (dispose `connected` if `Create` throws; bound the TrackMix audio against video + 0.5 s).
