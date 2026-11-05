@@ -30,8 +30,8 @@ A game's own Video quality and its reset are unchanged in code. "Change for this
 - New tests:
   - `ReplayBufferSettingsPageTests.SourceComesFirstSendsMatchSourceKeepingTheSizeAndAFixedSizeTurnsItOff`: Source first; choosing it sends `matchSource` with the size kept; the H.264 line shows for H.264 only; a fixed size turns it off; there is no help line then.
   - `GameProfilesPageTests.AGameTakingItsOwnVideoQualityKeepsSource`: the summary says Source, and the game's override carries `matchSource`. The tests' `SetProfiles` helper now lets a test's own global values win over its defaults; it overwrote `video` before.
-  - `SourceResolutionViewTests`: the Clips page shows Source selected and its help line in Fluent and Gaming dark.
-- PNGs for the builder, beside the App test binary (`tests/ReplayBuffer.App.Tests/bin/Release/net10.0-windows10.0.26100.0/`): `clips-source-fluent.png` and `clips-source-gaming.png`.
+  - `SourceResolutionViewTests`: the Clips page and a game's Video quality editor (`GameVideoEditor`, added at QA) show Source selected and its help line in Fluent and Gaming dark.
+- PNGs for the builder, beside the App test binary (`tests/ReplayBuffer.App.Tests/bin/Release/net10.0-windows10.0.26100.0/`): `clips-source-fluent.png`, `clips-source-gaming.png`, `game-video-source-fluent.png` and `game-video-source-gaming.png`.
 - No Heavy, GPU or bench runs: none apply.
 
 ## Follow-ups

@@ -9,23 +9,14 @@ using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Tests;
 
-/// <summary>Story 12.3: the Clips page's Video quality with Source chosen, in both themes.</summary>
+/// <summary>Story 12.3: the Clips page's and a game's Video quality with Source chosen, in both themes.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class SourceResolutionViewTests
 {
     [Fact]
     public void TheClipsPageShowsSourceAndItsHelpInBothThemes() => Sta.Run(() =>
     {
-        var engine = new FakeEngineSession();
-        engine.State = engine.State! with
-        {
-            Settings = SettingsDocument.Empty with
-            {
-                Revision = 1,
-                Global = SettingsMaps.EmptyValues.Add(Keys.Video.Name, Keys.Video.ToJson(Keys.Video.Default with { MatchSource = true })),
-            },
-        };
-        var model = new MainViewModel(engine, action => action());
+        var model = new MainViewModel(SourceEngine(), action => action());
         var window = new MainWindow
         {
             DataContext = model,
@@ -58,6 +49,55 @@ public sealed class SourceResolutionViewTests
             window.CloseForQuit();
         }
     });
+
+    [Fact]
+    public void TheGamesVideoEditorShowsSourceAndItsHelpInBothThemes() => Sta.Run(() =>
+    {
+        // A game's own Video quality (GameVideoEditor) binds the same view model as the Clips page.
+        var model = new MainViewModel(SourceEngine(), action => action());
+        var window = new Window
+        {
+            Content = new Border { Padding = new Thickness(16), Child = new GameVideoEditor { DataContext = model.ReplayBuffer } },
+            Width = 720,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -30000,
+            Top = -30000,
+            ShowActivated = false,
+            ShowInTaskbar = false,
+        };
+        try
+        {
+            window.Show();
+            foreach (var (theme, file) in new[] { (AppTheme.Fluent, "game-video-source-fluent.png"), (AppTheme.GamingDark, "game-video-source-gaming.png") })
+            {
+                ThemeService.ForWindow(window).Apply(theme);
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+                var resolution = Descendants<ComboBox>(window).Single(c => c.SelectedItem is ResolutionItem);
+                Assert.Equal(ReplayBufferSettingsPage.SourceLabel, ((ResolutionItem)resolution.SelectedItem).Label);
+                Assert.True(Descendants<TextBlock>(window).Single(t => t.Text == model.ReplayBuffer.SourceHelp).IsVisible);
+                Save(window, file);
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    private static FakeEngineSession SourceEngine()
+    {
+        var engine = new FakeEngineSession();
+        engine.State = engine.State! with
+        {
+            Settings = SettingsDocument.Empty with
+            {
+                Revision = 1,
+                Global = SettingsMaps.EmptyValues.Add(Keys.Video.Name, Keys.Video.ToJson(Keys.Video.Default with { MatchSource = true })),
+            },
+        };
+        return engine;
+    }
 
     private static List<T> Descendants<T>(DependencyObject root)
         where T : DependencyObject
