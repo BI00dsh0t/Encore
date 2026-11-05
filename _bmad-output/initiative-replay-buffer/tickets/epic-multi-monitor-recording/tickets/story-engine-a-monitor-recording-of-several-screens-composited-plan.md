@@ -3,7 +3,7 @@ title: 'Engine: a Monitor Recording of several screens, composited'
 type: 'feature'
 ticket: '3'
 created: '2026-11-04'
-status: built
+status: done
 baseline_revision: '2aef49f'
 route: 'full'
 risk: 'high'
