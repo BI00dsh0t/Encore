@@ -38,7 +38,7 @@ risk: 'medium'
     - over a real pipe on a Guid test instance, an old `settings.json` with no `matchSource` loads with it false, and `settings.update` with it true round-trips.
 - **Heavy, written and not run** (nights only): `MatchSourceTests.ARealCaptureOfA2560By1440WindowWithMatchSourceRecordsAt2560By1440`.
   - It runs `debug-capture --match-source` on a borderless, animated 2560×1440 window at the primary screen's top-left for 30 s at 60 fps, with a 1280×720 fallback size.
-  - It asserts exit 0, that the log's anchor line reads `output 2560x1440`, a 2560×1440 file, and a clean decode. The test takes `.bench-running` itself.
+  - It asserts exit 0, that the log's anchor line reads `output 2560x1440`, a 2560×1440 file at 60 fps (59 to 61 by its PTS) for 29 to 31 s, and a clean decode (QA: fps and length were missing). The test takes `.bench-running` itself.
 
   `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*ARealCaptureOfA2560By1440WindowWithMatchSourceRecordsAt2560By1440"`
 
