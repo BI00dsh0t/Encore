@@ -64,7 +64,8 @@ public sealed record DebugCaptureCommand(
     bool TrackLayout = false,
     string? Instance = null,
     IReadOnlyList<string>? Monitors = null,
-    bool MonitorDuplication = false) : EngineCommand
+    bool MonitorDuplication = false,
+    bool MatchSource = false) : EngineCommand
 {
     public const int DefaultSeconds = 30;
 
@@ -117,7 +118,7 @@ public static class CommandLine
                               [--stats <file.json>] [--gpu-priority <-7..7>] [--stages full|copy|wgc]
                               [--nvenc-preset p1..p7] [--nvenc-tune hq|ll|ull] [--color x1|x2] [--encode-thread]
                               [--codec h264|hevc|av1] [--size <W>x<H>] [--fps 1..120] [--bitrate <kbps>]
-                              [--encoder <ffmpeg encoder name>] [--track-layout]
+                              [--encoder <ffmpeg encoder name>] [--track-layout] [--match-source]
                               [--instance ReplayBuffer-Test-<suffix>]
           ReplayBuffer.Engine debug-capture --monitors all|<device name>[,...] [--monitor-api wgc|dd] [the options above]
                               (spike 11.1, dev only: the monitors composited into one canvas instead of a window;
@@ -176,6 +177,7 @@ public static class CommandLine
         string? instance = null;
         IReadOnlyList<string>? monitors = null;
         var monitorDuplication = false;
+        var matchSource = false;
 
         for (var i = 1; i < args.Count; i++)
         {
@@ -189,6 +191,12 @@ public static class CommandLine
             if (option == "--track-layout")
             {
                 trackLayout = true;
+                continue;
+            }
+
+            if (option == "--match-source")
+            {
+                matchSource = true;
                 continue;
             }
 
@@ -404,7 +412,7 @@ public static class CommandLine
         return new ParseResult(
             new DebugCaptureCommand(
                 window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages, preset, tune, color, encodeThread,
-                codec, size, fps, bitrate, encoder, trackLayout, instance, monitors, monitorDuplication),
+                codec, size, fps, bitrate, encoder, trackLayout, instance, monitors, monitorDuplication, matchSource),
             null);
     }
 

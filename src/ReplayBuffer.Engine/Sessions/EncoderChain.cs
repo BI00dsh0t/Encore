@@ -108,7 +108,21 @@ internal sealed class EncoderChain : IDisposable
 
     public VideoCodec Codec { get; }
 
-    public VideoSize OutputSize { get; }
+    public VideoSize OutputSize { get; private set; }
+
+    /// <summary>
+    /// Story 12.1 (matchSource): sets the output size before <see cref="Build"/> creates the frame
+    /// pool and scaler at it. A built chain keeps its size.
+    /// </summary>
+    public void SizeTo(VideoSize size)
+    {
+        if (IsBuilt)
+        {
+            throw new InvalidOperationException("A built encoder chain keeps its output size.");
+        }
+
+        OutputSize = size;
+    }
 
     public int Fps => Spec.Snapshot.Video.Fps;
 

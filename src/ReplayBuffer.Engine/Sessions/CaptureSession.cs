@@ -5,6 +5,7 @@ using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Core.Audio;
 using ReplayBuffer.Core.Monitors;
+using ReplayBuffer.Core.Output;
 using ReplayBuffer.Core.Replay;
 using ReplayBuffer.Core.Sessions;
 using ReplayBuffer.Engine.Audio;
@@ -268,6 +269,9 @@ internal sealed class CaptureSession : ICaptureSession
     private WindowInfo? _window;
     private MonitorInfo? _monitor;
     private IReadOnlyList<MonitorPlacement>? _composite;
+
+    // Story 12.1: the game's captured size at the anchor, for chains under matchSource; written before the anchor is published.
+    private VideoSize? _sourceSize;
     private string? _path;
     private D3D11Device? _device;
     private ICaptureSource? _capture;
@@ -521,6 +525,26 @@ internal sealed class CaptureSession : ICaptureSession
             _log.LogWarning("The {Codec} encoder probe failed: {Message}", codec, e.Message);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Story 12.1: a game session's <paramref name="chain"/>, not yet built, sized from the game's
+    /// captured size at the anchor when its snapshot has <c>matchSource</c> on (Core's
+    /// <see cref="SourceOutputSize"/>: even sides, scaled only to fit the chain's codec, and a game
+    /// under 640×360 keeping the snapshot's size). Unchanged otherwise, and for the Monitor session.
+    /// </summary>
+    private EncoderChain SizedToSource(EncoderChain chain) => SizedToSource(chain, IsMonitor, _sourceSize);
+
+    /// <summary><see cref="SizedToSource(EncoderChain)"/> for a session that <paramref name="isMonitor"/> or not, whose game was <paramref name="source"/> at the anchor.</summary>
+    internal static EncoderChain SizedToSource(EncoderChain chain, bool isMonitor, VideoSize? source)
+    {
+        if (!isMonitor && chain.Spec.Snapshot.Video.MatchSource && source is { } captured
+            && SourceOutputSize.For(captured.Width, captured.Height, chain.Codec) is { } size)
+        {
+            chain.SizeTo(new VideoSize(size.Width, size.Height));
+        }
+
+        return chain;
     }
 
     /// <summary>Whether this is the Monitor session (6.9), not a game window's.</summary>
@@ -1123,13 +1147,13 @@ internal sealed class CaptureSession : ICaptureSession
             if (switchTo is not null)
             {
                 var (encoder, codec) = ResolveEncoder(switchTo);
-                next = new EncoderChain(switchTo, encoder, codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
+                next = SizedToSource(new EncoderChain(switchTo, encoder, codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail));
                 next.Subscribe();
                 next.Build(_anchorQpc, first: false, latency: null);
             }
             else
             {
-                next = new EncoderChain(old.Spec, old.EncoderName, old.Codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
+                next = SizedToSource(new EncoderChain(old.Spec, old.EncoderName, old.Codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail));
                 next.Subscribe();
                 next.Build(_anchorQpc, first: false, latency: null, restartOf: old.Ring, window: old.WindowSeconds);
             }
@@ -1428,7 +1452,7 @@ internal sealed class CaptureSession : ICaptureSession
                 ? D3D11Device.CreateForMonitor(monitor.Handle, _loggers.CreateLogger<D3D11Device>())
                 : D3D11Device.Create(window!.Handle, _loggers.CreateLogger<D3D11Device>());
             var (encoder, codec) = ReferenceEquals(spec, lost.Spec) ? (lost.EncoderName, lost.Codec) : ResolveEncoder(spec);
-            next = new EncoderChain(spec, encoder, codec, null, _options, device, _audio, _micMute, _loggers, _log, Fail);
+            next = SizedToSource(new EncoderChain(spec, encoder, codec, null, _options, device, _audio, _micMute, _loggers, _log, Fail));
             next.Subscribe();
 
             // The same ring, in a new generation: what it held before the reset stays saveable. One a
@@ -2060,6 +2084,8 @@ internal sealed class CaptureSession : ICaptureSession
     {
         _anchorQpc = anchorQpc;
         var chain = _current!;
+        _sourceSize = contentSize;
+        SizedToSource(chain);
         _log.LogInformation("Anchor QPC {Anchor}; output {Size}, content {Content}", anchorQpc, chain.OutputSize, contentSize);
 
         _stats?.SnapshotAnchor();
@@ -2324,7 +2350,7 @@ internal sealed class CaptureSession : ICaptureSession
         try
         {
             var (encoder, codec) = ResolveEncoder(spec);
-            chain = new EncoderChain(spec, encoder, codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail);
+            chain = SizedToSource(new EncoderChain(spec, encoder, codec, null, _options, _device!, _audio, _micMute, _loggers, _log, Fail));
             chain.Subscribe();
             chain.Build(_anchorQpc, first: false, latency: null);
             _log.LogInformation("The encoder chain for the next save is built: {Size} at {Fps} fps, {Tracks} Tracks",
