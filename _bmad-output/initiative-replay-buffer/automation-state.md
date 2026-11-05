@@ -47,7 +47,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle; 14.2's Heavy tonight |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 14.5 (stacked on 14.2); 14.2's Heavy tonight |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -211,7 +211,7 @@ The coordinator logs each QA round in the Log below.
 | 35.2 | 14.2 Tracer: a Clip plays on a player page from the Library | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | code approved at `27ebd41`; Heavy tonight, then merge |
 | 35.3 | 14.3 Recordings play to the end: mehd at finalize | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | code QA passed at `e0ad4c0`; Heavy tonight, then merge |
 | 35.4 | 14.4 Track picker | | pending |
-| 35.5 | 14.5 Transport: seek bar, time, volume and keys | | pending |
+| 35.5 | 14.5 Transport: seek bar, time, volume and keys | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress (stacked on 14.2; moved ahead of 14.4) |
 | 35.6 | 14.6 When Windows can't play the file | | pending |
 | 35.7 | 14.7 Refactor sweep | | pending |
 | 35.8 | 14.8 The in-app player end to end on the builder's PC | | pending |
@@ -1009,3 +1009,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 14.2 round 2 at `4630577`: 4 of 5 fixes confirmed (every object reaches 0 refs with no GC, AOT-clean; redraw; Quit; resize). One finding: `Present()` catches only `ExternalException`, but `ThrowExceptionForHR` maps out-of-video-memory and an invalid size to `OutOfMemoryException` and `ArgumentException`, which would crash the App. The test also bypassed the view's catch. story-2-7 is widening the catch with a seam test through it; the coordinator checks it with no new QA round.
 - 2026-11-05: 14.2 round 3 at `27ebd41` was checked and approved by the coordinator: `PlayerView.Draw` uses commented `catch (Exception)` blocks around the surface build (it releases and shows Failed, paused) and the frame copy (skipped). The theory goes through the real catch for `OutOfMemoryException`, `COMException` and `ArgumentException`, plus a skipped-copy test. Platform.Desktop 15 and App 235 passed. Code QA done; it merges after tonight's `*PlayerPlaybackTests`.
 - 2026-11-05: **Builder: "checkout 14.2's branch."** The branch is checked out in story-2-7's worktree, so the main folder was detached at its tip `27ebd41` instead (the same code). Merges into develop are paused; the coordinator's state commits go through a `coord-develop` worktree.
+- 2026-11-05: **Builder, trying 14.2: "the player is missing basic player controls … all that exists is a play button."** The transport (14.5) moves ahead of the Track picker (14.4): 14.5 now comes after 14.2 and 14.4 after 14.5, and the tree check is clean. 14.5 went to story-2-7, stacked on 14.2's branch since 14.2 merges after tonight's Heavy. It includes the proof's seek-while-paused fix. 14.4 follows, stacked the same way.
