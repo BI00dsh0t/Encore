@@ -204,3 +204,18 @@ QA failed round 1 at `b11f216` with one blocking finding and four others.
 - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
 - Default suites, 0 failed (started 15:40): Platform.Desktop 15 of 15; App 232, with 209 passed and 23 skipped (Explicit/Heavy).
 - The Heavy `PlayerPlaybackTests` are unchanged and still unrun (nights).
+
+## QA round 2 fix (2026-11-05)
+
+Round 2 confirmed the references, the front-buffer redraw, Quit and resize. One finding was left: `Present`'s catches were too narrow. `ThrowOnFailure` and CsWinRT map `E_OUTOFMEMORY` to `OutOfMemoryException` and `E_INVALIDARG` to `ArgumentException`, which aren't `ExternalException`, so the App would have crashed from the dispatcher.
+
+- **Fix:** the present's work is now `PlayerView.Draw(page, ensureSurface, show, release)`.
+  - Any exception building the surface releases it and calls `page.ShowFailure()`, which pauses and shows the Failed line.
+  - Any exception copying a frame skips that frame.
+  - Both are commented `catch (Exception)`.
+- **Tests, through the real catch:**
+  - `LibraryPlayerTests.APictureTheGpuRefusesShowsTheFailureAndPauses` is a theory over `OutOfMemoryException`, `COMException` (DXGI device removed) and `ArgumentException`. Each releases the surface and leaves the page Failed, paused, with Play disabled.
+  - `AFrameThatCantBeCopiedIsSkippedAndThePageKeepsPlaying` has the fake's `CopyFrame` throw a `COMException` into a real 64×36 surface: nothing is shown, and the page keeps playing.
+- **Verification (round 3):**
+  - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+  - Default suites, 0 failed (started 15:48): Platform.Desktop 15 of 15; App 235, with 212 passed and 23 skipped (Explicit/Heavy).

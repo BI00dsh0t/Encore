@@ -1,4 +1,7 @@
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Interop;
 using ReplayBuffer.App.Library;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Platform.Desktop;
@@ -104,22 +107,55 @@ public sealed class LibraryPlayerTests : IDisposable
         Assert.Equal([("open", Path.Combine(_folder, Clip))], _shell.Calls);
     }
 
-    // QA 14.2 round 1: a GPU failure building the picture is the page's failure, never a blank picture.
-    [Fact]
-    public void APictureTheGpuRefusesShowsTheFailureAndPauses()
+    // QA 14.2 rounds 1 and 2: any GPU failure building the picture, however its HRESULT is mapped, is the
+    // page's failure through the view's own catch, never a blank picture or a crash.
+    [Theory]
+    [InlineData("out of video memory")]
+    [InlineData("com")]
+    [InlineData("unsupported size")]
+    public void APictureTheGpuRefusesShowsTheFailureAndPauses(string failure)
     {
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
-        page.Render(State());
-        page.Click(Row(page, Clip), ctrl: false, shift: false);
-        page.OpenFocused();
-        page.Player!.PlayPauseCommand.Execute(null);
-        Assert.True(_player.IsPlaying);
+        var page = PlayingPage();
+        var released = false;
 
-        page.Player.ShowFailure();
+        PlayerView.Draw(
+            page,
+            () => throw failure switch
+            {
+                "out of video memory" => new OutOfMemoryException(),
+                "com" => new COMException("device removed", unchecked((int)0x887A0005)),
+                _ => new ArgumentException("size"),
+            },
+            _ => Assert.Fail("Nothing is shown."),
+            () => released = true);
 
-        Assert.True(page.Player.IsFailed);
+        Assert.True(released);
+        Assert.True(page.IsFailed);
         Assert.False(_player.IsPlaying);
-        Assert.False(page.Player.PlayPauseCommand.CanExecute(null));
+        Assert.False(page.PlayPauseCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void AFrameThatCantBeCopiedIsSkippedAndThePageKeepsPlaying() => Sta.Run(() =>
+    {
+        var page = PlayingPage();
+        _player.CopyFails = new COMException("lost", unchecked((int)0x887A0007));
+        using var surface = new VideoSurface(64, 36, new WindowInteropHelper(new Window()).EnsureHandle());
+
+        PlayerView.Draw(page, () => surface, _ => Assert.Fail("A skipped frame isn't shown."), () => Assert.Fail("The surface is kept."));
+
+        Assert.Equal(PlayerState.Playing, page.State);
+    });
+
+    private PlayerPage PlayingPage()
+    {
+        var library = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        library.Render(State());
+        library.Click(Row(library, Clip), ctrl: false, shift: false);
+        library.OpenFocused();
+        library.Player!.PlayPauseCommand.Execute(null);
+        Assert.True(_player.IsPlaying);
+        return library.Player;
     }
 
     [Fact]
@@ -197,8 +233,15 @@ internal sealed class FakePlayer : IPlayer
 
     public void Pause() => IsPlaying = false;
 
+    /// <summary>CopyFrame throws this, as a lost device does.</summary>
+    public Exception? CopyFails { get; set; }
+
     public void CopyFrame(VideoSurface target)
     {
+        if (CopyFails is { } failure)
+        {
+            throw failure;
+        }
     }
 
     public void Dispose() => Disposed = true;

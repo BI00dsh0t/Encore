@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -112,15 +111,31 @@ internal partial class PlayerView
             return;
         }
 
+        Draw(page, () => EnsureSurface(media), Show, ReleaseSurface);
+    }
+
+    /// <summary>
+    /// One present's work: build or reuse the surface, copy the frame into it, show it.
+    /// <list type="bullet">
+    /// <item>Any failure building the surface releases it and puts the page in its Failed state, paused,
+    /// never a blank picture or a crash. That covers a failing HRESULT however it's mapped:
+    /// <c>COMException</c>, or <c>OutOfMemoryException</c> for out of video memory, or <c>ArgumentException</c>
+    /// for a size the GPU won't take.</item>
+    /// <item>A frame that can't be copied is skipped; the next one comes.</item>
+    /// </list>
+    /// </summary>
+    internal static void Draw(PlayerPage page, Func<VideoSurface?> ensureSurface, Action<VideoSurface> show, Action release)
+    {
         VideoSurface? surface;
         try
         {
-            surface = EnsureSurface(media);
+            surface = ensureSurface();
         }
-        catch (ExternalException)
+#pragma warning disable CA1031 // Every GPU failure here is the page's failure (QA 14.2 round 2): narrowing missed OutOfMemoryException and ArgumentException.
+        catch (Exception)
+#pragma warning restore CA1031
         {
-            // The GPU refused the surface (CsWin32 throws on any failing HRESULT): say so, never a blank picture.
-            ReleaseSurface();
+            release();
             page.ShowFailure();
             return;
         }
@@ -134,12 +149,18 @@ internal partial class PlayerView
         {
             page.Player.CopyFrame(surface);
         }
-        catch (Exception e) when (e is ExternalException or ObjectDisposedException or InvalidOperationException)
+#pragma warning disable CA1031 // A frame the player can't copy now (closing, its device lost, any mapped HRESULT) is skipped, never a crash.
+        catch (Exception)
+#pragma warning restore CA1031
         {
-            // A frame the player can't copy now (closing, or its device lost): skipped; the next one comes.
             return;
         }
 
+        show(surface);
+    }
+
+    private void Show(VideoSurface surface)
+    {
         surface.Flush();
         _image.Lock();
         _image.AddDirtyRect(new Int32Rect(0, 0, surface.Width, surface.Height));
