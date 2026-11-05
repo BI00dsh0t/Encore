@@ -115,14 +115,8 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     /// <summary>Each screen's source, in placement order.</summary>
     public IReadOnlyList<CompositeSource> Sources => _sources;
 
-    /// <summary>The compositor, for its counts.</summary>
-    public MonitorCompositor Compositor => _compositor;
-
     /// <summary>The GDI device names of the screens still captured.</summary>
     public IReadOnlyList<string> LiveDevices => [.. _sources.Where(s => !s.Removed).Select(s => s.Placement.Monitor.DeviceName)];
-
-    /// <summary>Whether any screen fell back to Desktop Duplication (or was asked to).</summary>
-    public bool AnyDuplication => _sources.Any(s => s.Api == "desktop-duplication");
 
     /// <summary>
     /// Starts every screen's capture, then the slot clock. A screen whose capture can't start at all
