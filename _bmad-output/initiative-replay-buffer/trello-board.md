@@ -162,5 +162,13 @@ Label ids take the form `ari:cloud:trello::label/workspace/6ae9f97af5eb2665e5252
 | 12.4 Refactor sweep | `6aec8e689f9e57da99d21004` |
 | 12.5 Source-resolution output end to end on the builder's PC | `6aec8e6987dad06b8fef18f7` |
 | 13.1 Capture new games: the key, the engine default and the General switch | `6aec8e6bed61cfb0536e8df8` |
+| 14.1 Architecture: AD-27, the in-app player | `6aece02e13573b81784d1632` |
+| 14.2 Tracer: a Clip plays on a player page from the Library | `6aece02f7071bd2e5b3ae544` |
+| 14.3 Recordings play to the end: mehd at finalize | `6aece030e26f999e85bba4f6` |
+| 14.4 Track picker | `6aece0314258cf3c88fe6a96` |
+| 14.5 Transport: seek bar, time, volume and keys | `6aece032f1d928984cdb931b` |
+| 14.6 When Windows can't play the file | `6aece0334874cb11c79fa3ae` |
+| 14.7 Refactor sweep | `6aece03437822070ee0a6b68` |
+| 14.8 The in-app player end to end on the builder's PC | `6aece03654e11803b0391c36` |
 
 The legend card at the top of Backlog is `6ae9fa9bd7f70d53c9518fbf`.
