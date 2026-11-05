@@ -6,6 +6,7 @@ using ReplayBuffer.Contracts.Ipc;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 using ReplayBuffer.Core.Sessions;
+using ReplayBuffer.Engine.Audio;
 
 namespace ReplayBuffer.Engine.Tests;
 
@@ -164,6 +165,21 @@ public sealed class MeterServeTests : IAsyncLifetime
             await Task.Delay(20, Token);
         }
 
+        Assert.Equal(0, _tones.ActiveSubscriptions);
+    }
+
+    [Fact]
+    public void ALateDisconnectUnwatchKeepsANewerWatch()
+    {
+        // QA 10.4: the disconnect's queued unwatch runs after a new client watched.
+        using var meters = new TrackMeters(_tones, _ => { }, NullLogger.Instance);
+        meters.Watch(Draft);
+        var departed = meters.Generation;
+        meters.Watch(Draft);
+
+        Assert.False(meters.UnwatchIf(departed));
+        Assert.Equal(2, _tones.ActiveSubscriptions);
+        Assert.True(meters.UnwatchIf(meters.Generation));
         Assert.Equal(0, _tones.ActiveSubscriptions);
     }
 

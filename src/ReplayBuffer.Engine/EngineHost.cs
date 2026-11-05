@@ -573,17 +573,25 @@ internal sealed class EngineHost : IAsyncDisposable
                 return ValueTask.FromResult(Empty.Value);
             });
             // A watch outlives no client: a crashed or killed App would leave every probed device open.
-            server.LastDisconnected += () => ThreadPool.QueueUserWorkItem(_ =>
+            // Queued, so it re-checks: a client that connected and watched since keeps its watch.
+            server.LastDisconnected += () =>
             {
-                try
+                var generation = trackMeters.Generation;
+                ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    trackMeters.Unwatch();
-                }
-                catch (ObjectDisposedException)
-                {
-                    // The engine is stopping; its dispose closes the watch.
-                }
-            });
+                    try
+                    {
+                        if (server.ConnectionCount == 0)
+                        {
+                            trackMeters.UnwatchIf(generation);
+                        }
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // The engine is stopping; its dispose closes the watch.
+                    }
+                });
+            };
             router.Register(AudioMessages.Unwatch, (_, _) =>
             {
                 trackMeters.Unwatch();
