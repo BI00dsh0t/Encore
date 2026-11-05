@@ -42,9 +42,9 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 12.2 |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 12.2's plan; 11.5 and 12.1 Heavy tonight |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; 12.2 in QA; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy merging 12.3 |
 
@@ -201,7 +201,7 @@ The coordinator logs each QA round in the Log below.
 | 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
 | 33.1 | 12.1 Tracer: the matchSource key and a game chain at the source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | merged (`735a52d`); open until tonight's Heavy 2560x1440 match-source capture passes |
 | 33.2 | 12.6 Architecture: AD-26, the source output size | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
-| 33.3 | 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | plan approved; building (day); Heavy and cost at night |
+| 33.3 | 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA (code); Heavy and cost tonight; merges after them |
 | 33.4 | 12.3 Source in the Video quality section | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
 | 33.5 | 12.4 Refactor sweep | | pending |
 | 33.6 | 12.5 Source-resolution output end to end on the builder's PC | | pending |
@@ -969,3 +969,11 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 12.2's plan at `81919f7` was approved by the coordinator. It covers: a pure Core `SourceSizeWatch` (3 s of frame time; under 640×360 ignored; held back while a writer is attached); the move through the prepared slot plus a new `ArmMove` (no `ChainKey` change; `reset-gap` through `Retire`'s `CheckGap`); a GPU reset at the current size; file mode never moving; one-screen Monitor through `PlanCanvas` under matchSource. Default tests: `SourceSizeWatchTests` and `CanvasPlanTests`. Heavy at night: a resize leading to a 2560×1440 Clip, a resize during a Recording, one-screen 3840×2160. Cost at night: `bench fps baseline,capture,capture-ms`, 2 × 45 s, with every session paused and an overlap log. Accepted: the Record-press refusal inside the armed window, as today.
 - 2026-11-05: 12.3 READY FOR QA at `af6212f` (App only): "Source — the game's or screen's own size" first in the Resolution list; Source sends matchSource true with the size kept; a SourceHelp line with an H.264-only 4096 px line; a game's summary reads "Source" under matchSource. App 200, Core 170 and Contracts 137 passed. QA went to slice-epic-8 (Sonnet, medium effort).
 - 2026-11-05: QA 12.3 passed at `af6212f`: every acceptance criterion holds; token style; glossary wording; the `SetProfiles` change is safe; App 220, Core 170 and Contracts 137 passed. Before merging, add `GameVideoEditor.xaml` to the both-themes load check, since nothing rendered it. story-2-7 is merging.
+- 2026-11-05: 12.2 READY FOR QA at `a569f28` (code `ab21bfb`), built to the approved plan, with two refinements: `SourceSizeWatch` has no wait-for-chain state; a new `ICaptureSession.SetBuildAhead(bool)` turns build-ahead off while a Monitor Recording runs (the move then uses Restart's tear-down-first path). Default: `SourceSizeWatchTests` and the one-screen `CanvasPlanTests`. Contracts 137, Core 173, Media 102, Platform.Capture 8, Engine 202 and App 197 passed; publish clean. Code QA went to slice-epic-8 (Sonnet, high effort). Because it's high risk, it merges only after tonight's Heavy run.
+- **Tonight's GPU queue (23:03), in order:**
+  1. 8.8's 8-hour Disk soak (slice-epic-5).
+  2. 11.5's Heavy `MonitorRecordingCaptureTests` rerun (qa-2-1).
+  3. 12.1's Heavy `ARealCaptureOfA2560By1440WindowWithMatchSourceRecordsAt2560By1440` (qa-2-1).
+  4. 12.2's three Heavy tests (qa-2-1).
+  5. 12.2's cost run, `bench fps --conditions baseline,capture,capture-ms --seconds 45 --passes 2`, with every session paused and an overlap log.
+  6. The two Heavy follow-ups (fragment cadence, short video).
