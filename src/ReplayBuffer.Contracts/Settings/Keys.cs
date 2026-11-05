@@ -175,9 +175,20 @@ public static class Keys
     public static SettingKey<RecordHotkeyMode> RecordHotkeyMode { get; } = new(
         "recordHotkeyMode", Json.RecordHotkeyMode, Settings.RecordHotkeyMode.Toggle, overridable: false, AppliesAt.Immediate, Enum.IsDefined);
 
-    /// <summary>The monitor device name for Monitor Recording; null is the primary monitor.</summary>
+    /// <summary>
+    /// The monitor device name for Monitor Recording; null is the primary monitor. Read only while
+    /// <see cref="MonitorRecordingScreens"/> is null (AD-25).
+    /// </summary>
     public static SettingKey<string?> MonitorRecordingMonitor { get; } = new(
         "monitorRecordingMonitor", Json.String, null, overridable: false, AppliesAt.NextSession, IsNotBlank, allowsNull: true);
+
+    /// <summary>
+    /// The screens a Monitor Recording composites (AD-25, story 11.2): all, or a selection of monitor
+    /// ids. Null (the default) reads the old <see cref="MonitorRecordingMonitor"/>.
+    /// </summary>
+    public static SettingKey<MonitorRecordingScreens?> MonitorRecordingScreens { get; } = new(
+        "monitorRecordingScreens", Json.MonitorRecordingScreens, null, overridable: false, AppliesAt.NextSession,
+        IsValidMonitorRecordingScreens, allowsNull: true);
 
     public static SettingKey<FeedbackSounds> FeedbackSounds { get; } = new(
         "feedbackSounds", Json.FeedbackSounds,
@@ -227,12 +238,22 @@ public static class Keys
         StartWithWindows,
         OverlayDot,
         AppTheme,
+        MonitorRecordingScreens,
     ];
 
     private static readonly Dictionary<string, SettingKey> ByName = All.ToDictionary(k => k.Name, StringComparer.Ordinal);
 
     /// <summary>Looks a key up by its exact name.</summary>
     public static bool TryGet(string name, [NotNullWhen(true)] out SettingKey? key) => ByName.TryGetValue(name, out key);
+
+    /// <summary>All with no list; Selected with at least one non-blank id, none repeated (ignoring case).</summary>
+    private static bool IsValidMonitorRecordingScreens(MonitorRecordingScreens? v) =>
+        v is null
+        || (v.Mode == MonitorScreensMode.All && v.Monitors is null or { Count: 0 })
+        || (v.Mode == MonitorScreensMode.Selected
+            && v.Monitors is { Count: > 0 } ids
+            && ids.All(id => !string.IsNullOrWhiteSpace(id))
+            && ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() == ids.Count);
 
     private static bool IsValidVideo(VideoSettings v) =>
         Enum.IsDefined(v.Codec)

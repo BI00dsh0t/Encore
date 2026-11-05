@@ -23,18 +23,18 @@ internal sealed class MainViewModel : Observable
 
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
     /// <param name="libraryViewFile">Where the Library remembers its view choices; without it, they last only this run.</param>
-    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null)
+    /// <param name="defaultCacheFolder">The engine's default cache folder, shown on the Clips page.</param>
+    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null)
     {
         _engine = engine;
         StatusLine = new StatusLine(engine);
-        Pages = SettingsPages.Create(new SettingsSender(engine), engine);
+        Pages = SettingsPages.Create(new SettingsSender(engine), engine, defaultCacheFolder);
         General = Pages.OfType<GeneralSettingsPage>().Single();
         ReplayBuffer = Pages.OfType<ReplayBufferSettingsPage>().Single();
         Hotkeys = Pages.OfType<HotkeysPage>().Single();
         TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
         GameProfiles = Pages.OfType<GameProfilesPage>().Single();
         FeedbackSounds = Pages.OfType<FeedbackSoundsPage>().Single();
-        Recordings = Pages.OfType<RecordingsSettingsPage>().Single();
         LibrarySettings = Pages.OfType<LibrarySettingsPage>().Single();
         _selectedPage = Pages[0];
         Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile);
@@ -66,9 +66,6 @@ internal sealed class MainViewModel : Observable
 
     /// <summary>The Feedback Sounds page, which takes the snapshot's device list and warnings as well as its settings.</summary>
     public FeedbackSoundsPage FeedbackSounds { get; }
-
-    /// <summary>The Recordings page, which lists the engine's monitors as well as taking its settings.</summary>
-    public RecordingsSettingsPage Recordings { get; }
 
     /// <summary>The Library and Cleanup page, which takes the snapshot's Library folder, items and Cleanup block as well as its settings.</summary>
     public LibrarySettingsPage LibrarySettings { get; }
@@ -185,7 +182,7 @@ internal sealed class MainViewModel : Observable
         GameProfiles.ShowState(state);
         Hotkeys.ShowStatus(state.Hotkeys);
         FeedbackSounds.ShowState(state);
-        Recordings.ShowState(state);
+        Hotkeys.ShowMonitors(state);
         LibrarySettings.ShowState(state);
         Library.Render(state);
 

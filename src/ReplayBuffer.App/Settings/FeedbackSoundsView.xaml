@@ -8,7 +8,7 @@
     </UserControl.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
-            <HeaderedContentControl Header="Feedback Sounds" Style="{DynamicResource RbSettingsSectionStyle}">
+            <HeaderedContentControl Header="Sounds" Style="{DynamicResource RbSettingsSectionStyle}">
                 <StackPanel>
                     <TextBlock Margin="0,0,0,8"
                                Style="{DynamicResource RbSettingsErrorTextStyle}"

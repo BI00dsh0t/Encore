@@ -96,18 +96,18 @@ public sealed class RecordingsEndToEndTests : IDisposable
             Assert.NotEmpty(monitors);
             Assert.True(monitors[0].Primary);
             Assert.Single(monitors, m => m.Primary);
-            main.Recordings.RefreshCommand.Execute(null);
-            Until(() => main.Recordings.Monitors.Count == monitors.Count + 1, "the Recordings page's monitor list");
-            Assert.Null(main.Recordings.Monitors[0].DeviceName);
-            Assert.Equal(monitors.Select(m => m.DeviceName), main.Recordings.Monitors.Skip(1).Select(m => m.DeviceName));
+            main.Hotkeys.Monitor.RefreshCommand.Execute(null);
+            Until(() => main.Hotkeys.Monitor.Monitors.Count == monitors.Count + 1, "the Recordings page's monitor list");
+            Assert.Null(main.Hotkeys.Monitor.Monitors[0].DeviceName);
+            Assert.Equal(monitors.Select(m => m.DeviceName), main.Hotkeys.Monitor.Monitors.Skip(1).Select(m => m.DeviceName));
             chosenMonitor = monitors[^1].DeviceName;
-            main.Recordings.SelectedMonitor = main.Recordings.Monitors[^1];
+            main.Hotkeys.Monitor.SelectedMonitor = main.Hotkeys.Monitor.Monitors[^1];
             Until(() => Effective(engine).MonitorRecordingMonitor == chosenMonitor, "monitorRecordingMonitor saved");
 
             // The Hotkeys page: Toggle shows the toggle rows; a Separate key bound in Toggle mode is inactive.
             var hotkeys = main.Hotkeys;
             Assert.True(hotkeys.IsToggleMode);
-            Assert.Equal(["Save Clip", "Mic mute", "Record (toggle)", "Monitor Recording (toggle)"], Shown(hotkeys));
+            Assert.Equal(["Save Clip", "Mic mute", "Record", "Monitor Recording"], Shown(hotkeys));
             hotkeys.Capture(HotkeyAction.RecordStart, recordStart);
             Until(() => Status(engine, HotkeyAction.RecordStart) is { Binding: not null }, "Record start saved");
             hotkeys.Capture(HotkeyAction.RecordStop, recordStop);
@@ -120,7 +120,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             // Separate shows the start and stop rows, and the engine now holds the Separate keys.
             hotkeys.IsSeparateMode = true;
             Until(() => Effective(engine).RecordHotkeyMode == RecordHotkeyMode.Separate, "recordHotkeyMode saved");
-            Assert.Equal(["Save Clip", "Mic mute", "Record start", "Record stop", "Monitor Recording (start)", "Monitor Recording (stop)"], Shown(hotkeys));
+            Assert.Equal(["Save Clip", "Mic mute", "Record start", "Record stop", "Monitor Recording start", "Monitor Recording stop"], Shown(hotkeys));
             Until(() => Status(engine, HotkeyAction.RecordStart) is { Registered: true } && Status(engine, HotkeyAction.RecordStop) is { Registered: true }, "the Separate keys registered");
             Until(() => Row(hotkeys, HotkeyAction.RecordStart).StatusText == "Working", "Record start working");
             Assert.Equal("Not used in this Record mode", Row(hotkeys, HotkeyAction.MonitorRecordToggle).StatusText);
@@ -131,7 +131,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
         {
             var engine = second.Engine;
             var main = second.Main;
-            Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId) && main.Recordings.SelectedMonitor?.DeviceName == chosenMonitor, "the pages after a restart");
+            Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId) && main.Hotkeys.Monitor.SelectedMonitor?.DeviceName == chosenMonitor, "the pages after a restart");
             Assert.True(main.GameProfiles.Profiles.Single(p => p.ProfileId == ProfileId).RecordingsEnabled);
             Assert.True(main.Hotkeys.IsSeparateMode);
             Assert.Equal("Ctrl+Alt+Shift+F20", Row(main.Hotkeys, HotkeyAction.RecordStart).BindingText);

@@ -53,6 +53,12 @@ public static class ErrorCodes
     /// <summary>A settings update names a Game Profile that does not exist.</summary>
     public const string ProfileNotFound = "profile-not-found";
 
+    /// <summary>
+    /// A settings update would leave the cache folder (<c>ringPath</c>, or its default) inside the Clips
+    /// folder (<c>outputFolder</c>, or its default), or the Clips folder inside the cache folder (AD-17, story 10.9); nothing changed.
+    /// </summary>
+    public const string RingPathInvalid = "ring-path-invalid";
+
     /// <summary>The settings file could not be written; nothing changed.</summary>
     public const string SettingsWriteFailed = "settings-write-failed";
 
@@ -301,6 +307,24 @@ public static class ErrorCodes
     /// </summary>
     public const string MonitorRemoved = "monitor-removed";
 
+    /// <summary>
+    /// A warning (AD-25): a screen chosen in <c>monitorRecordingScreens</c> isn't attached as a
+    /// Monitor Recording starts, so it is skipped; the others are recorded. No Overlay message.
+    /// </summary>
+    public const string MonitorMissing = "monitor-missing";
+
+    /// <summary>
+    /// None of the screens chosen in <c>monitorRecordingScreens</c> is attached, so the Monitor
+    /// Recording doesn't start (AD-25); the usual failure notices follow.
+    /// </summary>
+    public const string MonitorRecordingNoScreens = "monitor-recording-no-screens";
+
+    /// <summary>
+    /// A warning (AD-25): a monitor arrived during a Monitor Recording of All screens. The canvas never
+    /// changes inside a file, so the monitor joins at the next Monitor Recording. No Overlay message.
+    /// </summary>
+    public const string MonitorAddedNextRecording = "monitor-added-next-recording";
+
     /// <summary>Every code in the registry.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -372,5 +396,9 @@ public static class ErrorCodes
         NotDevInstance,
         MonitorCaptureFallback,
         MonitorRemoved,
+        RingPathInvalid,
+        MonitorMissing,
+        MonitorRecordingNoScreens,
+        MonitorAddedNextRecording,
     ];
 }

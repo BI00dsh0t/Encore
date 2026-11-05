@@ -14,6 +14,7 @@ public sealed partial class KeysTests
                 "video", "trackLayout", "bufferWindow", "replayStorage", "ringPath", "saveCooldown", "outputFolder",
                 "hotkeys", "recordHotkeyMode", "monitorRecordingMonitor", "feedbackSounds", "feedbackSoundDevice",
                 "cleanup", "manualGames", "startWithWindows", "overlayDot", "appTheme",
+                "monitorRecordingScreens",
             ],
             Keys.All.Select(k => k.Name));
     }
@@ -100,6 +101,10 @@ public sealed partial class KeysTests
     [InlineData("video", """{"codec":"h264","width":1921,"height":1080,"fps":60,"bitrateKbps":40000,"rateControl":"cbr"}""")]
     [InlineData("ringPath", "\"relative\\\\ring\"")]
     [InlineData("manualGames", """["c:\\games\\a.exe","C:\\Games\\A.exe"]""")]
+    [InlineData("monitorRecordingScreens", """{"mode":"selected","monitors":[]}""")]
+    [InlineData("monitorRecordingScreens", """{"mode":"selected"}""")]
+    [InlineData("monitorRecordingScreens", """{"mode":"selected","monitors":["a","A"]}""")]
+    [InlineData("monitorRecordingScreens", """{"mode":"all","monitors":["a"]}""")]
     public void BadValuesAreRefused(string name, string json)
     {
         Assert.True(Keys.TryGet(name, out var key));
@@ -111,6 +116,9 @@ public sealed partial class KeysTests
     [Theory]
     [InlineData("ringPath", "null")]
     [InlineData("ringPath", "\"D:\\\\ring\"")]
+    [InlineData("monitorRecordingScreens", "null")]
+    [InlineData("monitorRecordingScreens", """{"mode":"all"}""")]
+    [InlineData("monitorRecordingScreens", """{"mode":"selected","monitors":["\\\\?\\DISPLAY#SAM7177#1","\\\\.\\DISPLAY2"]}""")]
     public void GoodValuesAreAccepted(string name, string json)
     {
         Assert.True(Keys.TryGet(name, out var key));

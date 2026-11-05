@@ -45,6 +45,7 @@ public static class SettingsResolver
             Hotkeys = Get(Keys.Hotkeys),
             RecordHotkeyMode = Get(Keys.RecordHotkeyMode),
             MonitorRecordingMonitor = Get(Keys.MonitorRecordingMonitor),
+            MonitorRecordingScreens = Get(Keys.MonitorRecordingScreens),
             FeedbackSounds = Get(Keys.FeedbackSounds),
             FeedbackSoundDevice = Get(Keys.FeedbackSoundDevice),
             Cleanup = Get(Keys.Cleanup),
