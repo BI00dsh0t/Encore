@@ -3,7 +3,7 @@ title: 'Library sort and search'
 type: 'feature'
 ticket: '3'
 created: '2026-11-05'
-status: 'built'
+status: done
 baseline_revision: '33686fa'
 route: 'oneshot'
 route_source: 'auto'
