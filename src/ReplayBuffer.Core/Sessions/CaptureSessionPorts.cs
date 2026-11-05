@@ -144,6 +144,15 @@ public interface ICaptureSession
     /// capture it. Called on the orchestrator thread.
     /// </summary>
     bool DropMonitor(string device) => false;
+
+    /// <summary>
+    /// Story 12.2 (AD-7, AD-26): whether the session may build a chain ahead beside its current one,
+    /// for a move to the game's new size. False while a Monitor Recording holds the other chain, when a
+    /// move tears the current chain down first. True by default. Called on the orchestrator thread.
+    /// </summary>
+    void SetBuildAhead(bool allowed)
+    {
+    }
 }
 
 /// <summary>

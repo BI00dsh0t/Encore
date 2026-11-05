@@ -23,6 +23,7 @@
       -x2            BGRA -> NV12 on the D3D11 VideoProcessor (--color x2)
       -fast          --nvenc-preset p1 --nvenc-tune ll
       -thread        --encode-thread (no effect since story 1.11: the encoder thread is always on)
+      -ms            --match-source (story 12.2): the game chain at the game's own size, -Size only the fallback
       -mon<mode>     spike 11.1: a second engine records a Monitor Recording beside the capture,
                      debug-capture --monitors, for the same span, at -Fps; <mode> is one of
                        one     the primary monitor alone, H.264 at its size (today's Monitor Recording)
@@ -203,8 +204,9 @@ function Resolve-Condition([string] $Name) {
             '^x2$' { $condition.EngineOptions += @('--color', 'x2') }
             '^fast$' { $condition.EngineOptions += @('--nvenc-preset', 'p1', '--nvenc-tune', 'll') }
             '^thread$' { $condition.EngineOptions += @('--encode-thread') }
+            '^ms$' { $condition.EngineOptions += @('--match-source') }
             '^mon' { $condition.MonitorOptions = Resolve-MonitorOptions $suffix.Substring(3) $Name }
-            default { Fail "Unknown suffix '$suffix' in condition '$Name'. Use -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast, -thread or -mon<mode>." }
+            default { Fail "Unknown suffix '$suffix' in condition '$Name'. Use -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast, -thread, -ms or -mon<mode>." }
         }
     }
 

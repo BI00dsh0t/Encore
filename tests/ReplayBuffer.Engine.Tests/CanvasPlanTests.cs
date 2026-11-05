@@ -23,6 +23,32 @@ public sealed class CanvasPlanTests
         new(new MonitorInfo(2, @"\\.\DISPLAY2", false), 2560, 0, 3840, 2160, 144),
     ];
 
+    [Fact]
+    public void UnderMatchSourceOneScreenRecordsAtItsModeSizeSwitchingCodecOnlyOver4096()
+    {
+        // Story 12.2: a fake 3840x2160 mode stays H.264 (it fits 4096); a fake 5120x1440 one takes HEVC at full size.
+        var uhd = new DisplayMonitor(@"\\.\DISPLAY2", "U32", 0, 0, false);
+        var wide = new DisplayMonitor(@"\\.\DISPLAY3", "Wide", 0, 0, false);
+        MonitorPlacement[] uhdPlaced = [new(new MonitorInfo(2, uhd.DeviceName, false), 2560, 0, 3840, 2160, 144)];
+        MonitorPlacement[] widePlaced = [new(new MonitorInfo(3, wide.DeviceName, false), 0, 0, 5120, 1440, 120)];
+
+        var (onUhd, composite) = CaptureSession.PlanCanvas(OneScreenSpec(uhd, matchSource: true), [uhd], uhdPlaced, _ => true, null, NullLogger.Instance);
+        var (onWide, _) = CaptureSession.PlanCanvas(OneScreenSpec(wide, matchSource: true), [wide], widePlaced, _ => true, null, NullLogger.Instance);
+        var (off, _) = CaptureSession.PlanCanvas(OneScreenSpec(uhd, matchSource: false), [uhd], uhdPlaced, _ => true, null, NullLogger.Instance);
+
+        Assert.Null(composite);
+        Assert.Equal((VideoCodec.H264, 3840, 2160), (onUhd.Snapshot.Video.Codec, onUhd.Snapshot.Video.Width, onUhd.Snapshot.Video.Height));
+        Assert.Equal((VideoCodec.Hevc, 5120, 1440), (onWide.Snapshot.Video.Codec, onWide.Snapshot.Video.Width, onWide.Snapshot.Video.Height));
+        Assert.Equal((VideoCodec.H264, 1920, 1080), (off.Snapshot.Video.Codec, off.Snapshot.Video.Width, off.Snapshot.Video.Height));
+    }
+
+    private static SessionSpec OneScreenSpec(DisplayMonitor screen, bool matchSource)
+    {
+        var video = new VideoSettings(VideoCodec.H264, 1920, 1080, 60, 20_000, RateControl.Cbr, matchSource);
+        var snapshot = Core.Settings.SettingsResolver.Resolve(SettingsDocument.Empty with { Global = SettingsDocument.Empty.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(video)) }, null);
+        return new SessionSpec(SessionKind.Monitor, new CaptureTarget(0, 0, null), snapshot, SessionAudio.None) { Screens = [screen] };
+    }
+
     private static SessionSpec MonitorSpec => new(
         SessionKind.Monitor, new CaptureTarget(0, 0, null), Core.Settings.SettingsResolver.Resolve(SettingsDocument.Empty, null), SessionAudio.None) { Screens = Screens };
 
