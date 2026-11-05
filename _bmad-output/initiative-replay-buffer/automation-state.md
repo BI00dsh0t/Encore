@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off (8.8 is held on its branch at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with QA 11.1 (8.7 fps command is in its plan) |
-| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.5 |
+| qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.2 |
@@ -186,7 +186,7 @@ The coordinator logs each QA round in the Log below.
 | 31.3 | 10.3 Library sort and search | | pending |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | | pending |
+| 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
 | 31.7 | 10.10 Games list and a page per game | | pending |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
@@ -835,3 +835,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 10.5 passed at `d0880b9` (round 2): `Load()` closes the picker, with a test, and the nav dot uses the radius tokens. App 157 passed. qa-1-14 is merging. QA 11.1 found 4 problems at `96abe48` (the go verdict looks sound) and is waiting for the implementer's fixes.
 - 2026-11-05: QA 10.2 passed at `be7ee5e` (round 2): a Favourite starred mid-batch is skipped, and the rename box keeps its own right-click. App 159, Core 161, Contracts 125 and Platform.Desktop 13 passed. story-2-7 is merging.
 - 2026-11-05: 10.5 merged (`08fb829`, `feat(app): merge 10.5-audio-tracks-editor`) after QA passed at `d0880b9` and develop was synced: 0-warning build; Contracts 128, Core 161 and App 157 passed, 0 failed. Marked done; the four Audio Tracks renders were copied to `ux-pass-2/renders/`, and the BEACN/Resolve check was added to the Human Check Queue. qa-1-14 is back in the pool.
+- 2026-11-05: 10.5 merged (`08fb829`, marked done `f4978fa`, with its Human Check row), and its card is Done. 10.9 (settings reorganised: the folder picker, Clips, Hotkeys, Storage and Recordings removed) went to qa-1-14 (Opus, medium effort; context kept), with its card In progress. 10.2 is merging.
