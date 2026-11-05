@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Windows.Media;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,11 +17,27 @@ internal partial class MainWindow
 
     private bool _quitting;
 
+    // The window as it was before the player went full screen (story 14.9); null while not.
+    private (WindowStyle Style, ResizeMode Resize, WindowState State)? _beforeFullScreen;
+
     internal override bool UsesMica => true;
 
     public MainWindow()
     {
         InitializeComponent();
+        DataContextChanged += (_, e) =>
+        {
+            if (e.OldValue is MainViewModel old)
+            {
+                old.PropertyChanged -= OnModelPropertyChanged;
+            }
+
+            if (e.NewValue is MainViewModel model)
+            {
+                model.PropertyChanged += OnModelPropertyChanged;
+                ApplyFullScreen(model.IsPlayerFullScreen);
+            }
+        };
         IsVisibleChanged += (_, _) =>
         {
             if (DataContext is MainViewModel model)
@@ -55,6 +72,15 @@ internal partial class MainWindow
     {
         // Story 10.10: Esc (after a control's own) and Alt+Left close a drill-in item page.
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // Story 14.9: in full screen, Esc only leaves it; the player page stays open.
+        if (key == Key.Escape && DataContext is MainViewModel { IsPlayerFullScreen: true } fullScreen)
+        {
+            fullScreen.LeavePlayerFullScreen();
+            e.Handled = true;
+            return;
+        }
+
         if (DataContext is MainViewModel { CurrentDrillIn: { IsOpen: true } drillIn }
             && (key == Key.Escape || (key == Key.Left && Keyboard.Modifiers == ModifierKeys.Alt)))
         {
@@ -107,8 +133,71 @@ internal partial class MainWindow
         }
     }
 
+    /// <summary>Whether the window is in the player's full screen: for tests.</summary>
+    internal bool IsFullScreen => _beforeFullScreen is not null;
+
+    private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsPlayerFullScreen) && sender is MainViewModel model)
+        {
+            ApplyFullScreen(model.IsPlayerFullScreen);
+        }
+    }
+
+    // Story 14.9: the player page fills the screen. The window drops its frame and covers the monitor, and the
+    // nav, status line, page header and page padding go; leaving puts each back as it was.
+    private void ApplyFullScreen(bool on)
+    {
+        if (on == IsFullScreen)
+        {
+            return;
+        }
+
+        if (on)
+        {
+            _beforeFullScreen = (WindowStyle, ResizeMode, WindowState);
+            NavPane.Visibility = Visibility.Collapsed;
+            NavColumn.Width = new GridLength(0);
+            StatusHeader.Visibility = Visibility.Collapsed;
+            PageHeader.Visibility = Visibility.Collapsed;
+            ContentPanel.Margin = new Thickness(0);
+            Page.Margin = new Thickness(0);
+            ContentLayer.BorderThickness = new Thickness(0);
+            ContentLayer.CornerRadius = new CornerRadius(0);
+            ContentLayer.Background = Brushes.Black;
+
+            // Normal first, so the maximized borderless window covers the taskbar too.
+            WindowState = System.Windows.WindowState.Normal;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            WindowState = System.Windows.WindowState.Maximized;
+            return;
+        }
+
+        var (style, resize, state) = _beforeFullScreen!.Value;
+        _beforeFullScreen = null;
+        WindowState = System.Windows.WindowState.Normal;
+        WindowStyle = style;
+        ResizeMode = resize;
+        WindowState = state;
+        NavPane.ClearValue(VisibilityProperty);
+        StatusHeader.ClearValue(VisibilityProperty);
+        PageHeader.ClearValue(VisibilityProperty);
+        ContentPanel.ClearValue(MarginProperty);
+        Page.Margin = new Thickness(0, 12, 0, 0);
+        ContentLayer.ClearValue(Border.BorderThicknessProperty);
+        ContentLayer.ClearValue(Border.CornerRadiusProperty);
+        ContentLayer.ClearValue(Border.BackgroundProperty);
+        NavColumn.Width = new GridLength(ActualWidth < NarrowWidth ? NarrowNavWidth : NavWidth);
+    }
+
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        if (IsFullScreen)
+        {
+            return;
+        }
+
         var narrow = e.NewSize.Width < NarrowWidth;
         NavColumn.Width = new GridLength(narrow ? NarrowNavWidth : NavWidth);
         Nav.Tag = narrow ? "Narrow" : null;

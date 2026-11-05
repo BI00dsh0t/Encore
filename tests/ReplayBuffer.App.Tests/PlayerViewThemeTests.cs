@@ -1,7 +1,11 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -77,22 +81,32 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.True(player.IsVisible);
                 Assert.False(((FrameworkElement)view.FindName("ListContent")).IsVisible);
                 Assert.True(model.IsDrilledIn);
-                Assert.Contains(Descendants<Button>(player), b => b.Content as string == "Play" && b.IsVisible);
+                var play = (Button)player.FindName("PlayPause");
+                Assert.Equal(("Play", true), (AutomationProperties.GetName(play), play.IsVisible));
 
-                // Story 14.5: the transport over the video, paused at 0:04 of the fake's 10 s file.
+                // Story 14.9, resting: the thin seek bar over one row, Play, the speaker, the time; the gear and full
+                // screen on the right; the volume slider hidden until the speaker is hovered or focused.
                 page.Player!.SeekTo(TimeSpan.FromSeconds(4));
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
                 Assert.True(((FrameworkElement)player.FindName("SeekBar")).IsVisible);
-                Assert.True(((FrameworkElement)player.FindName("VolumeBar")).IsVisible);
+                Assert.True(((FrameworkElement)player.FindName("Gear")).IsVisible);
+                Assert.True(((FrameworkElement)player.FindName("FullScreen")).IsVisible);
+                Assert.False(player.IsVolumeShown);
                 Assert.Contains(Descendants<TextBlock>(player), t => t.Text == "0:04 / 0:10" && t.IsVisible);
-
-                // Story 14.4: the Track list, by name, with the playing Track shown.
-                var tracks = (ComboBox)player.FindName("TrackList");
-                Assert.True(tracks.IsVisible);
-                Assert.Equal("Game", ((PlayerTrack)tracks.SelectedItem).Name);
                 Save(window, file);
 
-                // The page's keys: Right seeks 5 s, Down lowers the volume 5 %, Space plays.
+                // The volume slider slides out on hover, and on keyboard focus.
+                var speaker = (FrameworkElement)player.FindName("VolumeGroup");
+                speaker.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseEnterEvent });
+                Assert.True(player.IsVolumeShown);
+                speaker.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseLeaveEvent });
+                Assert.False(player.IsVolumeShown);
+                ((Button)player.FindName("Mute")).Focus();
+                Assert.True(player.IsVolumeShown);
+                play.Focus();
+                Assert.False(player.IsVolumeShown);
+
+                // The page's keys, as in 14.5: Right seeks 5 s, Down lowers the volume 5 %, Space plays.
                 foreach (var key in new[] { Key.Right, Key.Down, Key.Space })
                 {
                     player.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, key) { RoutedEvent = Keyboard.KeyDownEvent });
@@ -103,25 +117,28 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.True(last.IsPlaying);
                 page.Player.Volume = 1;
 
-                // QA 14.4: with the Track list focused, its own arrows win, as a closed Windows ComboBox's do: Down and
-                // Right pick the next Track, Up and Left the one before. They don't seek or change the volume there.
-                tracks.Focus();
-                var seeks = last.Seeks.Count;
-                var picked = new List<int>();
-                foreach (var key in new[] { Key.Down, Key.Right, Key.Left, Key.Up })
-                {
-                    tracks.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, key) { RoutedEvent = Keyboard.KeyDownEvent });
-                    picked.Add(last.SelectedTrack);
-                }
-
-                Assert.Equal([1, 2, 1, 0], picked);
-                Assert.Equal((seeks, 1.0), (last.Seeks.Count, last.Volume));
-
-                // QA 14.4: the open drop-down, once in each look.
-                tracks.IsDropDownOpen = true;
+                // The gear's menu: "Audio track", the Tracks with the playing one ticked, a divider, then Open in
+                // default player. The heading isn't a choice; the Tracks and the last item take arrow-key focus.
+                var menu = player.OpenSettingsMenu()!;
                 Sta.Pump(TimeSpan.FromMilliseconds(200));
-                SavePopup(tracks, file.Replace("player-", "player-tracks-", StringComparison.Ordinal));
-                tracks.IsDropDownOpen = false;
+                Assert.Same(menu, player.SettingsMenu);
+                Assert.True(((ToggleButton)player.FindName("Gear")).IsChecked);
+                var items = menu.Items.OfType<MenuItem>().ToList();
+                Assert.Equal("Audio track", ((TextBlock)items[0].Header).Text);
+                Assert.False(items[0].Focusable);
+                Assert.Equal(["Game", "Mic", "Discord", "Desktop"], items.Skip(1).Take(4).Select(i => (string)i.Header));
+                Assert.Equal([true, false, false, false], items.Skip(1).Take(4).Select(i => i.IsChecked));
+                Assert.Single(menu.Items.OfType<Separator>());
+                Assert.Equal("Open in default player", items[^1].Header);
+                Assert.All(items.Skip(1), i => Assert.True(i.Focusable));
+                SaveMenu(menu, file.Replace("player-", "player-menu-", StringComparison.Ordinal));
+
+                // A choice switches Track and closes the menu.
+                ((IInvokeProvider)new MenuItemAutomationPeer(items[3])).Invoke();
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+                Assert.Equal(2, last.SelectedTrack);
+                Assert.Null(player.SettingsMenu);
+                Assert.False(((ToggleButton)player.FindName("Gear")).IsChecked);
 
                 // The hidden list's keys do nothing: Space would star the row, F2 rename it.
                 var list = (ListBox)view.FindName("List");
@@ -133,9 +150,25 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.Empty(engine.Sent);
                 Assert.False(row.IsRenaming);
 
+                // Story 14.9, full screen: F enters it (the window loses its frame, nav and headers), Esc leaves it
+                // with the page still open, the button enters it again, and closing the page leaves it.
+                player.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.F) { RoutedEvent = Keyboard.KeyDownEvent });
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+                Assert.True(page.Player!.IsFullScreen);
+                Assert.True(window.IsFullScreen);
+                Assert.Equal((WindowStyle.None, Visibility.Collapsed), (window.WindowStyle, ((FrameworkElement)window.FindName("NavPane")).Visibility));
+                Save(window, file.Replace("player-", "player-fullscreen-", StringComparison.Ordinal));
+                player.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
+                Assert.False(window.IsFullScreen);
+                Assert.True(model.IsDrilledIn);
+                ((IInvokeProvider)new ButtonAutomationPeer((Button)player.FindName("FullScreen"))).Invoke();
+                Sta.Pump(TimeSpan.FromMilliseconds(100));
+                Assert.True(window.IsFullScreen);
+
                 model.CurrentDrillIn!.Close();
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
                 Assert.True(((FrameworkElement)view.FindName("ListContent")).IsVisible);
+                Assert.False(window.IsFullScreen);
             }
 
             // A file Windows can't play: the plain line and Open in default player.
@@ -241,17 +274,15 @@ public sealed class PlayerViewThemeTests : IDisposable
         return found;
     }
 
-    // The ComboBox's drop-down is its own popup window: render its content.
-    private static void SavePopup(ComboBox box, string name)
+    // The gear's menu is its own popup window: render the menu itself.
+    private static void SaveMenu(ContextMenu menu, string name)
     {
-        var popup = (System.Windows.Controls.Primitives.Popup)box.Template.FindName("PART_Popup", box);
-        Assert.True(popup.IsOpen);
-        var root = (FrameworkElement)popup.Child;
-        var size = new Size(Math.Max(1, root.ActualWidth), Math.Max(1, root.ActualHeight));
+        Assert.True(menu.IsOpen);
+        var size = new Size(Math.Max(1, menu.ActualWidth), Math.Max(1, menu.ActualHeight));
         var visual = new DrawingVisual();
         using (var context = visual.RenderOpen())
         {
-            context.DrawRectangle(new VisualBrush(root) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top }, null, new Rect(size));
+            context.DrawRectangle(new VisualBrush(menu) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top }, null, new Rect(size));
         }
 
         var bitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height), 96, 96, PixelFormats.Pbgra32);

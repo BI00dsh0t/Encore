@@ -63,6 +63,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     private PlayerTrack? _selectedTrack;
     private string? _failure;
     private CodecExtension? _missing;
+    private bool _isFullScreen;
 
     /// <param name="path">The file's absolute path.</param>
     /// <param name="title">The row's name, shown in the breadcrumb.</param>
@@ -82,6 +83,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         _log = log ?? (_ => { });
         PlayPauseCommand = new RelayCommand(PlayPause, () => State is PlayerState.Paused or PlayerState.Playing);
         MuteCommand = new RelayCommand(() => IsMuted = !IsMuted);
+        FullScreenCommand = new RelayCommand(() => IsFullScreen = !IsFullScreen);
         OpenInDefaultPlayerCommand = new RelayCommand(() => _openInDefaultPlayer(Path));
         OpenStoreCommand = new RelayCommand(() =>
         {
@@ -134,6 +136,7 @@ internal sealed class PlayerPage : Observable, IDisposable
                 OnPropertyChanged(nameof(IsPlaying));
                 OnPropertyChanged(nameof(IsFailed));
                 OnPropertyChanged(nameof(PlayPauseLabel));
+                OnPropertyChanged(nameof(PlayPauseGlyph));
                 OnPropertyChanged(nameof(Message));
                 OnPropertyChanged(nameof(StoreLinkText));
                 OnPropertyChanged(nameof(HasStoreLink));
@@ -152,8 +155,34 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>Whether the transport shows: once the file is open and playable.</summary>
     public bool HasControls => State is PlayerState.Paused or PlayerState.Playing;
 
-    /// <summary>The play button's text.</summary>
+    /// <summary>The play button's name: "Play" or "Pause".</summary>
     public string PlayPauseLabel => IsPlaying ? "Pause" : "Play";
+
+    /// <summary>The play button's glyph (Segoe Fluent Icons): Play, or Pause while playing (story 14.9).</summary>
+    public string PlayPauseGlyph => IsPlaying ? "\uE769" : "\uE768";
+
+    /// <summary>
+    /// Whether the player page fills the screen, the bar over the video (story 14.9). The button or F toggles it,
+    /// Esc leaves it (the shell's), and closing the page leaves it.
+    /// </summary>
+    public bool IsFullScreen
+    {
+        get => _isFullScreen;
+        set
+        {
+            if (Set(ref _isFullScreen, value && !IsClosed))
+            {
+                OnPropertyChanged(nameof(FullScreenGlyph));
+                OnPropertyChanged(nameof(FullScreenName));
+            }
+        }
+    }
+
+    /// <summary>The full-screen button's glyph: Full screen, or Back to window while in it.</summary>
+    public string FullScreenGlyph => IsFullScreen ? "\uE73F" : "\uE740";
+
+    /// <summary>The full-screen button's name for screen readers and its tooltip.</summary>
+    public string FullScreenName => IsFullScreen ? "Exit full screen" : "Full screen";
 
     /// <summary>The line over the video while it opens or when it can't play; null otherwise.</summary>
     public string? Message => State switch
@@ -288,7 +317,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     }
 
     /// <summary>The mute button's glyph (Segoe Fluent Icons): Volume, or Mute while muted.</summary>
-    public string MuteGlyph => IsMuted ? "" : "";
+    public string MuteGlyph => IsMuted ? "\uE74F" : "\uE767";
 
     /// <summary>The mute button's name for screen readers.</summary>
     public string MuteName => IsMuted ? "Unmute" : "Mute";
@@ -326,6 +355,9 @@ internal sealed class PlayerPage : Observable, IDisposable
     public ICommand PlayPauseCommand { get; }
 
     public ICommand MuteCommand { get; }
+
+    /// <summary>The full-screen button and F: toggles <see cref="IsFullScreen"/>.</summary>
+    public ICommand FullScreenCommand { get; }
 
     /// <summary>"Open in default player", offered when the page can't play the file.</summary>
     public ICommand OpenInDefaultPlayerCommand { get; }
@@ -461,6 +493,8 @@ internal sealed class PlayerPage : Observable, IDisposable
             return;
         }
 
+        // Leaving the page leaves full screen (story 14.9).
+        IsFullScreen = false;
         IsClosed = true;
         Player.Ended -= OnEnded;
         Player.Dispose();
