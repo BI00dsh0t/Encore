@@ -106,6 +106,7 @@ Set-StrictMode -Version Latest
 $Conditions = @($Conditions | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'measure-gpu.ps1')
 $WarmUpSeconds = 10   # CaptureStatsCollector.WarmUp: the engine leaves it out of its rates
 $EngineTailSeconds = 5 # the engine keeps capturing a little past PresentMon's window
 
@@ -329,28 +330,6 @@ function Start-GpuSampler([int] $EnginePid, [int] $Samples) {
             [pscustomobject]@{ Error = "$($_.Exception.Message)" }
         }
     }
-}
-
-function Measure-GpuSamples($Samples) {
-    $errors = @($Samples | Where-Object { $_.PSObject.Properties['Error'] })
-    $rows = @($Samples | Where-Object { $_.PSObject.Properties['Instance'] })
-    if ($rows.Count -eq 0) {
-        $why = if ($errors.Count) { $errors[0].Error } else { 'no GPU Engine counter instances for the engine process' }
-        return [pscustomobject]@{ ByType = @{}; Error = $why }
-    }
-
-    # Per sample, sum the engines of one type; then the mean and max of those sums.
-    $byType = @{}
-    $rows | ForEach-Object {
-        $type = if ($_.Instance -match 'engtype_(.+)$') { $Matches[1] } else { 'unknown' }
-        [pscustomobject]@{ Time = $_.Time; Type = $type; Value = $_.Value }
-    } | Group-Object Type | ForEach-Object {
-        $sums = @($_.Group | Group-Object { $_.Time.Ticks } | ForEach-Object { ($_.Group | Measure-Object Value -Sum).Sum })
-        $stats = $sums | Measure-Object -Average -Maximum
-        $byType[$_.Name] = [pscustomobject]@{ MeanPercent = [math]::Round($stats.Average, 3); MaxPercent = [math]::Round($stats.Maximum, 3); Samples = $sums.Count }
-    }
-
-    return [pscustomobject]@{ ByType = $byType; Error = $null }
 }
 
 function Measure-PresentMon([string] $Csv) {
@@ -633,7 +612,7 @@ $summary = [ordered]@{
         'fpsLossPercent is against the mean of the baseline runs in this invocation.'
         'Engine CPU, allocations and GC rates exclude the engine''s first 10 s (warm-up); frame counts include them.'
         'Missed slots are against 60 fps; judge them against the game''s own present rate (avgFps).'
-        'GPU engine use is the engine process only, summed over engines of a type per 1 s sample (Get-Counter "\GPU Engine(pid_<engine>_*)\Utilization Percentage").'
+        'GPU engine use is the engine process only, per 1 s sample the maximum over the process''s engines of a type (a process gets three identical video-encode instances; before 2026-11-04 they were summed, 3x too high) (Get-Counter "\GPU Engine(pid_<engine>_*)\Utilization Percentage").'
         'NativeAOT: see engine.nativeAot and engine.sizeBytes; startupToFirstFrameMs is process start to the first captured frame.'
         'Interop debugging effort is qualitative and not measured here.'
     )
