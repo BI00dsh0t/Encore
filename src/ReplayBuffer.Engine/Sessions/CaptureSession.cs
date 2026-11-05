@@ -130,6 +130,16 @@ internal sealed record CaptureSessionOptions
     /// null ignores it.
     /// </summary>
     public Action<string>? ResetGap { get; init; }
+
+    /// <summary>
+    /// Spike 11.1, dev only (<c>debug-capture --monitors</c>): the session captures these monitors
+    /// (GDI device names; empty for every attached monitor) composited into one canvas
+    /// (<see cref="CompositeCapture"/>) instead of its window or its one monitor; null for the normal path.
+    /// </summary>
+    public IReadOnlyList<string>? CompositeMonitors { get; init; }
+
+    /// <summary>Spike 11.1, dev only: <see cref="CompositeMonitors"/> captures every monitor through Desktop Duplication.</summary>
+    public bool CompositeDuplication { get; init; }
 }
 
 /// <summary>
@@ -244,6 +254,7 @@ internal sealed class CaptureSession : ICaptureSession
 
     private WindowInfo? _window;
     private MonitorInfo? _monitor;
+    private IReadOnlyList<MonitorPlacement>? _composite;
     private string? _path;
     private D3D11Device? _device;
     private ICaptureSource? _capture;
@@ -334,7 +345,21 @@ internal sealed class CaptureSession : ICaptureSession
         // Before anything is opened: the first codec use may run the probe.
         var (encoder, codec) = ResolveEncoder(_spec);
         var target = _spec.Target;
-        if (IsMonitor)
+        if (_options.CompositeMonitors is { } names)
+        {
+            // Spike 11.1: the device goes on the primary composited monitor's adapter.
+            _composite = MonitorCanvas.Place(names);
+            if (_composite.Count == 0)
+            {
+                throw new EngineFailure(ErrorCodes.CaptureFailed, $"None of the monitors '{string.Join(", ", names)}' is attached.");
+            }
+
+            if (IsMonitor)
+            {
+                _monitor = _composite[0].Monitor;
+            }
+        }
+        else if (IsMonitor)
         {
             _monitor = MonitorFinder.Find(_spec.Snapshot.MonitorRecordingMonitor, _log);
             _log.LogInformation("Monitor capture of {Device}", _monitor.DeviceName);
@@ -352,7 +377,7 @@ internal sealed class CaptureSession : ICaptureSession
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         }
 
-        _device = _monitor is { } monitor
+        _device = (_monitor ?? _composite?[0].Monitor) is { } monitor
             ? D3D11Device.CreateForMonitor(monitor.Handle, _loggers.CreateLogger<D3D11Device>())
             : D3D11Device.Create(target.Window, _loggers.CreateLogger<D3D11Device>());
         if (_options.GpuPriority is { } priority)
@@ -382,7 +407,7 @@ internal sealed class CaptureSession : ICaptureSession
             return;
         }
 
-        var capture = NewCapture(target.Window, _device, first.Fps);
+        ICaptureSource capture = _composite is not null ? NewComposite(_device, first.Fps) : NewCapture(target.Window, _device, first.Fps);
         lock (_gate)
         {
             _capture = capture;
@@ -1703,6 +1728,22 @@ internal sealed class CaptureSession : ICaptureSession
     /// </summary>
     private ICaptureSource StartMonitorCapture(D3D11Device device, int fps, Action<ICaptureSource> start)
     {
+        if (_composite is not null)
+        {
+            var composite = NewComposite(device, fps);
+            try
+            {
+                start(composite);
+            }
+            catch
+            {
+                composite.Dispose();
+                throw;
+            }
+
+            return composite;
+        }
+
         var monitor = _monitor!;
         WindowCapture? wgc = null;
         try
@@ -1763,6 +1804,14 @@ internal sealed class CaptureSession : ICaptureSession
 
             throw;
         }
+    }
+
+    /// <summary>Spike 11.1: the composited capture of <see cref="_composite"/> on <paramref name="device"/>, not started.</summary>
+    private CompositeCapture NewComposite(D3D11Device device, int fps)
+    {
+        var composite = Wire(new CompositeCapture(device, _composite!, fps, _options.CompositeDuplication, OnFrame, _loggers.CreateLogger<CompositeCapture>()));
+        CaptureApi = _options.CompositeDuplication ? "composite-desktop-duplication" : "composite";
+        return composite;
     }
 
     private void ThrowWgcFault()

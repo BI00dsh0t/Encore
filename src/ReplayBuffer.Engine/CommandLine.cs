@@ -62,7 +62,9 @@ public sealed record DebugCaptureCommand(
     int BitrateKbps = DebugCaptureCommand.DefaultBitrateKbps,
     string? Encoder = null,
     bool TrackLayout = false,
-    string? Instance = null) : EngineCommand
+    string? Instance = null,
+    IReadOnlyList<string>? Monitors = null,
+    bool MonitorDuplication = false) : EngineCommand
 {
     public const int DefaultSeconds = 30;
 
@@ -117,6 +119,9 @@ public static class CommandLine
                               [--codec h264|hevc|av1] [--size <W>x<H>] [--fps 1..120] [--bitrate <kbps>]
                               [--encoder <ffmpeg encoder name>] [--track-layout]
                               [--instance ReplayBuffer-Test-<suffix>]
+          ReplayBuffer.Engine debug-capture --monitors all|<device name>[,...] [--monitor-api wgc|dd] [the options above]
+                              (spike 11.1, dev only: the monitors composited into one canvas instead of a window;
+                              no --size: the canvas, fitted only to the codec's largest side: 4096 px for H.264, 8192 for HEVC and AV1)
         """;
 
     public static ParseResult Parse(IReadOnlyList<string> args)
@@ -169,6 +174,8 @@ public static class CommandLine
         string? encoder = null;
         var trackLayout = false;
         string? instance = null;
+        IReadOnlyList<string>? monitors = null;
+        var monitorDuplication = false;
 
         for (var i = 1; i < args.Count; i++)
         {
@@ -195,6 +202,29 @@ public static class CommandLine
             {
                 case "--window":
                     window = value;
+                    break;
+                case "--monitors":
+                    // Spike 11.1: "all" (every attached monitor) or GDI device names.
+                    monitors = value == "all" ? [] : [.. value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+                    if (value != "all" && monitors.Count == 0)
+                    {
+                        return Fail("--monitors needs all or a comma-separated list of monitor device names.");
+                    }
+
+                    break;
+                case "--monitor-api":
+                    switch (value)
+                    {
+                        case "wgc":
+                            monitorDuplication = false;
+                            break;
+                        case "dd":
+                            monitorDuplication = true;
+                            break;
+                        default:
+                            return Fail("--monitor-api must be wgc or dd.");
+                    }
+
                     break;
                 case "--hwnd":
                     if (!TryParseHandle(value, out var handle))
@@ -349,9 +379,9 @@ public static class CommandLine
             }
         }
 
-        if ((window is null) == (hwnd is null))
+        if (monitors is not null ? window is not null || hwnd is not null : (window is null) == (hwnd is null))
         {
-            return Fail("Give exactly one of --window or --hwnd.");
+            return Fail("Give exactly one of --window, --hwnd or --monitors.");
         }
 
         if (window is { Length: 0 })
@@ -374,7 +404,7 @@ public static class CommandLine
         return new ParseResult(
             new DebugCaptureCommand(
                 window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages, preset, tune, color, encodeThread,
-                codec, size, fps, bitrate, encoder, trackLayout, instance),
+                codec, size, fps, bitrate, encoder, trackLayout, instance, monitors, monitorDuplication),
             null);
     }
 
