@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off (8.8 is held on its branch at e3822aa) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off; busy with QA 10.3 (8.7 fps command is in its plan) |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.2 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 10.9 |
@@ -183,7 +183,7 @@ The coordinator logs each QA round in the Log below.
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged) |
 | 31.1 | 10.1 Design pass: renders and the builder's approval of ux-pass-2 | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (builder approved all recommendations) |
 | 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `6f23d23`) |
-| 31.3 | 10.3 Library sort and search | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in QA (slice-epic-8) |
+| 31.3 | 10.3 Library sort and search | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA (2-1-tracer) |
@@ -850,3 +850,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.9 READY FOR QA at `d8c9b64`: Contracts 128, Core 161 and App 170 passed; App only. One shared FolderPicker (with a file variant for 10.10); Clips, Hotkeys regrouped (a `MonitorPicker` ready for 11.4), Storage and Cleanup, Sounds; Recordings removed. Deviation: no engine `ring-path-invalid` code exists, so the App checks before sending. QA went to 2-1-tracer (Sonnet, medium effort).
 - 2026-11-05: Bugfix `bench-videoencode-count` merged (`4dc66d8`); Bench 151 passed. slice-epic-5 is back in the pool.
 - 2026-11-05: 10.3 READY FOR QA at `58fc9b1`: App 173, Core 161 and Contracts 128 passed; Library files only. QA went to slice-epic-8 (Sonnet, medium effort). **Queued bugfix** (found by 10.3): the Gaming dark TextBox template applies Padding twice (`PART_ContentHost` margin plus the ScrollViewer padding), so every gaming text box sits about 2x inset. Fix it in `GamingDarkTheme.xaml` after 10.9 merges, since both touch the shared theme.
+- 2026-11-05: QA 10.3 passed at `58fc9b1`. story-2-7 is merging. **Two new flaky tests** seen only in full-solution runs (both pass alone): `LibraryThemeTests.TheLibraryLoadsInBothThemesWithItsBannerLockAndFavourite` (a row container not yet realised under load) and `NothingToReselectServeTests` (a temp-file lock). Queued for a flaky-test bugfix after 10.3 merges, together with the gaming TextBox padding fix after 10.9.
