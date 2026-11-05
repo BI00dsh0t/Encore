@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -14,7 +13,7 @@ namespace ReplayBuffer.App.Tests;
 
 /// <summary>Story 11.4: the Hotkeys screen picker, on a fabricated monitor list.</summary>
 [Collection(nameof(WpfCollection))]
-public sealed partial class MonitorPickerTests
+public sealed class MonitorPickerTests
 {
     // The builder's two screens (spike 11.1) and a portable one, left of the primary and lower.
     private static readonly DisplayMonitor Dell = new(@"\\.\DISPLAY1", "DELL", 2560, 1440, true, "path-dell", 0, 0, 240);
@@ -171,10 +170,15 @@ public sealed partial class MonitorPickerTests
                 Assert.True(picker.IsVisible, $"The picker isn't shown under {which}");
                 Assert.True(((FrameworkElement)model.Hotkeys.View.FindName("ScreenPreview")).IsVisible);
                 Assert.Equal(4, Descendants<CheckBox>(picker).Count());
-                Assert.Equal(3, Descendants<System.Windows.Controls.Primitives.ToggleButton>(picker).Count(t => t is not CheckBox and not RadioButton && t.Focusable));
-                foreach (var key in ResourceKeys())
+                var tiles = Descendants<System.Windows.Controls.Primitives.ToggleButton>(picker).Where(t => t is not CheckBox and not RadioButton).ToList();
+                Assert.Equal(3, tiles.Count(t => t.Focusable));
+
+                // A tile toggles its row's check box through the view's bindings.
+                if (which == AppTheme.GamingDark)
                 {
-                    Assert.True(window.TryFindResource(key) is not null, $"Missing resource {key} under {which}");
+                    tiles[2].IsChecked = true;
+                    Sta.Pump(TimeSpan.FromMilliseconds(50));
+                    Assert.True(Descendants<CheckBox>(picker).ElementAt(2).IsChecked);
                 }
 
                 Save(window, $"hotkeys-screens-picker-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
@@ -187,23 +191,10 @@ public sealed partial class MonitorPickerTests
             window.CloseForQuit();
         }
 
-        Assert.DoesNotContain(errors.Messages, m => m.Contains("Screen", StringComparison.Ordinal) || m.Contains("Monitor", StringComparison.Ordinal));
+        Assert.Empty(errors.Messages);
     });
 
     private static string Json(MonitorRecordingScreens screens) => Keys.MonitorRecordingScreens.ToJson(screens).GetRawText();
-
-    private static IEnumerable<string> ResourceKeys()
-    {
-        var folder = AppContext.BaseDirectory;
-        while (!File.Exists(Path.Combine(folder, "ReplayBuffer.slnx")))
-        {
-            folder = Path.GetDirectoryName(folder)!;
-        }
-
-        var xaml = File.ReadAllText(Path.Combine(folder, "src", "ReplayBuffer.App", "Settings", "HotkeysView.xaml"));
-        var local = LocalKey().Matches(xaml).Select(m => m.Groups[1].Value).ToHashSet();
-        return ResourceKey().Matches(xaml).Select(m => m.Groups[1].Value).Where(k => !local.Contains(k)).Distinct();
-    }
 
     private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
     {
@@ -241,12 +232,6 @@ public sealed partial class MonitorPickerTests
         using var file = File.Create(Path.Combine(AppContext.BaseDirectory, name));
         encoder.Save(file);
     }
-
-    [GeneratedRegex(@"\{(?:Dynamic|Static)Resource (\w+)\}")]
-    private static partial Regex ResourceKey();
-
-    [GeneratedRegex(@"x:Key=""(\w+)""")]
-    private static partial Regex LocalKey();
 
     private void SetState(long revision, MonitorRecordingScreens? screens)
     {

@@ -48,6 +48,7 @@ internal sealed class MonitorPicker : Observable
     private double _previewHeight;
     private string? _fetchedInstance;
     private MonitorList? _changed;
+    private bool _listed;
 
     /// <param name="send">Sends the ops, as the hosting page's <c>SendAsync</c>.</param>
     /// <param name="message">Shows a note on the hosting page's error bar; null clears it.</param>
@@ -89,6 +90,12 @@ internal sealed class MonitorPicker : Observable
             if (ids.Count > 0)
             {
                 Choose(MonitorRecordingScreens.Selected(ids));
+            }
+            else
+            {
+                // Nothing to choose yet: the radio buttons go back to All screens.
+                OnPropertyChanged(nameof(IsAllScreens));
+                OnPropertyChanged();
             }
         }
     }
@@ -279,6 +286,7 @@ internal sealed class MonitorPicker : Observable
     private void ShowMonitors(IReadOnlyList<DisplayMonitor> monitors)
     {
         _monitors = monitors;
+        _listed = true;
         foreach (var monitor in monitors)
         {
             _known[Id(monitor)] = monitor;
@@ -305,7 +313,8 @@ internal sealed class MonitorPicker : Observable
             wanted.Add((Id(m), m, label, all || chosen.Any(id => Matches(m, id))));
         }
 
-        foreach (var id in chosen.Where(id => !_monitors.Any(m => Matches(m, id))))
+        // Before the first list, no chosen screen is called not connected.
+        foreach (var id in _listed ? chosen.Where(id => !_monitors.Any(m => Matches(m, id))) : [])
         {
             var name = _known.Values.FirstOrDefault(k => Matches(k, id)) is { } seen
                 ? $"{Number(seen.DeviceName, wanted.Count + 1)}  {seen.FriendlyName}"
@@ -376,6 +385,11 @@ internal sealed class MonitorPicker : Observable
     /// <summary>The output line: the canvas rule's size, "(scaled down)", and which format keeps the detail.</summary>
     private string Output(IReadOnlyList<DisplayMonitor> screens, int chosen)
     {
+        if (!_listed)
+        {
+            return "Looking for your screens…";
+        }
+
         if (screens.Count == 0)
         {
             return chosen > 0

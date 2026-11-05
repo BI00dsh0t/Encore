@@ -3,7 +3,7 @@ title: 'Screens to record: the picker on Hotkeys'
 type: 'feature'
 ticket: '4'
 created: '2026-11-04'
-status: 'in-review'
+status: 'built'
 baseline_revision: '2aef49f0f987746d59374bfaf9da0aa71b3fc20e'
 route: 'full'
 route_source: 'auto'
@@ -73,9 +73,28 @@ context:
 
 ## Implementation Notes
 
+- Implemented directly in the build session (the investigation context was already loaded), not by a subagent.
+- `MonitorPicker` keeps row objects while the list of ids is unchanged, so a focused tile or check box keeps focus across a toggle.
+- The help sentence reads "A Recording of your screens", from the picker mockup.
+- `RecordingsEndToEndTests` (Heavy, not run) now picks All screens and checks `monitorRecordingScreens` across the restart.
+- After review: nothing is called "Not connected" before the first `monitors.list`, and the output line reads "Looking for your screens…" until then.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+Pass 1 (quick lens): 0 high, 2 medium, 3 low, 1 false, 1 rejected.
+
+| # | Finding | Verdict | Route | Evidence / action |
+|---|---|---|---|---|
+| 1 | Linking `MonitorCanvasRule.cs` into the App puts Core code in the App assembly, against AD-2's graph | medium | intent_gap, kept under the unattended default | A logged design decision (Design Notes). Raised in the QA report for the builder or an AD-2 update; the alternative is an App → Core edge. |
+| 2 | Before any `monitors.list`, chosen screens read "Unknown screen · Not connected" and the output line says the Recording won't start | medium | patch | Real: `_monitors` starts empty. Fixed with `_listed`; the line reads "Looking for your screens…" until a list arrives. |
+| 3 | The test's resource-key check duplicates `SettingsLayoutTests.ViewResourceKeys` | low | patch | Real duplication under the lean-tests rule. Deleted. |
+| 4 | No test drives a tile's `IsChecked` binding to the row | low | patch | Real gap. The render test now checks a tile and sees the row's check box tick. |
+| 5 | The binding-error assertion only filters "Screen" or "Monitor" | low | patch | Now `Assert.Empty(errors.Messages)`; it passes. |
+| 6 | Inline font sizes on the tile, not keyed styles | false | reject | The rule is colours from tokens with no key-less style. Font sizes aren't colours, and the view has no key-less style. |
+| 7 | Tab order runs through the tiles before the check boxes | low | reject | Tab follows the visual order, preview then rows, and the design only asks that tiles be tab stops too. Changing it adds TabIndex plumbing for no clear gain. |
+| 8 | Chosen screens with nothing to choose leaves the radios out of step | low | patch | Real edge case. The setter now raises both properties, so the radios return to All screens. |
 
 ## Design Notes
 
