@@ -46,7 +46,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 12.1 (day); 11.5's Heavy rerun tonight |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with 12.6 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -200,7 +200,7 @@ The coordinator logs each QA round in the Log below.
 | 32.5 | 11.5 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | merged (`ae8ad66`); open until the Heavy MonitorRecordingCaptureTests rerun passes after 8.8 |
 | 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
 | 33.1 | 12.1 Tracer: the matchSource key and a game chain at the source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress (Heavy at night) |
-| 33.2 | 12.6 Architecture: AD-26, the source output size | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
+| 33.2 | 12.6 Architecture: AD-26, the source output size | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 33.3 | 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | | pending |
 | 33.4 | 12.3 Source in the Video quality section | | pending |
 | 33.5 | 12.4 Refactor sweep | | pending |
@@ -961,3 +961,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 13.1 merged into develop (`4f06c58`, `feat(engine): merge 13.1-capture-new-games`) after QA passed at `9c30e1a` with no findings, and marked done. **Epic 13 (New games captured by default, or not) is done** (its only story). Synced develop (`5a0a987`) first: 0-warning build; Contracts 136, Core 169, Engine 199 (47 explicit skipped), App 197 (20 skipped) and Platform.Windows 32 passed, 0 failed; publish clean (12.1 MB). No Heavy, GPU or bench runs. One Human Check row added (turn the setting off, run a new game, see the notice and Not captured, turn it on and save a Clip).
 - 2026-11-05: 13.1 merged (`4f06c58`). **Epic 13 is marked done** (`41cb5e1`), with one Human Check row. Card moved to Done. After the sync: 0-warning build; Contracts 136, Core 169, Engine 199, App 197 and Platform.Windows 32 passed; publish clean.
 - 2026-11-05: **Builder: "for 12, I accept the recommended answers."** 12.6 (AD-26 spine edit, docs only; the coordinator reviews and merges it) went to story-2-7. 12.1 (match-source tracer) went to qa-2-1 for the day part (default tests); its Heavy check joins tonight's queue after the Disk soak and 11.5's rerun. 11.5's code is already in develop, so 12.1 builds on it. Cards In progress.
+- 2026-11-05: 12.6 (AD-26, "Source output size: the chain follows the source, a file never changes size") was reviewed by the coordinator and merged, then marked done. It covers: matchSource means resolution only; a game's size is set at its first frame and fitted to the codec's largest side, with no codec switch for games; a size change held 3 s moves the chain through AD-7's build-ahead switch, started by the engine and never during a Recording; one screen goes through AD-25's `Plan`. AD-7 and AD-25 point to it, and epic 12's Notes mark the defaults as the builder's decisions. The coordinator also added the R41 capability-map row and binds entry the plan flagged. 12.2 waits on 12.1.

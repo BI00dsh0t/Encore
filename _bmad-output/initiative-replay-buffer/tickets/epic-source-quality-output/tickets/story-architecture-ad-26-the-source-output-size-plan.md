@@ -3,7 +3,7 @@ title: 'Architecture: AD-26, the source output size'
 type: 'docs'
 ticket: '6'
 created: '2026-11-05'
-status: built
+status: done
 baseline_revision: 'c51f4be'
 route: 'quick'
 risk: 'low'

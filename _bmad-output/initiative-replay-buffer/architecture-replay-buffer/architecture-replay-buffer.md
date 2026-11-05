@@ -8,7 +8,7 @@ scope: 'initiative-replay-buffer: the engine process and the Main App, all 13 ep
 status: final
 created: '2026-10-25'
 updated: '2026-11-05'
-binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39, R40]
+binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39, R40, R41]
 sources:
   - _bmad-output/initiative-replay-buffer/initiative-replay-buffer.md
   - PLAN.md
@@ -512,6 +512,7 @@ ReplayBuffer/
 | R31, R34, R35 startup, supervision, hands-off | App (supervisor), Engine | AD-16, AD-22 |
 | R37 themes | App (ThemeService, theme dictionaries), Contracts (key catalog) | AD-23, AD-4 |
 | R40 source-resolution output | Contracts (`video` key), Core (size rule), Engine (chain sizing and moves), App (Video quality) | AD-26, AD-7, AD-25, AD-4, AD-22 |
+| R41 new games captured by default, or not | Contracts (`captureNewGames` key), Engine (new Game Profiles), Platform.Windows (detection), App (General) | AD-4, AD-5, AD-18, AD-22 |
 | R39 multi-monitor Monitor Recording | Media (MonitorCompositor), Platform.Capture, Core (screen resolver, canvas rule), App (Hotkeys picker) | AD-25, AD-7, AD-12, AD-22 |
 | R38 Library selection and bulk actions, audio-tracks editor, first-run seed, Games, settings pages, plain labels | App (Library, Audio Tracks, Games and settings view models), Engine (settings seed, warning texts), Core (LibraryActor kind), Platform.Audio (default device) | AD-24, AD-17, AD-4, AD-20, AD-21, AD-22 |
 | R32 Hotkeys | Platform.Windows | AD-11 |
