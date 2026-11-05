@@ -105,7 +105,7 @@ public sealed class GameProfilesPageTests
         _engine.RaiseChanged();
         Assert.True(layout.CanEdit);
 
-        layout.Devices[0].IsMic = true;
+        layout.Tracks[0].Sources[0].IsMic = true;
         layout.SaveCommand.Execute(null);
 
         var save = Assert.Single(updates[1].Ops);
@@ -113,7 +113,7 @@ public sealed class GameProfilesPageTests
         Assert.True(Keys.TrackLayout.TryRead(save.Value, out var saved));
         Assert.True(Assert.Single(saved.Devices).IsMic);
         Assert.Equal(GlobalLayout.Tracks.Select(t => t.Id), saved.Tracks.Select(t => t.Id));
-        Assert.False(Assert.Single(model.TrackLayout.Devices).IsMic);
+        Assert.False(Assert.Single(model.TrackLayout.Tracks[0].Sources).IsMic);
 
         SetProfiles(revision: 5, ("trackLayout", save.Value));
         _engine.RaiseChanged();
@@ -121,7 +121,7 @@ public sealed class GameProfilesPageTests
 
         var remove = Assert.Single(updates[2].Ops);
         Assert.Equal((SettingsScope.Profile, AlphaId, "trackLayout", SettingsOpKind.Remove), (remove.Scope, remove.ProfileId, remove.Key, remove.Op));
-        Assert.False(Assert.Single(layout.Devices).IsMic);
+        Assert.False(Assert.Single(layout.Tracks[0].Sources).IsMic);
         Assert.False(layout.CanEdit);
 
         // The profile goes away, and so do the editors.

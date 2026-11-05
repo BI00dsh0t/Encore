@@ -10,24 +10,28 @@ using ReplayBuffer.Contracts.Settings;
 namespace ReplayBuffer.App.Settings;
 
 /// <summary>
-/// The Global <c>trackLayout</c> (R1, R2), or with a profile id that Game Profile's override of it (R7):
-/// an unsaved draft of its devices and Tracks, which Save sends as
-/// one <c>settings.update</c>. Devices come from the snapshot's <c>devices</c> list; a layout device that
-/// isn't present shows as unavailable and stays in the layout. While the page is open it meters its draft
-/// (R6) through <c>meters.watch</c>, and each Track shows its level from the snapshot's <c>meters</c>.
-/// A profile without an override shows the Global layout, which it can't edit, until "Use Global" is
-/// unticked. Members run on the UI thread.
+/// Audio Tracks (story 10.5, epic 10's EXPERIENCE.md "Audio Tracks"): the Global <c>trackLayout</c>
+/// (R14 to R19), or with a profile id that game's own (R7), edited as one card per Track listing the
+/// sounds it records. The draft is story 10.4's <see cref="AudioTracksDraft"/>, so a device is one record
+/// across Tracks and a device on no Track is dropped at save (AD-24). Save changes sends one
+/// <c>settings.update</c>. While the page is open it meters the draft through <c>meters.watch</c>, with
+/// one probe Track per source and, while the sound picker is open, per listed device
+/// (<see cref="MeterProbes"/>). A profile without its own tracks shows a read-only summary until
+/// "Use the main audio tracks" is unticked. Members run on the UI thread.
 /// </summary>
 internal sealed class TrackLayoutPage : SettingsPage
 {
+    public const string PageTitle = "Audio Tracks";
+    public const string AppliesHint = "Changes apply from your next game, or right after your next saved Clip.";
+    public const string NameNeeded = "Give every track a name to save.";
+    public const string ChangedElsewhere = "Audio tracks were changed somewhere else, so this page shows the new ones.";
+
     private readonly IEngineSession _engine;
     private AudioDeviceList _devices = AudioDeviceList.Empty;
     private TrackLayout _basis = Keys.TrackLayout.Default;
+    private AudioTracksDraft _draft = AudioTracksDraft.From(Keys.TrackLayout.Default);
     private bool _isDirty;
     private bool _saving;
-    private TrackLayoutDeviceItem? _selectedDevice;
-    private TrackLayoutTrackItem? _selectedTrack;
-    private TrackLayoutChoice? _selectedChoice;
     private bool _isOpen;
     private MeterLevels _levels = MeterLevels.Empty;
     private string? _engineInstanceId;
@@ -35,6 +39,11 @@ internal sealed class TrackLayoutPage : SettingsPage
     private string? _watchedInstanceId;
     private bool _unwatchPending;
     private bool _usesGlobal;
+    private string? _saveProblem;
+    private AudioTrackCard? _pickerTrack;
+    private string _pickerSearch = "";
+    private AudioPickerRow? _pickerSelection;
+    private FrameworkElement? _view;
 
     public TrackLayoutPage(SettingsSender sender, IEngineSession engine, string? profileId = null)
         : base(sender)
@@ -42,28 +51,26 @@ internal sealed class TrackLayoutPage : SettingsPage
         _engine = engine;
         ProfileId = profileId;
         _usesGlobal = profileId is not null;
-        AddDeviceCommand = new RelayCommand(AddDevice);
-        RemoveDeviceCommand = new RelayCommand(RemoveDevice);
         AddTrackCommand = new RelayCommand(AddTrack);
-        MoveUpCommand = new RelayCommand(() => MoveTrack(-1));
-        MoveDownCommand = new RelayCommand(() => MoveTrack(1));
-        DeleteTrackCommand = new RelayCommand(DeleteTrack);
         SaveCommand = new RelayCommand(() => _ = SaveAsync());
-        RevertCommand = new RelayCommand(Revert);
+        DiscardCommand = new RelayCommand(Discard);
+        ApplyPresetCommand = new ParameterCommand(p => ApplyPreset(p is TrackLayoutPreset preset ? preset : TrackLayoutPreset.Simple));
+        ClosePickerCommand = new RelayCommand(ClosePicker);
+        Confirm = (message, caption) => Prompts.YesNo(_view, message, caption, MessageBoxImage.Question);
         Load(_basis);
     }
 
-    public override string Title => "Track Layout";
+    public override string Title => PageTitle;
 
-    /// <summary>The Game Profile whose override this page edits; null on the Global page.</summary>
+    /// <summary>The game whose own tracks this page edits; null on the main page.</summary>
     public string? ProfileId { get; }
 
     public bool IsProfile => ProfileId is not null;
 
     /// <summary>
-    /// Whether the profile has no override and so uses the Global layout; false on the Global page.
-    /// Ticking it removes the override and drops the draft; unticking it sets the override to the Global
-    /// layout as is, so the Track ids and device keys stay the same.
+    /// Whether the game has no tracks of its own and so uses the main ones; false on the main page.
+    /// Ticking it removes the game's own value and drops the draft; unticking it sets the game's own
+    /// value to the main tracks as they are, so the Track ids and device keys stay the same (AD-4).
     /// </summary>
     public bool UsesGlobal
     {
@@ -91,46 +98,54 @@ internal sealed class TrackLayoutPage : SettingsPage
         }
     }
 
-    /// <summary>Whether the draft can be edited: always on the Global page, else while the profile has its own layout.</summary>
+    /// <summary>Whether the draft can be edited: always on the main page, else while the game has its own tracks.</summary>
     public bool CanEdit => !IsProfile || !UsesGlobal;
 
-    /// <summary>The draft's devices, in layout order.</summary>
-    public ObservableCollection<TrackLayoutDeviceItem> Devices { get; } = [];
+    /// <summary>The read-only summary mode: a game using the main tracks shows them as text.</summary>
+    public bool ShowsSummary => !CanEdit;
 
-    /// <summary>The draft's Tracks, in layout order.</summary>
-    public ObservableCollection<TrackLayoutTrackItem> Tracks { get; } = [];
+    /// <summary>The Tracks and their sounds as text, one line per Track: "1  Everything: Speakers, Microphone".</summary>
+    public IReadOnlyList<string> Summary => [.. Tracks.Select(t => $"{t.Number}  {t.Name}: {(t.Sources.Count == 0 ? "no sounds" : string.Join(", ", t.Sources.Select(s => s.Label)))}")];
 
-    /// <summary>The listed devices the draft doesn't hold yet.</summary>
-    public ObservableCollection<TrackLayoutChoice> Choices { get; } = [];
+    /// <summary>One card per Track, in file order.</summary>
+    public ObservableCollection<AudioTrackCard> Tracks { get; } = [];
 
-    public TrackLayoutDeviceItem? SelectedDevice
-    {
-        get => _selectedDevice;
-        set => Set(ref _selectedDevice, value);
-    }
+    public bool HasNoTracks => Tracks.Count == 0;
 
-    public TrackLayoutTrackItem? SelectedTrack
-    {
-        get => _selectedTrack;
-        set => Set(ref _selectedTrack, value);
-    }
-
-    public TrackLayoutChoice? SelectedChoice
-    {
-        get => _selectedChoice;
-        set => Set(ref _selectedChoice, value);
-    }
-
-    /// <summary>Whether the draft differs from the layout the page rendered.</summary>
+    /// <summary>Whether the draft differs from the tracks the page rendered.</summary>
     public bool IsDirty
     {
         get => _isDirty;
-        private set => Set(ref _isDirty, value);
+        private set
+        {
+            if (Set(ref _isDirty, value))
+            {
+                OnPropertyChanged(nameof(HasUnsavedChanges));
+            }
+        }
     }
+
+    /// <inheritdoc/>
+    public override bool HasUnsavedChanges => IsDirty;
+
+    /// <summary>Why the last Save changes didn't save, on the save bar; null when it did or none was tried.</summary>
+    public string? SaveProblem
+    {
+        get => _saveProblem;
+        private set
+        {
+            if (Set(ref _saveProblem, value))
+            {
+                OnPropertyChanged(nameof(HasSaveProblem));
+            }
+        }
+    }
+
+    public bool HasSaveProblem => SaveProblem is not null;
 
     /// <summary>
     /// Whether the page is on screen: the window shown and this settings page selected in the nav. Opening
-    /// watches the draft; closing sends <c>meters.unwatch</c> and zeroes every level.
+    /// watches the draft; closing sends <c>meters.unwatch</c>, closes the picker and zeroes every level.
     /// </summary>
     public bool IsOpen
     {
@@ -149,6 +164,7 @@ internal sealed class TrackLayoutPage : SettingsPage
             }
             else
             {
+                ClosePicker();
                 _watchedJson = null;
                 _watchedInstanceId = null;
                 _ = UnwatchAsync();
@@ -158,23 +174,66 @@ internal sealed class TrackLayoutPage : SettingsPage
         }
     }
 
-    public ICommand AddDeviceCommand { get; }
-
-    public ICommand RemoveDeviceCommand { get; }
+    /// <summary>Asks a Yes/No question: the preset and Remove track confirmations. Tests replace it.</summary>
+    public Func<string, string, bool> Confirm { get; set; }
 
     public ICommand AddTrackCommand { get; }
 
-    public ICommand MoveUpCommand { get; }
-
-    public ICommand MoveDownCommand { get; }
-
-    public ICommand DeleteTrackCommand { get; }
-
     public ICommand SaveCommand { get; }
 
-    public ICommand RevertCommand { get; }
+    public ICommand DiscardCommand { get; }
 
-    /// <summary>Takes the snapshot's device list: refreshes availability and labels, and the picker's choices.</summary>
+    /// <summary>Takes a <see cref="TrackLayoutPreset"/>; replaces the draft after its confirmation.</summary>
+    public ICommand ApplyPresetCommand { get; }
+
+    public ICommand ClosePickerCommand { get; }
+
+    /// <summary>The presets, with their menu labels.</summary>
+    public IReadOnlyList<AudioPresetChoice> Presets { get; } =
+    [
+        new(TrackLayoutPreset.Simple, "Simple", "Simple — one track with your PC's sound and your microphone"),
+        new(TrackLayoutPreset.ForEditing, "For editing", "For editing — everything, game and chat, and your microphone on their own tracks"),
+    ];
+
+    /// <summary>The Track the sound picker adds to, while it's open; null when it's closed.</summary>
+    public AudioTrackCard? PickerTrack
+    {
+        get => _pickerTrack;
+        private set
+        {
+            if (Set(ref _pickerTrack, value))
+            {
+                OnPropertyChanged(nameof(IsPickerOpen));
+            }
+        }
+    }
+
+    public bool IsPickerOpen => PickerTrack is not null;
+
+    /// <summary>The picker's search text: rows whose name or parent contain it.</summary>
+    public string PickerSearch
+    {
+        get => _pickerSearch;
+        set
+        {
+            if (Set(ref _pickerSearch, value ?? ""))
+            {
+                RefreshPicker();
+            }
+        }
+    }
+
+    /// <summary>The picker's rows, playback first, then microphones and other inputs; the view groups them by <see cref="AudioPickerRow.Section"/>.</summary>
+    public ObservableCollection<AudioPickerRow> PickerRows { get; } = [];
+
+    /// <summary>The picker's highlighted row, kept across live device updates.</summary>
+    public AudioPickerRow? PickerSelection
+    {
+        get => _pickerSelection;
+        set => Set(ref _pickerSelection, value);
+    }
+
+    /// <summary>Takes the snapshot's device list: refreshes availability, labels and the picker.</summary>
     public void ShowDevices(AudioDeviceList devices)
     {
         ArgumentNullException.ThrowIfNull(devices);
@@ -184,12 +243,14 @@ internal sealed class TrackLayoutPage : SettingsPage
         }
 
         _devices = devices;
-        RefreshDevices();
+        RefreshSources();
+        RefreshPicker();
+        MetersMayChange();
     }
 
     /// <summary>
-    /// Takes the snapshot's meter levels and engine run: sets each Track's level, and watches the draft
-    /// again when the page is open and the engine is a new run.
+    /// Takes the snapshot's meter levels and engine run: sets each Track's and source's level, and
+    /// watches the draft again when the page is open and the engine is a new run or the link was lost.
     /// </summary>
     public void ShowMeters(MeterLevels levels, string engineInstanceId)
     {
@@ -217,15 +278,134 @@ internal sealed class TrackLayoutPage : SettingsPage
         ShowLevels();
     }
 
-    /// <summary>The draft as Contracts' <see cref="TrackLayout"/>.</summary>
-    public TrackLayout ToLayout() => new(
-        [.. Devices.Select(d => d.Device)],
-        [.. Tracks.Select(t => new Track(t.Id, t.Name, [.. t.DeviceKeys], t.MuteAffected))]);
+    /// <summary>The draft as Contracts' <see cref="TrackLayout"/>, as Save changes sends it.</summary>
+    public TrackLayout ToLayout() => _draft.ToLayout();
+
+    /// <summary>Opens the sound picker for <paramref name="track"/>; its rows meter every listed device.</summary>
+    public void OpenPicker(AudioTrackCard track)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        if (!CanEdit)
+        {
+            return;
+        }
+
+        _pickerSearch = "";
+        OnPropertyChanged(nameof(PickerSearch));
+        PickerTrack = track;
+        RefreshPicker();
+        PickerSelection = PickerRows.FirstOrDefault(r => r.CanAdd);
+        MetersMayChange();
+    }
+
+    public void ClosePicker()
+    {
+        if (PickerTrack is null)
+        {
+            return;
+        }
+
+        PickerTrack = null;
+        PickerRows.Clear();
+        PickerSelection = null;
+        MetersMayChange();
+    }
+
+    /// <summary>
+    /// Adds a picker row's device to the picker's Track (a recording device as a microphone), then closes
+    /// the picker unless <paramref name="keepOpen"/> (Ctrl+click).
+    /// </summary>
+    public void Pick(AudioPickerRow row, bool keepOpen = false)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (PickerTrack is not { } track || !row.CanAdd)
+        {
+            return;
+        }
+
+        AddSound(track, row.Device);
+        if (keepOpen)
+        {
+            RefreshPicker();
+            PickerSelection = PickerRows.FirstOrDefault(r => SameEndpoint(r.Device, row.Device));
+        }
+        else
+        {
+            ClosePicker();
+        }
+    }
+
+    /// <summary>Adds <paramref name="device"/> to <paramref name="track"/>, reusing the draft's record of it.</summary>
+    public void AddSound(AudioTrackCard track, AudioDevice device)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        ArgumentNullException.ThrowIfNull(device);
+        if (_draft.AddSource(track.Model, device) is not null)
+        {
+            StructureChanged();
+        }
+    }
+
+    /// <summary>Remove from this track: the device stays on its other Tracks, and leaves the saved tracks when it's on none.</summary>
+    public void RemoveSound(AudioTrackCard track, AudioSourceRow source)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        ArgumentNullException.ThrowIfNull(source);
+        _draft.RemoveSource(track.Model, source.Key);
+        StructureChanged();
+    }
+
+    /// <summary>Treat as a microphone: one record, so it changes on every Track with this sound.</summary>
+    public void SetMicrophone(AudioSourceRow source, bool isMic)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        _draft.SetMic(source.Key, isMic);
+        StructureChanged();
+    }
+
+    /// <summary>Moves a Track up (-1) or down (+1); its id is kept.</summary>
+    public void MoveTrack(AudioTrackCard track, int by)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        var from = _draft.Tracks.IndexOf(track.Model);
+        var to = from + by;
+        if (from < 0 || to < 0 || to >= _draft.Tracks.Count)
+        {
+            return;
+        }
+
+        _draft.Tracks.RemoveAt(from);
+        _draft.Tracks.Insert(to, track.Model);
+        StructureChanged();
+    }
+
+    /// <summary>Remove track: asks first when the Track has sounds.</summary>
+    public void RemoveTrack(AudioTrackCard track)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        if (track.Sources.Count > 0 && !Confirm($"Remove \"{track.Name}\" and its {track.Summary}?", "Remove track"))
+        {
+            return;
+        }
+
+        if (PickerTrack == track)
+        {
+            ClosePicker();
+        }
+
+        _draft.Tracks.Remove(track.Model);
+        StructureChanged();
+    }
 
     protected override FrameworkElement CreateView()
     {
         var view = new TrackLayoutView { DataContext = this };
-        return IsProfile ? Embedded(view) : view;
+        if (IsProfile)
+        {
+            view.Unscroll();
+        }
+
+        return _view = view;
     }
 
     protected override void OnRender(SettingsDocument document)
@@ -247,7 +427,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         {
             _basis = layout;
             Load(layout);
-            Message = "The Track Layout changed elsewhere, so this page reloaded it.";
+            Message = ChangedElsewhere;
         }
     }
 
@@ -256,66 +436,120 @@ internal sealed class TrackLayoutPage : SettingsPage
         if (Set(ref _usesGlobal, value, nameof(UsesGlobal)))
         {
             OnPropertyChanged(nameof(CanEdit));
+            OnPropertyChanged(nameof(ShowsSummary));
         }
     }
 
-    // Records' list members compare by reference, so layouts compare as JSON.
+    // Records' list members compare by reference, so layouts compare as JSON; a device on no Track
+    // doesn't count, since saving drops it.
     private static bool Same(TrackLayout a, TrackLayout b) =>
-        JsonElement.DeepEquals(Keys.TrackLayout.ToJson(a), Keys.TrackLayout.ToJson(b));
+        JsonElement.DeepEquals(Keys.TrackLayout.ToJson(AudioTracksDraft.From(a).ToLayout()), Keys.TrackLayout.ToJson(AudioTracksDraft.From(b).ToLayout()));
 
-    private static bool SameEndpoint(string endpointId, AudioFlow flow, string otherId, AudioFlow otherFlow) =>
-        flow == otherFlow && string.Equals(endpointId, otherId, StringComparison.OrdinalIgnoreCase);
+    private static bool SameEndpoint(AudioDevice a, AudioDevice b) =>
+        a.Flow == b.Flow && string.Equals(a.EndpointId, b.EndpointId, StringComparison.OrdinalIgnoreCase);
 
     private void Load(TrackLayout layout)
     {
-        var selectedTrackId = SelectedTrack?.Id;
-        SelectedDevice = null;
-        Devices.Clear();
-        foreach (var device in layout.Devices)
-        {
-            Devices.Add(new TrackLayoutDeviceItem(device, DraftChanged));
-        }
-
+        // The picker's Track belongs to the draft being replaced (QA 10.5).
+        ClosePicker();
+        _draft = AudioTracksDraft.From(layout);
+        SaveProblem = null;
         Tracks.Clear();
-        foreach (var track in layout.Tracks)
+        StructureChanged();
+    }
+
+    /// <summary>After any edit that changes the Tracks, their sources or a device record: syncs the cards, then <see cref="DraftChanged"/>.</summary>
+    private void StructureChanged()
+    {
+        // Cards are kept by Track id, so a focused card or name box survives a move or an added sound.
+        var cards = Tracks.ToDictionary(c => c.Id);
+        for (var i = 0; i < _draft.Tracks.Count; i++)
         {
-            Tracks.Add(new TrackLayoutTrackItem(track, DraftChanged));
+            var model = _draft.Tracks[i];
+            if (!cards.Remove(model.Id, out var card) || card.Model != model)
+            {
+                card = new AudioTrackCard(this, model);
+            }
+
+            var at = Tracks.IndexOf(card);
+            if (at < 0)
+            {
+                Tracks.Insert(i, card);
+            }
+            else if (at != i)
+            {
+                Tracks.Move(at, i);
+            }
+
+            card.Number = i + 1;
+            card.ShowSources(_draft.SourcesOf(model));
         }
 
+        while (Tracks.Count > _draft.Tracks.Count)
+        {
+            Tracks.RemoveAt(Tracks.Count - 1);
+        }
+
+        foreach (var card in Tracks)
+        {
+            card.IsFirst = card.Number == 1;
+            card.IsLast = card.Number == Tracks.Count;
+        }
+
+        OnPropertyChanged(nameof(HasNoTracks));
+        RefreshSources();
+        RefreshPicker();
         ShowLevels();
-        SelectedTrack = Tracks.FirstOrDefault(t => t.Id == selectedTrackId) ?? Tracks.FirstOrDefault();
-        DevicesChanged();
         DraftChanged();
     }
 
-    /// <summary>After any draft edit: each Track's double-count warning, then whether the draft is dirty.</summary>
-    private void DraftChanged()
+    /// <summary>After any draft edit: each Track's double-count line, the summary, whether the draft is dirty, and the watch.</summary>
+    internal void DraftChanged()
     {
-        foreach (var track in Tracks)
+        if (SaveProblem == NameNeeded && Tracks.All(t => !string.IsNullOrWhiteSpace(t.Name)))
         {
-            // R2: outputs from two or more parent devices may carry the same audio twice. Inputs never count.
-            var parents = track.DeviceKeys
-                .Select(key => Devices.FirstOrDefault(d => d.Device.Key == key)?.Device)
-                .Where(d => d is { Flow: AudioFlow.Output })
-                .Select(d => d!.ParentName)
+            SaveProblem = null;
+        }
+
+        foreach (var card in Tracks)
+        {
+            // R15: outputs from two or more parent devices may carry the same audio twice. Inputs never count.
+            var parents = card.Sources
+                .Where(s => s.Device.Flow == AudioFlow.Output)
+                .Select(s => s.Device.ParentName)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            track.Warning = parents.Count >= 2
-                ? $"May count audio twice: mixes outputs from {string.Join(", ", parents)}."
+            card.Warning = parents.Count >= 2
+                ? $"You may hear some sounds twice: {JoinAnd(parents)} can both carry the same audio."
                 : "";
+            card.ShowNameProblem(SaveProblem == NameNeeded);
         }
 
         IsDirty = !Same(ToLayout(), _basis);
+        OnPropertyChanged(nameof(Summary));
+        MetersMayChange();
+    }
+
+    private static string JoinAnd(IReadOnlyList<string> items) =>
+        items.Count == 1 ? items[0] : string.Join(", ", items.Take(items.Count - 1)) + " and " + items[^1];
+
+    /// <summary>Re-watches when the metered layout (names aside) or the picker's probes changed.</summary>
+    private void MetersMayChange()
+    {
         if (IsOpen && MeteredJson() != _watchedJson)
         {
             Watch();
         }
     }
 
+    /// <summary>The layout the meters watch: the draft, plus a probe per source and per listed device while the picker is open.</summary>
+    private TrackLayout Watched() =>
+        MeterProbes.WithProbes(ToLayout(), IsPickerOpen ? _devices.Devices : null);
+
     // Names don't change what the engine meters, and the name box updates per keystroke.
     private string MeteredJson()
     {
-        var layout = ToLayout();
+        var layout = Watched();
         return Keys.TrackLayout.ToJson(layout with { Tracks = [.. layout.Tracks.Select(t => t with { Name = "" })] }).GetRawText();
     }
 
@@ -323,7 +557,7 @@ internal sealed class TrackLayoutPage : SettingsPage
     {
         _watchedJson = MeteredJson();
         _watchedInstanceId = _engineInstanceId;
-        _ = WatchAsync(_watchedJson, new MetersWatch(ToLayout()));
+        _ = WatchAsync(_watchedJson, new MetersWatch(Watched()));
     }
 
     private async Task WatchAsync(string json, MetersWatch watch)
@@ -363,133 +597,106 @@ internal sealed class TrackLayoutPage : SettingsPage
         }
     }
 
-    /// <summary>Each Track's level from the last levels; 0 when the page is closed or the levels don't list it.</summary>
+    /// <summary>Each Track's, source's and picker row's level from the last levels; 0 when the page is closed or the levels don't list it.</summary>
     private void ShowLevels()
     {
-        foreach (var track in Tracks)
+        var levels = IsOpen ? _levels : MeterLevels.Empty;
+        foreach (var card in Tracks)
         {
-            track.ShowPeak(IsOpen ? _levels.Tracks.FirstOrDefault(l => l.TrackId == track.Id)?.Peak ?? 0 : 0);
-        }
-    }
-
-    /// <summary>After the draft's devices change: the Tracks' checkboxes, the labels and the choices.</summary>
-    private void DevicesChanged()
-    {
-        foreach (var track in Tracks)
-        {
-            track.ShowDevices(Devices);
-        }
-
-        RefreshDevices();
-    }
-
-    private void RefreshDevices()
-    {
-        // Every distinct device the page knows, so a shared friendly name shows the parents.
-        var known = _devices.Devices.Select(d => (d.EndpointId, d.Flow, d.FriendlyName))
-            .Concat(Devices.Select(d => (d.Device.EndpointId, d.Device.Flow, d.Device.FriendlyName)))
-            .DistinctBy(d => (d.EndpointId.ToUpperInvariant(), d.Flow))
-            .ToList();
-        bool Shared(string name) => known.Count(d => string.Equals(d.FriendlyName, name, StringComparison.OrdinalIgnoreCase)) > 1;
-        string Label(string name, string parent, AudioFlow flow) =>
-            (Shared(name) && parent.Length > 0 ? $"{name} — {parent}" : name) + (flow == AudioFlow.Output ? " (Output)" : " (Input)");
-
-        foreach (var item in Devices)
-        {
-            var device = item.Device;
-            item.Label = Label(device.FriendlyName, device.ParentName, device.Flow);
-            item.Available = _devices.Devices.Any(d => d.Available && SameEndpoint(d.EndpointId, d.Flow, device.EndpointId, device.Flow));
-        }
-
-        var selected = SelectedChoice?.Device;
-        Choices.Clear();
-        foreach (var device in _devices.Devices)
-        {
-            if (!Devices.Any(d => SameEndpoint(d.Device.EndpointId, d.Device.Flow, device.EndpointId, device.Flow)))
+            card.ShowPeak(levels.Tracks.FirstOrDefault(l => l.TrackId == card.Id)?.Peak ?? 0);
+            foreach (var source in card.Sources)
             {
-                Choices.Add(new TrackLayoutChoice(device, Label(device.FriendlyName, device.ParentName, device.Flow)));
+                source.ShowPeak(MeterProbes.LevelOf(levels, source.Device.EndpointId, source.Device.Flow));
             }
         }
 
-        SelectedChoice = selected is null
-            ? null
-            : Choices.FirstOrDefault(c => SameEndpoint(c.Device.EndpointId, c.Device.Flow, selected.EndpointId, selected.Flow));
+        foreach (var row in PickerRows)
+        {
+            row.ShowPeak(MeterProbes.LevelOf(levels, row.Device.EndpointId, row.Device.Flow));
+        }
     }
 
-    private void AddDevice()
+    /// <summary>Every distinct device the page knows, so a name two devices share shows its parent.</summary>
+    private Func<string, bool> SharedNames()
     {
-        if (SelectedChoice is not { } choice)
+        var known = _devices.Devices.Select(d => (d.EndpointId, d.Flow, d.FriendlyName))
+            .Concat(Tracks.SelectMany(t => t.Sources).Select(s => (s.Device.EndpointId, s.Device.Flow, s.Device.FriendlyName)))
+            .DistinctBy(d => (d.EndpointId.ToUpperInvariant(), d.Flow))
+            .ToList();
+        return name => known.Count(d => string.Equals(d.FriendlyName, name, StringComparison.OrdinalIgnoreCase)) > 1;
+    }
+
+    internal static string Label(string name, string parent, bool shared) =>
+        shared && parent.Length > 0 ? $"{name} ({parent})" : name;
+
+    private void RefreshSources()
+    {
+        var shared = SharedNames();
+        foreach (var source in Tracks.SelectMany(t => t.Sources))
+        {
+            var device = source.Device;
+            source.Label = Label(device.FriendlyName, device.ParentName, shared(device.FriendlyName));
+            source.Available = _devices.Devices.Any(d => d.Available && d.Flow == device.Flow
+                && string.Equals(d.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        OnPropertyChanged(nameof(Summary));
+    }
+
+    /// <summary>Rebuilds the picker's rows from the device list, keeping the highlighted row (R14's live updates).</summary>
+    private void RefreshPicker()
+    {
+        if (PickerTrack is not { } track)
         {
             return;
         }
 
-        var source = choice.Device;
-        var device = new LayoutDevice(Guid.NewGuid(), source.EndpointId, source.FriendlyName, source.ParentName, source.Flow, IsMic: false);
-        Devices.Add(new TrackLayoutDeviceItem(device, DraftChanged));
-        Tracks.FirstOrDefault(t => t.Id == Keys.EverythingTrackId)?.DeviceKeys.Add(device.Key);
-        SelectedChoice = null;
-        DevicesChanged();
-        DraftChanged();
-    }
-
-    private void RemoveDevice()
-    {
-        if (SelectedDevice is not { } item)
+        var selected = PickerSelection?.Device;
+        var shared = SharedNames();
+        var held = track.Sources.Select(s => s.Device).ToList();
+        PickerRows.Clear();
+        foreach (var device in _devices.Devices.OrderBy(d => d.Flow))
         {
-            return;
+            var label = Label(device.FriendlyName, device.ParentName, shared(device.FriendlyName));
+            if (PickerSearch.Length > 0
+                && !label.Contains(PickerSearch, StringComparison.OrdinalIgnoreCase)
+                && !device.ParentName.Contains(PickerSearch, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var added = held.Any(h => h.Flow == device.Flow && string.Equals(h.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
+            PickerRows.Add(new AudioPickerRow(device, label, added));
         }
 
-        Devices.Remove(item);
-        foreach (var track in Tracks)
-        {
-            track.DeviceKeys.Remove(item.Device.Key);
-        }
-
-        SelectedDevice = null;
-        DevicesChanged();
-        DraftChanged();
+        PickerSelection = selected is null ? null : PickerRows.FirstOrDefault(r => SameEndpoint(r.Device, selected));
+        ShowLevels();
     }
 
     private void AddTrack()
     {
-        var track = new TrackLayoutTrackItem(new Track(Guid.NewGuid(), $"Track {Tracks.Count + 1}", [], MuteAffected: false), DraftChanged);
-        track.ShowDevices(Devices);
-        Tracks.Add(track);
-        ShowLevels();
-        SelectedTrack = track;
-        DraftChanged();
+        var model = _draft.AddTrack($"Track {_draft.Tracks.Count + 1}");
+        StructureChanged();
+        Tracks.First(t => t.Model == model).RequestRename();
     }
 
-    private void MoveTrack(int by)
+    private void ApplyPreset(TrackLayoutPreset preset)
     {
-        if (SelectedTrack is not { } track)
+        if (!CanEdit)
         {
             return;
         }
 
-        var from = Tracks.IndexOf(track);
-        var to = from + by;
-        if (to < 0 || to >= Tracks.Count)
+        var name = Presets.First(p => p.Preset == preset).Name;
+        if (!Confirm($"Replace your audio tracks with {name}?", "Use a preset"))
         {
             return;
         }
 
-        Tracks.Move(from, to);
-        SelectedTrack = track;
-        DraftChanged();
-    }
-
-    private void DeleteTrack()
-    {
-        if (SelectedTrack is not { } track)
-        {
-            return;
-        }
-
-        var index = Tracks.IndexOf(track);
-        Tracks.Remove(track);
-        SelectedTrack = Tracks.Count == 0 ? null : Tracks[Math.Min(index, Tracks.Count - 1)];
-        DraftChanged();
+        ClosePicker();
+        _draft.ApplyPreset(preset, _devices.Devices);
+        Tracks.Clear();
+        StructureChanged();
     }
 
     private async Task SaveAsync()
@@ -502,10 +709,12 @@ internal sealed class TrackLayoutPage : SettingsPage
 
         if (Tracks.Any(t => string.IsNullOrWhiteSpace(t.Name)))
         {
-            Message = "Not saved: every Track needs a name.";
+            SaveProblem = NameNeeded;
+            DraftChanged();
             return;
         }
 
+        SaveProblem = null;
         _saving = true;
         try
         {
@@ -517,112 +726,117 @@ internal sealed class TrackLayoutPage : SettingsPage
         }
     }
 
-    private void Revert()
+    private void Discard()
     {
         Message = null;
         Load(_basis);
     }
 }
 
-/// <summary>A device of the draft layout.</summary>
-internal sealed class TrackLayoutDeviceItem(LayoutDevice device, Action changed) : Observable
+/// <summary>A preset in the Use a preset menu.</summary>
+internal sealed record AudioPresetChoice(TrackLayoutPreset Preset, string Name, string Label);
+
+/// <summary>A command with a parameter.</summary>
+internal sealed class ParameterCommand(Action<object?> execute) : ICommand
 {
-    private string _label = device.FriendlyName;
-    private bool _available;
-
-    /// <summary>The draft's device; marking it a Mic replaces it with the same key.</summary>
-    public LayoutDevice Device { get; private set; } = device;
-
-    /// <summary>Only an Input Device can be a Mic Device; an Output Device marked by hand can still be unmarked.</summary>
-    public bool CanBeMic => Device.Flow == AudioFlow.Input || Device.IsMic;
-
-    /// <summary>Whether the Mic Mute Hotkey mutes this device (R4).</summary>
-    public bool IsMic
+    public event EventHandler? CanExecuteChanged
     {
-        get => Device.IsMic;
+        add { }
+        remove { }
+    }
+
+    public bool CanExecute(object? parameter) => true;
+
+    public void Execute(object? parameter) => execute(parameter);
+}
+
+/// <summary>A Track's card. <see cref="Id"/> stays the same across renames and moves.</summary>
+internal sealed class AudioTrackCard : Observable
+{
+    private readonly TrackLayoutPage _page;
+    private int _number;
+    private string _warning = "";
+    private double _level;
+    private bool _nameProblem;
+    private bool _isFirst;
+    private bool _isLast;
+    private bool _pendingRename;
+
+    public AudioTrackCard(TrackLayoutPage page, AudioTracksDraftTrack model)
+    {
+        _page = page;
+        Model = model;
+        RenameCommand = new RelayCommand(RequestRename);
+        MoveUpCommand = new RelayCommand(() => page.MoveTrack(this, -1));
+        MoveDownCommand = new RelayCommand(() => page.MoveTrack(this, 1));
+        RemoveCommand = new RelayCommand(() => page.RemoveTrack(this));
+        AddSoundCommand = new RelayCommand(() => page.OpenPicker(this));
+    }
+
+    /// <summary>Raised when the card's name box should take focus (Rename, F2, a new Track).</summary>
+    public event Action? RenameRequested;
+
+    internal AudioTracksDraftTrack Model { get; }
+
+    public Guid Id => Model.Id;
+
+    /// <summary>The track number, 1-based, as players and editors count them.</summary>
+    public int Number
+    {
+        get => _number;
+        set => Set(ref _number, value);
+    }
+
+    public string Name
+    {
+        get => Model.Name;
         set
         {
-            if (value == Device.IsMic)
+            if (value == Model.Name)
             {
                 return;
             }
 
-            Device = Device with { IsMic = value };
+            Model.Name = value ?? "";
             OnPropertyChanged();
-            changed();
+            _page.DraftChanged();
         }
     }
 
-    public string Label
-    {
-        get => _label;
-        set => Set(ref _label, value);
-    }
-
-    /// <summary>Whether the snapshot's device list has this endpoint, present and active.</summary>
-    public bool Available
-    {
-        get => _available;
-        set
-        {
-            if (Set(ref _available, value))
-            {
-                OnPropertyChanged(nameof(Note));
-            }
-        }
-    }
-
-    /// <summary>"unavailable" when the device isn't present, else empty.</summary>
-    public string Note => Available ? "" : "unavailable";
-}
-
-/// <summary>A Track of the draft layout. <see cref="Id"/> stays the same across renames and moves.</summary>
-internal sealed class TrackLayoutTrackItem(Track track, Action changed) : Observable
-{
-    private string _name = track.Name;
-    private bool _muteAffected = track.MuteAffected;
-    private string _warning = "";
-    private double _level;
-
-    public Guid Id { get; } = track.Id;
-
-    /// <summary>The Track's level bar, 0..1: its linear peak on a −60..0 dBFS scale.</summary>
-    public double Level
-    {
-        get => _level;
-        private set => Set(ref _level, value);
-    }
-
-    /// <summary>Sets <see cref="Level"/> from a linear sample peak.</summary>
-    public void ShowPeak(float peak) =>
-        Level = peak <= 0 ? 0 : Math.Clamp(((20 * Math.Log10(peak)) + 60) / 60, 0, 1);
-
-    public string Name
-    {
-        get => _name;
-        set
-        {
-            if (Set(ref _name, value))
-            {
-                changed();
-            }
-        }
-    }
-
-    /// <summary>Whether the Mic Mute Hotkey mutes the Mic Devices in this Track.</summary>
+    /// <summary>The mute switch: whether the Mic mute key silences this Track's microphones.</summary>
     public bool MuteAffected
     {
-        get => _muteAffected;
+        get => Model.MuteAffected;
         set
         {
-            if (Set(ref _muteAffected, value))
+            if (value == Model.MuteAffected)
             {
-                changed();
+                return;
             }
+
+            Model.MuteAffected = value;
+            OnPropertyChanged();
+            _page.DraftChanged();
         }
     }
 
-    /// <summary>The double-count warning; empty when there is none. It never blocks Save.</summary>
+    /// <summary>The sounds this Track records, in order.</summary>
+    public ObservableCollection<AudioSourceRow> Sources { get; } = [];
+
+    /// <summary>"{n} sounds", or the silent line.</summary>
+    public string Summary => Sources.Count switch
+    {
+        0 => "No sounds — this track will be silent",
+        1 => "1 sound",
+        var n => $"{n} sounds",
+    };
+
+    public bool IsSilent => Sources.Count == 0;
+
+    /// <summary>The mute switch shows only when the Track has a microphone.</summary>
+    public bool HasMicrophone => Sources.Any(s => s.IsMic);
+
+    /// <summary>The double-count line; empty when there is none. It never blocks Save (R15).</summary>
     public string Warning
     {
         get => _warning;
@@ -637,60 +851,225 @@ internal sealed class TrackLayoutTrackItem(Track track, Action changed) : Observ
 
     public bool HasWarning => Warning.Length > 0;
 
-    /// <summary>The Track's device keys, in order; a checked device is appended.</summary>
-    public List<Guid> DeviceKeys { get; } = [.. track.DeviceKeys];
-
-    /// <summary>One checkbox per layout device.</summary>
-    public ObservableCollection<TrackLayoutCheck> Checks { get; } = [];
-
-    public void ShowDevices(IEnumerable<TrackLayoutDeviceItem> devices)
+    /// <summary>Whether the name box is outlined: a save was refused for a blank name, and this one is blank.</summary>
+    public bool HasNameProblem
     {
-        Checks.Clear();
-        foreach (var device in devices)
-        {
-            Checks.Add(new TrackLayoutCheck(this, device));
-        }
+        get => _nameProblem;
+        private set => Set(ref _nameProblem, value);
     }
 
-    internal void Assign(Guid key, bool assigned)
+    public bool IsFirst
     {
-        if (assigned == DeviceKeys.Contains(key))
-        {
-            return;
-        }
+        get => _isFirst;
+        set => Set(ref _isFirst, value);
+    }
 
-        if (assigned)
+    public bool IsLast
+    {
+        get => _isLast;
+        set => Set(ref _isLast, value);
+    }
+
+    /// <summary>The Track's level bar, 0..1: its linear peak on a −60..0 dBFS scale.</summary>
+    public double Level
+    {
+        get => _level;
+        private set => Set(ref _level, value);
+    }
+
+    public ICommand RenameCommand { get; }
+
+    public ICommand MoveUpCommand { get; }
+
+    public ICommand MoveDownCommand { get; }
+
+    public ICommand RemoveCommand { get; }
+
+    public ICommand AddSoundCommand { get; }
+
+    /// <summary>Sets <see cref="Level"/> from a linear sample peak.</summary>
+    public void ShowPeak(float peak) => Level = AudioLevels.Bar(peak);
+
+    /// <summary>Focuses the card's name box; a card whose view isn't loaded yet takes it when it loads.</summary>
+    public void RequestRename()
+    {
+        if (RenameRequested is { } handler)
         {
-            DeviceKeys.Add(key);
+            handler();
         }
         else
         {
-            DeviceKeys.Remove(key);
+            _pendingRename = true;
+        }
+    }
+
+    /// <summary>Whether a rename was asked for before the view loaded; clears it.</summary>
+    public bool TakePendingRename()
+    {
+        var pending = _pendingRename;
+        _pendingRename = false;
+        return pending;
+    }
+
+    internal void ShowNameProblem(bool refused) => HasNameProblem = refused && string.IsNullOrWhiteSpace(Name);
+
+    internal void ShowSources(IReadOnlyList<LayoutDevice> devices)
+    {
+        var rows = Sources.ToDictionary(s => s.Key);
+        Sources.Clear();
+        foreach (var device in devices)
+        {
+            if (rows.TryGetValue(device.Key, out var row))
+            {
+                row.Device = device;
+            }
+            else
+            {
+                row = new AudioSourceRow(_page, this, device);
+            }
+
+            Sources.Add(row);
         }
 
-        changed();
+        OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(IsSilent));
+        OnPropertyChanged(nameof(HasMicrophone));
     }
 }
 
-/// <summary>Whether a Track holds one layout device.</summary>
-internal sealed class TrackLayoutCheck(TrackLayoutTrackItem track, TrackLayoutDeviceItem device) : Observable
+/// <summary>A sound on a Track: one device record, shown with its own level.</summary>
+internal sealed class AudioSourceRow : Observable
 {
-    public TrackLayoutDeviceItem Device { get; } = device;
+    private readonly TrackLayoutPage _page;
+    private LayoutDevice _device;
+    private string _label;
+    private bool _available = true;
+    private double _level;
 
-    public bool IsChecked
+    public AudioSourceRow(TrackLayoutPage page, AudioTrackCard track, LayoutDevice device)
     {
-        get => track.DeviceKeys.Contains(Device.Device.Key);
+        _page = page;
+        _device = device;
+        _label = device.FriendlyName;
+        RemoveCommand = new RelayCommand(() => page.RemoveSound(track, this));
+    }
+
+    public Guid Key => Device.Key;
+
+    public LayoutDevice Device
+    {
+        get => _device;
         set
         {
-            track.Assign(Device.Device.Key, value);
-            OnPropertyChanged();
+            if (Set(ref _device, value))
+            {
+                OnPropertyChanged(nameof(IsMic));
+                OnPropertyChanged(nameof(Kind));
+                OnPropertyChanged(nameof(CanBeMic));
+            }
         }
     }
+
+    /// <summary>The name as Windows shows it, with the parent in brackets when two share a name.</summary>
+    public string Label
+    {
+        get => _label;
+        set => Set(ref _label, value);
+    }
+
+    public bool IsPlayback => Device.Flow == AudioFlow.Output;
+
+    /// <summary>"playback", "microphone", or "input" for a recording device that isn't a microphone.</summary>
+    public string Kind => AudioLevels.Kind(Device.Flow, Device.IsMic);
+
+    /// <summary>Only a recording device offers Treat as a microphone; a playback device marked by hand can still be unmarked.</summary>
+    public bool CanBeMic => Device.Flow == AudioFlow.Input || Device.IsMic;
+
+    /// <summary>Treat as a microphone: on every Track with this sound.</summary>
+    public bool IsMic
+    {
+        get => Device.IsMic;
+        set
+        {
+            if (value != Device.IsMic)
+            {
+                _page.SetMicrophone(this, value);
+            }
+        }
+    }
+
+    /// <summary>Whether the device list has it, present and active.</summary>
+    public bool Available
+    {
+        get => _available;
+        set
+        {
+            if (Set(ref _available, value))
+            {
+                OnPropertyChanged(nameof(Note));
+                OnPropertyChanged(nameof(HasNote));
+            }
+        }
+    }
+
+    /// <summary>The not-connected note, or empty. It stays on the Track and records silence (R14).</summary>
+    public string Note => Available ? "" : "Not connected — records silence until it's back";
+
+    public bool HasNote => !Available;
+
+    public double Level
+    {
+        get => _level;
+        private set => Set(ref _level, value);
+    }
+
+    public ICommand RemoveCommand { get; }
+
+    public void ShowPeak(float peak) => Level = AudioLevels.Bar(peak);
 }
 
-/// <summary>A listed device the picker offers.</summary>
-internal sealed record TrackLayoutChoice(AudioDevice Device, string Label)
+/// <summary>A device the sound picker lists.</summary>
+internal sealed class AudioPickerRow(AudioDevice device, string label, bool added) : Observable
 {
-    /// <summary>"unavailable" when the listed device isn't present, else empty.</summary>
-    public string Note => Device.Available ? "" : "unavailable";
+    private double _level;
+
+    public AudioDevice Device { get; } = device;
+
+    public string Label { get; } = label;
+
+    /// <summary>The section header the view groups by.</summary>
+    public string Section => Device.Flow == AudioFlow.Output ? "Sounds from your PC (playback)" : "Microphones and other inputs";
+
+    public bool IsPlayback => Device.Flow == AudioFlow.Output;
+
+    /// <summary>"Windows default" for the default of its section, else the parent device's name.</summary>
+    public string Caption => Device.IsDefault ? "Windows default" : Device.ParentName;
+
+    public bool IsDefault => Device.IsDefault;
+
+    /// <summary>The note for a device the layout holds that isn't connected.</summary>
+    public string Note => Device.Available ? "" : "Not connected";
+
+    /// <summary>Already on this Track: listed ticked and disabled.</summary>
+    public bool IsAdded { get; } = added;
+
+    public bool CanAdd => !IsAdded;
+
+    public double Level
+    {
+        get => _level;
+        private set => Set(ref _level, value);
+    }
+
+    public void ShowPeak(float peak) => Level = AudioLevels.Bar(peak);
+}
+
+/// <summary>Shared rules of the Audio Tracks rows.</summary>
+internal static class AudioLevels
+{
+    /// <summary>A level bar, 0..1: a linear peak on the −60..0 dBFS scale.</summary>
+    public static double Bar(float peak) => peak <= 0 ? 0 : Math.Clamp(((20 * Math.Log10(peak)) + 60) / 60, 0, 1);
+
+    /// <summary>The kind caption (EXPERIENCE.md's glossary).</summary>
+    public static string Kind(AudioFlow flow, bool isMic) => flow == AudioFlow.Output ? "playback" : isMic ? "microphone" : "input";
 }
