@@ -45,8 +45,8 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | busy with QA round 2 of 14.2 |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle; 14.2 in QA round 2; its Heavy tonight |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with the 14.2 round 2 fix; its Heavy tonight |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -207,7 +207,7 @@ The coordinator logs each QA round in the Log below.
 | 33.6 | 12.5 Source-resolution output end to end on the builder's PC | | pending |
 | 34.1 | 13.1 Capture new games: the key, the engine default and the General switch | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `4f06c58`) |
 | 35.1 | 14.1 Architecture: AD-27, the in-app player | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
-| 35.2 | 14.2 Tracer: a Clip plays on a player page from the Library | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA round 2 (code); Heavy tonight; merges after it |
+| 35.2 | 14.2 Tracer: a Clip plays on a player page from the Library | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | round 2: 1 finding (catch too narrow); fixing; Heavy tonight |
 | 35.3 | 14.3 Recordings play to the end: mehd at finalize | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | code QA passed at `e0ad4c0`; Heavy tonight, then merge |
 | 35.4 | 14.4 Track picker | | pending |
 | 35.5 | 14.5 Transport: seek bar, time, volume and keys | | pending |
@@ -1005,3 +1005,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - **Tonight's queue additions:** 14.2's `*PlayerPlaybackTests` (App, story-2-7) after its round 2; 14.3's `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*AFiveSecondRecordingPlaysToItsEndInMediaPlayer" --filter-method "*ATwoScreenMonitorRecordingOf60Seconds*"` plus the crash-cut seek check (slice-epic-4).
 - 2026-11-05: 14.2 round 2 at `4630577`. (1) `VideoSurface` disposes the wrapper and CsWinRT's per-interface references and `NativeObject`, so every D3D and WinRT object reaches 0 refs with no GC (a new default test counts them). (2) The CsWin32 calls already throw; `Present` catches only `ExternalException` and shows the Failed state (with a test). (3) It redraws after front-buffer loss. (4) Quit closes the player first. (5) Devices are made once; a resize rebuilds the texture after 150 ms. Platform.Desktop 15 and App 232 passed. QA round 2 went to 2-1-tracer (Sonnet, high effort).
 - 2026-11-05: **Code QA for 14.3 passed at `e0ad4c0`.** The bytes were re-derived from the code: the v1 `mehd` layout; `free` ends exactly at the old `udta`'s end; `moov` tiles and nothing after it moves; the in-between state is a valid tree. Both writes use `Flush(true)` before `EndWrite`; refusals and I/O errors only log; the duration error is under about 22 µs. Core 171, Platform.FFmpeg 43 and App passed; publish clean. Engine hit one load flake in a Clip test 14.3 doesn't touch (`ReplayClipCaptureTests.ASavePress…`, which passed alone). It merges after tonight's Heavy.
+- 2026-11-05: QA 14.2 round 2 at `4630577`: 4 of 5 fixes confirmed (every object reaches 0 refs with no GC, AOT-clean; redraw; Quit; resize). One finding: `Present()` catches only `ExternalException`, but `ThrowExceptionForHR` maps out-of-video-memory and an invalid size to `OutOfMemoryException` and `ArgumentException`, which would crash the App. The test also bypassed the view's catch. story-2-7 is widening the catch with a seam test through it; the coordinator checks it with no new QA round.
