@@ -104,6 +104,24 @@ public sealed class LibraryPlayerTests : IDisposable
         Assert.Equal([("open", Path.Combine(_folder, Clip))], _shell.Calls);
     }
 
+    // QA 14.2 round 1: a GPU failure building the picture is the page's failure, never a blank picture.
+    [Fact]
+    public void APictureTheGpuRefusesShowsTheFailureAndPauses()
+    {
+        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        page.Render(State());
+        page.Click(Row(page, Clip), ctrl: false, shift: false);
+        page.OpenFocused();
+        page.Player!.PlayPauseCommand.Execute(null);
+        Assert.True(_player.IsPlaying);
+
+        page.Player.ShowFailure();
+
+        Assert.True(page.Player.IsFailed);
+        Assert.False(_player.IsPlaying);
+        Assert.False(page.Player.PlayPauseCommand.CanExecute(null));
+    }
+
     [Fact]
     public void TheLibrarysPlayerIsTheShellsDrillInAndLeavingTheLibraryClosesIt()
     {

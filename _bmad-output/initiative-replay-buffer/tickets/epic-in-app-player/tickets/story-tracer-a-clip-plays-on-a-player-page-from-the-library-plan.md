@@ -178,3 +178,29 @@ Approved by the coordinator at `de32126`, with the `VideoSurface` test kept in t
 ## Log
 
 - 2026-11-05: branch `feature/14.2-player-tracer` from develop `3cca32f`; plan `de32126` approved; built and verified by 15:29.
+
+## QA round 1 fixes (2026-11-05)
+
+QA failed round 1 at `b11f216` with one blocking finding and four others.
+
+1. **[blocking] References after `Dispose`:**
+   - **Measured:** a scratch probe counted the references left on each COM object after `Dispose`.
+     - Disposing the WinRT wrapper (`IClosable.Close`) frees the texture and both devices. But the WinRT surface object keeps 3 references: the wrapper's native reference and CsWinRT's per-interface cache entries, which `Close` doesn't touch. They go only at a GC.
+     - Media Foundation keeps none once the player is disposed, whichever is released first.
+   - **Fix:** `VideoSurface` disposes the wrapper and then, through public CsWinRT API, its interface references (`GetObjectReferenceForType` for `IDirect3DSurface` and `IDisposable`) and its `NativeObject`. That happens on every resize and in `Dispose`.
+   - **New default test:** `VideoSurfaceTests.DisposeReleasesEveryReferenceAtOnceEvenAfterAResize`. With no GC, the old views reach 0 after a resize, and the WinRT surface, the D3D9 texture (which shares its count with its surface level), the D3D11 texture, the D3D9Ex device, D3D9, the D3D11 context and the D3D11 device all reach 0 after `Dispose`.
+2. **HRESULTs:**
+   - CsWin32's struct methods (`CreateTexture2D`, `GetSharedHandle`, `CreateDeviceEx`, `CreateTexture`, `GetSurfaceLevel`) are `void` and call `ThrowOnFailure` themselves, as checked in the generated source. So every step already throws on failure; the class comment now says so.
+   - `PlayerView.Present` catches only `ExternalException` from building the surface. It then releases the surface and calls the new `PlayerPage.ShowFailure()`, which pauses and shows the Failed line.
+   - The copy's catch is narrowed to `ExternalException`, `ObjectDisposedException` and `InvalidOperationException`, which skip that frame.
+   - New default test: `LibraryPlayerTests.APictureTheGpuRefusesShowsTheFailureAndPauses`.
+3. **Front buffer back:** the surface is remade on new devices, and the current frame is redrawn (`OnFrameAvailable`), paused or playing.
+4. **Quit:** `ShellApp.QuitAsync` closes the Library's drill-in first, so the player stops and the file and devices are released before the engine shuts down.
+5. **Resize:**
+   - `VideoSurface` now makes its two devices once, in `new VideoSurface(window)`. `Resize(width, height)` remakes only the texture and its views.
+   - `PlayerView` remakes them only after the picture's size has held for 150 ms. Until then it copies into the old texture, drawn scaled.
+
+**Verification (round 2):**
+- `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+- Default suites, 0 failed (started 15:40): Platform.Desktop 15 of 15; App 232, with 209 passed and 23 skipped (Explicit/Heavy).
+- The Heavy `PlayerPlaybackTests` are unchanged and still unrun (nights).

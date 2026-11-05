@@ -333,6 +333,10 @@ internal sealed class ShellApp(Instance instance) : Application
         }
 
         _quitting = true;
+
+        // The Library's player page closes first: the player stops, its surface and devices go, and the
+        // file is released (AD-27, QA 14.2).
+        (_window!.DataContext as MainViewModel)?.Library.DrillIn.Close();
         await _engine!.ShutdownAsync(QuitTimeout);
         await _engine.DisposeAsync();
         _tray!.Dispose();

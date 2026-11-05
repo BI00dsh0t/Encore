@@ -146,6 +146,18 @@ internal sealed class PlayerPage : Observable, IDisposable
         }
     }
 
+    /// <summary>The picture can't be shown (the GPU refused the video surface): pauses and shows the plain failure line.</summary>
+    public void ShowFailure()
+    {
+        if (IsClosed || State == PlayerState.Failed)
+        {
+            return;
+        }
+
+        Player.Pause();
+        State = PlayerState.Failed;
+    }
+
     /// <summary>Stops the player and releases the file; safe to call twice.</summary>
     public void Dispose()
     {

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -8,15 +9,25 @@ using ReplayBuffer.Platform.Desktop;
 namespace ReplayBuffer.App.Library;
 
 /// <summary>
-/// Draws the player page's frames (AD-27, story 14.2). The player's frame events are coalesced into one present
-/// on the UI thread. That present sizes the <see cref="VideoSurface"/> to the picture's pixels, with the video's
-/// aspect and never above its own size. It copies the frame in and marks the <see cref="D3DImage"/> dirty. On a
-/// resize the old surface stays up, scaled, until the next frame, so a paused picture never blanks. Leaving the
-/// page drops its frames before the back buffer goes (the proof's close order).
+/// Draws the player page's frames (AD-27, story 14.2).
+/// <list type="bullet">
+/// <item>The player's frame events are coalesced into one present on the UI thread. It copies the frame
+/// into the <see cref="VideoSurface"/> and marks the <see cref="D3DImage"/> dirty.</item>
+/// <item>The surface's two devices are made once per page. Its texture is sized to the picture's pixels,
+/// with the video's aspect and never above the video's own size. It's remade only after a resize settles,
+/// and until then the old one is drawn scaled, so a paused picture never blanks.</item>
+/// <item>A GPU failure building the surface puts the page in its Failed state rather than leaving a blank picture.</item>
+/// <item>After a lost front buffer (a lock screen, a display change) the surface is remade and the current frame redrawn.</item>
+/// <item>Leaving the page drops its frames before the back buffer goes (the proof's close order).</item>
+/// </list>
 /// </summary>
 internal partial class PlayerView
 {
+    // How long the picture's size must hold before the texture is remade at it.
+    private static readonly TimeSpan ResizeSettle = TimeSpan.FromMilliseconds(150);
+
     private readonly D3DImage _image = new();
+    private readonly DispatcherTimer _settle;
     private PlayerPage? _page;
     private VideoSurface? _surface;
     private int _presentPending;
@@ -25,14 +36,20 @@ internal partial class PlayerView
     {
         InitializeComponent();
         Picture.Source = _image;
+        _settle = new DispatcherTimer(ResizeSettle, DispatcherPriority.Render, OnResizeSettled, Dispatcher) { IsEnabled = false };
         _image.IsFrontBufferAvailableChanged += OnFrontBufferAvailableChanged;
+        ((FrameworkElement)Picture.Parent).SizeChanged += (_, _) =>
+        {
+            _settle.Stop();
+            _settle.Start();
+        };
         DataContextChanged += (_, e) => Attach(e.NewValue as PlayerPage);
         Unloaded += (_, _) => Attach(null);
         Loaded += (_, _) => Attach(DataContext as PlayerPage);
     }
 
-    /// <summary>The surface's size now, or null with none: for tests.</summary>
-    internal (int Width, int Height)? SurfaceSize => _surface is { } s ? (s.Width, s.Height) : null;
+    /// <summary>The surface's texture size now, or null with none: for tests.</summary>
+    internal (int Width, int Height)? SurfaceSize => _surface is { Width: > 0 } s ? (s.Width, s.Height) : null;
 
     /// <summary>Focuses the play button, when the page opens.</summary>
     public void FocusFirstControl() => PlayPause.Focus();
@@ -67,16 +84,14 @@ internal partial class PlayerView
             old.PropertyChanged -= OnPagePropertyChanged;
         }
 
-        _page = page;
+        _page = null;
+        _settle.Stop();
         ReleaseSurface();
         if (page is not null && IsLoaded)
         {
+            _page = page;
             page.Player.FrameAvailable += OnFrameAvailable;
             page.PropertyChanged += OnPagePropertyChanged;
-        }
-        else
-        {
-            _page = null;
         }
     }
 
@@ -92,54 +107,73 @@ internal partial class PlayerView
     private void Present()
     {
         Interlocked.Exchange(ref _presentPending, 0);
-        if (_page is not { IsClosed: false, Media: { } media } page || !_image.IsFrontBufferAvailable)
+        if (_page is not { IsClosed: false, IsFailed: false, Media: { } media } page || !_image.IsFrontBufferAvailable)
+        {
+            return;
+        }
+
+        VideoSurface? surface;
+        try
+        {
+            surface = EnsureSurface(media);
+        }
+        catch (ExternalException)
+        {
+            // The GPU refused the surface (CsWin32 throws on any failing HRESULT): say so, never a blank picture.
+            ReleaseSurface();
+            page.ShowFailure();
+            return;
+        }
+
+        if (surface is null)
         {
             return;
         }
 
         try
         {
-            if (EnsureSurface(media) is not { } surface)
-            {
-                return;
-            }
-
             page.Player.CopyFrame(surface);
-            surface.Flush();
-            _image.Lock();
-            _image.AddDirtyRect(new Int32Rect(0, 0, surface.Width, surface.Height));
-            _image.Unlock();
         }
-#pragma warning disable CA1031 // A frame that can't be copied (a lost device, a closing player) is skipped, never a crash.
-        catch (Exception)
-#pragma warning restore CA1031
+        catch (Exception e) when (e is ExternalException or ObjectDisposedException or InvalidOperationException)
         {
+            // A frame the player can't copy now (closing, or its device lost): skipped; the next one comes.
+            return;
         }
+
+        surface.Flush();
+        _image.Lock();
+        _image.AddDirtyRect(new Int32Rect(0, 0, surface.Width, surface.Height));
+        _image.Unlock();
     }
 
-    // The surface at the size the picture wants now, made or remade; null when there's no window or GPU for it.
+    // The surface at the size the picture wants now; during a resize the old one stays until the size settles.
+    // Null when there's no window to make it on yet.
     private VideoSurface? EnsureSurface(PlayerMedia media)
     {
         var dpi = VisualTreeHelper.GetDpi(this);
         var area = (FrameworkElement)Picture.Parent;
         var (width, height) = Fit(media.Width, media.Height, area.ActualWidth * dpi.DpiScaleX, area.ActualHeight * dpi.DpiScaleY);
-        if (_surface is { } current && current.Width == width && current.Height == height)
+        if (_surface is { Width: > 0 } current && (_settle.IsEnabled || (current.Width == width && current.Height == height)))
         {
             return current;
         }
 
-        if (PresentationSource.FromVisual(this) is not HwndSource window)
+        if (_surface is null)
         {
-            return null;
+            if (PresentationSource.FromVisual(this) is not HwndSource window)
+            {
+                return null;
+            }
+
+            _surface = new VideoSurface(window.Handle);
         }
 
-        var next = new VideoSurface(width, height, window.Handle);
+        // D3DImage keeps its own reference on the old back buffer until it's given the new one.
+        _surface.Resize(width, height);
         _image.Lock();
-        _image.SetBackBuffer(D3DResourceType.IDirect3DSurface9, next.BackBuffer, enableSoftwareFallback: true);
+        _image.SetBackBuffer(D3DResourceType.IDirect3DSurface9, _surface.BackBuffer, enableSoftwareFallback: true);
         _image.Unlock();
-        _surface?.Dispose();
-        _surface = next;
-        return next;
+        return _surface;
     }
 
     private void ReleaseSurface()
@@ -156,7 +190,14 @@ internal partial class PlayerView
         _surface = null;
     }
 
-    // Once the page has its media, the first frame (already shown, paused) is asked for again for this view.
+    // The size held: redraw at it (the present remakes the texture).
+    private void OnResizeSettled(object? sender, EventArgs e)
+    {
+        _settle.Stop();
+        OnFrameAvailable();
+    }
+
+    // Once the page has its media, the first frame (already shown, paused) is drawn for this view.
     private void OnPagePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(PlayerPage.Media))
@@ -165,18 +206,16 @@ internal partial class PlayerView
         }
     }
 
-    // A lock screen or display change loses the D3D9 device: rebuild the surface when it's back, and ask for a frame.
+    // A lock screen or display change loses the D3D9 device: remake the surface on new devices when it's
+    // back, and redraw the current frame, paused or playing.
     private void OnFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.NewValue is not true || _page is not { IsClosed: false } page)
+        if (e.NewValue is not true || _page is not { IsClosed: false })
         {
             return;
         }
 
         ReleaseSurface();
-        if (!page.IsPlaying && page.Player.Position == TimeSpan.Zero)
-        {
-            page.Player.ShowFirstFrame();
-        }
+        OnFrameAvailable();
     }
 }
