@@ -48,6 +48,8 @@ public sealed partial class GlossaryTests
         @"src\ReplayBuffer.App\TrayCapture.cs",
         @"src\ReplayBuffer.App\Overlay\OverlayViewModel.cs",
         @"src\ReplayBuffer.App\Library\LibraryWelcome.cs",
+        @"src\ReplayBuffer.App\Library\LibraryPage.cs",
+        @"src\ReplayBuffer.App\ShellApp.cs",
         @"src\ReplayBuffer.App\Settings\*Page.cs",
         @"src\ReplayBuffer.App\Settings\FolderPicker.cs",
         @"src\ReplayBuffer.App\Settings\MonitorPicker.cs",
@@ -83,7 +85,7 @@ public sealed partial class GlossaryTests
         var text = line.TrimStart();
         return text.StartsWith("//", StringComparison.Ordinal)
             || text.StartsWith('*')
-            || line.Contains("Log", StringComparison.Ordinal)
+            || LogCall().IsMatch(line)
             || line.Contains("Exception(", StringComparison.Ordinal)
             || line.Contains("nameof(", StringComparison.Ordinal);
     }
@@ -161,6 +163,10 @@ public sealed partial class GlossaryTests
     // A C# string literal, plain or interpolated (not verbatim paths), on one line.
     [GeneratedRegex(@"(?<!@)\$?""(?<text>(?:[^""\\]|\\.)*)""")]
     private static partial Regex CodeLiteral();
+
+    // A logger call (log.LogWarning, _log.LogInformation, logger.Log…) or a bare Log(…) helper.
+    [GeneratedRegex(@"\b_?(?:log|logger)\.\w+\(|\bLog\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex LogCall();
 
     [GeneratedRegex(@"\{[^{}]*\}")]
     private static partial Regex Interpolation();
