@@ -38,7 +38,7 @@ The builder ran it, and **the control buttons render as blank rectangles**.
 - `PlayerPage.cs` has `PlayPauseGlyph` (`\uE768`/`\uE769`), `MuteGlyph` (`\uE767`/`\uE74F`) and `FullScreenGlyph` (`\uE740`/`\uE73F`);
 - the gear in `PlayerView.xaml` uses `&#xE713;`.
 
-Their font is `RbPlayerGlyphFont` = `"Segoe Fluent Icons, Segoe MDL2 Assets"` (`src/ReplayBuffer.App/Theme/LibraryTheme.xaml`, about line 345), used by `RbPlayerIconButtonStyle` and `RbPlayerIconToggleStyle` (about lines 387–430). **This PC doesn't have Segoe Fluent Icons;** `C:\Windows\Fonts` has only `segmdl2.ttf`. Confirm the cause before fixing. Also rule out:
+Their font is `RbPlayerGlyphFont` = `"Segoe Fluent Icons, Segoe MDL2 Assets"` (`src/ReplayBuffer.App/Theme/LibraryTheme.xaml`, about line 345), used by `RbPlayerIconButtonStyle` and `RbPlayerIconToggleStyle` (about lines 387–430). **This PC doesn't have Segoe Fluent Icons;** `C:\Windows\Fonts` has only `segmdl2.ttf`. **A stronger lead from the last worker:** 14.5's mute glyph rendered fine under the default Button style with the same font list. So the likelier cause is an **app-level implicit `TextBlock` style overriding the FontFamily** inside 14.9's custom `RbPlayerIconTemplate` ContentPresenter. Check for an implicit `TextBlock` style first; a fix would be an explicit `TextBlock` with `FontFamily="{TemplateBinding FontFamily}"` in the template. No `bugfix/player-blank-controls` branch exists yet. Confirm the cause before fixing. Also rule out:
 - a template whose ContentPresenter doesn't get the font;
 - a Foreground key missing in one theme;
 - the subtle-fill border drawing with no glyph.
