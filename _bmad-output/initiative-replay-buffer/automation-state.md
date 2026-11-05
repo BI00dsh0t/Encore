@@ -43,7 +43,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 8.8 (build and smoke) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (holds 8.7 for its pending fps run) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy as the GPU runner (catch-up) |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with bugfix tiny-startup-window-capture |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off |
 
@@ -792,3 +792,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-04: 8.7 merged (`1400c42`; docs `e2bef31` with 5 Human Check rows). The ticket stays open until the fps run. 8.8 went to slice-epic-5 (Opus) for the build and short smoke soaks only. The two 8-hour soaks wait for the builder's go-ahead, and probably for the Dev App to be closed.
 - 2026-11-05: **Builder: "stop the current tests."** 8.8's Memory smoke rerun was stopped: the session's turn interrupted, and told to stop its own soak processes and monitor and to start no further tests until the builder says so.
 - 2026-11-05: 8.8 stopped at `e3822aa` (not merged). Nothing is running and `.bench-running` is clear. Smoke 1 (Memory, 10 min) missed only on harness bugs: 16/17 Clips, 10/10 bounds, the kill-app recovered in 1 s and saved, 2/2 Recordings with 4 Tracks, Cleanup kept all Favourites. All 3 harness bugs are fixed (a separate Recording check queue, the two-clock bucket size, the recovery count), but not yet re-verified. The Dev App doesn't detect the soak's marker window, so the soaks don't need it closed. Left: rerun the Memory and Disk smokes (about 11 min each), then 2 × 8 h soaks, all on the builder's go-ahead.
+- 2026-11-05: **Builder-found bug: Rocket League is detected but never captured on the Dev instance.** The Dev engine log shows Detection proposes RocketLeague.exe while its window is a 156x27 startup placeholder; WGC gets no first frame within 5 s and the session fails with no retry, so Save and Record do nothing for the rest of the game. Bugfix `tiny-startup-window-capture` (builder: "implement that fix") went to qa-2-1 (Opus, high effort): wait for a real window size, and retry a first-frame timeout while the game is still the Target Game. Tests are written but not run until the builder resumes tests.
