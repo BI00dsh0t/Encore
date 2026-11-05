@@ -41,7 +41,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; full-run-flaky-tests in QA round 2 (8.8 held at e3822aa) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 10.11 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | busy with QA round 2 of full-run-flaky-tests |
@@ -188,7 +188,7 @@ The coordinator logs each QA round in the Log below.
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.7 | 10.10 Games list and a page per game | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA |
+| 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
@@ -884,3 +884,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA round 1 for full-run-flaky-tests failed at `0ad3fd7` with 2 findings, both in the new `MediaLengthTests`: (1) the test depends on order (FFmpeg isn't initialised when it runs alone); (2) it doesn't guard `MediaLength`'s wiring, so reverting to the file protocol still passes. Both product fixes check out (the IpcServer test fails without its fix; SharedInput's callbacks and frees are right and NativeAOT-safe), and the relaxations are accepted. Sent back to slice-epic-5, with two small ones (dispose `connected` if `Create` throws; bound the TrackMix audio against video + 0.5 s).
 - 2026-11-05: 10.11 READY FOR QA at `2967259` (feature `ac8ca44`, then develop with 11.4): text only (keys, codes, message names, Contracts, logs and automation ids unchanged). It rewrites the status header and engine-state texts, the tray, the engine warnings and notices, and the General help, and adds `GlossaryTests` over the App's XAML (11.4's picker included). Contracts 135, Core 165, Engine 193 and App 190 passed; publish clean. 11.3's monitor warnings aren't covered yet; 11.3 must use the glossary when it merges. QA went to slice-epic-8 (Sonnet, medium effort).
 - 2026-11-05: full-run-flaky-tests round 2 at `ae7287a`: the regression test goes through an internal `MediaLength.Read(…, whileOpen)` seam (it passes alone and fails with the file protocol restored); IpcServer disposes the spent instance in a finally. The TrackMix ceiling was kept at captured + 0.5 s (a loaded run had correct audio 1.05 s past short video), and the coordinator accepted that. FFmpeg 40, Engine 194 and App 182 passed. QA round 2 went to 2-1-tracer.
+- 2026-11-05: QA 10.11 passed at `2967259`: text only, about 25 rewordings match the glossary, and the test catches the fabricated view. App 190, Core 165, Contracts 135 and Engine passed. Gap noted for 10.7: the glossary test checks XAML only, so C#-set user strings (`warning.raised`, view models) need the sweep to extend it. qa-1-14 is merging.
