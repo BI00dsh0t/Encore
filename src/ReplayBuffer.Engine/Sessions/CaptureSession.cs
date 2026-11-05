@@ -590,12 +590,6 @@ internal sealed class CaptureSession : ICaptureSession
     }
 
     /// <summary>
-    /// Story 12.1: a game session's <paramref name="chain"/>, not yet built, sized from the game's
-    /// captured size at the anchor when its snapshot has <c>matchSource</c> on (Core's
-    /// <see cref="SourceOutputSize"/>: even sides, scaled only to fit the chain's codec, and a game
-    /// under 640×360 keeping the snapshot's size). Unchanged otherwise, and for the Monitor session.
-    /// </summary>
-    /// <summary>
     /// Every chain of the session, made here (story 12.4): <paramref name="spec"/>'s on
     /// <paramref name="device"/>, at the snapshot's fixed size, or, for a game under <c>matchSource</c>
     /// once its source size is known, at that size or a move's (<see cref="SizedToSource(EncoderChain)"/>).
@@ -604,6 +598,12 @@ internal sealed class CaptureSession : ICaptureSession
     private EncoderChain NewChain(SessionSpec spec, string encoder, VideoCodec codec, string? path, D3D11Device device) =>
         SizedToSource(new EncoderChain(spec, encoder, codec, path, _options, device, _audio, _micMute, _loggers, _log, Fail));
 
+    /// <summary>
+    /// Story 12.1: a game session's <paramref name="chain"/>, not yet built, sized from the game's
+    /// captured size at the anchor when its snapshot has <c>matchSource</c> on (Core's
+    /// <see cref="SourceOutputSize"/>: even sides, scaled only to fit the chain's codec, and a game
+    /// under 640×360 keeping the snapshot's size). Unchanged otherwise, and for the Monitor session.
+    /// </summary>
     private EncoderChain SizedToSource(EncoderChain chain) => SizedToSource(chain, IsMonitor, _movingTo ?? _sourceSize);
 
     /// <summary><see cref="SizedToSource(EncoderChain)"/> for a session that <paramref name="isMonitor"/> or not, whose game was <paramref name="source"/> at the anchor.</summary>
@@ -761,7 +761,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>For tests (12.4): whether a size move is built ahead and waits to arm, so a Record press now cancels it.</summary>
+    /// <summary>For tests (12.4): whether a size move is pending (building or waiting to arm), so a Record press now cancels it.</summary>
     internal bool MovePending
     {
         get
