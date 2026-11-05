@@ -9,6 +9,20 @@ internal enum LibraryGrouping
 {
     Game,
     Day,
+
+    /// <summary>One flat list with no headers (story 10.3).</summary>
+    None,
+}
+
+/// <summary>How the Library orders its rows within each group (story 10.3).</summary>
+internal enum LibrarySort
+{
+    NewestFirst,
+    OldestFirst,
+    Name,
+    LargestFirst,
+    LongestFirst,
+    Game,
 }
 
 /// <summary>Which dates the Library list shows, against the local today.</summary>
@@ -22,14 +36,16 @@ internal enum LibraryDateFilter
 
 /// <summary>
 /// The Library's view choices (story 7.5), remembered per instance in a small JSON file. Any failure
-/// to read or write the file is ignored: a load gives the defaults, a save is dropped.
+/// to read or write the file is ignored: a load gives the defaults, a save is dropped. Story 10.3 adds
+/// the sort; a file from before it has none and loads with Newest first. The search text isn't kept.
 /// </summary>
 /// <param name="Game">The game filter's group key; null for all games.</param>
 internal sealed record LibraryViewState(
     LibraryGrouping GroupBy = LibraryGrouping.Game,
     string? Game = null,
     LibraryDateFilter Date = LibraryDateFilter.All,
-    bool FavouritesOnly = false)
+    bool FavouritesOnly = false,
+    LibrarySort Sort = LibrarySort.NewestFirst)
 {
     private static LibraryViewState Default { get; } = new();
 
@@ -43,7 +59,7 @@ internal sealed record LibraryViewState(
         try
         {
             var state = JsonSerializer.Deserialize(File.ReadAllText(path), LibraryViewStateJson.Default.LibraryViewState);
-            return state is not null && Enum.IsDefined(state.GroupBy) && Enum.IsDefined(state.Date) ? state : Default;
+            return state is not null && Enum.IsDefined(state.GroupBy) && Enum.IsDefined(state.Date) && Enum.IsDefined(state.Sort) ? state : Default;
         }
         catch (Exception)
         {

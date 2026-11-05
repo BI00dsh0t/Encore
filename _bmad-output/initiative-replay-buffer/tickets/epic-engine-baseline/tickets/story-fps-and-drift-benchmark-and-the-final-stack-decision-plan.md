@@ -257,6 +257,8 @@ When resuming, in order:
 
 Then: full build with 0 warnings, the tests and the NativeAOT publish; commit with `Refs: 1.14`; on the builder's go-ahead, merge into `develop` from the main folder with `--no-ff` and `feat(bench): merge 1.14-benchmark`; `tickets.py mark epic-engine-baseline 1.14 done` committed on `develop`.
 
+**Correction (bugfix `bench-videoencode-count`, 2026-11-04):** `measure-path-a.ps1` summed the three identical `engtype_VideoEncode` counter instances each process gets on this GPU, so every `gpu_videoencode` figure was **3× over-counted**. 1.14's 18.9 % VideoEncode (the `gpu_videoencode_meanPercent` in its `fps.json` summaries) is about 6.3 %. FPS loss, 1 % lows, engine CPU and 3D use are unaffected (the sampler only reads counters, and 3D has one instance), so the 1.47 % and 5.88 % FPS-loss results stand.
+
 ## Design Notes
 
 - **What drift means here:** the 60-minute change in offset. Constant pipeline offsets (DWM composition, AAC priming, capture latency) cancel out, and are reported separately as the "absolute offset, minute 1". Video onsets are quantised to 1/60 s, so a single burst's error can be off by ±8 ms. Per-minute medians of about 60 bursts average that out, so a raw max−min spread isn't used as the verdict.

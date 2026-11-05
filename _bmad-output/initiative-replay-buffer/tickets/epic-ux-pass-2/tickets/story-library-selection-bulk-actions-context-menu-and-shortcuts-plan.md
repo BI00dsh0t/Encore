@@ -3,7 +3,7 @@ title: 'Library selection, bulk actions, context menu and shortcuts'
 type: 'feature'
 ticket: '2'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: 'bea6f2131967325f9ee01cb7246efb3898e29ee0'
 route: 'full'
 route_source: 'auto'
