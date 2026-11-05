@@ -40,7 +40,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | off (its App.Tests bin is locked by orphan PID 66604 until the builder ends it) |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with 8.8 (build and smoke) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | off; busy with QA 10.4 (8.8 is held on its branch at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (holds 8.7 for its pending fps run) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.4 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
@@ -184,7 +184,7 @@ The coordinator logs each QA round in the Log below.
 | 31.1 | 10.1 Design pass: renders and the builder's approval of ux-pass-2 | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (builder approved all recommendations) |
 | 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 31.3 | 10.3 Library sort and search | | pending |
-| 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
+| 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA (slice-epic-5) |
 | 31.5 | 10.5 Audio Tracks editor | | pending |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | | pending |
 | 31.7 | 10.10 Games list and a page per game | | pending |
@@ -821,3 +821,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: **Builder: "I approve the recommended decisions in the design docs."** Every 10.1 recommendation is approved (Decision in the epic Notes), and 10.1 is marked done. 10.2 (Library selection and bulk actions, high risk) went to story-2-7 and 10.4 (Audio Tracks defaults, seed, presets and meters, high risk) to qa-1-14, both Opus at high effort, in parallel on separate files. **Builder: "monitor recording needs to allow selecting which monitors to record, or capture all monitors. Plan that feature out."** Planning went to 2-1-tracer. 8.7's fps and 8.8 stay paused.
 - 2026-11-05: **Epic 11 "Multi-monitor recording" planned and merged** (`a6fd176`; R39 and AD-25, which also settles AD-7's open Monitor-device question as an explicit exception). Recommendation (b): one composited file, with the selected monitors blitted into one canvas laid out as Windows arranges them, scaled to the codec max and a 4K-area budget, through the existing pacer, encoder chain and writer. (a) one file per monitor is parked (it breaks AD-7's 2-chain budget). 6 stories: 11.1 spike (GPU, ready now but paused), 11.2 settings (`monitorRecordingScreens`), 11.3 engine compositor, 11.4 picker on Hotkeys (after 10.9), 11.5 sweep, 11.6 end to end. 8.11 waits on 11.6. Cards and Queue rows 32.x added. The PC has 2 monitors, both 2560x1440 side by side, on one RTX 5090 (plus a Meta Virtual Monitor adapter). Builder question pending: is a scaled side-by-side video OK? 5120x1440 exceeds H.264's 4096 px, so it would be scaled, or use HEVC or AV1 at full width.
 - 2026-11-05: **Builder: HEVC or AV1 at full width for several screens; run spike 11.1 now.** The decision is in epic 11's Notes (`0f00410`). 11.1 went to qa-2-1 (Opus, high effort) with short GPU runs allowed under the lock rule; captures go to temp files and are deleted. 8.7's fps and the 8.8 soaks stay paused.
+- 2026-11-05: 10.4 READY FOR QA at `77345d0`: Contracts 128, Core 161, Engine 187, Platform.Audio 26 and App 154 passed; publish clean. Meter-cost decision: keep the probe Tracks, with no fallback unless the Heavy `MeterProbeCostTests` shows more than 0.1 of a core or fewer than 15 levels/s. QA went to slice-epic-5 (Sonnet, high effort); it may run that read-only Heavy test once `.bench-running` is free of spike 11.1.
