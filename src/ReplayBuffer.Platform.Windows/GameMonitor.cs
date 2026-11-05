@@ -271,6 +271,12 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
 /// A game whose Game Profile is Ignored, read each poll (AD-5), is never detected; one that becomes
 /// Ignored while detected is forgotten as if it had exited (reason ignored), and clearing the flag lets
 /// the rules above detect it again.
+/// The fullscreen rule alone is weak evidence: a browser or a media player showing a video fullscreen
+/// passes it. So the apps in <see cref="KnownNonGames"/> (browsers, media players, Discord, Explorer,
+/// Office, ReplayBuffer's own App) are never detected by it; only a listing (Windows' game list or
+/// <c>manualGames</c>) detects them. And a game found only by the fullscreen rule never takes the
+/// Target by focus from a listed one: only another listed game can. No GPU or module heuristic is
+/// used, as AD-12 reads nothing from a process beyond its image path.
 /// </summary>
 public sealed class GameMonitor : IDisposable
 {
@@ -278,6 +284,27 @@ public sealed class GameMonitor : IDisposable
     public static readonly TimeSpan FocusToSwitch = TimeSpan.FromSeconds(10);
 
     private static readonly IReadOnlySet<string> NothingListed = new HashSet<string>();
+
+    /// <summary>
+    /// Executables that are never games however they show their window: the fullscreen rule doesn't
+    /// detect them. Matched on the file name, ignoring case.
+    /// </summary>
+    public static IReadOnlySet<string> KnownNonGames { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        // Browsers.
+        "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "opera_gx.exe", "vivaldi.exe", "iexplore.exe",
+
+        // Media players.
+        "vlc.exe", "mpc-hc.exe", "mpc-hc64.exe", "mpc-be.exe", "mpc-be64.exe", "mpv.exe", "wmplayer.exe", "video.ui.exe",
+        "microsoft.media.player.exe", "potplayer.exe", "potplayer64.exe", "potplayermini.exe", "potplayermini64.exe", "ffplay.exe",
+
+        // Chat, the shell and Office.
+        "discord.exe", "explorer.exe", "applicationframehost.exe", "winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe",
+        "onenote.exe", "msaccess.exe", "mspub.exe", "visio.exe", "teams.exe", "ms-teams.exe",
+
+        // ReplayBuffer itself, wherever it runs from (a dev build isn't under the install folder).
+        "replaybuffer.app.exe", "replaybuffer.engine.exe",
+    };
 
     private readonly IGameWindowProbe _probe;
     private readonly Func<int, bool> _isExcluded;
@@ -301,6 +328,9 @@ public sealed class GameMonitor : IDisposable
     private TargetChangeReason _proposedReason;
     private int? _focusPid;
     private long _focusSince;
+
+    // Poll's thread only: the listed games' paths this poll read.
+    private IReadOnlySet<string> _listedNow = NothingListed;
     private bool _firstPoll = true;
 
     private Thread? _thread;
@@ -405,7 +435,8 @@ public sealed class GameMonitor : IDisposable
         {
             if (game.Candidate is null)
             {
-                if (!Ignored(game))
+                // A known non-game passes the fullscreen rule showing a video; only a listing detects it.
+                if (!Ignored(game) && !game.NonGame)
                 {
                     Detect(game, fullscreen.Handle);
                 }
@@ -426,7 +457,7 @@ public sealed class GameMonitor : IDisposable
     // even windowed. Proposing is Decide's.
     private void ScanListed(GameWindow? foreground)
     {
-        var listed = _listed?.Invoke() ?? NothingListed;
+        var listed = _listedNow = _listed?.Invoke() ?? NothingListed;
         var windows = _probe.Windows();
 
         var done = new HashSet<int>();
@@ -508,11 +539,26 @@ public sealed class GameMonitor : IDisposable
             return;
         }
 
-        if (_focusPid != _proposed && Detected(_focusPid) is { } focused && _time.GetElapsedTime(_focusSince, now) >= FocusToSwitch)
+        if (_focusPid != _proposed
+            && Detected(_focusPid) is { } focused
+            && _time.GetElapsedTime(_focusSince, now) >= FocusToSwitch
+            && !Outranks(_proposed, focused.ProcessId))
         {
             Propose(focused, TargetChangeReason.Focus);
         }
     }
+
+    // Whether the Target (a listed game) keeps its place against a focused one the fullscreen rule
+    // alone detected: only another listed game takes the Target from a listed one by focus.
+    private bool Outranks(int? target, int focused) =>
+        target is { } pid
+        && _seen.TryGetValue(pid, out var current)
+        && current.Candidate is not null
+        && IsListed(current)
+        && !(_seen.TryGetValue(focused, out var other) && IsListed(other));
+
+    private bool IsListed(Seen game) =>
+        (game.ProfileId is { } id && _listedNow.Contains(id)) || _listedNow.Contains(game.RawPath);
 
     private TargetCandidate? Detected(int? pid) => pid is { } p && _seen.TryGetValue(p, out var seen) ? seen.Candidate : null;
 
@@ -564,7 +610,10 @@ public sealed class GameMonitor : IDisposable
         }
 
         var underInstall = profileId is not null && _installFolder is not null && profileId.StartsWith(_installFolder, StringComparison.Ordinal);
-        seen = new Seen(pid, process, profileId, process.ImagePath.ToLowerInvariant(), profileId is not null && !underInstall);
+        seen = new Seen(pid, process, profileId, process.ImagePath.ToLowerInvariant(), profileId is not null && !underInstall)
+        {
+            NonGame = KnownNonGames.Contains(Path.GetFileName(process.ImagePath)),
+        };
         _seen.Add(pid, seen);
         return seen;
     }
@@ -709,5 +758,8 @@ public sealed class GameMonitor : IDisposable
 
         /// <summary>The timestamp of the last poll that saw it in front; 0 = never.</summary>
         public long LastFocused { get; set; }
+
+        /// <summary>Whether it is one of <see cref="KnownNonGames"/>: the fullscreen rule never detects it.</summary>
+        public bool NonGame { get; init; }
     }
 }
