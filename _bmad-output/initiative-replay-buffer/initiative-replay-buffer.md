@@ -61,6 +61,7 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
 - R35 (NFR-6): After first setup, nothing needs doing per session. Settings and device choices survive reboots, app restarts and mixer restarts.
 - R36 (NFR-1): FPS loss stays under the provisional 3% at 1080p60 in a GPU-bound game, Overlay included, measured by benchmark. The benchmark confirms or replaces the target before v1 is done (Q-1).
 - R37 (builder decision 2026-11-04; gap): The Main App offers two looks, chosen in Settings: Fluent (the default, following the Windows light or dark mode and accent colour) and Gaming dark. Switching applies at once to every window, with no restart, and is kept across restarts. Every surface the app shows, the tray menu, its dialogs and the Overlay's messages included, follows the chosen look.
+- R38 (builder decision 2026-11-05; gap): The Main App works the way a gamer who isn't a developer expects. The Library selects several Clips and Recordings with the usual Windows mouse and keys, acts on them together (Favourite, copy, show in Explorer, and delete with one confirmation), and sorts and searches them; files being written are never changed, Favourites are never deleted, and deletes still confirm. Audio tracks are set up by picking sounds per track by name, with presets and a live level beside each choice, and a fresh install records the PC's sound and the default microphone with no setup. Pages, the tray menu and the status line use plain words, and an empty Library says how to save the first Clip.
 
 ## Constraints
 
@@ -89,7 +90,7 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
 
 - prd — _bmad-output/initiative-replay-buffer/prd-replay-buffer/prd-replay-buffer.md, §3 Glossary, §4 Features, §5 NFRs, §8 Success Metrics, §9 Open Questions
 - addendum — _bmad-output/initiative-replay-buffer/prd-replay-buffer/addendum.md, Precedence; Inputs for architecture; Test reference
-- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, Invariants & Rules AD-1–AD-23; Consistency Conventions; Stack
+- architecture — _bmad-output/initiative-replay-buffer/architecture-replay-buffer/architecture-replay-buffer.md, Invariants & Rules AD-1–AD-24; Consistency Conventions; Stack
 - architecture input — PLAN.md, §1 Architecture, §3 Video, §6 Interop & pipeline bake-off, §8 Test catalog T-01…T-25
 
 ## Notes
@@ -112,3 +113,4 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
 - Decision: 2026-10-25, run `bmad-architecture` next, to settle the shared decisions below.
 - Decision: 2026-10-25, the shared cross-epic decisions live in the architecture spine (adopted companion). AD-3 covers IPC, AD-4 settings, AD-14 the interop stack, AD-9 containers, AD-19 the capture sessions and AD-22 the Contracts. Epic 1 seeds AD-22's skeleton before epics 2 and 3 start.
 - Decision: 2026-11-04, the builder added epic 9 "Modern UI" (epic-modern-ui, R37): a `bmad-ux` design pass, then stories per UI area. Both looks become selectable themes, Fluent by default. It runs after epics 6 and 7 and before epic 8's final conformance run (8.7), so 8.8, 8.9 and 8.11 wait too. Architecture AD-23 records the theming rule.
+- Decision: 2026-11-05, the builder asked for another UX pass: "The library is missing basic list functionality, like multi select" and "The track layout is convoluted and makes no sense to an end user". Epic 10 "UX pass 2" (epic-ux-pass-2, R38) runs after epic 9 and before 8.11, so the hands-off run uses the final UI; 8.7 to 8.9 measure the engine and don't wait. It overrides epic 7's "actions act on one item at a time (no multi-select in v1)". Architecture AD-24 records the App-side rules.
