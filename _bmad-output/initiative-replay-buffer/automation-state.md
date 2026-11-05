@@ -185,7 +185,7 @@ The coordinator logs each QA round in the Log below.
 | 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA passed, merging |
 | 31.3 | 10.3 Library sort and search | | pending |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
+| 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | | pending |
 | 31.7 | 10.10 Games list and a page per game | | pending |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
@@ -278,6 +278,7 @@ Checks only the builder can do. Each row: ticket, what to check, how, and what t
 | 8.7 | Discord, VLC and DaVinci Resolve: an H.264 Clip and the 4-Track Recording, plus HEVC and AV1 where they support them, with every Track present, named and in sync by eye | Open `measurements/bench-8.7/playback*.mp4` and the Recording under `measurements/bench-8.7/clips/Bench marker/` in each; check A/V sync by eye in all five players | `playback --auto`: Chrome plays all four files; Windows Media Player plays H.264, HEVC and the Recording; the Recording lists Everything, Game, Chat and Mic |
 | 8.7 | Windows Media Player and AV1 | Install the AV1 Video Extension and reopen `playback-av1.mp4`, or accept WMP as a player that doesn't support AV1 | WMP refused the AV1 clip ("encountered a problem"); Chrome plays it |
 | 8.7 | Whether NFR-1's provisional 3 % stands (Q-1) | Decide after the pending FPS run and the capture-cost check (`research/capture-cost-regression.md`) | Capture costs about 7 % on this PC since 2026-11-03 (not a code regression) |
+| 10.5 | Audio Tracks with real devices: rebuild the BEACN layout from a preset with the meters moving, save it, and check the next Clip's tracks | Main App → Audio Tracks → Use a preset, adjust in the cards and picker, Save changes; save a Clip after a game starts or a Clip resets, then open it in DaVinci Resolve | view-model tests with fakes; both themes rendered with the picker open (`renders/settings-audio-tracks*.png`) |
 
 ## Decisions Awaiting Review
 
@@ -833,3 +834,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: QA 10.2 round 1 failed with 2 findings at `90f1d5e`, sent to story-2-7: (1) **a Clip starred as a Favourite in the middle of a large bulk delete (over 10 items) still gets deleted**, because the Favourite check is taken once at the start rather than per item; (2) a right-click in the rename box commits the rename. Build and default suites pass.
 - 2026-11-05: QA 10.5 passed at `d0880b9` (round 2): `Load()` closes the picker, with a test, and the nav dot uses the radius tokens. App 157 passed. qa-1-14 is merging. QA 11.1 found 4 problems at `96abe48` (the go verdict looks sound) and is waiting for the implementer's fixes.
 - 2026-11-05: QA 10.2 passed at `be7ee5e` (round 2): a Favourite starred mid-batch is skipped, and the rename box keeps its own right-click. App 159, Core 161, Contracts 125 and Platform.Desktop 13 passed. story-2-7 is merging.
+- 2026-11-05: 10.5 merged (`08fb829`, `feat(app): merge 10.5-audio-tracks-editor`) after QA passed at `d0880b9` and develop was synced: 0-warning build; Contracts 128, Core 161 and App 157 passed, 0 failed. Marked done; the four Audio Tracks renders were copied to `ux-pass-2/renders/`, and the BEACN/Resolve check was added to the Human Check Queue. qa-1-14 is back in the pool.

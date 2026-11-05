@@ -1,7 +1,7 @@
 ---
 title: "Audio Tracks editor"
 ticket: 5
-status: review
+status: done
 ---
 
 # Plan: 10.5 Audio Tracks editor
