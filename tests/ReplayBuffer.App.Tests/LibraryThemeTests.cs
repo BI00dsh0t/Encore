@@ -99,6 +99,17 @@ public sealed class LibraryThemeTests
                 Assert.Single(Descendants<VirtualizingStackPanel>(list));
 
                 Save(window, $"library-selected-{name}.png");
+
+                // Story 10.3: a search with Largest first and Group by None, nothing selected.
+                page.ClearSelection();
+                (page.GroupBy, page.Sort, page.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "a");
+                Sta.Pump(TimeSpan.FromMilliseconds(150));
+                Assert.Equal("a", ((TextBox)view.FindName("SearchBox")).Text);
+                Assert.Equal(["ace.mp4", "no-thumbnail.mp4", "saving.mp4"], page.Entries.Cast<LibraryRow>().Select(r => r.Name));
+                Assert.Equal(Visibility.Collapsed, ((FrameworkElement)view.FindName("NoResultsMessage")).Visibility);
+                Save(window, $"library-search-{name}.png");
+                (page.GroupBy, page.Sort, page.SearchText) = (LibraryGrouping.Game, LibrarySort.NewestFirst, "");
+                list.ScrollIntoView(page.Entries[0]);
             }
         }
         finally
@@ -128,6 +139,16 @@ public sealed class LibraryThemeTests
         page.Render(engine.State! with { Library = [new LibraryItem("clip.mp4", null, 1024, Day, false, 10, Modified: Day)] });
         Layout(view);
         Assert.Equal(Visibility.Collapsed, empty.Visibility);
+
+        // Story 10.3: a search that matches nothing says so, apart from the empty Library's message.
+        var noResults = (TextBlock)view.FindName("NoResultsMessage");
+        Assert.Equal(Visibility.Collapsed, noResults.Visibility);
+        page.SearchText = "zzz";
+        Layout(view);
+        Assert.Equal((Visibility.Visible, "No items match \u201czzz\u201d.", Visibility.Collapsed), (noResults.Visibility, noResults.Text, empty.Visibility));
+        page.SearchText = "";
+        Layout(view);
+
         var star = Descendants<ToggleButton>((ItemsControl)view.FindName("List")).Single();
         Assert.False(star.IsChecked);
 
