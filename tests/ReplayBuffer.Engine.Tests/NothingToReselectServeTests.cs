@@ -108,7 +108,7 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
         var item = client.State.Library[0];
         await client.SendAsync(LibraryMessages.SetFavourite, new LibrarySetFavourite(item.Path, item.Size, item.Modified, true), Token);
         await UntilAsync(() => client.State.Library[0].Favourite, "the Favourite");
-        await UntilAsync(() => File.Exists(LibraryFile) && File.ReadAllText(LibraryFile).Contains("true", StringComparison.Ordinal), "library.json written");
+        await UntilAsync(() => ReadWhenFree(LibraryFile)?.Contains("true", StringComparison.Ordinal) == true, "library.json written");
 
         var settings = client.State.Settings;
         var files = Snapshot();
@@ -210,6 +210,23 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
     {
         var result = await client.SendAsync(SettingsMessages.Update, new SettingsUpdate(client.State.Settings.Revision, ops), Token);
         await UntilAsync(() => client.State.Settings.Revision >= result.Revision, "settings.changed");
+    }
+
+    /// <summary>
+    /// The file's text, or null while it is missing or the engine still has it open to write: the bug
+    /// that bit (story 11.2's runs) was this poll reading library.json mid-write and failing on the
+    /// sharing violation.
+    /// </summary>
+    private static string? ReadWhenFree(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.ReadAllText(path) : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Every persisted file's bytes.</summary>
