@@ -120,16 +120,17 @@ public sealed class LibrarySettingsPageTests
         };
         var page = Create();
         Assert.Equal("1.2 GB in 2 files", page.FolderSizeText);
-        Assert.Equal("the default folder under Videos", page.OutputFolderText);
+        Assert.Equal("Storage and Cleanup", page.Title);
         Assert.NotNull(page.CleanupBlockedText);
-        Assert.False(page.CanUseDefaultFolder);
+        Assert.False(page.ClipsFolder.CanUseDefault);
 
-        page.ChooseOutputFolder("Clips");
+        page.ClipsFolder.Choose("Clips");
         Assert.Empty(_engine.Sent);
-        Assert.NotNull(page.Message);
+        Assert.NotNull(page.ClipsFolder.Problem);
 
         _answer = true;
-        page.ChooseOutputFolder(@"D:\Clips");
+        page.ClipsFolder.Validate = _ => null;
+        page.ClipsFolder.Choose(@"D:\Clips");
         Assert.Contains("Existing files aren't moved.", Assert.Single(_prompts), StringComparison.Ordinal);
         var op = Assert.Single(Assert.Single(_updates).Ops);
         Assert.Equal((Keys.OutputFolder.Name, "\"D:\\\\Clips\""), (op.Key, op.Value.GetRawText()));

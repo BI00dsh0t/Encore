@@ -106,18 +106,18 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
 internal static class SettingsPages
 {
     /// <summary>
-    /// Every page. An epic adds its page here, one line each: epic 2 the Track Layout editor,
-    /// epic 3 Game Profiles, epic 5 Feedback Sounds, epic 7 Library and Cleanup.
+    /// Every page, in story 10.9's order: General, Clips, Hotkeys, Audio Tracks, Games, Sounds, and
+    /// Storage and Cleanup. The Recordings page is gone; its screen picker is on Hotkeys.
     /// </summary>
-    public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine) =>
+    /// <param name="defaultCacheFolder">The engine's default cache folder, shown as the cache folder's default.</param>
+    public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null) =>
     [
         new GeneralSettingsPage(sender),
-        new ReplayBufferSettingsPage(sender),
-        new HotkeysPage(sender),
+        new ReplayBufferSettingsPage(sender, defaultCacheFolder: defaultCacheFolder),
+        new HotkeysPage(sender, engine),
         new TrackLayoutPage(sender, engine),
         new GameProfilesPage(sender, engine),
         new FeedbackSoundsPage(sender, engine),
-        new RecordingsSettingsPage(sender, engine),
         new LibrarySettingsPage(sender, engine),
     ];
 }

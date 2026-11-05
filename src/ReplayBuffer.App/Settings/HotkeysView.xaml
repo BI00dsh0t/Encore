@@ -18,46 +18,85 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <!-- One Hotkey row: its label, the binding, Set and Clear, and its status under it. -->
+        <DataTemplate x:Key="HotkeyRowTemplate">
+            <Grid Visibility="{Binding IsShown, Converter={StaticResource Visible}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="{Binding Label}" />
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding BindingText}" />
+                <Button Grid.Column="2" Margin="8,4,0,4" Command="{Binding SetCommand}" Content="Set" />
+                <Button Grid.Column="3" Margin="8,4,0,4" Command="{Binding ClearCommand}" Content="Clear" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,0,0,6"
+                           Style="{StaticResource HotkeyStatus}" Text="{Binding StatusText}" />
+            </Grid>
+        </DataTemplate>
     </UserControl.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
-            <HeaderedContentControl Header="Hotkeys" Style="{DynamicResource RbSettingsSectionStyle}">
+            <HeaderedContentControl Header="Clips" Style="{DynamicResource RbSettingsSectionStyle}">
                 <StackPanel>
+                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding ClipsHelp}" />
+                    <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding ClipRows}" />
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <HeaderedContentControl Header="Recordings" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding RecordingsHelp}" />
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Record mode" />
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <RadioButton Content="One toggle Hotkey" GroupName="RecordMode" IsChecked="{Binding IsToggleMode}" />
-                            <RadioButton Margin="12,0,0,0" Content="Separate start and stop" GroupName="RecordMode" IsChecked="{Binding IsSeparateMode}" />
+                        <StackPanel Grid.Column="1">
+                            <RadioButton Content="One key starts and stops" GroupName="RecordMode" IsChecked="{Binding IsToggleMode}" />
+                            <RadioButton Margin="0,4,0,0" Content="Separate start and stop keys" GroupName="RecordMode" IsChecked="{Binding IsSeparateMode}" />
                         </StackPanel>
                     </Grid>
-                    <ItemsControl ItemsSource="{Binding Rows}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Visibility="{Binding IsShown, Converter={StaticResource Visible}}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="{Binding Label}" />
-                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding BindingText}" />
-                                    <Button Grid.Column="2" Margin="8,4,0,4" Command="{Binding SetCommand}" Content="Set" />
-                                    <Button Grid.Column="3" Margin="8,4,0,4" Command="{Binding ClearCommand}" Content="Clear" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,0,0,6"
-                                               Style="{StaticResource HotkeyStatus}" Text="{Binding StatusText}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding RecordRows}" />
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <HeaderedContentControl Header="Monitor Recording" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding MonitorHelp}" />
+                    <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding MonitorRows}" />
+                    <!-- The screen picker, moved from the removed Recordings page; story 11.4 replaces this row. -->
+                    <Grid x:Name="ScreenRow" DataContext="{Binding Monitor}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Screen to record" />
+                        <ComboBox Grid.Column="1"
+                                  Margin="0,4"
+                                  AutomationProperties.Name="Screen to record"
+                                  DisplayMemberPath="Label"
+                                  ItemsSource="{Binding Monitors}"
+                                  SelectedItem="{Binding SelectedMonitor}" />
+                        <Button Grid.Column="2"
+                                Margin="8,4,0,4"
+                                Command="{Binding RefreshCommand}"
+                                Content="Refresh" />
+                    </Grid>
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <HeaderedContentControl Header="Microphone" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding MicRows}" />
+                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding MicHelp, Mode=OneWay}" />
                 </StackPanel>
             </HeaderedContentControl>
         </theme:SettingsContent>

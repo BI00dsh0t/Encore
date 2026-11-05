@@ -86,10 +86,10 @@ public sealed class LibraryEndToEndTests : IDisposable
                 prompts.Add(text);
                 return true;
             };
-            settings.ChooseOutputFolder(output);
+            settings.ClipsFolder.Choose(output);
             Assert.Contains("Existing files aren't moved.", Assert.Single(prompts), StringComparison.Ordinal);
             Until(() => first.Engine.State!.LibraryFolder == output && first.Engine.State.Library.Count == 5, "the five files listed from the chosen folder");
-            Assert.Equal(output, settings.OutputFolderText);
+            Assert.Equal(output, settings.ClipsFolder.Value);
             Assert.DoesNotContain(first.Engine.State!.Library, i => i.Path.Contains("victim", StringComparison.OrdinalIgnoreCase));
         }
 

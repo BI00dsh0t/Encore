@@ -43,26 +43,29 @@ internal sealed class LibrarySettingsPage : SettingsPage
     {
         _engine = engine;
         Confirm = ConfirmWithPrompt;
-        UseDefaultFolderCommand = new RelayCommand(UseDefaultFolder);
+        ClipsFolder = new FolderPicker(Keys.OutputFolder, ops => SendAsync(ops))
+        {
+            DialogTitle = "Choose the Clips folder",
+            Help = "Where Clips and Recordings are saved. Each game gets its own folder, and Monitor Recordings have theirs.",
+            Validate = path => FolderPicker.CanWrite(path) ? null : ReplayBufferSettingsPage.CantWrite,
+            Confirm = path => Confirm(path is null
+                ? "Use the default folder under Videos as the Clips folder?\n\n" + FolderChangeNote
+                : $"Use {path} as the Clips folder?\n\n{FolderChangeNote}"),
+        };
     }
 
-    public override string Title => "Library and Cleanup";
+    public override string Title => "Storage and Cleanup";
+
+    /// <summary>The Clips folder (<c>outputFolder</c>), story 10.9's folder picker.</summary>
+    public FolderPicker ClipsFolder { get; }
 
     /// <summary>Asks the user a Yes/No question; true is Yes. Settable for tests.</summary>
     internal Func<string, bool> Confirm { get; set; }
 
     /// <summary>The folder the Library lists: the engine's, else the setting, else the default.</summary>
-    public string OutputFolderText => _libraryFolder ?? _outputFolder ?? "the default folder under Videos";
-
-    /// <summary>The Library's current size and file count, e.g. "1.2 GB in 3 files".</summary>
     public string FolderSizeText => string.Create(
         CultureInfo.InvariantCulture,
         $"{ReplayBufferSettingsPage.FormatBytes(_folderBytes)} in {_folderCount} {(_folderCount == 1 ? "file" : "files")}");
-
-    /// <summary>Whether <c>outputFolder</c> is set, so Use default has something to reset.</summary>
-    public bool CanUseDefaultFolder => _outputFolder is not null;
-
-    public RelayCommand UseDefaultFolderCommand { get; }
 
     /// <summary>The note shown while Cleanup is blocked by a rebuilt index; null otherwise.</summary>
     public string? CleanupBlockedText => _cleanupBlocked
@@ -153,7 +156,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
         if (_libraryFolder != state.LibraryFolder)
         {
             _libraryFolder = state.LibraryFolder;
-            OnPropertyChanged(nameof(OutputFolderText));
+            ClipsFolder.Show(_outputFolder, _libraryFolder ?? "");
         }
 
         var bytes = state.Library.Sum(i => i.Size);
@@ -171,26 +174,6 @@ internal sealed class LibrarySettingsPage : SettingsPage
         }
     }
 
-    /// <summary>The folder picker's choice: after a Yes, sets <c>outputFolder</c> to <paramref name="path"/>.</summary>
-    public void ChooseOutputFolder(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
-        {
-            Message = "The Output Folder must be a full path, such as D:\\Clips.";
-            return;
-        }
-
-        if (string.Equals(path, _outputFolder, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        if (Confirm($"Use {path} as the Output Folder?\n\n{FolderChangeNote}"))
-        {
-            _ = SendAsync([SettingsValues.SetGlobal(Keys.OutputFolder, path)]);
-        }
-    }
-
     protected override FrameworkElement CreateView() => _view = new LibrarySettingsView { DataContext = this };
 
     protected override void OnRender(SettingsDocument document)
@@ -202,12 +185,8 @@ internal sealed class LibrarySettingsPage : SettingsPage
         }
 
         var folder = SettingsValues.Global(document, Keys.OutputFolder);
-        if (folder != _outputFolder)
-        {
-            _outputFolder = folder;
-            OnPropertyChanged(nameof(OutputFolderText));
-            OnPropertyChanged(nameof(CanUseDefaultFolder));
-        }
+        _outputFolder = folder;
+        ClipsFolder.Show(folder, _libraryFolder ?? "");
     }
 
     private static bool Lowers(long? next, long? current) => next is { } n && (current is null || current > n);
@@ -331,19 +310,6 @@ internal sealed class LibrarySettingsPage : SettingsPage
         foreach (var name in (string[])[nameof(SizeLimitEnabled), nameof(SizeLimitText), nameof(AgeLimitEnabled), nameof(AgeLimitText)])
         {
             OnPropertyChanged(name);
-        }
-    }
-
-    private void UseDefaultFolder()
-    {
-        if (_outputFolder is null)
-        {
-            return;
-        }
-
-        if (Confirm("Use the default folder under Videos as the Output Folder?\n\n" + FolderChangeNote))
-        {
-            _ = SendAsync([SettingsValues.SetGlobal(Keys.OutputFolder, (string?)null)]);
         }
     }
 

@@ -14,6 +14,19 @@ public sealed class MainViewModelTests
     private readonly List<Action> _posted = [];
 
     [Fact]
+    public void TheNavListsTheEightPagesInOrderWithNoRecordingsPage()
+    {
+        // Story 10.9: the builder's approved order; the Games page keeps its old title until story 10.10.
+        var model = Create();
+
+        Assert.Equal(
+            ["Library", "Settings", "General", "Clips", "Hotkeys", "Audio Tracks", "Game Profiles", "Sounds", "Storage and Cleanup"],
+            model.NavItems.Select(i => i.Title));
+        Assert.Equal(8, model.NavItems.Count(i => !i.IsSection));
+        Assert.DoesNotContain(model.NavItems, i => i.Title == "Recordings");
+    }
+
+    [Fact]
     public void ARefreshRendersTheSnapshotAndTheSettingsPages()
     {
         var model = Create();
