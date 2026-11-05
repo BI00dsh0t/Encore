@@ -45,7 +45,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.1 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.2 |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.3 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -183,7 +183,7 @@ The coordinator logs each QA round in the Log below.
 | 30.9 | 9.9 Modern UI end to end on the builder's PC | slice-epic-5 pool worker (local_1d2ad9da-a155-47ef-9312-64143e709751) | done (merged) |
 | 31.1 | 10.1 Design pass: renders and the builder's approval of ux-pass-2 | 2-1-tracer pool worker (local_9c35886e-1667-4c7b-996a-23e8da89130b) | done (builder approved all recommendations) |
 | 31.2 | 10.2 Library selection, bulk actions, context menu and shortcuts | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `6f23d23`) |
-| 31.3 | 10.3 Library sort and search | | pending |
+| 31.3 | 10.3 Library sort and search | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
@@ -838,3 +838,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.5 merged (`08fb829`, `feat(app): merge 10.5-audio-tracks-editor`) after QA passed at `d0880b9` and develop was synced: 0-warning build; Contracts 128, Core 161 and App 157 passed, 0 failed. Marked done; the four Audio Tracks renders were copied to `ux-pass-2/renders/`, and the BEACN/Resolve check was added to the Human Check Queue. qa-1-14 is back in the pool.
 - 2026-11-05: 10.5 merged (`08fb829`, marked done `f4978fa`, with its Human Check row), and its card is Done. 10.9 (settings reorganised: the folder picker, Clips, Hotkeys, Storage and Recordings removed) went to qa-1-14 (Opus, medium effort; context kept), with its card In progress. 10.2 is merging.
 - 2026-11-05: 10.2 merged (`6f23d23`, `feat(app): merge 10.2-library-selection`) after QA passed at `be7ee5e`; develop (with 10.4) was merged into the branch first with no conflicts, and the merged tip with 10.5 was rebuilt: 0-warning build; App 165, Core 161, Contracts 128 and Platform.Desktop 13 passed. Marked done; `library-selected-{fluent,gaming-dark}.png` copied to `ux-pass-2/renders/`, and the Library Human Check row added.
+- 2026-11-05: 10.2 merged (`6f23d23`; marked done, renders and its Human Check row in `a60deb5`). The merged develop with 10.4, 10.5 and 10.2 passed App 165, Core 161, Contracts 128 and Platform.Desktop 13. Its card is Done. 10.3 (Library sort and search) went to story-2-7 (Opus, medium effort; context kept), in parallel with 10.9.
