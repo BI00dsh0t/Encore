@@ -24,7 +24,7 @@ These cover the merges made without a post-merge run:
 | `de23206` | 14.4 Track picker | passed on its branch at `7c22d82` |
 | `d2273f9` | 14.6 When Windows can't play | passed on its branch at `c20c1a4` |
 | later | 14.7 Player sweep | **its new tests have never run** (`67a4fba` onward) |
-| later | 12.4 Source-resolution sweep | added when it merges |
+| later | 12.4 Source-resolution sweep | **never run** (from `feature/12.4-source-sweep`): Engine above all, for `CaptureSession.NewChain`; its changed Heavy test (`ARecordPressWhileAMoveBuildsCancelsItAndTheRecordingKeepsItsChain`, now with an arm delay and a cancel check) is in §2 #4, and a fixed-size Clip check is `--filter-class "*ReplayClipCaptureTests"` with `--explicit only` |
 
 ## 2. Heavy and GPU, at night, in this order
 

@@ -462,18 +462,21 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     public async Task ARecordPressWhileAMoveBuildsCancelsItAndTheRecordingKeepsItsChain()
     {
         // Story 12.2 (QA 1, 2): the window resizes at 2 s, the size holds at 5 s and the move's chain
-        // builds; Record lands then. The Recording keeps the 1280x720 chain in one file, and the move
-        // is found again after the stop.
+        // builds; Record lands while it waits to arm. The Recording keeps the 1280x720 chain in one
+        // file, and the move is found again after the stop. Story 12.4 (QA's note): the press waits for
+        // the move to be pending and the test checks it was cancelled, so it can't pass without it.
         using var bench = BenchLock.Take("Engine 12.2 size move test");
-        using var rig = NewRig(recordingsEnabled: true, clips: true);
+        using var rig = NewRig(recordingsEnabled: true, clips: true, moveArmDelay: TimeSpan.FromSeconds(3));
         MatchSource();
         var window = SessionTestKit.OpenWindow(_directory, _processes, ResizingWindowScript, "2");
         rig.Orchestrator.Post(new ProposeTarget(new TargetCandidate((int)window.ProcessId, window.Handle, ProfileId, "testgame.exe"), TargetChangeReason.Detected));
         await WaitUntil(() => rig.Factory.Sessions.Count == 1);
-        await Task.Delay(TimeSpan.FromSeconds(5.1), Token);
+        var session = Assert.Single(rig.Factory.Sessions.OfType<CaptureSession>());
+        await WaitUntil(() => session.MovePending);
 
         Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
         var recording = Assert.IsType<RecordingStarted>(await rig.NextAsync());
+        Assert.Equal(1, session.MovesCancelled);
         await Task.Delay(TimeSpan.FromSeconds(4), Token);
         Assert.True(rig.Factory.Sessions.Sum(s => s.Chains) <= 1, "no move chain parked beside the Recording");
         Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, Stopwatch.GetTimestamp())));
@@ -763,7 +766,8 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         IDisplayMonitors? displays = null,
         Action<string>? warn = null,
         IReadOnlyCollection<string>? duplicationScreens = null,
-        bool recovery = false)
+        bool recovery = false,
+        TimeSpan moveArmDelay = default)
     {
         SessionTestKit.RequireFFmpeg();
         var hub = new ToneHub(new Dictionary<string, (double, double)> { ["game"] = (0.1, 440), ["mic"] = (0.2, 1000) });
@@ -790,7 +794,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var published = new ConcurrentQueue<CaptureState>();
         var factory = new KeepingFactory(new CaptureSessionFactory(
-            new CaptureSessionOptions { OutputFolder = _directory, Replay = true, ResetGap = resetGap, WgcFault = wgcFault, CaptureFallback = fallback, DuplicationScreens = duplicationScreens },
+            new CaptureSessionOptions { OutputFolder = _directory, Replay = true, ResetGap = resetGap, WgcFault = wgcFault, CaptureFallback = fallback, DuplicationScreens = duplicationScreens, MoveArmDelay = moveArmDelay },
             NullLoggerFactory.Instance,
             hub));
         var orchestrator = new SessionOrchestrator(
