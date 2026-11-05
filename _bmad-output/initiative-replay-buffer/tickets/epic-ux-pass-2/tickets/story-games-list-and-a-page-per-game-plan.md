@@ -60,3 +60,4 @@ status: review
 ## Log
 
 - 2026-11-05: built and verified; READY FOR QA.
+- 2026-11-05: QA passed at e348991 with 3 minor findings, fixed before the merge: the game page shows the program's icon, Enter or Space on the selected Games nav item goes back like a click (`MainViewModel.ReselectNavItem`), and the source caption lost its double spaces.

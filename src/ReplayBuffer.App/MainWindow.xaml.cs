@@ -92,10 +92,21 @@ internal partial class MainWindow
     {
         if (e.OriginalSource is DependencyObject hit
             && ItemsControl.ContainerFromElement(Nav, hit) is ListBoxItem { DataContext: NavItem item }
-            && DataContext is MainViewModel model
-            && ReferenceEquals(item, model.SelectedNavItem))
+            && DataContext is MainViewModel model)
         {
-            model.CurrentDrillIn?.Close();
+            model.ReselectNavItem(item);
+        }
+    }
+
+    // Enter or Space on the selected nav item does what a click on it does.
+    private void OnNavKeyDown(object sender, KeyEventArgs e)
+    {
+        if ((e.Key == Key.Enter || e.Key == Key.Space)
+            && e.OriginalSource is ListBoxItem { DataContext: NavItem item }
+            && DataContext is MainViewModel { CurrentDrillIn.IsOpen: true } model)
+        {
+            model.ReselectNavItem(item);
+            e.Handled = true;
         }
     }
 

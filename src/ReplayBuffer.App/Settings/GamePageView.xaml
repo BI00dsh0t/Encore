@@ -56,6 +56,7 @@
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
                                    Text="{Binding Initial}" />
+                        <Image Source="{Binding Icon}" Stretch="Uniform" Visibility="{Binding HasIcon, Converter={StaticResource Visible}}" />
                     </Grid>
                 </Border>
                 <StackPanel>
@@ -70,9 +71,7 @@
                              ToolTip="Rename (F2)" />
                     <WrapPanel Margin="0,6,0,0">
                         <TextBlock VerticalAlignment="Center" Style="{DynamicResource RbGameCaptionStyle}">
-                            <Run Text="{Binding Source, Mode=OneWay}" />
-                            <Run Text=" · Program: " />
-                            <Run Text="{Binding ProgramPath, Mode=OneTime}" />
+                            <Run Text="{Binding Source, Mode=OneWay}" /><Run Text=" · Program: " /><Run Text="{Binding ProgramPath, Mode=OneTime}" />
                         </TextBlock>
                         <Button Margin="12,0,0,0" Command="{Binding ShowProgramCommand}" Content="Show in Explorer" />
                     </WrapPanel>

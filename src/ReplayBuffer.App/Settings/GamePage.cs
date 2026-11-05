@@ -92,6 +92,7 @@ internal sealed class GamePage : SettingsPage
     private string? _folder;
     private string? _clipsFolder;
     private string _recordKey = "the Record key";
+    private System.Windows.Media.ImageSource? _icon;
 
     public GamePage(SettingsSender sender, IEngineSession engine, string profileId, GameProfilesPage parent, IGameShell shell)
         : base(sender)
@@ -125,7 +126,23 @@ internal sealed class GamePage : SettingsPage
         OpenFolderCommand = new RelayCommand(() => _shell.OpenFolder(FolderPath!), () => FolderPath is not null);
         StopDetectingCommand = new RelayCommand(StopDetecting);
         Confirm = (message, caption) => Prompts.YesNo(_parent.View, message, caption, MessageBoxImage.Question);
+        shell.LoadIcon(profileId, icon => Icon = icon);
     }
+
+    /// <summary>The program's icon from the shell, or null for the letter tile (QA 10.10).</summary>
+    public System.Windows.Media.ImageSource? Icon
+    {
+        get => _icon;
+        private set
+        {
+            if (Set(ref _icon, value))
+            {
+                OnPropertyChanged(nameof(HasIcon));
+            }
+        }
+    }
+
+    public bool HasIcon => _icon is not null;
 
     /// <summary>The game's name, as the breadcrumb shows it.</summary>
     public override string Title => _name;

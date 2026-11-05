@@ -63,6 +63,16 @@ public sealed class GameProfilesPageTests
 
         Assert.Null(page.OpenGame);
         Assert.Equal(ChadId, page.LastOpenedId);
+
+        // Choosing Games in the nav again (click, Enter or Space) goes back too; another item doesn't.
+        var model = Create();
+        model.SelectedPage = model.GameProfiles;
+        model.IsSettingsTabSelected = true;
+        model.GameProfiles.Open(model.GameProfiles.Profiles[0]);
+        model.ReselectNavItem(model.NavItems.Single(i => i.Page == model.General));
+        Assert.True(model.IsDrilledIn);
+        model.ReselectNavItem(model.SelectedNavItem);
+        Assert.False(model.IsDrilledIn);
     }
 
     [Fact]

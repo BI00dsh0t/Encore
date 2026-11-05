@@ -130,6 +130,18 @@ internal sealed class MainViewModel : Observable
     /// <summary>Whether an item page is open, so the page header is a breadcrumb.</summary>
     public bool IsDrilledIn => CurrentDrillIn?.IsOpen == true;
 
+    /// <summary>
+    /// The nav item chosen again, by click, Enter or Space: on the page already shown, an open drill-in
+    /// item page goes back to its list (story 10.10).
+    /// </summary>
+    public void ReselectNavItem(NavItem item)
+    {
+        if (ReferenceEquals(item, SelectedNavItem))
+        {
+            CurrentDrillIn?.Close();
+        }
+    }
+
     /// <summary>The page header's title: "Library" or the settings page's.</summary>
     public string CurrentTitle => SelectedNavItem.Title;
 

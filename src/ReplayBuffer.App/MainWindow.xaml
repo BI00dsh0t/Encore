@@ -43,6 +43,7 @@
                      FocusVisualStyle="{x:Null}"
                      ItemContainerStyle="{DynamicResource RbNavItemStyle}"
                      ItemsSource="{Binding NavItems, Mode=OneTime}"
+                     KeyDown="OnNavKeyDown"
                      PreviewMouseLeftButtonUp="OnNavClick"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      SelectedItem="{Binding SelectedNavItem, Mode=TwoWay}"
