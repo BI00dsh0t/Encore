@@ -17,6 +17,13 @@
   <ItemGroup>
     <InternalsVisibleTo Include="ReplayBuffer.App.Tests" />
   </ItemGroup>
+  <!--
+    Core's canvas rule, shared with the Hotkeys screen picker (AD-25, story 11.4). It's a pure function on
+    Contracts types, compiled here as a linked source file, because AD-2's graph has no App to Core edge.
+  -->
+  <ItemGroup>
+    <Compile Include="..\ReplayBuffer.Core\Monitors\MonitorCanvasRule.cs" Link="Settings\MonitorCanvasRule.cs" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj" />
     <ProjectReference Include="..\ReplayBuffer.Platform.Desktop\ReplayBuffer.Platform.Desktop.csproj" />
