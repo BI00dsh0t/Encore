@@ -475,7 +475,21 @@ internal sealed class CaptureSession : ICaptureSession
     /// </summary>
     private void PlanCanvas(IReadOnlyList<DisplayMonitor> screens)
     {
-        var placements = MonitorCanvas.Place(screens);
+        (_spec, _composite) = PlanCanvas(_spec, screens, MonitorCanvas.Place(screens), CanEncode, _options.Warn, _log);
+    }
+
+    /// <summary>
+    /// <see cref="PlanCanvas(IReadOnlyList{DisplayMonitor})"/> on screens already placed: the spec to
+    /// encode with, and the placements to composite (null when one screen is left, captured as today).
+    /// </summary>
+    internal static (SessionSpec Spec, IReadOnlyList<MonitorPlacement>? Composite) PlanCanvas(
+        SessionSpec spec,
+        IReadOnlyList<DisplayMonitor> screens,
+        IReadOnlyList<MonitorPlacement> placements,
+        Func<VideoCodec, bool> canEncode,
+        Action<string, string>? warn,
+        ILogger log)
+    {
         if (placements.Count == 0)
         {
             throw new EngineFailure(ErrorCodes.MonitorRecordingNoScreens, "None of the screens chosen to record is connected.");
@@ -483,24 +497,22 @@ internal sealed class CaptureSession : ICaptureSession
 
         if (placements.Count == 1)
         {
-            _spec = _spec with { Screens = [screens.First(s => string.Equals(s.DeviceName, placements[0].Monitor.DeviceName, StringComparison.OrdinalIgnoreCase))] };
-            return;
+            return (spec with { Screens = [screens.First(s => string.Equals(s.DeviceName, placements[0].Monitor.DeviceName, StringComparison.OrdinalIgnoreCase))] }, null);
         }
 
         var placed = placements.Select(p => new DisplayMonitor(p.Monitor.DeviceName, p.Monitor.DeviceName, p.Width, p.Height, p.Monitor.IsPrimary, null, p.X, p.Y, p.RefreshHz)).ToList();
-        var video = _spec.Snapshot.Video;
-        var plan = MonitorCanvasRule.Plan(placed, video.Codec, CanEncode);
-        _log.LogInformation("Canvas {Native}x{NativeHeight} encoded {Codec} {Width}x{Height} (Output codec {Output})",
+        var video = spec.Snapshot.Video;
+        var plan = MonitorCanvasRule.Plan(placed, video.Codec, canEncode);
+        log.LogInformation("Canvas {Native}x{NativeHeight} encoded {Codec} {Width}x{Height} (Output codec {Output})",
             plan.NativeWidth, plan.NativeHeight, plan.Codec, plan.Width, plan.Height, video.Codec);
         if (plan.Codec == VideoCodec.H264 && plan.Scaled)
         {
-            _options.Warn?.Invoke(
+            warn?.Invoke(
                 ErrorCodes.MonitorRecordingScaled,
                 $"No HEVC or AV1 encoder works on this PC, so the {plan.NativeWidth} × {plan.NativeHeight} Monitor Recording is scaled down to {plan.Width} × {plan.Height} for H.264.");
         }
 
-        _spec = _spec with { Snapshot = _spec.Snapshot with { Video = video with { Codec = plan.Codec, Width = plan.Width, Height = plan.Height } } };
-        _composite = placements;
+        return (spec with { Snapshot = spec.Snapshot with { Video = video with { Codec = plan.Codec, Width = plan.Width, Height = plan.Height } } }, placements);
     }
 
     /// <summary>Whether this PC has a working encoder for <paramref name="codec"/> (the probe's answer); false when the probe fails.</summary>

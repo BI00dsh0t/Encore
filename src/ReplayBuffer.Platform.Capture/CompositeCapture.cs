@@ -25,13 +25,14 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     private const uint WaitObject0 = 0;
     private const long HundredNanosecondsPerSecond = 10_000_000;
 
-    private readonly D3D11Device _device;
+    private readonly D3D11Device? _device;
+    private readonly Func<CompositeSource, CapturedFrameHandler, ICaptureSource>? _sourceFactory;
     private readonly CapturedFrameHandler _onFrame;
     private readonly ILogger _logger;
     private readonly Lock _gate = new();
     private readonly CompositeSource[] _sources;
     private readonly MonitorCompositor _compositor;
-    private readonly CanvasSurface _surface;
+    private readonly ICanvasTarget _surface;
     private readonly Thread _clock;
     private readonly long _qpcFrequency = Stopwatch.Frequency;
     private HANDLE _stopEvent;
@@ -40,22 +41,48 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     private int _fps;
     private int _closedRaised;
     private bool _started;
+    private bool _clockStarted;
     private bool _disposed;
 
     /// <param name="duplication">Whether a screen is captured through Desktop Duplication instead of WGC (for tests and <c>--monitor-api dd</c>); null for none.</param>
     public CompositeCapture(D3D11Device device, IReadOnlyList<MonitorPlacement> placements, int fps, Func<MonitorPlacement, bool>? duplication, CapturedFrameHandler onFrame, ILogger logger)
+        : this(device ?? throw new ArgumentNullException(nameof(device)), placements, fps, duplication, null, (owner, size) => new CanvasSurface(owner, size), onFrame, logger)
     {
-        ArgumentNullException.ThrowIfNull(device);
+    }
+
+    /// <summary>For tests: each screen's capture comes from <paramref name="sources"/> and the canvas from <paramref name="canvas"/>; no GPU device.</summary>
+    internal CompositeCapture(
+        IReadOnlyList<MonitorPlacement> placements,
+        int fps,
+        Func<CompositeSource, CapturedFrameHandler, ICaptureSource> sources,
+        Func<VideoSize, ICanvasTarget> canvas,
+        CapturedFrameHandler onFrame,
+        ILogger logger)
+        : this(null, placements, fps, null, sources, (_, size) => canvas(size), onFrame, logger)
+    {
+    }
+
+    private CompositeCapture(
+        D3D11Device? device,
+        IReadOnlyList<MonitorPlacement> placements,
+        int fps,
+        Func<MonitorPlacement, bool>? duplication,
+        Func<CompositeSource, CapturedFrameHandler, ICaptureSource>? sources,
+        Func<CompositeCapture, VideoSize, ICanvasTarget> canvas,
+        CapturedFrameHandler onFrame,
+        ILogger logger)
+    {
         ArgumentOutOfRangeException.ThrowIfZero(placements.Count);
         ArgumentOutOfRangeException.ThrowIfLessThan(fps, 1);
         _device = device;
+        _sourceFactory = sources;
         _onFrame = onFrame;
         _logger = logger;
         _fps = fps;
 
         var (size, left, top) = MonitorCanvas.Bounds(placements);
         CanvasSize = size;
-        _surface = new CanvasSurface(this, size);
+        _surface = canvas(this, size);
         _sources = [.. placements.Select((p, i) => new CompositeSource(this, i, p, p.X - left, p.Y - top, duplication?.Invoke(p) == true))];
         _compositor = new MonitorCompositor(_surface, [.. _sources.Select(s => new CanvasRect(s.CanvasX, s.CanvasY, s.Area.Width, s.Area.Height))], _qpcFrequency, fps);
 
@@ -97,7 +124,11 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     /// <summary>Whether any screen fell back to Desktop Duplication (or was asked to).</summary>
     public bool AnyDuplication => _sources.Any(s => s.Api == "desktop-duplication");
 
-    /// <summary>Starts every screen's capture, then the slot clock. A screen whose capture can't start at all fails the start.</summary>
+    /// <summary>
+    /// Starts every screen's capture, then the slot clock. A screen whose capture can't start at all
+    /// fails the start with its own error; the caller then disposes this, which stops the screens
+    /// already started.
+    /// </summary>
     public void Start()
     {
         lock (_gate)
@@ -116,7 +147,16 @@ public sealed unsafe class CompositeCapture : ICaptureSource
             source.Start();
         }
 
-        _clock.Start();
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _clock.Start();
+            _clockStarted = true;
+        }
     }
 
     public void SetFps(int fps)
@@ -135,6 +175,14 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     /// </summary>
     public bool Drop(string deviceName)
     {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return false;
+            }
+        }
+
         var source = _sources.FirstOrDefault(s => !s.Removed && string.Equals(s.Placement.Monitor.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase));
         if (source is null)
         {
@@ -148,7 +196,7 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     /// <summary>Stops the clock and every source, waiting for frames in flight, logs each source's arrivals and releases the canvas.</summary>
     public void Dispose()
     {
-        bool started;
+        bool clockStarted;
         lock (_gate)
         {
             if (_disposed)
@@ -157,12 +205,13 @@ public sealed unsafe class CompositeCapture : ICaptureSource
             }
 
             _disposed = true;
-            started = _started;
+            clockStarted = _clockStarted;
             _stopping = true;
             PInvoke.SetEvent(_stopEvent);
         }
 
-        if (started && Thread.CurrentThread != _clock)
+        // Only a clock that started is joined: a start that failed part-way never started it.
+        if (clockStarted && Thread.CurrentThread != _clock)
         {
             _clock.Join();
         }
@@ -184,6 +233,14 @@ public sealed unsafe class CompositeCapture : ICaptureSource
 
     private void RemoveSource(CompositeSource source, string why)
     {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+        }
+
         if (!source.MarkRemoved())
         {
             return;
@@ -255,60 +312,76 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     /// The canvas texture: a frame of the screen's size is copied into its place; one of another size
     /// (a mode change) is first scaled to the place's size, letterboxed, through that place's own scaler.
     /// </summary>
-    private sealed class CanvasSurface : ICanvasSurface, IDisposable
+    /// <summary>The canvas a <see cref="CompositeCapture"/> draws into: the GPU texture, or a test's fake.</summary>
+    internal interface ICanvasTarget : ICanvasSurface, IDisposable;
+
+    private sealed class CanvasSurface : ICanvasTarget
     {
         private readonly CompositeCapture _owner;
         private readonly VideoSize _size;
         private readonly Dictionary<CanvasRect, (FrameScaler Scaler, nint Staging)> _scaled = [];
+        private readonly D3D11Device _device;
+        private readonly Lock _clearing = new();
         private nint _canvas;
 
         public CanvasSurface(CompositeCapture owner, VideoSize size)
         {
             _owner = owner;
+            _device = owner._device!;
             _size = size;
-            _canvas = owner._device.CreateTexture(size);
+            _canvas = _device.CreateTexture(size);
             if (_canvas == 0)
             {
                 throw new InvalidOperationException($"Could not create the {size} canvas texture.");
             }
 
-            owner._device.Clear(_canvas, 0, 0f, 0f, 0f);
+            _device.Clear(_canvas, 0, 0f, 0f, 0f);
         }
 
         public void Blit(nint texture, int contentWidth, int contentHeight, CanvasRect area)
         {
             var place = new VideoSize(area.Width, area.Height);
             var content = new VideoSize(contentWidth, contentHeight);
+            var device = _device;
             if (content == place)
             {
-                _owner._device.CopyFrameTo(texture, content, _canvas, area.X, area.Y, place);
+                device.CopyFrameTo(texture, content, _canvas, area.X, area.Y, place);
                 return;
             }
 
             if (!_scaled.TryGetValue(area, out var scaled))
             {
-                var staging = _owner._device.CreateTexture(place);
-                scaled = (new FrameScaler(_owner._device, place, nv12: false, targets: 1, _owner._logger), staging);
+                var staging = _device.CreateTexture(place);
+                scaled = (new FrameScaler(_device, place, nv12: false, targets: 1, _owner._logger), staging);
                 _scaled[area] = scaled;
                 _owner._logger.LogInformation("A screen at ({X},{Y}) delivers {Content} into its {Place} place: scaled from now on", area.X, area.Y, content, place);
             }
 
             scaled.Scaler.Draw(texture, content, scaled.Staging, 0);
-            _owner._device.CopyFrameTo(scaled.Staging, place, _canvas, area.X, area.Y, place);
+            _device.CopyFrameTo(scaled.Staging, place, _canvas, area.X, area.Y, place);
         }
 
         public void Clear(CanvasRect area)
         {
-            // A black frame of the place's size, copied over it: Clear fills a whole texture.
-            var black = _owner._device.CreateTexture(new VideoSize(area.Width, area.Height));
-            try
+            // A removal (the orchestrator's thread) may race a teardown: once the canvas is released, nothing to clear.
+            lock (_clearing)
             {
-                _owner._device.Clear(black, 0, 0f, 0f, 0f);
-                _owner._device.CopyFrameTo(black, new VideoSize(area.Width, area.Height), _canvas, area.X, area.Y, new VideoSize(area.Width, area.Height));
-            }
-            finally
-            {
-                D3D11Device.ReleaseTexture(black);
+                if (_canvas == 0)
+                {
+                    return;
+                }
+
+                // A black frame of the place's size, copied over it: Clear fills a whole texture.
+                var black = _device.CreateTexture(new VideoSize(area.Width, area.Height));
+                try
+                {
+                    _device.Clear(black, 0, 0f, 0f, 0f);
+                    _device.CopyFrameTo(black, new VideoSize(area.Width, area.Height), _canvas, area.X, area.Y, new VideoSize(area.Width, area.Height));
+                }
+                finally
+                {
+                    D3D11Device.ReleaseTexture(black);
+                }
             }
         }
 
@@ -323,8 +396,11 @@ public sealed unsafe class CompositeCapture : ICaptureSource
             }
 
             _scaled.Clear();
-            D3D11Device.ReleaseTexture(_canvas);
-            _canvas = 0;
+            lock (_clearing)
+            {
+                D3D11Device.ReleaseTexture(_canvas);
+                _canvas = 0;
+            }
         }
     }
 
@@ -413,13 +489,23 @@ public sealed unsafe class CompositeCapture : ICaptureSource
 
         internal void Start()
         {
+            if (_owner._sourceFactory is { } factory)
+            {
+                var made = factory(this, OnFrame);
+                Wire(made);
+                made.Start();
+                Api = "test";
+                return;
+            }
+
+            var device = _owner._device!;
             var handle = Placement.Monitor.Handle;
             if (!_duplication)
             {
                 ICaptureSource? wgc = null;
                 try
                 {
-                    wgc = WindowCapture.ForMonitor(_owner._device, handle, Volatile.Read(ref _owner._fps), OnFrame, _owner._logger);
+                    wgc = WindowCapture.ForMonitor(device, handle, Volatile.Read(ref _owner._fps), OnFrame, _owner._logger);
                     Wire(wgc);
                     wgc.Start();
                     Api = "wgc";
@@ -433,7 +519,7 @@ public sealed unsafe class CompositeCapture : ICaptureSource
                 }
             }
 
-            var duplication = new DesktopDuplicationCapture(_owner._device, handle, Volatile.Read(ref _owner._fps), OnFrame, _owner._logger);
+            var duplication = new DesktopDuplicationCapture(device, handle, Volatile.Read(ref _owner._fps), OnFrame, _owner._logger);
             Wire(duplication);
             duplication.Start();
             Api = "desktop-duplication";
