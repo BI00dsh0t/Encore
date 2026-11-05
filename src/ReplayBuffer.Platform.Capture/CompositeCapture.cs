@@ -308,13 +308,13 @@ public sealed unsafe class CompositeCapture : ICaptureSource
         }
     }
 
+    /// <summary>The canvas a <see cref="CompositeCapture"/> draws into: the GPU texture, or a test's fake.</summary>
+    internal interface ICanvasTarget : ICanvasSurface, IDisposable;
+
     /// <summary>
     /// The canvas texture: a frame of the screen's size is copied into its place; one of another size
     /// (a mode change) is first scaled to the place's size, letterboxed, through that place's own scaler.
     /// </summary>
-    /// <summary>The canvas a <see cref="CompositeCapture"/> draws into: the GPU texture, or a test's fake.</summary>
-    internal interface ICanvasTarget : ICanvasSurface, IDisposable;
-
     private sealed class CanvasSurface : ICanvasTarget
     {
         private readonly CompositeCapture _owner;
