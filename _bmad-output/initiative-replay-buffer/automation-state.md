@@ -42,9 +42,9 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 12.2 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (QA 12.2 round 2 comes back here) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; 12.2 in QA; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with the 12.2 round 1 fixes; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
@@ -201,7 +201,7 @@ The coordinator logs each QA round in the Log below.
 | 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
 | 33.1 | 12.1 Tracer: the matchSource key and a game chain at the source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | merged (`735a52d`); open until tonight's Heavy 2560x1440 match-source capture passes |
 | 33.2 | 12.6 Architecture: AD-26, the source output size | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
-| 33.3 | 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA (code); Heavy and cost tonight; merges after them |
+| 33.3 | 12.2 Size changes mid-session, and one-screen Monitor Recordings at source size | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | QA round 1 failed (3 concurrency findings); fixing; Heavy and cost tonight |
 | 33.4 | 12.3 Source in the Video quality section | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `edf675f`) |
 | 33.5 | 12.4 Refactor sweep | | pending |
 | 33.6 | 12.5 Source-resolution output end to end on the builder's PC | | pending |
@@ -979,3 +979,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
   6. The two Heavy follow-ups (fragment cadence, short video).
 - 2026-11-05: 12.3 merged into develop (`edf675f`, `feat(app): merge 12.3-source-in-video-quality`) after QA passed at `af6212f`, and marked done. Before the merge, QA's request was added in `6edfa69`: `SourceResolutionViewTests` also renders the game's `GameVideoEditor` with Source in both themes (`game-video-source-*.png`). Develop (`b8aa00d`, docs only) was synced: 0-warning build; App 201 (20 skipped), Core 170 and Contracts 137 passed, 0 failed. The Clips PNGs are copied to `epic-source-quality-output/` (`clips-source-fluent.png`, `clips-source-gaming.png`). No Heavy or GPU runs.
 - 2026-11-05: 12.3 merged (`edf675f`) and done (`e0aca81`); `GameVideoEditor` now has a both-themes test (`6edfa69`). Card moved to Done. 12.4 (sweep) waits on 12.2.
+- 2026-11-05: QA 12.2 round 1 failed at `a569f28` with 3 concurrency findings: (1, high) a Record press can race the worker-thread `ArmMove`, so a Recording attaches to a retiring chain; (2, medium) a parked move chain during a game Recording keeps `Chains` at 2 and blocks a Monitor Recording with `encoder-budget` (cancel the move when `Record()` succeeds); (3, medium) `StartMonitor` checks `Chains` before `SetBuildAhead(false)`, so a move in between gives 3 chains. Defaults, lock order, the frame path and GPU loss all passed; the default suites passed. Sent to qa-2-1, with default or Heavy tests for 1 and 2.
