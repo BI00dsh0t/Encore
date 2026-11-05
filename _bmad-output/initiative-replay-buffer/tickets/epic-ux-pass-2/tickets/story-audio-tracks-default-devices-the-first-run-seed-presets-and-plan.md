@@ -1,7 +1,7 @@
 ---
 title: "Audio Tracks: default devices, the first-run seed, presets and per-device meters"
 ticket: 4
-status: review
+status: done
 ---
 
 # Plan: 10.4 Audio Tracks model work
@@ -41,3 +41,4 @@ status: review
 - 2026-11-05: built and verified; READY FOR QA.
 - 2026-11-05: QA round 1, 2 findings fixed: an empty seed is no longer written, and the meter watch stops when the last client disconnects.
 - 2026-11-05: QA passed at c569ab9; the disconnect-unwatch race guard folded in before the merge.
+- 2026-11-05: merged into develop (`3bec10b`). Heavy meter-cost result (QA's run on the builder's PC): 30 devices probed (19 playback, 11 recording), +0.036 of a core over idle, 16.0 `meters.levels` a second; under the 0.1-core and 15/s limits, so the probes stay.
