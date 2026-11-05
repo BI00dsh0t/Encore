@@ -3,7 +3,7 @@ title: 'Engine: a Monitor Recording of several screens, composited'
 type: 'feature'
 ticket: '3'
 created: '2026-11-04'
-status: in-progress
+status: built
 baseline_revision: '2aef49f'
 route: 'full'
 risk: 'high'
@@ -61,9 +61,20 @@ risk: 'high'
   - `AScreenOnDesktopDuplicationStillComposites`: one screen forced to Desktop Duplication; one fallback notice naming it; same size; in step; decodes; gap black.
   - `AGpuResetRebuildsTheCompositeAndTheMonitorRecordingContinuesInASecondFile`: a simulated device loss gives a `RecordingRestart`; one chain after it; both files at the canvas size decode cleanly.
 
+## Cost (for NFR-1)
+
+Clean run, 2026-11-05 01:43 to 01:59, 2 passes of 45 s; the figures are in the epic's Notes. The two-screen composite costs 7.00 % in total (spike: 7.6 to 10 %). Its capture-only and copy stages cost the same, so the extra over one screen is the second screen's capture, not the composite, the scale or the encode. The pacer got one canvas per slot, with 1.1 to 1.3 % duplicates and 0 non-increasing stamps.
+
 ## Verification
 
-See the Log.
+- `dotnet build ReplayBuffer.slnx -c Release` on the branch synced with develop (11.4, 10.11 and the flaky-tests bugfix): 0 warnings.
+- Contracts 135, Core 168, Media 102 (4 explicit skipped) and Platform.Capture 6 passed.
+- Engine: 194 passed, 0 failed on the third run.
+  - The first two runs each failed a different audio or timing test, `RecordingCrashTests.ARecordingKilledThreeSecondsIn...` and then `TrackMixCaptureTests.EachTrackCarriesExactlyItsDevicesTones`, neither touched here.
+  - Those two runs overlapped the start of 8.7's fps bench (from about 01:58).
+- 10.11's `GlossaryTests` (App.Tests): 3 passed on the combined branch.
+- Heavy `MonitorRecordingCaptureTests` after the hand-off fix: 13/13.
+- `pwsh tools/publish-engine.ps1`: clean, 12.1 MB.
 
 ## Log
 
@@ -73,3 +84,6 @@ See the Log.
 - 00:10: fix: the canvas is handed on outside the drawing lock, by the first frame of a new slot (from its source's thread) or by the clock for a late change; still at most one per slot with increasing stamps. A 30 s check of capture-monhevc: 1.0 % duplicates, 0.9 % missed slots, 9 hand-off drops, 0 non-increasing stamps (spike: 1 to 2 %, 1 to 1.5 %, 160 to 946, about 2,000).
 - 00:15: the clean re-measure aborted after 3 runs: the GPU load exited at 00:17 (exit 0), and other NVENC users appeared again at 00:16 to 00:17. Then the builder stopped all tests.
 - **Left (when tests resume):** the stage-split cost run (baseline, capture, capture-monone, capture-monhevc, -monhevccopy, -monhevcwgc, 2 passes × 45 s) on a quiet PC; the Heavy class again after the hand-off change; the default suites; the NativeAOT publish; then the epic Notes and READY FOR QA. Sync develop (11.4, 10.11) and run 10.11's GlossaryTests on the combined branch.
+- 01:30: tests resumed. The default suites passed, then the Heavy class 13/13 after the hand-off fix.
+- 01:43 to 01:59: the clean stage-split cost run (above). The GPU load exit at 00:17 had matched the builder's stop (exit 0 is the load's Escape or close path); this run had none. Captures were deleted. GPU DONE was sent at 01:59.
+- 02:00: synced develop. Built and verified as above.
