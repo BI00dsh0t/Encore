@@ -72,7 +72,7 @@
             <!-- The embedded views carry their own section cards, so they follow the Overrides card, not inside it. -->
             <StackPanel Visibility="{Binding HasSelectedProfile, Converter={StaticResource Visible}}">
                 <ContentControl Content="{Binding OverrideOutput.View}" />
-                <ContentControl Margin="0,0,0,8" Content="Track Layout" Style="{DynamicResource RbSectionHeaderStyle}" />
+                <ContentControl Margin="0,0,0,8" Content="Audio Tracks" Style="{DynamicResource RbSectionHeaderStyle}" />
                 <ContentControl Content="{Binding OverrideTrackLayout.View}" />
             </StackPanel>
         </theme:SettingsContent>

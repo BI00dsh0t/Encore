@@ -69,13 +69,28 @@
                                 HorizontalAlignment="Left"
                                 Background="{DynamicResource AccentFillColorDefaultBrush}"
                                 Visibility="Collapsed" />
-                        <TextBlock x:Name="Label"
-                                   Margin="{TemplateBinding Padding}"
-                                   VerticalAlignment="Center"
-                                   Text="{Binding Title, Converter={StaticResource RbShellUppercase}}"
-                                   TextTrimming="CharacterEllipsis" />
+                        <DockPanel Margin="{TemplateBinding Padding}" LastChildFill="False">
+                            <TextBlock x:Name="Label"
+                                       DockPanel.Dock="Left"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding Title, Converter={StaticResource RbShellUppercase}}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <!-- Story 10.5: an unsaved draft on the page (6 px, accent; square under Gaming dark). -->
+                            <Border x:Name="UnsavedDot"
+                                    Width="6"
+                                    Height="6"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                    CornerRadius="0"
+                                    DockPanel.Dock="Left"
+                                    Visibility="Collapsed" />
+                        </DockPanel>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True">
+                            <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
                             <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />

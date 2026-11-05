@@ -227,16 +227,36 @@ internal sealed class MainViewModel : Observable
 }
 
 /// <summary>One item of the shell's navigation: the Library, the Settings section label, or a settings page.</summary>
-internal sealed class NavItem(string title, SettingsPage? page, bool isSection)
+internal sealed class NavItem : Observable
 {
+    public NavItem(string title, SettingsPage? page, bool isSection)
+    {
+        Title = title;
+        Page = page;
+        IsSection = isSection;
+        if (page is not null)
+        {
+            page.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(SettingsPage.HasUnsavedChanges))
+                {
+                    OnPropertyChanged(nameof(HasUnsavedChanges));
+                }
+            };
+        }
+    }
+
+    /// <summary>The nav item's dot: its page holds unsaved changes.</summary>
+    public bool HasUnsavedChanges => Page?.HasUnsavedChanges ?? false;
+
     /// <summary>The page's title, in sentence case; Gaming dark uppercases it in its template only.</summary>
-    public string Title { get; } = title;
+    public string Title { get; }
 
     /// <summary>The settings page it opens; null for the Library and the section label.</summary>
-    public SettingsPage? Page { get; } = page;
+    public SettingsPage? Page { get; }
 
     /// <summary>The non-selectable Settings label above the settings pages.</summary>
-    public bool IsSection { get; } = isSection;
+    public bool IsSection { get; }
 
     public override string ToString() => Title;
 }

@@ -74,7 +74,11 @@ public sealed partial class SettingsLayoutTests
         var engine = new FakeEngineSession { Reply = (_, _) => Empty.Value };
         engine.State = engine.State! with
         {
-            Devices = new AudioDeviceList([new AudioDevice("{out-1}", "Speakers", "USB DAC", AudioFlow.Output, true)]),
+            Devices = new AudioDeviceList(
+            [
+                new AudioDevice("{out-1}", "Speakers", "USB DAC", AudioFlow.Output, true, IsDefault: true),
+                new AudioDevice("{in-1}", "Microphone", "Yeti", AudioFlow.Input, true, IsDefault: true),
+            ]),
             Settings = SettingsDocument.Empty with
             {
                 Revision = 1,
@@ -90,8 +94,8 @@ public sealed partial class SettingsLayoutTests
         var theme = ThemeService.ForWindow(window);
         var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
         {
-            (model.TrackLayout, "track-layout", ["Devices", "Tracks"]),
-            (model.GameProfiles, "game-profiles", ["Games", "Add a game by hand", "Overrides for", "Replay Buffer", "Output", "Devices", "Tracks"]),
+            (model.TrackLayout, "audio-tracks", []),
+            (model.GameProfiles, "game-profiles", ["Games", "Add a game by hand", "Overrides for", "Replay Buffer", "Output"]),
             (model.LibrarySettings, "library-and-cleanup", ["Output Folder", "Cleanup"]),
         };
         try
@@ -102,20 +106,49 @@ public sealed partial class SettingsLayoutTests
                 window.Show();
                 var card = (Style)window.FindResource("RbCardStyle");
                 var meter = (Style)window.FindResource("RbLevelMeterStyle");
+                var accent = window.FindResource("AccentButtonStyle");
                 foreach (var (page, slug, sections) in expected)
                 {
                     model.SelectedNavItem = model.NavItems.First(i => i.Page == page);
                     Sta.Pump(TimeSpan.FromMilliseconds(100));
                     if (page == model.TrackLayout)
                     {
-                        model.TrackLayout.Tracks[0].ShowPeak(1f);
-                        model.TrackLayout.Tracks[1].ShowPeak(0.0316f);
-                        model.TrackLayout.SelectedTrack = model.TrackLayout.Tracks[0];
+                        // Story 10.5: an unsaved draft (the save bar), fabricated levels, and the picker open.
+                        var tracks = model.TrackLayout.Tracks;
+                        if (tracks[1].Sources.Count == 0)
+                        {
+                            model.TrackLayout.AddSound(tracks[1], engine.State.Devices.Devices[1]);
+                        }
+
+                        tracks[0].ShowPeak(1f);
+                        tracks[1].ShowPeak(0.0316f);
+                        tracks[0].Sources[0].ShowPeak(0.3f);
                         Sta.Pump(TimeSpan.FromMilliseconds(50));
-                        Assert.True(model.TrackLayout.Tracks[0].HasWarning);
+                        Assert.True(tracks[0].HasWarning);
+                        Assert.True(((FrameworkElement)page.View.FindName("SaveBar")).IsVisible);
                         var meters = Descendants<ProgressBar>(page.View).ToList();
-                        Assert.Equal(2, meters.Count);
+                        Assert.Equal(5, meters.Count);
                         Assert.All(meters, m => Assert.Same(meter, m.Style));
+
+                        var picker = (System.Windows.Controls.Primitives.Popup)page.View.FindName("Picker");
+                        picker.PlacementTarget = page.View;
+                        model.TrackLayout.OpenPicker(tracks[1]);
+                        Sta.Pump(TimeSpan.FromMilliseconds(100));
+                        Assert.True(picker.IsOpen);
+                        var flyout = (FrameworkElement)picker.Child;
+                        Assert.Equal(2, Descendants<ListBoxItem>(flyout).Count());
+                        Assert.All(Descendants<ProgressBar>(flyout), m => Assert.Same(meter, m.Style));
+                        SaveElement(flyout, $"settings-audio-tracks-picker-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png", window);
+                        model.TrackLayout.ClosePicker();
+                        tracks[0].ShowPeak(1f);
+                        tracks[1].ShowPeak(0.0316f);
+                        tracks[0].Sources[0].ShowPeak(0.3f);
+                        tracks[1].Sources[0].ShowPeak(0.1f);
+                        Sta.Pump(TimeSpan.FromMilliseconds(50));
+                        foreach (var key in AudioTracksResourceKeys())
+                        {
+                            Assert.True(window.TryFindResource(key) is not null, $"Missing resource {key} under {which}");
+                        }
                     }
 
                     Assert.True(page.View.IsLoaded, $"{page.Title} didn't load under {which}");
@@ -124,7 +157,8 @@ public sealed partial class SettingsLayoutTests
                     Assert.All(found, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
 
                     // A keyed local style hid Gaming dark's implicit Button style and showed the default look.
-                    Assert.All(Descendants<Button>(page.View), b => Assert.Equal(DependencyProperty.UnsetValue, b.ReadLocalValue(FrameworkElement.StyleProperty)));
+                    // Save changes is the one accent button.
+                    Assert.All(Descendants<Button>(page.View).Where(b => b.Style != accent), b => Assert.Equal(DependencyProperty.UnsetValue, b.ReadLocalValue(FrameworkElement.StyleProperty)));
                     Save(window, $"settings-{slug}-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
                 }
             }
@@ -179,6 +213,33 @@ public sealed partial class SettingsLayoutTests
             Assert.False(LiteralColour().IsMatch(xaml), $"{view} has a literal colour");
             Assert.False(KeylessStyle().IsMatch(xaml), $"{view} has a key-less style");
         }
+    }
+
+    /// <summary>Every resource key Audio Tracks' view and dictionary look up, but the view's own converter.</summary>
+    private static IEnumerable<string> AudioTracksResourceKeys()
+    {
+        var folder = Path.Combine(MainFolder(), "src", "ReplayBuffer.App");
+        var xaml = File.ReadAllText(Path.Combine(folder, "Settings", "TrackLayoutView.xaml"))
+            + File.ReadAllText(Path.Combine(folder, "Theme", "AudioTracksTheme.xaml"));
+        return ResourceKey().Matches(xaml).Select(m => m.Groups[1].Value).Where(k => k != "Visible").Distinct();
+    }
+
+    private static void SaveElement(FrameworkElement element, string name, Window window)
+    {
+        var size = new Size(Math.Max(1, element.ActualWidth), Math.Max(1, element.ActualHeight));
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawRectangle((Brush)window.FindResource("SolidBackgroundFillColorBaseBrush"), null, new Rect(size));
+            context.DrawRectangle(new VisualBrush(element) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top }, null, new Rect(size));
+        }
+
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height), 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var file = File.Create(Path.Combine(AppContext.BaseDirectory, name));
+        encoder.Save(file);
     }
 
     private static MainWindow Offscreen(MainWindow window)
@@ -246,4 +307,7 @@ public sealed partial class SettingsLayoutTests
 
     [GeneratedRegex(@"<Style(?![^>]*x:Key)[^>]*TargetType=")]
     private static partial Regex KeylessStyle();
+
+    [GeneratedRegex(@"\{(?:Dynamic|Static)Resource (\w+)\}")]
+    private static partial Regex ResourceKey();
 }
