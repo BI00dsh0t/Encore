@@ -3,14 +3,14 @@ title: 'Recordings play to the end: mehd at finalize'
 type: 'feature'
 ticket: '3'
 created: '2026-11-05'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '3cca32f9b04352c3872ee3db3f2201f99dbaa1eb'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: [quick]
 review_loop_iteration: 0
 context: []
 ---
@@ -67,12 +67,12 @@ context: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.Core/Library/Mp4File.cs` -- add a pure `FragmentDurationPatch? PlanFragmentDuration(ReadOnlySpan<byte> header, long durationUs)` (a record of two writes: `(MehdOffset, MehdAndFree bytes)` then `(MvexOffset, new 4-byte size)`): walk top-level to `moov`, its children to `mvhd` (timescale at +20 for v0, +28 for v1), `mvex` and the box after it; on the expected layout return the `mehd` v1 (20 bytes) plus a `free` header of `udta` size − 20 (none when `udta` is exactly 20), and `mvex` size + 20. Otherwise null -- testable without FFmpeg.
-- [ ] `src/ReplayBuffer.Platform.FFmpeg/DurableOutput.cs` -- keep a copy of the bytes written before the first `Flush` (`Header`), and add `Overwrite(long offset, ReadOnlySpan<byte>)`: seek, one write, `Flush(flushToDisk)` (`FlushFileBuffers`), seek back to the end -- the header is at offset 0, so offsets in it are file offsets.
-- [ ] `src/ReplayBuffer.Platform.FFmpeg/FragmentedMp4Muxer.cs` -- in `Write`, per stream keep the first DTS, the last DTS and the last packet's duration (in stream time base, after rescale). In `Finish` (durable), after the trailer flush: the duration = max over streams of `lastDts + lastDuration − firstDts`, rescaled to µs rounding up (movenc's `track_duration`); plan the patch on `Header`, then `Overwrite` the `mehd` write, then the `mvex` size write, in that order; log a warning on null or on an `IOException`, and log the `mehd` duration on success.
-- [ ] `tests/ReplayBuffer.Platform.FFmpeg.Tests/FragmentDurationTests.cs` -- one default test: a synthetic three-Track Recording through `RecordingWriter` (as `RecordingStartTests`). Walk its boxes: `Mp4File.IsComplete`; `moov`'s children tile it exactly; `mvex` ends with an `mehd` (20 bytes, v1); a `free` box ends where the `udta` did; `mehd` / `mvhd` timescale is within one frame of the video length; ffprobe's format duration is within one frame of it and lists 1 + `Tracks` streams with their titles; the `mfra` is last, its `mfro` size matches, and the first `tfra` entry's offset points at a `moof`. Then a copy with `mvex`'s size set back by 20 (the state between the two writes): `Mp4File.IsComplete`, `moov`'s children still tile it, and ffprobe still reads it with every stream.
-- [ ] `tests/ReplayBuffer.Core.Tests/Mp4FileTests.cs` (new; the flat layout of that project) -- one test: a header whose `mvex` isn't followed by a `udta` plans no patch (null).
-- [ ] `tests/ReplayBuffer.Engine.Tests/RecordingCaptureTests.cs`, `MonitorRecordingCaptureTests.cs` -- Heavy (`Explicit`, night): a ~5 s Recording each in H.264, HEVC and AV1, and the existing Monitor Recording test, opened in WinRT `MediaPlayer` from a stream: `NaturalDuration` within one frame of ffprobe's; seek to 1.5 s before the end, play, `MediaEnded` fires with the position at the end. A small shared helper in the Engine tests project holds the `MediaPlayer` check.
+- [x] `src/ReplayBuffer.Core/Library/Mp4File.cs` -- add a pure `FragmentDurationPatch? PlanFragmentDuration(ReadOnlySpan<byte> header, long durationUs)` (a record of two writes: `(MehdOffset, MehdAndFree bytes)` then `(MvexOffset, new 4-byte size)`): walk top-level to `moov`, its children to `mvhd` (timescale at +20 for v0, +28 for v1), `mvex` and the box after it; on the expected layout return the `mehd` v1 (20 bytes) plus a `free` header of `udta` size − 20 (none when `udta` is exactly 20), and `mvex` size + 20. Otherwise null -- testable without FFmpeg.
+- [x] `src/ReplayBuffer.Platform.FFmpeg/DurableOutput.cs` -- keep a copy of the bytes written before the first `Flush` (`Header`), and add `Overwrite(long offset, ReadOnlySpan<byte>)`: seek, one write, `Flush(flushToDisk)` (`FlushFileBuffers`), seek back to the end -- the header is at offset 0, so offsets in it are file offsets.
+- [x] `src/ReplayBuffer.Platform.FFmpeg/FragmentedMp4Muxer.cs` -- in `Write`, per stream keep the first DTS, the last DTS and the last packet's duration (in stream time base, after rescale). In `Finish` (durable), after the trailer flush: the duration = max over streams of `lastDts + lastDuration − firstDts`, rescaled to µs rounding up (movenc's `track_duration`); plan the patch on `Header`, then `Overwrite` the `mehd` write, then the `mvex` size write, in that order; log a warning on null or on an `IOException`, and log the `mehd` duration on success.
+- [x] `tests/ReplayBuffer.Platform.FFmpeg.Tests/FragmentDurationTests.cs` -- one default test: a synthetic three-Track Recording through `RecordingWriter` (as `RecordingStartTests`). Walk its boxes: `Mp4File.IsComplete`; `moov`'s children tile it exactly; `mvex` ends with an `mehd` (20 bytes, v1); a `free` box ends where the `udta` did; `mehd` / `mvhd` timescale is within one frame of the video length; ffprobe's format duration is within one frame of it and lists 1 + `Tracks` streams with their titles; the `mfra` is last, its `mfro` size matches, and the first `tfra` entry's offset points at a `moof`. Then a copy with `mvex`'s size set back by 20 (the state between the two writes): `Mp4File.IsComplete`, `moov`'s children still tile it, and ffprobe still reads it with every stream.
+- [x] `tests/ReplayBuffer.Core.Tests/Mp4FileTests.cs` (new; the flat layout of that project) -- one test: a header whose `mvex` isn't followed by a `udta` plans no patch (null).
+- [x] `tests/ReplayBuffer.Engine.Tests/RecordingCaptureTests.cs`, `MonitorRecordingCaptureTests.cs` -- Heavy (`Explicit`, night): a ~5 s Recording each in H.264, HEVC and AV1, and the existing Monitor Recording test, opened in WinRT `MediaPlayer` from a stream: `NaturalDuration` within one frame of ffprobe's; seek to 1.5 s before the end, play, `MediaEnded` fires with the position at the end. A small shared helper in the Engine tests project holds the `MediaPlayer` check.
 
 **Acceptance Criteria:**
 - Given a Recording finalized by the engine, when ffprobe reads it, then its duration and Track list match the video length and Tracks, and its `mvex` holds an `mehd` with that duration.
@@ -81,11 +81,22 @@ context: []
 
 ## Implementation Notes
 
+- Built in 9fe1fb0 (patcher, header copy, muxer, tests) and 930745a (review fixes). `mvex` and `udta` must also use 32-bit sizes, and so must `mvhd` after review. The success log line says whether the first write straddles a 512-byte sector.
+- The Heavy MediaPlayer check is `MediaPlayerCheck` in Engine.Tests. It's a Theory over H.264, HEVC and AV1 in `RecordingCaptureTests`, and is appended to `MonitorRecordingCaptureTests`' 60 s two-screen test. None of it has run (night only). The end-position assertion (within one frame after `MediaEnded`) may need loosening if MF reports a slightly different end.
+- Not tested, on purpose (lean tests): a patch write that throws `IOException` only logs. Full-disk and crash-cut paths never reach the patch; the existing `DiskFullRecordingTests` and `RecordingCrashTests` still pass.
+- Day verification: the 0-warning Release build; Core 171/171, Platform.FFmpeg 41 passed with 2 skipped, Engine 201 with 51 skipped, App 201 with 20 skipped (the skips are the existing Explicit tests); `tools/publish-engine.ps1` with no IL warnings.
+- Crash-cut experiment, parse half (2026-11-05, CPU-encoded spike files, WinRT `MediaSource.Duration`): with `mfra` cut off, MF reports no length (`TimeSpan.MaxValue`); with a hand-patched `mehd` it reports the full 2.000 s. So `InterruptedRecordings` writing an `mehd` would give crash-cut Recordings a known length. Whether they then seek waits for the night playback check.
+
 ## Plan Change Log
 
 - 2026-11-05, at approval (coordinator's durability point): the single `[mvex, udta+24)` rewrite with a v0 `mehd` first became two ordered, flushed writes with a v1 `mehd` last in `mvex`. It avoids a half-updated `mvex`/`free` on a power cut (the old rewrite had no valid in-between state) and a 32-bit overflow at 48 kHz after 24.8 h. Measured before the switch: Media Foundation reads v0 and v1, first or last; the in-between file opens with today's length. KEEP: the layout check, the header copy, the duration source, nothing outside `moov` touched.
 
 ## Review Triage Log
+
+- Pass 1 (quick lens): high 0, medium 0, low 3, false 0, maybe-false 0.
+  - low, patch: the first write's straddle of a 512-byte sector isn't recorded (the coordinator's "off sector boundaries where cheap"). The offsets are FFmpeg's and can't move, so the success log now says whether it straddles.
+  - low, patch: an `mvhd` with a 64-bit size header would be read as an 8-byte one, giving a wrong timescale. It's now rejected like `mvex` and `udta`. Latent: FFmpeg never writes one.
+  - low, rejected: an `mvex` whose children don't tile it passes the "no `mehd`" check. Latent with FFmpeg's well-formed output, and the fix needs a new tiling check, more code than the problem deserves.
 
 ## Design Notes
 
