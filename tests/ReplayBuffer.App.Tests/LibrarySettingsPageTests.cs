@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ReplayBuffer.App.Settings;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 
@@ -223,6 +224,27 @@ public sealed class LibrarySettingsPageTests
         var clips = new MainViewModel(_engine, action => action(), defaultCacheFolder: @"C:\Users\sam\AppData\Local\ReplayBuffer\ring").LibrarySettings.ClipsFolder;
         clips.Choose(@"C:\Users\sam\AppData");
         Assert.Equal("The Clips folder can't contain the cache folder.", clips.Problem);
+    }
+
+    [Fact]
+    public void BothFolderPickersWordTheEnginesNestingRefusal()
+    {
+        // Story 10.9: another client set the cache folder, so only the engine knows; each picker says it plainly.
+        _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.RingPathInvalid, "The cache folder and the Clips folder can't be inside each other.");
+        var model = new MainViewModel(_engine, action => action());
+        var clips = model.LibrarySettings.ClipsFolder;
+        clips.Validate = _ => null;
+        model.LibrarySettings.Confirm = _ => true;
+        clips.Choose(@"D:\");
+        Assert.Equal("The Clips folder can't contain the cache folder.", clips.Problem);
+        Assert.Null(model.LibrarySettings.Message);
+
+        var cache = model.ReplayBuffer.CacheFolder;
+        model.ReplayBuffer.IsDisk = true;
+        cache.Validate = _ => null;
+        cache.Choose(@"D:\Clips\Cache");
+        Assert.Equal("The cache folder can't be inside the Clips folder.", cache.Problem);
+        Assert.Null(model.ReplayBuffer.Message);
     }
 
     private LibrarySettingsPage Create(CleanupSettings? cleanup = null)

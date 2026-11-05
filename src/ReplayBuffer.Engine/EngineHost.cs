@@ -254,6 +254,7 @@ internal sealed class EngineHost : IAsyncDisposable
         try
         {
             var load = SettingsStore.Open(instance.RoamingDataFolder);
+            load.Store.FolderDefaults = (Path.Combine(instance.LocalDataFolder, "ring"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name));
 
             // The Library at start seeds the hub's initial state, as the device list does.
             string OutputFolder() =>

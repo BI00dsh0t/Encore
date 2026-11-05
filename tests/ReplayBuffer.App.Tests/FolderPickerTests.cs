@@ -8,6 +8,7 @@ namespace ReplayBuffer.App.Tests;
 public sealed class FolderPickerTests
 {
     private readonly List<SettingsOp> _sent = [];
+    private string? _refusal;
 
     [Fact]
     public void APickSendsSetUseDefaultSendsRemoveAndACancelSendsNothing()
@@ -61,6 +62,22 @@ public sealed class FolderPickerTests
     }
 
     [Fact]
+    public void AnEngineRefusalTheHostWordsShowsOnThePicker()
+    {
+        var picker = Create();
+        picker.Show(@"D:\Clips", "");
+        picker.RefusalText = code => code == "ring-path-invalid" ? "The Clips folder can't contain the cache folder." : null;
+        _refusal = "ring-path-invalid";
+        picker.Dialog = _ => @"D:\";
+
+        picker.BrowseCommand.Execute(null);
+
+        Assert.Single(_sent);
+        Assert.Equal("The Clips folder can't contain the cache folder.", picker.Problem);
+        Assert.Equal(@"D:\Clips", picker.PathText);
+    }
+
+    [Fact]
     public void OpenInExplorerIsOffForAMissingFolderAndTheFreeSpaceShows()
     {
         var folder = Path.Combine(Path.GetTempPath(), "rb-picker-" + Guid.NewGuid().ToString("N"));
@@ -91,6 +108,6 @@ public sealed class FolderPickerTests
     private FolderPicker Create() => new(Keys.OutputFolder, ops =>
     {
         _sent.AddRange(ops);
-        return Task.CompletedTask;
+        return Task.FromResult(_refusal);
     });
 }

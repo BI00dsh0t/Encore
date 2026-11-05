@@ -18,15 +18,15 @@ namespace ReplayBuffer.App.Settings;
 internal sealed class FolderPicker : Observable
 {
     private readonly SettingKey<string?> _key;
-    private readonly Func<IReadOnlyList<SettingsOp>, Task> _send;
+    private readonly Func<IReadOnlyList<SettingsOp>, Task<string?>> _send;
     private string? _value;
     private string _defaultPath = "";
     private string? _problem;
     private bool _isEnabled = true;
 
     /// <param name="key">The nullable folder key it sets and removes.</param>
-    /// <param name="send">Sends the ops, as the hosting page's <c>SendAsync</c>.</param>
-    public FolderPicker(SettingKey<string?> key, Func<IReadOnlyList<SettingsOp>, Task> send)
+    /// <param name="send">Sends the ops, as the hosting page's <c>SendAsync</c>; returns a refusal's error code, or null.</param>
+    public FolderPicker(SettingKey<string?> key, Func<IReadOnlyList<SettingsOp>, Task<string?>> send)
     {
         _key = key;
         _send = send;
@@ -55,6 +55,9 @@ internal sealed class FolderPicker : Observable
 
     /// <summary>Why a chosen folder can't be used, in plain words, or null when it can. Checked before anything is sent.</summary>
     public Func<string, string?> Validate { get; set; } = _ => null;
+
+    /// <summary>The plain words for an engine refusal's error code, or null to leave it to the page's error bar.</summary>
+    public Func<string, string?> RefusalText { get; set; } = _ => null;
 
     /// <summary>Asks before a change (null: back to the default); true goes ahead. By default, always.</summary>
     public Func<string?, bool> Confirm { get; set; } = _ => true;
@@ -187,7 +190,7 @@ internal sealed class FolderPicker : Observable
             return;
         }
 
-        _ = _send([SettingsValues.SetGlobal(_key, path)]);
+        _ = SendAsync([SettingsValues.SetGlobal(_key, path)]);
     }
 
     /// <summary>"212 GB", "1.8 TB": decimal units, one decimal under 10 and from TB.</summary>
@@ -239,7 +242,16 @@ internal sealed class FolderPicker : Observable
         }
 
         Problem = null;
-        _ = _send([SettingsOp.RemoveGlobal(_key.Name)]);
+        _ = SendAsync([SettingsOp.RemoveGlobal(_key.Name)]);
+    }
+
+    // An engine refusal the picker words shows on its danger line, and the old path stays.
+    private async Task SendAsync(IReadOnlyList<SettingsOp> ops)
+    {
+        if (await _send(ops) is { } code && RefusalText(code) is { } text)
+        {
+            Problem = text;
+        }
     }
 
     private void RaiseCommands()

@@ -46,8 +46,9 @@ internal sealed class LibrarySettingsPage : SettingsPage
         _engine = engine;
         DefaultCacheFolder = defaultCacheFolder;
         Confirm = ConfirmWithPrompt;
-        ClipsFolder = new FolderPicker(Keys.OutputFolder, ops => SendAsync(ops))
+        ClipsFolder = new FolderPicker(Keys.OutputFolder, ops => SendForPickerAsync(ops, ErrorCodes.RingPathInvalid))
         {
+            RefusalText = code => code == ErrorCodes.RingPathInvalid ? ReplayBufferSettingsPage.ClipsContainsCache : null,
             DialogTitle = "Choose the Clips folder",
             Help = "Where Clips and Recordings are saved. Each game gets its own folder, and Monitor Recordings have theirs.",
             Validate = ValidateClipsFolder,

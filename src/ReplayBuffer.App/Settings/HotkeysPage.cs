@@ -27,7 +27,7 @@ internal sealed class HotkeysPage : SettingsPage
         : base(sender)
     {
         Rows = [.. Enum.GetValues<HotkeyAction>().Select(a => new HotkeyRow(this, a, Label(a)))];
-        Monitor = new MonitorPicker(engine, ops => SendAsync(ops), message => Message = message);
+        Monitor = new MonitorPicker(engine, async ops => await SendAsync(ops), message => Message = message);
         ShowRows();
     }
 

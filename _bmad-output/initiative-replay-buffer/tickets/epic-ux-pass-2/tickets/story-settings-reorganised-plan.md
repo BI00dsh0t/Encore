@@ -6,7 +6,7 @@ status: review
 
 # Plan: 10.9 Settings reorganised
 
-**Intent:** the settings pages rearranged to EXPERIENCE.md's Information Architecture, Settings pages and Folder picker sections. Only labels, layout and where controls sit change. No settings key, message or Contracts type changes (AD-22, AD-24), and no Engine or Core code changes.
+**Intent:** the settings pages rearranged to EXPERIENCE.md's Information Architecture, Settings pages and Folder picker sections. Only labels, layout and where controls sit change. No settings key, message or Contracts type changes (AD-22, AD-24); the one additive change is the error code `ring-path-invalid`, with the engine guard behind it.
 
 ## Done
 
@@ -38,11 +38,12 @@ status: review
 ## Deviations
 
 - **The path box has no middle ellipsis.** It's a read-only TextBox, so the whole path stays selectable and copyable, and the tooltip shows it in full.
-- **No `ring-path-invalid` error code exists in the engine.** The App checks the cache folder before sending: it may not be inside the Clips folder, and the folder must be writable, probed with a delete-on-close file in the nearest existing folder. A refused update from the engine still shows on the page's error bar.
+- **The folder rule is enforced in both places.** The App checks the cache folder (inside the Clips folder, or not writable) and the Clips folder (containing the cache folder, or not writable) before sending. The engine, as the one settings writer (AD-4), refuses any `settings.update` that sets or removes `ringPath` or `outputFolder` and leaves the two folders nested either way, defaults included, with the additive `ring-path-invalid` (AD-22). That code is `ErrorCodes.RingPathInvalid`, checked by `RingPathRule` and enforced through `SettingsStore.FolderDefaults`, which `EngineHost` sets. Each picker shows the refusal in its own plain words on its danger line, not on the page's error bar.
 - **Use default for the Clips folder now sends `remove`** where it sent a `set` to null, as the ticket asks. The engine treats both as the default.
 
 ## Tests (lean)
 
+- `SettingsStoreTests.AnUpdateThatNestsTheCacheAndClipsFoldersIsRefusedEitherWay` (Engine).
 - `FolderPickerTests`: a pick sends `set`, Use default sends `remove`, and a cancel sends nothing; a refused pick shows its text and keeps the old path; Open in Explorer is off for a missing folder; the free-space line.
 - `ReplayBufferSettingsPageTests.TheCacheFolderIsEnabledOnlyUnderDiskAndSendsRingPathAndTimeBetweenSaves`, plus the existing bufferWindow, replayStorage and video test.
 - `MonitorPickerTests` (was `RecordingsSettingsPageTests`): the screen picker on Hotkeys sends `monitorRecordingMonitor`.
@@ -53,4 +54,4 @@ status: review
 ## Log
 
 - 2026-11-05: built and verified; READY FOR QA.
-- 2026-11-05: QA round 1, 1 finding fixed: the Clips folder is refused when it contains the cache folder (its ringPath, else the engine default), "The Clips folder can't contain the cache folder." The containment check also handled a drive root wrongly (D: never matched), now fixed for both directions.
+- 2026-11-05: QA round 1, 1 finding fixed: the Clips folder is refused when it contains the cache folder (its ringPath, else the engine default), "The Clips folder can't contain the cache folder." The containment check also handled a drive root wrongly (D: never matched), now fixed for both directions. On the coordinator's call, the engine now refuses a nesting update with `ring-path-invalid`, and the pickers word it (`BothFolderPickersWordTheEnginesNestingRefusal`, `AnEngineRefusalTheHostWordsShowsOnThePicker`).

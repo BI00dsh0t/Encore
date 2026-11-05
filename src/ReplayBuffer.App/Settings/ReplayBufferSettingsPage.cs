@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Windows;
+using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
 
@@ -51,8 +52,9 @@ internal sealed class ReplayBufferSettingsPage(SettingsSender sender, string? pr
         $"ReplayBuffer keeps the last part of your game ready, so {(_saveKey is { } key ? HotkeysPage.Describe(key) : "the Save Clip key")} can save it as a Clip.";
 
     /// <summary>The cache folder (<c>ringPath</c>): enabled only under Disk.</summary>
-    public FolderPicker CacheFolder => _cacheFolder ??= new FolderPicker(Keys.RingPath, ops => SendAsync(ops))
+    public FolderPicker CacheFolder => _cacheFolder ??= new FolderPicker(Keys.RingPath, ops => SendForPickerAsync(ops, ErrorCodes.RingPathInvalid))
     {
+        RefusalText = code => code == ErrorCodes.RingPathInvalid ? CacheInsideClips : null,
         DialogTitle = "Choose the cache folder",
         DisabledCaption = "Used only in Disk mode",
         Validate = ValidateCacheFolder,
