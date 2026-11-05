@@ -36,6 +36,9 @@ IDXGIOutput2
 SHParseDisplayName
 SHOpenFolderAndSelectItems
 ILFree
+ILFindLastID
+SHFileOperation
+SHFILEOPSTRUCTW
 DwmSetWindowAttribute
 DwmGetWindowAttribute
 DwmExtendFrameIntoClientArea

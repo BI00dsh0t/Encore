@@ -18,10 +18,17 @@ namespace ReplayBuffer.App.Library;
 /// asked by absolute path once the item is written, never while it is. Each row's star (story 7.4)
 /// sends <c>library.setFavourite</c> and changes only when the snapshot does. The list is grouped by
 /// game or by day and filtered by game, date and Favourite (story 7.5), a choice remembered per
-/// instance. Each row opens in the default player, shows in Explorer and copies as a file drop
-/// (story 7.6) through the shell, by absolute path, after checking only that the file still exists.
-/// Each row renames inline and deletes after a confirmation (story 7.7), both through the engine by
-/// the row's identity and both disabled while it is locked; a refusal shows its short message.
+/// instance. Rows rename inline through the engine by the row's identity (story 7.7), disabled while
+/// locked; a refusal shows its short message.
+/// <para>
+/// Story 10.2 makes the list selectable with Explorer's rules. The selection is this page's set of item
+/// paths, with an anchor and a focused path, never the list control's: a filter hides selected items but
+/// keeps them, a snapshot drops the ones that left the Library, and the App's own rename carries them to
+/// the new path. Every action acts on the shown selected rows, in shown order, through today's per-item
+/// engine commands sent one at a time (AD-3, AD-24): Favourite, Delete (one confirmation, Favourites and
+/// files being written left out), Rename; or through the shell by absolute path after checking only that
+/// each file exists (AD-1): Open, Copy (one file drop), Copy to folder and Show in Explorer.
+/// </para>
 /// Members run on the UI thread.
 /// </summary>
 internal sealed class LibraryPage : Observable
@@ -31,6 +38,9 @@ internal sealed class LibraryPage : Observable
 
     private const string OtherKey = "other";
     private const string DayFormat = "yyyy-MM-dd";
+    private const int MaxExplorerWindows = 3;
+    // A delete of more items than this shows its progress in the command bar.
+    private const int ProgressFrom = 10;
     private static readonly string MonitorRecordingsKey = FolderKey(MonitorRecordings);
 
     private readonly IEngineSession _engine;
@@ -39,10 +49,23 @@ internal sealed class LibraryPage : Observable
     private readonly TimeProvider _time;
     private readonly ILibraryShell _shell;
     private readonly Func<string, bool> _confirmDelete;
+    private readonly Func<string?> _pickFolder;
+    private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
+    // The App's own renames in flight: old path → the path the item gets once the snapshot shows it.
+    private readonly Dictionary<string, string> _renames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<RelayCommand> _selectionCommands = [];
     private readonly Dictionary<string, LibraryRow> _rows = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, LibraryGroupHeader> _headers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, LibraryGameOption> _gameOptions = new(StringComparer.Ordinal);
     private readonly LibraryGameOption _allGames = new(null) { Name = "All games" };
+    private List<LibraryRow> _shownRows = [];
+    private Dictionary<string, int> _shownIndex = new(StringComparer.OrdinalIgnoreCase);
+    private List<LibraryRow> _shownSelected = [];
+    private string? _anchor;
+    private string? _focus;
+    private bool _deleting;
+    private int _deleteDone;
+    private int _deleteTotal;
     private List<(LibraryRow Row, LibraryItem Item, string Key)> _shown = [];
     private bool _hasSnapshot;
     private FrameworkElement? _view;
@@ -59,15 +82,17 @@ internal sealed class LibraryPage : Observable
     /// <param name="thumbnails">Where the rows' thumbnails come from; without it, every row shows the generic glyph.</param>
     /// <param name="viewStateFile">Where the view choices are remembered; without it, they last only this run.</param>
     /// <param name="time">The clock the date filter and day headers read "today" from.</param>
-    /// <param name="shell">The row actions' shell; the Windows shell without it.</param>
-    /// <param name="confirmDelete">Asks whether to move the named file to the Recycle Bin; a Yes/No message box over the view's window without it.</param>
+    /// <param name="shell">The actions' shell; the Windows shell without it.</param>
+    /// <param name="confirmDelete">Asks the delete's whole question, true for Yes; a themed Yes/No prompt over the view's window without it.</param>
+    /// <param name="pickFolder">Picks the folder Copy to folder copies into, null on a cancel; the Windows folder dialog without it.</param>
     public LibraryPage(
         IEngineSession engine,
         LibraryThumbnails? thumbnails = null,
         string? viewStateFile = null,
         TimeProvider? time = null,
         ILibraryShell? shell = null,
-        Func<string, bool>? confirmDelete = null)
+        Func<string, bool>? confirmDelete = null,
+        Func<string?>? pickFolder = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _thumbnails = thumbnails;
@@ -75,7 +100,16 @@ internal sealed class LibraryPage : Observable
         _time = time ?? TimeProvider.System;
         _shell = shell ?? new WindowsLibraryShell();
         _confirmDelete = confirmDelete ?? ConfirmDelete;
+        _pickFolder = pickFolder ?? PickFolder;
         AcknowledgeCommand = new RelayCommand(() => _ = AcknowledgeAsync());
+        OpenCommand = Selection(OpenSelection, () => _shownSelected.Count == 1);
+        FavouriteSelectionCommand = Selection(() => _ = FavouriteSelectionAsync(), () => _shownSelected.Count > 0);
+        CopyCommand = Selection(CopySelection, () => _shownSelected.Any(r => !r.IsLocked));
+        CopyToFolderCommand = Selection(CopySelectionToFolder, () => _shownSelected.Any(r => !r.IsLocked));
+        ShowInExplorerCommand = Selection(ShowSelectionInExplorer, () => _shownSelected.Count > 0);
+        RenameCommand = Selection(RenameSelection, () => _shownSelected is [{ IsLocked: false }]);
+        DeleteCommand = Selection(DeleteSelection, () => _shownSelected.Any(IsDeletable));
+        ClearSelectionCommand = Selection(ClearSelection, () => _selected.Count > 0);
         Games.Add(_allGames);
 
         var view = LibraryViewState.Load(viewStateFile);
@@ -106,6 +140,71 @@ internal sealed class LibraryPage : Observable
 
     /// <summary>Sends <c>warning.dismiss</c> for the active <c>library-corrupt</c> warning.</summary>
     public ICommand AcknowledgeCommand { get; }
+
+    /// <summary>Whether any item is selected, shown or hidden by a filter: the command bar shows its actions.</summary>
+    public bool HasSelection => _selected.Count > 0;
+
+    /// <summary>Whether any selected item is shown; the actions act only on those.</summary>
+    public bool HasShownSelection => _shownSelected.Count > 0;
+
+    /// <summary>"{n} selected", every selected item still in the Library; "Deleting {k} of {n}…" while a delete of more than ten runs.</summary>
+    public string SelectionText => _deleting && _deleteTotal > ProgressFrom
+        ? string.Create(CultureInfo.InvariantCulture, $"Deleting {_deleteDone} of {_deleteTotal}…")
+        : string.Create(CultureInfo.InvariantCulture, $"{_selected.Count} selected");
+
+    /// <summary>"({m} hidden by filters)" when a filter hides some selected items; else empty.</summary>
+    public string HiddenText => _selected.Count - _shownSelected.Count is var hidden and > 0
+        ? string.Create(CultureInfo.InvariantCulture, $"({hidden} hidden by filters)")
+        : "";
+
+    /// <summary>The shown list's summary with nothing selected: "{n} items · {size}".</summary>
+    public string SummaryText
+    {
+        get
+        {
+            var size = SizeText(_shownRows.Sum(r => r.Item?.Size ?? 0));
+            return _shownRows.Count == 1
+                ? $"1 item · {size}"
+                : string.Create(CultureInfo.InvariantCulture, $"{_shownRows.Count} items · {size}");
+        }
+    }
+
+    /// <summary>"Remove from Favourites" when every shown selected item is one; else "Favourite".</summary>
+    public string FavouriteLabel =>
+        _shownSelected.Count > 0 && _shownSelected.All(r => r.IsFavourite) ? "Remove from Favourites" : "Favourite";
+
+    /// <summary>Whether exactly one selected item is shown: Open and Rename show.</summary>
+    public bool IsSingle => _shownSelected.Count == 1;
+
+    /// <summary>Why Delete is disabled, when every shown selected item is a Favourite or being written; else null.</summary>
+    public string? DeleteToolTip =>
+        _shownSelected.Count > 0 && !_shownSelected.Any(IsDeletable) ? NotDeletableText(_shownSelected) : null;
+
+    /// <summary>The focused row, when it is shown.</summary>
+    public LibraryRow? FocusedRow => _focus is not null && _shownIndex.TryGetValue(_focus, out var i) ? _shownRows[i] : null;
+
+    /// <summary>Opens the one shown selected item in its default player, even while it is being written.</summary>
+    public ICommand OpenCommand { get; }
+
+    /// <summary>Stars every shown selected item, or unstars them all when all are Favourites; one send per item that changes.</summary>
+    public ICommand FavouriteSelectionCommand { get; }
+
+    /// <summary>Puts the shown selected items that are written on the clipboard as one file drop.</summary>
+    public ICommand CopyCommand { get; }
+
+    /// <summary>Copies the shown selected items that are written into a picked folder, through the shell.</summary>
+    public ICommand CopyToFolderCommand { get; }
+
+    /// <summary>Shows the shown selected items selected in Explorer, one window per folder.</summary>
+    public ICommand ShowInExplorerCommand { get; }
+
+    /// <summary>Starts the inline rename of the one shown selected item; disabled while it is being written.</summary>
+    public ICommand RenameCommand { get; }
+
+    /// <summary>Moves the shown selected items that aren't Favourites or being written to the Recycle Bin, after one confirmation.</summary>
+    public ICommand DeleteCommand { get; }
+
+    public ICommand ClearSelectionCommand { get; }
 
     /// <summary>All the items, newest first, whatever the grouping and filters.</summary>
     public ObservableCollection<LibraryRow> Rows { get; } = [];
@@ -194,7 +293,7 @@ internal sealed class LibraryPage : Observable
         {
             if (!_rows.TryGetValue(item.Path, out var row))
             {
-                row = new LibraryRow(item.Path, r => _ = SetFavouriteAsync(r), Act, (r, name) => _ = RenameAsync(r, name), r => _ = DeleteAsync(r));
+                row = new LibraryRow(item.Path, r => _ = SetFavouriteAsync(r), (r, name) => _ = RenameAsync(r, name));
                 _rows.Add(item.Path, row);
             }
 
@@ -219,12 +318,86 @@ internal sealed class LibraryPage : Observable
             ClearActionError();
         }
 
+        // The selection follows the App's own renames, and loses what left the Library; a hidden item stays.
+        CarryRenames();
+        _selected.RemoveWhere(p => !_rows.ContainsKey(p));
+        if (_anchor is not null && !_rows.ContainsKey(_anchor))
+        {
+            _anchor = null;
+        }
+
+        var lostFocus = _focus is not null && !_rows.ContainsKey(_focus) ? _focus : null;
+        var previous = _shownRows;
+
         Sync(Rows, shown.ConvertAll(s => s.Row));
         _shown = shown;
         _hasSnapshot = true;
         SyncGames(games);
         Apply();
+
+        if (lostFocus is not null)
+        {
+            _focus = NextFocus(previous, lostFocus);
+            RefreshSelection();
+        }
     }
+
+    // A pending rename whose new path has arrived, and whose old one has gone, moves the selection,
+    // anchor and focus there; one whose old path has gone otherwise is dropped.
+    private void CarryRenames()
+    {
+        foreach (var (from, to) in _renames.ToList())
+        {
+            if (_rows.ContainsKey(from))
+            {
+                continue;
+            }
+
+            _renames.Remove(from);
+            if (!_rows.TryGetValue(to, out var renamed))
+            {
+                continue;
+            }
+
+            if (_selected.Remove(from))
+            {
+                _selected.Add(renamed.Path);
+            }
+
+            _anchor = Same(_anchor, from) ? renamed.Path : _anchor;
+            _focus = Same(_focus, from) ? renamed.Path : _focus;
+        }
+    }
+
+    // The next row of the previous shown order that is still shown, else the previous one.
+    private string? NextFocus(List<LibraryRow> previous, string lost)
+    {
+        var index = previous.FindIndex(r => Same(r.Path, lost));
+        if (index < 0)
+        {
+            return null;
+        }
+
+        for (var i = index + 1; i < previous.Count; i++)
+        {
+            if (_shownIndex.ContainsKey(previous[i].Path))
+            {
+                return previous[i].Path;
+            }
+        }
+
+        for (var i = index - 1; i >= 0; i--)
+        {
+            if (_shownIndex.ContainsKey(previous[i].Path))
+            {
+                return previous[i].Path;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool Same(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The item's game: its group key and the name its header shows.</summary>
     /// <remarks>
@@ -363,6 +536,14 @@ internal sealed class LibraryPage : Observable
         }
 
         Sync(Entries, wanted);
+        _shownRows = wanted.OfType<LibraryRow>().ToList();
+        _shownIndex = new Dictionary<string, int>(_shownRows.Count, StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < _shownRows.Count; i++)
+        {
+            _shownIndex[_shownRows[i].Path] = i;
+        }
+
+        RefreshSelection();
     }
 
     private static string DayName(DateTime day, DateTime today) =>
@@ -456,52 +637,329 @@ internal sealed class LibraryPage : Observable
         }
     }
 
-    // One shell action on the row's file; only its existence is checked, never its contents (AD-1).
-    private void Act(LibraryRow row, LibraryAction action)
+    private RelayCommand Selection(Action execute, Func<bool> canExecute)
     {
-        var folder = _libraryFolder;
-        var path = string.IsNullOrEmpty(folder) ? null : System.IO.Path.Combine(folder, row.Path);
-        if (path is null || !System.IO.File.Exists(path))
+        var command = new RelayCommand(execute, () => !_deleting && canExecute());
+        _selectionCommands.Add(command);
+        return command;
+    }
+
+    // Sets each row's flags from the set, then tells the command bar and the commands.
+    private void RefreshSelection()
+    {
+        _shownSelected = _shownRows.Where(r => _selected.Contains(r.Path)).ToList();
+        foreach (var row in _rows.Values)
         {
-            Fail(row, "That file no longer exists.");
+            row.IsSelected = _selected.Contains(row.Path);
+            row.IsFocused = Same(row.Path, _focus);
+        }
+
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(HasShownSelection));
+        OnPropertyChanged(nameof(SelectionText));
+        OnPropertyChanged(nameof(HiddenText));
+        OnPropertyChanged(nameof(SummaryText));
+        OnPropertyChanged(nameof(FavouriteLabel));
+        OnPropertyChanged(nameof(IsSingle));
+        OnPropertyChanged(nameof(DeleteToolTip));
+        OnPropertyChanged(nameof(FocusedRow));
+        foreach (var command in _selectionCommands)
+        {
+            command.RaiseCanExecuteChanged();
+        }
+    }
+
+    /// <summary>
+    /// A click on a shown row: plain selects only it; Ctrl toggles it; Shift selects the range from the
+    /// anchor to it in shown order, headers skipped; Ctrl+Shift adds that range. Plain and Ctrl make it the
+    /// anchor; every click makes it the focus. With no shown anchor, the row is the anchor.
+    /// </summary>
+    public void Click(LibraryRow row, bool ctrl, bool shift)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (!_shownIndex.ContainsKey(row.Path))
+        {
             return;
         }
 
+        if (shift)
+        {
+            SelectRange(row.Path, add: ctrl);
+        }
+        else if (ctrl)
+        {
+            if (!_selected.Remove(row.Path))
+            {
+                _selected.Add(row.Path);
+            }
+
+            _anchor = row.Path;
+        }
+        else
+        {
+            _selected.Clear();
+            _selected.Add(row.Path);
+            _anchor = row.Path;
+        }
+
+        _focus = row.Path;
+        RefreshSelection();
+    }
+
+    /// <summary>
+    /// The arrows, Page Up/Down, Home and End: plain selects only the target; Shift selects the range from
+    /// the anchor; Ctrl moves only the focus. Clamped to the shown rows; <paramref name="pageRows"/> is a page.
+    /// </summary>
+    public void MoveFocus(LibraryMove move, int pageRows, bool ctrl, bool shift)
+    {
+        if (_shownRows.Count == 0)
+        {
+            return;
+        }
+
+        var current = FocusedRow is { } focused ? _shownIndex[focused.Path] : -1;
+        var page = Math.Max(1, pageRows);
+        var target = move switch
+        {
+            LibraryMove.Up => current < 0 ? 0 : current - 1,
+            LibraryMove.Down => current < 0 ? 0 : current + 1,
+            LibraryMove.PageUp => current < 0 ? 0 : current - page,
+            LibraryMove.PageDown => current < 0 ? 0 : current + page,
+            LibraryMove.Home => 0,
+            _ => _shownRows.Count - 1,
+        };
+        var path = _shownRows[Math.Clamp(target, 0, _shownRows.Count - 1)].Path;
+
+        if (shift)
+        {
+            SelectRange(path, add: ctrl);
+        }
+        else if (!ctrl)
+        {
+            _selected.Clear();
+            _selected.Add(path);
+            _anchor = path;
+        }
+
+        _focus = path;
+        RefreshSelection();
+    }
+
+    // Selects (or adds) the shown rows from the anchor to path; a missing anchor becomes path.
+    private void SelectRange(string path, bool add)
+    {
+        if (_anchor is null || !_shownIndex.ContainsKey(_anchor))
+        {
+            _anchor = path;
+        }
+
+        var (from, to) = (_shownIndex[_anchor], _shownIndex[path]);
+        if (!add)
+        {
+            _selected.Clear();
+        }
+
+        for (var i = Math.Min(from, to); i <= Math.Max(from, to); i++)
+        {
+            _selected.Add(_shownRows[i].Path);
+        }
+    }
+
+    /// <summary>Ctrl+A: the selection becomes every shown row.</summary>
+    public void SelectAll()
+    {
+        _selected.Clear();
+        _selected.UnionWith(_shownRows.Select(r => r.Path));
+        RefreshSelection();
+    }
+
+    /// <summary>Ctrl+Space: toggles the focused row, which becomes the anchor.</summary>
+    public void ToggleFocusedSelection()
+    {
+        if (FocusedRow is { } row)
+        {
+            Click(row, ctrl: true, shift: false);
+        }
+    }
+
+    /// <summary>Esc, the ✕, or a click on empty space: nothing selected; the focus stays.</summary>
+    public void ClearSelection()
+    {
+        _selected.Clear();
+        RefreshSelection();
+    }
+
+    /// <summary>
+    /// Before the context menu opens on <paramref name="row"/>: a row outside the selection becomes the only
+    /// one selected; a row in it becomes the focus, the selection unchanged.
+    /// </summary>
+    public void PrepareContextMenu(LibraryRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        if (!_selected.Contains(row.Path))
+        {
+            Click(row, ctrl: false, shift: false);
+        }
+        else if (!Same(_focus, row.Path) && _shownIndex.ContainsKey(row.Path))
+        {
+            _focus = row.Path;
+            RefreshSelection();
+        }
+    }
+
+    /// <summary>Enter or a double-click: opens the focused row.</summary>
+    public void OpenFocused()
+    {
+        if (!_deleting && FocusedRow is { } row)
+        {
+            Open(row);
+        }
+    }
+
+    /// <summary>Space: toggles the focused row's Favourite.</summary>
+    public void ToggleFocusedFavourite()
+    {
+        if (FocusedRow is { } row)
+        {
+            _ = SetFavouriteAsync(row);
+        }
+    }
+
+    private static bool IsDeletable(LibraryRow row) => !row.IsFavourite && !row.IsLocked && row.Item is not null;
+
+    private static string NotDeletableText(IReadOnlyList<LibraryRow> rows)
+    {
+        var favourites = rows.Count(r => r.IsFavourite);
+        if (favourites == rows.Count)
+        {
+            return rows.Count == 1
+                ? "Favourites can't be deleted. Remove it from Favourites first."
+                : "Favourites can't be deleted. Remove them from Favourites first.";
+        }
+
+        if (favourites == 0)
+        {
+            return rows.Count == 1 ? "That file is still being written." : "Those files are still being written.";
+        }
+
+        return "Favourites and files being saved can't be deleted.";
+    }
+
+    private string? Absolute(LibraryRow row) =>
+        string.IsNullOrEmpty(_libraryFolder) ? null : System.IO.Path.Combine(_libraryFolder, row.Path);
+
+    // The rows' absolute paths whose files still exist, in order; when none does, the error and null.
+    // Only existence is checked, never the contents (AD-1).
+    private List<string>? Existing(IReadOnlyList<LibraryRow> rows)
+    {
+        var paths = rows.Select(Absolute).OfType<string>().Where(System.IO.File.Exists).ToList();
+        if (paths.Count == 0)
+        {
+            Fail(rows[0].Path, "That file no longer exists.");
+            return null;
+        }
+
+        return paths;
+    }
+
+    // One shell call: a success clears the error, any failure shows the short message.
+    private void Shell(string row, Action action, string failure)
+    {
         try
         {
-            switch (action)
-            {
-                case LibraryAction.Open:
-                    _shell.Open(path);
-                    break;
-                case LibraryAction.ShowInExplorer:
-                    _shell.ShowInExplorer(path);
-                    break;
-                default:
-                    _shell.Copy(path);
-                    break;
-            }
+            action();
         }
 #pragma warning disable CA1031 // Any shell failure is shown as a short error, never a crash.
         catch (Exception)
 #pragma warning restore CA1031
         {
-            var verb = action switch
-            {
-                LibraryAction.Open => "open",
-                LibraryAction.ShowInExplorer => "show",
-                _ => "copy",
-            };
-            Fail(row, $"Couldn't {verb} the file.");
+            Fail(row, failure);
             return;
         }
 
         ClearActionError();
     }
 
-    private void Fail(LibraryRow row, string message)
+    private void Open(LibraryRow row)
     {
-        _actionErrorPath = row.Path;
+        if (Existing([row]) is [var path])
+        {
+            Shell(row.Path, () => _shell.Open(path), "Couldn't open the file.");
+        }
+    }
+
+    private void OpenSelection()
+    {
+        if (_shownSelected is [var row])
+        {
+            Open(row);
+        }
+    }
+
+    private void CopySelection()
+    {
+        var rows = _shownSelected.Where(r => !r.IsLocked).ToList();
+        if (rows.Count > 0 && Existing(rows) is { } paths)
+        {
+            Shell(rows[0].Path, () => _shell.Copy(paths), paths.Count == 1 ? "Couldn't copy the file." : "Couldn't copy the files.");
+        }
+    }
+
+    private void CopySelectionToFolder()
+    {
+        var rows = _shownSelected.Where(r => !r.IsLocked).ToList();
+        if (rows.Count > 0 && Existing(rows) is { } paths && _pickFolder() is { } folder)
+        {
+            Shell(rows[0].Path, () => _shell.CopyToFolder(paths, folder), "Couldn't copy the files.");
+        }
+    }
+
+    // One Explorer window per folder with its files selected; past three folders, the Library's folder.
+    private void ShowSelectionInExplorer()
+    {
+        var rows = _shownSelected.ToList();
+        if (rows.Count == 0 || Existing(rows) is not { } paths)
+        {
+            return;
+        }
+
+        var folders = paths
+            .GroupBy(p => System.IO.Path.GetDirectoryName(p)!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Folder: g.Key, Files: (IReadOnlyList<string>)g.ToList()))
+            .ToList();
+        Shell(
+            rows[0].Path,
+            () =>
+            {
+                if (folders.Count > MaxExplorerWindows)
+                {
+                    _shell.OpenFolder(_libraryFolder!);
+                    return;
+                }
+
+                foreach (var (folder, files) in folders)
+                {
+                    _shell.ShowInExplorer(folder, files);
+                }
+            },
+            paths.Count == 1 ? "Couldn't show the file." : "Couldn't show the files.");
+    }
+
+    private void RenameSelection()
+    {
+        if (_shownSelected is [var row])
+        {
+            row.RenameCommand.Execute(null);
+        }
+    }
+
+    private void Fail(string? path, string message)
+    {
+        _actionErrorPath = path;
         ActionError = message;
     }
 
@@ -519,13 +977,29 @@ internal sealed class LibraryPage : Observable
             return;
         }
 
+        await SendFavouriteAsync(item, !item.Favourite);
+    }
+
+    private async Task SendFavouriteAsync(LibraryItem item, bool favourite)
+    {
         try
         {
-            await _engine.SendAsync(LibraryMessages.SetFavourite, new LibrarySetFavourite(item.Path, item.Size, item.Modified, !item.Favourite));
+            await _engine.SendAsync(LibraryMessages.SetFavourite, new LibrarySetFavourite(item.Path, item.Size, item.Modified, favourite));
         }
         catch (ErrorCodeException)
         {
             // A stale identity or a lost engine; the snapshot carries the truth.
+        }
+    }
+
+    // Every shown selected item to the bar's state, one send per item that changes, in shown order.
+    private async Task FavouriteSelectionAsync()
+    {
+        var rows = _shownSelected.ToList();
+        var favourite = !rows.All(r => r.IsFavourite);
+        foreach (var item in rows.Where(r => r.IsFavourite != favourite).Select(r => r.Item).OfType<LibraryItem>().ToList())
+        {
+            await SendFavouriteAsync(item, favourite);
         }
     }
 
@@ -536,7 +1010,8 @@ internal sealed class LibraryPage : Observable
         return name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
     }
 
-    // The engine renames by the identity last shown (AD-3); the row follows the snapshot.
+    // The engine renames by the identity last shown (AD-3); the row follows the snapshot, and the
+    // selection follows it to the new path once the snapshot shows it.
     private async Task RenameAsync(LibraryRow row, string text)
     {
         if (row.Item is not { } item)
@@ -544,38 +1019,116 @@ internal sealed class LibraryPage : Observable
             return;
         }
 
-        await SendActionAsync(
-            row,
-            () => _engine.SendAsync(LibraryMessages.Rename, new LibraryRename(item.Path, item.Size, item.Modified, BaseName(text))),
-            "Couldn't rename the file.");
-    }
-
-    // Nothing is sent unless the confirmation says yes.
-    private async Task DeleteAsync(LibraryRow row)
-    {
-        if (row.Item is not { } item || !_confirmDelete(row.Name))
-        {
-            return;
-        }
-
-        await SendActionAsync(
-            row,
-            () => _engine.SendAsync(LibraryMessages.Delete, new LibraryDelete(item.Path, item.Size, item.Modified)),
-            "Couldn't delete the file.");
-    }
-
-    // A row's command through the engine: a success clears the error, a refusal shows its short message.
-    private async Task SendActionAsync(LibraryRow row, Func<Task> send, string otherwise)
-    {
+        var name = BaseName(text);
+        _renames[item.Path] = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(item.Path) ?? "", name + ".mp4");
         try
         {
-            await send();
+            await _engine.SendAsync(LibraryMessages.Rename, new LibraryRename(item.Path, item.Size, item.Modified, name));
             ClearActionError();
         }
         catch (ErrorCodeException e)
         {
-            Fail(row, RefusalText(e.Code, otherwise));
+            _renames.Remove(item.Path);
+            Fail(row.Path, RefusalText(e.Code, "Couldn't rename the file."));
         }
+    }
+
+    /// <summary>
+    /// Delete, the key or the command: one confirmation for the shown selected items that aren't Favourites
+    /// or being written, naming the ones kept, then one <c>library.delete</c> each. With nothing deletable,
+    /// nothing is asked or sent and the error says why.
+    /// </summary>
+    public void DeleteSelection()
+    {
+        if (_deleting || _shownSelected.Count == 0)
+        {
+            return;
+        }
+
+        var shown = _shownSelected.ToList();
+        var deletable = shown.Where(IsDeletable).ToList();
+        if (deletable.Count == 0)
+        {
+            Fail(shown[0].Path, NotDeletableText(shown));
+            return;
+        }
+
+        if (_confirmDelete(DeleteQuestion(shown, deletable)))
+        {
+            _ = DeleteAsync(deletable.ConvertAll(r => r.Item!));
+        }
+    }
+
+    private static string DeleteQuestion(List<LibraryRow> shown, List<LibraryRow> deletable)
+    {
+        var question = deletable.Count == 1
+            ? $"Move “{deletable[0].Name}” to the Recycle Bin?"
+            : string.Create(CultureInfo.InvariantCulture, $"Move {deletable.Count} items ({SizeText(deletable.Sum(r => r.Item!.Size))}) to the Recycle Bin?");
+
+        var favourites = shown.Count(r => r.IsFavourite);
+        var saving = shown.Count(r => !r.IsFavourite && r.IsLocked);
+        var kept = new List<string>(2);
+        if (favourites > 0)
+        {
+            kept.Add(favourites == 1 ? "1 Favourite" : string.Create(CultureInfo.InvariantCulture, $"{favourites} Favourites"));
+        }
+
+        if (saving > 0)
+        {
+            kept.Add(saving == 1 ? "1 file being saved" : string.Create(CultureInfo.InvariantCulture, $"{saving} files being saved"));
+        }
+
+        return kept.Count == 0
+            ? question
+            : $"{question}\n{string.Join(" and ", kept)} {(favourites + saving == 1 ? "is" : "are")} kept.";
+    }
+
+    // One send at a time in shown order, by the identity as shown (AD-3); the rows leave as the snapshot says.
+    private async Task DeleteAsync(List<LibraryItem> items)
+    {
+        _deleting = true;
+        _deleteTotal = items.Count;
+        var failures = new Dictionary<string, int>(StringComparer.Ordinal);
+        string? firstFailed = null;
+        var deleted = 0;
+        try
+        {
+            for (var i = 0; i < items.Count; i++)
+            {
+                _deleteDone = i + 1;
+                RefreshSelection();
+                var item = items[i];
+                try
+                {
+                    await _engine.SendAsync(LibraryMessages.Delete, new LibraryDelete(item.Path, item.Size, item.Modified));
+                    deleted++;
+                }
+                catch (ErrorCodeException e)
+                {
+                    failures[e.Code] = failures.GetValueOrDefault(e.Code) + 1;
+                    firstFailed ??= item.Path;
+                }
+            }
+        }
+        finally
+        {
+            _deleting = false;
+            RefreshSelection();
+        }
+
+        if (failures.Count == 0)
+        {
+            ClearActionError();
+            return;
+        }
+
+        // The most common reason wins; a tie goes to the first seen.
+        var code = failures.MaxBy(f => f.Value).Key;
+        var failed = items.Count - deleted;
+        Fail(firstFailed, items.Count == 1
+            ? RefusalText(code, "Couldn't delete the file.")
+            : string.Create(CultureInfo.InvariantCulture, $"Deleted {deleted} of {items.Count}. ")
+                + RefusalText(code, failed == 1 ? "1 file couldn't be deleted." : string.Create(CultureInfo.InvariantCulture, $"{failed} files couldn't be deleted.")));
     }
 
     private static string RefusalText(string code, string otherwise) => code switch
@@ -588,8 +1141,16 @@ internal sealed class LibraryPage : Observable
         _ => otherwise,
     };
 
-    private bool ConfirmDelete(string name) =>
-        Prompts.YesNo(_view, $"Move “{name}” to the Recycle Bin?", "Delete", MessageBoxImage.Question);
+    private bool ConfirmDelete(string question) =>
+        Prompts.YesNo(_view, question, "Delete", MessageBoxImage.Question);
+
+    private string? PickFolder()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Copy to folder" };
+        var owner = _view is null ? null : Window.GetWindow(_view);
+        var picked = owner is null ? dialog.ShowDialog() : dialog.ShowDialog(owner);
+        return picked == true ? dialog.FolderName : null;
+    }
 
     private async Task AcknowledgeAsync()
     {
@@ -637,15 +1198,11 @@ internal sealed class LibraryPage : Observable
 
 /// <summary>One Library item as the page shows it.</summary>
 /// <param name="setFavourite">Sends the row's Favourite toggle; the star command's action.</param>
-/// <param name="act">Runs a shell action on the row's file; the Open, Show in Explorer and Copy commands' action.</param>
 /// <param name="rename">Sends the row's rename with the edited text; the commit's action.</param>
-/// <param name="delete">Confirms and sends the row's delete; the Delete command's action.</param>
 internal sealed class LibraryRow(
     string path,
     Action<LibraryRow>? setFavourite = null,
-    Action<LibraryRow, LibraryAction>? act = null,
-    Action<LibraryRow, string>? rename = null,
-    Action<LibraryRow>? delete = null) : Observable
+    Action<LibraryRow, string>? rename = null) : Observable
 {
     private string _game = "";
     private string _date = "";
@@ -654,14 +1211,12 @@ internal sealed class LibraryRow(
     private ImageSource? _thumbnail;
     private bool _isLocked;
     private bool _isFavourite;
+    private bool _isSelected;
+    private bool _isFocused;
     private RelayCommand? _favouriteCommand;
-    private RelayCommand? _openCommand;
-    private RelayCommand? _showInExplorerCommand;
-    private RelayCommand? _copyCommand;
     private RelayCommand? _renameCommand;
     private RelayCommand? _commitRenameCommand;
     private RelayCommand? _cancelRenameCommand;
-    private RelayCommand? _deleteCommand;
     private bool _isRenaming;
     private string _renameText = "";
 
@@ -670,6 +1225,23 @@ internal sealed class LibraryRow(
 
     /// <summary>The file's name.</summary>
     public string Name { get; } = System.IO.Path.GetFileName(path);
+
+    /// <summary>True: a row, which the list can select and focus, unlike a group header.</summary>
+    public bool IsRow => true;
+
+    /// <summary>Whether the page's selection holds this item; set only by the page.</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set => Set(ref _isSelected, value);
+    }
+
+    /// <summary>Whether this is the page's focused row; set only by the page.</summary>
+    public bool IsFocused
+    {
+        get => _isFocused;
+        internal set => Set(ref _isFocused, value);
+    }
 
     public string Game
     {
@@ -724,9 +1296,7 @@ internal sealed class LibraryRow(
             if (Set(ref _isLocked, value))
             {
                 OnPropertyChanged(nameof(Lock));
-                _copyCommand?.RaiseCanExecuteChanged();
                 _renameCommand?.RaiseCanExecuteChanged();
-                _deleteCommand?.RaiseCanExecuteChanged();
                 if (value)
                 {
                     IsRenaming = false;
@@ -756,16 +1326,6 @@ internal sealed class LibraryRow(
 
     /// <summary>Toggles the Favourite through the engine.</summary>
     public ICommand FavouriteCommand => _favouriteCommand ??= new RelayCommand(() => setFavourite?.Invoke(this));
-
-    /// <summary>Opens the file in its default player, even while it is being written.</summary>
-    public ICommand OpenCommand => _openCommand ??= new RelayCommand(() => act?.Invoke(this, LibraryAction.Open));
-
-    /// <summary>Shows the file selected in Explorer, even while it is being written.</summary>
-    public ICommand ShowInExplorerCommand =>
-        _showInExplorerCommand ??= new RelayCommand(() => act?.Invoke(this, LibraryAction.ShowInExplorer));
-
-    /// <summary>Copies the file as a file drop; disabled until it is written.</summary>
-    public ICommand CopyCommand => _copyCommand ??= new RelayCommand(() => act?.Invoke(this, LibraryAction.Copy), () => !IsLocked);
 
     /// <summary>Whether the name is being edited inline.</summary>
     public bool IsRenaming
@@ -803,9 +1363,6 @@ internal sealed class LibraryRow(
     /// <summary>Ends the edit, sending nothing.</summary>
     public ICommand CancelRenameCommand => _cancelRenameCommand ??= new RelayCommand(() => IsRenaming = false);
 
-    /// <summary>Moves the file to the Recycle Bin after a confirmation; disabled until it is written.</summary>
-    public ICommand DeleteCommand => _deleteCommand ??= new RelayCommand(() => delete?.Invoke(this), () => !IsLocked);
-
     /// <summary>The item last shown, whose identity (path, size, modified time) a command sends.</summary>
     internal LibraryItem? Item { get; private set; }
 
@@ -821,12 +1378,15 @@ internal sealed class LibraryRow(
     }
 }
 
-/// <summary>A row's shell action.</summary>
-internal enum LibraryAction
+/// <summary>A key move in the Library list.</summary>
+internal enum LibraryMove
 {
-    Open,
-    ShowInExplorer,
-    Copy,
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+    Home,
+    End,
 }
 
 /// <summary>A group's header in the Library list; one instance per group key, its name kept current.</summary>
@@ -835,6 +1395,9 @@ internal sealed class LibraryGroupHeader(string key) : Observable
     private string _name = "";
 
     public string Key { get; } = key;
+
+    /// <summary>False: a header, which the list never selects or focuses.</summary>
+    public bool IsRow => false;
 
     public string Name
     {

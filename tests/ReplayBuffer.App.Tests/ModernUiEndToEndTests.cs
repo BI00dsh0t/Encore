@@ -143,7 +143,8 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                 PromptDialog.Showing += OnShowing;
                 try
                 {
-                    first.Main.Library.Rows[0].DeleteCommand.Execute(null);
+                    first.Main.Library.Click(first.Main.Library.Rows[0], ctrl: false, shift: false);
+                    first.Main.Library.DeleteCommand.Execute(null);
                 }
                 finally
                 {

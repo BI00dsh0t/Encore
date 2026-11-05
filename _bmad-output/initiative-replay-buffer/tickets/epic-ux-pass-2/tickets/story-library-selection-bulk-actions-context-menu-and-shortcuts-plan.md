@@ -3,21 +3,28 @@ title: 'Library selection, bulk actions, context menu and shortcuts'
 type: 'feature'
 ticket: '2'
 created: '2026-11-04'
-status: 'in-progress'
+status: 'built'
 baseline_revision: 'bea6f2131967325f9ee01cb7246efb3898e29ee0'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: [quick]
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
   - '{project-root}/CLAUDE.md'
   - '{project-root}/_bmad-output/initiative-replay-buffer/tickets/epic-ux-pass-2/ux-pass-2/EXPERIENCE.md'
 warnings: [oversized]
-deferred: []
+deferred:
+  - summary: >-
+      Under Fluent in Windows light mode the selected Library row's fill (the accent's Light2 tint at 25 %) may be barely different from an unselected card.
+    evidence: |-
+      Fluent follows the Windows app mode (ThemeMode.System), and RbLibraryRowSelectedBrush uses AccentColorLight2Key in both modes. Only dark mode was rendered (library-selected-fluent.png); a light-mode render on the builder's PC would settle it, and a mode-aware brush (Dark1 in light mode) would fix it.
+    location: >-
+      src/ReplayBuffer.App/Theme/FluentTheme.xaml:13
+    severity: medium (unverified)
 ---
 
 <intent-contract>
@@ -79,15 +86,15 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Library/LibraryShell.cs` -- `ILibraryShell` becomes: `Open(path)`, `ShowInExplorer(string folder, IReadOnlyList<string> files)`, `OpenFolder(string folder)`, `Copy(IReadOnlyList<string> paths)`, `CopyToFolder(IReadOnlyList<string> paths, string folder)`. `LibraryClipboard.Create(IReadOnlyList<string>)` puts every path in one file drop with `DROPEFFECT_COPY`. `WindowsLibraryShell.CopyToFolder` runs the shell's copy on a background STA thread so the App stays responsive (owner = the main window's handle, captured on the UI thread); the shell shows its own progress, conflict and error dialogs. `OpenFolder` is ShellExecute on the folder.
-- [ ] `src/ReplayBuffer.Platform.Desktop/ShellFolder.cs` (+ `NativeMethods.txt`) -- add `SelectInExplorer(string folder, IReadOnlyList<string> files)` (folder pidl + `ILFindLastID` children → `SHOpenFolderAndSelectItems`) and a `ShellFileCopy.Copy(IReadOnlyList<string> files, string folder, nint owner)` over `SHFileOperationW` `FO_COPY` with `FOF_ALLOWUNDO` (double-null-terminated lists); a user cancel is not an error.
-- [ ] `src/ReplayBuffer.App/Library/LibraryPage.cs` -- the selection model, bar state and page commands, per the Design Notes. New optional ctor parameter `Func<string?>? pickFolder` (default: `OpenFolderDialog` titled "Copy to folder" over the view's window); `confirmDelete` now receives the full question (default `Prompts.YesNo(_view, text, "Delete", Question)`). `LibraryRow` gains `IsSelected`, `IsFocused` (observable, set only by the page) and `IsRow => true`; `LibraryGroupHeader` gains `IsRow => false`. Remove the row's Open/ShowInExplorer/Copy/Delete commands and `LibraryAction`. Update the class summary for 10.2.
-- [ ] `src/ReplayBuffer.App/Library/LibraryOverflowPanel.cs` (new) -- a horizontal Panel for the bar's actions: measures every child; when they don't fit, children marked with attached `Overflows="True"` (Copy to folder…, Show in Explorer) and the child marked `IsMore="True"` swap: overflowing ones get `Visibility.Hidden` (Hidden still measures, so no layout loop) and are arranged at zero width, and More is shown; otherwise More is Hidden. Collapsed children (Open/Rename when not single) take no space.
-- [ ] `src/ReplayBuffer.App/Library/LibraryView.xaml(.cs)` -- per Design Notes "View": the command bar, the `ListBox`, one ContextMenu, input routing.
-- [ ] `src/ReplayBuffer.App/Theme/LibraryTheme.xaml` (+ the two theme dictionaries for one `RbLibraryRowSelectedBrush` each) -- selected row fill and 3 px accent bar, focus ring, `ListBoxItem` container style, command bar card style. Under Gaming `RbLibraryRowSelectedBrush` = the accent-subtle colour `#1A2DD4BF`; under Fluent a brush on the Windows accent colour at about 25 % opacity (a `DynamicResource` colour, as `RbAccentSubtleBrush` does), so a grey accent still gives a visibly stronger fill than the 6 % grey (DESIGN's grey-accent rule, made stronger; record it in Implementation Notes).
-- [ ] `tests/ReplayBuffer.App.Tests/LibrarySelectionTests.cs` (new) -- the ticket's verify, one test each: Shift/Ctrl ranges across a header (+ Shift+Down); selection survives a filter change, a new item and the App's own rename, and a removed item leaves it (focus moves on); bulk Favourite sends one per changing item; bulk delete of five → one confirmation naming 3 and the kept line, three deletes, then a refusal reported "Deleted 2 of 3. …"; a single Favourite's delete sends and asks nothing; Copy is one file drop of the shown written files; Show in Explorer groups by folder.
-- [ ] `tests/ReplayBuffer.App.Tests/LibraryActionsTests.cs`, `LibraryEndToEndTests.cs`, `LibraryPageTests.cs` -- move to the page-level API (select the row, then run the page command) and the new shell shape; `TheClipboardData…` takes a list; keep each test's intent.
-- [ ] `tests/ReplayBuffer.App.Tests/LibraryThemeTests.cs` -- `RowCard` finds the card inside a `ListBoxItem`. In both themes: select two rows and focus one; assert the command bar is visible with "2 selected", a selected card's background is `RbLibraryRowSelectedBrush` and differs from an unselected card's, the list is still virtualized, and no Library binding error; save `library-selected-fluent.png` and `library-selected-gaming-dark.png` beside the test binary (keep the existing PNGs).
+- [x] `src/ReplayBuffer.App/Library/LibraryShell.cs` -- `ILibraryShell` becomes: `Open(path)`, `ShowInExplorer(string folder, IReadOnlyList<string> files)`, `OpenFolder(string folder)`, `Copy(IReadOnlyList<string> paths)`, `CopyToFolder(IReadOnlyList<string> paths, string folder)`. `LibraryClipboard.Create(IReadOnlyList<string>)` puts every path in one file drop with `DROPEFFECT_COPY`. `WindowsLibraryShell.CopyToFolder` runs the shell's copy on a background STA thread so the App stays responsive (owner = the main window's handle, captured on the UI thread); the shell shows its own progress, conflict and error dialogs. `OpenFolder` is ShellExecute on the folder.
+- [x] `src/ReplayBuffer.Platform.Desktop/ShellFolder.cs` (+ `NativeMethods.txt`) -- add `SelectInExplorer(string folder, IReadOnlyList<string> files)` (folder pidl + `ILFindLastID` children → `SHOpenFolderAndSelectItems`) and a `ShellFileCopy.Copy(IReadOnlyList<string> files, string folder, nint owner)` over `SHFileOperationW` `FO_COPY` with `FOF_ALLOWUNDO` (double-null-terminated lists); a user cancel is not an error.
+- [x] `src/ReplayBuffer.App/Library/LibraryPage.cs` -- the selection model, bar state and page commands, per the Design Notes. New optional ctor parameter `Func<string?>? pickFolder` (default: `OpenFolderDialog` titled "Copy to folder" over the view's window); `confirmDelete` now receives the full question (default `Prompts.YesNo(_view, text, "Delete", Question)`). `LibraryRow` gains `IsSelected`, `IsFocused` (observable, set only by the page) and `IsRow => true`; `LibraryGroupHeader` gains `IsRow => false`. Remove the row's Open/ShowInExplorer/Copy/Delete commands and `LibraryAction`. Update the class summary for 10.2.
+- [x] `src/ReplayBuffer.App/Library/LibraryOverflowPanel.cs` (new) -- a horizontal Panel for the bar's actions: measures every child; when they don't fit, children marked with attached `Overflows="True"` (Copy to folder…, Show in Explorer) and the child marked `IsMore="True"` swap: overflowing ones get `Visibility.Hidden` (Hidden still measures, so no layout loop) and are arranged at zero width, and More is shown; otherwise More is Hidden. Collapsed children (Open/Rename when not single) take no space.
+- [x] `src/ReplayBuffer.App/Library/LibraryView.xaml(.cs)` -- per Design Notes "View": the command bar, the `ListBox`, one ContextMenu, input routing.
+- [x] `src/ReplayBuffer.App/Theme/LibraryTheme.xaml` (+ the two theme dictionaries for one `RbLibraryRowSelectedBrush` each) -- selected row fill and 3 px accent bar, focus ring, `ListBoxItem` container style, command bar card style. Under Gaming `RbLibraryRowSelectedBrush` = the accent-subtle colour `#1A2DD4BF`; under Fluent a brush on the Windows accent colour at about 25 % opacity (a `DynamicResource` colour, as `RbAccentSubtleBrush` does), so a grey accent still gives a visibly stronger fill than the 6 % grey (DESIGN's grey-accent rule, made stronger; record it in Implementation Notes).
+- [x] `tests/ReplayBuffer.App.Tests/LibrarySelectionTests.cs` (new) -- the ticket's verify, one test each: Shift/Ctrl ranges across a header (+ Shift+Down); selection survives a filter change, a new item and the App's own rename, and a removed item leaves it (focus moves on); bulk Favourite sends one per changing item; bulk delete of five → one confirmation naming 3 and the kept line, three deletes, then a refusal reported "Deleted 2 of 3. …"; a single Favourite's delete sends and asks nothing; Copy is one file drop of the shown written files; Show in Explorer groups by folder.
+- [x] `tests/ReplayBuffer.App.Tests/LibraryActionsTests.cs`, `LibraryEndToEndTests.cs`, `LibraryPageTests.cs` -- move to the page-level API (select the row, then run the page command) and the new shell shape; `TheClipboardData…` takes a list; keep each test's intent.
+- [x] `tests/ReplayBuffer.App.Tests/LibraryThemeTests.cs` -- `RowCard` finds the card inside a `ListBoxItem`. In both themes: select two rows and focus one; assert the command bar is visible with "2 selected", a selected card's background is `RbLibraryRowSelectedBrush` and differs from an unselected card's, the list is still virtualized, and no Library binding error; save `library-selected-fluent.png` and `library-selected-gaming-dark.png` beside the test binary (keep the existing PNGs).
 
 **Acceptance Criteria:**
 - Given the Library view loaded under Fluent and under Gaming dark with two rows selected, when it renders, then the selected rows show the selected fill and accent bar, the focused row shows the focus ring, the bar shows the count and actions in 40 px, and no binding or resource error is logged.
@@ -97,9 +104,34 @@ deferred: []
 
 ## Implementation Notes
 
+- **Selected fill under Fluent (DESIGN's grey-accent rule, made stronger):** `RbLibraryRowSelectedBrush` is the Windows accent at 25 % opacity, through `{DynamicResource {x:Static SystemColors.AccentColorKey}}`. The Fluent dictionary's own `SystemAccentColor` key doesn't resolve as a `Color` from the App's dictionary (the brush threw "ResourceReferenceExpression is not a valid value for property 'Color'"). On the build PC the accent is grey: the selected fill is faint but differs from a row, the accent bar is grey, and the focus ring is white. The builder checks it on their PC; if it's too faint, raise the opacity. Under Gaming dark it's `#1A2DD4BF`, as planned.
+- **Ring and accent bar live in the row's DataTemplate,** not the `ListBoxItem` template. A container template binding `IsFocused` would also bind on header containers, which have no such property, and log a Library binding error. The container template is only a transparent border around the content.
+- **Header containers stay hit-testable** (not focusable or tab stops), so a click on a header is recognized and does nothing, as the Input rules say. Without hit-testing it would fall through to the list and clear the selection.
+- **"Deleting {k} of {n}…"** shows while a delete of more than 10 items runs (the ticket and EXPERIENCE.md; the orchestrator corrected the first cut, which showed it for every batch). The actions are disabled during every batch.
+- **Hover on a selected row** keeps the selected fill only, with no hover overlay (the plan's rule, simpler than DESIGN's overlay).
+- **The command bar's buttons** use the themes' own Button style; a Library style based on it can't be used, since `LibraryTheme.xaml` is built on its own and can't `StaticResource` the theme's implicit style. `VerticalAlignment` and `ToolTipService.ShowOnDisabled` are set on each button.
+- **Rename box keys:** a `KeyDown` handler on the box marks Up, Down, Page Up/Down, Home and End handled, so the list never moves while renaming. Text keys aren't touched, since a handled key down makes no text input.
+- **Copy to folder** runs `SHFileOperationW` on a background STA thread owned by the main window. A failure after the dialog opens is shown by the shell's own dialog and isn't reported in the action-error line; only a synchronous throw is ("Couldn't copy the files.").
+- **Also updated:** `ModernUiEndToEndTests` and `SurfacesThemeTests` called a row's `DeleteCommand`; they now select the row and run the page's.
+- **Fluent selected fill, corrected by the orchestrator:** the plain accent at 25 % was still nearly invisible under this PC's grey accent (`library-selected-fluent.png`), so the brush now uses `SystemColors.AccentColorLight2Key`, the light tint Fluent's dark-mode accent fill uses. The selected card is now clearly lighter. In Windows light mode a pale tint at 25 % may be faint (deferred).
+- **Review fixes:** focus landing inside a row (the star) no longer redirects list focus; a right-click on a selected row makes it the focused row; Space and Enter on a focused star press the star.
+- **Not done here:** Ctrl+F (story 10.3's search box). `ListBoxItem.IsSelected` isn't bound to the page's selection, so UI Automation's SelectionItemPattern doesn't report it (binding it is what desyncs under recycling).
+- **Verified:** the default App suite (158 pass, 20 explicit skipped), Core (161) and Contracts (125), and a 0-warning non-incremental Release build. Throwaway checks, since deleted, also covered the overflow panel at narrow widths and the view's input routing: click, arrows, Home, End, Space, Delete, Esc, F2 into the rename box, and a star click left unhandled. The explicit `LibraryEndToEndTests` (Heavy) was updated but not run.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+### 2026-11-04 — Review pass
+- verdicts: 7 findings — high 0, medium 2, low 4, false 0, maybe-false 1
+- findings:
+  - `[medium]` `[patch]` A click on a row's star with focus outside the list made OnListGotKeyboardFocus move page focus and queue FocusRow, scrolling the list and stealing focus mid-click — fixed: the redirect runs only when the new focus is the ListBox or a ListBoxItem.
+  - `[medium]` `[patch]` A right-click on an already selected row focused its container but left the page's focus elsewhere, so the ring, Enter, Space and arrows acted on another row; Space on a focused star toggled the page's focused row — fixed: PrepareContextMenu makes a selected row the focus; Space/Enter from a ButtonBase are left to the button.
+  - `[maybe-false]` `[defer]` The Fluent selected fill (AccentColorLight2 at 25 %) may be faint in Windows light mode — deferred as medium (unverified); a light-mode render settles it. The Implementation Notes' stale key name was corrected.
+  - `[low]` `[reject]` The Implementation Notes said the delete progress shows for every batch; the code shows it past 10 — a fix that edits this build's plan is rejected (the notes were corrected anyway as a factual record).
+  - `[low]` `[reject]` The count's LiveSetting raises no LiveRegionChanged, so a screen reader isn't told — this personal project has no screen-reader user, and the fix adds a property-change hook and automation-peer code.
+  - `[low]` `[reject]` Rows don't expose SelectionItemPattern — no screen-reader user; a custom automation peer per row is new surface, and binding ListBoxItem.IsSelected desyncs under recycling. Listed in Implementation Notes for a later pass.
+  - `[low]` `[reject]` LibraryThemeTests doesn't assert the accent bar's and focus ring's visibility or resource-lookup failures — lean tests (CLAUDE.md); the saved PNGs, checked by eye in both themes, show both.
 
 ## Design Notes
 
@@ -140,3 +172,12 @@ The ContextMenu items use `InputGestureText` for the keys shown.
 
 **Manual checks (if no CLI):**
 - Open `library-selected-fluent.png` and `library-selected-gaming-dark.png` in `tests/ReplayBuffer.App.Tests/bin/Release/net10.0-windows10.0.26100.0/`: selected rows visibly differ from the others in both, the focused row has the ring, the bar shows the count and actions.
+
+## Auto Run Result
+
+- **Summary:** The Library is a selectable list with Explorer's mouse and keys, held by `LibraryPage` as a set of paths with an anchor and a focus; a 40 px command bar (summary or count and actions, with a More ⋯ overflow); one context menu with key hints; Enter, Delete, F2, Ctrl+C, Ctrl+A, Space, Ctrl+Space and Esc; bulk Favourite, Copy (one file drop), Copy to folder (the shell's copy), Show in Explorer (one window per folder, the Clips folder past three) and Delete (one confirmation, Favourites and files being saved kept and named, one `library.delete` each, progress past 10, "Deleted k of n." on a refusal). A single Favourite can't be deleted (7.7 changed, as approved at 10.1).
+- **Files:** `LibraryPage.cs` (selection model, bar state, page commands), `LibraryView.xaml(.cs)` (ListBox, bar, menu, input routing), `LibraryOverflowPanel.cs` (new: the bar's overflow), `LibraryShell.cs` (multi-file shell calls), `Platform.Desktop/ShellFolder.cs` + `NativeMethods.txt` (multi-select in Explorer, `SHFileOperationW` copy), `LibraryTheme.xaml` (selected row, bar, ring, list styles), `FluentTheme.xaml` / `GamingDarkTheme.xaml` (one `RbLibraryRowSelectedBrush` each), tests: `LibrarySelectionTests.cs` (new, 7), `LibraryActionsTests`, `LibraryThemeTests` (selected PNGs in both themes), `LibraryEndToEndTests` (Heavy, compiles), `ModernUiEndToEndTests`, `SurfacesThemeTests`.
+- **Review:** 2 medium patches applied (focus redirect, right-click focus and the star's keys); 1 deferred (Fluent light-mode fill, unverified); 4 low rejected with reasons above.
+- **Follow-up review recommended:** false (no high patched; two medium patches are small, local and verified by the default suite).
+- **Verification:** `dotnet build ReplayBuffer.slnx -c Release` 0 warnings; App 158 passed (20 explicit skipped), Core 161, Contracts 125, Platform.Desktop 13. PNGs `library-selected-fluent.png` and `library-selected-gaming-dark.png` checked by eye.
+- **Residual risks:** the real shell calls (Explorer multi-select, the shell copy's dialogs, a multi-file paste into Discord) are untested by automation and are the builder's hand check; the Fluent selected fill on the builder's PC and in light mode; no UI Automation selection state.

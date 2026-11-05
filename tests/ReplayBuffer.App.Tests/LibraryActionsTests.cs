@@ -12,7 +12,7 @@ public sealed class LibraryActionsTests : IDisposable
     private const string Clip = @"Game\clip.mp4";
 
     private readonly FakeEngineSession _engine = new();
-    private readonly FakeShell _shell = new();
+    private readonly FakeLibraryShell _shell = new();
     private readonly string _folder = Directory.CreateTempSubdirectory("rb-library-actions-").FullName;
 
     public void Dispose() => Directory.Delete(_folder, recursive: true);
@@ -28,21 +28,21 @@ public sealed class LibraryActionsTests : IDisposable
         var state = _engine.State! with { LibraryFolder = _folder, Library = [writing] };
 
         page.Render(state);
-        var row = page.Rows[0];
+        page.Click(page.Rows[0], ctrl: false, shift: false);
         var changed = 0;
-        row.CopyCommand.CanExecuteChanged += (_, _) => changed++;
-        Assert.False(row.CopyCommand.CanExecute(null));
-        row.CopyCommand.Execute(null);
-        row.OpenCommand.Execute(null);
+        page.CopyCommand.CanExecuteChanged += (_, _) => changed++;
+        Assert.False(page.CopyCommand.CanExecute(null));
+        page.CopyCommand.Execute(null);
+        page.OpenCommand.Execute(null);
         Assert.Equal([("open", absolute)], _shell.Calls);
 
         page.Render(state with { Library = [writing with { Size = 1, BeingWritten = false }] });
-        Assert.Equal(1, changed);
-        Assert.True(row.CopyCommand.CanExecute(null));
-        row.ShowInExplorerCommand.Execute(null);
-        row.CopyCommand.Execute(null);
+        Assert.True(changed > 0);
+        Assert.True(page.CopyCommand.CanExecute(null));
+        page.ShowInExplorerCommand.Execute(null);
+        page.CopyCommand.Execute(null);
 
-        Assert.Equal([("open", absolute), ("show", absolute), ("copy", absolute)], _shell.Calls);
+        Assert.Equal([("open", absolute), ("show " + Path.GetDirectoryName(absolute), absolute), ("copy", absolute)], _shell.Calls);
         Assert.Null(page.ActionError);
     }
 
@@ -51,19 +51,20 @@ public sealed class LibraryActionsTests : IDisposable
     {
         var page = new LibraryPage(_engine, shell: _shell);
         page.Render(_engine.State! with { LibraryFolder = _folder, Library = [new LibraryItem("gone.mp4", null, 1, DateTimeOffset.UnixEpoch, false)] });
+        page.Click(page.Rows[0], ctrl: false, shift: false);
 
-        page.Rows[0].OpenCommand.Execute(null);
+        page.OpenCommand.Execute(null);
         Assert.Equal("That file no longer exists.", page.ActionError);
         Assert.True(page.HasActionError);
         Assert.Empty(_shell.Calls);
 
         File.WriteAllBytes(Path.Combine(_folder, "gone.mp4"), [0]);
         _shell.Fail = true;
-        page.Rows[0].CopyCommand.Execute(null);
+        page.CopyCommand.Execute(null);
         Assert.Equal("Couldn't copy the file.", page.ActionError);
 
         _shell.Fail = false;
-        page.Rows[0].OpenCommand.Execute(null);
+        page.OpenCommand.Execute(null);
         Assert.Null(page.ActionError);
     }
 
@@ -74,9 +75,10 @@ public sealed class LibraryActionsTests : IDisposable
         var page = new LibraryPage(_engine, shell: _shell);
         page.Render(_engine.State! with { LibraryFolder = _folder, Library = [item] });
         var row = page.Rows[0];
+        page.Click(row, ctrl: false, shift: false);
         _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.FileNameTaken, "taken");
 
-        row.RenameCommand.Execute(null);
+        page.RenameCommand.Execute(null);
         Assert.Equal((true, "clip"), (row.IsRenaming, row.RenameText));
         row.RenameText = "  best.MP4 ";
         row.CommitRenameCommand.Execute(null);
@@ -86,12 +88,12 @@ public sealed class LibraryActionsTests : IDisposable
         Assert.Equal("A file with that name already exists.", page.ActionError);
 
         // Escape sends nothing; a success clears the error.
-        row.RenameCommand.Execute(null);
+        page.RenameCommand.Execute(null);
         row.CancelRenameCommand.Execute(null);
         row.CommitRenameCommand.Execute(null);
         Assert.Single(_engine.Sent);
         _engine.Reply = (_, _) => Empty.Value;
-        row.RenameCommand.Execute(null);
+        page.RenameCommand.Execute(null);
         row.CommitRenameCommand.Execute(null);
         Assert.Equal(2, _engine.Sent.Count);
         Assert.Null(page.ActionError);
@@ -102,40 +104,40 @@ public sealed class LibraryActionsTests : IDisposable
     {
         var answer = false;
         var asked = new List<string>();
-        var page = new LibraryPage(_engine, shell: _shell, confirmDelete: name =>
+        var page = new LibraryPage(_engine, shell: _shell, confirmDelete: question =>
         {
-            asked.Add(name);
+            asked.Add(question);
             return answer;
         });
         var writing = new LibraryItem(Clip, null, 0, DateTimeOffset.UnixEpoch, true);
         var state = _engine.State! with { LibraryFolder = _folder, Library = [writing] };
         page.Render(state);
-        var row = page.Rows[0];
-        Assert.False(row.RenameCommand.CanExecute(null));
-        Assert.False(row.DeleteCommand.CanExecute(null));
+        page.Click(page.Rows[0], ctrl: false, shift: false);
+        Assert.False(page.RenameCommand.CanExecute(null));
+        Assert.False(page.DeleteCommand.CanExecute(null));
 
         var written = writing with { Size = 48, BeingWritten = false, Modified = DateTimeOffset.UnixEpoch };
         page.Render(state with { Library = [written] });
-        Assert.True(row.RenameCommand.CanExecute(null));
+        Assert.True(page.RenameCommand.CanExecute(null));
         _engine.Reply = (_, _) => Empty.Value;
 
-        row.DeleteCommand.Execute(null);
+        page.DeleteCommand.Execute(null);
         Assert.Empty(_engine.Sent);
 
         answer = true;
-        row.DeleteCommand.Execute(null);
-        Assert.Equal(["clip.mp4", "clip.mp4"], asked);
+        page.DeleteCommand.Execute(null);
+        Assert.Equal(["Move “clip.mp4” to the Recycle Bin?", "Move “clip.mp4” to the Recycle Bin?"], asked);
         Assert.Equal(new LibraryDelete(Clip, 48, written.Modified), Assert.Single(_engine.Sent));
     }
 
     [Fact]
-    public void TheClipboardDataIsTheOnePathAsAFileDropToCopy() => Sta.Run(() =>
+    public void TheClipboardDataIsEveryPathInOneFileDropToCopy() => Sta.Run(() =>
     {
-        var path = Path.Combine(_folder, Clip);
+        string[] paths = [Path.Combine(_folder, Clip), Path.Combine(_folder, "other.mp4")];
 
-        var data = LibraryClipboard.Create(path);
+        var data = LibraryClipboard.Create(paths);
 
-        Assert.Equal([path], data.GetFileDropList().Cast<string>());
+        Assert.Equal(paths, data.GetFileDropList().Cast<string>());
         var effect = Assert.IsType<MemoryStream>(data.GetData(LibraryClipboard.PreferredDropEffect));
         Assert.Equal([1, 0, 0, 0], effect.ToArray());
     });
@@ -147,33 +149,38 @@ public sealed class LibraryActionsTests : IDisposable
         var path = Path.Combine(_folder, "clip.mp4");
         File.WriteAllBytes(path, [0]);
 
-        new WindowsLibraryShell().Copy(path);
+        new WindowsLibraryShell().Copy([path]);
 
         Assert.Equal([path], Clipboard.GetFileDropList().Cast<string>());
         var effect = Assert.IsType<MemoryStream>(Clipboard.GetData(LibraryClipboard.PreferredDropEffect));
         Assert.Equal([1, 0, 0, 0], effect.ToArray());
     });
+}
 
-    private sealed class FakeShell : ILibraryShell
+/// <summary>Records each shell call as (action, its paths joined by '|'); launches nothing.</summary>
+internal sealed class FakeLibraryShell : ILibraryShell
+{
+    public List<(string Action, string Paths)> Calls { get; } = [];
+
+    public bool Fail { get; set; }
+
+    public void Open(string path) => Record("open", [path]);
+
+    public void ShowInExplorer(string folder, IReadOnlyList<string> files) => Record("show " + folder, files);
+
+    public void OpenFolder(string folder) => Record("folder", [folder]);
+
+    public void Copy(IReadOnlyList<string> paths) => Record("copy", paths);
+
+    public void CopyToFolder(IReadOnlyList<string> paths, string folder) => Record("copy to " + folder, paths);
+
+    private void Record(string action, IReadOnlyList<string> paths)
     {
-        public List<(string Action, string Path)> Calls { get; } = [];
-
-        public bool Fail { get; set; }
-
-        public void Open(string path) => Record("open", path);
-
-        public void ShowInExplorer(string path) => Record("show", path);
-
-        public void Copy(string path) => Record("copy", path);
-
-        private void Record(string action, string path)
+        if (Fail)
         {
-            if (Fail)
-            {
-                throw new IOException("shell failed");
-            }
-
-            Calls.Add((action, path));
+            throw new IOException("shell failed");
         }
+
+        Calls.Add((action, string.Join('|', paths)));
     }
 }
