@@ -24,10 +24,16 @@ internal sealed class WindowsMediaPlayer : IPlayer
     private readonly MediaPlayer _player = new() { AutoPlay = false, IsVideoFrameServerEnabled = true };
     private MediaPlaybackItem? _item;
     private TimeSpan? _resumeAt;
+    private readonly string? _forcedUnsupported;
     private volatile bool _disposed;
 
-    public WindowsMediaPlayer()
+    /// <param name="forcedUnsupported">
+    /// A codec ("HEVC" or "AV1") to report as undecodable, whatever the file holds: the dev-instance switch
+    /// <c>--player-unsupported</c>, for checking the page Windows shows without the extension (story 14.6). Null in a normal run.
+    /// </param>
+    public WindowsMediaPlayer(string? forcedUnsupported = null)
     {
+        _forcedUnsupported = forcedUnsupported;
         _player.VideoFrameAvailable += OnFrameAvailable;
         _player.MediaEnded += OnMediaEnded;
     }
@@ -117,12 +123,15 @@ internal sealed class WindowsMediaPlayer : IPlayer
         var session = _player.PlaybackSession;
         var duration = session.NaturalDuration;
         var video = item.VideoTracks.Count > 0 ? item.VideoTracks[0] : null;
+        static bool Playable(MediaDecoderStatus status) => status is MediaDecoderStatus.FullySupported or MediaDecoderStatus.Degraded;
         return new PlayerMedia(
             (int)session.NaturalVideoWidth,
             (int)session.NaturalVideoHeight,
             duration > TimeSpan.Zero && duration < TimeSpan.FromDays(1) ? duration : null,
             item.AudioTracks.Select(t => t.Name).ToList(),
-            video?.SupportInfo.DecoderStatus == MediaDecoderStatus.FullySupported);
+            _forcedUnsupported is null && video is not null && Playable(video.SupportInfo.DecoderStatus),
+            _forcedUnsupported ?? video?.GetEncodingProperties().Subtype ?? "",
+            item.AudioTracks.Select(t => Playable(t.SupportInfo.DecoderStatus)).ToList());
     }
 
     // Paused, a position set delivers that frame through the frame server (the 14.2 proof, the 14.5 probe).

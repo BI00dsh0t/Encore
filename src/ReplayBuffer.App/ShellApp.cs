@@ -8,6 +8,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using H.NotifyIcon;
 using ReplayBuffer.App.Engine;
+using ReplayBuffer.App.Library;
 using ReplayBuffer.App.Overlay;
 using ReplayBuffer.App.Theme;
 using ReplayBuffer.Contracts;
@@ -29,6 +30,12 @@ internal sealed class ShellApp(Instance instance) : Application
     public const string TrayArgument = "--tray";
     public const string InstanceArgument = "--instance";
     public const string ReplayBufferArgument = "--replay-buffer";
+
+    /// <summary>
+    /// <c>--player-unsupported=hevc</c> or <c>=av1</c>: the in-app player reports that codec as undecodable, to
+    /// check the page Windows shows without its extension (story 14.6). Ignored on the installed instance.
+    /// </summary>
+    public const string PlayerUnsupportedArgument = "--player-unsupported=";
 
     /// <summary>The tray menu's Restart item, shown only in <see cref="EngineStatus.CrashLoop"/>.</summary>
     public const string RestartItemName = "RestartItem";
@@ -90,11 +97,14 @@ internal sealed class ShellApp(Instance instance) : Application
             Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ReplayBuffer.App.exe"));
         _engine.Changed += () => Dispatcher.BeginInvoke(SyncStartup);
         _theme.Follow(_engine, action => Dispatcher.BeginInvoke(action), theme => ThemeService.WriteLast(ThemeFile, theme));
+        var unsupported = PlayerUnsupported(e.Args, instance);
         var model = new MainViewModel(
             _engine,
             action => Dispatcher.BeginInvoke(action),
             Path.Combine(instance.RoamingDataFolder, "library-view.json"),
-            Path.Combine(instance.LocalDataFolder, "ring"));
+            Path.Combine(instance.LocalDataFolder, "ring"),
+            player: unsupported is null ? null : () => new WindowsMediaPlayer(unsupported),
+            log: Log);
         _window = new MainWindow { DataContext = model };
         if (instance.Name != Instance.InstalledName)
         {
@@ -116,6 +126,13 @@ internal sealed class ShellApp(Instance instance) : Application
 
     /// <summary>Whether the command line asks for no window at start.</summary>
     internal static bool StartsInTray(IEnumerable<string> args) => args.Contains(TrayArgument, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The codec <c>--player-unsupported=</c> names ("HEVC" or "AV1"), on any instance but the installed one; else null.</summary>
+    internal static string? PlayerUnsupported(IEnumerable<string> args, Instance instance)
+    {
+        var codec = args.FirstOrDefault(a => a.StartsWith(PlayerUnsupportedArgument, StringComparison.OrdinalIgnoreCase))?[PlayerUnsupportedArgument.Length..];
+        return instance.Name == Instance.InstalledName || CodecExtension.For(codec) is not { } extension ? null : extension.Codec;
+    }
 
     /// <summary>Whether the command line passes <c>--replay-buffer</c> on to the engine; valid on a test instance only.</summary>
     internal static bool WantsReplayBuffer(IEnumerable<string> args) => args.Contains(ReplayBufferArgument, StringComparer.OrdinalIgnoreCase);

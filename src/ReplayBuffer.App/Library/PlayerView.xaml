@@ -17,7 +17,8 @@
     <Border Style="{DynamicResource RbPlayerBackdropStyle}">
         <Grid>
             <Image x:Name="Picture" Stretch="Uniform" />
-            <TextBlock HorizontalAlignment="Center"
+            <TextBlock MaxWidth="560"
+                       HorizontalAlignment="Center"
                        VerticalAlignment="Center"
                        Style="{DynamicResource RbPlayerMessageStyle}"
                        Text="{Binding Message}"
@@ -38,6 +39,12 @@
                                 VerticalAlignment="Center"
                                 Command="{Binding PlayPauseCommand}"
                                 Content="{Binding PlayPauseLabel}" />
+                        <!-- Story 14.6: the missing extension's Microsoft Store page, then the default player. -->
+                        <Button Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Command="{Binding OpenStoreCommand}"
+                                Content="{Binding StoreLinkText}"
+                                Visibility="{Binding HasStoreLink, Converter={StaticResource Visible}}" />
                         <Button Margin="8,0,0,0"
                                 VerticalAlignment="Center"
                                 Command="{Binding OpenInDefaultPlayerCommand}"

@@ -26,7 +26,8 @@ internal sealed class MainViewModel : Observable
     /// <param name="libraryViewFile">Where the Library remembers its view choices; without it, they last only this run.</param>
     /// <param name="defaultCacheFolder">The engine's default cache folder, shown on the Clips page.</param>
     /// <param name="player">Makes the Library's in-app player; Windows' own without it (AD-27).</param>
-    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null, IGameShell? gameShell = null, Func<IPlayer>? player = null)
+    /// <param name="log">Writes a line to the App's log (the player's, story 14.6).</param>
+    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null, IGameShell? gameShell = null, Func<IPlayer>? player = null, Action<string>? log = null)
     {
         _engine = engine;
         StatusLine = new StatusLine(engine);
@@ -39,7 +40,7 @@ internal sealed class MainViewModel : Observable
         FeedbackSounds = Pages.OfType<FeedbackSoundsPage>().Single();
         LibrarySettings = Pages.OfType<LibrarySettingsPage>().Single();
         _selectedPage = Pages[0];
-        Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile, player: player);
+        Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile, player: player, log: log);
         LibraryNav = new NavItem(LibraryTitle, null, isSection: false);
         NavItems = [LibraryNav, new NavItem(SettingsLabel, null, isSection: true), .. Pages.Select(p => new NavItem(p.Title, p, isSection: false))];
         foreach (var drillIn in Pages.Select(p => p.DrillIn).OfType<DrillIn>().Append(Library.DrillIn))
