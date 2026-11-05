@@ -1,0 +1,91 @@
+# Stories of epic-in-app-player, in build order. `id` is permanent, never reused.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Architecture: AD-27, the in-app player"
+description = "A spine edit under AD-22, run by the coordinator as an architecture update session (as with AD-26), before the tracer and entry 3 build on it. A new AD-27 'In-app player' binding R42 (and R11, R12, R21, R28), with pointers from AD-1, AD-2 and AD-9. AD-1 is amended: the App may open a finished media file read-only, to play it in WinRT Windows.Media.Playback.MediaPlayer. It still never captures, encodes or writes settings, never opens a file being written, and opens it sharing read, write and delete, handing MediaPlayer a stream (MediaSource.CreateFromStream), so the LibraryActor's rename, delete and Cleanup (AD-17) never fail on a playing file, and releases it when the page closes or the item leaves the Library. Playback is App-only. The engine plays nothing, and there's no new message or Contracts type. Rendering: the frame server (IsVideoFrameServerEnabled, CopyFrameToVideoSurface) copies each frame into a shared D3D11 BGRA texture sized to the view. A D3D9Ex surface opened on it is shown by a WPF D3DImage, so there's no airspace. The D3D11 and D3D9Ex interop lives in Platform.Desktop through CsWin32 (AD-2, AD-14), with no Vortice or other package. Tracks: the first Track is selected at open, because Media Foundation picks the last. AudioTracks.SelectedIndex switches one Track at a time, and names come from the Track's handler_name. AD-9 is amended: a Recording's moov/mvex gets an mehd, the fragment duration, written at finalize. Without it Media Foundation ends a fragmented MP4 at its last mfra entry. Clips are unchanged. The spine's scope line changes from 13 epics to 14. No code."
+verify = "AD-27 is in the architecture file with its Binds, Prevents and Rule. AD-1, AD-2 and AD-9 point to it, R42 is in the spine's binds and capability map, and the epic's Notes link it."
+covers = ["R1", "R2", "R4", "R5", "R7"]
+after = []
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Tracer: a Clip plays on a player page from the Library"
+description = "The thinnest path through every layer. Library: Enter and a double-click on a finished row (LibraryView OpenFocused) open a player page through 10.10's DrillIn. The shell (MainViewModel) routes Back, Esc, Alt+Left, the mouse's Back button and the nav item to the Library's drill-in as it does for the Settings pages', and leaving the Library closes the player and releases the file; the row action 'Open' becomes 'Open in default player' and keeps today's shell path; a row being written isn't played. Platform.Desktop, through CsWin32: a D3D11 device with BGRA support and a shared BGRA texture at the view's pixel size; a D3D9Ex device that opens it as a surface; the IDirect3DSurface wrapper (CreateDirect3D11SurfaceFromDXGISurface) that MediaPlayer copies into. All of it passes the AOT analyzers. App: a player view model over a small seam (open, play, pause, position, tracks, events) with the WinRT MediaPlayer behind it, so later stories test against a fake. The file is opened read-only, sharing read, write and delete, and handed over as a stream (AD-27). The MediaPlayer is with IsVideoFrameServerEnabled on before playing. On ItemOpened it sets AudioTracks.SelectedIndex to 0. On VideoFrameAvailable it calls CopyFrameToVideoSurface, then marks the D3DImage dirty on the UI thread, only when a frame was copied. The view resizes the texture with the page and letterboxes, aspect kept. Play and pause only, starting paused on the first frame. Back, Esc, Alt+Left and the mouse's Back button close the page, dispose the player, release the file and focus the row. When the item leaves the Library (renamed, deleted or cleaned up), the page closes and releases the file, as 10.10's drill-in returns to the list when its item goes. Both looks. R1, R2 (Clips), R7 (release)."
+verify = "Automated tests: the Library opens the player for Enter and a double-click on a finished row, and not for a row being written, and 'Open in default player' still shell-opens. A 2 s 1280×720 H.264 Clip fixture with four named Tracks, made by the test with the bundled FFmpeg: the player opens it with SelectedIndex 0, a frame reaches the texture (a non-black readback), and after Back the fixture can be deleted at once. While it plays, the fixture can be renamed and deleted by another handle, and removing the item from the Library closes the page. Heavy (explicit): 200 opens and closes leave the App's private bytes flat, and the D3D11, D3D9Ex and D3DImage resources are released. The page loads in both looks with no missing resource. Heavy (explicit, at night): a 6400×2160 HEVC fixture reaches the texture scaled to the view."
+covers = ["R1", "R2", "R4", "R7"]
+after = [1, "10.2", "10.10"]
+hitl = false
+risk = "high"
+plan_checkpoint = true
+
+[[entry]]
+id = 3
+type = "story"
+title = "Recordings play to the end: mehd at finalize"
+description = "Engine, in the Recording muxer (FragmentedMp4Muxer's durable path, frag_custom through DurableOutput, AD-9 as amended by AD-27). When a Recording or Monitor Recording finalizes, before EndWrite so the Library never lists a half-patched file, its moov/mvex gets an mehd holding the file's fragment duration, so Windows' media player shows the full length and plays the last fragment. The plan checkpoint settles how. The research's lead: the moov from empty_moov has mvex directly followed by udta, so grow mvex over udta's first 16 bytes as the mehd, and turn the rest of udta into a free box. That's an in-place patch, with no shift of later offsets and no rewrite of a large file, done durably like the trailer. The plan first proves it on real Recordings: H.264, HEVC and AV1, durable and not, through MediaPlayer and ffprobe. It falls back to a reserved box written with the moov if udta isn't always there. It also records how a crash-cut Recording (no trailer, so no mfra) behaves in MediaPlayer, in the epic's Notes, and whether the engine's start-up trim of interrupted Recordings (InterruptedRecordings) can write the mehd too. Recordings made before this change aren't touched. R5."
+verify = "Automated tests: the finalize patch on a small fragmented MP4 written by the durable muxer path from synthetic packets gives a valid file whose ffprobe duration and Track list are unchanged, and whose mvex holds an mehd with the file's duration. Heavy (explicit, at night): real Recordings in H.264, HEVC and AV1, including a 6400×2160 Monitor Recording, open in WinRT MediaPlayer with NaturalDuration within one frame of ffprobe's and play to the end, and still play in VLC, Chrome and DaVinci Resolve with every Track (R33)."
+covers = ["R5"]
+after = [1]
+hitl = false
+risk = "high"
+plan_checkpoint = true
+
+[[entry]]
+id = 4
+type = "story"
+title = "Track picker"
+description = "The player page lists the file's Tracks from MediaPlaybackItem.AudioTracks by Name, which is our handler_name. They're shown in file order, with the playing one marked and the first selected at open (from the tracer). Choosing another sets AudioTracks.SelectedIndex mid-play. Playback carries on with no restart or change of position, and only the brief gap Windows makes (about 0.1 s). One Track at a time. A Track with no name shows 'track n', to epic 10's glossary. The list works by mouse and keyboard, in both looks, to epic 10's glossary. Reopening a file starts on the first Track again. R4."
+verify = "Automated tests on the 2 s four-Track fixture: the list shows Game, Mic, Discord and Desktop with the first selected. Choosing Discord while playing sets SelectedIndex 2 and the position keeps advancing. An unnamed Track shows 'track n'. Heavy (explicit): the process-loopback check from the research (inaudible volume, Goertzel on each Track's tone) hears the chosen Track after each of ten switches."
+covers = ["R4"]
+after = [2]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Transport: seek bar, time, volume and keys"
+description = "The player page's controls, drawn over the video in both looks. A seek bar shows the elapsed and total time (PlaybackSession.Position and NaturalDuration). It seeks on click, and while dragging it throttles Position writes to about one per rendered frame. Play and pause, and one volume slider with mute. Keys: Space plays and pauses, Left and Right seek 5 s, Up and Down change the volume by 5 %, Esc goes back (after a control's own Esc, as 10.10's drill-in does). A focused control's own keys win, such as the Track list's and the seek bar's arrows. A file with no known length (a crash-cut Recording) shows the elapsed time only, with seeking off. The volume is kept in LibraryViewState across runs. At the end the player stops on the last frame, and Space plays again from the start. R3."
+verify = "Automated tests on the player view model, against 14.2's fake player with a 30 s file: Right moves the position by 5 s (clamped at the end), a seek bar drag to 50 % lands within a frame of the middle, Space toggles playing, the volume persists through LibraryViewState, and the end state replays from the start, and an unknown length hides the total and disables seeking. The page loads in both looks."
+covers = ["R3"]
+after = [4]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 6
+type = "story"
+title = "When Windows can't play the file"
+description = "When the video Track's SupportInfo.DecoderStatus isn't supported (or a dev-instance switch forces it, for the checks in 14.8 and the Done when), MediaFailed is raised, or no frame arrives, the player page shows a plain-words message in place of the video. It names the HEVC Video Extension or AV1 Video Extension, linking to its Microsoft Store page (opened through the shell), says the file is fine, and offers 'Open in default player'. Text follows epic 10's glossary, and the page's Back and keys keep working. The App's log line records the codec and the status. Audio-only problems (an undecodable Track) show the Track as unavailable in the list. R6."
+verify = "Automated tests with 14.2's fake player, which reports DecoderStatus UnsupportedSubtype for HEVC, and MediaFailed for a corrupt file: the page shows the matching message, the Store link and 'Open in default player', and Back returns to the row. The message view loads in both looks."
+covers = ["R6"]
+after = [5]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup only, scoped at its start from the plans and review findings the epic deferred, such as interop helpers left in the App rather than Platform.Desktop, or a player view model grown across stories. Grep the ticket tree before removing anything a later ticket names."
+verify = "All default tests pass. A Clip and a Recording still play, switch Track and seek after the sweep (Heavy, at night). Every deferred cleanup item is closed or recorded."
+covers = []
+after = [2, 3, 4, 5, 6]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 8
+type = "story"
+title = "The in-app player end to end on the builder's PC"
+description = "The closing end-to-end check of the epic's Done when, integrated. An automated suite against the installed build on a dev instance opens a fixture Clip, a Recording and a 6400×2160 Monitor Recording from the Library, then for each: checks a frame and the full length, switches Track mid-play, seeks, plays the last second, goes back and deletes the file. It also runs an open-and-close loop of 200 for memory, and shows the missing-codec page through 14.6's dev-instance switch. GPU parts are Heavy and run at night. The builder then plays real Clips and Recordings in both looks, switches to the Mic Track and back while it plays, and opens one in the default player."
+verify = "The automated suite passes against the installed build, and the builder's session confirms each Done-when line."
+covers = ["R1", "R2", "R3", "R4", "R5", "R6", "R7"]
+after = [7]
+hitl = true
+risk = "medium"
