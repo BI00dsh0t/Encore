@@ -40,11 +40,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
-| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; full-run-flaky-tests in QA round 2 (8.8 held at e3822aa) |
+| slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; full-run-flaky-tests merge held at `58a374d` until tests resume (8.8 held at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.11 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy with 11.3 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | busy with QA round 2 of full-run-flaky-tests |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -188,13 +188,13 @@ The coordinator logs each QA round in the Log below.
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.7 | 10.10 Games list and a page per game | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed, merging |
+| 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | QA passed; merge held at `d824347` until tests resume |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
 | 31.10 | 10.7 Refactor sweep | | pending |
 | 31.11 | 10.8 UX pass 2 end to end on the builder's PC | | pending |
 | 32.1 | 11.1 Spike: composite several monitors into one encoded video | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `3fd6ed4`) |
 | 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `5ae65e3`) |
-| 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress |
+| 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in progress; WIP at `0fd8c94`, held for the test stop |
 | 32.4 | 11.4 Screens to record: the picker on Hotkeys | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
 | 32.5 | 11.5 Refactor sweep | | pending |
 | 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
@@ -885,3 +885,9 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.11 READY FOR QA at `2967259` (feature `ac8ca44`, then develop with 11.4): text only (keys, codes, message names, Contracts, logs and automation ids unchanged). It rewrites the status header and engine-state texts, the tray, the engine warnings and notices, and the General help, and adds `GlossaryTests` over the App's XAML (11.4's picker included). Contracts 135, Core 165, Engine 193 and App 190 passed; publish clean. 11.3's monitor warnings aren't covered yet; 11.3 must use the glossary when it merges. QA went to slice-epic-8 (Sonnet, medium effort).
 - 2026-11-05: full-run-flaky-tests round 2 at `ae7287a`: the regression test goes through an internal `MediaLength.Read(…, whileOpen)` seam (it passes alone and fails with the file protocol restored); IpcServer disposes the spent instance in a finally. The TrackMix ceiling was kept at captured + 0.5 s (a loaded run had correct audio 1.05 s past short video), and the coordinator accepted that. FFmpeg 40, Engine 194 and App 182 passed. QA round 2 went to 2-1-tracer.
 - 2026-11-05: QA 10.11 passed at `2967259`: text only, about 25 rewordings match the glossary, and the test catches the fabricated view. App 190, Core 165, Contracts 135 and Engine passed. Gap noted for 10.7: the glossary test checks XAML only, so C#-set user strings (`warning.raised`, view models) need the sweep to extend it. qa-1-14 is merging.
+- 2026-11-05: QA round 2 passed for full-run-flaky-tests at `ae7287a`: the regression test passes alone and fails with the file protocol restored; the seam is harmless; IpcServer disposes in a finally. FFmpeg 42, Engine 194 and App 182 passed. slice-epic-5 is merging.
+- 2026-11-05: **Builder: "stop all tests".** The "Tests stopped" rule is added. The coordinator sent stop messages and interrupted the turns of qa-1-14 (10.11, was running its post-sync suites before merging), qa-2-1 (11.3) and slice-epic-5 (full-run-flaky-tests, was syncing to merge). Both merges are held until tests resume. Each session stops only the test processes it started and replies TESTS STOPPED.
+- 2026-11-05: TESTS STOPPED for 10.11: qa-1-14's post-sync run was interrupted, and no process from its worktree is left. It's not merged; `feature/10.11-plain-words` is at `d824347` (the 10.7 glossary note plus a state-only sync). Its post-sync suites and publish run when tests resume, then it merges.
+- 2026-11-05: TESTS STOPPED for full-run-flaky-tests: the post-sync run stopped during Engine (FFmpeg 40/40 had passed), and no process from its worktree is left. It's not merged; `bugfix/full-run-flaky-tests` is at `58a374d` (develop synced, 0-warning build). Engine, App and the publish run when tests resume, then it merges.
+- 2026-11-05: TESTS STOPPED for 11.3: nothing of qa-2-1's was running (the stage-split bench had already ended after 3 of its 12 runs when its GPU load exited); `.bench-running` is clear; capture files are deleted. WIP is at `0fd8c94`: the compositor, composite capture, screen resolution and notices, the canvas plan (`monitor-recording-scaled`) and GPU-reset rebuild, with glossary wording. Before the stop, the default suites and Heavy `MonitorRecordingCaptureTests` 13/13 passed (60 s two-screen, Desktop Duplication on one screen, GPU reset into a second file). Since then a hand-off timing fix (1.0 % duplicates, 9 drops). Left for when tests resume: re-run Heavy and default, the clean stage-split cost run, the publish, the sync with 11.4 and 10.11, and the epic Notes.
+- 2026-11-05: **Builder: "resume all tests. I'll be asleep for a few hours. Run backlogged gpu tests as well."** The "Tests stopped" rule is removed; "GPU tests resumed" applies again, and the builder's go covers the GPU backlog, including 8.8's soaks. **GPU order** (one holder at a time, under `.bench-running`): (1) 11.3's Heavy re-run and the stage-split cost run; (2) 8.7's fps run (about 18 min; the Dev App is closed); (3) 8.8's Memory and Disk smoke reruns (about 11 min each); (4) 8.8's two 8-hour soaks, Memory then Disk. During the soaks, no other session runs Heavy or bench work; default tests are allowed. After the soaks: the two Heavy follow-ups (`RecordingWriter`'s fragment cadence under load, and the video ending short of the audio at a stop). Meanwhile the default-test merges go on: 10.11 and full-run-flaky-tests, then 10.6.
