@@ -44,11 +44,11 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle; 14.3 in QA; its Heavy tonight |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy reviewing 14.7 round 2 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
-| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | busy with the 14.7 review fixes |
+| story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
 
@@ -214,7 +214,7 @@ The coordinator logs each QA round in the Log below.
 | 35.4 | 14.4 Track picker | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `de23206`) |
 | 35.5 | 14.5 Transport: seek bar, time, volume and keys | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `8ed5775`) |
 | 35.6 | 14.6 When Windows can't play the file | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `d2273f9`) |
-| 35.7 | 14.7 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | review round 2 at `118d583` (no tests) |
+| 35.7 | 14.7 Refactor sweep | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged; tests in the backlog) |
 | 35.8 | 14.8 The in-app player end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
@@ -1031,3 +1031,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: The code review of 12.4 passed at `8af0e1f`: the same arguments at all five sites; the first chain at Open is a no-op through `SizedToSource`; matchSource off never acts; `MoveArmDelay` is only set by the test rig; the Heavy test now deterministically hits the cancel, including during the build. Two doc nits (`NewChain` and `SizedToSource` summaries swapped; the `MovePending` wording) are being fixed; then the coordinator merges.
 - 2026-11-05: 14.7 round 2 at `118d583`: any volume request while muted unmutes (clamps included); rounding before the compare, with a PropertyChanged snap; the no-picture wait starts on attach when `Media` is already set; one `_frontBufferAvailable` signal. The coordinator asked the reviewer to check that no non-user path (restore at open, the slider's write-back, a theme re-template) sets `Volume` while muted.
 - 2026-11-05: 12.4 merged into develop by the coordinator (in `coord-develop`) at `ed567a6` (doc nits fixed) and marked done. Develop builds Release with 0 warnings. Epic 12 has only 12.5 left (end to end on the builder's PC, HITL), which waits on the test backlog's night runs.
+- 2026-11-05: The 14.7 round 2 review passed at `118d583`. The coordinator's risk question is settled: at open, the kept volume and mute restore muted (`Volume` set before `IsMuted`, the handler subscribed after); the slider binding only pushes source to target, so loading, re-templating or the 0.33 snap can't call the setter; only a user drag or Up/Down unmutes. Merged into develop by the coordinator and marked done; develop builds with 0 warnings. 14.7's 5 unrun default tests are in the backlog. **Epic 14 has only 14.8 left** (end to end on the builder's PC, HITL), which waits on the backlog's night run of `*PlayerPlaybackTests`.
