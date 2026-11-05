@@ -88,13 +88,12 @@ public sealed partial class SettingsLayoutTests
             },
         };
         var model = new MainViewModel(engine, action => action());
-        model.GameProfiles.SelectedProfile = model.GameProfiles.Profiles[0];
         var window = Offscreen(new MainWindow { DataContext = model });
         var theme = ThemeService.ForWindow(window);
         var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
         {
             (model.TrackLayout, "audio-tracks", []),
-            (model.GameProfiles, "game-profiles", ["Games", "Add a game by hand", "Overrides for", "Clip length", "Video quality — for Clips and Recordings"]),
+            (model.GameProfiles, "games", []),
             (model.LibrarySettings, "storage-and-cleanup", ["Clips folder", "Cleanup"]),
         };
         try
@@ -159,6 +158,23 @@ public sealed partial class SettingsLayoutTests
                     // Save changes is the one accent button.
                     Assert.All(Descendants<Button>(page.View).Where(b => b.Style != accent), b => Assert.Equal(DependencyProperty.UnsetValue, b.ReadLocalValue(FrameworkElement.StyleProperty)));
                     Save(window, $"settings-{slug}-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
+
+                    // Story 10.10: a game's page, with the breadcrumb in the page header.
+                    if (page == model.GameProfiles)
+                    {
+                        model.GameProfiles.Open(model.GameProfiles.Profiles[0]);
+                        Sta.Pump(TimeSpan.FromMilliseconds(150));
+                        var game = model.GameProfiles.OpenGame!.View;
+                        Assert.True(game.IsLoaded, $"A game's page didn't load under {which}");
+                        Assert.True(((FrameworkElement)window.FindName("Breadcrumb")).IsVisible);
+                        Assert.False(((FrameworkElement)window.FindName("PageTitle")).IsVisible);
+                        var gameSections = Descendants<HeaderedContentControl>(game).Where(s => s.Visibility == Visibility.Visible).ToList();
+                        Assert.Equal(["Capture", "Recordings", "Files"], gameSections.Select(s => s.Header as string));
+                        Assert.All(gameSections, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
+                        Save(window, $"settings-game-page-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
+                        model.GameProfiles.DrillIn.Close();
+                        Sta.Pump(TimeSpan.FromMilliseconds(50));
+                    }
                 }
             }
         }
@@ -222,7 +238,7 @@ public sealed partial class SettingsLayoutTests
     {
         var folder = Path.Combine(MainFolder(), "src", "ReplayBuffer.App");
         var xaml = string.Concat(
-            ((string[])[@"Settings\TrackLayoutView.xaml", @"Theme\AudioTracksTheme.xaml", @"Settings\FolderPickerView.xaml", @"Settings\ReplayBufferSettingsView.xaml", @"Settings\HotkeysView.xaml", @"Settings\LibrarySettingsView.xaml"])
+            ((string[])[@"Settings\TrackLayoutView.xaml", @"Theme\AudioTracksTheme.xaml", @"Settings\FolderPickerView.xaml", @"Settings\ReplayBufferSettingsView.xaml", @"Settings\HotkeysView.xaml", @"Settings\LibrarySettingsView.xaml", @"Settings\GameProfilesView.xaml", @"Settings\GamePageView.xaml", @"Settings\GameClipsEditor.xaml", @"Settings\GameVideoEditor.xaml", @"Theme\GamesTheme.xaml", "DrillInHeader.xaml"])
             .Select(f => File.ReadAllText(Path.Combine(folder, f))));
         var local = LocalKey().Matches(xaml).Select(m => m.Groups[1].Value).ToHashSet();
         return ResourceKey().Matches(xaml).Select(m => m.Groups[1].Value).Where(k => !local.Contains(k)).Distinct();

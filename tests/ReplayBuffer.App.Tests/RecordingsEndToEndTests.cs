@@ -70,7 +70,6 @@ public sealed class RecordingsEndToEndTests : IDisposable
         var recordStop = new HotkeyBinding(0x84, HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift);
         var monitorToggle = new HotkeyBinding(0x85, HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift);
         IReadOnlyList<DisplayMonitor> monitors;
-        string chosenMonitor;
         using (var first = Session.Start(instance, _folder, post, logs))
         {
             var engine = first.Engine;
@@ -85,24 +84,23 @@ public sealed class RecordingsEndToEndTests : IDisposable
             Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId), "the profile on the Game Profiles page");
 
             // R9: Recordings are off by default; the Game Profiles page switches them on.
-            var profile = main.GameProfiles.Profiles.Single(p => p.ProfileId == ProfileId);
+            var profile = main.GameProfiles.Page(ProfileId);
             Assert.False(profile.RecordingsEnabled);
             profile.RecordingsEnabled = true;
             Until(() => engine.State!.Settings.Profiles[ProfileId].RecordingsEnabled, "recordingsEnabled saved");
 
-            // monitors.list on this PC: the primary first, and the Recordings page offers Primary then each one.
+            // monitors.list on this PC: the primary first, and the Hotkeys screen picker lists each one.
             monitors = Run(engine.SendAsync(RecordingMessages.MonitorsList, Empty.Value)).Monitors;
             Log?.WriteLine("monitors: " + string.Join("; ", monitors.Select(m => $"{m.DeviceName} {m.FriendlyName} {m.Width}x{m.Height}{(m.Primary ? " primary" : "")}")));
             Assert.NotEmpty(monitors);
             Assert.True(monitors[0].Primary);
             Assert.Single(monitors, m => m.Primary);
             main.Hotkeys.Monitor.RefreshCommand.Execute(null);
-            Until(() => main.Hotkeys.Monitor.Monitors.Count == monitors.Count + 1, "the Recordings page's monitor list");
-            Assert.Null(main.Hotkeys.Monitor.Monitors[0].DeviceName);
-            Assert.Equal(monitors.Select(m => m.DeviceName), main.Hotkeys.Monitor.Monitors.Skip(1).Select(m => m.DeviceName));
-            chosenMonitor = monitors[^1].DeviceName;
-            main.Hotkeys.Monitor.SelectedMonitor = main.Hotkeys.Monitor.Monitors[^1];
-            Until(() => Effective(engine).MonitorRecordingMonitor == chosenMonitor, "monitorRecordingMonitor saved");
+            Until(() => main.Hotkeys.Monitor.Rows.Count == monitors.Count, "the Hotkeys screen picker's rows");
+            Assert.Equal(monitors.Select(m => m.MonitorId ?? m.DeviceName), main.Hotkeys.Monitor.Rows.Select(r => r.Id));
+            main.Hotkeys.Monitor.IsAllScreens = true;
+            Until(() => Effective(engine).MonitorRecordingScreens?.Mode == MonitorScreensMode.All, "monitorRecordingScreens saved");
+            Assert.Null(Effective(engine).MonitorRecordingMonitor);
 
             // The Hotkeys page: Toggle shows the toggle rows; a Separate key bound in Toggle mode is inactive.
             var hotkeys = main.Hotkeys;
@@ -131,8 +129,8 @@ public sealed class RecordingsEndToEndTests : IDisposable
         {
             var engine = second.Engine;
             var main = second.Main;
-            Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId) && main.Hotkeys.Monitor.SelectedMonitor?.DeviceName == chosenMonitor, "the pages after a restart");
-            Assert.True(main.GameProfiles.Profiles.Single(p => p.ProfileId == ProfileId).RecordingsEnabled);
+            Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId) && main.Hotkeys.Monitor.IsAllScreens, "the pages after a restart");
+            Assert.True(main.GameProfiles.Page(ProfileId).RecordingsEnabled);
             Assert.True(main.Hotkeys.IsSeparateMode);
             Assert.Equal("Ctrl+Alt+Shift+F20", Row(main.Hotkeys, HotkeyAction.RecordStart).BindingText);
             Assert.Equal("Ctrl+Alt+Shift+F21", Row(main.Hotkeys, HotkeyAction.RecordStop).BindingText);
