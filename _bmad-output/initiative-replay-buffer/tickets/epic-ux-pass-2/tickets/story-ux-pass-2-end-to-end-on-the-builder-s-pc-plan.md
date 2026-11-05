@@ -66,3 +66,4 @@ Bench wasn't run: 8.8's soak holds the lock, and its engine holds the Hotkey a B
 ## Log
 
 - 2026-11-05: built and verified; READY FOR QA.
+- 2026-11-05: QA round 1, one finding fixed: run alone, the test could see the wrong Newest first order. A scanned item is dated by its creation time (`LibraryActor`), and the test set only the write time, so three files made within milliseconds could share a date. It now sets both an hour apart, checks the engine's dates are in that order, and waits for the shown order. The class passed alone 5 times in a row, and the full App suite passed (195 passed, 20 skipped, 0 failed).

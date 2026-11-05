@@ -86,7 +86,10 @@ public sealed class UxPass2EndToEndTests : IDisposable
         {
             var file = Path.Combine(output, names[i]);
             File.WriteAllBytes(file, [0, 0, 0, 16, .. "ftypisom"u8, 0, 0, 2, 0, 0, 0, 0, 8, .. "moov"u8]);
-            File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddHours(i - 3));
+            // A scanned item's date is its creation time; files written this fast could share one.
+            var made = DateTime.UtcNow.AddHours(i - 3);
+            File.SetCreationTimeUtc(file, made);
+            File.SetLastWriteTimeUtc(file, made);
         }
 
         main.LibrarySettings.Confirm = _ => true;
@@ -101,7 +104,9 @@ public sealed class UxPass2EndToEndTests : IDisposable
 
         // R4: sort and search.
         (library.GroupBy, library.Sort) = (LibraryGrouping.None, LibrarySort.NewestFirst);
-        Assert.Equal(["charlie.mp4", "bravo.mp4", "alpha.mp4"], Shown(library));
+        // The engine dated each item by the creation time set above, an hour apart.
+        Assert.Equal(names, engine.State!.Library.OrderBy(i => i.Date).Select(i => i.Path));
+        Until(() => Shown(library).SequenceEqual(["charlie.mp4", "bravo.mp4", "alpha.mp4"]), "Newest first");
         library.Sort = LibrarySort.Name;
         Assert.Equal(names, Shown(library));
         library.SearchText = "RAV";
