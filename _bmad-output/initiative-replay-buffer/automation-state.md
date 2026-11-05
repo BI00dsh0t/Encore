@@ -39,7 +39,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 
 | Worker | Session id | Remote Control |
 |--------|------------|----------------|
-| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
+| slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | busy with 8.7's fps run (holds the GPU) |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | waiting for GPU FREE to run 8.8's smokes and soaks (8.8 at e3822aa) |
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.6 |
@@ -898,3 +898,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.6 READY FOR QA at `1390586` (from develop `4f16173`): an optional `LibraryItem.Kind` (additive; set through a default-implemented `ILibraryWrites.BeginWrite`; kept in library.json); a Recording or Monitor Recording badge; the welcome card; the tray menu (live status, Open, Open Library, Open the Clips folder, and so on; no Save Clip now); the status hint. Contracts 135, Core 166, App 193 and Engine 194 passed; publish clean. QA went to slice-epic-8 (Sonnet, medium effort).
 - 2026-11-05: QA 10.6 passed at `1390586` with no blocking findings: `Kind` is additive, kinds survive a restart, scanned files have none except in Monitor Recordings, and the tray, hint and badge match the design. Contracts 135, Core 166, App 213 and Engine 238 passed. Nit: drop the unbound `OpenGamesCommand` and `WelcomeLink.Games`. qa-1-14 is merging; 10.7 comes to it next.
 - 2026-11-05: 10.6 merged (`feat(app): merge 10.6-welcome-badge-tray`) after QA passed `1390586` and its nit was fixed in `89bba6a` (the welcome card's unused Games link removed). Develop synced (state lines only): 0-warning build; Contracts 135, Core 166, App 193 and Engine 194 passed, 0 failed; publish clean. Marked done; the welcome and badge-plus-hint renders were copied to `ux-pass-2/renders/`. qa-1-14 takes 10.7 next.
+- 2026-11-05: GPU DONE for 11.3: Heavy `MonitorRecordingCaptureTests` passed 13/13 after the hand-off fix, and the clean stage-split cost run is done; the lock is clear. 11.3's READY FOR QA follows. **8.7's fps run** (`fps --overlay --recording`, about 18 min) went to slice-epic-4 (Opus, medium effort). It checks first that no `ReplayBuffer.App` is running, then records the results against NFR-1's 3 %, merges and marks 8.7 done.
