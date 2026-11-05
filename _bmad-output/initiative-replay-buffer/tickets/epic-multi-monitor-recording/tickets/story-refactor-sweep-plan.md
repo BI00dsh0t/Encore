@@ -28,6 +28,10 @@ Cleanup only, with no behaviour change, scoped at the start from 11.1 to 11.4's 
 | 9 | 11.4 review #1: the App compiles `MonitorCanvasRule.cs` as a linked source, against AD-2's graph | **Recorded, unchanged:** 11.4's unattended design decision, for the builder or an AD-2 update. Moving it would be a design change, not a cleanup. |
 | 10 | 11.4 review #7: tab order runs through the tiles before the check boxes | **Recorded, unchanged** (rejected at review: it follows the visual order). |
 
+## Follow-ups
+
+- **A test gap (QA, not a finding):** no default test covers the old `monitorRecordingMonitor` falling back to the primary when the screen it names isn't attached. `MonitorFinder.Find` does it against the real displays, and 11.2's `MonitorScreensTests` covers Core's resolver, but the engine's pass-through has no fake-display test. A small default test would need `MonitorFinder.Find` behind a display port.
+
 ## Verification
 
 - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings.
