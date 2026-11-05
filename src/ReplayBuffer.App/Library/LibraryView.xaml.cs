@@ -18,15 +18,34 @@ internal partial class LibraryView
     public LibraryView()
     {
         InitializeComponent();
+        DataContextChanged += (_, e) =>
+        {
+            if (e.OldValue is LibraryPage old)
+            {
+                old.DrillIn.Opened -= OnPlayerOpened;
+                old.DrillIn.Closed -= OnPlayerClosed;
+            }
+
+            if (e.NewValue is LibraryPage page)
+            {
+                page.DrillIn.Opened += OnPlayerOpened;
+                page.DrillIn.Closed += OnPlayerClosed;
+            }
+        };
     }
 
     private LibraryPage? Page => DataContext as LibraryPage;
+
+    // The list is hidden while the player page shows (story 14.2): its keys and clicks must not reach the
+    // hidden selection, where Delete would delete the file being played.
+    private LibraryPage? ListPage => Page is { DrillIn.IsOpen: false } page ? page : null;
 
     // Ctrl+F, anywhere on the page: focus the search box with its text selected (story 10.3). A rename box
     // keeps every key, so an open rename isn't committed by the focus moving away.
     private void OnViewPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control
+        if (ListPage is not null
+            && e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control
             && (e.OriginalSource is not TextBox box || ReferenceEquals(box, SearchBox)))
         {
             SearchBox.Focus();
@@ -94,7 +113,7 @@ internal partial class LibraryView
     // A click on a header does nothing, and one on the empty space clears the selection.
     private void OnListPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (Page is not { } page || e.OriginalSource is not DependencyObject source || Within<ScrollBar>(source, List))
+        if (ListPage is not { } page || e.OriginalSource is not DependencyObject source || Within<ScrollBar>(source, List))
         {
             return;
         }
@@ -131,7 +150,7 @@ internal partial class LibraryView
     // A right-click in the rename box is the box's own (its Cut, Copy and Paste menu), and leaves the edit open.
     private void OnListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (Page is { } page
+        if (ListPage is { } page
             && e.OriginalSource is DependencyObject source
             && ContainerOf(source) is { DataContext: LibraryRow row } container
             && !Within<TextBox>(source, container))
@@ -144,8 +163,9 @@ internal partial class LibraryView
     // The menu acts on the shown selection, so it opens only on a row (or, from the keyboard, the focused row).
     private void OnListContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        if (Page is not { } page)
+        if (ListPage is not { } page)
         {
+            e.Handled = true;
             return;
         }
 
@@ -174,7 +194,7 @@ internal partial class LibraryView
     private void OnListPreviewKeyDown(object sender, KeyEventArgs e)
     {
         // The rename box takes every key; a focused button (the star) takes Space and Enter.
-        if (Page is not { } page
+        if (ListPage is not { } page
             || e.OriginalSource is TextBox
             || (e.OriginalSource is ButtonBase && e.Key is Key.Space or Key.Enter))
         {
@@ -254,6 +274,20 @@ internal partial class LibraryView
             Dispatcher.BeginInvoke(DispatcherPriority.Input, () => FocusRow(row));
         }
     }
+
+    // The player page opened: its first control takes focus once it's shown.
+    private void OnPlayerOpened(string path) =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PlayerContent.FocusFirstControl());
+
+    // Back on the list: focus returns to the row that was played, as Games does.
+    private void OnPlayerClosed(string path) =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            if (Page?.FocusedRow is { } row)
+            {
+                FocusRow(row);
+            }
+        });
 
     // The More ⋯ button opens its menu under itself.
     private void OnMoreClick(object sender, RoutedEventArgs e)

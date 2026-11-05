@@ -11,9 +11,12 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:ReplayBuffer.App.Library"
+             xmlns:theme="clr-namespace:ReplayBuffer.App.Theme"
              PreviewKeyDown="OnViewPreviewKeyDown">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
+        <theme:TrueToCollapsedConverter x:Key="Hidden" />
+        <theme:EmptyToCollapsedConverter x:Key="NotEmpty" />
         <local:LibraryMetaConverter x:Key="Meta" />
         <DataTemplate DataType="{x:Type local:LibraryGroupHeader}">
             <ContentControl Content="{Binding Name}" Style="{DynamicResource RbLibraryGroupHeaderStyle}" />
@@ -103,7 +106,10 @@
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
-    <DockPanel>
+    <!-- The list, or (story 14.2) the drill-in's player page in its place; the list is hidden, not unloaded, so its scroll and focus survive. -->
+    <Grid>
+    <local:PlayerView x:Name="PlayerContent" DataContext="{Binding Player}" Visibility="{Binding Converter={StaticResource NotEmpty}}" />
+    <DockPanel x:Name="ListContent" Visibility="{Binding DrillIn.IsOpen, Converter={StaticResource Hidden}}">
         <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
             <!-- Each caption stays with its combo when the row wraps. -->
             <!-- Search: a text box with a leading glyph, a hint while empty and a clear button while it has text. -->
@@ -244,8 +250,8 @@
                     </StackPanel>
                     <local:LibraryOverflowPanel x:Name="Actions" HorizontalAlignment="Left" VerticalAlignment="Center">
                         <Button VerticalAlignment="Center"
-                                Command="{Binding OpenCommand}"
-                                Content="Open"
+                                Command="{Binding PlayCommand}"
+                                Content="Play"
                                 Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
                         <Button VerticalAlignment="Center" Command="{Binding FavouriteSelectionCommand}" Content="{Binding FavouriteLabel}" />
                         <Button VerticalAlignment="Center" Command="{Binding CopyCommand}" Content="Copy" />
@@ -253,6 +259,11 @@
                                 VerticalAlignment="Center"
                                 Command="{Binding CopyToFolderCommand}"
                                 Content="Copy to folder…" />
+                        <Button local:LibraryOverflowPanel.Overflows="True"
+                                VerticalAlignment="Center"
+                                Command="{Binding OpenCommand}"
+                                Content="Open in default player"
+                                Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
                         <Button local:LibraryOverflowPanel.Overflows="True"
                                 VerticalAlignment="Center"
                                 Command="{Binding ShowInExplorerCommand}"
@@ -295,9 +306,12 @@
                      Style="{DynamicResource RbLibraryListStyle}">
                 <ListBox.ContextMenu>
                     <ContextMenu>
-                        <MenuItem Command="{Binding OpenCommand}"
-                                  Header="Open"
+                        <MenuItem Command="{Binding PlayCommand}"
+                                  Header="Play"
                                   InputGestureText="Enter"
+                                  Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                        <MenuItem Command="{Binding OpenCommand}"
+                                  Header="Open in default player"
                                   Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
                         <MenuItem Command="{Binding FavouriteSelectionCommand}" Header="{Binding FavouriteLabel}" />
                         <MenuItem Command="{Binding CopyCommand}" Header="Copy" InputGestureText="Ctrl+C" />
@@ -382,4 +396,5 @@
             </Border>
         </Grid>
     </DockPanel>
+    </Grid>
 </UserControl>
