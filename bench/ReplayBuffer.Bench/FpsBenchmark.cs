@@ -153,7 +153,7 @@ internal static class FpsBenchmark
         {
             "-NoProfile", "-File", script,
             "-Game", game,
-            "-Conditions", withRecording ? "baseline," + AppCondition : "baseline,capture",
+            "-Conditions", withRecording ? "baseline," + AppCondition : options.Text("conditions") ?? "baseline,capture",
             "-Seconds", seconds.ToString(CultureInfo.InvariantCulture),
             "-Repeats", passes.ToString(CultureInfo.InvariantCulture),
             "-SettleSeconds", settle.ToString(CultureInfo.InvariantCulture),
