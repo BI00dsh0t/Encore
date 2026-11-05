@@ -41,9 +41,9 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | busy with 8.8 smokes then soaks (holds the GPU) |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 11.5 |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | busy with 10.8 |
-| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; 11.5 in QA |
+| qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | busy merging 11.5 |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | idle |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | idle |
 
@@ -196,7 +196,7 @@ The coordinator logs each QA round in the Log below.
 | 32.2 | 11.2 Screen selection: the monitorRecordingScreens key and richer monitor list | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `5ae65e3`) |
 | 32.3 | 11.3 Engine: a Monitor Recording of several screens, composited | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | done (merged `79e227b`) |
 | 32.4 | 11.4 Screens to record: the picker on Hotkeys | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | done (merged) |
-| 32.5 | 11.5 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | in QA; Heavy rerun pending after 8.8's soaks |
+| 32.5 | 11.5 Refactor sweep | qa-2-1 pool worker (local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f) | QA passed, merging; ticket open until the Heavy rerun after 8.8's soaks |
 | 32.6 | 11.6 Multi-monitor recording end to end on the builder's PC | | pending |
 | 29.12 | Release epic 8 (`v0.8.0`) | | pending |
 
@@ -916,3 +916,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 10.7 merged (`caf3af2`, `refactor(app): merge 10.7-refactor-sweep`) and marked done, after QA passed `500157f`. QA's two glossary-test fixes landed: it skips only real logger calls and now scans `LibraryPage.cs` and `ShellApp.cs`. After the sync it also skips path-building lines (ShellApp's on-disk "ring" folder). Develop synced: 0-warning build; Contracts 135, Core 166, Media 104, Platform.Audio 29, Platform.Capture 7, Platform.Desktop 13, Platform.FFmpeg 42, Platform.Windows 32, Engine 238 and App 214 passed, 0 failed; publish clean (12.0 MB). Bench wasn't rerun after the sync: 8.8's soak engine holds its Hotkey, and 10.7 touches no Bench code (Bench 161 passed at `500157f`). No renders. qa-1-14 takes 10.8 next.
 - 2026-11-05: 11.5 READY FOR QA at `f3be508`. `CaptureSession.Open`'s two one-screen branches are now one pass-through; the unused `CompositeCapture.AnyDuplication` and `Compositor` and a dead dev-path branch are removed. The spike's dev path is kept on purpose (it reproduces the NFR-1 figures). Contracts 135, Core 169, Media 102, Platform.Capture 8, Engine 196 and App 193 passed; publish clean. **GPU queue after 8.8's soaks:** `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-class "*MonitorRecordingCaptureTests"` (13 tests: one-screen and two-screen), then the two Heavy follow-ups (fragment cadence, short video). QA went to slice-epic-8 (Sonnet, medium effort). 10.7 is told to merge without a Bench rerun if its diff doesn't touch Bench (the soak holds the lock).
 - 2026-11-05: 10.7 merged (`caf3af2`) and done (`7e4a726`). The glossary test also skips path-building lines (`ShellApp`'s on-disk "ring" folder). Every default suite except Bench passed after the sync (App 214); Bench wasn't re-run, since the soak holds the lock and 10.7 changes no Bench code. Card moved to Done. **10.8 (UX pass 2 end to end)** started on qa-1-14: the automated suite runs on a published build in a temp dev instance (never the builder's install), with any GPU part marked Heavy and queued after the soaks; the builder's session goes in as Human Check rows.
+- 2026-11-05: QA 11.5 passed at `f3be508`: cleanup only (the merged one-screen branch makes the same `MonitorFinder.Find` call); the removals are unused; the plan table is complete; Contracts 135, Core 169, Media 102, Platform.Capture 8, Engine 196 and App 193 passed. Gap (a plan follow-up): no default test covers the legacy-key fallback to the primary. qa-2-1 is merging, with the ticket open until the Heavy rerun after the soaks. 8.8's Disk smoke runs until about 03:16.
