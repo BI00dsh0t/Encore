@@ -333,4 +333,28 @@
         <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
+
+    <!--
+        The in-app player's page (story 14.2, AD-27): the video on black, letterboxed, with the page's corners,
+        and the control bar over its bottom edge on the Overlay's card brush, so it reads over any picture in
+        both themes. The message over the video is white on that black.
+    -->
+    <Style x:Key="RbPlayerBackdropStyle" TargetType="Border">
+        <Setter Property="Background" Value="Black" />
+        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style x:Key="RbPlayerBarStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource RbOverlayCardBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Margin" Value="0,0,0,16" />
+    </Style>
+    <Style x:Key="RbPlayerMessageStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="Margin" Value="16" />
+    </Style>
 </ResourceDictionary>

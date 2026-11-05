@@ -25,7 +25,8 @@ internal sealed class MainViewModel : Observable
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
     /// <param name="libraryViewFile">Where the Library remembers its view choices; without it, they last only this run.</param>
     /// <param name="defaultCacheFolder">The engine's default cache folder, shown on the Clips page.</param>
-    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null, IGameShell? gameShell = null)
+    /// <param name="player">Makes the Library's in-app player; Windows' own without it (AD-27).</param>
+    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null, IGameShell? gameShell = null, Func<IPlayer>? player = null)
     {
         _engine = engine;
         StatusLine = new StatusLine(engine);
@@ -38,10 +39,10 @@ internal sealed class MainViewModel : Observable
         FeedbackSounds = Pages.OfType<FeedbackSoundsPage>().Single();
         LibrarySettings = Pages.OfType<LibrarySettingsPage>().Single();
         _selectedPage = Pages[0];
-        Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile);
+        Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile, player: player);
         LibraryNav = new NavItem(LibraryTitle, null, isSection: false);
         NavItems = [LibraryNav, new NavItem(SettingsLabel, null, isSection: true), .. Pages.Select(p => new NavItem(p.Title, p, isSection: false))];
-        foreach (var drillIn in Pages.Select(p => p.DrillIn).OfType<DrillIn>())
+        foreach (var drillIn in Pages.Select(p => p.DrillIn).OfType<DrillIn>().Append(Library.DrillIn))
         {
             drillIn.PropertyChanged += (_, e) =>
             {
@@ -134,8 +135,8 @@ internal sealed class MainViewModel : Observable
     /// <summary>The Clips folder the engine uses, or null before it says: the tray's Open the Clips folder.</summary>
     public string? ClipsFolder => _engine.State?.LibraryFolder;
 
-    /// <summary>The shown page's drill-in (story 10.10), or null: the shell's breadcrumb binds to it.</summary>
-    public DrillIn? CurrentDrillIn => IsSettingsTabSelected ? SelectedPage.DrillIn : null;
+    /// <summary>The shown page's drill-in (story 10.10; the Library's player page, story 14.2), or null: the shell's breadcrumb binds to it.</summary>
+    public DrillIn? CurrentDrillIn => IsSettingsTabSelected ? SelectedPage.DrillIn : Library.DrillIn;
 
     /// <summary>Whether an item page is open, so the page header is a breadcrumb.</summary>
     public bool IsDrilledIn => CurrentDrillIn?.IsOpen == true;
@@ -179,6 +180,11 @@ internal sealed class MainViewModel : Observable
         {
             if (Set(ref _isWindowShown, value))
             {
+                if (!value)
+                {
+                    Library.PausePlayer();
+                }
+
                 UpdateOpenPage();
             }
         }
@@ -238,7 +244,13 @@ internal sealed class MainViewModel : Observable
 
     private void NavigationChanged()
     {
-        // Leaving a page shows its list when it's shown again (story 10.10's drill-in).
+        // Leaving a page shows its list when it's shown again (story 10.10's drill-in); leaving the Library
+        // closes its player page and releases the file (story 14.2).
+        if (IsSettingsTabSelected)
+        {
+            Library.DrillIn.Close();
+        }
+
         foreach (var page in Pages)
         {
             if (!IsSettingsTabSelected || !ReferenceEquals(page, SelectedPage))

@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using ReplayBuffer.App.Engine;
+using ReplayBuffer.App.Settings;
 using ReplayBuffer.Contracts;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Contracts.Settings;
@@ -55,6 +57,9 @@ internal sealed class LibraryPage : Observable
     private readonly ILibraryShell _shell;
     private readonly Func<string, bool> _confirmDelete;
     private readonly Func<string?> _pickFolder;
+    private readonly Func<IPlayer> _newPlayer;
+    private readonly Func<string, Stream>? _openRead;
+    private PlayerPage? _player;
     private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
     // The App's own renames in flight: old path → the path the item gets once the snapshot shows it.
     private readonly Dictionary<string, string> _renames = new(StringComparer.OrdinalIgnoreCase);
@@ -94,6 +99,8 @@ internal sealed class LibraryPage : Observable
     /// <param name="shell">The actions' shell; the Windows shell without it.</param>
     /// <param name="confirmDelete">Asks the delete's whole question, true for Yes; a themed Yes/No prompt over the view's window without it.</param>
     /// <param name="pickFolder">Picks the folder Copy to folder copies into, null on a cancel; the Windows folder dialog without it.</param>
+    /// <param name="player">Makes the in-app player; Windows' own media player without it (AD-27).</param>
+    /// <param name="openRead">Opens a file for the player; read-only and shared for read, write and delete without it (AD-27).</param>
     public LibraryPage(
         IEngineSession engine,
         LibraryThumbnails? thumbnails = null,
@@ -101,7 +108,9 @@ internal sealed class LibraryPage : Observable
         TimeProvider? time = null,
         ILibraryShell? shell = null,
         Func<string, bool>? confirmDelete = null,
-        Func<string?>? pickFolder = null)
+        Func<string?>? pickFolder = null,
+        Func<IPlayer>? player = null,
+        Func<string, Stream>? openRead = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         PropertyChanged += (_, e) =>
@@ -118,8 +127,13 @@ internal sealed class LibraryPage : Observable
         _shell = shell ?? new WindowsLibraryShell();
         _confirmDelete = confirmDelete ?? ConfirmDelete;
         _pickFolder = pickFolder ?? PickFolder;
+        _newPlayer = player ?? (() => new WindowsMediaPlayer());
+        _openRead = openRead;
+        DrillIn = new DrillIn(MainViewModel.LibraryTitle);
+        DrillIn.Closed += _ => ClosePlayer();
         AcknowledgeCommand = new RelayCommand(() => _ = AcknowledgeAsync());
         OpenCommand = Selection(OpenSelection, () => _shownSelected.Count == 1);
+        PlayCommand = Selection(PlaySelection, () => _shownSelected is [{ IsLocked: false }]);
         FavouriteSelectionCommand = Selection(() => _ = FavouriteSelectionAsync(), () => _shownSelected.Count > 0);
         CopyCommand = Selection(CopySelection, () => _shownSelected.Any(r => !r.IsLocked));
         CopyToFolderCommand = Selection(CopySelectionToFolder, () => _shownSelected.Any(r => !r.IsLocked));
@@ -200,8 +214,21 @@ internal sealed class LibraryPage : Observable
     /// <summary>The focused row, when it is shown.</summary>
     public LibraryRow? FocusedRow => _focus is not null && _shownIndex.TryGetValue(_focus, out var i) ? _shownRows[i] : null;
 
-    /// <summary>Opens the one shown selected item in its default player, even while it is being written.</summary>
+    /// <summary>"Open in default player": hands the one shown selected item to the shell's default player, even while it is being written.</summary>
     public ICommand OpenCommand { get; }
+
+    /// <summary>"Play": plays the one shown selected item on the in-app player page, once it's written (AD-27).</summary>
+    public ICommand PlayCommand { get; }
+
+    /// <summary>The in-app player's drill-in (story 14.2): the Library's item page, with 10.10's breadcrumb, keys and close.</summary>
+    public DrillIn DrillIn { get; }
+
+    /// <summary>The open player page, or null on the list.</summary>
+    public PlayerPage? Player
+    {
+        get => _player;
+        private set => Set(ref _player, value);
+    }
 
     /// <summary>Stars every shown selected item, or unstars them all when all are Favourites; one send per item that changes.</summary>
     public ICommand FavouriteSelectionCommand { get; }
@@ -399,6 +426,12 @@ internal sealed class LibraryPage : Observable
         if (_anchor is not null && !_rows.ContainsKey(_anchor))
         {
             _anchor = null;
+        }
+
+        // A player page whose item left the Library (deleted, renamed or cleaned up) closes and releases the file.
+        if (DrillIn.ItemId is { } playing && !_rows.ContainsKey(playing))
+        {
+            DrillIn.Close();
         }
 
         var lostFocus = _focus is not null && !_rows.ContainsKey(_focus) ? _focus : null;
@@ -892,14 +925,17 @@ internal sealed class LibraryPage : Observable
         }
     }
 
-    /// <summary>Enter or a double-click: opens the focused row.</summary>
+    /// <summary>Enter or a double-click: plays the focused row in the app; a row still being written does nothing (AD-27).</summary>
     public void OpenFocused()
     {
-        if (!_deleting && FocusedRow is { } row)
+        if (!_deleting && FocusedRow is { IsLocked: false } row)
         {
-            Open(row);
+            Play(row);
         }
     }
+
+    /// <summary>Pauses the player, if one is playing: the window was hidden.</summary>
+    public void PausePlayer() => Player?.Pause();
 
     /// <summary>Space: toggles the focused row's Favourite.</summary>
     public void ToggleFocusedFavourite()
@@ -979,6 +1015,37 @@ internal sealed class LibraryPage : Observable
         {
             Open(row);
         }
+    }
+
+    private void PlaySelection()
+    {
+        if (_shownSelected is [{ IsLocked: false } row])
+        {
+            Play(row);
+        }
+    }
+
+    // Opens the row's player page in the drill-in, then the file; the page is disposed when the drill-in closes.
+    private void Play(LibraryRow row)
+    {
+        if (Existing([row]) is not [var path])
+        {
+            return;
+        }
+
+        DrillIn.Close();
+        ClearActionError();
+        var page = new PlayerPage(path, row.Name, _newPlayer(), _openRead, p => Shell(row.Path, () => _shell.Open(p), "Couldn't open the file."));
+        Player = page;
+        DrillIn.Open(row.Path, row.Name);
+        _ = page.OpenAsync();
+    }
+
+    private void ClosePlayer()
+    {
+        var page = Player;
+        Player = null;
+        page?.Dispose();
     }
 
     private void CopySelection()

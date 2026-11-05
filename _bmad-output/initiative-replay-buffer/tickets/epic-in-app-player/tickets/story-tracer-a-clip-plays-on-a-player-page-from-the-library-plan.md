@@ -3,7 +3,7 @@ title: 'Tracer: a Clip plays on a player page from the Library'
 type: 'feature'
 ticket: '2'
 created: '2026-11-05'
-status: draft
+status: built
 baseline_revision: '3cca32f'
 route: 'quick'
 risk: 'high'
@@ -129,3 +129,52 @@ A scratch copy of the whole path ran on this PC on 2026-11-05: a CsWin32 interop
 
 - **14.5:** a seek while paused delivered no frame in the proof, and playback then resumed from about 0. 14.5's scrubbing must find a way that redraws while paused (for example `StepForwardOneFrame`, or a brief muted play) and check the resume position.
 - **14.4:** the Track list reads `PlayerMedia.TrackNames` and sets `SelectedTrack`; no seam change.
+
+## Built (2026-11-05)
+
+Approved by the coordinator at `de32126`, with the `VideoSurface` test kept in the default run, the real-fixture checks Heavy, and the seek-while-paused finding noted on 14.5's ticket (done, in its `notes`).
+
+### Differences from the plan
+
+- **The Library's actions:** the command bar's single-item button is now **Play** (it plays in the app, as Enter does, and is disabled for a row still being written). **Open in default player** moves to the bar's overflow and to the context menu, under **Play** (Enter). `OpenCommand` is unchanged: it's the shell open, now labelled "Open in default player".
+- **`WindowsMediaPlayer.IsMuted`:** added so the Heavy tests never make a sound. 14.5's volume builds on it.
+- **`PlayerView.Fit`** (the surface size rule) is a small internal static with its own default test.
+- **The failed page:** `PlayerPage.OpenInDefaultPlayerCommand` goes through the Library's shell call, so a shell failure shows the Library's usual error line. Its default test is `AFileThatCantBePlayedSaysSoAndOffersTheDefaultPlayer`.
+- **Binding check:** the theme test asserts that no binding message names a Player type, as the other page tests scope theirs. WPF's known `ListBoxItem` `Horizontal`/`VerticalContentAlignment` messages from the hidden list aren't this page's.
+- **Test names:**
+  - `ListKeysDoNothingWhileThePlayerIsOpen` and the both-looks check are one test, `PlayerViewThemeTests.ThePlayerPageShowsInBothLooksAndTheHiddenListIgnoresItsKeys`. It sends Space and F2 to the hidden list and checks that nothing is sent and no rename starts.
+  - The MainViewModel drill-in test lives in `LibraryPlayerTests`.
+
+### Verification
+
+- `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings, 0 errors.
+- Default suites, 0 failed (started 15:27):
+
+  | Suite | Total | Passed | Skipped |
+  |---|---|---|---|
+  | App | 231 | 208 | 23 (Explicit/Heavy, 3 of them new) |
+  | Core | 170 | 170 | 0 |
+  | Contracts | 137 | 137 | 0 |
+  | Platform.Desktop | 14 | 14 | 0 |
+- New default tests:
+  - `Platform.Desktop.Tests/VideoSurfaceTests.ASharedSurfaceHasBothViewsAndReleasesThem`;
+  - `App.Tests/LibraryPlayerTests`:
+    - `EnterPlaysAFinishedRowOnItsPageAndNotOneBeingWritten`;
+    - `ThePlayerSharesTheFileForRenameAndDeleteAndBackReleasesIt`;
+    - `AnItemLeavingTheLibraryClosesItsPlayer`;
+    - `AFileThatCantBePlayedSaysSoAndOffersTheDefaultPlayer`;
+    - `TheLibrarysPlayerIsTheShellsDrillInAndLeavingTheLibraryClosesIt`;
+    - `TheSurfaceFitsTheVideosAspectIntoThePictureAndNeverGrowsPastIt`;
+  - `App.Tests/PlayerViewThemeTests.ThePlayerPageShowsInBothLooksAndTheHiddenListIgnoresItsKeys`.
+- PNGs for QA, beside the App test binary (`tests/ReplayBuffer.App.Tests/bin/Release/net10.0-windows10.0.26100.0/`): `player-fluent.png`, `player-gaming.png` and `player-failed-gaming.png`.
+- **Heavy, written and not run** (nights only; muted; the fixtures come from `native/ffmpeg/ffmpeg.exe`). `PlayerPlaybackTests`:
+  - `AClipFixturePlaysIntoTheViewOnTrack1`;
+  - `A6400By2160HevcFixtureReachesTheViewScaledDown`;
+  - `TwoHundredOpensAndClosesDoNotGrowMemory`.
+
+  `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --explicit only --filter-class "*PlayerPlaybackTests"`
+- Not run: `tools/publish-engine.ps1`. Platform.Desktop isn't in the engine's graph, and its AOT analyzers passed in the build.
+
+## Log
+
+- 2026-11-05: branch `feature/14.2-player-tracer` from develop `3cca32f`; plan `de32126` approved; built and verified by 15:29.
