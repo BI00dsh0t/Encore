@@ -42,7 +42,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 |--------|------------|----------------|
 | slice-epic-4 | local_bddcb996-00d5-440b-abab-994cff2c6899 | idle; 14.3 in QA; its Heavy tonight |
 | slice-epic-5 | local_1d2ad9da-a155-47ef-9312-64143e709751 | idle; 8.8's Disk soak tonight |
-| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | busy with QA of 14.3 (14.2 round 2 next) |
+| slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | idle |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | idle |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | idle; tonight: 11.5, 12.1 and 12.2 Heavy, then 12.2's cost run |
 | 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | busy with QA round 2 of 14.2 |
@@ -208,7 +208,7 @@ The coordinator logs each QA round in the Log below.
 | 34.1 | 13.1 Capture new games: the key, the engine default and the General switch | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged `4f06c58`) |
 | 35.1 | 14.1 Architecture: AD-27, the in-app player | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | done (merged) |
 | 35.2 | 14.2 Tracer: a Clip plays on a player page from the Library | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | QA round 2 (code); Heavy tonight; merges after it |
-| 35.3 | 14.3 Recordings play to the end: mehd at finalize | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | in QA (code); Heavy tonight; merges after it |
+| 35.3 | 14.3 Recordings play to the end: mehd at finalize | slice-epic-4 pool worker (local_bddcb996-00d5-440b-abab-994cff2c6899) | code QA passed at `e0ad4c0`; Heavy tonight, then merge |
 | 35.4 | 14.4 Track picker | | pending |
 | 35.5 | 14.5 Transport: seek bar, time, volume and keys | | pending |
 | 35.6 | 14.6 When Windows can't play the file | | pending |
@@ -1004,3 +1004,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 14.3 READY FOR QA at `e0ad4c0`. **An accepted change from the plan, for durability:** two ordered, flushed writes before `EndWrite`: a v1 `mehd` plus a `free` header over the start of `udta`, then `mvex`'s size field +20. So the `mehd` is `mvex`'s last child, and every in-between state is a valid file. Measured: Media Foundation reads v0 or v1, first or last, and reports the full 2.000 s (against 1.05 s unpatched); the in-between state opens as today. The `mvhd` timescale is 48000, hence v1 (it would overflow after 24.8 h). A torn first write is possible only across a 512 B sector, and the log reports it. Core 171, Platform.FFmpeg 41, Engine 201 and App 201 passed; publish clean. Code QA went to slice-epic-8. **Crash-cut finding (for the Notes):** with `mfra` cut off, Media Foundation reports no length; a hand-patched `mehd` gives the full length. A candidate follow-up: `InterruptedRecordings` writes an `mehd` at start-up (seeking checked tonight).
 - **Tonight's queue additions:** 14.2's `*PlayerPlaybackTests` (App, story-2-7) after its round 2; 14.3's `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build --explicit only --filter-method "*AFiveSecondRecordingPlaysToItsEndInMediaPlayer" --filter-method "*ATwoScreenMonitorRecordingOf60Seconds*"` plus the crash-cut seek check (slice-epic-4).
 - 2026-11-05: 14.2 round 2 at `4630577`. (1) `VideoSurface` disposes the wrapper and CsWinRT's per-interface references and `NativeObject`, so every D3D and WinRT object reaches 0 refs with no GC (a new default test counts them). (2) The CsWin32 calls already throw; `Present` catches only `ExternalException` and shows the Failed state (with a test). (3) It redraws after front-buffer loss. (4) Quit closes the player first. (5) Devices are made once; a resize rebuilds the texture after 150 ms. Platform.Desktop 15 and App 232 passed. QA round 2 went to 2-1-tracer (Sonnet, high effort).
+- 2026-11-05: **Code QA for 14.3 passed at `e0ad4c0`.** The bytes were re-derived from the code: the v1 `mehd` layout; `free` ends exactly at the old `udta`'s end; `moov` tiles and nothing after it moves; the in-between state is a valid tree. Both writes use `Flush(true)` before `EndWrite`; refusals and I/O errors only log; the duration error is under about 22 µs. Core 171, Platform.FFmpeg 43 and App passed; publish clean. Engine hit one load flake in a Clip test 14.3 doesn't touch (`ReplayClipCaptureTests.ASavePress…`, which passed alone). It merges after tonight's Heavy.
