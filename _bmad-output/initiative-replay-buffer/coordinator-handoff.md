@@ -1,22 +1,22 @@
-# Coordinator handoff (2026-11-05, evening)
+# Coordinator handoff (2026-11-05, Codex takeover)
 
-Read this first, then `automation-state.md` (the pool table, Queue, Human Check Queue, Decisions Awaiting Review, and Log; its last ~40 Log lines are the recent story) and `test-backlog.md`.
+Read root `CLAUDE.md`, this file, `test-backlog.md`, then the last ~30 Log lines of `automation-state.md`. Its Human Check Queue and Decisions Awaiting Review remain pending.
 
 ## The job
 
-You coordinate the ReplayBuffer initiative, built unattended by a pool of Claude Code sessions. You don't write product code. You brief workers, send each story to a QA or review worker, merge into develop, mark tickets, keep the state file and the Trello board in step, and commit each step on develop (Conventional Commits, `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`).
+Codex works directly in `%USERPROFILE%/Documents/repos/ReplayBuffer`. The former Claude worker-session, SendMessage and Trello instructions are retired for this takeover. Follow the builder's current scope; do not resume the remaining initiative work without their word.
 
 - **Tickets:** `python _bmad/method/scripts/tickets.py next|status|find|mark _bmad-output/initiative-replay-buffer [ref] [state]`.
-- **Trello:** board ids are in `trello-board.md`. Lists: Backlog `6ae9fa34de1908c24b0712be`, In progress `6ae9fa36873f9ca073071568`, In QA `6ae9fa379a75786dc5c08722`, Done `6ae9fa383e33708cc8d74fb3`. Card and list ids use the form `ari:cloud:trello::card/workspace/6ae9f97af5eb2665e52529f6/<id>` (and `…::list/…/<id>`). Labels: red (high risk) `6ae9fa1c9105c93239e2ce69`, purple (HITL) `6ae9fa1c9105c93239e2ce6a`.
-- **Workers:** message them with SendMessage, using `to` = the session id. Reset a worker before a new job with `clear_session`; if that's refused, reuse the session and say "new job" in the brief. Set the model (`claude-opus-5-5` for builds, `claude-sonnet-5-5` for QA and review), effort, and title through the `ccd_session_mgmt` tools.
+- **Git:** git flow (AVH); code on `feature/...` or `bugfix/...` from develop. Conventional Commits, lowercase imperative summary of at most 72 characters, and a `Refs: <story>` footer when applicable. Planning artifacts may be committed directly on develop.
 
 ## Standing rules (the builder's words are in the state file's top section)
 
 1. **Dev resumed, tests deferred** (builder: "resume dev work. don't run any tests until later. make a backlog of tests to run. Merge to dev when changes are ready").
-   - Workers build with 0 warnings but run **no tests**: no default, Heavy, bench or soak runs.
+   - Build with `dotnet build ReplayBuffer.slnx -c Release`, with 0 warnings, but run **no tests**: no default, Heavy, bench or soak runs.
    - QA is **code review only**, and a story merges when its review passes.
    - Every unrun test goes into `test-backlog.md`.
    - Only the builder lifts this rule.
+   - The sole exception for the blank-player-controls bug has been used: one focused icon-render test passed. It does not authorize further test runs.
 2. **GPU work at night only.** Heavy, GPU, capture, bench and soak runs happen at night, after the builder's go. Tonight's 23:03 timer was **deleted** at the builder's request; nothing is scheduled.
 3. **Measurement runs need a quiet PC.** Before any fps or bench run, pause every session's builds and suites. `.bench-running` doesn't stop other sessions. Keep an overlap log.
 4. **Merges:** in the main folder `%USERPROFILE%/Documents/repos/ReplayBuffer` on develop, with exactly `git merge --no-ff <branch> -m "<type>(<scope>): merge <name>"`, serialized. Never push; there's no remote.
@@ -33,8 +33,13 @@ You coordinate the ReplayBuffer initiative, built unattended by a pool of Claude
   - epics 1–7, 9, 10 and 13;
   - 11.1–11.5, and 12.1–12.4 with 12.6;
   - 14.1–14.7, merged as 14.2 `de6f653`, 14.3 `6a8340a`, 14.5 `8ed5775`, 14.4 `de23206`, 14.6 `d2273f9`, 14.7 `2a1f913`.
-- **Develop:** at `0841503` or later; it builds Release with 0 warnings. **No test suite has run since these merges.** See `test-backlog.md` §1, then the 10 night runs in §2.
-- **14.9 "Player controls restyled, with full screen" is merged and done** (its review passed at `4d3066f`). Five small follow-ups from its review are in the state file's last Log line; fold them into a small fix or into 14.8. In progress: bugfix `player-blank-controls` on story-2-7 (the builder saw the 14.9 controls as blank rectangles; a likely cause is the missing Segoe Fluent Icons font). Review it, then merge.
+- **Develop:** player fix merged at `2b38a99` (`eecdc8c` on `bugfix/player-blank-controls`); the post-merge Release build passed with **0 warnings, 0 errors**. The subsequent docs commit updates this handoff and the state log. **No full test suite has run since the earlier merges.** See `test-backlog.md` §1, then the 10 night runs in §2.
+- **14.9 "Player controls restyled, with full screen" is merged and done** (`a38758d`; its review passed at `4d3066f`). Its blank-controls bug is now fixed:
+  - Source diagnosis: Gaming dark's implicit `TextBlock` style assigns Segoe UI, overriding the glyph font inherited by the custom template's `ContentPresenter`. The template now has an explicit `TextBlock` with template-bound font, size, foreground and content; Segoe MDL2 Assets comes first in the font list. Foreground tokens exist in both looks, and the fill triggers do not replace the icon.
+  - Both looks visibly render Play, speaker, gear and full screen. The one authorized run, `PlayerViewThemeTests.ThePlayerIconsRenderInBothLooks`, passed (1 test), including all alternate glyphs and a deliberately conflicting implicit text style. It uses a fake player and no engine, real media or GPU surface. The two inspected PNGs are `tests/ReplayBuffer.App.Tests/bin/Release/net10.0-windows10.0.26100.0/player-icons-{fluent,gaming}.png`.
+  - Review follow-ups fixed: save/restore `Page.Margin`; leave full screen when the window hides (including close/Alt+F4 to tray); centre "Audio track" and put an accent Path check on the right. The full-screen/video background now shares a player theme token instead of `Brushes.Black`.
+  - **Still open:** the gear's possible outside-click close/reopen race. It needs a real pointer/input check; left unchanged and recorded in `test-backlog.md` for the builder/14.8. The broader updated theme/menu/full-screen regression method was written but not run.
+- **Builder can see the fix:** rebuild and run their Dev App from develop, then open a clip from the Library. The existing running Dev App, installed app and real data were left alone.
 - **Waiting on the builder or the test backlog:**
   - 8.8's 8-hour Disk soak (the Memory soak ran 5 h 9 min; engine growth was 1.87 MB/h against a 2 MB/h limit, so watch it). Then 8.9–8.11.
   - The HITL end-to-end stories 11.6, 12.5 and 14.8.
@@ -43,20 +48,6 @@ You coordinate the ReplayBuffer initiative, built unattended by a pool of Claude
 - **Candidate follow-ups, not yet tickets:**
   - an `mehd` written at start-up for crash-cut Recordings (14.3's finding; the night seek check decides it);
   - the two Heavy recording-timing questions (§2 rows 9–10).
-
-## The pool (session ids)
-
-All are idle except story-2-7.
-
-| Name | Session id | Usually |
-|---|---|---|
-| story-2-7 | `local_12351eee-812a-4dcb-8f13-6b288e96bce5` | Opus; App and player builds (14.9 now) |
-| qa-2-1 | `local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f` | Opus; engine and capture (11.x, 12.x); owns the 11.5, 12.1 and 12.2 Heavy runs |
-| slice-epic-4 | `local_bddcb996-00d5-440b-abab-994cff2c6899` | Opus; 14.3 (`mehd`); owns its Heavy runs and the crash-cut check |
-| slice-epic-5 | `local_1d2ad9da-a155-47ef-9312-64143e709751` | Opus; 8.8 soaks (`feature/8.8-soaks`, Disk soak command in its plan) |
-| qa-1-14 | `local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97` | Opus; epic 10 stories |
-| slice-epic-8 | `local_72b7980a-c079-4b93-949b-0a98dc8cee69` | Sonnet; QA and code review |
-| 2-1-tracer-track-layout | `local_9c35886e-1667-4c7b-996a-23e8da89130b` | Sonnet; QA and review (`clear_session` is often refused; reuse it with "new job") |
 
 ## When the builder says tests may run again
 
