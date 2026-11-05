@@ -44,7 +44,7 @@ Workers have Remote Control off, which `clear_session` requires. Sessions that a
 | slice-epic-8 | local_72b7980a-c079-4b93-949b-0a98dc8cee69 | off (8.7 fps command is in its plan) |
 | qa-1-14 | local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97 | off; busy with 10.9 |
 | qa-2-1 | local_e7074a28-6407-45d9-9f57-3ac6d03c4a4f | off; busy with 11.2 |
-| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off |
+| 2-1-tracer-track-layout | local_9c35886e-1667-4c7b-996a-23e8da89130b | off; busy with QA 10.9 |
 | story-2-7 | local_12351eee-812a-4dcb-8f13-6b288e96bce5 | off; busy with 10.3 |
 
 When a session finishes its task (its story merged, its QA passed), it joins the pool if its Remote Control is off, and is archived if it is on (the builder, 2026-11-02, archived every finished session outside the pool). Pool workers are reused through `clear_session`; QA 2.9 and 2.9 itself return to the pool when 2.9 merges.
@@ -186,7 +186,7 @@ The coordinator logs each QA round in the Log below.
 | 31.3 | 10.3 Library sort and search | story-2-7 pool worker (local_12351eee-812a-4dcb-8f13-6b288e96bce5) | in progress |
 | 31.4 | 10.4 Audio Tracks: default devices, the first-run seed, presets and per-device meters | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
 | 31.5 | 10.5 Audio Tracks editor | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | done (merged) |
-| 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in progress |
+| 31.6 | 10.9 Settings reorganised: the folder picker, the Clips, Hotkeys and Storage pages, Recordings removed | qa-1-14 pool worker (local_6dea16b4-fdf6-4dc5-bb4e-994e666dee97) | in QA (2-1-tracer) |
 | 31.7 | 10.10 Games list and a page per game | | pending |
 | 31.8 | 10.11 Plain words everywhere: the glossary on every label, status and warning | | pending |
 | 31.9 | 10.6 Welcome card, Library kind badge, tray menu and status hint | | pending |
@@ -847,3 +847,4 @@ Choices sessions made without the builder. Each row: date, ticket, decision, why
 - 2026-11-05: 11.1 merged into develop (`3fd6ed4`, `feat(capture): merge 11.1-multi-monitor-spike`) and marked done (its plan already said done). Synced with develop first (10.2, 10.4, 10.5): 0-warning build, Platform.Capture 6, Bench 150, Engine 190 passed; publish clean (11.9 MB). The AD-25 spine edit (`e92f903`) landed on develop after the sync; it was docs-only and merged cleanly. NFR-1 note added to Decisions Awaiting Review. Human Check: none new (the VLC check ran headless; watching one in VLC is optional, in the plan).
 - 2026-11-05: 11.1 merged (`3fd6ed4`; done and state in `6a2aeba`, with the NFR-1 row added under capture cost), and its card is Done. 11.2 (the `monitorRecordingScreens` key, the richer monitor list and the canvas rule; no App UI) went to qa-2-1 (Opus, medium effort; context kept), with its card In progress.
 - 2026-11-05: Bugfix `bench-videoencode-count` ready at `be7c2cb`. The coordinator checked it and approved the merge: per sample, the max over a process's instances of a type, summed over processes (the RTX 5090 gives each process 3 identical VideoEncode instances). The reduction moved to `tools/measure-gpu.ps1`, with `MeasureGpuSamplesTests`; correction notes were added to 1.2, epic 1, 1.14, capture-cost research, 5.12, 8.7 and 11.1; Bench 151 passed; no GPU runs.
+- 2026-11-05: 10.9 READY FOR QA at `d8c9b64`: Contracts 128, Core 161 and App 170 passed; App only. One shared FolderPicker (with a file variant for 10.10); Clips, Hotkeys regrouped (a `MonitorPicker` ready for 11.4), Storage and Cleanup, Sounds; Recordings removed. Deviation: no engine `ring-path-invalid` code exists, so the App checks before sending. QA went to 2-1-tracer (Sonnet, medium effort).
