@@ -100,6 +100,7 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
 
 ## Notes
 
+- Feature request: 2026-11-05, [Create clips with precise waveform trimming and audio export](feature-requests/clip-creator/clip-creator.md), with the builder's source input and audio-mode decision alongside it. Recorded for future planning, outside the current build order; the existing no-editing boundary is a scheduling/refinement conflict to reconcile rather than an instruction to discard the request.
 - Open question: the FPS-loss target. The provisional 3% is confirmed or replaced by the first benchmark (PRD Q-1). The builder decides.
 - Open question: the tray icon's behaviour beyond open and quit (PRD Q-2). The builder decides once the tray design is ready.
 - Open question: which anti-cheat-protected games to verify against (PRD Q-3). Decided at test planning.

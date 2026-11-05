@@ -29,6 +29,7 @@ Codex works directly in `%USERPROFILE%/Documents/repos/ReplayBuffer`. The former
 
 ## Where things stand
 
+- **New unscheduled feature request:** [Clip creator](feature-requests/clip-creator/clip-creator.md), requested 2026-11-05: Library/player entry points, Twitch-style range selection, waveform zoom and millisecond controls, MP4/MP3 export, and both separate audio tracks and a combined mix (builder confirmed). Recorded only, not numbered/sliced/started; it does not change the current queue. Existing no-editing boundaries and read-only player architecture need reconciliation when scheduled.
 - **Done and merged:**
   - epics 1–7, 9, 10 and 13;
   - 11.1–11.5, and 12.1–12.4 with 12.6;
