@@ -62,6 +62,55 @@ components:
     lead: '{typography.subtitle}'
     body: '{typography.body}'
     link: '{colors.text-accent}'
+  folder-picker:
+    path-background: '{colors.fill-control-disabled}'
+    path-foreground: '{colors.text-primary}'
+    path-border: '{colors.stroke-control}'
+    caption: '{colors.text-secondary}'
+    error: '{colors.danger}'
+    radius: '{rounded.control}'
+    gap: '{spacing.xs}'
+  breadcrumb-header:
+    back-button: button-subtle
+    parent-link: '{colors.text-accent}'
+    separator: '{colors.text-secondary}'
+    current: '{typography.title}'
+  game-row:
+    base: library-row
+    icon-size: 32px
+    name: '{typography.body-strong}'
+    caption: '{typography.caption}'
+    chevron: '{colors.text-secondary}'
+  pill-capturing:
+    background: '{colors.accent-subtle}'
+    foreground: '{colors.text-accent}'
+    radius: '{rounded.small}'
+    type: '{typography.caption}'
+  pill-not-captured:
+    background: '{colors.fill-control}'
+    foreground: '{colors.text-secondary}'
+    radius: '{rounded.small}'
+    type: '{typography.caption}'
+  inheritance-chip-main:
+    background: '{colors.fill-control}'
+    border: '{colors.stroke-control}'
+    foreground: '{colors.text-secondary}'
+    radius: '{rounded.small}'
+    type: '{typography.caption}'
+  inheritance-chip-changed:
+    background: '{colors.accent-subtle}'
+    border: '{colors.accent}'
+    foreground: '{colors.text-accent}'
+    radius: '{rounded.small}'
+    type: '{typography.caption}'
+  inherited-summary:
+    foreground: '{colors.text-primary}'
+    type: '{typography.body}'
+  library-kind-badge:
+    background: '{colors.fill-on-image}'
+    foreground: '{colors.text-primary}'
+    radius: '{rounded.small}'
+    type: '{typography.caption}'
 ---
 
 # ReplayBuffer UX pass 2 — Design addendum
@@ -143,6 +192,56 @@ Epic 9's card, centred in the list area, at most 520 px wide:
 - links as hyperlinks in `{colors.text-accent}`;
 - the silent-audio line in `{colors.caution}`.
 
+### Folder picker
+
+```
+[ C:\Users\sam\AppData\Local\ReplayBuffer\Cache          ] [Browse…] [Open in Explorer] [Use default]
+  help text (caption, text-secondary)
+  212 GB free on C: (caption, text-secondary)
+  The cache folder can't be inside the Clips folder. (caption, danger)
+```
+
+- **The path:** a read-only text box (`{colors.fill-control-disabled}` fill, `{colors.text-primary}` text, so it stays readable at AA), selectable, with a middle ellipsis and the full path as its tooltip. It isn't drawn disabled.
+- **Buttons:** standard buttons, `{spacing.xs}` apart. Use default is a subtle button.
+- **Disabled** (the cache folder under Memory): the whole row takes the disabled look, with "Used only in Disk mode" as its caption.
+- **The file variant** shows the same row with Browse… only.
+
+### Breadcrumb header (drill-in pages)
+
+The page header of an item page:
+
+- a subtle **Back** button with the ← glyph (Segoe Fluent Icons Back, U+E72B);
+- the parent's title as a hyperlink in `{colors.text-accent}`;
+- a › separator in `{colors.text-secondary}`;
+- the item's name in `{typography.title}`, Gaming dark's uppercase included.
+
+The Back button and the link get the focus visual. On the Games list the header is the plain title, as on every page.
+
+### Game row
+
+- **Layout:** the selected Library row's card and its selected, hover and focus states, with a 32 px program icon in place of the thumbnail (`{rounded.small}` corners), and a › chevron at the right end.
+- **Text:** the name in `{typography.body-strong}`, and the caption line in `{typography.caption}`, `{colors.text-secondary}`.
+- **Pills,** in the caption line: **Capturing now** (accent-subtle, text-accent) and **Not captured** (fill-control, text-secondary). The unsaved dot is the nav dirty dot.
+- **The "Ignored games" group header** is epic 9's group header.
+
+### Inheritance section
+
+```
+CLIPS                                       [ Uses the main setting ]      (section header + chip)
+  Save the last 30 seconds                  [Change for this game]  Edit the main setting
+```
+
+- **The chip** sits right-aligned on the section header row. The main-setting chip is neutral; the changed chip is accent-subtle with an accent border.
+- **The summary** of an inherited value is `{typography.body}` text in `{colors.text-primary}`, never disabled controls, so it meets AA.
+- **Buttons:**
+  - Change for this game is a standard button.
+  - Reset to the main setting is a standard button.
+  - Edit the main setting is a hyperlink.
+
+### Library kind badge
+
+Like the length badge on the thumbnail (`{colors.fill-on-image}`, `{rounded.small}`, caption type), in the thumbnail's top-left corner, reading "Recording" or "Monitor Recording".
+
 ### Tray status item
 
 A disabled menu item in `{colors.text-secondary}`, at the top of the tray menu, followed by a separator.
@@ -155,3 +254,5 @@ A disabled menu item in `{colors.text-secondary}`, at the top of the tray menu, 
 | Keep the command bar's height fixed | Let the list jump when the selection changes |
 | Reuse the level meter at two sizes | Draw a new meter style |
 | Take every colour from epic 9's tokens | Add a token for this epic |
+| Show an inherited value as readable text | Show it as a row of disabled controls |
+| Show a path read-only with Browse | Offer an editable path box |
