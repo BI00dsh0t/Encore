@@ -11,7 +11,7 @@ risk: 'low'
 
 # Story 14.5: Transport: seek bar, time, volume and keys
 
-Brought forward before 14.4 at the builder's word ("the player is missing basic player controls", "all that exists is a play button"). It's stacked on 14.2's tip `27ebd41` (`feature/14.5-transport` from `feature/14.2-player-tracer`), since 14.2 merges after tonight's Heavy run. App only; AD-27.
+Built before 14.4 at the builder's word ("the player is missing basic player controls", "all that exists is a play button"); the ticket order stays as planned ("we don't need to swap ticket order"). It's stacked on 14.2's tip `27ebd41` (`feature/14.5-transport` from `feature/14.2-player-tracer`), since 14.2 merges after tonight's Heavy run. App only; AD-27.
 
 ## The seek-while-paused finding (14.2's note), settled
 
@@ -28,7 +28,7 @@ A scratch probe drove the real `MediaPlayer` over the four-Track fixtures, throu
 
 So a paused seek works in itself. It's a Track switch while paused that makes Media Foundation's next Play resume from the start. `WindowsMediaPlayer` now:
 - chooses the first Track in `AudioTracksChanged` while the file opens, so there's no switch at open. 14.2's `SelectedTrack = 0` is then a no-op, and the setter skips a no-change.
-- after any Track switch while paused, sets the paused (or since sought) position again just after `Play()`. 14.4's picker relies on this; a note on 14.4 says so.
+- after any Track switch while paused, sets the paused (or since sought) position again just after `Play()`. 14.4's picker relies on this, and its Heavy check should cover a paused switch followed by Play.
 
 ## Changes
 

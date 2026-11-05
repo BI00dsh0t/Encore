@@ -36,18 +36,6 @@ risk = "high"
 plan_checkpoint = true
 
 [[entry]]
-id = 5
-type = "story"
-title = "Transport: seek bar, time, volume and keys"
-description = "The player page's controls, drawn over the video in both looks. A seek bar shows the elapsed and total time (PlaybackSession.Position and NaturalDuration). It seeks on click, and while dragging it throttles Position writes to about one per rendered frame. Play and pause, and one volume slider with mute. Keys: Space plays and pauses, Left and Right seek 5 s, Up and Down change the volume by 5 %, Esc goes back (after a control's own Esc, as 10.10's drill-in does). A focused control's own keys win, such as the Track list's and the seek bar's arrows. A file with no known length (a crash-cut Recording) shows the elapsed time only, with seeking off. The volume is kept in LibraryViewState across runs. At the end the player stops on the last frame, and Space plays again from the start. R3."
-verify = "Automated tests on the player view model, against 14.2's fake player with a 30 s file: Right moves the position by 5 s (clamped at the end), a seek bar drag to 50 % lands within a frame of the middle, Space toggles playing, the volume persists through LibraryViewState, and the end state replays from the start, and an unknown length hides the total and disables seeking. The page loads in both looks."
-notes = ["14.2 proof, 2026-11-05: with the player paused, a Position set to 3 s delivered no frame through the frame server, and Play then resumed from about 0. Scrubbing must find a way that redraws while paused (StepForwardOneFrame, or a brief muted play) and check where play resumes. Position = 0 while paused does deliver the first frame (14.2 relies on it)."]
-covers = ["R3"]
-after = [2]
-hitl = false
-risk = "low"
-
-[[entry]]
 id = 4
 type = "story"
 title = "Track picker"
@@ -55,9 +43,21 @@ description = "The player page lists the file's Tracks from MediaPlaybackItem.Au
 verify = "Automated tests on the 2 s four-Track fixture: the list shows Game, Mic, Discord and Desktop with the first selected. Choosing Discord while playing sets SelectedIndex 2 and the position keeps advancing. An unnamed Track shows 'track n'. Heavy (explicit): the process-loopback check from the research (inaudible volume, Goertzel on each Track's tone) hears the chosen Track after each of ten switches."
 notes = ["14.5 probe, 2026-11-05: a Track switch while paused makes Media Foundation's next Play resume from 0 (a switch while playing is fine). WindowsMediaPlayer now sets the paused position again just after Play when a Track was switched while paused, and picks the first Track as the Tracks are listed, so there is no switch at open. 14.4's picker relies on this; test a paused switch then Play in its Heavy check."]
 covers = ["R4"]
-after = [5]
+after = [2]
 hitl = false
 risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Transport: seek bar, time, volume and keys"
+description = "The player page's controls, drawn over the video in both looks. A seek bar shows the elapsed and total time (PlaybackSession.Position and NaturalDuration). It seeks on click, and while dragging it throttles Position writes to about one per rendered frame. Play and pause, and one volume slider with mute. Keys: Space plays and pauses, Left and Right seek 5 s, Up and Down change the volume by 5 %, Esc goes back (after a control's own Esc, as 10.10's drill-in does). A focused control's own keys win, such as the Track list's and the seek bar's arrows. A file with no known length (a crash-cut Recording) shows the elapsed time only, with seeking off. The volume is kept in LibraryViewState across runs. At the end the player stops on the last frame, and Space plays again from the start. R3."
+verify = "Automated tests on the player view model, against 14.2's fake player with a 30 s file: Right moves the position by 5 s (clamped at the end), a seek bar drag to 50 % lands within a frame of the middle, Space toggles playing, the volume persists through LibraryViewState, and the end state replays from the start, and an unknown length hides the total and disables seeking. The page loads in both looks."
+notes = ["14.2 proof, 2026-11-05: with the player paused, a Position set to 3 s delivered no frame through the frame server, and Play then resumed from about 0. Scrubbing must find a way that redraws while paused (StepForwardOneFrame, or a brief muted play) and check where play resumes. Position = 0 while paused does deliver the first frame (14.2 relies on it)."]
+covers = ["R3"]
+after = [4]
+hitl = false
+risk = "low"
 
 [[entry]]
 id = 6
@@ -66,7 +66,7 @@ title = "When Windows can't play the file"
 description = "When the video Track's SupportInfo.DecoderStatus isn't supported (or a dev-instance switch forces it, for the checks in 14.8 and the Done when), MediaFailed is raised, or no frame arrives, the player page shows a plain-words message in place of the video. It names the HEVC Video Extension or AV1 Video Extension, linking to its Microsoft Store page (opened through the shell), says the file is fine, and offers 'Open in default player'. Text follows epic 10's glossary, and the page's Back and keys keep working. The App's log line records the codec and the status. Audio-only problems (an undecodable Track) show the Track as unavailable in the list. R6."
 verify = "Automated tests with 14.2's fake player, which reports DecoderStatus UnsupportedSubtype for HEVC, and MediaFailed for a corrupt file: the page shows the matching message, the Store link and 'Open in default player', and Back returns to the row. The message view loads in both looks."
 covers = ["R6"]
-after = [4]
+after = [5]
 hitl = false
 risk = "low"
 
