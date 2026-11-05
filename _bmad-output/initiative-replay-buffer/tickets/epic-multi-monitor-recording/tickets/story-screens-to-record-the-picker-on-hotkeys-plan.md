@@ -3,7 +3,7 @@ title: 'Screens to record: the picker on Hotkeys'
 type: 'feature'
 ticket: '4'
 created: '2026-11-04'
-status: 'built'
+status: done
 baseline_revision: '2aef49f0f987746d59374bfaf9da0aa71b3fc20e'
 route: 'full'
 route_source: 'auto'
