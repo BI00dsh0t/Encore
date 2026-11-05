@@ -1,7 +1,7 @@
 ---
 name: Multi-monitor Monitor Recording — design
 status: final
-updated: 2026-11-05
+updated: 2026-11-04 (spike 11.1)
 ticket: epic-multi-monitor-recording.md
 ---
 
@@ -40,14 +40,17 @@ The builder's words (2026-11-05): "monitor recording needs to allow selecting wh
 ### The canvas size under (b)
 
 - **Native size:** the canvas is the bounding box of the selected monitors in virtual-desktop pixels. For example, 2560×1440 + 2560×1440 side by side is 5120×1440.
-- **Scaling:** it's scaled down, keeping its aspect ratio, to fit both limits:
-  - **The codec's maximum frame size.** NVENC encodes H.264 at up to 4096 px a side and HEVC and AV1 at up to 8192 px. The encoder probe (story 1.13) reports the real limit.
-  - **A pixel budget** equal to the Global Output resolution's area, or 3840×2160 if that's larger. A three-monitor canvas then costs the encoder about what one 4K monitor would.
+  - The positions and sizes are physical: each display's current mode (`EnumDisplaySettings`: `dmPosition`, `dmPelsWidth`, `dmPelsHeight`), never `rcMonitor`. The engine declares no DPI awareness, so GDI rectangles are virtualized. On the builder's PC, a DPI-unaware reader sees DISPLAY2 as 2560×1440 when it is 3840×2160 (spike 11.1). The builder's canvas is 2560×1440 + 3840×2160 = **6400×2160**.
+- **Scaling:** it's scaled down, keeping its aspect ratio, only to fit **the codec's maximum frame size**:
+  - Spike 11.1 measured NVENC on the RTX 5090: H.264 encodes up to **4096 px a side**, and HEVC and AV1 up to **8192 px a side**. Above that, the open fails with "No capable devices found".
+  - Story 1.13's probe doesn't report a limit (it opens each encoder at 1280×720), so the limits are constants per codec.
+  - The pixel budget (the Output area, or 3840×2160) is **dropped**, by the builder's 2026-11-05 decision that several screens are recorded at full width with HEVC or AV1. Spike 11.1 measured 6400×2160 HEVC and AV1 at 60 fps: 89 % and 76 % NVENC video-encode use, and about 3.7 points more FPS loss than one monitor.
 - **Even sizes:** both sides are rounded down to even numbers (4:2:0, Keys' rule).
 - **Examples:**
   - One monitor is recorded exactly as today.
-  - Two 1440p monitors under HEVC give 5120×1440, inside the 4K budget (7.4 M px).
-  - Three under H.264 give 4096×768, so the picker says "Recorded as one 4096 × 768 video (scaled down)", and suggests HEVC for more detail.
+  - Two 1440p monitors under HEVC give 5120×1440.
+  - The builder's 1440p + 2160p under HEVC or AV1 give 6400×2160, and under H.264 4096×1382.
+  - Three 1440p monitors under H.264 give 4096×768, so the picker says "Recorded as one 4096 × 768 video (scaled down)", and suggests HEVC for more detail.
 
 ### Recommendation: (b), one composited file
 
@@ -108,6 +111,8 @@ MONITOR RECORDING
 - **The Monitor session** gets one `ICaptureSource` per selected monitor: WGC, else that monitor's Desktop Duplication fallback.
   - Each source keeps its latest frame as a texture on the Monitor session's device.
   - A `MonitorCompositor` (Media) blits each latest frame into a canvas texture at its scaled layout rectangle, once per output frame at the Output Settings' fps, and hands the canvas to the existing pacer, scaler and one encoder chain.
+    - The canvas goes to the pacer **once per slot, from the compositor's own slot clock**, never once per source frame. Spike 11.1 pushed on every source frame and got 160 to 946 hand-off drops and about 2,000 non-increasing stamps per 50 s run.
+    - A blit costs 11 µs (1440p) to 22 µs (2160p) of GPU time.
   - With one monitor, the compositor is a pass-through, so today's output is unchanged.
 - **Device:** the Monitor session's own D3D11 device, on the adapter of the primary selected monitor. This settles AD-7's open item as an explicit exception (AD-25).
   - Under the PRD's one-GPU constraint, every monitor is on that adapter.

@@ -61,6 +61,38 @@ The builder presses the Monitor Recording key and gets one playable file holding
 
 ## Notes
 
+- Spike 11.1 report, 2026-11-04 (details in `tickets/spike-spike-composite-several-monitors-into-one-encoded-video-plan.md`): **GO for 11.3's design.**
+  - **The PC:** DISPLAY1 is 2560x1440 at 240 Hz (primary, at 0,0) and DISPLAY2 is **3840x2160 at 144 Hz** (at 2560,0), not 2560x1440. A DPI-unaware reader sees a virtualized 2560x1440. The canvas is **6400x2160**, from each display's current mode (`EnumDisplaySettings`), never `rcMonitor`. The Meta Virtual Monitor adapter has no active output and never appears in the monitor list.
+  - **FPS on the synthetic load** (80 fps GPU-bound, baseline 79.31; two balanced passes, 45 s each), all beside the game capture:
+
+    | Condition | FPS loss |
+    |---|---|
+    | Game capture alone | **2.85 %** (NFR-1 pass) |
+    | + today's one-monitor Monitor Recording | **5.15 %** |
+    | + two monitors composited, HEVC 6400x2160 | **8.83 %** |
+    | + the same in AV1 | **8.80 %** |
+    | + H.264 fitted to 4096x1382 | **9.27 %** |
+    | + Desktop Duplication, HEVC | **7.06 %** |
+
+    The composite adds about 3.7 points over one monitor. Engine 3D stays ≤ 5.5 %. NVENC video-encode reaches 89 % at 6400x2160 60 fps p5.
+  - **Blits:** 10.9 µs per 2560x1440 copy and 22.0 µs per 3840x2160 copy.
+  - **NVENC sessions:** 2 during each composite run (AD-7 held).
+  - **Codec limits (measured; the probe doesn't report them):** H.264 4096 px a side; HEVC and AV1 8192 px a side. Above that, the open fails with "No capable devices found".
+  - **Mixed refresh** (240 Hz and 144 Hz, at 60 fps output): fresh frames in 98.5 to 99 % of slots, with per-source p99 intervals of 29 to 34 ms. No stutter.
+  - **Desktop Duplication** composites the same way, but at 47 to 54 fps per source with 12 % missed slots: acceptable for a fallback.
+  - **Cross-adapter:** not testable (one GPU).
+  - **The files:** every composite file decoded with 0 errors and showed Windows' arrangement. The VLC check is for the builder (VLC isn't installed).
+- Decision: 2026-11-04 (spike 11.1), **the pixel budget, under the builder's full-width decision:** HEVC and AV1 encode the full canvas, limited only by 8192 px a side; a wider canvas is fitted to 8192, aspect kept. H.264 fits the canvas to 4096 px a side. AD-25's 3840x2160 area budget is dropped. AD-25's Canvas rule needs this edit before 11.3.
+- Decision: 2026-11-04 (spike 11.1), the per-codec frame limits are constants (NVENC's: H.264 4096, HEVC and AV1 8192 a side), not a probe result. Story 1.13's probe opens each encoder at 1280x720 only.
+- Decision: 2026-11-04 (spike 11.1), 11.3's compositor hands the pacer one canvas per output slot, from its own slot clock, not one per source frame. The spike's per-frame push gave 160 to 946 queue drops and about 2,000 non-increasing stamps per 50 s run, and a full-canvas scale pass for each source frame.
+- Decision awaiting review: 2026-11-04 (spike 11.1), NFR-1 and a Monitor Recording beside a game. Neither today's one-monitor Recording (5.15 % in total) nor the composite (8.8 %) meets 3 % beside a GPU-bound game. Unattended default: NFR-1 stays the game-capture target (2.85 %, pass). A Monitor Recording beside a game is reported as a known extra cost, and 11.3 re-measures after the per-slot compositing. The builder decides whether 11.3 needs a cap while a game runs, such as the 4K budget or a lower NVENC preset. The Done-when's "within NFR-1" waits on this.
+- Spike code kept as the base for 11.3:
+  - `Platform.Capture`: `MonitorCanvas` and `CompositeCapture`, and `D3D11Device.CopyFrameTo` and `TimeCopies`;
+  - `CaptureSessionOptions.CompositeMonitors` and `debug-capture --monitors` (dev only);
+  - `measure-path-a.ps1 -mon<mode>` and `bench fps --conditions`.
+
+  AD-25 places the compositor in Media and the canvas rule in Core, so 11.2 and 11.3 move them there.
+
 - Decision: 2026-11-05, the builder chose **full width with HEVC or AV1** for several screens: when a Monitor Recording covers more than H.264's 4096 px, it uses HEVC (or AV1) so each screen keeps its native resolution in one file (this PC: two 2560x1440 side by side, 5120x1440, on one RTX 5090). H.264 stays for a single screen, or when the canvas fits. The builder accepted (b), one composited file. 11.1 (the spike) runs now with GPU runs allowed, while 8.7's fps and the 8.8 soaks stay paused.
 
 - Decision: 2026-11-05, the builder's words: "monitor recording needs to allow selecting which monitors to record, or capture all monitors. Plan that feature out."
