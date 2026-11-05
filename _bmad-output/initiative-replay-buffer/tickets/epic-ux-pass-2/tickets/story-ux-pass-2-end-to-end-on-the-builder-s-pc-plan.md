@@ -1,7 +1,7 @@
 ---
 title: "UX pass 2 end to end on the builder's PC"
 ticket: 8
-status: review
+status: done
 ---
 
 # Plan: 10.8 UX pass 2 end to end on the builder's PC
@@ -67,3 +67,4 @@ Bench wasn't run: 8.8's soak holds the lock, and its engine holds the Hotkey a B
 
 - 2026-11-05: built and verified; READY FOR QA.
 - 2026-11-05: QA round 1, one finding fixed: run alone, the test could see the wrong Newest first order. A scanned item is dated by its creation time (`LibraryActor`), and the test set only the write time, so three files made within milliseconds could share a date. It now sets both an hour apart, checks the engine's dates are in that order, and waits for the shown order. The class passed alone 5 times in a row, and the full App suite passed (195 passed, 20 skipped, 0 failed).
+- 2026-11-05: QA passed at `73d7c5c`. Synced with develop (11.5): 0-warning build; Contracts 135, Core 169, Media 106, Platform.Audio 29, Platform.Capture 9, Platform.Desktop 13, Platform.FFmpeg 42, Platform.Windows 32, Engine 243 and App 215 total, 0 failed; publish clean (12.1 MB). Bench not rerun: the soak holds the lock; 10.8 changes no Bench code. The builder's 10 rows went into the Human Check Queue at the merge.
