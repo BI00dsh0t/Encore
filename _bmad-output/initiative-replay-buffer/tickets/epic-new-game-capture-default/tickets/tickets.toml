@@ -1,0 +1,12 @@
+# Stories of epic-new-game-capture-default, in build order. `id` is permanent, never reused.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Capture new games: the key, the engine default and the General switch"
+description = "Contracts, additively (AD-22): a Global-only captureNewGames key (bool, default true, AppliesAt.Immediate) in Keys.cs, and a new-game-not-captured warning code in ErrorCodes. Engine: GameProfiles.EnsureProfile creates a missing profile with its name and, in the same SettingsUpdate, ignored = !captureNewGames, except for a game in manualGames, which is always created captured; an existing profile is never touched. When a profile is created not captured, the engine raises warning.raised new-game-not-captured once with the game's name ('{Game} was found but isn't captured. Turn it on in Games.'), shown on the status line and as an Overlay message. App: the General page gets a 'Games' section with a 'Capture new games' switch and its help line ('When off, a game ReplayBuffer finds for the first time is added to Games as Not captured. Games you add by hand are always captured.'), sent through the settings.update sender, in both themes and to epic 10's glossary. Games' Ignored group, Not captured pill and Capture this game switch (10.10) are unchanged. R1 to R4."
+verify = "Automated tests: captureNewGames defaults to true and round-trips through settings.update; with it false, a fake detected game's new profile is ignored and the warning is raised once, and a second detection of it raises nothing; with it true the new profile is captured; a hand-added game is captured with it false; an existing captured profile stays captured after the setting goes false; the General page's switch sends the key, and the view loads in both themes. Human Check: the builder turns it off, runs a game for the first time, sees the notice and Not captured in Games, turns it on and saves a Clip."
+covers = ["R1", "R2", "R3", "R4"]
+after = []
+hitl = false
+risk = "low"

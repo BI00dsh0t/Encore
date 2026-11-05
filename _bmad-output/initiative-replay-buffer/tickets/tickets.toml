@@ -99,6 +99,21 @@ covers = ["R39"]
 after = [{ epic = 10, needs = "10.9's Hotkeys page, where the screen picker moves, for story 11.4's picker" }]
 
 [[epic]]
+id = 12
+slug = "epic-source-quality-output"
+title = "Source-resolution output"
+description = "Video quality offers a Source resolution, globally and per game: Clips and game Recordings are encoded at the Target Game window's own size and a one-screen Monitor Recording at the screen's own size, fitted only to the codec's largest side, at the Output Settings' frame rate and bitrate. A held mid-session size change moves the Replay Buffer to the new size; a Recording never splits."
+covers = ["R40"]
+after = [{ epic = 11, needs = "11.5's cleanup of CaptureSession.Open, which 12.1 changes" }]
+
+[[epic]]
+id = 13
+slug = "epic-new-game-capture-default"
+title = "New games captured by default, or not"
+description = "A Global \"Capture new games\" switch on the General page, on by default: with it off, a game the engine finds for the first time gets a Game Profile that isn't captured and the user is told once, while hand-added games are always captured and existing games never change."
+covers = ["R41"]
+
+[[epic]]
 id = 8
 slug = "epic-hardening"
 title = "Hardening and hands-off operation"
@@ -115,4 +130,6 @@ after = [
   { epic = 9, needs = "the finished, restyled App, so the final conformance run and the soaks run against the UI that ships" },
   { epic = 10, needs = "the final UI (Library selection, Audio Tracks and the first-run seed), so 8.11's hands-off run on the builder's PC uses what ships; 8.7 to 8.9 measure the engine and don't wait" },
   { epic = 11, needs = "multi-monitor Monitor Recording, finished, so 8.11's hands-off run uses it" },
+  { epic = 12, needs = "source-resolution output, finished, so 8.11's hands-off run uses it; 8.7 to 8.10 don't wait" },
+  { epic = 13, needs = "the Capture new games setting, so 8.11's hands-off run uses it; 8.7 to 8.10 don't wait" },
 ]
