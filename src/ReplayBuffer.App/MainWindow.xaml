@@ -32,8 +32,8 @@
         <DockPanel x:Name="NavPane" Margin="{DynamicResource RbNavPanePadding}">
             <ToggleButton x:Name="NavigationToggle" DockPanel.Dock="Top" Height="36" Margin="4,8,4,0"
                           IsChecked="{Binding IsNavigationExpanded, Mode=TwoWay}"
-                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" HorizontalAlignment="Left" Width="40"
-                          ToolTip="{Binding NavigationToggleLabel}" AutomationProperties.Name="{Binding NavigationToggleLabel}"><TextBlock Text="&#xE700;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" /></ToggleButton>
+                          Style="{DynamicResource RbSettingsNavStyle}" HorizontalAlignment="Left" Width="40"
+                          ToolTip="{Binding NavigationToggleLabel}" AutomationProperties.Name="{Binding NavigationToggleLabel}"><Path Width="16" Height="16" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.5" Data="M 1,1 L 15,1 L 15,15 L 1,15 Z M 6,1 L 6,15" /></ToggleButton>
             <ToggleButton x:Name="SettingsButton" DockPanel.Dock="Bottom" Style="{DynamicResource RbSettingsNavStyle}"
                           IsChecked="{Binding IsSettingsTabSelected, Mode=OneWay}" Click="OnSettingsClick"
                           ToolTip="Settings" AutomationProperties.Name="Settings">

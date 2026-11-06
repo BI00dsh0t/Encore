@@ -56,14 +56,14 @@
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
         <Setter Property="FontSize" Value="14" />
-        <Setter Property="Height" Value="36" />
+        <Setter Property="Height" Value="40" />
         <Setter Property="Padding" Value="12,0" />
-        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="Margin" Value="4,1" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
                     <Grid>
-                        <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource RbNavItemCornerRadius}" />
+                        <Border x:Name="Fill" Background="Transparent" CornerRadius="6" /><Border x:Name="SelectedFill" Background="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0.12" CornerRadius="6" Visibility="Collapsed" />
                         <Border x:Name="Pill"
                                 Width="3"
                                 Height="16"
@@ -72,8 +72,8 @@
                                 Background="{DynamicResource AccentFillColorDefaultBrush}"
                                 CornerRadius="{DynamicResource RbSmallCornerRadius}"
                                 Visibility="Collapsed" />
-                        <DockPanel Margin="{TemplateBinding Padding}" LastChildFill="False">
-                            <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <DockPanel x:Name="NavContent" Margin="{TemplateBinding Padding}" LastChildFill="False">
+                            <TextBlock x:Name="NavGlyph" DockPanel.Dock="Left" Text="{Binding Glyph}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center" Margin="0,0,12,0" />
                             <TextBlock x:Name="Label"
                                        DockPanel.Dock="Left"
                                        VerticalAlignment="Center"
@@ -93,20 +93,20 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="Rail">
-                            <Setter TargetName="Label" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="Label" Property="Visibility" Value="Collapsed" /><Setter Property="Padding" Value="0" /><Setter TargetName="NavContent" Property="HorizontalAlignment" Value="Center" /><Setter TargetName="NavGlyph" Property="Margin" Value="0" />
                         </DataTrigger>
                         <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True">
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible" />
                         </DataTrigger>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
-                            <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="SelectedFill" Property="Visibility" Value="Visible" />
+
                         </Trigger>
                         <Trigger Property="theme:NavPress.IsPressed" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
                             <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -127,19 +127,20 @@
             </DataTrigger>
         </Style.Triggers>
     </Style>
-    <Style x:Key="RbSettingsNavStyle" TargetType="ToggleButton">
+    <Style x:Key="RbSettingsNavStyle" TargetType="ToggleButton"><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="Height" Value="40" /><Setter Property="Margin" Value="4,8,4,0" /><Setter Property="Padding" Value="12,0" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton"><Grid>
-            <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource RbNavItemCornerRadius}" />
+            <Border x:Name="Fill" Background="Transparent" CornerRadius="6" />
             <Border x:Name="Pill" Width="3" Height="16" HorizontalAlignment="Left" Background="{DynamicResource AccentFillColorDefaultBrush}" Visibility="Collapsed" />
             <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
         </Grid><ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger>
-            <Trigger Property="IsChecked" Value="True"><Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /><Setter TargetName="Pill" Property="Visibility" Value="Visible" /></Trigger>
-        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger>
+            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" /></Trigger>
+        <Trigger Property="IsPressed" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        <Style.Triggers><DataTrigger Binding="{Binding IsNavigationExpanded}" Value="False"><Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="Padding" Value="0" /></DataTrigger></Style.Triggers>
     </Style>
 </ResourceDictionary>

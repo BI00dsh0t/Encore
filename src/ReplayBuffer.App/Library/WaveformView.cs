@@ -59,6 +59,16 @@ internal sealed class WaveformView : FrameworkElement
         CoerceValue(LaneOffsetProperty);
         return new Size(double.IsPositiveInfinity(availableSize.Width) ? 0 : availableSize.Width, 28 + Math.Max(1, Math.Min(5, lanes)) * LaneHeight);
     }
+    protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        base.OnGotKeyboardFocus(e);
+        InvalidateVisual();
+    }
+    protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        base.OnLostKeyboardFocus(e);
+        InvalidateVisual();
+    }
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
     protected override void OnRender(DrawingContext dc)
     {
@@ -72,11 +82,17 @@ internal sealed class WaveformView : FrameworkElement
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         void Label(string value, double x, double y) => dc.DrawText(new FormattedText(value, CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, RulerBrush, dpi), new Point(Math.Clamp(x, 0, Math.Max(0, ActualWidth - 100)), y));
-        for (var i = 0; i <= 5; i++)
+        var rulerLabels = Math.Max(1, (int)(plotWidth / 150));
+        for (var i = 0; i <= rulerLabels; i++)
         {
-            var x = PlotLeft + plotWidth * i / 5;
+            var x = PlotLeft + plotWidth * i / rulerLabels;
             dc.DrawLine(pen, new(x, 20), new(x, ActualHeight));
-            Label(ClipCreatorPage.FormatTime(page.ViewportStart + (page.ViewportEnd - page.ViewportStart) * i / 5), x + 3, 2);
+            var text = new FormattedText(ClipCreatorPage.FormatTime(page.ViewportStart + (page.ViewportEnd - page.ViewportStart) * i / rulerLabels),
+                CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, RulerBrush, dpi);
+            // If even two full timestamps cannot fit, keep only the visible viewport start.
+            if (i > 0 && plotWidth < text.Width * 2 + 8) { continue; }
+            var labelX = i == 0 ? x : i == rulerLabels ? x - text.Width : x - text.Width / 2;
+            dc.DrawText(text, new Point(Math.Max(PlotLeft, labelX), 2));
         }
         for (var lane = (int)LaneOffset; lane < Math.Min(lanes.Length, (int)LaneOffset + 5); lane++)
         {
@@ -97,16 +113,21 @@ internal sealed class WaveformView : FrameworkElement
         if (lanes.Length == 0) { Label(page.Tracks.Any(t => t.Included) ? "Loading source waveform…" : "No audio tracks selected", 8, 30); }
         var left = X(page.Start);
         var right = X(page.End);
+        dc.PushOpacity(page.CanEdit ? 1 : 0.45);
         var fill = SelectionBrush.Clone(); fill.Opacity = 0.15;
-        dc.DrawRectangle(fill, null, new Rect(new Point(Math.Clamp(left, PlotLeft, ActualWidth), 22), new Point(Math.Clamp(right, PlotLeft, ActualWidth), ActualHeight)));
+        dc.DrawRectangle(fill, new Pen(SelectionBrush, 1), new Rect(new Point(Math.Clamp(left, PlotLeft, ActualWidth), 28), new Point(Math.Clamp(right, PlotLeft, ActualWidth), ActualHeight)));
         foreach (var x in new[] { left, right })
         {
             if (x >= PlotLeft && x <= ActualWidth)
             {
-                dc.DrawLine(new Pen(SelectionBrush, 3), new(x, 22), new(x, ActualHeight));
-                dc.DrawRectangle(SelectionBrush, null, new Rect(Math.Clamp(x - 5, 0, Math.Max(0, ActualWidth - 10)), 22, 10, 22));
+                var handle = new Rect(x - 5, 28, 10, Math.Max(1, ActualHeight - 28));
+                dc.DrawRoundedRectangle(SelectionBrush, null, handle, 3, 3);
+                dc.DrawLine(new Pen(SurfaceBrush, 2), new(x, handle.Top + (handle.Height - 15) / 2), new(x, handle.Top + (handle.Height + 15) / 2));
+                if (IsKeyboardFocused && (x == left ? !_endHandle : _endHandle))
+                { dc.DrawRoundedRectangle(null, new Pen(RulerBrush, 2), new Rect(x - 8, 25, 16, Math.Max(1, ActualHeight - 26)), 4, 4); }
             }
         }
+        dc.Pop();
         var head = X(page.Playhead);
         if (head >= PlotLeft && head <= ActualWidth) { dc.DrawLine(new Pen(RulerBrush, 2), new(head, 22), new(head, ActualHeight)); }
         if (IsKeyboardFocused) { dc.DrawRectangle(null, new Pen(SelectionBrush, 2), new Rect(1, 1, Math.Max(0, ActualWidth - 2), Math.Max(0, ActualHeight - 2))); }
@@ -127,12 +148,17 @@ internal sealed class WaveformView : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        if (IsMouseCaptured && _page is { } page)
+        if (IsMouseCaptured && _page is { CanEdit: true } page)
         {
             var time = Math.Round(Time(e.GetPosition(this).X), 3);
-            if (_handle == 1) { page.SetRange(Math.Clamp(time, 0, Math.Max(0, page.End - 0.001)), page.End); }
-            if (_handle == 2) { page.SetRange(page.Start, Math.Clamp(time, Math.Min(page.Duration, page.Start + 0.001), page.Duration)); }
+            if (_handle != 0) { MoveBoundary(_handle == 2, time); }
         }
+    }
+    internal void MoveBoundary(bool end, double time)
+    {
+        if (_page is not { CanEdit: true } page) { return; }
+        if (end) { page.SetRange(page.Start, time); }
+        else { page.SetRange(time, page.End); }
     }
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { base.OnMouseLeftButtonUp(e); _handle = 0; ReleaseMouseCapture(); }
     protected override void OnMouseWheel(MouseWheelEventArgs e)

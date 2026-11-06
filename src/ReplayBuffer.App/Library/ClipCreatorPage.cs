@@ -109,6 +109,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     public double End { get => _end; set => SetRange(Start, value); }
     public string StartText { get => FormatTime(Start); set { if (TryTime(value, out var time)) { Start = time; } else { Status = "Enter start as HH:MM:SS.mmm."; } OnPropertyChanged(); } }
     public string EndText { get => FormatTime(End); set { if (TryTime(value, out var time)) { End = time; } else { Status = "Enter end as HH:MM:SS.mmm."; } OnPropertyChanged(); } }
+    public string SelectedDurationText => FormatTime(TimeSpan.FromSeconds(Math.Max(0, End - Start)));
     public string DurationText => $"Selection {FormatTime(TimeSpan.FromSeconds(Math.Max(0, End - Start)))}";
     public string EffectiveText => _effective is { } range
         ? $"{(range.Alignment == "audioSamples48000" ? "Effective audio samples (48 kHz)" : "Effective source frames")}: {FormatTime(range.Start)} – {FormatTime(range.End)}"
@@ -362,7 +363,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     }
     private void NotifyRange()
     {
-        foreach (var property in new[] { nameof(Start), nameof(End), nameof(StartText), nameof(EndText), nameof(DurationText), nameof(ViewportStart), nameof(ViewportEnd) }) { OnPropertyChanged(property); }
+        foreach (var property in new[] { nameof(Start), nameof(End), nameof(StartText), nameof(EndText), nameof(DurationText), nameof(SelectedDurationText), nameof(ViewportStart), nameof(ViewportEnd) }) { OnPropertyChanged(property); }
     }
     private void NotifyCommands()
     {

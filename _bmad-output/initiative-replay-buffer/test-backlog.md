@@ -1,5 +1,11 @@
 # Test backlog
 
+## Clip creator control styling follow-up (2026-11-05)
+
+- Approved styling contract R10/R11 implemented on `feature/clip-creator-control-styling`; see `plan-clip-creator-control-styling.md`. Scoped templates, vector icons, joined Export, grouped millisecond fields/duration, responsive whole-group layout, rounded/dimmed focus-aware handles, quieter popup and sidebar treatment.
+- Final `dotnet build ReplayBuffer.slnx -c Release`: **0 warnings/errors**. Final `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --filter-class "*ClipCreatorTests" --explicit off`: **11 executed/passed, 0 failed/skipped** (13.032 s), after all four independent-review patches. Follow-up inspection confirmed all fixes and no remaining directly caused defect.
+- Fake-service Fluent/Gaming expanded/rail/narrow PNGs and Gaming options popup were generated beside the Release test binary and visually inspected. This scoped fake-window rendering supersedes the old blanket no-render wording for these artifacts only. Real pointer/hover/focus/disabled visual matrix, high DPI, standalone shell/Settings tests, native chooser/HITL and real-media/Heavy tests remain pending; no expanded clearance inferred. Windows quoting was not retried; no Engine/native/media changes required retesting there.
+
 **Current exception (2026-11-05):** builder cleared tests, then limited clearance to clip creator only. Run only its non-Explicit App/Engine/Windows classes, one project at a time, after a zero-warning Release build. This does not authorize §1/§2, HITL, publish/install, or the clip creator's Explicit/Heavy media/shared-handle checks; those retain the night/go rule. Focused QA results will be recorded in the clip-creator section below.
 
 The builder, 2026-11-05 evening: "resume dev work. don't run any tests until later. make a backlog of tests to run. Merge to dev when changes are ready."
