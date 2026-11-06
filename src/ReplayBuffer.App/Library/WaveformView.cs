@@ -25,6 +25,7 @@ internal sealed class WaveformView : FrameworkElement
     private int _handle;
     private bool _endHandle;
     private bool _seekFocus;
+    private DrawingGroup? _waveformDrawing;
 
     public WaveformView()
     {
@@ -43,15 +44,35 @@ internal sealed class WaveformView : FrameworkElement
     private void Attach(ClipCreatorPage? page)
     {
         _page?.EndScrub();
+        _page?.EndRangeDrag();
         if (_page is not null) { _page.PropertyChanged -= Changed; }
         _page = page;
+        _waveformDrawing = null;
         if (_page is not null) { _page.PropertyChanged += Changed; }
         InvalidateMeasure();
         InvalidateVisual();
     }
     private void Changed(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(ClipCreatorPage.Waveforms) or nameof(ClipCreatorPage.Metadata) or nameof(ClipCreatorPage.EffectiveText)) { InvalidateMeasure(); }
+        if (e.PropertyName is nameof(ClipCreatorPage.Waveforms) or nameof(ClipCreatorPage.Metadata)) { InvalidateMeasure(); }
+        if (e.PropertyName is nameof(ClipCreatorPage.Waveforms) or nameof(ClipCreatorPage.Metadata) or nameof(ClipCreatorPage.ViewportStart) or nameof(ClipCreatorPage.ViewportEnd)) { _waveformDrawing = null; }
+        InvalidateVisual();
+    }
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.Property == WaveBrushProperty || e.Property == RulerBrushProperty || e.Property == LaneOffsetProperty)
+        { _waveformDrawing = null; }
+    }
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        _waveformDrawing = null;
+    }
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        _waveformDrawing = null;
         InvalidateVisual();
     }
     protected override Size MeasureOverride(Size availableSize)
@@ -79,7 +100,6 @@ internal sealed class WaveformView : FrameworkElement
         var pen = new Pen(RulerBrush, 1);
         var lanes = page.Waveforms;
         System.Windows.Automation.AutomationProperties.SetName(this, "Audio waveform and trim selection. " + string.Join(", ", lanes.Skip((int)LaneOffset).Take(5).Select(lane => page.Tracks.FirstOrDefault(t => t.Track.StreamIndex == lane.StreamIndex)?.Name ?? "Audio")));
-        var laneHeight = LaneHeight;
         var plotWidth = Math.Max(1, ActualWidth - PlotLeft);
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         void Label(string value, double x, double y) => dc.DrawText(new FormattedText(value, CultureInfo.CurrentCulture,
@@ -96,24 +116,8 @@ internal sealed class WaveformView : FrameworkElement
             var labelX = i == 0 ? x : i == rulerLabels ? x - text.Width : x - text.Width / 2;
             dc.DrawText(text, new Point(Math.Max(PlotLeft, labelX), 2));
         }
-        for (var lane = (int)LaneOffset; lane < Math.Min(lanes.Length, (int)LaneOffset + 5); lane++)
-        {
-            var data = lanes[lane];
-            var center = 28 + laneHeight * (lane - LaneOffset + 0.5);
-            var peaks = new Pen(WaveBrush, Math.Max(1, plotWidth / Math.Max(1, data.Peaks.Length)));
-            var name = page.Tracks.FirstOrDefault(t => t.Track.StreamIndex == data.StreamIndex)?.Name ?? "Audio";
-            var label = new FormattedText(name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, RulerBrush, dpi)
-            { MaxTextWidth = LabelWidth - 8, MaxTextHeight = LaneHeight, Trimming = TextTrimming.CharacterEllipsis };
-            dc.DrawText(label, new Point(4, center - label.Height / 2));
-            dc.PushClip(new RectangleGeometry(new Rect(PlotLeft, 28, plotWidth, Math.Max(0, ActualHeight - 28))));
-            for (var i = 0; i < data.Peaks.Length; i++)
-            {
-                var x = X(data.Start + (data.End - data.Start) * i / data.Peaks.Length);
-                var amplitude = data.Peaks[i] * laneHeight * 0.35;
-                dc.DrawLine(peaks, new(x, center - amplitude), new(x, center + amplitude));
-            }
-            dc.Pop();
-        }
+        if (_waveformDrawing is null) { _waveformDrawing = CreateWaveformDrawing(page, plotWidth, dpi); }
+        dc.DrawDrawing(_waveformDrawing);
         if (lanes.Length == 0 && !page.Tracks.Any(t => t.Included)) { Label("No audio tracks selected", 8, 30); }
         var left = X(page.Start);
         var right = X(page.End);
@@ -149,6 +153,39 @@ internal sealed class WaveformView : FrameworkElement
         }
         if (IsKeyboardFocused) { dc.DrawRectangle(null, new Pen(SelectionBrush, 2), new Rect(1, 1, Math.Max(0, ActualWidth - 2), Math.Max(0, ActualHeight - 2))); }
     }
+    private DrawingGroup CreateWaveformDrawing(ClipCreatorPage page, double plotWidth, double dpi)
+    {
+        var drawing = new DrawingGroup();
+        using (var dc = drawing.Open())
+        {
+            for (var lane = (int)LaneOffset; lane < Math.Min(page.Waveforms.Length, (int)LaneOffset + 5); lane++)
+            {
+                var data = page.Waveforms[lane];
+                var center = 28 + LaneHeight * (lane - LaneOffset + 0.5);
+                var name = page.Tracks.FirstOrDefault(t => t.Track.StreamIndex == data.StreamIndex)?.Name ?? "Audio";
+                var label = new FormattedText(name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, RulerBrush, dpi)
+                { MaxTextWidth = LabelWidth - 8, MaxTextHeight = LaneHeight, Trimming = TextTrimming.CharacterEllipsis };
+                dc.DrawText(label, new Point(4, center - label.Height / 2));
+                var geometry = new StreamGeometry();
+                using (var lines = geometry.Open())
+                {
+                    for (var i = 0; i < data.Peaks.Length; i++)
+                    {
+                        var x = X(data.Start + (data.End - data.Start) * i / data.Peaks.Length);
+                        var amplitude = data.Peaks[i] * LaneHeight * 0.35;
+                        lines.BeginFigure(new(x, center - amplitude), false, false);
+                        lines.LineTo(new(x, center + amplitude), true, false);
+                    }
+                }
+                geometry.Freeze();
+                dc.PushClip(new RectangleGeometry(new Rect(PlotLeft, 28, plotWidth, Math.Max(0, ActualHeight - 28))));
+                dc.DrawGeometry(null, new Pen(WaveBrush, Math.Max(1, plotWidth / Math.Max(1, data.Peaks.Length))), geometry);
+                dc.Pop();
+            }
+        }
+        // Keep theme brushes live; geometry is immutable, and the group is reused by moving overlays.
+        return drawing;
+    }
     private double X(double time) => _page is { } page ? PlotLeft + (time - page.ViewportStart) / (page.ViewportEnd - page.ViewportStart) * Math.Max(1, ActualWidth - PlotLeft) : 0;
     private double Time(double x) => _page is { } page ? page.ViewportStart + Math.Clamp((x - PlotLeft) / Math.Max(1, ActualWidth - PlotLeft), 0, 1) * (page.ViewportEnd - page.ViewportStart) : 0;
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -163,8 +200,8 @@ internal sealed class WaveformView : FrameworkElement
         _handle = point.Y < 28 ? 3 : Math.Abs(x - X(page.Start)) <= 12 ? 1 : Math.Abs(x - X(page.End)) <= 12 ? 2 : 3;
         _seekFocus = _handle == 3;
         if (_seekFocus) { page.BeginScrub(Time(x)); }
-        else { _endHandle = _handle == 2; }
-        if (!CaptureMouse()) { page.EndScrub(); _handle = 0; }
+        else { _endHandle = _handle == 2; page.BeginRangeDrag(); }
+        if (!CaptureMouse()) { page.EndScrub(); page.EndRangeDrag(); _handle = 0; }
         e.Handled = true;
     }
     protected override void OnMouseMove(MouseEventArgs e)
@@ -183,8 +220,8 @@ internal sealed class WaveformView : FrameworkElement
         if (end) { page.SetRange(page.Start, time); }
         else { page.SetRange(time, page.End); }
     }
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { base.OnMouseLeftButtonUp(e); _page?.EndScrub(); _handle = 0; ReleaseMouseCapture(); }
-    protected override void OnLostMouseCapture(MouseEventArgs e) { base.OnLostMouseCapture(e); _page?.EndScrub(); _handle = 0; }
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { base.OnMouseLeftButtonUp(e); _page?.EndScrub(); _page?.EndRangeDrag(); _handle = 0; ReleaseMouseCapture(); }
+    protected override void OnLostMouseCapture(MouseEventArgs e) { base.OnLostMouseCapture(e); _page?.EndScrub(); _page?.EndRangeDrag(); _handle = 0; }
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);

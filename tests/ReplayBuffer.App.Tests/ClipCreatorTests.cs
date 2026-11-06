@@ -95,6 +95,51 @@ public sealed class ClipCreatorTests : IDisposable
     }
 
     [Fact]
+    public async Task TrimDragUpdatesSelectionWithoutStartingWorkUntilRelease()
+    {
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        await page.OpenAsync(0);
+        var peaks = page.Waveforms;
+        var rangeCount = _media.Requests.Count(r => r.Operation == "range");
+        var viewportNotifications = 0;
+        page.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(page.ViewportStart) or nameof(page.ViewportEnd)) { viewportNotifications++; }
+        };
+        page.BeginRangeDrag();
+        for (var i = 1; i <= 200; i++)
+        {
+            page.SetRange(i / 100d, 30 - i / 100d);
+            await page.RefreshAsync();
+        }
+        Assert.Equal((2d, 28d), (page.Start, page.End));
+        Assert.Equal("00:00:26.000", page.SelectedDurationText);
+        Assert.Equal(rangeCount, _media.Requests.Count(r => r.Operation == "range"));
+        Assert.Equal(0, viewportNotifications);
+        Assert.Same(peaks, page.Waveforms);
+        Assert.False(page.Busy);
+        Assert.False(page.CanExport);
+        var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        page.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(page.CanExport) && page.CanExport) { released.TrySetResult(); }
+        };
+        page.EndRangeDrag(); await released.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(rangeCount + 1, _media.Requests.Count(r => r.Operation == "range"));
+        Assert.Equal((2d, 28d), (_media.Requests[^1].Start, _media.Requests[^1].End));
+        Assert.Same(peaks, page.Waveforms);
+        Assert.True(page.CanExport);
+        Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
+        Assert.Empty(page.Status);
+        page.BeginRangeDrag(); page.SetRange(3, 27); page.PauseAndCancel();
+        await page.RefreshAsync();
+        Assert.Equal(rangeCount + 1, _media.Requests.Count(r => r.Operation == "range"));
+        page.Resume(); await page.RefreshAsync();
+        Assert.True(page.CanExport);
+        Assert.Equal((3d, 27d), (_media.Requests[^1].Start, _media.Requests[^1].End));
+    }
+
+    [Fact]
     public async Task PreparationSurvivesOrdinaryEditsAndCancelledPreparationCanResume()
     {
         _media.PreparationRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -398,6 +443,11 @@ public sealed class ClipCreatorTests : IDisposable
                 waveform.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.LostMouseCaptureEvent });
                 Assert.False(page.IsScrubbing);
                 Assert.Equal(originalRange, (page.Start, page.End));
+                page.BeginRangeDrag(); waveform.MoveBoundary(false, 0.5);
+                Assert.False(page.CanExport);
+                waveform.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.LostMouseCaptureEvent });
+                Sta.PumpUntil(() => page.CanExport, "trim release to resolve its final range");
+                Assert.True(page.CanExport);
                 var firstStartBox = (TextBox)view.FindName("StartBox");
                 var oldEnd = page.End;
                 firstStartBox.Text = "00:00:01.123";
