@@ -35,3 +35,9 @@ Recorded scope: a dedicated Settings button pinned to the bottom of the sidebar,
 > use bmad to create a spec for this UX pass
 
 This requests specification work. It does not start implementation, schedule old backlog/HITL work, or expand the current test clearance.
+
+## Control styling correction
+
+> The styling of the controls does not match the mockup
+
+The accepted mockup governs control appearance as well as layout: shapes, density, typography, icon weight, borders, fills, spacing and grouped controls must match. Reusing an existing control template is not sufficient if its appearance differs. Keep semantic theme colors and accessible interaction states while matching the reference treatment.

@@ -2,13 +2,31 @@
 
 ## Composition
 
-The accepted `mockup.html` is the visual reference. Use the product's existing destinations, theme tokens and glyph conventions; the driving scene, Game/Mic names, Dashboard/Recordings placeholders and design-tweak sliders are illustrative.
+The accepted `mockup.html` governs both layout and control styling. Preserve the product's existing destinations and semantic theme colors; match the reference geometry, spacing, typography, icon weight and visual hierarchy rather than inheriting visibly different controls. The driving scene, Game/Mic names, Dashboard/Recordings placeholders and design-tweak sliders are illustrative.
 
 The shell has a title-bar sidebar toggle, a primary navigation region and a separate bottom Settings button. The creator heading identifies the source, offers Back and places the split export action at the right. A large aspect-preserving player occupies the main area. Playback controls and Preview selection sit immediately below it, followed by a compact waveform/ruler, small pan/zoom tools, In/Out fields and selection duration. Show progress, cancellation and messages when relevant. Do not reserve permanent space for a long idle export form or repeated instructional paragraphs.
 
 Reference sizing is a 960×900 client area at 100% scale with two tracks, in each sidebar mode. Target an approximately 400 px or taller picture and roughly 24 px waveform lanes plus a shared ruler, matching the reference proportions. These are layout targets rather than fixed heights: preserve aspect ratio, readable controls and available space at other sizes/scales. Many tracks use a bounded scrollable lane region with shared time mapping, rather than increasing the whole editor indefinitely. A track reached by keyboard must scroll into view. Smaller windows may scroll the editor; controls must not overlap, clip or disappear.
 
 Start/end remain numeric to milliseconds, with accessible 1 ms nudges and draggable handles. Zoom buttons show plus/minus; pan buttons show left/right arrows. Tooltips distinguish timeline zoom from boundary nudges. The effective range remains visible in compact form; precision information must not be available only on hover. Do not restore the former tall waveform merely to satisfy its old minimum-height test.
+
+## Control styling contract (R10)
+
+Use the preserved mockup as the visual source. The following measurements come from its desktop styles, expressed as device-independent reference units at 100% scale. Scale with DPI and preserve usable hit targets; do not substitute the old theme's oversized, strongly bordered or differently shaped controls. Theme colors map to semantic surface/text/accent/hover tokens so Fluent light/dark and Gaming dark remain legible without losing this treatment.
+
+| Control | Required reference treatment |
+|---|---|
+| Ordinary and secondary buttons | Compact, softly rounded 6-unit corners; normal 14-unit Segoe UI text; approximately 7 vertical / 10 horizontal padding. Low-emphasis icon actions are transparent at rest, with a subtle hover surface. Preview selection has the reference's quiet surface and thin border. |
+| Zoom, pan and playback icons | Approximately 16×16, consistent thin-stroke weight and optical alignment. Timeline buttons use approximately 5 / 7 padding. Match the mockup symbols and silhouettes with suitable vector/native assets; a heavy or oversized glyph is not equivalent. Keep tooltips and accessible action names. |
+| In/Out fields and nudges | One softly rounded, 1-unit outlined group per field, with a quiet filled input surface, tabular time text and integrated compact minus/plus nudges. Avoid separate chunky buttons or multiple nested field borders. Reference text width is approximately 115 with 7 / 8 padding. |
+| Split Export action | One continuous accent-filled group, 6-unit outer corners, square adjoining edges and one subtle separator; no gap between main action and arrow. Main padding approximately 9 / 14; arrow approximately 9. Text has medium weight and a contrast-correct foreground. |
+| Export dropdown | Opaque raised surface, 9-unit corners, thin quiet border, subtle shadow, approximately 5-unit outer padding and 11-unit menu-item padding. Icon, label and current-choice check align as in the reference. |
+| Export popup | Approximately 440-unit reference width, 12-unit corners, quiet border, shadow and 22-unit inner padding. Inputs have 6-unit corners and 8 / 10 padding. Header, track choices, summary and secondary/primary actions preserve the reference spacing and emphasis. |
+| Sidebar and Settings entry | Compact icon/label rows with approximately 10 / 12 padding, 12-unit icon-to-label gap and 40-unit row height. Selected navigation uses a soft accent surface, not a large filled card. Collapsed icons stay centered. Settings uses the same control treatment in its separate bottom region. |
+
+Use normal/medium weights rather than bold or uppercase labels. Match the mockup's quieter secondary text and stronger primary action. Hover gives a soft surface response; keyboard focus remains a clearly visible accent outline, approximately 2 units with separation from the edge; disabled controls visibly reduce emphasis while keeping readable labels and their geometry. Define pressed states consistently with the same hierarchy. Do not let global implicit styles override icon fonts, grouped edges, padding or field geometry; use explicit scoped styles/templates where necessary.
+
+These requirements apply to controls shown in the creator, its app-owned export surfaces and the sidebar/Settings entry. They do not redesign existing Settings page content or Windows-native destination dialogs. A matching layout with the old button/field styling fails visual acceptance.
 
 ## Export behavior
 
@@ -33,6 +51,7 @@ The mockup demonstrates the interaction; it does not model real encoding, choose
 | Case | Given / When | Observable result |
 |---|---|---|
 | Workspace (R1, R9) | Open a finished two-track item at the reference size in either look and sidebar mode. | Video is larger than the former 300 px player; the compact waveform, time fields, preview and export fit without scrolling through export settings. A many-track item remains bounded, with every lane reachable and no overlap. |
+| Control fidelity (R10) | Compare the integrated creator, export dropdown/popup and both sidebar modes against `mockup.html` at the same viewport/DPI, when visual checks are authorized; exercise normal, hover, keyboard-focus and disabled states in both looks. | Button/field shapes, icon weight/size, density, borders/fills, typography, spacing and joined groups follow the control styling contract; a retained old template that visibly differs is corrected. Capture comparisons only under the current verification clearance. |
 | Precision (R2, R9) | Set a millisecond range, nudge either endpoint, zoom/pan, then resize/toggle the sidebar. | Text and range agree to 1 ms; selection survives and finer source bins appear on zoom. Effective sample/frame boundaries remain displayed. |
 | Split action (R3) | Choose each type using only the arrow, then activate the main action. | Correct type/check and matching options appear; neither action starts encoding or the chooser. Dismissal restores trigger focus. |
 | Type-specific options (R4) | Select one, several or no named tracks in video/audio options. | Applicable separate/mix controls and file/folder meanings are clear; silent video works and no-track MP3 cannot save; no unselected track is silently included. |
