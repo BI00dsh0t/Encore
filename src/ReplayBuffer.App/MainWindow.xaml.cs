@@ -13,6 +13,7 @@ internal partial class MainWindow
 
     private const double NavWidth = 200;
     private const double NarrowNavWidth = 160;
+    private const double RailWidth = 58;
 
     private bool _quitting;
 
@@ -35,6 +36,7 @@ internal partial class MainWindow
             {
                 model.PropertyChanged += OnModelPropertyChanged;
                 ApplyFullScreen(model.IsPlayerFullScreen);
+                ApplyNavigationWidth();
             }
         };
         IsVisibleChanged += (_, _) =>
@@ -100,7 +102,8 @@ internal partial class MainWindow
 
         model.NavigateBy((Keyboard.Modifiers & ModifierKeys.Shift) != 0 ? -1 : 1);
         Nav.UpdateLayout();
-        (Nav.ItemContainerGenerator.ContainerFromItem(Nav.SelectedItem) as ListBoxItem)?.Focus();
+        if (model.IsSettingsTabSelected) { SettingsSections.Focus(); }
+        else { (Nav.ItemContainerGenerator.ContainerFromItem(Nav.SelectedItem) as ListBoxItem)?.Focus(); }
         e.Handled = true;
     }
 
@@ -137,11 +140,38 @@ internal partial class MainWindow
         }
     }
 
+    // Preview observes the current section before ComboBox commits/dismisses its popup.
+    private void OnSettingsSectionClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject hit
+            && ItemsControl.ContainerFromElement(SettingsSections, hit) is ComboBoxItem { DataContext: NavItem item }
+            && DataContext is MainViewModel model)
+        {
+            model.ReselectNavItem(item);
+        }
+    }
+
+    private void OnSettingsSectionKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Space) || !SettingsSections.IsDropDownOpen
+            || DataContext is not MainViewModel model) { return; }
+        var highlighted = SettingsSections.Items.Cast<NavItem>()
+            .FirstOrDefault(item => SettingsSections.ItemContainerGenerator.ContainerFromItem(item) is ComboBoxItem { IsHighlighted: true });
+        if (ReferenceEquals(highlighted, model.SelectedNavItem))
+        {
+            model.ReselectNavItem(model.SelectedNavItem);
+            SettingsSections.IsDropDownOpen = false;
+            e.Handled = true;
+        }
+        // Escape and other section choices keep ComboBox's normal dismissal/selection behavior.
+    }
+
     /// <summary>Whether the window is in the player's full screen: for tests.</summary>
     internal bool IsFullScreen => _beforeFullScreen is not null;
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainViewModel.IsNavigationExpanded)) { ApplyNavigationWidth(); }
         if (e.PropertyName == nameof(MainViewModel.IsPlayerFullScreen) && sender is MainViewModel model)
         {
             ApplyFullScreen(model.IsPlayerFullScreen);
@@ -192,7 +222,7 @@ internal partial class MainWindow
         ContentLayer.ClearValue(Border.BorderThicknessProperty);
         ContentLayer.ClearValue(Border.CornerRadiusProperty);
         ContentLayer.ClearValue(Border.BackgroundProperty);
-        NavColumn.Width = new GridLength(ActualWidth < NarrowWidth ? NarrowNavWidth : NavWidth);
+        ApplyNavigationWidth();
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -202,9 +232,26 @@ internal partial class MainWindow
             return;
         }
 
-        var narrow = e.NewSize.Width < NarrowWidth;
-        NavColumn.Width = new GridLength(narrow ? NarrowNavWidth : NavWidth);
-        Nav.Tag = narrow ? "Narrow" : null;
+        ApplyNavigationWidth();
+    }
+
+    private void ApplyNavigationWidth()
+    {
+        if (IsFullScreen) { return; }
+        var expanded = DataContext is not MainViewModel model || model.IsNavigationExpanded;
+        var narrow = ActualWidth < NarrowWidth;
+        NavColumn.Width = new GridLength(expanded ? narrow ? NarrowNavWidth : NavWidth : RailWidth);
+        Nav.Tag = !expanded ? "Rail" : narrow ? "Narrow" : null;
+    }
+
+    private void OnSettingsClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model)
+        {
+            if (model.IsSettingsTabSelected) { model.ReselectNavItem(model.SelectedNavItem); }
+            model.IsSettingsTabSelected = true;
+            SettingsButton.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty, true);
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)

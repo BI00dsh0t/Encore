@@ -10,6 +10,10 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:local="clr-namespace:ReplayBuffer.App.Library">
 
+    <Style x:Key="RbClipToolButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="32" /><Setter Property="Height" Value="30" /><Setter Property="FontSize" Value="14" /><Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+    </Style>
+
     <!-- AD-28 creator uses the same semantic tokens in both looks. -->
     <Style x:Key="RbClipWaveformStyle" TargetType="local:WaveformView">
         <Setter Property="WaveBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />

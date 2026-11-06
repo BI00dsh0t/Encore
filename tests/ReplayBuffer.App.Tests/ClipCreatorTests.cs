@@ -192,16 +192,25 @@ public sealed class ClipCreatorTests : IDisposable
                 window.Show(); window.UpdateLayout(); Sta.Pump(TimeSpan.FromMilliseconds(50));
                 var waveform = Descendants<WaveformView>(view).Single();
                 Assert.True(waveform.ActualWidth > 400);
-                Assert.True(waveform.ActualHeight >= 28 + 10 * 40);
+                Assert.Equal(28 + 5 * 24, waveform.ActualHeight);
+                Assert.Equal(5, waveform.ScrollMaximum);
+                waveform.LaneOffset = 5;
+                Assert.Equal(5, waveform.LaneOffset);
                 Assert.Equal(((SolidColorBrush)window.FindResource("AccentFillColorDefaultBrush")).Color, ((SolidColorBrush)waveform.WaveBrush).Color);
                 Assert.NotEqual(((SolidColorBrush)waveform.SurfaceBrush).Color, ((SolidColorBrush)waveform.RulerBrush).Color);
                 Assert.Contains(Descendants<TextBox>(view), t => t.Text == page.StartText);
-                Assert.Equal(10, Descendants<CheckBox>(view).Count());
+                Assert.Empty(Descendants<CheckBox>(view));
+                Assert.True(((PlayerView)view.FindName("Video")).ActualHeight > 400);
                 Assert.True(((Button)view.FindName("PreviewButton")).IsEnabled);
                 Assert.Equal(Visibility.Collapsed, ((Button)((PlayerView)view.FindName("Video")).FindName("FullScreen")).Visibility);
                 var firstStartBox = Descendants<TextBox>(view).First();
                 Assert.True(firstStartBox.TransformToAncestor(view).Transform(new Point()).Y >= waveform.TransformToAncestor(view).Transform(new Point()).Y + waveform.ActualHeight);
             }
+            var range = (page.Start, page.End, page.ViewportStart, page.ViewportEnd);
+            window.Width = 480; window.UpdateLayout();
+            Assert.Equal(range, (page.Start, page.End, page.ViewportStart, page.ViewportEnd));
+            window.Width = 100; window.UpdateLayout(); Sta.Pump(TimeSpan.FromMilliseconds(50));
+            Assert.True(((WaveformView)view.FindName("Timeline")).ActualWidth < 100);
             listener.Flush();
             Assert.Equal("", errors.ToString());
         }
@@ -211,6 +220,167 @@ public sealed class ClipCreatorTests : IDisposable
             PresentationTraceSources.DataBindingSource.Switch.Level = level;
             window.Close();
         }
+    });
+
+    [Fact]
+    public async Task ChooserCancellationAndDuplicatePressesPreserveConfigurationAndStartOnlyOneExport()
+    {
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        await page.OpenAsync(0);
+        page.IsMp3 = true;
+        page.ExportName = "my selection";
+        page.Tracks[1].Included = false;
+        await page.RefreshAsync();
+        Assert.True(page.SeparateAudioFiles);
+        await page.ChooseAndExportAsync(_ => Task.FromResult<string?>(null));
+        Assert.DoesNotContain(_media.Requests, r => r.Operation == "export");
+        var destination = new TaskCompletionSource<string?>();
+        var choosing = page.ChooseAndExportAsync(_ => destination.Task);
+        Assert.False(page.CanSave);
+        Assert.False(page.CanOpenOptions);
+        await page.ChooseAndExportAsync(_ => throw new InvalidOperationException("Duplicate chooser"));
+        destination.SetResult(Path.Combine(_folder, page.ExportName));
+        await choosing;
+        var export = Assert.Single(_media.Requests, r => r.Operation == "export");
+        Assert.Equal("mp3", export.Format);
+        Assert.Equal([1], export.Tracks!);
+        Assert.False(export.Mix);
+        Assert.Equal("my selection", page.ExportName);
+        page.ExportName = "../source";
+        Assert.False(page.CanSave);
+    }
+
+    [Fact]
+    public void SplitMenuAndOwnedOptionsRetainEditsRestoreFocusAndNeverChooseOnDismissal() => Sta.Run(() =>
+    {
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        var opening = page.OpenAsync(0);
+        Sta.PumpUntil(() => opening.IsCompleted, "source to open");
+        opening.GetAwaiter().GetResult();
+        var view = new ClipCreatorView { DataContext = page, ChooseDestination = _ => throw new InvalidOperationException("Dismissal chose a destination") };
+        ((PlayerView)view.FindName("Video")).FrontBufferChanged(false);
+        var window = new Window { Content = view, Width = 960, Height = 900, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
+        var theme = ThemeService.ForWindow(window);
+        void Options(ClipExportDialog dialog)
+        {
+            ThemeService.ForWindow(dialog).Apply(AppTheme.GamingDark);
+            dialog.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle, () =>
+            {
+                Assert.Same(window, dialog.Owner);
+                Assert.Equal(2, Descendants<CheckBox>(dialog).Count());
+                page.Tracks[1].Included = false;
+                page.ExportName = "retained";
+                dialog.Close();
+            });
+        }
+        ClipExportDialog.Showing += Options;
+        try
+        {
+            theme.Apply(AppTheme.Fluent);
+            window.Show(); window.UpdateLayout();
+            var arrow = (Button)view.FindName("ExportArrow");
+            arrow.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            var menu = arrow.ContextMenu!;
+            Assert.True(menu.IsOpen);
+            Assert.Equal(2, menu.Items.Count);
+            ((MenuItem)menu.Items[1]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            menu.IsOpen = false;
+            Assert.Equal("mp3", page.Format);
+            var refreshed = page.RefreshAsync();
+            Sta.PumpUntil(() => refreshed.IsCompleted, "type configuration to refresh");
+            var export = (Button)view.FindName("ExportButton");
+            export.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.Equal("retained", page.ExportName);
+            Assert.False(page.Tracks[1].Included);
+            Assert.Same(export, System.Windows.Input.FocusManager.GetFocusedElement(window));
+            Assert.DoesNotContain(_media.Requests, r => r.Operation is "export" or "preview");
+            var preview = page.RefreshAsync();
+            Sta.PumpUntil(() => preview.IsCompleted, "retained options to refresh");
+            preview = page.PreviewAsync();
+            Sta.PumpUntil(() => preview.IsCompleted, "selection preview");
+            var request = _media.Requests.Last(r => r.Operation == "preview");
+            Assert.Equal("mp3", request.Format);
+            Assert.Equal([1], request.Tracks!);
+        }
+        finally { ClipExportDialog.Showing -= Options; window.Close(); }
+    });
+
+    [Fact]
+    public void ReferenceClientAreaKeepsTwoTrackCreatorActionsVisibleInsideTheActualShell() => Sta.Run(() =>
+    {
+        var engine = new FakeEngineSession();
+        var source = Source;
+        engine.State = engine.State! with { LibraryFolder = _folder, Library = [new LibraryItem("source.mp4", null, source.Length, DateTimeOffset.UtcNow, false)] };
+        var model = new MainViewModel(engine, action => action(), player: () => new FakePlayer(), clipMedia: _media);
+        model.Library.Click(model.Library.Rows[0], false, false);
+        model.Library.CreateClipCommand.Execute(null);
+        Sta.PumpUntil(() => model.Library.Creator is { Busy: false, Metadata: not null }, "source to open");
+        var page = model.Library.Creator!;
+        var view = (ClipCreatorView)((LibraryView)model.Library.View).FindName("CreatorContent");
+        ((PlayerView)view.FindName("Video")).FrontBufferChanged(false);
+        var window = new MainWindow { DataContext = model, Width = 960, Height = 900, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
+        var themes = ThemeService.ForWindow(window);
+        try
+        {
+            foreach (var look in new[] { AppTheme.Fluent, AppTheme.GamingDark })
+            {
+                themes.Apply(look); window.Show(); window.UpdateLayout();
+                var client = (Grid)window.Content;
+                window.Width += 960 - client.ActualWidth;
+                window.Height += 900 - client.ActualHeight;
+                foreach (var expanded in new[] { true, false })
+                {
+                    model.IsNavigationExpanded = expanded;
+                    window.UpdateLayout();
+                    var scroll = (ScrollViewer)view.Content;
+                    Assert.True(scroll.ScrollableHeight == 0, $"Scroll {scroll.ScrollableHeight}; viewport {scroll.ViewportHeight}; extent {scroll.ExtentHeight}; header {((FrameworkElement)window.FindName("PageHeader")).ActualHeight}; status {((FrameworkElement)window.FindName("StatusHeader")).ActualHeight}; client {client.ActualHeight}; children " + string.Join(", ", ((StackPanel)scroll.Content).Children.OfType<FrameworkElement>().Select(c => c.GetType().Name + "=" + c.ActualHeight)));
+                    var video = (PlayerView)view.FindName("Video");
+                    Assert.True(video.ActualHeight >= 470);
+                    Assert.True(((Grid)((Border)video.Content).Child).RowDefinitions[0].ActualHeight >= 390);
+                    Assert.True(((Button)view.FindName("PreviewButton")).IsVisible);
+                    Assert.True(((Button)view.FindName("ExportButton")).IsVisible);
+                    Assert.Equal(76, ((WaveformView)view.FindName("Timeline")).ActualHeight);
+                }
+            }
+        }
+        finally { window.CloseForQuit(); }
+    });
+
+    [Fact]
+    public void MinimumShellSizeWrapsEveryTimelineActionWithinTheScrollableViewport() => Sta.Run(() =>
+    {
+        var engine = new FakeEngineSession();
+        var source = Source;
+        engine.State = engine.State! with { LibraryFolder = _folder, Library = [new LibraryItem("source.mp4", null, source.Length, DateTimeOffset.UtcNow, false)] };
+        var model = new MainViewModel(engine, action => action(), player: () => new FakePlayer(), clipMedia: _media);
+        model.Library.Click(model.Library.Rows[0], false, false);
+        model.Library.CreateClipCommand.Execute(null);
+        Sta.PumpUntil(() => model.Library.Creator is { Busy: false, Metadata: not null }, "source to open");
+        var view = (ClipCreatorView)((LibraryView)model.Library.View).FindName("CreatorContent");
+        ((PlayerView)view.FindName("Video")).FrontBufferChanged(false);
+        var window = new MainWindow { DataContext = model, Width = 480, Height = 320, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
+        var themes = ThemeService.ForWindow(window);
+        try
+        {
+            foreach (var look in new[] { AppTheme.Fluent, AppTheme.GamingDark })
+            {
+                themes.Apply(look); window.Show(); window.UpdateLayout();
+                var scroll = (ScrollViewer)view.Content;
+                var viewport = Descendants<ScrollContentPresenter>(scroll).First();
+                var toolbar = (WrapPanel)view.FindName("TimelineToolbar");
+                Assert.True(model.IsNavigationExpanded);
+                Assert.Equal(5, toolbar.Children.OfType<Button>().Count());
+                Assert.True(scroll.ScrollableHeight > 0);
+                foreach (var button in toolbar.Children.OfType<Button>())
+                {
+                    button.BringIntoView(); window.UpdateLayout();
+                    var bounds = button.TransformToAncestor(viewport).TransformBounds(new Rect(button.RenderSize));
+                    Assert.True(bounds.Left >= -1 && bounds.Right <= viewport.ActualWidth + 1, $"Action clipped horizontally: {bounds}, viewport {viewport.RenderSize}");
+                    Assert.True(bounds.Top >= -1 && bounds.Bottom <= viewport.ActualHeight + 1, $"Action cannot scroll into view: {bounds}, viewport {viewport.RenderSize}");
+                }
+            }
+        }
+        finally { window.CloseForQuit(); }
     });
 
     private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject

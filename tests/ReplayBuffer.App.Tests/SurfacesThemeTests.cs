@@ -198,6 +198,38 @@ public sealed class SurfacesThemeTests
         }
     });
 
+    // Added for the UX pass; execution awaits shared-shell clearance.
+    [Fact]
+    public void BottomSettingsAndPrimaryIconsResolveInBothNavigationWidthsAndLooks() => Sta.Run(() =>
+    {
+        var model = new MainViewModel(new FakeEngineSession(), action => action());
+        var window = Offscreen(new MainWindow { DataContext = model, Width = 960, Height = 900 });
+        var theme = ThemeService.ForWindow(window);
+        try
+        {
+            foreach (var look in new[] { AppTheme.Fluent, AppTheme.GamingDark })
+            {
+                theme.Apply(look); window.Show();
+                foreach (var expanded in new[] { true, false })
+                {
+                    model.IsNavigationExpanded = expanded; window.UpdateLayout();
+                    var bottom = (ToggleButton)window.FindName("SettingsButton");
+                    Assert.NotNull(bottom.Template);
+                    Assert.Equal("Settings", System.Windows.Automation.AutomationProperties.GetName(bottom));
+                    Assert.Equal(Dock.Bottom, DockPanel.GetDock(bottom));
+                    var nav = (ListBox)window.FindName("Nav");
+                    var item = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromIndex(0);
+                    item.ApplyTemplate();
+                    var label = (TextBlock)item.Template.FindName("Label", item);
+                    Assert.Equal(expanded ? Visibility.Visible : Visibility.Collapsed, label.Visibility);
+                    Assert.True(item.IsSelected);
+                    Assert.Equal("Library", item.ToolTip);
+                }
+            }
+        }
+        finally { window.CloseForQuit(); }
+    });
+
     private static List<Color> GlyphColours(IEnumerable<FrameworkElement> glyphs) =>
         glyphs.SelectMany(g => g is Panel p ? p.Children.OfType<Shape>() : g is Shape s ? [s] : [])
             .SelectMany(s => new[] { s.Fill, s.Stroke })

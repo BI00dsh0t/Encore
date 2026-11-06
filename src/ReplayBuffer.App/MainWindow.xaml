@@ -30,11 +30,23 @@
         </Grid.ColumnDefinitions>
 
         <DockPanel x:Name="NavPane" Margin="{DynamicResource RbNavPanePadding}">
+            <ToggleButton x:Name="NavigationToggle" DockPanel.Dock="Top" Height="36" Margin="4,8,4,0"
+                          IsChecked="{Binding IsNavigationExpanded, Mode=TwoWay}"
+                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" HorizontalAlignment="Left" Width="40"
+                          ToolTip="{Binding NavigationToggleLabel}" AutomationProperties.Name="{Binding NavigationToggleLabel}"><TextBlock Text="&#xE700;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" /></ToggleButton>
+            <ToggleButton x:Name="SettingsButton" DockPanel.Dock="Bottom" Style="{DynamicResource RbSettingsNavStyle}"
+                          IsChecked="{Binding IsSettingsTabSelected, Mode=OneWay}" Click="OnSettingsClick"
+                          ToolTip="Settings" AutomationProperties.Name="Settings">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center" />
+                 <TextBlock Text="Settings" Margin="12,0,0,0"><TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers><DataTrigger Binding="{Binding IsNavigationExpanded}" Value="False"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+                </StackPanel>
+            </ToggleButton>
             <ContentControl x:Name="Brand"
                             Margin="{DynamicResource RbNavBrandMargin}"
                             Content="{Binding Title, ElementName=Shell}"
                             DockPanel.Dock="Top"
-                            Style="{DynamicResource RbBrandStyle}" />
+                            Style="{DynamicResource RbBrandStyle}"
+                            Visibility="{Binding IsNavigationExpanded, Converter={StaticResource RbShellVisible}}" />
             <app:NavListBox x:Name="Nav"
                      Padding="0"
                      AutomationProperties.Name="Navigation"
@@ -42,7 +54,7 @@
                      BorderThickness="0"
                      FocusVisualStyle="{x:Null}"
                      ItemContainerStyle="{DynamicResource RbNavItemStyle}"
-                     ItemsSource="{Binding NavItems, Mode=OneTime}"
+                     ItemsSource="{Binding PrimaryNavItems, Mode=OneTime}"
                      KeyDown="OnNavKeyDown"
                      PreviewMouseLeftButtonUp="OnNavClick"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -57,7 +69,15 @@
                                 Content="{Binding StatusLine.View}"
                                 DockPanel.Dock="Top"
                                 Focusable="False" />
+                <ComboBox x:Name="SettingsSections" DockPanel.Dock="Top" Margin="0,12,0,0"
+                          ItemsSource="{Binding SettingsNavItems, Mode=OneTime}"
+                          PreviewMouseLeftButtonUp="OnSettingsSectionClick" PreviewKeyDown="OnSettingsSectionKeyDown"
+                          SelectedItem="{Binding SelectedNavItem, Mode=TwoWay}" AutomationProperties.Name="Settings section"
+                          Visibility="{Binding IsSettingsTabSelected, Converter={StaticResource RbShellVisible}}">
+                    <ComboBox.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding Title}" /><Border Width="6" Height="6" Margin="8,0,0,0" Background="{DynamicResource AccentFillColorDefaultBrush}" Visibility="{Binding HasUnsavedChanges, Converter={StaticResource RbShellVisible}}" /></StackPanel></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
                 <Grid x:Name="PageHeader" Margin="0,16,0,0" DockPanel.Dock="Top">
+                    <Grid.Style><Style TargetType="Grid"><Style.Triggers><DataTrigger Binding="{Binding IsCreatingClip}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></Grid.Style>
                     <ContentControl x:Name="PageTitle"
                                     Content="{Binding CurrentTitle}"
                                     Style="{DynamicResource RbPageTitleStyle}"
