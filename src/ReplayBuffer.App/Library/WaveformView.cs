@@ -19,7 +19,7 @@ internal sealed class WaveformView : FrameworkElement
     public double LaneOffset { get => (double)GetValue(LaneOffsetProperty); set => SetValue(LaneOffsetProperty, value); }
     public double ScrollMaximum { get => (double)GetValue(ScrollMaximumProperty); private set => SetValue(ScrollMaximumProperty, value); }
     private const double LabelWidth = 100;
-    private const double LaneHeight = 24;
+    private const double LaneHeight = 40;
     private double PlotLeft => Math.Min(LabelWidth, Math.Max(0, ActualWidth - 1));
     private ClipCreatorPage? _page;
     private int _handle;
@@ -104,7 +104,7 @@ internal sealed class WaveformView : FrameworkElement
             var name = page.Tracks.FirstOrDefault(t => t.Track.StreamIndex == data.StreamIndex)?.Name ?? "Audio";
             var label = new FormattedText(name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, RulerBrush, dpi)
             { MaxTextWidth = LabelWidth - 8, MaxTextHeight = LaneHeight, Trimming = TextTrimming.CharacterEllipsis };
-            dc.DrawText(label, new Point(4, 28 + laneHeight * (lane - LaneOffset)));
+            dc.DrawText(label, new Point(4, center - label.Height / 2));
             dc.PushClip(new RectangleGeometry(new Rect(PlotLeft, 28, plotWidth, Math.Max(0, ActualHeight - 28))));
             for (var i = 0; i < data.Peaks.Length; i++)
             {

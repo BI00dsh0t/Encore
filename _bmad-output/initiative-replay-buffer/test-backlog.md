@@ -1,5 +1,11 @@
 # Test backlog
 
+## Taller waveform lanes (2026-11-06)
+
+- Increased each track lane from 24 to 40 pixels; proportional waveform envelope grows with it and track labels are vertically centered. Existing five-lane scrolling and responsive player allocation remain. Two-track timeline is now 108 pixels including the ruler. Updated existing layout expectations for the deliberate extra height; no new tests added for this small visual change.
+- `dotnet build ReplayBuffer.slnx -c Release --no-restore -v quiet`: **0 warnings/errors**. `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --filter-class "*ClipCreatorTests" --explicit off`: **15 passed, 0 failed/skipped**, 16.026 s. Both-look/rail player growth, ten-track scrolling and minimum-window controls checked. Inspected generated Gaming expanded fake-media PNG: taller distinct lanes, centered labels, visible editing controls. Ordinary diff review clear.
+- Real media, high DPI and actual pointer/HITL remain deferred; no real Dev App/data changes, unrelated tests or Heavy runs.
+
 ## Per-track waveform amplitude scaling (2026-11-06)
 
 - Approved `plan-clip-creator-waveform-amplitude-scaling.md` implemented directly without BMad execution. App display arrays scale against each track's validated whole-source maximum from the existing single-peak cache level. Silent tracks stay zero; zoom/pan/track inclusion retain the denominator. Renderer styling, source/cache bytes, worker and audio playback/export unchanged.
