@@ -1,5 +1,9 @@
 # Automation State
 
+## Taller waveform lane checkpoint (2026-11-06)
+
+- Requested track height increase implemented: 24 → 40 pixels, larger peak envelope, vertically centered labels. Feature `4a1fb9296a29c8c239ba227385b4897fbbf19330`, no-ff merged into develop `aa92384adb2403d6ac76b6a8a63900fea1c0fd96`. All 15 scoped ClipCreatorTests passed (0 failed/skipped), including both looks, player resizing, five-lane scrolling and minimum-window reachability. Feature and post-merge Release builds 0 warnings/errors. Ordinary review and generated Gaming expanded fake-media PNG inspection clear. Backlog/handoff updated; no real app/data use, unrelated tests, Heavy runs or push.
+
 ## Waveform amplitude scaling checkpoint (2026-11-06)
 
 - Builder approved BMad planning, with implementation explicitly outside BMad. Feature `5873727d6f9d4fae83a0657e9061f51f4247b19d` merged no-ff to develop at `aaa9fc82e7f625c4cf730c875c2b7c2fe9f7ca13`. Display peaks use validated per-track whole-source maxima, stable through zoom/pan/inclusion; silence stays flat. No source/cache-byte/audio/worker/style changes. Final ClipCreatorTests 15 executed/passed, 0 failed/skipped; initial new-test viewport assumption corrected after 14 passed/1 failed. Final feature and post-merge Release builds 0 warnings/errors. Ordinary diff review clear. Plan/backlog/handoff updated; existing real-media/Heavy/publish/high-DPI/HITL restrictions persist. No real app/data/settings changes, unrelated tests or push. Rebuild/restart Dev App from develop to see the change.
