@@ -41,3 +41,9 @@ This requests specification work. It does not start implementation, schedule old
 > The styling of the controls does not match the mockup
 
 The accepted mockup governs control appearance as well as layout: shapes, density, typography, icon weight, borders, fills, spacing and grouped controls must match. Reusing an existing control template is not sufficient if its appearance differs. Keep semantic theme colors and accessible interaction states while matching the reference treatment.
+
+## Clip range controls clarification
+
+> in the spec, include the the changes to the clip range controls.
+
+The range controls shown in the accepted mockup are explicitly in scope: a compact In/Out/duration row below the waveform, millisecond time fields with integrated minus/plus nudges, and shared draggable waveform boundaries with selection shading. Their appearance follows the mockup and their values stay synchronized with the existing precise selection, preview and export behavior.

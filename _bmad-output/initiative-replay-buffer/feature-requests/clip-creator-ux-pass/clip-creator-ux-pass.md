@@ -35,6 +35,7 @@ The builder can inspect footage, precisely trim it and configure audio/video exp
 - R8 (baseline, Constraints and Lifecycle matrix; request, Accepted mockup): Progress, cancellation of active work, actionable errors and the success location remain visible when relevant. Source validation, disappearance/navigation handling and operation isolation remain intact; repeated UI actions cannot create duplicate exports.
 - R9 (baseline, both-look acceptance; request, Accepted mockup and Sidebar addition): Fluent and Gaming dark, keyboard interaction and resized windows keep controls, named tracks, selection, ruler and focus legible and reachable. Menu/popup dismissal restores focus to its trigger; larger track counts do not force unbounded waveform growth or overlap the trim controls.
 - R10 (request, Control styling correction and Accepted mockup): Creator controls, export menu/popup and sidebar/Settings entry match the approved mockup's shapes, density, typography, icon weight, borders, fills, spacing and joined control groups. Hover, focus and disabled states preserve that visual hierarchy and accessibility. Acceptance includes a visual comparison with the mockup when authorized; equivalent functionality with visibly different controls does not satisfy this requirement.
+- R11 (request, Clip range controls clarification and Accepted mockup; baseline, Precision matrix): Clip range controls use the mockup's compact **In / Out / selected duration** row beneath the waveform. Each `HH:MM:SS.mmm` field groups integrated **− / +** buttons that adjust only that boundary by 1 ms. Draggable accent handles and shared selection shading identify the same range across track lanes. Fields, handles and duration stay synchronized through numeric entry, nudges and dragging; supported keyboard trimming remains available. Invalid, empty, crossed or out-of-source ranges preserve the last valid selection with a clear explanation. Effective export boundaries remain distinguishable from requested values, and valid changes invalidate stale preview without losing the selection on zoom, pan or resize.
 
 ## Constraints
 
@@ -49,12 +50,12 @@ The builder can inspect footage, precisely trim it and configure audio/video exp
 - Visual comparison confirms the mockup's control treatment for the editor, joined Export button, menu, popup and expanded/collapsed sidebar including Settings; existing theme styles do not override that appearance (R10).
 - The split button selects either export type, presents only applicable options and reaches the correct save chooser; preview and export share the selected range/audio configuration (R3–R5).
 - Sidebar expansion/collapse works throughout the shell without changing the selected page or creator state; Settings is a separate bottom button in both modes and opens the existing settings content (R6–R7).
-- Existing source, timing, preview and cancellation regressions stay intact; relevant progress/errors remain accessible (R2, R5, R8).
-- The acceptance cases in `experience.md` have honest pass/deferred evidence under the builder's current clearance; the zero-warning build, code review and required authorized checks pass before integration (R1–R10).
+- The mockup's compact range fields, integrated 1 ms nudges and waveform handles control one synchronized selection; source, timing, preview and cancellation regressions stay intact and relevant feedback remains accessible (R2, R5, R8, R11).
+- The acceptance cases in `experience.md` have honest pass/deferred evidence under the builder's current clearance; the zero-warning build, code review and required authorized checks pass before integration (R1–R11).
 
 ## Boundaries
 
-- In scope: clip-creator composition, compact waveform presentation, symbol buttons, export type/options interaction, app-wide sidebar expansion/collapse, separate Settings access and matching control styles across these surfaces.
+- In scope: clip-creator composition, compact waveform presentation, compact In/Out/duration controls with integrated nudges and waveform handles, symbol buttons, export type/options interaction, app-wide sidebar expansion/collapse, separate Settings access and matching control styles across these surfaces.
 - Out: changing Settings content, renaming/reordering navigation destinations, new codecs or quality presets, media-engine redesign, multi-cut editing, effects, uploads, unrelated player redesign, capture/cleanup behavior or migration of real user data.
 - Touch point: Library/player source and return context — existing clip creator and in-app player.
 - Touch point: shell navigation, selected page and Settings entry — existing App shell; use actual current destinations, not the mockup's illustrative labels.
@@ -63,7 +64,7 @@ The builder can inspect footage, precisely trim it and configure audio/video exp
 
 ## References
 
-- request — `request.md`, Editor request, Accepted mockup, Sidebar addition, Settings addition, Spec instruction and Control styling correction.
+- request — `request.md`, Editor request, Accepted mockup, Sidebar addition, Settings addition, Spec instruction, Control styling correction and Clip range controls clarification.
 - baseline — `_bmad-output/initiative-replay-buffer/plan-clip-creator.md`, frozen Intent, Boundaries & Constraints, Defaults, I/O matrix and both-look acceptance; implementation-time test-hold wording is superseded by the current coordinator handoff.
 - interaction design — `experience.md`, composition, export behavior, sidebar/Settings behavior and acceptance cases.
 - visual design — `mockup.html`, accepted interactive mockup preserved from this chat; illustrative content and tweak controls excluded from implementation scope.
@@ -74,5 +75,6 @@ The builder can inspect footage, precisely trim it and configure audio/video exp
 
 - Decision: 2026-11-05, builder accepted the editor mockup, added collapsible navigation and a separate Settings button, and requested this BMad spec. This request is unscheduled, unnumbered and unsliced; it does not change existing ticket order or completion history.
 - Decision: 2026-11-05, builder flagged control styling that does not match the mockup. R10 makes visual control fidelity mandatory and supersedes the earlier instruction to retain existing control conventions where they differ from the reference. No child stories exist to re-slice.
+- Decision: 2026-11-05, builder explicitly included clip range control changes. R11 makes the compact range row, integrated millisecond nudges, waveform boundaries and synchronized validation/preview behavior a dedicated acceptance requirement.
 - Assumption: the sidebar starts expanded, matching the revised mockup, and retains its choice across navigation in the current app session. Persistence across restarts is not required by this spec.
 - Assumption: popup option edits remain the current creator configuration after dismissal so Preview selection can audition them before reopening Export. Dismissal does not encode; type/audio changes invalidate stale selection preview.
