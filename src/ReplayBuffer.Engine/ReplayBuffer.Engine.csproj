@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging" />
+    <Compile Include="..\Shared\ClipPeakFile.cs" Link="ClipPeakFile.cs" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ReplayBuffer.Engine.Tests" />

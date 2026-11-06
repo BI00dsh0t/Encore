@@ -1,5 +1,12 @@
 # Test backlog
 
+## Clip creator seek/cache/responsive-player follow-up (2026-11-05)
+
+- Implemented per approved `plan-clip-creator-waveform-interaction.md`: separate draggable ruler seek handle, full-source all-track 1 ms disk peak cache with coarser levels and bounded local reads, no repeat waveform decoding/clearing on edits or zoom/pan, no routine loading/checking text, and finite responsive player height. AD-28 records cache ownership/protocol. Initial uncached preparation still takes time.
+- Final `dotnet build ReplayBuffer.slnx -c Release`: **0 warnings/errors**. Final `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --filter-class "*ClipCreatorTests" --explicit off`: **14 executed/passed, 0 failed/skipped**, 17.781 s, after review patches. Synthetic temporary peak fixtures/fake services cover precision/cache reuse, corruption, cancellation/retry, preview seek mapping, keyboard/lost capture and both-look/rail resizing. Root inspected generated Fluent expanded/Gaming rail previews.
+- Quick review's persistent waveform error/validation feedback finding fixed; coordinator's suspended cache-read cancellation finding fixed; follow-up inspection clear. No actual media, Engine/native/shared-shell suites, publishing, benchmarks, soak or HITL ran. Do not retry unchanged Windows quoting tests.
+- Pending when separately cleared: real `prepareWaveforms` media fixture with delayed tracks, gaps and nonzero origin; exact 1 ms bucket/onset behavior and complete duration; source rename/delete/change during preparation; cancellation/disk-full cleanup; long-source RAM/disk/read latency; NativeAOT/source-generated worker JSON. Existing real-media/Heavy/night/go restrictions still apply, as do high-DPI and real pointer/chooser acceptance gaps.
+
 ## Clip creator control styling follow-up (2026-11-05)
 
 - Approved styling contract R10/R11 implemented on `feature/clip-creator-control-styling`; see `plan-clip-creator-control-styling.md`. Scoped templates, vector icons, joined Export, grouped millisecond fields/duration, responsive whole-group layout, rounded/dimmed focus-aware handles, quieter popup and sidebar treatment.

@@ -46,12 +46,139 @@ public sealed class ClipCreatorTests : IDisposable
         Assert.Equal(41.124, page.Start, 6);
         Assert.Equal(44.987, page.End, 6);
         Assert.Equal("00:00:41.124", page.StartText);
-        var waveform = _media.Requests.Last(r => r.Operation == "waveform");
+        Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
+        Assert.DoesNotContain(_media.Requests, r => r.Operation == "waveform");
+        var waveform = page.Waveforms[0];
         Assert.Equal(15, waveform.End - waveform.Start, 6);
-        Assert.Equal(1600, waveform.Bins);
+        Assert.True(waveform.Peaks.Length <= 1600);
+        var previous = page.Waveforms;
+        page.Seek(41.124);
+        page.Zoom(0.0001);
+        Assert.Same(previous, page.Waveforms);
+        await page.RefreshAsync();
+        Assert.InRange(page.Waveforms[0].Peaks.Length, 10, 11);
+        Assert.Contains(1f, page.Waveforms[0].Peaks);
+        Assert.Contains(0f, page.Waveforms[0].Peaks);
+        Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
         Assert.Equal(page.Start, _media.Requests.Last(r => r.Operation == "range").Start);
         page.SetRange(44, 42);
         Assert.Equal(41.124, page.Start, 6);
+        Assert.NotEmpty(page.Status);
+        page.SetRange(page.Start, page.End);
+        Assert.Empty(page.Status);
+    }
+
+    [Fact]
+    public async Task PreparationSurvivesOrdinaryEditsAndCancelledPreparationCanResume()
+    {
+        _media.PreparationRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        var opening = page.OpenAsync(0);
+        Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
+        page.SetRange(1.123, 2.456);
+        page.Zoom(0.5); page.Pan(0.2); page.Format = "mp3"; page.Tracks[1].Included = false;
+        await page.RefreshAsync();
+        Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
+        Assert.Empty(page.Status);
+        page.PauseAndCancel();
+        await opening;
+        var firstFolder = _media.Requests.Single(r => r.Operation == "prepareWaveforms").Destination!;
+        Assert.False(Directory.Exists(firstFolder));
+        _media.PreparationRelease.SetResult();
+        page.Resume();
+        await page.RefreshAsync();
+        await page.EnsureWaveformsAsync();
+        Assert.Equal(2, _media.Requests.Count(r => r.Operation == "prepareWaveforms"));
+        Assert.Equal(2, page.Tracks.Count);
+        Assert.Equal((1.123, 2.456), (page.Start, page.End));
+        Assert.Single(page.Waveforms);
+        Assert.Equal(1, page.Waveforms[0].StreamIndex);
+        var peaks = page.Waveforms;
+        page.PauseAndCancel(); page.Resume(); await page.RefreshAsync();
+        Assert.Equal(2, _media.Requests.Count(r => r.Operation == "prepareWaveforms"));
+        Assert.NotEmpty(peaks);
+    }
+
+    [Fact]
+    public async Task CorruptPreparationIsRejectedAndDisposeWaitsForOwnedWorkerCleanup()
+    {
+        _media.CorruptPreparation = true;
+        using (var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(),
+            createPreviewFolder: () => throw new IOException("Newer preview failure.")))
+        {
+            await page.OpenAsync(0);
+            Assert.Empty(page.Waveforms);
+            Assert.Contains("Waveform preparation failed", page.Status);
+            var preparationError = page.Status;
+            page.SetRange(2, 1);
+            Assert.Contains("non-empty range", page.Status);
+            page.SetRange(page.Start, page.End);
+            Assert.Equal(preparationError, page.Status);
+            page.StartText = "invalid";
+            await page.PreviewAsync();
+            Assert.Equal("Newer preview failure.", page.Status);
+            page.SetRange(page.Start, page.End);
+            Assert.Equal("Newer preview failure.", page.Status);
+            var folder = _media.Requests.Single(r => r.Operation == "prepareWaveforms").Destination!;
+            Assert.False(Directory.Exists(folder));
+            Assert.True(File.Exists(Source.Path));
+        }
+        _media.Requests.Clear();
+        _media.CorruptPreparation = false;
+        using (var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer()))
+        {
+            await page.OpenAsync(0);
+            var previous = page.Waveforms;
+            var folder = _media.Requests.Single(r => r.Operation == "prepareWaveforms").Destination!;
+            page.PauseAndCancel();
+            File.WriteAllBytes(Path.Combine(folder, "track-1-0.rbpk"), [0]);
+            page.Zoom(0.0001); await page.RefreshAsync();
+            Assert.Same(previous, page.Waveforms);
+            Assert.Empty(page.Status);
+            page.Resume(); await page.RefreshAsync();
+            Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
+            Assert.Contains("Cannot read waveform cache", page.Status);
+            var readError = page.Status;
+            page.EndText = "invalid";
+            Assert.Contains("Enter end", page.Status);
+            page.SetRange(1, 2);
+            Assert.Equal(readError, page.Status);
+        }
+        _media.Requests.Clear();
+        _media.PreparationRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pending = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        var opening = pending.OpenAsync(0);
+        var scratch = _media.Requests.Single(r => r.Operation == "prepareWaveforms").Destination!;
+        Assert.True(Directory.Exists(scratch));
+        pending.Dispose();
+        await opening;
+        Assert.False(Directory.Exists(scratch));
+        Assert.True(File.Exists(Source.Path));
+    }
+
+    [Fact]
+    public async Task IndependentScrubbingKeepsTrimAndMapsRenderedPreviewBackToSource()
+    {
+        var players = new List<FakePlayer>();
+        using var page = new ClipCreatorPage(Source, "source", _media, () =>
+        {
+            var player = new FakePlayer { Media = new(1280, 720, TimeSpan.FromSeconds(90), ["Game", "Mic"], true) };
+            players.Add(player); return player;
+        });
+        await page.OpenAsync(0);
+        page.SetRange(1, 4); await page.RefreshAsync(); await page.PreviewAsync();
+        page.BeginScrub(2.123);
+        Assert.Equal(1.123, players[1].Seeks.Last().TotalSeconds, 6);
+        players[1].Position = TimeSpan.Zero;
+        page.Tick();
+        Assert.Equal(2.123, page.Playhead, 6);
+        page.Seek(5.678);
+        Assert.Equal("Source video", page.PreviewLabel);
+        Assert.True(players[1].Disposed);
+        Assert.Equal(5.678, players[0].Seeks.Last().TotalSeconds, 6);
+        page.EndScrub();
+        Assert.False(page.IsScrubbing);
+        Assert.Equal((1d, 4d), (page.Start, page.End));
     }
 
     [Fact]
@@ -226,6 +353,16 @@ public sealed class ClipCreatorTests : IDisposable
                 page.Preview.IsMuted = false; window.UpdateLayout();
                 Assert.Equal(volumeShape, muteIcon.Data.ToString());
                 Assert.NotEqual(playShape, ((System.Windows.Shapes.Path)gear.Template.FindName("Icon", gear)).Data.ToString());
+                var originalRange = (page.Start, page.End);
+                var originalPlayhead = page.Playhead;
+                waveform.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(view)!, 0, Key.P) { RoutedEvent = Keyboard.KeyDownEvent });
+                waveform.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(view)!, 0, Key.Right) { RoutedEvent = Keyboard.KeyDownEvent });
+                Assert.Equal(originalPlayhead + 0.001, page.Playhead, 6);
+                Assert.Equal(originalRange, (page.Start, page.End));
+                page.BeginScrub(3);
+                waveform.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.LostMouseCaptureEvent });
+                Assert.False(page.IsScrubbing);
+                Assert.Equal(originalRange, (page.Start, page.End));
                 var firstStartBox = (TextBox)view.FindName("StartBox");
                 var oldEnd = page.End;
                 firstStartBox.Text = "00:00:01.123";
@@ -383,7 +520,7 @@ public sealed class ClipCreatorTests : IDisposable
                     model.IsNavigationExpanded = expanded;
                     window.UpdateLayout();
                     var scroll = (ScrollViewer)view.Content;
-                    Assert.True(scroll.ScrollableHeight == 0, $"Scroll {scroll.ScrollableHeight}; viewport {scroll.ViewportHeight}; extent {scroll.ExtentHeight}; header {((FrameworkElement)window.FindName("PageHeader")).ActualHeight}; status {((FrameworkElement)window.FindName("StatusHeader")).ActualHeight}; client {client.ActualHeight}; children " + string.Join(", ", ((StackPanel)scroll.Content).Children.OfType<FrameworkElement>().Select(c => c.GetType().Name + "=" + c.ActualHeight)));
+                    Assert.True(scroll.ScrollableHeight == 0, $"Scroll {scroll.ScrollableHeight}; viewport {scroll.ViewportHeight}; extent {scroll.ExtentHeight}");
                     var video = (PlayerView)view.FindName("Video");
                     Assert.True(video.ActualHeight >= 470);
                     Assert.True(((Grid)((Border)video.Content).Child).RowDefinitions[0].ActualHeight >= 390);
@@ -391,6 +528,11 @@ public sealed class ClipCreatorTests : IDisposable
                     Assert.True(((Button)view.FindName("ExportButton")).IsVisible);
                     Assert.Equal(76, ((WaveformView)view.FindName("Timeline")).ActualHeight);
                     Capture(client, $"clip-controls-{look}-{(expanded ? "expanded" : "rail")}.png");
+                    var originalHeight = video.ActualHeight;
+                    window.Height += 300; window.UpdateLayout();
+                    Assert.True(video.ActualHeight >= originalHeight + 299);
+                    Assert.Equal(0, scroll.ScrollableHeight);
+                    window.Height -= 300; window.UpdateLayout();
                 }
             }
         }
@@ -473,18 +615,52 @@ public sealed class ClipCreatorTests : IDisposable
     {
         public List<ClipMediaRequest> Requests { get; } = [];
         public int TrackCount { get; set; } = 2;
-        public Task<ClipMediaResponse> ExecuteAsync(ClipMediaRequest request, IProgress<double>? progress, CancellationToken token)
+        public TaskCompletionSource? PreparationRelease { get; set; }
+        public bool CorruptPreparation { get; set; }
+        public async Task<ClipMediaResponse> ExecuteAsync(ClipMediaRequest request, IProgress<double>? progress, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             Requests.Add(request);
-            return Task.FromResult(request.Operation switch
+            if (request.Operation == "prepareWaveforms")
+            {
+                if (PreparationRelease is { } release) { await release.Task.WaitAsync(token); }
+                return Prepare(request);
+            }
+            return request.Operation switch
             {
                 "probe" => new ClipMediaResponse("complete", Metadata: new(90, 1280, 720, 30,
                     Enumerable.Range(1, TrackCount).Select(i => new ClipAudioTrack(i, i == 1 ? "Game" : i == 2 ? "Mic" : $"Track {i}", 48000, 2)).ToArray())),
                 "range" => new ClipMediaResponse("complete", Range: new(request.Start, request.End, request.Format == "mp3" ? "audioSamples48000" : "videoFrames")),
                 "waveform" => new ClipMediaResponse("complete", Waveforms: (request.Tracks ?? []).Select(i => new ClipWaveform(request.Start, request.End, i, new float[request.Bins])).ToArray()),
                 _ => Render(request),
-            });
+            };
+        }
+        private ClipMediaResponse Prepare(ClipMediaRequest request)
+        {
+            var tracks = new List<ClipPeakTrack>();
+            for (var track = 1; track <= TrackCount; track++)
+            {
+                var levels = new List<ClipPeakLevel>();
+                var values = Enumerable.Range(0, 90000).Select(i => i % 1000 == 124 ? 1f : 0f).ToArray();
+                long stride = 1;
+                while (true)
+                {
+                    var name = $"track-{track}-{levels.Count}.rbpk";
+                    using (var writer = new BinaryWriter(File.Create(Path.Combine(request.Destination!, name))))
+                    {
+                        writer.Write(0x4B504252); writer.Write(1); writer.Write(track); writer.Write(0);
+                        writer.Write(stride); writer.Write((long)values.Length);
+                        foreach (var peak in values) { writer.Write(peak); }
+                    }
+                    levels.Add(new(name, stride, values.Length));
+                    if (values.Length == 1) { break; }
+                    values = values.Chunk(16).Select(chunk => chunk.Max()).ToArray();
+                    stride *= 16;
+                }
+                tracks.Add(new(track, [.. levels]));
+            }
+            if (CorruptPreparation) { File.WriteAllBytes(Path.Combine(request.Destination!, tracks[0].Levels[0].FileName), [0]); }
+            return new("complete", Cache: new(1, request.Source, 90, [.. tracks]));
         }
         private static ClipMediaResponse Render(ClipMediaRequest request)
         {

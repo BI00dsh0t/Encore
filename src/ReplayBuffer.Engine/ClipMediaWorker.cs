@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using ReplayBuffer.Contracts.Messages;
 using ReplayBuffer.Platform.Windows;
+using ReplayBuffer.Waveforms;
 
 namespace ReplayBuffer.Engine;
 
@@ -63,6 +64,9 @@ public static class ClipMediaWorker
         switch (request.Operation)
         {
             case "probe": response = new("complete", Metadata: metadata); break;
+            case "prepareWaveforms":
+                response = new("complete", Cache: await PrepareWaveformsAsync(request, metadata, cancellationToken).ConfigureAwait(false));
+                break;
             case "waveform":
                 CheckRange(request.Start, request.End, metadata.Duration);
                 var lanes = new List<ClipWaveform>();
@@ -204,6 +208,81 @@ public static class ClipMediaWorker
 
     private static string AudioTrim(int streamIndex, ClipRange range, double origin) =>
         $"[0:{streamIndex}]atrim=start={Number(origin + range.Start)}:end={Number(origin + range.End)},asetpts=PTS-{Number(origin + range.Start)}/TB,aresample=48000:async=1:first_pts=0,apad,atrim=duration={Number(range.End - range.Start)}";
+
+    private static async Task<ClipWaveformDescriptor> PrepareWaveformsAsync(ClipMediaRequest request, ClipMetadata metadata, CancellationToken token)
+    {
+        var folder = request.Destination ?? throw new IOException("A waveform cache folder is required.");
+        if (!Directory.Exists(folder) || Directory.EnumerateFileSystemEntries(folder).Any())
+        { throw new IOException("The waveform cache needs an empty owned folder."); }
+        var tracks = new List<ClipPeakTrack>();
+        foreach (var track in metadata.Tracks)
+        {
+            token.ThrowIfCancellationRequested();
+            var count = checked((long)Math.Ceiling(metadata.Duration * 1000));
+            var levels = new List<ClipPeakLevel>();
+            var name = $"track-{track.StreamIndex}-0.rbpk";
+            using (var writer = new BinaryWriter(File.Create(Path.Combine(folder, name))))
+            {
+                ClipPeakFile.WriteHeader(writer, track.StreamIndex, 1, count);
+                long written = 0;
+                var frames = 0;
+                var peak = 0f;
+                var filter = AudioTrim(track.StreamIndex, new(0, metadata.Duration), metadata.Origin) + "[a]";
+                await SharedMediaProcess.RunAsync(Tool("ffmpeg"),
+                    ["-v", "error", "-nostdin", "-threads", "2", "-copyts", "-i", "fd:", "-filter_complex_threads", "1", "-filter_complex", filter,
+                        "-map", "[a]", "-ac", "2", "-ar", "48000", "-t", Number(metadata.Duration), "-f", "f32le", "pipe:1"], request.Source.Path,
+                    async (stream, ct) =>
+                    {
+                        var buffer = new byte[8192];
+                        var pending = 0;
+                        int bytes;
+                        while ((bytes = await stream.ReadAsync(buffer.AsMemory(pending), ct).ConfigureAwait(false)) != 0)
+                        {
+                            bytes += pending;
+                            var complete = bytes - bytes % 8;
+                            for (var offset = 0; offset < complete; offset += 8)
+                            {
+                                var value = Math.Max(Math.Abs(BitConverter.ToSingle(buffer, offset)), Math.Abs(BitConverter.ToSingle(buffer, offset + 4)));
+                                if (float.IsFinite(value)) { peak = Math.Max(peak, Math.Min(1, value)); }
+                                if (++frames == 48)
+                                {
+                                    if (written < count) { writer.Write(peak); written++; }
+                                    frames = 0; peak = 0;
+                                }
+                            }
+                            pending = bytes - complete;
+                            buffer.AsSpan(complete, pending).CopyTo(buffer);
+                        }
+                        if (pending != 0) { throw new IOException("The waveform decoder returned incomplete audio frames."); }
+                    }, token).ConfigureAwait(false);
+                if (frames != 0 && written < count) { writer.Write(peak); written++; }
+                while (written < count) { token.ThrowIfCancellationRequested(); writer.Write(0f); written++; }
+            }
+            levels.Add(new(name, 1, count));
+            while (count > 1)
+            {
+                token.ThrowIfCancellationRequested();
+                var previous = levels[^1];
+                count = (count + 15) / 16;
+                var stride = checked(previous.MillisecondsPerPeak * 16);
+                name = $"track-{track.StreamIndex}-{levels.Count}.rbpk";
+                using var reader = new BinaryReader(File.OpenRead(Path.Combine(folder, previous.FileName)));
+                ClipPeakFile.Validate(reader, track.StreamIndex, previous.MillisecondsPerPeak, previous.Count);
+                using var writer = new BinaryWriter(File.Create(Path.Combine(folder, name)));
+                ClipPeakFile.WriteHeader(writer, track.StreamIndex, stride, count);
+                for (long first = 0; first < previous.Count; first += 16)
+                {
+                    token.ThrowIfCancellationRequested();
+                    var peak = 0f;
+                    for (var i = 0; i < Math.Min(16, previous.Count - first); i++) { peak = Math.Max(peak, ClipPeakFile.ReadPeak(reader)); }
+                    writer.Write(peak);
+                }
+                levels.Add(new(name, stride, count));
+            }
+            tracks.Add(new(track.StreamIndex, [.. levels]));
+        }
+        return new(ClipPeakFile.Version, request.Source, metadata.Duration, [.. tracks]);
+    }
 
     private static async Task<float[]> WaveformAsync(ClipMediaRequest request, ClipMetadata metadata, ClipAudioTrack track, CancellationToken token)
     {
