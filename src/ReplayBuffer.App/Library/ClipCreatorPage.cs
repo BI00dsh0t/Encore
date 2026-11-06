@@ -30,6 +30,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     private ClipWaveformCache? _cache;
     private int _viewportRevision;
     private bool _scrubbing;
+    private bool _trimming;
     private bool _suspended;
     private string? _rangeFeedback;
     private PlayerPage? _sourcePlayer;
@@ -137,7 +138,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         : "Separate tracks retain their names and order. Preview's audio menu can audition each exported stream.";
     public bool Busy { get => _busy; private set { Set(ref _busy, value); NotifyCommands(); } }
     public bool Exporting { get => _exporting; private set { Set(ref _exporting, value); NotifyCommands(); } }
-    public bool CanExport => !_closed && Metadata is not null && _effective is not null && !Busy && End > Start && (Format != "mp3" || Tracks.Any(t => t.Included));
+    public bool CanExport => !_closed && !_trimming && Metadata is not null && _effective is not null && !Busy && End > Start && (Format != "mp3" || Tracks.Any(t => t.Included));
     public bool CanEdit => !_closed && !Exporting && Metadata is not null;
     public string Status
     {
@@ -166,6 +167,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
             _viewportStart = _start;
             _viewportEnd = _end;
             NotifyRange();
+            OnPropertyChanged(nameof(ViewportStart)); OnPropertyChanged(nameof(ViewportEnd));
             _sourcePlayer = new PlayerPage(Source.Path, Title, _newPlayer(), embedded: true);
             Preview = _sourcePlayer;
             await _sourcePlayer.OpenAsync();
@@ -184,10 +186,22 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         if (Math.Abs(start - _start) < 0.00000001 && Math.Abs(end - _end) < 0.00000001) { return; }
         (_start, _end) = (start, end);
         NotifyRange();
-        Changed();
+        if (!_trimming) { Changed(); }
     }
 
     public void Nudge(bool end, int milliseconds) => SetRange(Start + (end ? 0 : milliseconds / 1000d), End + (end ? milliseconds / 1000d : 0));
+    internal void BeginRangeDrag()
+    {
+        if (!CanEdit || _trimming) { return; }
+        _trimming = true;
+        Changed();
+    }
+    internal void EndRangeDrag()
+    {
+        if (!_trimming) { return; }
+        _trimming = false;
+        if (!_closed && !_suspended) { _ = RefreshAsync(); }
+    }
     private void RangeError(string message) { _rangeFeedback = message; OnPropertyChanged(nameof(Status)); }
     public void Zoom(double factor)
     {
@@ -247,6 +261,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         _preparationCancellation?.Cancel();
         _viewportCancellation?.Cancel();
         EndScrub();
+        EndRangeDrag();
         Preview?.Pause();
         _sourcePlayer?.Pause();
     }
@@ -272,23 +287,24 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         OnPropertyChanged(nameof(Separate)); OnPropertyChanged(nameof(IsMp4)); OnPropertyChanged(nameof(IsMp3));
         foreach (var property in new[] { nameof(MixWarning), nameof(EffectiveText), nameof(ExportLabel), nameof(SaveLabel), nameof(FormatSummary), nameof(SeparateLabel), nameof(MultipleTracks), nameof(SeparateAudioFiles), nameof(OutputSummary) }) { OnPropertyChanged(property); }
         NotifyCommands();
-        _ = RefreshAsync();
+        if (!_trimming) { _ = RefreshAsync(); }
     }
 
     internal async Task RefreshAsync()
     {
-        if (_closed || _suspended || Metadata is null || Exporting) { return; }
+        if (_closed || _suspended || _trimming || Metadata is null || Exporting) { return; }
         var revision = _revision;
         await WorkAsync(async token =>
         {
             await Task.Delay(150, token);
+            if (_trimming || revision != _revision) { return; }
             var range = await _media.ExecuteAsync(Request("range"), null, token);
             token.ThrowIfCancellationRequested();
-            if (revision != _revision) { return; }
+            if (_trimming || revision != _revision) { return; }
             _effective = range.Range;
             OnPropertyChanged(nameof(EffectiveText));
         });
-        await ReadWaveformsAsync();
+        if (!_trimming && revision == _revision) { await ReadWaveformsAsync(); }
     }
 
     internal Task EnsureWaveformsAsync()
@@ -345,12 +361,15 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         _viewportCancellation?.Cancel();
         var cache = _cache;
         if (_closed || _suspended || cache is null) { return; }
+        var tracks = Tracks.Where(t => t.Included).Select(t => t.Track.StreamIndex).ToArray();
+        // Trimming changes the overlay, not the source peaks in this viewport.
+        if (Waveforms.Length == tracks.Length && Waveforms.Select(w => w.StreamIndex).SequenceEqual(tracks)
+            && Waveforms.All(w => w.Start == ViewportStart && w.End == ViewportEnd)) { return; }
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _viewportCancellation = cancel;
         try
         {
-            var waveforms = await cache.ReadAsync(ViewportStart, ViewportEnd,
-                Tracks.Where(t => t.Included).Select(t => t.Track.StreamIndex).ToArray(), 1600, cancel.Token);
+            var waveforms = await cache.ReadAsync(ViewportStart, ViewportEnd, tracks, 1600, cancel.Token);
             if (!_closed && !_suspended && !cancel.IsCancellationRequested && generation == _viewportRevision && ReferenceEquals(cache, _cache)) { Waveforms = waveforms; }
         }
         catch (OperationCanceledException) { }
@@ -450,6 +469,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         _closed = true;
         _lifetime.Cancel();
         EndScrub();
+        EndRangeDrag();
         var cache = _cache;
         _cache = null;
         if (cache is not null) { _ = Task.Run(cache.Dispose); }
@@ -460,7 +480,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     }
     private void NotifyRange()
     {
-        foreach (var property in new[] { nameof(Start), nameof(End), nameof(StartText), nameof(EndText), nameof(DurationText), nameof(SelectedDurationText), nameof(ViewportStart), nameof(ViewportEnd) }) { OnPropertyChanged(property); }
+        foreach (var property in new[] { nameof(Start), nameof(End), nameof(StartText), nameof(EndText), nameof(DurationText), nameof(SelectedDurationText) }) { OnPropertyChanged(property); }
     }
     private void NotifyCommands()
     {
