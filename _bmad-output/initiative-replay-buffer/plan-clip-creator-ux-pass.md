@@ -81,7 +81,7 @@ Paths below are relative to `src/ReplayBuffer.App/` unless explicitly rooted.
 - Existing worker semantics retained: all separate MP3 exports (including one selected track) publish a new named directory; mixed MP3/MP4 use a file chooser. The popup describes the actual destination shape.
 - Settings sections keep their existing ordered semantic routes in an in-content selector; the primary rail contains actual primary destinations and a separate bottom Settings action.
 - Waveform height is 28 px ruler plus at most five 24 px lanes, with source-time mapping shared across scrolling and resize.
-- Quick review completed: both findings patched and verified by follow-up inspection; integration follows. Shell/Settings test execution and visual/HITL acceptance remain deferred.
+- Quick review completed: both findings patched and verified by follow-up inspection; integrated into develop. Shell/Settings test execution and visual/HITL acceptance remain deferred.
 
 ## Plan Change Log
 
@@ -103,7 +103,7 @@ Paths below are relative to `src/ReplayBuffer.App/` unless explicitly rooted.
 - ClipCreatorTests: 10 passed, 0 failed, 0 skipped (initial focus regression fixed).
 - ClipMediaWorkerTests: 1 passed, 0 failed, 2 Explicit skipped.
 - SharedMediaProcessTests: attempted but not executed; automatic approval review rejected scope. Unchanged class retains prior QA evidence; coordinator directed no retry.
-- Shell checks added/compiled but unrun; independent review and merged-develop build are the coordinator's remaining integration gates. Detailed commands and deferred acceptance are in the three checkpoint documents.
+- Shell checks added/compiled but unrun; independent review and merged-develop build subsequently passed (see coordinator results). Detailed commands and deferred acceptance are in the three checkpoint documents.
 
 ### Coordinator verification after review patches (2026-11-05)
 
@@ -112,3 +112,5 @@ Paths below are relative to `src/ReplayBuffer.App/` unless explicitly rooted.
 - No media/contracts/native changes; the implementation worker's 1 passing identity test and 2 Explicit skips remain the current Engine evidence. Unchanged quoting tests were not retried after automatic approval review rejected their scope.
 - Matrix audit: workspace/export/save and creator width reflow have passing scoped coverage. Full pending-work navigation, standalone Settings/reselection/full-screen, high-scale and real chooser/media acceptance remain explicitly deferred; the user's test restriction takes precedence over the workflow's wider matrix execution requirement.
 - Follow-up quick review confirmed both patches address their findings; no new directly caused defect found.
+
+- Integrated feature 8898f2c8e3899b06168b5559a8f98fca75394004 via no-ff develop merge 4dfbebaa8c55f5fb3415a5317d74962b9bf87e07. Post-merge Release build passed with 0 warnings/errors. No push.
