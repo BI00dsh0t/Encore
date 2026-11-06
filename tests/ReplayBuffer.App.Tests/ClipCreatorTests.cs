@@ -357,7 +357,7 @@ public sealed class ClipCreatorTests : IDisposable
                 window.Show(); window.UpdateLayout(); Sta.Pump(TimeSpan.FromMilliseconds(50));
                 var waveform = Descendants<WaveformView>(view).Single();
                 Assert.True(waveform.ActualWidth > 400);
-                Assert.Equal(28 + 5 * 24, waveform.ActualHeight);
+                Assert.Equal(28 + 5 * 40, waveform.ActualHeight);
                 Assert.Equal(5, waveform.ScrollMaximum);
                 waveform.LaneOffset = 5;
                 Assert.Equal(5, waveform.LaneOffset);
@@ -365,7 +365,7 @@ public sealed class ClipCreatorTests : IDisposable
                 Assert.NotEqual(((SolidColorBrush)waveform.SurfaceBrush).Color, ((SolidColorBrush)waveform.RulerBrush).Color);
                 Assert.Contains(Descendants<TextBox>(view), t => t.Text == page.StartText);
                 Assert.Empty(Descendants<CheckBox>(view));
-                Assert.True(((PlayerView)view.FindName("Video")).ActualHeight > 400);
+                Assert.True(((PlayerView)view.FindName("Video")).ActualHeight > 320);
                 CommandManager.InvalidateRequerySuggested(); Sta.Pump(TimeSpan.FromMilliseconds(50));
                 Assert.True(((Button)view.FindName("PreviewButton")).IsEnabled, $"Preview command {page.CanExport}, busy {page.Busy}, status {page.Status}");
                 Assert.Equal(Visibility.Collapsed, ((Button)((PlayerView)view.FindName("Video")).FindName("FullScreen")).Visibility);
@@ -557,11 +557,11 @@ public sealed class ClipCreatorTests : IDisposable
                     var scroll = (ScrollViewer)view.Content;
                     Assert.True(scroll.ScrollableHeight == 0, $"Scroll {scroll.ScrollableHeight}; viewport {scroll.ViewportHeight}; extent {scroll.ExtentHeight}");
                     var video = (PlayerView)view.FindName("Video");
-                    Assert.True(video.ActualHeight >= 470);
-                    Assert.True(((Grid)((Border)video.Content).Child).RowDefinitions[0].ActualHeight >= 390);
+                    Assert.True(video.ActualHeight >= 438);
+                    Assert.True(((Grid)((Border)video.Content).Child).RowDefinitions[0].ActualHeight >= 358);
                     Assert.True(((Button)view.FindName("PreviewButton")).IsVisible);
                     Assert.True(((Button)view.FindName("ExportButton")).IsVisible);
-                    Assert.Equal(76, ((WaveformView)view.FindName("Timeline")).ActualHeight);
+                    Assert.Equal(108, ((WaveformView)view.FindName("Timeline")).ActualHeight);
                     Capture(client, $"clip-controls-{look}-{(expanded ? "expanded" : "rail")}.png");
                     var originalHeight = video.ActualHeight;
                     window.Height += 300; window.UpdateLayout();
