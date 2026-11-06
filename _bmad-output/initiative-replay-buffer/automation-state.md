@@ -1,5 +1,9 @@
 # Automation State
 
+## Trim handle drag lag checkpoint (2026-11-06)
+
+- Builder reported lag/freezing dragging range controls. Bugfix `f1020e9bf6cd9c33624336321b1097b40bcdf81f`, no-ff develop merge `74ffa0ff0cf9ddec4de5e0f274c7aa8f77957a0e`. Drag sessions update selection locally, resolve once after release/lost capture, reject stale range work and retain unchanged viewport peaks. Cached StreamGeometry lanes avoid recording thousands of individual peak lines per overlay frame. Final ClipCreatorTests 16 executed/passed, 0 failed/skipped; feature and post-merge Release builds 0 warnings/errors. Ordinary diff review and fake-media Gaming rail PNG inspection clear. Backlog/handoff record coverage and deferred real pointer/media/teardown checks; no measured runtime-performance claim, real Dev App/data/settings changes, unrelated suites, Heavy runs, BMad implementation or push. Builder: rebuild/restart Dev App to verify responsiveness.
+
 ## Taller waveform lane checkpoint (2026-11-06)
 
 - Requested track height increase implemented: 24 → 40 pixels, larger peak envelope, vertically centered labels. Feature `4a1fb9296a29c8c239ba227385b4897fbbf19330`, no-ff merged into develop `aa92384adb2403d6ac76b6a8a63900fea1c0fd96`. All 15 scoped ClipCreatorTests passed (0 failed/skipped), including both looks, player resizing, five-lane scrolling and minimum-window reachability. Feature and post-merge Release builds 0 warnings/errors. Ordinary review and generated Gaming expanded fake-media PNG inspection clear. Backlog/handoff updated; no real app/data use, unrelated tests, Heavy runs or push.
