@@ -3,14 +3,14 @@ title: 'Streamline clip creation and expandable navigation'
 type: 'feature'
 ticket: ''
 created: '2026-11-05'
-status: 'draft'
+status: 'built'
 baseline_revision: 'ca5e8e7d287b707982d3dcb9be341fbd3961d60d'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: [quick]
 review_loop_iteration: 0
 context:
   - '{project-root}/CLAUDE.md'
@@ -61,13 +61,13 @@ context:
 Paths below are relative to `src/ReplayBuffer.App/` unless explicitly rooted.
 
 **Execution:**
-- [ ] `Library/ClipCreatorView.xaml(.cs)`: responsive picture/transport/compact timeline composition, symbol pan/zoom with names/tooltips, header split action, focus restoration and conditional status/progress.
-- [ ] `Library/ClipExportDialog.xaml(.cs)`, `Library/ClipCreatorPage.cs`: shared retained export configuration, name and type-specific summaries, track/mix eligibility, guarded Save and injectable chooser. Separate multiple MP3s use folder selection plus a new named directory; opening/dismissing never exports.
-- [ ] `Library/WaveformView.cs`: compact lanes near 24 px, synchronized ruler/handles, bounded scrolling and keyboard reachability; preserve accurate source-time mapping on resize/zoom.
-- [ ] `MainWindow.xaml(.cs)`, `MainViewModel.cs`: expanded/icon-rail state, stable width application, bottom Settings and secondary Settings navigation; preserve routes, drill-in lifecycle, shortcuts and full-screen restoration.
-- [ ] `Theme/ShellFluent.xaml`, `Theme/ShellGamingDark.xaml`, `Theme/LibraryTheme.xaml`: icons, label/rail states, selection, popup and compact editor tokens in both looks.
-- [ ] `tests/ReplayBuffer.App.Tests/ClipCreatorTests.cs`: update obsolete tall-lane assertions; cover split/options/chooser/preview parity, layout, focus, busy guards and sidebar state preservation using fake services. Write shell-specific checks in `MainWindowTests.cs`/`SurfacesThemeTests.cs` but defer execution.
-- [ ] `_bmad-output/initiative-replay-buffer/test-backlog.md`, `coordinator-handoff.md`, `automation-state.md`: record actual scoped verification, shared-shell gaps and integration.
+- [x] `Library/ClipCreatorView.xaml(.cs)`: responsive picture/transport/compact timeline composition, symbol pan/zoom with names/tooltips, header split action, focus restoration and conditional status/progress.
+- [x] `Library/ClipExportDialog.xaml(.cs)`, `Library/ClipCreatorPage.cs`: shared retained export configuration, name and type-specific summaries, track/mix eligibility, guarded Save and injectable chooser. Separate multiple MP3s use folder selection plus a new named directory; opening/dismissing never exports.
+- [x] `Library/WaveformView.cs`: compact lanes near 24 px, synchronized ruler/handles, bounded scrolling and keyboard reachability; preserve accurate source-time mapping on resize/zoom.
+- [x] `MainWindow.xaml(.cs)`, `MainViewModel.cs`: expanded/icon-rail state, stable width application, bottom Settings and secondary Settings navigation; preserve routes, drill-in lifecycle, shortcuts and full-screen restoration.
+- [x] `Theme/ShellFluent.xaml`, `Theme/ShellGamingDark.xaml`, `Theme/LibraryTheme.xaml`: icons, label/rail states, selection, popup and compact editor tokens in both looks.
+- [x] `tests/ReplayBuffer.App.Tests/ClipCreatorTests.cs`: update obsolete tall-lane assertions; cover split/options/chooser/preview parity, layout, focus, busy guards and sidebar state preservation using fake services. Write shell-specific checks in `MainWindowTests.cs`/`SurfacesThemeTests.cs` but defer execution.
+- [x] `_bmad-output/initiative-replay-buffer/test-backlog.md`, `coordinator-handoff.md`, `automation-state.md`: record actual scoped verification, shared-shell gaps and integration.
 
 **Acceptance Criteria:**
 - Given either look at reference size, when editing two tracks, then the larger picture, compact waveform and primary actions are reachable without scrolling past export settings.
@@ -77,12 +77,38 @@ Paths below are relative to `src/ReplayBuffer.App/` unless explicitly rooted.
 
 ## Implementation Notes
 
+- Shared retained page configuration drives the modal and Preview. An injected destination chooser is guarded separately from media work.
+- Existing worker semantics retained: all separate MP3 exports (including one selected track) publish a new named directory; mixed MP3/MP4 use a file chooser. The popup describes the actual destination shape.
+- Settings sections keep their existing ordered semantic routes in an in-content selector; the primary rail contains actual primary destinations and a separate bottom Settings action.
+- Waveform height is 28 px ruler plus at most five 24 px lanes, with source-time mapping shared across scrolling and resize.
+- Quick review completed: both findings patched and verified by follow-up inspection; integration follows. Shell/Settings test execution and visual/HITL acceptance remain deferred.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+- **medium → patch — creator narrow toolbar:** confirmed the fixed horizontal tools exceed the content width at MainWindow's supported 480 px minimum (160 px expanded nav plus 48 px page padding). Fixed by wrapping individual existing actions; the new minimum-shell reachability regression passed in both looks.
+- **medium → patch — Settings section reselection:** confirmed ComboBox selection of the current Games section does not change SelectedItem and bypasses ReselectNavItem, unlike the former navigation list. Fixed by restoring pointer/keyboard current-section reselection on the existing selector; a shell regression was written/compiled, with execution deferred under the user scope restriction.
 
 ## Verification
 
 - `dotnet build ReplayBuffer.slnx -c Release`: zero warnings/errors on feature and merged develop.
 - Run only non-Explicit `ClipCreatorTests`, `ClipMediaWorkerTests`, `SharedMediaProcessTests`, one project at a time, using `--filter-class` and `--explicit off`; require nonzero execution and honest counts. No full suites.
 - Defer shell/Settings test classes, real-media/Heavy, publish, benchmark, soak, real app and HITL verification. Independent code review before no-fast-forward integration; record remaining visual/shell acceptance gaps.
+
+### Implementation-worker verification (2026-11-05)
+
+- Final feature Release build: 0 warnings/errors.
+- Actual Library-hosted creator at a 960×900 client size, both looks/rail states: no scrolling with two 24 px waveform lanes and ≥390 px picture area. An initial 137 px overflow was fixed by consolidating rows and replacing the duplicate shell breadcrumb with creator Back.
+- ClipCreatorTests: 10 passed, 0 failed, 0 skipped (initial focus regression fixed).
+- ClipMediaWorkerTests: 1 passed, 0 failed, 2 Explicit skipped.
+- SharedMediaProcessTests: attempted but not executed; automatic approval review rejected scope. Unchanged class retains prior QA evidence; coordinator directed no retry.
+- Shell checks added/compiled but unrun; independent review and merged-develop build are the coordinator's remaining integration gates. Detailed commands and deferred acceptance are in the three checkpoint documents.
+
+### Coordinator verification after review patches (2026-11-05)
+
+- Release build: 0 warnings, 0 errors.
+- ClipCreatorTests: 11 passed, 0 failed, 0 skipped (12 s). Includes the new actual 480×320 shell timeline-action reachability check in both looks, plus the reference client-area regression.
+- No media/contracts/native changes; the implementation worker's 1 passing identity test and 2 Explicit skips remain the current Engine evidence. Unchanged quoting tests were not retried after automatic approval review rejected their scope.
+- Matrix audit: workspace/export/save and creator width reflow have passing scoped coverage. Full pending-work navigation, standalone Settings/reselection/full-screen, high-scale and real chooser/media acceptance remain explicitly deferred; the user's test restriction takes precedence over the workflow's wider matrix execution requirement.
+- Follow-up quick review confirmed both patches address their findings; no new directly caused defect found.

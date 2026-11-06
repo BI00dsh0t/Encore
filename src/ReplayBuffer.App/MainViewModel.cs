@@ -20,6 +20,7 @@ internal sealed class MainViewModel : Observable
     private readonly IEngineSession _engine;
     private SettingsPage _selectedPage;
     private bool _isWindowShown;
+    private bool _isNavigationExpanded = true;
     private bool _isSettingsTabSelected;
 
     /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
@@ -27,7 +28,7 @@ internal sealed class MainViewModel : Observable
     /// <param name="defaultCacheFolder">The engine's default cache folder, shown on the Clips page.</param>
     /// <param name="player">Makes the Library's in-app player; Windows' own without it (AD-27).</param>
     /// <param name="log">Writes a line to the App's log (the player's, story 14.6).</param>
-    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null, IGameShell? gameShell = null, Func<IPlayer>? player = null, Action<string>? log = null)
+    public MainViewModel(IEngineSession engine, Action<Action> post, string? libraryViewFile = null, string? defaultCacheFolder = null, IGameShell? gameShell = null, Func<IPlayer>? player = null, Action<string>? log = null, IClipMediaService? clipMedia = null)
     {
         _engine = engine;
         StatusLine = new StatusLine(engine);
@@ -40,7 +41,7 @@ internal sealed class MainViewModel : Observable
         FeedbackSounds = Pages.OfType<FeedbackSoundsPage>().Single();
         LibrarySettings = Pages.OfType<LibrarySettingsPage>().Single();
         _selectedPage = Pages[0];
-        Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile, player: player, log: log);
+        Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile, player: player, log: log, clipMedia: clipMedia);
         LibraryNav = new NavItem(LibraryTitle, null, isSection: false);
         NavItems = [LibraryNav, new NavItem(SettingsLabel, null, isSection: true), .. Pages.Select(p => new NavItem(p.Title, p, isSection: false))];
         foreach (var drillIn in Pages.Select(p => p.DrillIn).OfType<DrillIn>().Append(Library.DrillIn))
@@ -57,6 +58,7 @@ internal sealed class MainViewModel : Observable
         // Story 14.9: the shell follows the player page's full screen; a page closing leaves it.
         Library.PropertyChanged += (_, e) =>
         {
+            if (e.PropertyName == nameof(LibraryPage.Creator)) { OnPropertyChanged(nameof(IsCreatingClip)); }
             if (e.PropertyName == nameof(LibraryPage.Player))
             {
                 WatchPlayer(Library.Player);
@@ -110,6 +112,10 @@ internal sealed class MainViewModel : Observable
     /// page in <see cref="Pages"/>' order. Only the label isn't selectable.
     /// </summary>
     public IReadOnlyList<NavItem> NavItems { get; }
+    public IEnumerable<NavItem> PrimaryNavItems => NavItems.Where(i => !i.IsSection && i.Page is null);
+    public IEnumerable<NavItem> SettingsNavItems => NavItems.Where(i => i.Page is not null);
+    public bool IsNavigationExpanded { get => _isNavigationExpanded; set { if (Set(ref _isNavigationExpanded, value)) { OnPropertyChanged(nameof(NavigationToggleLabel)); } } }
+    public string NavigationToggleLabel => IsNavigationExpanded ? "Collapse navigation" : "Expand navigation";
 
     /// <summary>The navigation's Library item.</summary>
     public NavItem LibraryNav { get; }
@@ -149,6 +155,8 @@ internal sealed class MainViewModel : Observable
     public DrillIn? CurrentDrillIn => IsSettingsTabSelected ? SelectedPage.DrillIn : Library.DrillIn;
 
     /// <summary>Whether an item page is open, so the page header is a breadcrumb.</summary>
+    public bool IsCreatingClip => !IsSettingsTabSelected && Library.Creator is not null;
+
     public bool IsDrilledIn => CurrentDrillIn?.IsOpen == true;
 
     /// <summary>
@@ -311,6 +319,7 @@ internal sealed class MainViewModel : Observable
             }
         }
 
+        OnPropertyChanged(nameof(IsCreatingClip));
         OnPropertyChanged(nameof(CurrentDrillIn));
         OnPropertyChanged(nameof(IsDrilledIn));
         OnPropertyChanged(nameof(SelectedNavItem));
@@ -371,6 +380,11 @@ internal sealed class NavItem : Observable
 
     /// <summary>The non-selectable Settings label above the settings pages.</summary>
     public bool IsSection { get; }
+    public string Glyph => Page is null ? "\uE8F1" : Title switch
+    {
+        "General" => "\uE713", "Replay Buffer" => "\uE714", "Hotkeys" => "\uE765",
+        "Audio Tracks" => "\uE8D6", "Games" => "\uE7FC", "Feedback Sounds" => "\uE767", _ => "\uE8B7",
+    };
 
     public override string ToString() => Title;
 }

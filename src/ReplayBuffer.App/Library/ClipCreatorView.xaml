@@ -1,43 +1,54 @@
 <UserControl x:Class="ReplayBuffer.App.Library.ClipCreatorView" x:ClassModifier="internal"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- xmlns:local="clr-namespace:ReplayBuffer.App.Library">
+ xmlns:local="clr-namespace:ReplayBuffer.App.Library"
+ xmlns:theme="clr-namespace:ReplayBuffer.App.Theme">
+ <UserControl.Resources><BooleanToVisibilityConverter x:Key="Visible" /><theme:EmptyToCollapsedConverter x:Key="NotEmpty" /></UserControl.Resources>
  <ScrollViewer VerticalScrollBarVisibility="Auto">
-  <StackPanel Margin="0,0,8,16">
-   <TextBlock Text="Create clip" FontSize="20" Margin="0,0,0,8" />
-   <TextBlock Text="{Binding PreviewLabel}" TextWrapping="Wrap" Margin="0,0,0,6" />
-   <local:PlayerView x:Name="Video" Height="300" DataContext="{Binding Preview}" />
-   <TextBlock Text="{Binding PlayheadText}" Margin="0,6" AutomationProperties.Name="Source playhead" />
+  <StackPanel Margin="0,0,8,0">
+   <DockPanel Margin="0,0,0,4" LastChildFill="True">
+    <Button Command="{Binding BackCommand}" Visibility="{Binding BackCommand, Converter={StaticResource NotEmpty}}" Style="{DynamicResource RbClipToolButtonStyle}" AutomationProperties.Name="Back to Library" ToolTip="Back to Library" DockPanel.Dock="Left" Margin="0,0,8,0"><TextBlock Text="&#xE72B;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" /></Button>
+    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+     <Button x:Name="ExportButton" Content="{Binding ExportLabel}" Click="Export" IsEnabled="{Binding CanOpenOptions}" Style="{DynamicResource AccentButtonStyle}" />
+     <Button x:Name="ExportArrow" Style="{DynamicResource RbClipToolButtonStyle}" Click="ChooseType" IsEnabled="{Binding CanOpenOptions}" AutomationProperties.Name="Choose export type" ToolTip="Choose export type" ><TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" /></Button>
+    </StackPanel>
+    <StackPanel><TextBlock Text="Create clip" FontSize="20" /><TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" /></StackPanel>
+   </DockPanel>
+   <Grid>
+    <local:PlayerView x:Name="Video" Height="480" DataContext="{Binding Preview}" />
+    <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8" Padding="4,2" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" IsHitTestVisible="False"><TextBlock Text="{Binding PreviewLabel}" FontSize="11" /></Border>
+    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Padding="4,2" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" IsHitTestVisible="False"><TextBlock Text="{Binding PlayheadText}" FontSize="11" AutomationProperties.Name="Source playhead" /></Border>
+   </Grid>
+   <WrapPanel x:Name="TimelineToolbar" Margin="0,4,0,0">
+    <TextBlock Text="{Binding DurationText}" VerticalAlignment="Center" Margin="0,0,12,4" />
+     <Button x:Name="PreviewButton" Content="Preview selection" Command="{Binding PreviewCommand}" Margin="0,0,8,4" />
+     <Button Command="{Binding PanLeftCommand}" Style="{DynamicResource RbClipToolButtonStyle}" AutomationProperties.Name="Pan timeline left" ToolTip="Pan timeline left" Margin="0,0,0,4" ><TextBlock Text="&#xE72B;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" /></Button>
+     <Button Command="{Binding PanRightCommand}" Style="{DynamicResource RbClipToolButtonStyle}" AutomationProperties.Name="Pan timeline right" ToolTip="Pan timeline right" Margin="0,0,0,4" ><TextBlock Text="&#xE72A;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" /></Button>
+     <Button Command="{Binding ZoomOutCommand}" Style="{DynamicResource RbClipToolButtonStyle}" AutomationProperties.Name="Zoom timeline out" ToolTip="Zoom timeline out" Margin="8,0,0,4" ><TextBlock Text="&#xE738;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" /></Button>
+     <Button Command="{Binding ZoomInCommand}" Style="{DynamicResource RbClipToolButtonStyle}" AutomationProperties.Name="Zoom timeline in" ToolTip="Zoom timeline in" Margin="0,0,0,4" ><TextBlock Text="&#xE710;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" /></Button>
+   </WrapPanel>
+   <Grid>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
    <local:WaveformView x:Name="Timeline" Style="{DynamicResource RbClipWaveformStyle}" AutomationProperties.Name="Audio waveform and trim selection"
-    AutomationProperties.HelpText="Drag handles to trim. Home selects start handle; End selects end handle. Left and Right nudge one millisecond. Plus and minus zoom. Shift and mouse wheel pan." />
-   <WrapPanel Margin="0,8" IsEnabled="{Binding CanEdit}">
-    <Button Content="Zoom in" Command="{Binding ZoomInCommand}" Margin="0,0,6,4" />
-    <Button Content="Zoom out" Command="{Binding ZoomOutCommand}" Margin="0,0,6,4" />
-    <Button Content="Pan left" Command="{Binding PanLeftCommand}" Margin="0,0,6,4" />
-    <Button Content="Pan right" Command="{Binding PanRightCommand}" Margin="0,0,6,4" />
-   </WrapPanel>
+    AutomationProperties.HelpText="Drag handles to trim. Home selects start handle; End selects end handle. Left and Right nudge one millisecond. Plus and minus zoom. Shift and mouse wheel pan. Up and Down scroll audio lanes." />
+    <ScrollBar Grid.Column="1" Orientation="Vertical" Minimum="0" Maximum="{Binding ScrollMaximum, ElementName=Timeline}" Value="{Binding LaneOffset, ElementName=Timeline, Mode=TwoWay}" SmallChange="1" LargeChange="5" ViewportSize="5" AutomationProperties.Name="Scroll audio waveform lanes">
+     <ScrollBar.Style><Style TargetType="ScrollBar"><Style.Triggers><DataTrigger Binding="{Binding ScrollMaximum, ElementName=Timeline}" Value="0"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></ScrollBar.Style>
+    </ScrollBar>
+   </Grid>
    <WrapPanel IsEnabled="{Binding CanEdit}">
-    <TextBlock Text="Start" VerticalAlignment="Center" Margin="0,0,6,4" />
+    <TextBlock Text="In" VerticalAlignment="Center" Margin="0,0,6,4" />
     <TextBox Width="130" Text="{Binding StartText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="Selection start HH:MM:SS.mmm" Margin="0,0,6,4" />
-    <Button Content="−1 ms" Click="StartMinus" AutomationProperties.Name="Start minus one millisecond" Margin="0,0,4,4" />
-    <Button Content="+1 ms" Click="StartPlus" AutomationProperties.Name="Start plus one millisecond" Margin="0,0,16,4" />
-    <TextBlock Text="End" VerticalAlignment="Center" Margin="0,0,6,4" />
+    <Button Content="−" ToolTip="Nudge boundary minus one millisecond" Click="StartMinus" AutomationProperties.Name="Start minus one millisecond" Margin="0,0,4,4" />
+    <Button Content="+" ToolTip="Nudge boundary plus one millisecond" Click="StartPlus" AutomationProperties.Name="Start plus one millisecond" Margin="0,0,16,4" />
+    <TextBlock Text="Out" VerticalAlignment="Center" Margin="0,0,6,4" />
     <TextBox Width="130" Text="{Binding EndText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="Selection end HH:MM:SS.mmm" Margin="0,0,6,4" />
-    <Button Content="−1 ms" Click="EndMinus" AutomationProperties.Name="End minus one millisecond" Margin="0,0,4,4" />
-    <Button Content="+1 ms" Click="EndPlus" AutomationProperties.Name="End plus one millisecond" Margin="0,0,4,4" />
+    <Button Content="−" ToolTip="Nudge boundary minus one millisecond" Click="EndMinus" AutomationProperties.Name="End minus one millisecond" Margin="0,0,4,4" />
+    <Button Content="+" ToolTip="Nudge boundary plus one millisecond" Click="EndPlus" AutomationProperties.Name="End plus one millisecond" Margin="0,0,4,4" />
    </WrapPanel>
-   <TextBlock Text="{Binding DurationText}" Margin="0,6,0,2" />
-   <TextBlock Text="{Binding EffectiveText}" TextWrapping="Wrap" Margin="0,0,0,10" />
-   <StackPanel IsEnabled="{Binding CanEdit}">
-    <WrapPanel><TextBlock Text="Include audio tracks" Margin="0,0,12,4" VerticalAlignment="Center" /><Button Content="All" Command="{Binding AllTracksCommand}" Margin="0,0,6,4" /><Button Content="None (silent MP4)" Command="{Binding NoTracksCommand}" Margin="0,0,6,4" /></WrapPanel>
-    <ItemsControl ItemsSource="{Binding Tracks}"><ItemsControl.ItemTemplate><DataTemplate><CheckBox Content="{Binding Name}" IsChecked="{Binding Included}" Margin="0,3" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-    <WrapPanel Margin="0,8"><RadioButton Content="Separate tracks" GroupName="AudioMode" IsChecked="{Binding Separate}" Margin="0,0,16,0" /><RadioButton Content="Combined mix" GroupName="AudioMode" IsChecked="{Binding Mix}" /></WrapPanel>
-    <TextBlock Text="{Binding MixWarning}" TextWrapping="Wrap" MaxWidth="800" HorizontalAlignment="Left" Margin="0,0,0,10" />
-    <WrapPanel><RadioButton Content="MP4 video (H.264 / AAC)" GroupName="ExportFormat" IsChecked="{Binding IsMp4}" Margin="0,0,16,0" /><RadioButton Content="MP3 audio (48 kHz / 192 kbps)" GroupName="ExportFormat" IsChecked="{Binding IsMp3}" /></WrapPanel>
-   </StackPanel>
-   <WrapPanel Margin="0,14,0,6"><Button x:Name="PreviewButton" Content="Preview selection" Command="{Binding PreviewCommand}" Margin="0,0,8,4" /><Button Content="Export…" Click="Export" IsEnabled="{Binding CanExport}" Margin="0,0,8,4" /><Button Content="Cancel operation" Command="{Binding CancelCommand}" IsEnabled="{Binding Busy}" Margin="0,0,8,4" /></WrapPanel>
-   <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}" Height="5" Margin="0,0,0,6" />
-   <TextBlock Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+   <TextBlock Text="{Binding EffectiveText}" TextWrapping="Wrap" Margin="0,2,0,2" />
+   <WrapPanel Visibility="{Binding Busy, Converter={StaticResource Visible}}" Margin="0,4"><Button Content="Cancel operation" Command="{Binding CancelCommand}" /></WrapPanel>
+   <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}" Height="5" Margin="0,0,0,6" Visibility="{Binding Busy, Converter={StaticResource Visible}}" />
+   <TextBlock Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" Visibility="{Binding Status, Converter={StaticResource NotEmpty}}" />
   </StackPanel>
  </ScrollViewer>
 </UserControl>

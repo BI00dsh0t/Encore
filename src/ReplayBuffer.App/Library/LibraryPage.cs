@@ -1118,7 +1118,7 @@ internal sealed class LibraryPage : Observable
             var source = new ClipSource(path, file.Length, file.LastWriteTimeUtc.Ticks);
             DrillIn.Close();
             _creatorItem = item;
-            Creator = new ClipCreatorPage(source, row.Name, _clipMedia, _newPlayer);
+            Creator = new ClipCreatorPage(source, row.Name, _clipMedia, _newPlayer) { BackCommand = DrillIn.BackCommand };
             Creator.SourceInvalidated = DrillIn.Close;
             DrillIn.Open(row.Path, "Create clip · " + row.Name);
             _ = Creator.OpenAsync(position);

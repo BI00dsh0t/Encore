@@ -33,6 +33,8 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     private ClipWaveform[] _waveforms = [];
     private double _start, _end, _viewportStart, _viewportEnd, _playhead, _progress;
     private bool _mix, _busy, _exporting, _closed;
+    private string _exportName;
+    private bool _choosingDestination;
     private string _format = "mp4", _status = "Opening source…";
     private int _revision;
     private int _sourceCheck;
@@ -42,6 +44,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     {
         Source = source;
         Title = title;
+        _exportName = Path.GetFileNameWithoutExtension(source.Path) + " clip";
         _media = media;
         _newPlayer = newPlayer;
         _createPreviewFolder = createPreviewFolder ?? (() => Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "ReplayBuffer-clip-" + Guid.NewGuid().ToString("N"))).FullName);
@@ -57,12 +60,39 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
 
     public ClipSource Source { get; }
     public string Title { get; }
+    public string ExportName { get => _exportName; set { if (Set(ref _exportName, value)) { NotifyCommands(); } } }
+    public string ExportLabel => IsMp3 ? "Export audio" : "Export video";
+    public string SaveLabel => IsMp3 ? "Save audio…" : "Save video…";
+    public string FormatSummary => IsMp3 ? "MP3 · Stereo · 48 kHz / 192 kbps" : "MP4 · H.264 video / AAC audio · Source resolution";
+    public string SeparateLabel => IsMp3 ? "Separate MP3 files" : "Separate audio tracks";
+    public bool MultipleTracks => Tracks.Count(t => t.Included) > 1;
+    public bool SeparateAudioFiles => IsMp3 && !Mix;
+    public string OutputSummary => !Tracks.Any(t => t.Included)
+        ? IsMp3 ? "Choose at least one audio track." : "Silent video with no audio."
+        : !MultipleTracks ? IsMp3 && !Mix ? "The selected track publishes as a named MP3 in one new folder." : "Only the selected track will be included."
+        : Mix ? MixWarning : IsMp3 ? "Named MP3 files publish together in one new folder." : "Named audio streams stay selectable in one MP4, in source order.";
+    public bool ValidExportName => !string.IsNullOrWhiteSpace(ExportName) && ExportName is not "." and not ".."
+        && ExportName.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && ExportName == ExportName.Trim().TrimEnd('.');
+    public bool CanSave => CanExport && ValidExportName && !_choosingDestination;
+    public bool CanOpenOptions => CanEdit && !_choosingDestination;
+
+    /// <summary>The chooser is separate from encoding and injectable, so cancellation cannot start work.</summary>
+    internal async Task ChooseAndExportAsync(Func<ClipCreatorPage, Task<string?>> choose)
+    {
+        if (!CanSave) { return; }
+        _choosingDestination = true;
+        NotifyCommands();
+        try
+        {
+            var destination = await choose(this);
+            if (destination is not null && !_closed) { await ExportAsync(destination); }
+        }
+        catch (Exception error) { Status = error.Message; }
+        finally { _choosingDestination = false; NotifyCommands(); }
+    }
     public Action? SourceInvalidated { get; set; }
-    public string PreviewLabel => _renderedPreview
-        ? Format == "mp3"
-            ? "Rendered selection preview — audio sample boundaries match MP3 export; picture follows the available source frames."
-            : "Rendered selection preview — audio and source-frame boundaries match export."
-        : "Source video — use Preview selection below to hear the selected tracks and range as exported.";
+    public ICommand? BackCommand { get; set; }
+    public string PreviewLabel => _renderedPreview ? "Rendered selection preview" : "Source video";
     public ObservableCollection<ClipCreatorTrack> Tracks { get; } = [];
     public ICommand CancelCommand { get; }
     public ICommand PreviewCommand { get; }
@@ -210,7 +240,8 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         Waveforms = [];
         InvalidatePreview();
         OnPropertyChanged(nameof(Separate)); OnPropertyChanged(nameof(IsMp4)); OnPropertyChanged(nameof(IsMp3));
-        OnPropertyChanged(nameof(MixWarning)); OnPropertyChanged(nameof(EffectiveText)); NotifyCommands();
+        foreach (var property in new[] { nameof(MixWarning), nameof(EffectiveText), nameof(ExportLabel), nameof(SaveLabel), nameof(FormatSummary), nameof(SeparateLabel), nameof(MultipleTracks), nameof(SeparateAudioFiles), nameof(OutputSummary) }) { OnPropertyChanged(property); }
+        NotifyCommands();
         _ = RefreshAsync();
     }
 
@@ -229,7 +260,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
             var waveform = await _media.ExecuteAsync(Request("waveform") with { Start = ViewportStart, End = ViewportEnd, Bins = 1600 }, null, token);
             token.ThrowIfCancellationRequested();
             Waveforms = waveform.Waveforms ?? [];
-            Status = "Drag either boundary, click to seek, or enter times. Wheel zooms; Shift+wheel pans.";
+            Status = "";
         });
     }
 
@@ -335,7 +366,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     }
     private void NotifyCommands()
     {
-        OnPropertyChanged(nameof(CanExport)); OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(CanExport)); OnPropertyChanged(nameof(CanEdit)); OnPropertyChanged(nameof(CanSave)); OnPropertyChanged(nameof(CanOpenOptions)); OnPropertyChanged(nameof(ValidExportName));
         ((RelayCommand)PreviewCommand).RaiseCanExecuteChanged();
     }
     public static string FormatTime(double seconds) => FormatTime(TimeSpan.FromSeconds(Math.Max(0, seconds)));

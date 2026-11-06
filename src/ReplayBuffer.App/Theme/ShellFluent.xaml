@@ -51,6 +51,7 @@
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+        <Setter Property="ToolTip" Value="{Binding Title}" />
         <Setter Property="theme:NavPress.Track" Value="True" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
@@ -72,6 +73,7 @@
                                 CornerRadius="{DynamicResource RbSmallCornerRadius}"
                                 Visibility="Collapsed" />
                         <DockPanel Margin="{TemplateBinding Padding}" LastChildFill="False">
+                            <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center" Margin="0,0,12,0" />
                             <TextBlock x:Name="Label"
                                        DockPanel.Dock="Left"
                                        VerticalAlignment="Center"
@@ -90,6 +92,9 @@
                         </DockPanel>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="Rail">
+                            <Setter TargetName="Label" Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
                         <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True">
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible" />
                         </DataTrigger>
@@ -121,5 +126,20 @@
                 <Setter Property="ToolTip" Value="{Binding Title}" />
             </DataTrigger>
         </Style.Triggers>
+    </Style>
+    <Style x:Key="RbSettingsNavStyle" TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="Height" Value="40" /><Setter Property="Margin" Value="4,8,4,0" /><Setter Property="Padding" Value="12,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton"><Grid>
+            <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource RbNavItemCornerRadius}" />
+            <Border x:Name="Pill" Width="3" Height="16" HorizontalAlignment="Left" Background="{DynamicResource AccentFillColorDefaultBrush}" Visibility="Collapsed" />
+            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+        </Grid><ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger>
+            <Trigger Property="IsChecked" Value="True"><Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /><Setter TargetName="Pill" Property="Visibility" Value="Visible" /></Trigger>
+        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
 </ResourceDictionary>
