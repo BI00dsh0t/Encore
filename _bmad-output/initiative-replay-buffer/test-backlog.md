@@ -1,5 +1,7 @@
 # Test backlog
 
+**Current exception (2026-11-05):** builder cleared tests, then limited clearance to clip creator only. Run only its non-Explicit App/Engine/Windows classes, one project at a time, after a zero-warning Release build. This does not authorize §1/§2, HITL, publish/install, or the clip creator's Explicit/Heavy media/shared-handle checks; those retain the night/go rule. Focused QA results will be recorded in the clip-creator section below.
+
 The builder, 2026-11-05 evening: "resume dev work. don't run any tests until later. make a backlog of tests to run. Merge to dev when changes are ready."
 
 Development goes on without test runs. Builds (0 warnings) still run, and QA is code review only. Stories merge into develop once their code review passes, and the tests they would have run are listed here. When the builder says tests may run again, work through this list top to bottom. Default tests run first, by day or night. Heavy, GPU, capture, bench and soak runs happen at night only, one at a time, with every other session paused for fps or bench measurements. Any failure becomes a bugfix.

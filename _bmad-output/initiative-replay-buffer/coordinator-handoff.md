@@ -11,6 +11,8 @@ Codex works directly in `%USERPROFILE%/Documents/repos/ReplayBuffer`. The former
 
 ## Standing rules (the builder's words are in the state file's top section)
 
+**Current scoped exception (2026-11-05):** builder said "you are cleared to run tests again", then "only run tests for the clip creator". Focused QA may build Release and run only non-Explicit `ClipCreatorTests`, `ClipMediaWorkerTests` (identity validation), and `SharedMediaProcessTests` (quoting), one project at a time. This includes fake-service both-look layout/focus checks. The blanket hold below still applies outside clip creator. Explicit/Heavy real-media/shared-handle checks still require the separate night/go clearance; no old backlog, HITL, publish, install or real Dev App work is authorized.
+
 1. **Dev resumed, tests deferred** (builder: "resume dev work. don't run any tests until later. make a backlog of tests to run. Merge to dev when changes are ready").
    - Build with `dotnet build ReplayBuffer.slnx -c Release`, with 0 warnings, but run **no tests**: no default, Heavy, bench or soak runs.
    - QA is **code review only**, and a story merges when its review passes.
@@ -51,6 +53,8 @@ Codex works directly in `%USERPROFILE%/Documents/repos/ReplayBuffer`. The former
   - the two Heavy recording-timing questions (§2 rows 9–10).
 
 ## When the builder says tests may run again
+
+The current clearance is clip creator only; do not execute the general resumption sequence below under that exception.
 
 1. Restate the rule change in the state file.
 2. Run `test-backlog.md` §1 (default suites on develop) by day. Any failure goes to a bugfix branch.
