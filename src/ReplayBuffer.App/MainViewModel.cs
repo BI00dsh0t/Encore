@@ -206,6 +206,10 @@ internal sealed class MainViewModel : Observable
                 {
                     Library.PausePlayer();
                 }
+                else
+                {
+                    Library.ResumeCreator();
+                }
 
                 UpdateOpenPage();
             }

@@ -7,7 +7,16 @@
 <ResourceDictionary x:Class="ReplayBuffer.App.Theme.LibraryTheme"
                     x:ClassModifier="internal"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:ReplayBuffer.App.Library">
+
+    <!-- AD-28 creator uses the same semantic tokens in both looks. -->
+    <Style x:Key="RbClipWaveformStyle" TargetType="local:WaveformView">
+        <Setter Property="WaveBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+        <Setter Property="RulerBrush" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="SurfaceBrush" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+    </Style>
 
     <!--
         Library row: a card that takes fill-control-hover on hover. Selected (story 10.2; DESIGN.md addendum

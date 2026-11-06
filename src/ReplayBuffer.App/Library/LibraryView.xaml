@@ -109,6 +109,7 @@
     <!-- The list, or (story 14.2) the drill-in's player page in its place; the list is hidden, not unloaded, so its scroll and focus survive. -->
     <Grid>
     <local:PlayerView x:Name="PlayerContent" DataContext="{Binding Player}" Visibility="{Binding Converter={StaticResource NotEmpty}}" />
+    <local:ClipCreatorView x:Name="CreatorContent" DataContext="{Binding Creator}" Visibility="{Binding Converter={StaticResource NotEmpty}}" />
     <DockPanel x:Name="ListContent" Visibility="{Binding DrillIn.IsOpen, Converter={StaticResource Hidden}}">
         <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
             <!-- Each caption stays with its combo when the row wraps. -->
@@ -249,6 +250,7 @@
                         <TextBlock Style="{DynamicResource RbLibraryBarCaptionStyle}" Text="{Binding HiddenText}" />
                     </StackPanel>
                     <local:LibraryOverflowPanel x:Name="Actions" HorizontalAlignment="Left" VerticalAlignment="Center">
+                        <Button Command="{Binding CreateClipCommand}" Content="Create clip" Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
                         <Button VerticalAlignment="Center"
                                 Command="{Binding PlayCommand}"
                                 Content="Play"
@@ -306,6 +308,7 @@
                      Style="{DynamicResource RbLibraryListStyle}">
                 <ListBox.ContextMenu>
                     <ContextMenu>
+                        <MenuItem Command="{Binding CreateClipCommand}" Header="Create clip" Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
                         <MenuItem Command="{Binding PlayCommand}"
                                   Header="Play"
                                   InputGestureText="Enter"

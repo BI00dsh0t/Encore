@@ -35,6 +35,7 @@ $Required = @(
     'avutil-61.dll',
     'swresample-7.dll',
     'swscale-10.dll',
+    'ffmpeg.exe',
     'ffprobe.exe'
 )
 

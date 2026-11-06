@@ -439,7 +439,7 @@ graph LR
     - The `mehd` is written in place, with no later bytes moved, and before `EndWrite`, so the Library never lists a half-patched file. Story 14.3 settles how; the lead is to take the first 16 bytes of the `udta` that follows `mvex` and leave the rest as a `free` box.
     - Clips (faststart) are unaffected. Recordings made before the change play up to their last fragment, and nothing rewrites them.
     - A crash-cut Recording, with no `mfra`, has no known length: the page shows the elapsed time only and turns seeking off.
-  - **Not in the player:** editing (the initiative's Boundaries), playing a file still being written, and full screen, speed and frame step (parked).
+  - **Not in the player:** editing is owned by the separate AD-28 clip creator; playing a file still being written, speed and frame step remain excluded.
   - **Measured** (`research/in-app-player.md`, 2026-11-05):
     - 30 of 30 audible Track switches were correct;
     - seeks took 7–144 ms;
@@ -576,3 +576,12 @@ ReplayBuffer/
 - **Thumbnail caching, Library UI layout, Overlay visuals and sound assets:** these belong to epics 7 and 5. Epic 5 checks that `WDA_EXCLUDEFROMCAPTURE` works on the layered Overlay window.
 - **The rolling-file logging provider, the test framework, and package versions beyond the Stack table:** epic 1's scaffold chooses them, and the code owns them after that.
 - **Out of v1:** HDR (HEVC 10-bit), more than one GPU, an installer, CI, auto-update, and telemetry.
+
+### AD-28 — Precise clip creation: isolated media worker and atomic publication
+
+- **Owner:** the App owns creator selection, waveforms, navigation and preview. An isolated `clip-media-worker` invocation of the engine owns probing, decoded PCM bins, source-frame boundary queries and software transcodes. Dispatch occurs before instance, settings, logging or capture initialization. Worker JSON in Contracts is additive and separate from live service IPC; no App → Engine assembly dependency is added.
+- **Source access:** only finished Library items qualify. Path, length and last-write identity are checked before and after work. FFmpeg/ffprobe receive a synchronous seekable file handle shared for read/write/delete through explicitly inherited stdin (`fd:`), never their ordinary file protocol. Source disappearance/change or navigation cancels only owned work.
+- **Resources:** one operation per creator, two codec threads, bounded viewport bins, bounded pipe diagnostics, hidden tools with drained stdout/stderr and owned-process cancellation. Capture remains independent.
+- **Precision/audio:** query decoded source frames near requested endpoints; display effective frame boundaries and transcode without keyframe widening. Decode/trim audio samples on the same source timeline. Explicit named track mapping, separate streams/files or a normalized/limited mix; mixed selection preview uses the same render path and maps preview zero to effective source start.
+- **Publication:** encode into unique owned scratch beside the requested destination, verify source identity, then rename without replacement. Separate MP3s publish as one directory rename. Cancel/failure removes only owned scratch; originals and existing destinations survive. MP4 inside the Library is indexed by the ordinary scanner; MP3 remains external.
+- **Editing exception:** AD-1/AD-27 and the initiative allow one contiguous clip export from finished footage. Player playback stays read-only; effects, multicuts, imports and uploads remain excluded. User picks export name/destination; H.264/AAC MP4 preserves dimensions/timing (even padding), MP3 is stereo 48 kHz/192 kbps.

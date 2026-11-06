@@ -7,8 +7,8 @@
 .DESCRIPTION
     Runs tools/publish-engine.ps1 into publish/engine/, then publishes the WPF App
     framework-dependent (Release, win-x64) into the output folder, copies ReplayBuffer.Engine.exe
-    and the DLLs beside it from the engine output, and deletes every .pdb. ffmpeg.exe, ffplay.exe
-    and ffprobe.exe stay behind in publish/engine/, where the engine tests use them. The layout is
+    and the DLLs beside it from the engine output, and deletes every .pdb. ffmpeg.exe and ffprobe.exe
+    support clip creation; ffplay.exe is excluded. The layout is
     checked and listed at the end. Install the result with tools/install.ps1.
 #>
 [CmdletBinding()]
@@ -35,7 +35,7 @@ $FFmpegDlls = @(
     'swresample-7.dll',
     'swscale-10.dll'
 )
-$Exes = @('ReplayBuffer.App.exe', 'ReplayBuffer.Engine.exe')
+$Exes = @('ReplayBuffer.App.exe', 'ReplayBuffer.Engine.exe', 'ffmpeg.exe', 'ffprobe.exe')
 
 & (Join-Path $PSScriptRoot 'publish-engine.ps1') -Output $EngineOutput
 
@@ -53,9 +53,12 @@ if ($LASTEXITCODE -ne 0) {
 
 Copy-Item -LiteralPath (Join-Path $EngineOutput 'ReplayBuffer.Engine.exe') -Destination $Output
 Copy-Item -Path (Join-Path $EngineOutput '*.dll') -Destination $Output
+foreach ($tool in @('ffmpeg.exe', 'ffprobe.exe')) {
+    Copy-Item -LiteralPath (Join-Path $EngineOutput $tool) -Destination $Output
+}
 # The JIT engine's content flows into the App's publish through the build-order reference: the
-# FFmpeg exes (the install needs only the DLLs) and its runtime files, which the AOT exe doesn't use.
-foreach ($name in @('ffmpeg.exe', 'ffplay.exe', 'ffprobe.exe', 'ReplayBuffer.Engine.runtimeconfig.json', 'ReplayBuffer.Engine.deps.json', 'ReplayBuffer.Engine.dll')) {
+# Unused FFplay and JIT runtime files, which the AOT exe doesn't use.
+foreach ($name in @('ffplay.exe', 'ReplayBuffer.Engine.runtimeconfig.json', 'ReplayBuffer.Engine.deps.json', 'ReplayBuffer.Engine.dll')) {
     Remove-Item -LiteralPath (Join-Path $Output $name) -Force -ErrorAction SilentlyContinue
 }
 Get-ChildItem -LiteralPath $Output -Filter '*.pdb' -File -Recurse | Remove-Item -Force

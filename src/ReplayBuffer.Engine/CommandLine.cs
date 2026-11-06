@@ -10,6 +10,9 @@ public abstract record EngineCommand;
 /// <summary><c>debug-list</c>: windows and audio endpoints.</summary>
 public sealed record DebugListCommand : EngineCommand;
 
+/// <summary>Private AD-28 media worker, isolated from live engine startup.</summary>
+public sealed record ClipMediaWorkerCommand : EngineCommand;
+
 /// <summary>How much of the video path a <c>debug-capture</c> runs (story 1.2 cost split).</summary>
 public enum CaptureStages
 {
@@ -134,6 +137,7 @@ public static class CommandLine
 
         return args[0] switch
         {
+            "clip-media-worker" => args.Count == 1 ? new ParseResult(new ClipMediaWorkerCommand(), null) : Fail("The clip worker takes no arguments."),
             "debug-list" => args.Count == 1 ? new ParseResult(new DebugListCommand(), null) : Fail($"Unexpected argument '{args[1]}'."),
             "debug-capture" => ParseCapture(args),
             "serve" => ParseServe(args),
