@@ -17,6 +17,12 @@ internal partial class ClipCreatorView
     }
     private ClipCreatorPage? Page => DataContext as ClipCreatorPage;
     public void FocusFirstControl() => Timeline.Focus();
+    private void CommitTime(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter) { return; }
+        ((System.Windows.Controls.TextBox)sender).GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+        e.Handled = true;
+    }
     private void StartMinus(object sender, RoutedEventArgs e) => Page?.Nudge(false, -1);
     private void StartPlus(object sender, RoutedEventArgs e) => Page?.Nudge(false, 1);
     private void EndMinus(object sender, RoutedEventArgs e) => Page?.Nudge(true, -1);
@@ -26,9 +32,23 @@ internal partial class ClipCreatorView
     {
         if (Page is not { CanOpenOptions: true } page) { return; }
         var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = ExportArrow };
+        menu.SetResourceReference(StyleProperty, "RbClipMenuStyle");
         foreach (var (format, label) in new[] { ("mp4", "Export as video"), ("mp3", "Export as audio") })
         {
-            var item = new System.Windows.Controls.MenuItem { Header = label, IsCheckable = true, IsChecked = page.Format == format };
+            var header = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+            var icon = new System.Windows.Shapes.Path
+            {
+                Width = 16, Height = 16, Stretch = System.Windows.Media.Stretch.Uniform, StrokeThickness = 1.5,
+                Data = System.Windows.Media.Geometry.Parse(format == "mp4"
+                    ? "M 1,1 L 15,1 L 15,15 L 1,15 Z M 5,1 L 5,15 M 11,1 L 11,15 M 1,5 L 5,5 M 1,11 L 5,11 M 11,5 L 15,5 M 11,11 L 15,11"
+                    : "M 6,12 L 6,3 L 14,1 L 14,10 M 6,3 L 14,1 M 6,12 C 6,16 0,16 0,13 C 0,10 6,10 6,12 M 14,10 C 14,14 8,14 8,11 C 8,8 14,8 14,10"),
+            };
+            icon.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "TextFillColorPrimaryBrush");
+            header.Children.Add(icon);
+            header.Children.Add(new System.Windows.Controls.TextBlock { Text = label, Margin = new Thickness(8, 0, 0, 0), FontFamily = new System.Windows.Media.FontFamily("Segoe UI"), FontSize = 14, FontWeight = FontWeights.Normal });
+            var item = new System.Windows.Controls.MenuItem { Header = header, IsCheckable = true, IsChecked = page.Format == format };
+            System.Windows.Automation.AutomationProperties.SetName(item, label);
+            item.SetResourceReference(StyleProperty, "RbClipMenuItemStyle");
             item.Click += (_, _) => { page.Format = format; };
             menu.Items.Add(item);
         }

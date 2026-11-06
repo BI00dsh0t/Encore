@@ -10,10 +10,84 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:local="clr-namespace:ReplayBuffer.App.Library">
 
-    <Style x:Key="RbClipToolButtonStyle" TargetType="Button">
-        <Setter Property="Width" Value="32" /><Setter Property="Height" Value="30" /><Setter Property="FontSize" Value="14" /><Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+    <!-- Creator-only chrome deliberately replaces theme button and field templates. -->
+    <Style x:Key="RbClipButtonStyle" TargetType="Button">
+        <Setter Property="FontFamily" Value="Segoe UI" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Padding" Value="10,7" /><Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" /><Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+            <Border x:Name="Chrome" CornerRadius="6" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger>
+                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" /></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
     </Style>
+    <Style x:Key="RbClipToolButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipButtonStyle}">
+        <Setter Property="Padding" Value="7,5" /><Setter Property="Width" Value="32" /><Setter Property="Height" Value="30" />
+    </Style>
+    <Style x:Key="RbClipIconStyle" TargetType="Path">
+        <Setter Property="Width" Value="16" /><Setter Property="Height" Value="16" /><Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" /><Setter Property="StrokeThickness" Value="1.5" />
+        <Setter Property="StrokeStartLineCap" Value="Round" /><Setter Property="StrokeEndLineCap" Value="Round" /><Setter Property="StrokeLineJoin" Value="Round" />
+    </Style>
+    <Style x:Key="RbClipPreviewButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipButtonStyle}">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+    </Style>
+    <Style x:Key="RbClipPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipButtonStyle}">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" /><Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" /><Setter Property="FontWeight" Value="Medium" /><Setter Property="Padding" Value="14,9" />
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+            <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+            <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.94" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="RbClipJoinedButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipPrimaryButtonStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" CornerRadius="6,0,0,6" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="RbClipJoinedArrowButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipPrimaryButtonStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" CornerRadius="0,6,6,0" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="RbClipInputStyle" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="Segoe UI" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" /><Setter Property="Typography.NumeralAlignment" Value="Tabular" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" /><Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Padding" Value="10,8" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="Chrome" CornerRadius="6" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ScrollViewer x:Name="PART_ContentHost" Padding="0" Margin="0" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="RbClipTimeInputStyle" TargetType="TextBox" BasedOn="{StaticResource RbClipInputStyle}"><Setter Property="Width" Value="115" /><Setter Property="Height" Value="34" /><Setter Property="MinHeight" Value="0" /><Setter Property="Padding" Value="8,7" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" /></Style>
+    <Style x:Key="RbClipTimeGroupStyle" TargetType="Border"><Setter Property="CornerRadius" Value="6" /><Setter Property="BorderThickness" Value="1" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" /><Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Style.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></Style.Triggers></Style>
+    <Style x:Key="RbClipMenuStyle" TargetType="ContextMenu"><Setter Property="OverridesDefaultStyle" Value="True" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu"><Border Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="9" Padding="5"><Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.2" /></Border.Effect><StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" /></Border></ControlTemplate></Setter.Value></Setter></Style>
 
+
+    <!-- Scoped by the creator's embedded PlayerView resources; ordinary players keep their templates. -->
+    <ControlTemplate x:Key="RbClipPlaybackTemplate" TargetType="ButtonBase">
+        <Border x:Name="Chrome" CornerRadius="6" Background="{TemplateBinding Background}">
+            <Path x:Name="Icon" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                  Stroke="{TemplateBinding Foreground}" StrokeThickness="1.4" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                  Data="M 3,1 L 14,8 L 3,15 Z" />
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="Content" Value="&#xE769;"><Setter TargetName="Icon" Property="Data" Value="M 5,1 L 5,15 M 11,1 L 11,15" /></Trigger>
+            <Trigger Property="Content" Value="&#xE767;"><Setter TargetName="Icon" Property="Data" Value="M 1,6 L 4,6 L 8,2 L 8,14 L 4,10 L 1,10 Z M 11,5 C 14,6 14,10 11,11 M 13,2 C 18,5 18,11 13,14" /></Trigger>
+            <Trigger Property="Content" Value="&#xE74F;"><Setter TargetName="Icon" Property="Data" Value="M 1,6 L 4,6 L 8,2 L 8,14 L 4,10 L 1,10 Z M 11,5 L 16,11 M 16,5 L 11,11" /></Trigger>
+            <Trigger Property="Content" Value="&#xE713;"><Setter TargetName="Icon" Property="Data" Value="M 6,1 L 10,1 L 10.5,3 L 12,4 L 14,3.5 L 16,7 L 14.5,8 L 14.5,10 L 16,11 L 14,14.5 L 12,14 L 10.5,15 L 10,17 L 6,17 L 5.5,15 L 4,14 L 2,14.5 L 0,11 L 1.5,10 L 1.5,8 L 0,7 L 2,3.5 L 4,4 L 5.5,3 Z M 11,9 A 3,3 0 1 0 5,9 A 3,3 0 1 0 11,9" /></Trigger>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger>
+            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" /></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
     <!-- AD-28 creator uses the same semantic tokens in both looks. -->
     <Style x:Key="RbClipWaveformStyle" TargetType="local:WaveformView">
         <Setter Property="WaveBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
@@ -560,4 +634,5 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style x:Key="RbClipMenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource RbPlayerMenuItemStyle}"><Setter Property="Padding" Value="11" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" /></Style>
 </ResourceDictionary>

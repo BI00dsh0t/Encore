@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Input;
 using ReplayBuffer.App.Library;
 using ReplayBuffer.App.Theme;
 using ReplayBuffer.Contracts.Messages;
@@ -170,6 +172,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public void CreatorLayoutAndWaveformTokensResolveInBothLooksWithoutBindingErrors() => Sta.Run(() =>
     {
+        SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
         _media.TrackCount = 10;
         using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
         var opening = page.OpenAsync(0);
@@ -201,9 +204,54 @@ public sealed class ClipCreatorTests : IDisposable
                 Assert.Contains(Descendants<TextBox>(view), t => t.Text == page.StartText);
                 Assert.Empty(Descendants<CheckBox>(view));
                 Assert.True(((PlayerView)view.FindName("Video")).ActualHeight > 400);
-                Assert.True(((Button)view.FindName("PreviewButton")).IsEnabled);
+                CommandManager.InvalidateRequerySuggested(); Sta.Pump(TimeSpan.FromMilliseconds(50));
+                Assert.True(((Button)view.FindName("PreviewButton")).IsEnabled, $"Preview command {page.CanExport}, busy {page.Busy}, status {page.Status}");
                 Assert.Equal(Visibility.Collapsed, ((Button)((PlayerView)view.FindName("Video")).FindName("FullScreen")).Visibility);
-                var firstStartBox = Descendants<TextBox>(view).First();
+                var playerView = (PlayerView)view.FindName("Video");
+                var play = (Button)playerView.FindName("PlayPause");
+                var mute = (Button)playerView.FindName("Mute");
+                var gear = (System.Windows.Controls.Primitives.ToggleButton)playerView.FindName("Gear");
+                Assert.Equal(34, play.ActualWidth); Assert.Equal(32, play.ActualHeight);
+                var playIcon = (System.Windows.Shapes.Path)play.Template.FindName("Icon", play);
+                Assert.Equal(16, playIcon.Width);
+                var playShape = playIcon.Data.ToString();
+                page.Preview!.PlayPauseCommand.Execute(null); window.UpdateLayout();
+                Assert.NotEqual(playShape, playIcon.Data.ToString());
+                page.Preview.PlayPauseCommand.Execute(null); window.UpdateLayout();
+                Assert.Equal(playShape, playIcon.Data.ToString());
+                var muteIcon = (System.Windows.Shapes.Path)mute.Template.FindName("Icon", mute);
+                var volumeShape = muteIcon.Data.ToString();
+                page.Preview.IsMuted = true; window.UpdateLayout();
+                Assert.NotEqual(volumeShape, muteIcon.Data.ToString());
+                page.Preview.IsMuted = false; window.UpdateLayout();
+                Assert.Equal(volumeShape, muteIcon.Data.ToString());
+                Assert.NotEqual(playShape, ((System.Windows.Shapes.Path)gear.Template.FindName("Icon", gear)).Data.ToString());
+                var firstStartBox = (TextBox)view.FindName("StartBox");
+                var oldEnd = page.End;
+                firstStartBox.Text = "00:00:01.123";
+                var enter = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(view)!, 0, Key.Enter) { RoutedEvent = Keyboard.KeyDownEvent };
+                firstStartBox.RaiseEvent(enter);
+                Assert.True(enter.Handled);
+                Assert.Equal(1.123, page.Start, 6);
+                Assert.Equal(oldEnd, page.End);
+                var right = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(view)!, 0, Key.Right) { RoutedEvent = Keyboard.KeyDownEvent };
+                firstStartBox.RaiseEvent(right);
+                Assert.Equal(1.123, page.Start, 6);
+                firstStartBox.Text = "00:00:99.999";
+                firstStartBox.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(view)!, 0, Key.Enter) { RoutedEvent = Keyboard.KeyDownEvent });
+                Assert.Equal(1.123, page.Start, 6);
+                Assert.NotEmpty(page.Status);
+                waveform.MoveBoundary(false, page.End);
+                Assert.Equal(1.123, page.Start, 6);
+                Assert.Equal(oldEnd, page.End);
+                waveform.MoveBoundary(true, page.Start - 0.001);
+                Assert.Equal(oldEnd, page.End);
+                waveform.MoveBoundary(false, 1.123);
+                page.Nudge(false, 1);
+                Assert.Equal("00:00:01.124", page.StartText);
+                Assert.Equal(ClipCreatorPage.FormatTime(page.End - page.Start), page.SelectedDurationText);
+                var refresh = page.RefreshAsync();
+                Sta.PumpUntil(() => refresh.IsCompleted, "edited range to refresh");
                 Assert.True(firstStartBox.TransformToAncestor(view).Transform(new Point()).Y >= waveform.TransformToAncestor(view).Transform(new Point()).Y + waveform.ActualHeight);
             }
             var range = (page.Start, page.End, page.ViewportStart, page.ViewportEnd);
@@ -266,6 +314,8 @@ public sealed class ClipCreatorTests : IDisposable
             ThemeService.ForWindow(dialog).Apply(AppTheme.GamingDark);
             dialog.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle, () =>
             {
+                dialog.UpdateLayout();
+                Capture((FrameworkElement)dialog.Content, "clip-options-GamingDark.png");
                 Assert.Same(window, dialog.Owner);
                 Assert.Equal(2, Descendants<CheckBox>(dialog).Count());
                 page.Tracks[1].Included = false;
@@ -340,6 +390,7 @@ public sealed class ClipCreatorTests : IDisposable
                     Assert.True(((Button)view.FindName("PreviewButton")).IsVisible);
                     Assert.True(((Button)view.FindName("ExportButton")).IsVisible);
                     Assert.Equal(76, ((WaveformView)view.FindName("Timeline")).ActualHeight);
+                    Capture(client, $"clip-controls-{look}-{(expanded ? "expanded" : "rail")}.png");
                 }
             }
         }
@@ -378,10 +429,35 @@ public sealed class ClipCreatorTests : IDisposable
                     Assert.True(bounds.Left >= -1 && bounds.Right <= viewport.ActualWidth + 1, $"Action clipped horizontally: {bounds}, viewport {viewport.RenderSize}");
                     Assert.True(bounds.Top >= -1 && bounds.Bottom <= viewport.ActualHeight + 1, $"Action cannot scroll into view: {bounds}, viewport {viewport.RenderSize}");
                 }
+                var rangePanel = Descendants<ClipRangePanel>(view).Single();
+                foreach (FrameworkElement group in rangePanel.Children)
+                {
+                    group.BringIntoView(); window.UpdateLayout();
+                    var bounds = group.TransformToAncestor(viewport).TransformBounds(new Rect(group.RenderSize));
+                    Assert.True(bounds.Left >= -1 && bounds.Right <= viewport.ActualWidth + 1, $"Range group clipped horizontally: {bounds}, viewport {viewport.RenderSize}");
+                    Assert.True(bounds.Top >= -1 && bounds.Bottom <= viewport.ActualHeight + 1, $"Range group cannot scroll into view: {bounds}, viewport {viewport.RenderSize}");
+                }
+                Capture((FrameworkElement)window.Content, $"clip-controls-{look}-narrow.png");
             }
         }
         finally { window.CloseForQuit(); }
     });
+
+    private static void Capture(FrameworkElement view, string name)
+    {
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(view.ActualWidth), (int)Math.Ceiling(view.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+        var background = new DrawingVisual();
+        using (var drawing = background.RenderOpen())
+        {
+            drawing.DrawRectangle((Brush)view.FindResource("SolidBackgroundFillColorBaseBrush"), null, new Rect(view.RenderSize));
+        }
+        bitmap.Render(background);
+        bitmap.Render(view);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var output = File.Create(Path.Combine(AppContext.BaseDirectory, name));
+        encoder.Save(output);
+    }
 
     private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
     {
