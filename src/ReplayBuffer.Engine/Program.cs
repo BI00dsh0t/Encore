@@ -5,6 +5,12 @@ using ReplayBuffer.Engine.Logging;
 using ReplayBuffer.Platform.Audio;
 using ReplayBuffer.Platform.Windows;
 
+// Before instance resolution, mutex, logs or settings: this worker never touches the live engine.
+if (args is ["clip-media-worker"])
+{
+    return await ClipMediaWorker.RunAsync();
+}
+
 var parsed = CommandLine.Parse(args);
 var testInstance = parsed.Command switch
 {

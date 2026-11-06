@@ -85,7 +85,7 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
 
 ## Boundaries
 
-- Not in v1, and not planned: per-application audio, injection or hooking, in-app video editing, uploading or streaming, multiple GPUs, distribution (PRD §6), Post-roll, more than one Save Hotkey, and splitting a Recording by size or time.
+- Not in v1, and not planned: per-application audio, injection or hooking, general in-app video editing, uploading or streaming, multiple GPUs, distribution (PRD §6), Post-roll, more than one Save Hotkey, and splitting a Recording by size or time.
 - Touch point: BEACN Mix Create app — its virtual Output and Input Devices, consumed only; owner: epic-multi-track-audio
 - Touch point: Windows default app for .mp4 and Discord's paste — consumed by Library actions; owner: epic-library-cleanup
 - Touch point: the HEVC and AV1 Video Extensions from the Microsoft Store — consumed by the in-app player's decoding; owner: epic-in-app-player
@@ -100,7 +100,7 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
 
 ## Notes
 
-- Feature request: 2026-11-05, [Create clips with precise waveform trimming and audio export](feature-requests/clip-creator/clip-creator.md), with the builder's source input and audio-mode decision alongside it. Recorded for future planning, outside the current build order; the existing no-editing boundary is a scheduling/refinement conflict to reconcile rather than an instruction to discard the request.
+- Feature request: 2026-11-05, [Create clips with precise waveform trimming and audio export](feature-requests/clip-creator/clip-creator.md), with the builder's source input and audio-mode decision alongside it. Approved for implementation through plan-clip-creator.md; AD-28 and the boundary exception below authorize one contiguous precise export.
 - Open question: the FPS-loss target. The provisional 3% is confirmed or replaced by the first benchmark (PRD Q-1). The builder decides.
 - Open question: the tray icon's behaviour beyond open and quit (PRD Q-2). The builder decides once the tray design is ready.
 - Open question: which anti-cheat-protected games to verify against (PRD Q-3). Decided at test planning.
@@ -124,3 +124,5 @@ For its builder and only user, ShadowPlay is replaced by an always-on replay who
 - Decision: 2026-11-05, the builder asked: "For output, we want to be able to specify recording in source quality", then: "We don't want to match the source framerate. Just the resolution. Output fps should always be determined by the output settings." Epic 12 "Source-resolution output" (epic-source-quality-output, R40) adds a Source resolution to Video quality. It runs after 11.5 and before 8.11, so the hands-off run uses it. Its unattended defaults (bitrate unchanged, no codec switch for games, the size follows a held change outside a Recording) are in the epic's Notes for the builder; AD-7 needs a spine edit before 12.2.
 - Decision: 2026-11-05, the builder asked: "add a general setting for allowing the user to specify if they want new games to be captured by default. So if a new game is detected, its Capture this game setting will be on or off by default." Epic 13 "New games captured by default, or not" (epic-new-game-capture-default, R41) is one story: a Global `captureNewGames` key, the engine creating new profiles Ignored when it's off, and a switch on the General page. It has no prerequisite and runs before 8.11. Its unattended defaults are in the epic's Notes for the builder.
 - Decision: 2026-11-05, the builder asked: "add a new feature request. first research easiest approach for an in app media player that also allows us to switch audio tracks." Research (`research/in-app-player.md`) compared six players. Then, of its recommendation: "use the windows media player", meaning WinRT `Windows.Media.Playback.MediaPlayer` drawn through its frame server into a WPF `D3DImage`. Epic 14 "In-app player" (epic-in-app-player, R42) adds a player page to the Library. It needs AD-27, which amends AD-1 (the App may read a finished media file to play it) and AD-9 (a Recording's `moov` gets an `mehd` so Windows plays its last fragment). It runs before 8.11, so the hands-off run uses it. Its unattended defaults (where it lives, one Track at a time, one volume, the controls, the missing-codec message, no trimming) are in the epic's Notes for the builder.
+
+- Decision: 2026-11-05, the approved clip-creator plan permits one contiguous precise export from a finished Library item, with waveforms, named tracks, separate/mixed audio, MP4 and MP3. AD-28 records the isolated worker and atomic output ownership. This is the scheduled exception to the editing boundary; multicuts and effects stay excluded.

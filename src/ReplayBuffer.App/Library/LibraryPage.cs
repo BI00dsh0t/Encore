@@ -61,6 +61,9 @@ internal sealed class LibraryPage : Observable
     private readonly Func<string, Stream>? _openRead;
     private readonly Action<string> _log;
     private PlayerPage? _player;
+    private ClipCreatorPage? _creator;
+    private LibraryItem? _creatorItem;
+    private readonly IClipMediaService _clipMedia;
     private double _playerVolume = 1.0;
     private bool _playerMuted;
     private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
@@ -115,7 +118,8 @@ internal sealed class LibraryPage : Observable
         Func<string?>? pickFolder = null,
         Func<IPlayer>? player = null,
         Func<string, Stream>? openRead = null,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        IClipMediaService? clipMedia = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         PropertyChanged += (_, e) =>
@@ -135,11 +139,13 @@ internal sealed class LibraryPage : Observable
         _newPlayer = player ?? (() => new WindowsMediaPlayer());
         _openRead = openRead;
         _log = log ?? (_ => { });
+        _clipMedia = clipMedia ?? new ClipMediaService();
         DrillIn = new DrillIn(MainViewModel.LibraryTitle);
-        DrillIn.Closed += _ => ClosePlayer();
+        DrillIn.Closed += _ => { ClosePlayer(); CloseCreator(); };
         AcknowledgeCommand = new RelayCommand(() => _ = AcknowledgeAsync());
         OpenCommand = Selection(OpenSelection, () => _shownSelected.Count == 1);
         PlayCommand = Selection(PlaySelection, () => _shownSelected is [{ IsLocked: false }]);
+        CreateClipCommand = Selection(CreateClipSelection, () => _shownSelected is [{ IsLocked: false }]);
         FavouriteSelectionCommand = Selection(() => _ = FavouriteSelectionAsync(), () => _shownSelected.Count > 0);
         CopyCommand = Selection(CopySelection, () => _shownSelected.Any(r => !r.IsLocked));
         CopyToFolderCommand = Selection(CopySelectionToFolder, () => _shownSelected.Any(r => !r.IsLocked));
@@ -226,6 +232,8 @@ internal sealed class LibraryPage : Observable
 
     /// <summary>"Play": plays the one shown selected item on the in-app player page, once it's written (AD-27).</summary>
     public ICommand PlayCommand { get; }
+    public ICommand CreateClipCommand { get; }
+    public ClipCreatorPage? Creator { get => _creator; private set => Set(ref _creator, value); }
 
     /// <summary>The in-app player's drill-in (story 14.2): the Library's item page, with 10.10's breadcrumb, keys and close.</summary>
     public DrillIn DrillIn { get; }
@@ -437,6 +445,12 @@ internal sealed class LibraryPage : Observable
 
         // A player page whose item left the Library (deleted, renamed or cleaned up) closes and releases the file.
         if (DrillIn.ItemId is { } playing && !_rows.ContainsKey(playing))
+        {
+            DrillIn.Close();
+        }
+        if (_creatorItem is { } original && (!_rows.TryGetValue(original.Path, out var sourceRow)
+            || sourceRow.Item is not { BeingWritten: false } current || current.Size != original.Size || current.Modified != original.Modified
+            || Creator is { } creator && (state.LibraryFolder is null || !string.Equals(Path.GetFullPath(Path.Combine(state.LibraryFolder, original.Path)), creator.Source.Path, StringComparison.OrdinalIgnoreCase))))
         {
             DrillIn.Close();
         }
@@ -949,7 +963,13 @@ internal sealed class LibraryPage : Observable
     }
 
     /// <summary>Pauses the player, if one is playing: the window was hidden.</summary>
-    public void PausePlayer() => Player?.Pause();
+    public void PausePlayer()
+    {
+        Player?.Pause();
+        Creator?.PauseAndCancel();
+    }
+
+    public void ResumeCreator() => Creator?.Resume();
 
     /// <summary>Space: toggles the focused row's Favourite.</summary>
     public void ToggleFocusedFavourite()
@@ -1062,6 +1082,7 @@ internal sealed class LibraryPage : Observable
             IsMuted = _playerMuted,
         };
         page.VolumeChanged += OnPlayerVolumeChanged;
+        page.CreateClip = () => CreateClip(row, page.Position.TotalSeconds);
         Player = page;
         DrillIn.Open(row.Path, row.Name);
         _ = page.OpenAsync();
@@ -1079,6 +1100,39 @@ internal sealed class LibraryPage : Observable
         page.VolumeChanged -= OnPlayerVolumeChanged;
         page.Dispose();
         SaveView();
+    }
+
+    private void CreateClipSelection()
+    {
+        if (_shownSelected is [{ IsLocked: false } row]) { CreateClip(row, 0); }
+    }
+
+    private void CreateClip(LibraryRow row, double position)
+    {
+        if (row.IsLocked || row.Item is not { BeingWritten: false } item || Existing([row]) is not [var path]) { return; }
+        try
+        {
+            var file = new FileInfo(path);
+            if (file.Length != item.Size || item.Modified is { } modified && file.LastWriteTimeUtc != modified.UtcDateTime)
+            { throw new IOException("This source changed. Wait for the Library to refresh, then reopen it."); }
+            var source = new ClipSource(path, file.Length, file.LastWriteTimeUtc.Ticks);
+            DrillIn.Close();
+            _creatorItem = item;
+            Creator = new ClipCreatorPage(source, row.Name, _clipMedia, _newPlayer);
+            Creator.SourceInvalidated = DrillIn.Close;
+            DrillIn.Open(row.Path, "Create clip · " + row.Name);
+            _ = Creator.OpenAsync(position);
+        }
+        catch (IOException error) { ActionError = error.Message; }
+        catch (UnauthorizedAccessException error) { ActionError = error.Message; }
+    }
+
+    private void CloseCreator()
+    {
+        var creator = Creator;
+        Creator = null;
+        _creatorItem = null;
+        creator?.Dispose();
     }
 
     private void CopySelection()

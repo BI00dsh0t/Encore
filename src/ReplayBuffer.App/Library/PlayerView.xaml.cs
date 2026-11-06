@@ -349,7 +349,7 @@ internal partial class PlayerView
             case Key.Down:
                 page.ChangeVolume(-PlayerPage.VolumeStep);
                 break;
-            case Key.F:
+            case Key.F when page.SupportsFullScreen:
                 page.FullScreenCommand.Execute(null);
                 break;
             default:
@@ -395,8 +395,11 @@ internal partial class PlayerView
             menu.Items.Add(item);
         }
 
-        menu.Items.Add(new Separator());
-        menu.Items.Add(new MenuItem { Header = "Open in default player", Style = itemStyle, Command = page.OpenInDefaultPlayerCommand });
+        if (page.SupportsExternalActions)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(new MenuItem { Header = "Open in default player", Style = itemStyle, Command = page.OpenInDefaultPlayerCommand });
+        }
         menu.Closed += (_, _) => Gear.IsChecked = false;
         _menu = menu;
         menu.IsOpen = true;

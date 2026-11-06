@@ -1,0 +1,43 @@
+<UserControl x:Class="ReplayBuffer.App.Library.ClipCreatorView" x:ClassModifier="internal"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:local="clr-namespace:ReplayBuffer.App.Library">
+ <ScrollViewer VerticalScrollBarVisibility="Auto">
+  <StackPanel Margin="0,0,8,16">
+   <TextBlock Text="Create clip" FontSize="20" Margin="0,0,0,8" />
+   <TextBlock Text="{Binding PreviewLabel}" TextWrapping="Wrap" Margin="0,0,0,6" />
+   <local:PlayerView x:Name="Video" Height="300" DataContext="{Binding Preview}" />
+   <TextBlock Text="{Binding PlayheadText}" Margin="0,6" AutomationProperties.Name="Source playhead" />
+   <local:WaveformView x:Name="Timeline" Style="{DynamicResource RbClipWaveformStyle}" AutomationProperties.Name="Audio waveform and trim selection"
+    AutomationProperties.HelpText="Drag handles to trim. Home selects start handle; End selects end handle. Left and Right nudge one millisecond. Plus and minus zoom. Shift and mouse wheel pan." />
+   <WrapPanel Margin="0,8" IsEnabled="{Binding CanEdit}">
+    <Button Content="Zoom in" Command="{Binding ZoomInCommand}" Margin="0,0,6,4" />
+    <Button Content="Zoom out" Command="{Binding ZoomOutCommand}" Margin="0,0,6,4" />
+    <Button Content="Pan left" Command="{Binding PanLeftCommand}" Margin="0,0,6,4" />
+    <Button Content="Pan right" Command="{Binding PanRightCommand}" Margin="0,0,6,4" />
+   </WrapPanel>
+   <WrapPanel IsEnabled="{Binding CanEdit}">
+    <TextBlock Text="Start" VerticalAlignment="Center" Margin="0,0,6,4" />
+    <TextBox Width="130" Text="{Binding StartText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="Selection start HH:MM:SS.mmm" Margin="0,0,6,4" />
+    <Button Content="−1 ms" Click="StartMinus" AutomationProperties.Name="Start minus one millisecond" Margin="0,0,4,4" />
+    <Button Content="+1 ms" Click="StartPlus" AutomationProperties.Name="Start plus one millisecond" Margin="0,0,16,4" />
+    <TextBlock Text="End" VerticalAlignment="Center" Margin="0,0,6,4" />
+    <TextBox Width="130" Text="{Binding EndText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="Selection end HH:MM:SS.mmm" Margin="0,0,6,4" />
+    <Button Content="−1 ms" Click="EndMinus" AutomationProperties.Name="End minus one millisecond" Margin="0,0,4,4" />
+    <Button Content="+1 ms" Click="EndPlus" AutomationProperties.Name="End plus one millisecond" Margin="0,0,4,4" />
+   </WrapPanel>
+   <TextBlock Text="{Binding DurationText}" Margin="0,6,0,2" />
+   <TextBlock Text="{Binding EffectiveText}" TextWrapping="Wrap" Margin="0,0,0,10" />
+   <StackPanel IsEnabled="{Binding CanEdit}">
+    <WrapPanel><TextBlock Text="Include audio tracks" Margin="0,0,12,4" VerticalAlignment="Center" /><Button Content="All" Command="{Binding AllTracksCommand}" Margin="0,0,6,4" /><Button Content="None (silent MP4)" Command="{Binding NoTracksCommand}" Margin="0,0,6,4" /></WrapPanel>
+    <ItemsControl ItemsSource="{Binding Tracks}"><ItemsControl.ItemTemplate><DataTemplate><CheckBox Content="{Binding Name}" IsChecked="{Binding Included}" Margin="0,3" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+    <WrapPanel Margin="0,8"><RadioButton Content="Separate tracks" GroupName="AudioMode" IsChecked="{Binding Separate}" Margin="0,0,16,0" /><RadioButton Content="Combined mix" GroupName="AudioMode" IsChecked="{Binding Mix}" /></WrapPanel>
+    <TextBlock Text="{Binding MixWarning}" TextWrapping="Wrap" MaxWidth="800" HorizontalAlignment="Left" Margin="0,0,0,10" />
+    <WrapPanel><RadioButton Content="MP4 video (H.264 / AAC)" GroupName="ExportFormat" IsChecked="{Binding IsMp4}" Margin="0,0,16,0" /><RadioButton Content="MP3 audio (48 kHz / 192 kbps)" GroupName="ExportFormat" IsChecked="{Binding IsMp3}" /></WrapPanel>
+   </StackPanel>
+   <WrapPanel Margin="0,14,0,6"><Button x:Name="PreviewButton" Content="Preview selection" Command="{Binding PreviewCommand}" Margin="0,0,8,4" /><Button Content="Export…" Click="Export" IsEnabled="{Binding CanExport}" Margin="0,0,8,4" /><Button Content="Cancel operation" Command="{Binding CancelCommand}" IsEnabled="{Binding Busy}" Margin="0,0,8,4" /></WrapPanel>
+   <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" Height="5" Margin="0,0,0,6" />
+   <TextBlock Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+  </StackPanel>
+ </ScrollViewer>
+</UserControl>

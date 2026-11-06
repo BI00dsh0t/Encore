@@ -72,26 +72,29 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <param name="openInDefaultPlayer">Hands the path to the shell's default player, offered when this page can't play it.</param>
     /// <param name="openLink">Opens a Microsoft Store page through the shell (story 14.6).</param>
     /// <param name="log">Writes a line to the App's log: what was opened, its codec and why it can't play.</param>
-    public PlayerPage(string path, string title, IPlayer player, Func<string, Stream>? openRead = null, Action<string>? openInDefaultPlayer = null, Action<string>? openLink = null, Action<string>? log = null)
+    public PlayerPage(string path, string title, IPlayer player, Func<string, Stream>? openRead = null, Action<string>? openInDefaultPlayer = null, Action<string>? openLink = null, Action<string>? log = null, bool embedded = false)
     {
         Path = path ?? throw new ArgumentNullException(nameof(path));
         Title = title ?? "";
         Player = player ?? throw new ArgumentNullException(nameof(player));
+        SupportsFullScreen = !embedded;
+        SupportsExternalActions = !embedded;
         _openRead = openRead ?? OpenShared;
         _openInDefaultPlayer = openInDefaultPlayer ?? (_ => { });
         _openLink = openLink ?? (_ => { });
         _log = log ?? (_ => { });
         PlayPauseCommand = new RelayCommand(PlayPause, () => State is PlayerState.Paused or PlayerState.Playing);
         MuteCommand = new RelayCommand(() => IsMuted = !IsMuted);
-        FullScreenCommand = new RelayCommand(() => IsFullScreen = !IsFullScreen);
-        OpenInDefaultPlayerCommand = new RelayCommand(() => _openInDefaultPlayer(Path));
+        FullScreenCommand = new RelayCommand(() => IsFullScreen = !IsFullScreen, () => SupportsFullScreen);
+        OpenInDefaultPlayerCommand = new RelayCommand(() => _openInDefaultPlayer(Path), () => SupportsExternalActions);
+        CreateClipCommand = new RelayCommand(() => { Pause(); IsFullScreen = false; CreateClip?.Invoke(); }, () => !IsClosed && CreateClip is not null);
         OpenStoreCommand = new RelayCommand(() =>
         {
-            if (_missing is { } extension)
+            if (SupportsExternalActions && _missing is { } extension)
             {
                 _openLink(extension.StoreLink);
             }
-        });
+        }, () => SupportsExternalActions);
         Player.Ended += OnEnded;
     }
 
@@ -100,6 +103,14 @@ internal sealed class PlayerPage : Observable, IDisposable
 
     /// <summary>The file's absolute path.</summary>
     public string Path { get; }
+    private Action? _createClip;
+    public Action? CreateClip
+    {
+        get => _createClip;
+        set { _createClip = value; OnPropertyChanged(nameof(HasCreateClip)); ((RelayCommand)CreateClipCommand).RaiseCanExecuteChanged(); }
+    }
+    public bool HasCreateClip => CreateClip is not null;
+    public ICommand CreateClipCommand { get; }
 
     /// <summary>The item's name.</summary>
     public string Title { get; }
@@ -109,6 +120,9 @@ internal sealed class PlayerPage : Observable, IDisposable
 
     /// <summary>The player; the view copies its frames.</summary>
     public IPlayer Player { get; }
+    public bool SupportsFullScreen { get; }
+    public bool SupportsExternalActions { get; }
+    public bool ShowsDefaultPlayerAction => SupportsExternalActions && IsFailed;
 
     /// <summary>What the file holds, once opened.</summary>
     public PlayerMedia? Media
@@ -135,6 +149,7 @@ internal sealed class PlayerPage : Observable, IDisposable
             {
                 OnPropertyChanged(nameof(IsPlaying));
                 OnPropertyChanged(nameof(IsFailed));
+                OnPropertyChanged(nameof(ShowsDefaultPlayerAction));
                 OnPropertyChanged(nameof(PlayPauseLabel));
                 OnPropertyChanged(nameof(PlayPauseGlyph));
                 OnPropertyChanged(nameof(Message));
@@ -170,7 +185,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         get => _isFullScreen;
         set
         {
-            if (Set(ref _isFullScreen, value && !IsClosed))
+            if (Set(ref _isFullScreen, value && !IsClosed && SupportsFullScreen))
             {
                 OnPropertyChanged(nameof(FullScreenGlyph));
                 OnPropertyChanged(nameof(FullScreenName));
@@ -193,7 +208,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     };
 
     /// <summary>The Store link's text when an extension is missing: "Get the HEVC Video Extension"; null otherwise.</summary>
-    public string? StoreLinkText => IsFailed && _missing is { } extension ? $"Get the {extension.Name}" : null;
+    public string? StoreLinkText => SupportsExternalActions && IsFailed && _missing is { } extension ? $"Get the {extension.Name}" : null;
 
     /// <summary>Whether the Store link shows.</summary>
     public bool HasStoreLink => StoreLinkText is not null;

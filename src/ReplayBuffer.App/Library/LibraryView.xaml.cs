@@ -277,7 +277,11 @@ internal partial class LibraryView
 
     // The player page opened: its first control takes focus once it's shown.
     private void OnPlayerOpened(string path) =>
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PlayerContent.FocusFirstControl());
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            if (Page?.Creator is not null) { CreatorContent.FocusFirstControl(); }
+            else { PlayerContent.FocusFirstControl(); }
+        });
 
     // Back on the list: focus returns to the row that was played, as Games does.
     private void OnPlayerClosed(string path) =>

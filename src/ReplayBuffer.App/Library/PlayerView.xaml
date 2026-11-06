@@ -94,9 +94,10 @@
                                     VerticalAlignment="Center"
                                     Command="{Binding OpenInDefaultPlayerCommand}"
                                     Content="Open in default player"
-                                    Visibility="{Binding IsFailed, Converter={StaticResource Visible}}" />
+                                    Visibility="{Binding ShowsDefaultPlayerAction, Converter={StaticResource Visible}}" />
                         </StackPanel>
                         <StackPanel VerticalAlignment="Center" DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Content="Create clip" Command="{Binding CreateClipCommand}" Margin="6,0" Visibility="{Binding HasCreateClip, Converter={StaticResource Visible}}" />
                             <ToggleButton x:Name="Gear"
                                           AutomationProperties.Name="Player settings"
                                           Click="OnGearClick"
@@ -109,6 +110,7 @@
                                     Command="{Binding FullScreenCommand}"
                                     Content="{Binding FullScreenGlyph}"
                                     Style="{DynamicResource RbPlayerIconButtonStyle}"
+                                    Visibility="{Binding SupportsFullScreen, Converter={StaticResource Visible}}"
                                     ToolTip="{Binding FullScreenName}" />
                         </StackPanel>
                     </DockPanel>

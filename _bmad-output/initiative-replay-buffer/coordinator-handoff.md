@@ -29,7 +29,7 @@ Codex works directly in `%USERPROFILE%/Documents/repos/ReplayBuffer`. The former
 
 ## Where things stand
 
-- **Clip creator implementation requested:** builder said "start implementation" on 2026-11-05. The [request](feature-requests/clip-creator/clip-creator.md) covers Library/player entry points, Twitch-style range selection, waveform zoom/millisecond controls, MP4/MP3 and separate/mixed tracks. Branch `feature/clip-creator` is cut from develop; [plan-clip-creator.md](plan-clip-creator.md) is draft, awaiting the mandatory BMad plan checkpoint. Investigation is complete; product code has not changed. Plan records an isolated media worker, seekable delete-shared FFmpeg input, matching mix preview, packaging changes and deferred verification. Reconcile the editing boundary/architecture before product code. Other pending stories and the test hold remain unchanged.
+- **Clip creator implemented:** builder approved [plan-clip-creator.md](plan-clip-creator.md), now built on `feature/clip-creator`, for [the request](feature-requests/clip-creator/clip-creator.md). Includes both entry points, precise waveform selection/zoom, named separate/mixed MP4/MP3 export, matching selection preview, isolated worker and packaging changes. AD-28 records ownership and the editing exception. Feature Release build passed with 0 warnings/errors; independent quick review and follow-up passed after four UI/lifecycle patches. All tests/media/UI/publish checks remain deferred in `test-backlog.md`. Integration and post-merge build follow; other pending stories remain on hold.
 - **Done and merged:**
   - epics 1–7, 9, 10 and 13;
   - 11.1–11.5, and 12.1–12.4 with 12.6;

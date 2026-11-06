@@ -15,7 +15,7 @@ risk: medium
 
 ## Description
 
-An unscheduled feature request for a clip creator reached through **Create clip** in the Library or the in-app player. A Twitch-style workflow combines a video preview, a timeline with start/end handles, zoomable audio waveforms, audio-track choices, and export. It creates a new media file from existing captured footage. This request is epic-sized, has no assigned ticket number or stories yet, and does not start development or change the current build order.
+A clip creator reached through **Create clip** in the Library or the in-app player. A Twitch-style workflow combines a video preview, a timeline with start/end handles, zoomable audio waveforms, audio-track choices, and export. It creates new media from existing captured footage. The builder approved implementation through `../../plan-clip-creator.md`; code is built and reviewed, with runtime acceptance deferred under the test hold. This request has no assigned ticket number or child stories.
 
 ## Outcome
 
@@ -68,6 +68,7 @@ The builder can find a moment in existing footage, precisely select its range us
 
 ## Notes
 
+- Decision: 2026-11-05, the builder approved the implementation plan and said to continue. The plan records implementation defaults, verification and code review. AD-28 and the initiative boundary now authorize this capability. Earlier intake notes below are historical; runtime acceptance remains pending.
 - Decision: 2026-11-05, the builder subsequently said "start implementation". Planning is underway on `feature/clip-creator` in `../../plan-clip-creator.md`; the BMad plan-approval checkpoint precedes product-code changes. The original request below remains the intake history.
 - Decision: 2026-11-05, builder requested this feature and explicitly chose **both separate tracks and a combined mix**. The request is recorded; development, story slicing, scheduling and test runs have not been started.
 - Source conflict: the original initiative excludes in-app video editing, and epic 14 excludes trimming/cutting/export. This new request reopens that capability for future planning; it does not expand the scope of already-completed player stories or rewrite their acceptance history. Amend the initiative boundary and architecture when this request is scheduled.
