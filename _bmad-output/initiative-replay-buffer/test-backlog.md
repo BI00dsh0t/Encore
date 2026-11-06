@@ -1,5 +1,11 @@
 # Test backlog
 
+## Per-track waveform amplitude scaling (2026-11-06)
+
+- Approved `plan-clip-creator-waveform-amplitude-scaling.md` implemented directly without BMad execution. App display arrays scale against each track's validated whole-source maximum from the existing single-peak cache level. Silent tracks stay zero; zoom/pan/track inclusion retain the denominator. Renderer styling, source/cache bytes, worker and audio playback/export unchanged.
+- Final Release build **0 warnings/errors**. `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --filter-class "*ClipCreatorTests" --explicit off`: **15 executed/passed, 0 failed/skipped**, 14.864 s. Synthetic full/half maxima, silence, zoom/pan/inclusion, unchanged peak files and one preparation verified; existing corruption test extended for NaN summary. Initial new-test viewport assumption corrected after a 14-pass/1-fail run; final whole-class rerun passed. Ordinary diff review found no remaining issue.
+- Existing real-media, long-source resource, NativeAOT/publish, high DPI and pointer/chooser HITL checks remain deferred; no broader test clearance, media tools or real Dev App use. Audio/worker unchanged, so no additional Engine/Heavy run introduced.
+
 ## Clip creator seek/cache/responsive-player follow-up (2026-11-05)
 
 - Implemented per approved `plan-clip-creator-waveform-interaction.md`: separate draggable ruler seek handle, full-source all-track 1 ms disk peak cache with coarser levels and bounded local reads, no repeat waveform decoding/clearing on edits or zoom/pan, no routine loading/checking text, and finite responsive player height. AD-28 records cache ownership/protocol. Initial uncached preparation still takes time.
