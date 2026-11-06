@@ -43,3 +43,4 @@ context:
 - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings/errors.
 - Only non-Explicit `ClipCreatorTests`, `ClipMediaWorkerTests`, `SharedMediaProcessTests`, one project at a time; check actual counts and preserve pending Heavy gaps in the QA report.
 - Post-fix Release build: 0 warnings/errors. App: 7 passed, 0 failed/skipped. Engine: 1 passed, 2 Explicit skipped. Windows: 4 quoting rows passed, 1 Explicit skipped. Final distinct non-Explicit cases: 12 passed, 0 failed. Real-media/Heavy/publish/HITL acceptance remains pending.
+- Merged with `--no-ff` into develop at `ec5064d1157376e655da4e01dc1f37f8101ef944`; post-merge Release build also passed with 0 warnings/errors. Full scoped results are in `qa-clip-creator.md`.

@@ -89,5 +89,7 @@ FFmpeg `fd:` uses inherited synchronous, delete-shared stdin for seekable access
 
 ## Verification
 
+- Focused QA update (2026-11-05, scoped builder clearance): App 7/7, Engine identity 1/1, Windows quoting 4/4 passed; 3 Explicit/Heavy cases skipped. Initial UI tests reproduced the builder's Progress binding exception and a millisecond display mismatch; fixes merged into develop at `ec5064d1157376e655da4e01dc1f37f8101ef944`. Post-merge Release build: 0 warnings/errors, independent quick bugfix review clear. See `qa-clip-creator.md`; real-media/export/HITL/packaging acceptance remains pending. Statements below describe implementation-time verification.
+
 - `dotnet build ReplayBuffer.slnx -c Release`: feature/develop, zero warnings/errors; independent code review before no-fast-forward merge.
 - No tests/media processes. Backlog NativeAOT/packaging, real-fixture boundaries/mix/sync, seek/delete-sharing/cancel, waveform/UI/resource verification; report unverified behavior.
