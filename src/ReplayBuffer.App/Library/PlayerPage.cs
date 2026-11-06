@@ -202,7 +202,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>The line over the video while it opens or when it can't play; null otherwise.</summary>
     public string? Message => State switch
     {
-        PlayerState.Opening => "Opening…",
+        PlayerState.Opening => SupportsExternalActions ? "Opening…" : null,
         PlayerState.Failed => _failure ?? FailedText,
         _ => null,
     };

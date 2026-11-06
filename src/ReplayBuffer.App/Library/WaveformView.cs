@@ -24,6 +24,7 @@ internal sealed class WaveformView : FrameworkElement
     private ClipCreatorPage? _page;
     private int _handle;
     private bool _endHandle;
+    private bool _seekFocus;
 
     public WaveformView()
     {
@@ -41,6 +42,7 @@ internal sealed class WaveformView : FrameworkElement
 
     private void Attach(ClipCreatorPage? page)
     {
+        _page?.EndScrub();
         if (_page is not null) { _page.PropertyChanged -= Changed; }
         _page = page;
         if (_page is not null) { _page.PropertyChanged += Changed; }
@@ -103,14 +105,16 @@ internal sealed class WaveformView : FrameworkElement
             var label = new FormattedText(name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, RulerBrush, dpi)
             { MaxTextWidth = LabelWidth - 8, MaxTextHeight = LaneHeight, Trimming = TextTrimming.CharacterEllipsis };
             dc.DrawText(label, new Point(4, 28 + laneHeight * (lane - LaneOffset)));
+            dc.PushClip(new RectangleGeometry(new Rect(PlotLeft, 28, plotWidth, Math.Max(0, ActualHeight - 28))));
             for (var i = 0; i < data.Peaks.Length; i++)
             {
-                var x = PlotLeft + plotWidth * i / data.Peaks.Length;
+                var x = X(data.Start + (data.End - data.Start) * i / data.Peaks.Length);
                 var amplitude = data.Peaks[i] * laneHeight * 0.35;
                 dc.DrawLine(peaks, new(x, center - amplitude), new(x, center + amplitude));
             }
+            dc.Pop();
         }
-        if (lanes.Length == 0) { Label(page.Tracks.Any(t => t.Included) ? "Loading source waveform…" : "No audio tracks selected", 8, 30); }
+        if (lanes.Length == 0 && !page.Tracks.Any(t => t.Included)) { Label("No audio tracks selected", 8, 30); }
         var left = X(page.Start);
         var right = X(page.End);
         dc.PushOpacity(page.CanEdit ? 1 : 0.45);
@@ -123,13 +127,26 @@ internal sealed class WaveformView : FrameworkElement
                 var handle = new Rect(x - 5, 28, 10, Math.Max(1, ActualHeight - 28));
                 dc.DrawRoundedRectangle(SelectionBrush, null, handle, 3, 3);
                 dc.DrawLine(new Pen(SurfaceBrush, 2), new(x, handle.Top + (handle.Height - 15) / 2), new(x, handle.Top + (handle.Height + 15) / 2));
-                if (IsKeyboardFocused && (x == left ? !_endHandle : _endHandle))
+                if (IsKeyboardFocused && !_seekFocus && (x == left ? !_endHandle : _endHandle))
                 { dc.DrawRoundedRectangle(null, new Pen(RulerBrush, 2), new Rect(x - 8, 25, 16, Math.Max(1, ActualHeight - 26)), 4, 4); }
             }
         }
         dc.Pop();
         var head = X(page.Playhead);
-        if (head >= PlotLeft && head <= ActualWidth) { dc.DrawLine(new Pen(RulerBrush, 2), new(head, 22), new(head, ActualHeight)); }
+        if (head >= PlotLeft && head <= ActualWidth)
+        {
+            dc.DrawLine(new Pen(RulerBrush, 2), new(head, 22), new(head, ActualHeight));
+            var thumb = new StreamGeometry();
+            using (var drawing = thumb.Open())
+            {
+                drawing.BeginFigure(new(head - 6, 16), true, true);
+                drawing.LineTo(new(head + 6, 16), true, false);
+                drawing.LineTo(new(head + 6, 22), true, false);
+                drawing.LineTo(new(head, 28), true, false);
+                drawing.LineTo(new(head - 6, 22), true, false);
+            }
+            dc.DrawGeometry(RulerBrush, _seekFocus && IsKeyboardFocused ? new Pen(SelectionBrush, 2) : null, thumb);
+        }
         if (IsKeyboardFocused) { dc.DrawRectangle(null, new Pen(SelectionBrush, 2), new Rect(1, 1, Math.Max(0, ActualWidth - 2), Math.Max(0, ActualHeight - 2))); }
     }
     private double X(double time) => _page is { } page ? PlotLeft + (time - page.ViewportStart) / (page.ViewportEnd - page.ViewportStart) * Math.Max(1, ActualWidth - PlotLeft) : 0;
@@ -139,10 +156,15 @@ internal sealed class WaveformView : FrameworkElement
         base.OnMouseLeftButtonDown(e);
         if (_page is not { CanEdit: true } page) { return; }
         Focus();
-        var x = e.GetPosition(this).X;
-        _handle = Math.Abs(x - X(page.Start)) <= 12 ? 1 : Math.Abs(x - X(page.End)) <= 12 ? 2 : 0;
-        if (_handle != 0) { _endHandle = _handle == 2; CaptureMouse(); }
-        else { page.Seek(Time(x)); }
+        var point = e.GetPosition(this);
+        var x = point.X;
+        if (x < PlotLeft) { return; }
+        // Ruler is exclusively seekable, even when the playhead coincides with a trim boundary.
+        _handle = point.Y < 28 ? 3 : Math.Abs(x - X(page.Start)) <= 12 ? 1 : Math.Abs(x - X(page.End)) <= 12 ? 2 : 3;
+        _seekFocus = _handle == 3;
+        if (_seekFocus) { page.BeginScrub(Time(x)); }
+        else { _endHandle = _handle == 2; }
+        if (!CaptureMouse()) { page.EndScrub(); _handle = 0; }
         e.Handled = true;
     }
     protected override void OnMouseMove(MouseEventArgs e)
@@ -151,7 +173,8 @@ internal sealed class WaveformView : FrameworkElement
         if (IsMouseCaptured && _page is { CanEdit: true } page)
         {
             var time = Math.Round(Time(e.GetPosition(this).X), 3);
-            if (_handle != 0) { MoveBoundary(_handle == 2, time); }
+            if (_handle == 3) { page.Seek(time); }
+            else if (_handle != 0) { MoveBoundary(_handle == 2, time); }
         }
     }
     internal void MoveBoundary(bool end, double time)
@@ -160,7 +183,8 @@ internal sealed class WaveformView : FrameworkElement
         if (end) { page.SetRange(page.Start, time); }
         else { page.SetRange(time, page.End); }
     }
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { base.OnMouseLeftButtonUp(e); _handle = 0; ReleaseMouseCapture(); }
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { base.OnMouseLeftButtonUp(e); _page?.EndScrub(); _handle = 0; ReleaseMouseCapture(); }
+    protected override void OnLostMouseCapture(MouseEventArgs e) { base.OnLostMouseCapture(e); _page?.EndScrub(); _handle = 0; }
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
@@ -178,10 +202,15 @@ internal sealed class WaveformView : FrameworkElement
             case Key.Down: LaneOffset++; break;
             case Key.PageUp: LaneOffset -= 5; break;
             case Key.PageDown: LaneOffset += 5; break;
-            case Key.Home: _endHandle = false; break;
-            case Key.End: _endHandle = true; break;
-            case Key.Left: _page?.Nudge(_endHandle, -1); break;
-            case Key.Right: _page?.Nudge(_endHandle, 1); break;
+            case Key.P: _seekFocus = true; break;
+            case Key.Home: _seekFocus = false; _endHandle = false; break;
+            case Key.End: _seekFocus = false; _endHandle = true; break;
+            case Key.Left:
+                if (_seekFocus) { _page?.Seek(_page.Playhead - 0.001); } else { _page?.Nudge(_endHandle, -1); }
+                break;
+            case Key.Right:
+                if (_seekFocus) { _page?.Seek(_page.Playhead + 0.001); } else { _page?.Nudge(_endHandle, 1); }
+                break;
             case Key.Add: case Key.OemPlus: _page?.Zoom(0.5); break;
             case Key.Subtract: case Key.OemMinus: _page?.Zoom(2); break;
             default: return;

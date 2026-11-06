@@ -24,6 +24,14 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     private readonly Func<string> _createPreviewFolder;
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _operation;
+    private CancellationTokenSource? _preparationCancellation;
+    private CancellationTokenSource? _viewportCancellation;
+    private Task? _preparation;
+    private ClipWaveformCache? _cache;
+    private int _viewportRevision;
+    private bool _scrubbing;
+    private bool _suspended;
+    private string? _rangeFeedback;
     private PlayerPage? _sourcePlayer;
     private PlayerPage? _preview;
     private string? _previewFolder;
@@ -35,7 +43,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     private bool _mix, _busy, _exporting, _closed;
     private string _exportName;
     private bool _choosingDestination;
-    private string _format = "mp4", _status = "Opening source…";
+    private string _format = "mp4", _status = "";
     private int _revision;
     private int _sourceCheck;
     private double _openingPosition;
@@ -107,13 +115,13 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     public double Duration => Metadata?.Duration ?? 0;
     public double Start { get => _start; set => SetRange(value, End); }
     public double End { get => _end; set => SetRange(Start, value); }
-    public string StartText { get => FormatTime(Start); set { if (TryTime(value, out var time)) { Start = time; } else { Status = "Enter start as HH:MM:SS.mmm."; } OnPropertyChanged(); } }
-    public string EndText { get => FormatTime(End); set { if (TryTime(value, out var time)) { End = time; } else { Status = "Enter end as HH:MM:SS.mmm."; } OnPropertyChanged(); } }
+    public string StartText { get => FormatTime(Start); set { if (TryTime(value, out var time)) { Start = time; } else { RangeError("Enter start as HH:MM:SS.mmm."); } OnPropertyChanged(); } }
+    public string EndText { get => FormatTime(End); set { if (TryTime(value, out var time)) { End = time; } else { RangeError("Enter end as HH:MM:SS.mmm."); } OnPropertyChanged(); } }
     public string SelectedDurationText => FormatTime(TimeSpan.FromSeconds(Math.Max(0, End - Start)));
     public string DurationText => $"Selection {FormatTime(TimeSpan.FromSeconds(Math.Max(0, End - Start)))}";
     public string EffectiveText => _effective is { } range
         ? $"{(range.Alignment == "audioSamples48000" ? "Effective audio samples (48 kHz)" : "Effective source frames")}: {FormatTime(range.Start)} – {FormatTime(range.End)}"
-        : Format == "mp3" ? "Checking effective audio-sample boundaries…" : "Checking effective source-frame boundaries…";
+        : "";
     public string PlayheadText => FormatTime(Playhead);
     public double Playhead { get => _playhead; private set { if (Set(ref _playhead, value)) { OnPropertyChanged(nameof(PlayheadText)); } } }
     public double ViewportStart => _viewportStart;
@@ -131,7 +139,11 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     public bool Exporting { get => _exporting; private set { Set(ref _exporting, value); NotifyCommands(); } }
     public bool CanExport => !_closed && Metadata is not null && _effective is not null && !Busy && End > Start && (Format != "mp3" || Tracks.Any(t => t.Included));
     public bool CanEdit => !_closed && !Exporting && Metadata is not null;
-    public string Status { get => _status; private set => Set(ref _status, value); }
+    public string Status
+    {
+        get => _rangeFeedback ?? _status;
+        private set { _rangeFeedback = null; _status = value; OnPropertyChanged(); }
+    }
     public double Progress { get => _progress; private set => Set(ref _progress, value); }
     public PlayerPage? Preview { get => _preview; private set => Set(ref _preview, value); }
 
@@ -160,14 +172,15 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
             token.ThrowIfCancellationRequested();
             Seek(Math.Clamp(position, 0, Duration));
         });
-        if (!_closed && Metadata is not null) { await RefreshAsync(); }
+        if (!_closed && Metadata is not null) { await Task.WhenAll(EnsureWaveformsAsync(), RefreshAsync()); }
     }
 
     public void SetRange(double start, double end)
     {
         if (Exporting || _closed || Metadata is null) { return; }
         if (!double.IsFinite(start) || !double.IsFinite(end) || start < 0 || end > Duration || end <= start)
-        { Status = "Choose a non-empty range inside the source."; NotifyRange(); return; }
+        { RangeError("Choose a non-empty range inside the source."); NotifyRange(); return; }
+        if (_rangeFeedback is not null) { _rangeFeedback = null; OnPropertyChanged(nameof(Status)); }
         if (Math.Abs(start - _start) < 0.00000001 && Math.Abs(end - _end) < 0.00000001) { return; }
         (_start, _end) = (start, end);
         NotifyRange();
@@ -175,6 +188,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     }
 
     public void Nudge(bool end, int milliseconds) => SetRange(Start + (end ? 0 : milliseconds / 1000d), End + (end ? milliseconds / 1000d : 0));
+    private void RangeError(string message) { _rangeFeedback = message; OnPropertyChanged(nameof(Status)); }
     public void Zoom(double factor)
     {
         if (!CanEdit) { return; }
@@ -189,15 +203,21 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     {
         _viewportStart = Math.Clamp(start, 0, Math.Max(0, Duration - width));
         _viewportEnd = Math.Min(Duration, _viewportStart + width);
-        Waveforms = [];
         OnPropertyChanged(nameof(ViewportStart)); OnPropertyChanged(nameof(ViewportEnd));
-        _ = RefreshAsync();
+        _ = ReadWaveformsAsync();
     }
     public void Seek(double position)
     {
         Playhead = Math.Clamp(position, 0, Duration);
+        if (_renderedPreview && _effective is { } range && (Playhead < range.Start || Playhead >= range.End))
+        {
+            InvalidatePreview();
+        }
         Preview?.SeekTo(TimeSpan.FromSeconds(_renderedPreview && _effective is { } r ? Math.Clamp(Playhead - r.Start, 0, r.End - r.Start) : Playhead));
     }
+    internal bool IsScrubbing => _scrubbing;
+    internal void BeginScrub(double position) { _scrubbing = true; Seek(position); }
+    internal void EndScrub() { _scrubbing = false; }
     public void Tick()
     {
         if (_closed) { return; }
@@ -213,7 +233,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
             catch (UnauthorizedAccessException) { }
             if (!valid) { Dispose(); SourceInvalidated?.Invoke(); return; }
         }
-        if (Preview is { IsClosed: false } player)
+        if (!_scrubbing && Preview is { IsClosed: false } player)
         {
             player.RefreshPosition();
             Playhead = Math.Clamp(player.Position.TotalSeconds + (_renderedPreview ? _effective?.Start ?? 0 : 0), 0, Duration);
@@ -222,7 +242,11 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
 
     public void PauseAndCancel()
     {
+        _suspended = true;
         _operation?.Cancel();
+        _preparationCancellation?.Cancel();
+        _viewportCancellation?.Cancel();
+        EndScrub();
         Preview?.Pause();
         _sourcePlayer?.Pause();
     }
@@ -230,15 +254,20 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     public void Resume()
     {
         if (_closed) { return; }
+        _suspended = false;
         if (Metadata is null) { _ = OpenAsync(_openingPosition); }
-        else if (_effective is null || Waveforms.Length == 0 && Tracks.Any(t => t.Included)) { _ = RefreshAsync(); }
+        else
+        {
+            _ = EnsureWaveformsAsync();
+            if (_effective is null) { _ = RefreshAsync(); }
+            else { _ = ReadWaveformsAsync(); }
+        }
     }
 
     private void Changed()
     {
         _revision++;
         _effective = null;
-        Waveforms = [];
         InvalidatePreview();
         OnPropertyChanged(nameof(Separate)); OnPropertyChanged(nameof(IsMp4)); OnPropertyChanged(nameof(IsMp3));
         foreach (var property in new[] { nameof(MixWarning), nameof(EffectiveText), nameof(ExportLabel), nameof(SaveLabel), nameof(FormatSummary), nameof(SeparateLabel), nameof(MultipleTracks), nameof(SeparateAudioFiles), nameof(OutputSummary) }) { OnPropertyChanged(property); }
@@ -248,7 +277,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
 
     internal async Task RefreshAsync()
     {
-        if (_closed || Metadata is null || Exporting) { return; }
+        if (_closed || _suspended || Metadata is null || Exporting) { return; }
         var revision = _revision;
         await WorkAsync(async token =>
         {
@@ -258,11 +287,76 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
             if (revision != _revision) { return; }
             _effective = range.Range;
             OnPropertyChanged(nameof(EffectiveText));
-            var waveform = await _media.ExecuteAsync(Request("waveform") with { Start = ViewportStart, End = ViewportEnd, Bins = 1600 }, null, token);
-            token.ThrowIfCancellationRequested();
-            Waveforms = waveform.Waveforms ?? [];
-            Status = "";
         });
+        await ReadWaveformsAsync();
+    }
+
+    internal Task EnsureWaveformsAsync()
+    {
+        if (_closed || _suspended || Metadata is null || _cache is not null) { return Task.CompletedTask; }
+        if (_preparation is { IsCompleted: false } pending)
+        {
+            return _preparationCancellation?.IsCancellationRequested == true ? RetryPreparationAsync(pending) : pending;
+        }
+        _preparation = PrepareWaveformsAsync();
+        return _preparation;
+    }
+
+    private async Task RetryPreparationAsync(Task pending)
+    {
+        await pending;
+        await EnsureWaveformsAsync();
+    }
+
+    private async Task PrepareWaveformsAsync()
+    {
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _preparationCancellation = cancel;
+        string? folder = null;
+        ClipWaveformCache? prepared = null;
+        try
+        {
+            folder = Directory.CreateTempSubdirectory("ReplayBuffer-waveforms-").FullName;
+            var response = await _media.ExecuteAsync(new("prepareWaveforms", Source, Destination: folder), null, cancel.Token);
+            cancel.Token.ThrowIfCancellationRequested();
+            var descriptor = response.Cache ?? throw new IOException("The media worker returned no waveform cache. Reopen the clip creator.");
+            prepared = await Task.Run(() => new ClipWaveformCache(folder, descriptor, Source, Metadata!), cancel.Token);
+            cancel.Token.ThrowIfCancellationRequested();
+            if (_closed) { return; }
+            _cache = prepared;
+            prepared = null;
+            folder = null;
+            await ReadWaveformsAsync();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error) { if (!_closed) { Status = "Waveform preparation failed: " + error.Message; } }
+        finally
+        {
+            // ExecuteAsync completes only after the owned worker has stopped. Reads finish before disposal deletes files.
+            prepared?.Dispose();
+            if (folder is not null) { ClipWaveformCache.DeleteOwnedFolder(folder); }
+            if (ReferenceEquals(_preparationCancellation, cancel)) { _preparationCancellation = null; }
+        }
+    }
+
+    private async Task ReadWaveformsAsync()
+    {
+        var generation = ++_viewportRevision;
+        _viewportCancellation?.Cancel();
+        var cache = _cache;
+        if (_closed || _suspended || cache is null) { return; }
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _viewportCancellation = cancel;
+        try
+        {
+            var waveforms = await cache.ReadAsync(ViewportStart, ViewportEnd,
+                Tracks.Where(t => t.Included).Select(t => t.Track.StreamIndex).ToArray(), 1600, cancel.Token);
+            if (!_closed && !_suspended && !cancel.IsCancellationRequested && generation == _viewportRevision && ReferenceEquals(cache, _cache)) { Waveforms = waveforms; }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+        catch (Exception error) { if (!_closed && !_suspended && !cancel.IsCancellationRequested && generation == _viewportRevision) { Status = "Cannot read waveform cache: " + error.Message; } }
+        finally { if (ReferenceEquals(_viewportCancellation, cancel)) { _viewportCancellation = null; } }
     }
 
     public async Task ExportAsync(string destination)
@@ -306,7 +400,6 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
                 await player.OpenAsync();
                 token.ThrowIfCancellationRequested();
                 player.PlayPauseCommand.Execute(null);
-                Status = "Selection preview uses the same effective range and audio rendering as export.";
             });
         }
         finally
@@ -356,6 +449,10 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         if (_closed) { return; }
         _closed = true;
         _lifetime.Cancel();
+        EndScrub();
+        var cache = _cache;
+        _cache = null;
+        if (cache is not null) { _ = Task.Run(cache.Dispose); }
         InvalidatePreview();
         _sourcePlayer?.Dispose(); _sourcePlayer = null;
         foreach (var track in Tracks) { track.Changed -= Changed; }

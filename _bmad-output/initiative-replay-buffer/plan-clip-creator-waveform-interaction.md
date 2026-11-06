@@ -3,14 +3,14 @@ title: 'Make clip seeking, waveforms and player resizing fluid'
 type: 'feature'
 ticket: ''
 created: '2026-11-05'
-status: 'draft'
+status: 'built'
 baseline_revision: '629e93dfcdae57b2803c21f90ab9505e37057c33'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
 review: 'quick'
 review_source: 'pinned'
-lenses_ran: []
+lenses_ran: [quick]
 review_loop_iteration: 0
 context:
   - '{project-root}/CLAUDE.md'
@@ -57,10 +57,10 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] Amend AD-28; implement additive cache descriptors, versioned peak format, streaming worker preparation and owned cleanup.
-- [ ] Integrate one-time preparation and bounded background viewport reads; decouple range probes, preserve peaks and remove routine loading text.
-- [ ] Implement independent scrub handle/seek lifecycle and source/selection-preview mapping.
-- [ ] Replace fixed-height composition with finite responsive layout and small-window fallback.
+- [x] Amend AD-28; implement additive cache descriptors, versioned peak format, streaming worker preparation and owned cleanup.
+- [x] Integrate one-time preparation and bounded background viewport reads; decouple range probes, preserve peaks and remove routine loading text.
+- [x] Implement independent scrub handle/seek lifecycle and source/selection-preview mapping.
+- [x] Replace fixed-height composition with finite responsive layout and small-window fallback.
 - [ ] Build Release at zero warnings; run only non-Explicit ClipCreatorTests with synthetic cache/fake media fixtures; record real-media checks as deferred. Complete quick review, patches, commit/no-ff integration and post-merge build.
 
 **Acceptance Criteria:**
@@ -71,14 +71,32 @@ context:
 
 ## Implementation Notes
 
+Builder authorized implementation of this plan in chat. Keep the frozen intent and captured baseline unchanged.
+
 Read-only recon confirmed repeated worker decode, startup-cancellation coupling, Tick scrub races and infinite-measure layout hazards. Full route: coordinated cache/protocol, state and layout work exceeds 100 lines.
+
+- Prepared all tracks using 1 ms binary base peaks plus 16:1 maximum-reduction levels. App/Engine link one pure format helper without a new assembly edge. Responses contain source-bound descriptors; viewport reads run off-thread with cancellation and generation checks and retain previous peaks until replacement.
+- Added independent ruler thumb/click-drag seeking, P plus Left/Right for keyboard seeking, lost-capture release and Tick suppression while scrubbing. Outside-selection seeks detach rendered preview and return to the source player without altering trim values.
+- ClipCreatorPanel measures controls first and gives the picture the finite viewport remainder; small windows scroll a minimum editor. Removed routine opening/checking/waveform text, retaining failure messages and export progress/cancel.
+- Completed preparation survives hide/resume; incomplete preparation is cancelled, cleaned only after worker completion, and retried on resume without duplicating tracks or resetting selection. Resolved validation feedback no longer erases unresolved preparation/read failures.
 
 ## Plan Change Log
 
 ## Review Triage Log
 
+- Quick review: medium → patch — waveform preparation/read failures can be overwritten by range feedback and then erased on correction, leaving a blank cache without explanation. Preserve the underlying actionable failure separately from transient range feedback; verify invalid-then-corrected edits restore it.
+- Coordinator audit: low → patch — hide cancels worker/range work but not the local viewport read, and RefreshAsync can start another read after cancellation. Cancel the viewport token and gate reads/completion on the suspended state.
+- Follow-up quick inspection confirmed persistent-error restoration and hide cancellation patches; no remaining directly caused defect found.
 ## Verification
 
 - `dotnet build ReplayBuffer.slnx -c Release`: 0 warnings/errors.
 - `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --filter-class "*ClipCreatorTests" --explicit off`: require nonzero executed count, passing cache/seek/layout/precision/lifecycle coverage and honest results. Tests use temporary synthetic peak files, fake services and owned windows only.
 - Write/defer real-media prepared-cache checks for delayed/common-origin/gapped tracks, long sources, cancellation, memory/disk behavior and published worker JSON. No unapproved media tools, publishes or Engine/shared-shell suites.
+
+### Final scoped verification
+
+- Coordinator `dotnet build ReplayBuffer.slnx -c Release` after review patches: **0 warnings, 0 errors**.
+- Coordinator class command above after patches: **14 discovered/executed, 14 passed, 0 failed, 0 skipped**, 17.781 s. Worker earlier whole-class runs also passed; the patch-specific run selected 2 relevant tests and passed. No full suites or Engine/native/Heavy tests ran.
+- Matrix mapping: Seek → IndependentScrubbingKeepsTrimAndMapsRenderedPreviewBackToSource plus both-look P/arrow/lost-capture assertions; Waveform → millisecond cached detail and one-preparation assertions across edits/viewport/audio changes; Lifecycle → preparation cancellation/retry, corrupt preparation/read, disposal cleanup and persistent-error/suspended-read tests; Resize → actual Library-host both-look/rail test grows height by 300 px and requires equal player growth, with existing minimum-window reachability checks. All covering tests executed in the 14-case class.
+- Root inspected fake-service Fluent expanded and Gaming rail PNGs beside the Release App test binary: separate ruler thumb visible, cached synthetic peaks drawn, compact controls legible and larger picture fills the available editor height. Screenshots use fake media, not the real Dev App.
+- Real worker PCM timing/delay/gap fidelity, long-source resource measurements, NativeAOT/published JSON, high DPI and real pointer/chooser HITL remain deferred under the standing clearance; no runtime media claims are made from synthetic cache tests.

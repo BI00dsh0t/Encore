@@ -23,6 +23,7 @@
   -->
   <ItemGroup>
     <Compile Include="..\ReplayBuffer.Core\Monitors\MonitorCanvasRule.cs" Link="Settings\MonitorCanvasRule.cs" />
+    <Compile Include="..\Shared\ClipPeakFile.cs" Link="Library\ClipPeakFile.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ReplayBuffer.Contracts\ReplayBuffer.Contracts.csproj" />

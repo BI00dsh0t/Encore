@@ -5,7 +5,7 @@
  xmlns:theme="clr-namespace:ReplayBuffer.App.Theme">
  <UserControl.Resources><BooleanToVisibilityConverter x:Key="Visible" /><theme:EmptyToCollapsedConverter x:Key="NotEmpty" /></UserControl.Resources>
  <ScrollViewer VerticalScrollBarVisibility="Auto">
-  <StackPanel Margin="0,0,8,0">
+  <local:ClipCreatorPanel Margin="0,0,8,0" ViewportHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
    <DockPanel Margin="0,0,0,4" LastChildFill="True">
     <Button Command="{Binding BackCommand}" Visibility="{Binding BackCommand, Converter={StaticResource NotEmpty}}" Style="{DynamicResource RbClipToolButtonStyle}" AutomationProperties.Name="Back to Library" ToolTip="Back to Library" DockPanel.Dock="Left" Margin="0,0,8,0"><Path Style="{DynamicResource RbClipIconStyle}" Data="M 15,8 L 1,8 M 7,2 L 1,8 L 7,14" /></Button>
     <Border DockPanel.Dock="Right" Background="{DynamicResource AccentFillColorDefaultBrush}" CornerRadius="6" VerticalAlignment="Center"><StackPanel Orientation="Horizontal">
@@ -15,7 +15,7 @@
     <StackPanel><TextBlock Text="Create clip" FontSize="20" /><TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" /></StackPanel>
    </DockPanel>
    <Grid>
-    <local:PlayerView x:Name="Video" Height="480" DataContext="{Binding Preview}">
+    <local:PlayerView x:Name="Video" DataContext="{Binding Preview}">
      <local:PlayerView.Resources>
       <Style x:Key="RbPlayerIconButtonStyle" TargetType="Button">
        <Setter Property="Width" Value="34" /><Setter Property="Height" Value="32" /><Setter Property="Background" Value="Transparent" />
@@ -44,7 +44,7 @@
    <Grid>
     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
    <local:WaveformView x:Name="Timeline" Style="{DynamicResource RbClipWaveformStyle}" AutomationProperties.Name="Audio waveform and trim selection"
-    AutomationProperties.HelpText="Drag handles to trim. Home selects start handle; End selects end handle. Left and Right nudge one millisecond. Plus and minus zoom. Shift and mouse wheel pan. Up and Down scroll audio lanes." />
+    AutomationProperties.HelpText="Drag the ruler playhead or click and drag the waveform to seek. P selects the playhead; Left and Right seek one millisecond. Home selects start trim handle; End selects end trim handle; Left and Right then trim one millisecond. Plus and minus zoom. Shift and mouse wheel pan. Up and Down scroll audio lanes." />
     <ScrollBar Grid.Column="1" Orientation="Vertical" Minimum="0" Maximum="{Binding ScrollMaximum, ElementName=Timeline}" Value="{Binding LaneOffset, ElementName=Timeline, Mode=TwoWay}" SmallChange="1" LargeChange="5" ViewportSize="5" AutomationProperties.Name="Scroll audio waveform lanes">
      <ScrollBar.Style><Style TargetType="ScrollBar"><Style.Triggers><DataTrigger Binding="{Binding ScrollMaximum, ElementName=Timeline}" Value="0"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></ScrollBar.Style>
     </ScrollBar>
@@ -73,9 +73,9 @@
     </local:ClipRangePanel>
    </Border>
    <TextBlock Text="{Binding EffectiveText}" TextWrapping="Wrap" Margin="0,2,0,2" />
-   <WrapPanel Visibility="{Binding Busy, Converter={StaticResource Visible}}" Margin="0,4"><Button Style="{DynamicResource RbClipButtonStyle}" Content="Cancel operation" Command="{Binding CancelCommand}" /></WrapPanel>
-   <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}" Height="5" Margin="0,0,0,6" Visibility="{Binding Busy, Converter={StaticResource Visible}}" />
+   <WrapPanel Visibility="{Binding Exporting, Converter={StaticResource Visible}}" Margin="0,4"><Button Style="{DynamicResource RbClipButtonStyle}" Content="Cancel operation" Command="{Binding CancelCommand}" /></WrapPanel>
+   <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}" Height="5" Margin="0,0,0,6" Visibility="{Binding Exporting, Converter={StaticResource Visible}}" />
    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" Visibility="{Binding Status, Converter={StaticResource NotEmpty}}" />
-  </StackPanel>
+  </local:ClipCreatorPanel>
  </ScrollViewer>
 </UserControl>
