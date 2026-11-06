@@ -61,7 +61,7 @@ context:
 - [x] Integrate one-time preparation and bounded background viewport reads; decouple range probes, preserve peaks and remove routine loading text.
 - [x] Implement independent scrub handle/seek lifecycle and source/selection-preview mapping.
 - [x] Replace fixed-height composition with finite responsive layout and small-window fallback.
-- [ ] Build Release at zero warnings; run only non-Explicit ClipCreatorTests with synthetic cache/fake media fixtures; record real-media checks as deferred. Complete quick review, patches, commit/no-ff integration and post-merge build.
+- [x] Build Release at zero warnings; run only non-Explicit ClipCreatorTests with synthetic cache/fake media fixtures; record real-media checks as deferred. Complete quick review, patches, commit/no-ff integration and post-merge build.
 
 **Acceptance Criteria:**
 - Given a source or rendered preview, when the playhead is dragged, then playback seeks while trim values stay unchanged and source-time position remains coherent after release.
@@ -94,6 +94,8 @@ Read-only recon confirmed repeated worker decode, startup-cancellation coupling,
 - Write/defer real-media prepared-cache checks for delayed/common-origin/gapped tracks, long sources, cancellation, memory/disk behavior and published worker JSON. No unapproved media tools, publishes or Engine/shared-shell suites.
 
 ### Final scoped verification
+
+- Feature commit `c83ccecf43219c21adf53f97eda7939716043e2e`, integrated with no-ff merge `53872864d6fbffef9930cc227b290e98d6b0983a` into develop. Post-merge `dotnet build ReplayBuffer.slnx -c Release --no-restore -v quiet` succeeded with **0 warnings, 0 errors**. No push or Dev App restart.
 
 - Coordinator `dotnet build ReplayBuffer.slnx -c Release` after review patches: **0 warnings, 0 errors**.
 - Coordinator class command above after patches: **14 discovered/executed, 14 passed, 0 failed, 0 skipped**, 17.781 s. Worker earlier whole-class runs also passed; the patch-specific run selected 2 relevant tests and passed. No full suites or Engine/native/Heavy tests ran.
