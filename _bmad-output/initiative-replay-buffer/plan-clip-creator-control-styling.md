@@ -61,7 +61,7 @@ context:
 - [x] Recompose the range row/duration and finish handle/selection rendering plus consistent validation/busy interaction.
 - [x] Apply matching export-popup and shell/Settings control treatment without changing routes or media operations.
 - [x] Update lean clip-creator regressions, build Release with zero warnings, and run only authorized non-Explicit ClipCreatorTests. Record unrun shell/media/visual checks honestly.
-- [ ] Complete independent quick review, patch verified findings, commit with Conventional Commits, then integrate with serialized no-fast-forward merge and zero-warning Release build.
+- [x] Complete independent quick review, patch verified findings, commit with Conventional Commits, then integrate with serialized no-fast-forward merge and zero-warning Release build.
 
 **Acceptance Criteria:**
 - Given either look, when viewing and interacting with affected controls, then shapes, spacing, thin icons, fields and groups follow the R10 contract rather than the former templates.
@@ -99,3 +99,4 @@ context:
 - One implementation-time scoped run failed the existing preview-enabled assertion after new async range edits: the test STA harness lacked a DispatcherSynchronizationContext. Added it to that test and awaited refresh before the next theme iteration; subsequent focused and whole-class runs passed. No product behavior was changed to satisfy this harness issue.
 - Matrix mapping: Styling/Range/Layout → existing both-look layout/precision tests extended with Enter, text-arrow isolation, crossed drag rejection and vector playback state assertions; actual reference and minimum-shell tests cover whole range-group wrapping, lane bounds and rendered previews. Export → existing type/options/chooser/retention/preview tests. All 11 tests passed. Full hover/focus/disabled pointer matrix, high DPI, standalone shared-shell/Settings lifecycle and actual media remain deferred under the standing clearance; structural checks are not claimed as that execution.
 - PNGs beside the Release App test binary: `clip-controls-{Fluent,GamingDark}-{expanded,rail,narrow}.png` and `clip-options-GamingDark.png`. They use fake player/media and temporary fixtures; no real app or media was launched.
+- Feature commit `68899fba035dc7494cf30aae013959899875ce26`; no-fast-forward develop merge `7d3c1fe205365c2d2167ede2f0158afeea2fa56d`. Post-merge Release build: **0 warnings, 0 errors** (17.53 s). No push. Final rendered creator playback and popup previews visually inspected after patches.
