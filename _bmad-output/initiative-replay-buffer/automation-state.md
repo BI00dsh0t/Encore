@@ -1,5 +1,9 @@
 # Automation State
 
+## Waveform amplitude scaling checkpoint (2026-11-06)
+
+- Builder approved BMad planning, with implementation explicitly outside BMad. Feature `5873727d6f9d4fae83a0657e9061f51f4247b19d` merged no-ff to develop at `aaa9fc82e7f625c4cf730c875c2b7c2fe9f7ca13`. Display peaks use validated per-track whole-source maxima, stable through zoom/pan/inclusion; silence stays flat. No source/cache-byte/audio/worker/style changes. Final ClipCreatorTests 15 executed/passed, 0 failed/skipped; initial new-test viewport assumption corrected after 14 passed/1 failed. Final feature and post-merge Release builds 0 warnings/errors. Ordinary diff review clear. Plan/backlog/handoff updated; existing real-media/Heavy/publish/high-DPI/HITL restrictions persist. No real app/data/settings changes, unrelated tests or push. Rebuild/restart Dev App from develop to see the change.
+
 The single place to resume the unattended build of initiative-replay-buffer after a usage limit or a restart. Every session reads this first and updates it at each checkpoint. It lives on `develop` in the main folder: `%USERPROFILE%\Documents\repos\ReplayBuffer\_bmad-output\initiative-replay-buffer\automation-state.md`.
 
 **To resume:** open the coordinator session (or any new session in this repo), say "continue the automation", and point it at this file. It reads the Queue, checks `git -C <main> log develop` and the board (`python _bmad/method/scripts/tickets.py status _bmad-output/initiative-replay-buffer`), and starts the session for the first row that isn't `done`.
