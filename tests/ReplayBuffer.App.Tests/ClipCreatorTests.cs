@@ -69,6 +69,32 @@ public sealed class ClipCreatorTests : IDisposable
     }
 
     [Fact]
+    public async Task WaveformDisplayUsesEachWholeTrackMaximumWithoutChangingCachedAudioPeaks()
+    {
+        _media.TrackCount = 3;
+        _media.PeakAt = (track, index) => track == 3 ? 0 :
+            index == 1000 ? (track == 1 ? 0.2f : 0.8f) :
+            index == 45000 ? (track == 1 ? 0.1f : 0.4f) : 0;
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        await page.OpenAsync(0);
+        page.Zoom(3); await page.RefreshAsync();
+        var folder = _media.Requests.Single(r => r.Operation == "prepareWaveforms").Destination!;
+        var files = Directory.GetFiles(folder).ToDictionary(path => path, File.ReadAllBytes);
+        Assert.Equal(new[] { 1f, 1f, 0f }, page.Waveforms.Select(w => w.Peaks.Max()).ToArray());
+        page.Seek(45); page.Zoom(0.001);
+        await page.RefreshAsync();
+        Assert.Equal(new[] { 0.5f, 0.5f, 0f }, page.Waveforms.Select(w => w.Peaks.Max()).ToArray());
+        Assert.All(page.Waveforms.SelectMany(w => w.Peaks), peak => Assert.True(float.IsFinite(peak)));
+        page.Pan(0.1); await page.RefreshAsync();
+        Assert.Equal(new[] { 0.5f, 0.5f, 0f }, page.Waveforms.Select(w => w.Peaks.Max()).ToArray());
+        page.Tracks[0].Included = false; await page.RefreshAsync();
+        Assert.Equal(0.5f, page.Waveforms.Single(w => w.StreamIndex == 2).Peaks.Max());
+        Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
+        Assert.DoesNotContain(_media.Requests, r => r.Operation is "waveform" or "preview" or "export");
+        foreach (var (path, bytes) in files) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
+    }
+
+    [Fact]
     public async Task PreparationSurvivesOrdinaryEditsAndCancelledPreparationCanResume()
     {
         _media.PreparationRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -125,6 +151,15 @@ public sealed class ClipCreatorTests : IDisposable
         }
         _media.Requests.Clear();
         _media.CorruptPreparation = false;
+        _media.CorruptSummary = true;
+        using (var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer()))
+        {
+            await page.OpenAsync(0);
+            Assert.Empty(page.Waveforms);
+            Assert.Contains("Waveform preparation failed", page.Status);
+        }
+        _media.Requests.Clear();
+        _media.CorruptSummary = false;
         using (var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer()))
         {
             await page.OpenAsync(0);
@@ -617,6 +652,8 @@ public sealed class ClipCreatorTests : IDisposable
         public int TrackCount { get; set; } = 2;
         public TaskCompletionSource? PreparationRelease { get; set; }
         public bool CorruptPreparation { get; set; }
+        public bool CorruptSummary { get; set; }
+        public Func<int, int, float>? PeakAt { get; set; }
         public async Task<ClipMediaResponse> ExecuteAsync(ClipMediaRequest request, IProgress<double>? progress, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
@@ -641,7 +678,7 @@ public sealed class ClipCreatorTests : IDisposable
             for (var track = 1; track <= TrackCount; track++)
             {
                 var levels = new List<ClipPeakLevel>();
-                var values = Enumerable.Range(0, 90000).Select(i => i % 1000 == 124 ? 1f : 0f).ToArray();
+                var values = Enumerable.Range(0, 90000).Select(i => PeakAt?.Invoke(track, i) ?? (i % 1000 == 124 ? 1f : 0f)).ToArray();
                 long stride = 1;
                 while (true)
                 {
@@ -660,6 +697,11 @@ public sealed class ClipCreatorTests : IDisposable
                 tracks.Add(new(track, [.. levels]));
             }
             if (CorruptPreparation) { File.WriteAllBytes(Path.Combine(request.Destination!, tracks[0].Levels[0].FileName), [0]); }
+            if (CorruptSummary)
+            {
+                using var writer = new BinaryWriter(File.OpenWrite(Path.Combine(request.Destination!, tracks[0].Levels[^1].FileName)));
+                writer.BaseStream.Position = 32; writer.Write(float.NaN);
+            }
             return new("complete", Cache: new(1, request.Source, 90, [.. tracks]));
         }
         private static ClipMediaResponse Render(ClipMediaRequest request)

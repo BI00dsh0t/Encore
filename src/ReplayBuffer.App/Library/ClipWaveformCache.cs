@@ -9,6 +9,7 @@ internal sealed class ClipWaveformCache : IDisposable
 {
     private readonly string _folder;
     private readonly ClipWaveformDescriptor _descriptor;
+    private readonly Dictionary<int, float> _trackMaxima = [];
     private readonly object _gate = new();
     private bool _disposed;
 
@@ -33,6 +34,8 @@ internal sealed class ClipWaveformCache : IDisposable
                 count = (count + 15) / 16;
             }
             if (track.Levels[^1].Count != 1) { throw new IOException("The waveform cache is incomplete."); }
+            using var summary = Open(track.StreamIndex, track.Levels[^1]);
+            _trackMaxima.Add(track.StreamIndex, ClipPeakFile.ReadPeak(summary));
         }
     }
 
@@ -70,6 +73,12 @@ internal sealed class ClipWaveformCache : IDisposable
                     var time = (index + 0.5) * level.MillisecondsPerPeak / 1000;
                     var bin = (int)Math.Clamp((time - start) / (end - start) * outputCount, 0, outputCount - 1);
                     peaks[bin] = Math.Max(peaks[bin], ClipPeakFile.ReadPeak(reader));
+                }
+                // Use the whole-source maximum so zooming never changes a track's visual gain.
+                var maximum = _trackMaxima[track.StreamIndex];
+                for (var i = 0; i < peaks.Length; i++)
+                {
+                    peaks[i] = maximum > 0 ? Math.Clamp(peaks[i] / maximum, 0, 1) : 0;
                 }
                 result.Add(new(start, end, track.StreamIndex, peaks));
             }

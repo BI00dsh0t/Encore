@@ -3,7 +3,7 @@ title: 'Scale clip waveforms to each track amplitude'
 type: 'feature'
 ticket: ''
 created: '2026-11-06'
-status: 'draft'
+status: 'in-progress'
 baseline_revision: '1130e843cd19ec1fcb0c478e562da5f4bd45ebca'
 route: 'oneshot'
 route_source: 'auto'
@@ -40,8 +40,8 @@ The builder explicitly requested BMad planning only. Stop after presenting this 
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/ReplayBuffer.App/Library/ClipWaveformCache.cs`: capture each track's whole-source maximum once during cache validation. Use direct division by a positive maximum, rather than a reciprocal that could overflow for extremely small values. Keep an all-zero track at zero and clamp display results to 0..1. Preserve raw cache data, bounded IO, cancellation and cleanup behavior.
-- [ ] `tests/ReplayBuffer.App.Tests/ClipCreatorTests.cs`: add one focused synthetic-cache scenario covering two differently quiet tracks, proportional peaks and silence. Read full and zoomed viewports, including one that excludes the loudest point, to establish a stable whole-track denominator. Confirm cache bytes remain unchanged and preparation is not repeated. Extend the existing corrupt-cache case to cover an invalid summary peak if practical without a new redundant test.
+- [x] `src/ReplayBuffer.App/Library/ClipWaveformCache.cs`: capture each track's whole-source maximum once during cache validation. Use direct division by a positive maximum, rather than a reciprocal that could overflow for extremely small values. Keep an all-zero track at zero and clamp display results to 0..1. Preserve raw cache data, bounded IO, cancellation and cleanup behavior.
+- [x] `tests/ReplayBuffer.App.Tests/ClipCreatorTests.cs`: add one focused synthetic-cache scenario covering two differently quiet tracks, proportional peaks and silence. Read full and zoomed viewports, including one that excludes the loudest point, to establish a stable whole-track denominator. Confirm cache bytes remain unchanged and preparation is not repeated. Extend the existing corrupt-cache case to cover an invalid summary peak if practical without a new redundant test.
 - [ ] Verify the scoped change, inspect its diff, record results/deferred checks in `test-backlog.md`, commit on a git-flow feature branch and integrate into develop under the standing merge rules. Use ordinary implementation and review, without BMad execution.
 
 **Acceptance Criteria:**
@@ -57,7 +57,11 @@ Estimated implementation plus focused fixture/assertion changes: at most 100 lin
 
 ## Plan Change Log
 
+- Builder approved the plan; implementation proceeded directly without invoking BMad. Product changes are confined to the App's peak-cache display reader, with existing renderer, worker, contracts and source peak bytes retained.
+
 ## Review Triage Log
+
+- Ordinary diff review: no remaining finding. Checked validated per-track whole-source maxima, division/zero handling, bounded allocations and reads, raw-file preservation, existing renderer consumers and cache cleanup/error propagation. No independent subagent review was invoked.
 
 ## Verification
 
@@ -66,3 +70,10 @@ Estimated implementation plus focused fixture/assertion changes: at most 100 lin
 - Inspect that the renderer still uses the existing styled lane envelope and that normalized data is consumed only by the waveform display. Existing synthetic both-look layout checks remain part of the scoped class.
 - Review implementation for per-track rather than visible-window maxima, safe zero handling, raw cache preservation and absence of audio/protocol changes. Record actual commands/counts after implementation; none have run for this plan.
 - Real media, Heavy/GPU tests, publishing, high DPI and real Dev App checks remain deferred under existing clearance rules. No unrelated suites or Windows quoting retry.
+
+### Implementation results (2026-11-06)
+
+- Release build after the final test correction: **0 warnings, 0 errors** (10.34 s).
+- Scoped ClipCreatorTests command above: **15 executed, 15 passed, 0 failed/skipped**, 14.864 s. New synthetic scenario proves per-track full/half amplitude, silent track, stable zoom/pan/inclusion scaling, exactly one preparation and unchanged cache bytes. Existing corrupt-cache test now rejects a NaN summary peak.
+- Initial scoped run: 14 passed, 1 failed because the new test assumed a full-source initial viewport, while the editor starts at 30 seconds. Corrected the test to expand to the whole source before seeking/zooming; product implementation unchanged. Final build and entire scoped class rerun passed.
+- No real media or Dev App operations, unrelated suites, Heavy runs or publish checks performed.
