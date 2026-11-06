@@ -36,7 +36,7 @@
     <WrapPanel><RadioButton Content="MP4 video (H.264 / AAC)" GroupName="ExportFormat" IsChecked="{Binding IsMp4}" Margin="0,0,16,0" /><RadioButton Content="MP3 audio (48 kHz / 192 kbps)" GroupName="ExportFormat" IsChecked="{Binding IsMp3}" /></WrapPanel>
    </StackPanel>
    <WrapPanel Margin="0,14,0,6"><Button x:Name="PreviewButton" Content="Preview selection" Command="{Binding PreviewCommand}" Margin="0,0,8,4" /><Button Content="Export…" Click="Export" IsEnabled="{Binding CanExport}" Margin="0,0,8,4" /><Button Content="Cancel operation" Command="{Binding CancelCommand}" IsEnabled="{Binding Busy}" Margin="0,0,8,4" /></WrapPanel>
-   <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" Height="5" Margin="0,0,0,6" />
+   <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}" Height="5" Margin="0,0,0,6" />
    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
   </StackPanel>
  </ScrollViewer>

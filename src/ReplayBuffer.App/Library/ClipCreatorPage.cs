@@ -339,7 +339,11 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         ((RelayCommand)PreviewCommand).RaiseCanExecuteChanged();
     }
     public static string FormatTime(double seconds) => FormatTime(TimeSpan.FromSeconds(Math.Max(0, seconds)));
-    private static string FormatTime(TimeSpan time) => $"{(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}.{time.Milliseconds:000}";
+    private static string FormatTime(TimeSpan time)
+    {
+        time = TimeSpan.FromMilliseconds(Math.Round(time.TotalMilliseconds, MidpointRounding.AwayFromZero));
+        return $"{(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}.{time.Milliseconds:000}";
+    }
     private static bool TryTime(string text, out double seconds)
     {
         seconds = 0;

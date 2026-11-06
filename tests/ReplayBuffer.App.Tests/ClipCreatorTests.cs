@@ -10,7 +10,7 @@ using ReplayBuffer.Contracts.Settings;
 
 namespace ReplayBuffer.App.Tests;
 
-/// <summary>Fake-service coverage only; written under the builder's test hold, not executed.</summary>
+/// <summary>Fake-service coverage only; no real media, engine or capture hardware.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class ClipCreatorTests : IDisposable
 {
