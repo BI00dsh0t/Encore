@@ -4,6 +4,8 @@
 
 Implemented on `feature/clip-selection-loop`:
 
+Integrated: feature `86d0461`; no-ff develop merge `06ff24b4066dcb00d6e51330fa6c77371c034e64`.
+
 - Play resumes inside the current In/Out interval; if paused outside it, Play first seeks to In. While playing, reaching Out or moving In past the current position seeks back to the live In boundary and continues playback. Slider/numeric/nudge changes feed the same current requested bounds without changing export alignment or requiring a rendered preview.
 - Rendered selection playback loops from its effective local end to zero and maps back to effective source time. Trimming a playing rendered preview invalidates it and continues the loop on source footage with the new range.
 - Paused seeking remains independent. Active scrubbing temporarily suppresses automatic wrapping. Pause, hide and disposal prevent automatic restart. No global loop toggle/settings or ordinary Library playback change.
