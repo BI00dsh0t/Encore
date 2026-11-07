@@ -22,6 +22,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     private readonly IClipMediaService _media;
     private readonly Func<IPlayer> _newPlayer;
     private readonly Func<string> _createPreviewFolder;
+    private readonly ClipThumbnailStore? _thumbnailStore;
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _operation;
     private CancellationTokenSource? _preparationCancellation;
@@ -53,13 +54,14 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     private int _sourceCheck;
     private double _openingPosition;
 
-    public ClipCreatorPage(ClipSource source, string title, IClipMediaService media, Func<IPlayer> newPlayer, Func<string>? createPreviewFolder = null)
+    public ClipCreatorPage(ClipSource source, string title, IClipMediaService media, Func<IPlayer> newPlayer, Func<string>? createPreviewFolder = null, string? thumbnailCacheFolder = null)
     {
         Source = source;
         Title = title;
         _exportName = Path.GetFileNameWithoutExtension(source.Path) + " clip";
         _media = media;
         _newPlayer = newPlayer;
+        _thumbnailStore = thumbnailCacheFolder is null ? null : new ClipThumbnailStore(thumbnailCacheFolder);
         _createPreviewFolder = createPreviewFolder ?? (() => Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "ReplayBuffer-clip-" + Guid.NewGuid().ToString("N"))).FullName);
         CancelCommand = new RelayCommand(() => _operation?.Cancel());
         PreviewCommand = new RelayCommand(() => _ = PreviewAsync(), () => CanExport);
@@ -444,11 +446,23 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         string? folder = null;
         try
         {
+            if (_thumbnailStore is not null)
+            {
+                var cached = await _thumbnailStore.TryLoadAsync(Source, Duration, cancel.Token);
+                cancel.Token.ThrowIfCancellationRequested();
+                if (cached is not null)
+                {
+                    if (!_closed && !_suspended) { Thumbnails = cached; }
+                    return;
+                }
+            }
             folder = Directory.CreateTempSubdirectory("ReplayBuffer-thumbnails-").FullName;
             var response = await _media.ExecuteAsync(new("prepareThumbnails", Source, Destination: folder), null, cancel.Token);
             cancel.Token.ThrowIfCancellationRequested();
             var descriptor = response.Thumbnails ?? throw new IOException("The media worker returned no thumbnails.");
             var images = await ClipThumbnailCache.LoadAsync(folder, descriptor, Source, Duration, cancel.Token);
+            cancel.Token.ThrowIfCancellationRequested();
+            if (_thumbnailStore is not null) { await _thumbnailStore.SaveAsync(folder, descriptor, cancel.Token); }
             cancel.Token.ThrowIfCancellationRequested();
             if (!_closed && !_suspended) { Thumbnails = images; }
         }

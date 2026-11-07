@@ -1,5 +1,11 @@
 # Test backlog
 
+## Persistent video-track thumbnail cache (2026-11-07)
+
+- Builder requested calculated thumbnails be cached. Persist source-bound JPEGs/manifests in the current instance's local cache across editor reopenings/app restarts; no thumbnail worker on a valid hit. Version/source invalidation, bounded image/manifest loading, corrupt-entry regeneration, atomic publication, cancellation cleanup and 128-entry / 256 MiB recency limits are implemented. Test roots are injected temporary directories; real instance caches/settings/Library remain untouched.
+- Release build **0 warnings/errors**; authorized non-Explicit ClipCreatorTests **25 passed, 0 failed/skipped**, with focused disk reuse/source change, corrupt/cancelled preparation and eviction ownership checks. Scoped ordinary review covers instance-root plumbing, off-thread IO, safe deletion boundaries, publication ordering and IO fallbacks.
+- Deferred: actual media cache hit/startup performance and long-source costs, abrupt process termination/concurrent filesystem access, native UI/HITL/high DPI and broader shell suites. Existing Heavy/media/Dev App/publish holds remain; no clearance expansion. See `plan-clip-thumbnail-cache.md` and AD-28 persistence amendment.
+
 ## Current clip selection playback loop (2026-11-07)
 
 - Builder-requested loop uses live requested In/Out for source playback and effective local boundaries for rendered previews; paused seek is independent, live trim continues source playback after invalidation, and hide/dispose stop restart. Release **0 warnings/errors**; authorized non-Explicit ClipCreatorTests **22 passed, 0 failed/skipped**, including two focused loop regressions. Ordinary non-looping EOF was checked with a fake player inside this clip-creator class; unrelated player suites were not run.

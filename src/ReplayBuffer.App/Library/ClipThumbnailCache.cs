@@ -12,14 +12,14 @@ internal static class ClipThumbnailCache
 {
     internal static Task<ClipThumbnailImage[]> LoadAsync(string folder, ClipThumbnailDescriptor descriptor, ClipSource source, double duration, CancellationToken token) => Task.Run(() =>
     {
-        if (descriptor.Version != 1 || descriptor.Source != source || descriptor.Duration != duration || descriptor.Frames.Length is < 1 or > 64)
+        if (descriptor.Version != 1 || descriptor.Source != source || descriptor.Duration != duration || descriptor.Frames is null || descriptor.Frames.Length is < 1 or > 64)
         { throw new IOException("The thumbnail cache does not match this source."); }
         var images = new List<ClipThumbnailImage>();
         var previous = -1d;
         foreach (var frame in descriptor.Frames)
         {
             token.ThrowIfCancellationRequested();
-            if (!double.IsFinite(frame.Time) || frame.Time < 0 || frame.Time >= duration || frame.Time <= previous
+            if (frame is null || !double.IsFinite(frame.Time) || frame.Time < 0 || frame.Time >= duration || frame.Time <= previous
                 || string.IsNullOrWhiteSpace(frame.FileName) || frame.FileName != Path.GetFileName(frame.FileName))
             { throw new IOException("The thumbnail cache contains an invalid frame."); }
             var file = new FileInfo(Path.Combine(folder, frame.FileName));

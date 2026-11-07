@@ -2,6 +2,8 @@
 
 Approved by the builder on 2026-11-07: “perfect, let's begin implementation.” Implemented through ordinary coding/review on `feature/clip-editor-refresh` at `92571e2`, no-ff merged into develop at `5e7c56afcab2e93355cb274f81ab828f712bc1bf`, using the approved mockup. This supersedes the initial design-only scope in the session's historical preview notes.
 
+**Thumbnail retention follow-up (2026-11-07):** The builder subsequently requested caching calculated video-track thumbnails. Completed JPEGs/manifests now persist across creator reopening and app restart in the app instance's local `cache/clip-thumbnails/v1` folder, with source-identity/version invalidation, corrupt-entry recovery, atomic publication and bounded recency eviction. This supersedes the original creator-only retention described below. In-memory rendering and worker scratch cleanup remain unchanged; see `../plan-clip-thumbnail-cache.md`.
+
 ## Result
 
 - One themed editor card with centered 10s back / Play-Pause / 10s forward, source-mapped elapsed/total time, Preview selection, 40px named audio rows, a 48px video filmstrip, independent red seek line/thumb and rounded shared selection/grips.

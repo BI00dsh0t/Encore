@@ -31,6 +31,84 @@ public sealed class ClipCreatorTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, true);
 
     [Fact]
+    public async Task CalculatedFilmstripSurvivesReopeningAndChangedSourcesMissTheCache()
+    {
+        var cacheFolder = Path.Combine(_folder, "filmstrip-cache");
+        using (var first = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
+        {
+            await first.OpenAsync(0); await first.EnsureThumbnailsAsync();
+            Assert.Equal(2, first.Thumbnails.Length);
+        }
+        Assert.Single(Directory.GetFiles(cacheFolder, "manifest.json", SearchOption.AllDirectories));
+        _media.Requests.Clear();
+        using (var reopened = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
+        {
+            await reopened.OpenAsync(0); await reopened.EnsureThumbnailsAsync();
+            Assert.Equal(2, reopened.Thumbnails.Length);
+            Assert.All(reopened.Thumbnails, frame => Assert.True(frame.Image.IsFrozen));
+            Assert.DoesNotContain(_media.Requests, request => request.Operation == "prepareThumbnails");
+            reopened.Zoom(0.5); reopened.Pan(0.5); reopened.Seek(2);
+            await reopened.EnsureThumbnailsAsync();
+            Assert.DoesNotContain(_media.Requests, request => request.Operation == "prepareThumbnails");
+        }
+        File.AppendAllText(Source.Path, "changed");
+        _media.Requests.Clear();
+        using var changed = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
+        await changed.OpenAsync(0); await changed.EnsureThumbnailsAsync();
+        Assert.Equal(2, changed.Thumbnails.Length);
+        Assert.Single(_media.Requests, request => request.Operation == "prepareThumbnails");
+    }
+
+    [Fact]
+    public async Task CancelledPreparationPublishesNothingAndCorruptCachedFramesAreRebuilt()
+    {
+        var cacheFolder = Path.Combine(_folder, "filmstrip-cache");
+        _media.ThumbnailRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
+        await cancelled.OpenAsync(0);
+        var pending = cancelled.EnsureThumbnailsAsync();
+        cancelled.Dispose(); await pending;
+        Assert.False(Directory.Exists(cacheFolder));
+        _media.ThumbnailRelease.SetResult();
+        using (var first = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
+        { await first.OpenAsync(0); await first.EnsureThumbnailsAsync(); Assert.Equal(2, first.Thumbnails.Length); }
+        var jpeg = Directory.GetFiles(cacheFolder, "*.jpg", SearchOption.AllDirectories).First();
+        File.WriteAllBytes(jpeg, [0]);
+        _media.Requests.Clear();
+        using (var rebuilt = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
+        {
+            await rebuilt.OpenAsync(0); await rebuilt.EnsureThumbnailsAsync();
+            Assert.Equal(2, rebuilt.Thumbnails.Length);
+            Assert.Single(_media.Requests, request => request.Operation == "prepareThumbnails");
+        }
+        _media.Requests.Clear();
+        using var reused = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
+        await reused.OpenAsync(0); await reused.EnsureThumbnailsAsync();
+        Assert.Equal(2, reused.Thumbnails.Length);
+        Assert.DoesNotContain(_media.Requests, request => request.Operation == "prepareThumbnails");
+    }
+
+    [Fact]
+    public async Task ThumbnailEvictionKeepsTheNewEntryAndLeavesUnrelatedFoldersAlone()
+    {
+        var cacheFolder = Path.Combine(_folder, "filmstrip-cache");
+        for (var i = 0; i < 129; i++)
+        {
+            var old = Directory.CreateDirectory(Path.Combine(cacheFolder, i.ToString("X64")));
+            old.LastWriteTimeUtc = DateTime.UtcNow.AddDays(-2);
+        }
+        var unrelated = Directory.CreateDirectory(Path.Combine(cacheFolder, "keep-me"));
+        File.WriteAllText(Path.Combine(unrelated.FullName, "note.txt"), "keep");
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
+        await page.OpenAsync(0); await page.EnsureThumbnailsAsync();
+        Assert.Equal(2, page.Thumbnails.Length);
+        Assert.Equal(128, Directory.GetDirectories(cacheFolder).Count(path => Path.GetFileName(path).Length == 64));
+        Assert.Single(Directory.GetFiles(cacheFolder, "manifest.json", SearchOption.AllDirectories));
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(unrelated.FullName, "note.txt")));
+        Assert.True(File.Exists(Source.Path));
+    }
+
+    [Fact]
     public async Task PlaybackLoopsTheLiveTrimRangeAndKeepsPausedSeekingIndependent()
     {
         var player = new FakePlayer { Media = new(1280, 720, TimeSpan.FromSeconds(90), ["Game"], true) };
