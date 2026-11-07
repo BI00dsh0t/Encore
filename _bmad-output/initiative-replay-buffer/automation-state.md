@@ -1,5 +1,9 @@
 # Automation State
 
+## Double-click visible range checkpoint (2026-11-07)
+
+- Builder approved implementation of `plan-clip-creator-select-visible-waveform-range.md`; implemented directly without BMad. Feature `2d998007d4eb7b74779dcaed3221cfbb39d48a0f`, no-ff develop merge `ef149704a24a07bdf03b9d2183bc9a2bac7a2328`. Second left click in waveform body/handle selects inward-millisecond viewport bounds, keeps viewport/cached peaks/settings, invalidates stale preview and resolves effective range normally. Ruler/labels/single clicks retain behavior; no leftover scrub/trim/capture. Tooltip/automation hint included. Final scoped ClipCreatorTests 17 passed, 0 failed/skipped (16.765 s), feature/post-merge Release 0 warnings/errors; ordinary review clear. Plan built, backlog/handoff updated, earlier draft-only notes superseded. Real pointer/high DPI/media/HITL and status-specific tests still deferred; no real Dev App/data/settings changes, unrelated suites, Heavy runs or push.
+
 ## Error-only top notices checkpoint (2026-11-07)
 
 - Builder requested top-of-window warnings removed unless errors. Feature `55e553a8cafec9b0304f6294d08e762686cf090e`, no-ff develop merge `88cf67bb46d5a417cbf6db0d0295dce5e493b834`. Entire status card/host collapses when no errors, displaying only severity Error rows or background-service failures. Routine capture/mic/hotkey/connecting text hidden; source session warnings/state and overlay/settings behavior intact. Feature and merged Release builds 0 warnings/errors; authorized ClipCreatorTests 16 passed, 0 failed/skipped, 15.089 s; generated Gaming expanded preview inspected. Ordinary review clear. New StatusLineTests regression compiled but not run (outside scoped clearance); backlog/handoff updated with pending error/recovery/dismiss UI checks. No real app/data/settings, unrelated tests, Explicit/Heavy runs or push. Earlier double-click visible-range plan remains draft awaiting approval.

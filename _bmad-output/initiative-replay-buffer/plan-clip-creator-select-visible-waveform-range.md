@@ -3,7 +3,7 @@ title: 'Select the visible waveform range on double-click'
 type: 'feature'
 ticket: ''
 created: '2026-11-07'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '63ebe1920bd2ebebbc3a54f129aa66eb5b89ba67'
 route: 'oneshot'
 route_source: 'auto'
@@ -46,7 +46,7 @@ This run is planning only. Implementation will follow approval, without invoking
 - [x] `ClipCreatorPage.cs`: implement one state-guarded visible-range selection operation using existing SetRange; preserve last valid range for an empty inward-rounded interval.
 - [x] `WaveformView.cs`, `ClipCreatorView.xaml`: wire the gesture/cleanup and discoverability hint; preserve ordinary input and rendering reuse.
 - [x] `ClipCreatorTests.cs`: cover zoom/pan, inward rounding/source edges, unchanged peaks/options, final request, preview invalidation, disabled states and one preparation. Extend both-look coverage for pointer-region precedence and capture cleanup.
-- [ ] After approval, implement directly on a git-flow feature branch, verify/review, update backlog/handoff, commit and merge no-ff. No builds/tests or app operations during planning.
+- [x] After approval, implement directly on a git-flow feature branch, verify/review, update backlog/handoff, commit and merge no-ff. No builds/tests or app operations during planning.
 
 **Acceptance Criteria:**
 - Given a zoomed/panned viewport with handles outside it, when double-clicking any track's waveform body, then both handles and their fields select the visible span, duration agrees, and viewport/peak data remain unchanged.
@@ -76,6 +76,8 @@ Low risk: App-only input/selection changes; source media and protocol untouched.
 - Real-media/Heavy, pointer/HITL and high-DPI checks remain deferred. No unrelated suites, media tools, publishing, real Dev App/data operations or Windows quoting retry.
 
 ### Implementation verification (2026-11-07)
+
+- Feature `2d998007d4eb7b74779dcaed3221cfbb39d48a0f`, no-ff develop merge `ef149704a24a07bdf03b9d2183bc9a2bac7a2328`. Post-merge Release build command above: **0 warnings/errors**, 29.35 s. No push or real Dev App restart.
 
 - Feature Release build: **0 warnings, 0 errors**.
 - Scoped ClipCreatorTests command above: **17 executed/passed, 0 failed/skipped**, 16.765 s. New fake-service scenario covers fractional zoom/pan, source start/end/full span, synchronized duration, unchanged viewport/peaks/playhead/audio track request, stale preview invalidation, no repeated preparation, export/suspend/dispose/uninitialized guards and a sub-millisecond source with no positive quantized interval. Existing both-look input test covers double-click on handle, excluded regions/single click, scrub/capture cleanup and automatic effective-range resolution. No real pointer automation or actual media used.
