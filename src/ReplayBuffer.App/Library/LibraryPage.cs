@@ -64,6 +64,7 @@ internal sealed class LibraryPage : Observable
     private ClipCreatorPage? _creator;
     private LibraryItem? _creatorItem;
     private readonly IClipMediaService _clipMedia;
+    private readonly string? _clipThumbnailCacheFolder;
     private double _playerVolume = 1.0;
     private bool _playerMuted;
     private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
@@ -119,7 +120,8 @@ internal sealed class LibraryPage : Observable
         Func<IPlayer>? player = null,
         Func<string, Stream>? openRead = null,
         Action<string>? log = null,
-        IClipMediaService? clipMedia = null)
+        IClipMediaService? clipMedia = null,
+        string? clipThumbnailCacheFolder = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         PropertyChanged += (_, e) =>
@@ -140,6 +142,7 @@ internal sealed class LibraryPage : Observable
         _openRead = openRead;
         _log = log ?? (_ => { });
         _clipMedia = clipMedia ?? new ClipMediaService();
+        _clipThumbnailCacheFolder = clipThumbnailCacheFolder;
         DrillIn = new DrillIn(MainViewModel.LibraryTitle);
         DrillIn.Closed += _ => { ClosePlayer(); CloseCreator(); };
         AcknowledgeCommand = new RelayCommand(() => _ = AcknowledgeAsync());
@@ -1118,7 +1121,7 @@ internal sealed class LibraryPage : Observable
             var source = new ClipSource(path, file.Length, file.LastWriteTimeUtc.Ticks);
             DrillIn.Close();
             _creatorItem = item;
-            Creator = new ClipCreatorPage(source, row.Name, _clipMedia, _newPlayer) { BackCommand = DrillIn.BackCommand };
+            Creator = new ClipCreatorPage(source, row.Name, _clipMedia, _newPlayer, thumbnailCacheFolder: _clipThumbnailCacheFolder) { BackCommand = DrillIn.BackCommand };
             Creator.SourceInvalidated = DrillIn.Close;
             DrillIn.Open(row.Path, "Create clip · " + row.Name);
             _ = Creator.OpenAsync(position);

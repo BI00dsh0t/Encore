@@ -104,7 +104,8 @@ internal sealed class ShellApp(Instance instance) : Application
             Path.Combine(instance.RoamingDataFolder, "library-view.json"),
             Path.Combine(instance.LocalDataFolder, "ring"),
             player: unsupported is null ? null : () => new WindowsMediaPlayer(unsupported),
-            log: Log);
+            log: Log,
+            clipThumbnailCacheFolder: Path.Combine(instance.LocalDataFolder, "cache", "clip-thumbnails", "v1"));
         _window = new MainWindow { DataContext = model };
         if (instance.Name != Instance.InstalledName)
         {
