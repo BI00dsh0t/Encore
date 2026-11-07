@@ -1,5 +1,9 @@
 # Automation State
 
+## Error-only top notices checkpoint (2026-11-07)
+
+- Builder requested top-of-window warnings removed unless errors. Feature `55e553a8cafec9b0304f6294d08e762686cf090e`, no-ff develop merge `88cf67bb46d5a417cbf6db0d0295dce5e493b834`. Entire status card/host collapses when no errors, displaying only severity Error rows or background-service failures. Routine capture/mic/hotkey/connecting text hidden; source session warnings/state and overlay/settings behavior intact. Feature and merged Release builds 0 warnings/errors; authorized ClipCreatorTests 16 passed, 0 failed/skipped, 15.089 s; generated Gaming expanded preview inspected. Ordinary review clear. New StatusLineTests regression compiled but not run (outside scoped clearance); backlog/handoff updated with pending error/recovery/dismiss UI checks. No real app/data/settings, unrelated tests, Explicit/Heavy runs or push. Earlier double-click visible-range plan remains draft awaiting approval.
+
 ## Trim handle drag lag checkpoint (2026-11-06)
 
 - Builder reported lag/freezing dragging range controls. Bugfix `f1020e9bf6cd9c33624336321b1097b40bcdf81f`, no-ff develop merge `74ffa0ff0cf9ddec4de5e0f274c7aa8f77957a0e`. Drag sessions update selection locally, resolve once after release/lost capture, reject stale range work and retain unchanged viewport peaks. Cached StreamGeometry lanes avoid recording thousands of individual peak lines per overlay frame. Final ClipCreatorTests 16 executed/passed, 0 failed/skipped; feature and post-merge Release builds 0 warnings/errors. Ordinary diff review and fake-media Gaming rail PNG inspection clear. Backlog/handoff record coverage and deferred real pointer/media/teardown checks; no measured runtime-performance claim, real Dev App/data/settings changes, unrelated suites, Heavy runs, BMad implementation or push. Builder: rebuild/restart Dev App to verify responsiveness.
