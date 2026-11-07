@@ -2,6 +2,8 @@
 
 Builder request, 2026-11-07: “the video thumbnails in the video track should be cached after being calculated.” Ordinary implementation on `feature/clip-thumbnail-cache`.
 
+Integrated into develop: feature `4ad1d08`; no-ff merge `8cd6b9a495dc443f4a2cec78125eaf9b82df657a`.
+
 The previous editor kept frozen thumbnails in memory only until its creator closed. Extend retention across creator reopenings and app restarts without changing the existing worker's thumbnail generation, display/time mapping or playback loop.
 
 - App startup injects the current instance's local `cache/clip-thumbnails/v1` root through MainViewModel → LibraryPage → ClipCreatorPage. No installed/Dev/test instance shares a cache root. Tests without an injected root retain temporary-only behavior and never access the real instance's cache.
