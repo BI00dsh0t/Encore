@@ -3,7 +3,7 @@ title: 'Select the visible waveform range on double-click'
 type: 'feature'
 ticket: ''
 created: '2026-11-07'
-status: 'draft'
+status: 'in-progress'
 baseline_revision: '63ebe1920bd2ebebbc3a54f129aa66eb5b89ba67'
 route: 'oneshot'
 route_source: 'auto'
@@ -43,9 +43,9 @@ This run is planning only. Implementation will follow approval, without invoking
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `ClipCreatorPage.cs`: implement one state-guarded visible-range selection operation using existing SetRange; preserve last valid range for an empty inward-rounded interval.
-- [ ] `WaveformView.cs`, `ClipCreatorView.xaml`: wire the gesture/cleanup and discoverability hint; preserve ordinary input and rendering reuse.
-- [ ] `ClipCreatorTests.cs`: cover zoom/pan, inward rounding/source edges, unchanged peaks/options, final request, preview invalidation, disabled states and one preparation. Extend both-look coverage for pointer-region precedence and capture cleanup.
+- [x] `ClipCreatorPage.cs`: implement one state-guarded visible-range selection operation using existing SetRange; preserve last valid range for an empty inward-rounded interval.
+- [x] `WaveformView.cs`, `ClipCreatorView.xaml`: wire the gesture/cleanup and discoverability hint; preserve ordinary input and rendering reuse.
+- [x] `ClipCreatorTests.cs`: cover zoom/pan, inward rounding/source edges, unchanged peaks/options, final request, preview invalidation, disabled states and one preparation. Extend both-look coverage for pointer-region precedence and capture cleanup.
 - [ ] After approval, implement directly on a git-flow feature branch, verify/review, update backlog/handoff, commit and merge no-ff. No builds/tests or app operations during planning.
 
 **Acceptance Criteria:**
@@ -62,7 +62,11 @@ Low risk: App-only input/selection changes; source media and protocol untouched.
 
 ## Plan Change Log
 
+- Builder explicitly requested implementation. Implemented directly without BMad execution, preserving approved intent and the captured baseline. Decimal time quantization avoids binary floating-point noise at millisecond boundaries.
+
 ## Review Triage Log
+
+- Ordinary diff/input-lifecycle review found no remaining issue. Second-click routing precedes trim hit testing; ruler/labels/outside plot and single clicks fall through unchanged. Clearing interaction state before release avoids leftover pointer drags. Selection calls existing SetRange and retains viewport/peaks and cached geometry.
 
 ## Verification
 
@@ -70,3 +74,8 @@ Low risk: App-only input/selection changes; source media and protocol untouched.
 - `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --filter-class "*ClipCreatorTests" --explicit off`: require a nonzero executed count and all selected tests passing, one project at a time after the successful build.
 - Review double-click precedence, rounding, lifecycle/capture cleanup and drawing reuse; record actual results after implementation.
 - Real-media/Heavy, pointer/HITL and high-DPI checks remain deferred. No unrelated suites, media tools, publishing, real Dev App/data operations or Windows quoting retry.
+
+### Implementation verification (2026-11-07)
+
+- Feature Release build: **0 warnings, 0 errors**.
+- Scoped ClipCreatorTests command above: **17 executed/passed, 0 failed/skipped**, 16.765 s. New fake-service scenario covers fractional zoom/pan, source start/end/full span, synchronized duration, unchanged viewport/peaks/playhead/audio track request, stale preview invalidation, no repeated preparation, export/suspend/dispose/uninitialized guards and a sub-millisecond source with no positive quantized interval. Existing both-look input test covers double-click on handle, excluded regions/single click, scrub/capture cleanup and automatic effective-range resolution. No real pointer automation or actual media used.

@@ -194,6 +194,7 @@ internal sealed class WaveformView : FrameworkElement
         if (_page is not { CanEdit: true } page) { return; }
         Focus();
         var point = e.GetPosition(this);
+        if (TrySelectVisibleRange(point, e.ClickCount)) { e.Handled = true; return; }
         var x = point.X;
         if (x < PlotLeft) { return; }
         // Ruler is exclusively seekable, even when the playhead coincides with a trim boundary.
@@ -203,6 +204,21 @@ internal sealed class WaveformView : FrameworkElement
         else { _endHandle = _handle == 2; page.BeginRangeDrag(); }
         if (!CaptureMouse()) { page.EndScrub(); page.EndRangeDrag(); _handle = 0; }
         e.Handled = true;
+    }
+    internal bool TrySelectVisibleRange(Point point, int clickCount)
+    {
+        if (clickCount != 2 || _page is not { CanEdit: true } page
+            || ActualWidth <= PlotLeft || point.X < PlotLeft || point.X > ActualWidth
+            || point.Y < 28 || point.Y > ActualHeight) { return false; }
+        _handle = 0;
+        _seekFocus = false;
+        _endHandle = false;
+        page.EndScrub();
+        page.SelectVisibleRange();
+        page.EndRangeDrag();
+        ReleaseMouseCapture();
+        InvalidateVisual();
+        return true;
     }
     protected override void OnMouseMove(MouseEventArgs e)
     {
