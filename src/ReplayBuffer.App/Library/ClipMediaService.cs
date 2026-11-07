@@ -14,10 +14,12 @@ internal interface IClipMediaService
 internal sealed class ClipMediaService : IClipMediaService
 {
     private readonly SemaphoreSlim _operation = new(1, 1);
+    private readonly SemaphoreSlim _thumbnails = new(1, 1);
 
     public async Task<ClipMediaResponse> ExecuteAsync(ClipMediaRequest request, IProgress<double>? progress, CancellationToken token)
     {
-        await _operation.WaitAsync(token).ConfigureAwait(false);
+        var slot = request.Operation == "prepareThumbnails" ? _thumbnails : _operation;
+        await slot.WaitAsync(token).ConfigureAwait(false);
         try
         {
             using var process = new Process
@@ -83,7 +85,7 @@ internal sealed class ClipMediaService : IClipMediaService
                 completed.Cancel();
             }
         }
-        finally { _operation.Release(); }
+        finally { slot.Release(); }
     }
 
     private static async Task DrainAsync(StreamReader reader)

@@ -11,6 +11,8 @@ public sealed record ClipWaveform(double Start, double End, int StreamIndex, flo
 public sealed record ClipPeakLevel(string FileName, long MillisecondsPerPeak, long Count);
 public sealed record ClipPeakTrack(int StreamIndex, ClipPeakLevel[] Levels);
 public sealed record ClipWaveformDescriptor(int Version, ClipSource Source, double Duration, ClipPeakTrack[] Tracks);
+public sealed record ClipThumbnail(double Time, string FileName);
+public sealed record ClipThumbnailDescriptor(int Version, ClipSource Source, double Duration, ClipThumbnail[] Frames);
 public sealed record ClipMediaRequest(
     string Operation, ClipSource Source, double Start = 0, double End = 0,
     int Bins = 1000, int[]? Tracks = null, bool Mix = false,
@@ -18,7 +20,7 @@ public sealed record ClipMediaRequest(
 public sealed record ClipMediaResponse(
     string Kind, ClipMetadata? Metadata = null, ClipRange? Range = null,
     ClipWaveform[]? Waveforms = null, double Progress = 0,
-    string? Output = null, string? Error = null, ClipWaveformDescriptor? Cache = null);
+    string? Output = null, string? Error = null, ClipWaveformDescriptor? Cache = null, ClipThumbnailDescriptor? Thumbnails = null);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ClipMediaRequest))]

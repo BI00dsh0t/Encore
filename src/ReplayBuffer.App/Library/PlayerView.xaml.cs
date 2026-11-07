@@ -30,6 +30,8 @@ namespace ReplayBuffer.App.Library;
 /// </summary>
 internal partial class PlayerView
 {
+    public static readonly DependencyProperty IsClipEditorProperty = DependencyProperty.Register(nameof(IsClipEditor), typeof(bool), typeof(PlayerView), new PropertyMetadata(false));
+    public bool IsClipEditor { get => (bool)GetValue(IsClipEditorProperty); set => SetValue(IsClipEditorProperty, value); }
     // How long the picture's size must hold before the texture is remade at it.
     private static readonly TimeSpan ResizeSettle = TimeSpan.FromMilliseconds(150);
 

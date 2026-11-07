@@ -31,6 +31,78 @@ public sealed class ClipCreatorTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, true);
 
     [Fact]
+    public async Task FilmstripIsPreparedOnceAndSeekingNeverChangesTrim()
+    {
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        await page.OpenAsync(15);
+        await page.EnsureThumbnailsAsync();
+        Assert.Equal(2, page.Thumbnails.Length);
+        Assert.All(page.Thumbnails, frame => Assert.True(frame.Image.IsFrozen));
+        var prepared = _media.Requests.Single(r => r.Operation == "prepareThumbnails");
+        Assert.False(Directory.Exists(prepared.Destination));
+        var images = page.Thumbnails;
+        var range = (page.Start, page.End);
+        page.SkipForwardCommand.Execute(null);
+        Assert.Equal(25, page.Playhead);
+        Assert.Equal(range, (page.Start, page.End));
+        page.SkipBackCommand.Execute(null);
+        Assert.Equal(15, page.Playhead);
+        page.Seek(0); page.SkipBackCommand.Execute(null); Assert.Equal(0, page.Playhead);
+        page.Seek(page.Duration); page.SkipForwardCommand.Execute(null); Assert.Equal(page.Duration, page.Playhead);
+        page.Zoom(0.5); page.Pan(-0.5); page.Nudge(false, 1); page.Format = "mp3";
+        await page.RefreshAsync();
+        await page.EnsureThumbnailsAsync();
+        Assert.Same(images, page.Thumbnails);
+        Assert.Single(_media.Requests, r => r.Operation == "prepareThumbnails");
+        await Assert.ThrowsAsync<IOException>(() => ClipThumbnailCache.LoadAsync(_folder,
+            new(1, Source, page.Duration, [new(0, "../outside.jpg")]), Source, page.Duration, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task OptionalThumbnailWorkCancelsBeforeExportAndRetriesAfterResume()
+    {
+        _media.ThumbnailRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        await page.OpenAsync(0);
+        var preparation = page.EnsureThumbnailsAsync();
+        var scratch = _media.Requests.Single(r => r.Operation == "prepareThumbnails").Destination!;
+        page.SetRange(1, 2);
+        await page.RefreshAsync();
+        Assert.True(page.CanExport); // Range queries must remain usable during thumbnail preparation.
+        await page.ExportAsync(Path.Combine(_folder, "output.mp4"));
+        Assert.Single(_media.Requests, r => r.Operation == "export");
+        await preparation;
+        Assert.False(Directory.Exists(scratch));
+        var retry = page.EnsureThumbnailsAsync();
+        page.PauseAndCancel();
+        await retry;
+        Assert.Empty(page.Thumbnails);
+        _media.ThumbnailRelease.SetResult();
+        page.Resume();
+        await page.EnsureThumbnailsAsync();
+        Assert.Equal(2, page.Thumbnails.Length);
+    }
+
+    [Fact]
+    public async Task CancellingWhileThumbnailWorkerStopsCannotStartAnExport()
+    {
+        _media.ThumbnailRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _media.ThumbnailStopRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        await page.OpenAsync(0);
+        var preparation = page.EnsureThumbnailsAsync();
+        var export = page.ExportAsync(Path.Combine(_folder, "cancelled.mp4"));
+        Assert.True(page.Exporting);
+        page.CancelCommand.Execute(null);
+        _media.ThumbnailStopRelease.SetResult();
+        await export;
+        await preparation;
+        Assert.DoesNotContain(_media.Requests, r => r.Operation == "export");
+        _media.ThumbnailRelease.SetResult();
+        await page.EnsureThumbnailsAsync();
+    }
+
+    [Fact]
     public async Task MillisecondSelectionSurvivesZoomAndPanAndRequestsFinerSourceBins()
     {
         using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
@@ -441,7 +513,7 @@ public sealed class ClipCreatorTests : IDisposable
                 window.Show(); window.UpdateLayout(); Sta.Pump(TimeSpan.FromMilliseconds(50));
                 var waveform = Descendants<WaveformView>(view).Single();
                 Assert.True(waveform.ActualWidth > 400);
-                Assert.Equal(28 + 5 * 40, waveform.ActualHeight);
+                Assert.Equal(28 + 5 * 40 + 48, waveform.ActualHeight);
                 Assert.Equal(5, waveform.ScrollMaximum);
                 waveform.LaneOffset = 5;
                 Assert.Equal(5, waveform.LaneOffset);
@@ -454,10 +526,12 @@ public sealed class ClipCreatorTests : IDisposable
                 Assert.True(((Button)view.FindName("PreviewButton")).IsEnabled, $"Preview command {page.CanExport}, busy {page.Busy}, status {page.Status}");
                 Assert.Equal(Visibility.Collapsed, ((Button)((PlayerView)view.FindName("Video")).FindName("FullScreen")).Visibility);
                 var playerView = (PlayerView)view.FindName("Video");
-                var play = (Button)playerView.FindName("PlayPause");
+                Assert.Equal(Visibility.Collapsed, ((Button)playerView.FindName("PlayPause")).Visibility);
+                Assert.Equal(Visibility.Collapsed, ((Slider)playerView.FindName("SeekBar")).Visibility);
+                var play = (Button)view.FindName("TransportPlay");
                 var mute = (Button)playerView.FindName("Mute");
                 var gear = (System.Windows.Controls.Primitives.ToggleButton)playerView.FindName("Gear");
-                Assert.Equal(34, play.ActualWidth); Assert.Equal(32, play.ActualHeight);
+                Assert.Equal(36, play.ActualWidth); Assert.Equal(36, play.ActualHeight);
                 var playIcon = (System.Windows.Shapes.Path)play.Template.FindName("Icon", play);
                 Assert.Equal(16, playIcon.Width);
                 var playShape = playIcon.Data.ToString();
@@ -662,11 +736,15 @@ public sealed class ClipCreatorTests : IDisposable
                     var scroll = (ScrollViewer)view.Content;
                     Assert.True(scroll.ScrollableHeight == 0, $"Scroll {scroll.ScrollableHeight}; viewport {scroll.ViewportHeight}; extent {scroll.ExtentHeight}");
                     var video = (PlayerView)view.FindName("Video");
-                    Assert.True(video.ActualHeight >= 438);
-                    Assert.True(((Grid)((Border)video.Content).Child).RowDefinitions[0].ActualHeight >= 358);
+                    Assert.True(video.ActualHeight >= 350, $"Picture allocation {video.ActualHeight}");
+                    Assert.True(((Grid)((Border)video.Content).Child).RowDefinitions[0].ActualHeight >= 300);
                     Assert.True(((Button)view.FindName("PreviewButton")).IsVisible);
                     Assert.True(((Button)view.FindName("ExportButton")).IsVisible);
-                    Assert.Equal(108, ((WaveformView)view.FindName("Timeline")).ActualHeight);
+                    var card = (Border)view.FindName("EditorCard");
+                    var play = (Button)view.FindName("TransportPlay");
+                    var playBounds = play.TransformToAncestor(card).TransformBounds(new Rect(play.RenderSize));
+                    Assert.InRange(Math.Abs(playBounds.Left + playBounds.Width / 2 - card.ActualWidth / 2), 0, 1);
+                    Assert.Equal(156, ((WaveformView)view.FindName("Timeline")).ActualHeight);
                     Capture(client, $"clip-controls-{look}-{(expanded ? "expanded" : "rail")}.png");
                     var originalHeight = video.ActualHeight;
                     window.Height += 300; window.UpdateLayout();
@@ -702,9 +780,9 @@ public sealed class ClipCreatorTests : IDisposable
                 var viewport = Descendants<ScrollContentPresenter>(scroll).First();
                 var toolbar = (WrapPanel)view.FindName("TimelineToolbar");
                 Assert.True(model.IsNavigationExpanded);
-                Assert.Equal(5, toolbar.Children.OfType<Button>().Count());
+                Assert.Equal(4, toolbar.Children.OfType<Button>().Count());
                 Assert.True(scroll.ScrollableHeight > 0);
-                foreach (var button in toolbar.Children.OfType<Button>())
+                foreach (var button in toolbar.Children.OfType<Button>().Concat(new[] { "TransportPlay", "SkipBack", "SkipForward", "PreviewButton" }.Select(name => (Button)view.FindName(name))))
                 {
                     button.BringIntoView(); window.UpdateLayout();
                     var bounds = button.TransformToAncestor(viewport).TransformBounds(new Rect(button.RenderSize));
@@ -757,6 +835,8 @@ public sealed class ClipCreatorTests : IDisposable
         public int TrackCount { get; set; } = 2;
         public double Duration { get; set; } = 90;
         public TaskCompletionSource? PreparationRelease { get; set; }
+        public TaskCompletionSource? ThumbnailRelease { get; set; }
+        public TaskCompletionSource? ThumbnailStopRelease { get; set; }
         public TaskCompletionSource? ExportRelease { get; set; }
         public bool CorruptPreparation { get; set; }
         public bool CorruptSummary { get; set; }
@@ -770,6 +850,37 @@ public sealed class ClipCreatorTests : IDisposable
             {
                 if (PreparationRelease is { } release) { await release.Task.WaitAsync(token); }
                 return Prepare(request);
+            }
+            if (request.Operation == "prepareThumbnails")
+            {
+                if (ThumbnailRelease is { } release)
+                {
+                    try { await release.Task.WaitAsync(token); }
+                    catch (OperationCanceledException)
+                    {
+                        if (ThumbnailStopRelease is { } stopped) { await stopped.Task; }
+                        throw;
+                    }
+                }
+                var frames = new List<ClipThumbnail>();
+                for (var frame = 0; frame < 2; frame++)
+                {
+                    var pixels = new byte[160 * 90 * 4];
+                    for (var y = 0; y < 90; y++)
+                    {
+                        for (var x = 0; x < 160; x++)
+                        {
+                            var offset = (y * 160 + x) * 4;
+                            pixels[offset] = (byte)(45 + y); pixels[offset + 1] = (byte)(30 + x / 2); pixels[offset + 2] = (byte)(30 + frame * 30); pixels[offset + 3] = 255;
+                        }
+                    }
+                    var image = BitmapSource.Create(160, 90, 96, 96, PixelFormats.Bgra32, null, pixels, 640);
+                    var encoder = new JpegBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(image));
+                    var name = $"frame-{frame}.jpg";
+                    using (var file = File.Create(Path.Combine(request.Destination!, name))) { encoder.Save(file); }
+                    frames.Add(new(frame * Duration / 2, name));
+                }
+                return new("complete", Thumbnails: new(1, request.Source, Duration, [.. frames]));
             }
             return request.Operation switch
             {

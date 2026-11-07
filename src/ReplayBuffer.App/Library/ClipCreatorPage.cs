@@ -27,6 +27,10 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     private CancellationTokenSource? _preparationCancellation;
     private CancellationTokenSource? _viewportCancellation;
     private Task? _preparation;
+    private Task? _thumbnailPreparation;
+    private CancellationTokenSource? _thumbnailCancellation;
+    private ClipThumbnailImage[] _thumbnails = [];
+    private bool _thumbnailFailed;
     private ClipWaveformCache? _cache;
     private int _viewportRevision;
     private bool _scrubbing;
@@ -59,10 +63,12 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         _createPreviewFolder = createPreviewFolder ?? (() => Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "ReplayBuffer-clip-" + Guid.NewGuid().ToString("N"))).FullName);
         CancelCommand = new RelayCommand(() => _operation?.Cancel());
         PreviewCommand = new RelayCommand(() => _ = PreviewAsync(), () => CanExport);
-        ZoomInCommand = new RelayCommand(() => Zoom(0.5));
-        ZoomOutCommand = new RelayCommand(() => Zoom(2));
-        PanLeftCommand = new RelayCommand(() => Pan(-0.5));
-        PanRightCommand = new RelayCommand(() => Pan(0.5));
+        ZoomInCommand = new RelayCommand(() => Zoom(0.5), () => CanEdit && ViewportEnd - ViewportStart > Math.Min(0.01, Duration));
+        ZoomOutCommand = new RelayCommand(() => Zoom(2), () => CanEdit && ViewportEnd - ViewportStart < Duration);
+        PanLeftCommand = new RelayCommand(() => Pan(-0.5), () => CanEdit && ViewportStart > 0);
+        PanRightCommand = new RelayCommand(() => Pan(0.5), () => CanEdit && ViewportEnd < Duration);
+        SkipBackCommand = new RelayCommand(() => Seek(Playhead - 10), () => CanEdit);
+        SkipForwardCommand = new RelayCommand(() => Seek(Playhead + 10), () => CanEdit);
         AllTracksCommand = new RelayCommand(() => { foreach (var track in Tracks) { track.Included = true; } });
         NoTracksCommand = new RelayCommand(() => { foreach (var track in Tracks) { track.Included = false; } });
     }
@@ -109,25 +115,33 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     public ICommand ZoomOutCommand { get; }
     public ICommand PanLeftCommand { get; }
     public ICommand PanRightCommand { get; }
+    public ICommand SkipBackCommand { get; }
+    public ICommand SkipForwardCommand { get; }
     public ICommand AllTracksCommand { get; }
     public ICommand NoTracksCommand { get; }
     public bool IsClosed => _closed;
-    public ClipMetadata? Metadata { get => _metadata; private set { Set(ref _metadata, value); OnPropertyChanged(nameof(Duration)); } }
+    public ClipMetadata? Metadata { get => _metadata; private set { Set(ref _metadata, value); OnPropertyChanged(nameof(Duration)); OnPropertyChanged(nameof(PlaybackText)); } }
     public double Duration => Metadata?.Duration ?? 0;
     public double Start { get => _start; set => SetRange(value, End); }
     public double End { get => _end; set => SetRange(Start, value); }
     public string StartText { get => FormatTime(Start); set { if (TryTime(value, out var time)) { Start = time; } else { RangeError("Enter start as HH:MM:SS.mmm."); } OnPropertyChanged(); } }
     public string EndText { get => FormatTime(End); set { if (TryTime(value, out var time)) { End = time; } else { RangeError("Enter end as HH:MM:SS.mmm."); } OnPropertyChanged(); } }
     public string SelectedDurationText => FormatTime(TimeSpan.FromSeconds(Math.Max(0, End - Start)));
+    public string SelectionLengthText => Math.Max(0, End - Start).ToString("0.000", CultureInfo.InvariantCulture) + " s";
     public string DurationText => $"Selection {FormatTime(TimeSpan.FromSeconds(Math.Max(0, End - Start)))}";
     public string EffectiveText => _effective is { } range
         ? $"{(range.Alignment == "audioSamples48000" ? "Effective audio samples (48 kHz)" : "Effective source frames")}: {FormatTime(range.Start)} – {FormatTime(range.End)}"
-        : "";
+        : CanEdit ? _trimming ? "Release trim handle to resolve effective media boundaries." : "Resolving effective media boundaries…" : "";
     public string PlayheadText => FormatTime(Playhead);
-    public double Playhead { get => _playhead; private set { if (Set(ref _playhead, value)) { OnPropertyChanged(nameof(PlayheadText)); } } }
+    public string PlaybackText => $"{FormatTime(Playhead)} / {FormatTime(Duration)}";
+    public string ViewportText => $"Visible {FormatTime(ViewportStart)} – {FormatTime(ViewportEnd)}";
+    public string ZoomText => ViewportEnd > ViewportStart ? $"{Duration / (ViewportEnd - ViewportStart):0.#}×" : "1×";
+    public double Playhead { get => _playhead; private set { if (Set(ref _playhead, value)) { OnPropertyChanged(nameof(PlayheadText)); OnPropertyChanged(nameof(PlaybackText)); } } }
     public double ViewportStart => _viewportStart;
     public double ViewportEnd => _viewportEnd;
     public ClipWaveform[] Waveforms { get => _waveforms; private set => Set(ref _waveforms, value); }
+    public ClipThumbnailImage[] Thumbnails { get => _thumbnails; private set => Set(ref _thumbnails, value); }
+    public string ThumbnailHint => _thumbnailFailed ? "Video thumbnails are unavailable. You can still edit and export; reopen the creator to retry thumbnails." : "Click or drag the video strip to seek without changing trim.";
     public bool Mix { get => _mix; set { if (Set(ref _mix, value)) { Changed(); } } }
     public bool Separate { get => !Mix; set { if (value) { Mix = false; } } }
     public string Format { get => _format; set { if (value is "mp4" or "mp3" && Set(ref _format, value)) { Changed(); } } }
@@ -168,13 +182,18 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
             _viewportEnd = _end;
             NotifyRange();
             OnPropertyChanged(nameof(ViewportStart)); OnPropertyChanged(nameof(ViewportEnd));
+            OnPropertyChanged(nameof(ViewportText)); OnPropertyChanged(nameof(ZoomText));
             _sourcePlayer = new PlayerPage(Source.Path, Title, _newPlayer(), embedded: true);
             Preview = _sourcePlayer;
             await _sourcePlayer.OpenAsync();
             token.ThrowIfCancellationRequested();
             Seek(Math.Clamp(position, 0, Duration));
         });
-        if (!_closed && Metadata is not null) { await Task.WhenAll(EnsureWaveformsAsync(), RefreshAsync()); }
+        if (!_closed && Metadata is not null)
+        {
+            await Task.WhenAll(EnsureWaveformsAsync(), RefreshAsync());
+            _ = EnsureThumbnailsAsync();
+        }
     }
 
     public void SetRange(double start, double end)
@@ -226,6 +245,8 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         _viewportStart = Math.Clamp(start, 0, Math.Max(0, Duration - width));
         _viewportEnd = Math.Min(Duration, _viewportStart + width);
         OnPropertyChanged(nameof(ViewportStart)); OnPropertyChanged(nameof(ViewportEnd));
+        OnPropertyChanged(nameof(ViewportText)); OnPropertyChanged(nameof(ZoomText));
+        NotifyCommands();
         _ = ReadWaveformsAsync();
     }
     public void Seek(double position)
@@ -267,6 +288,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         _suspended = true;
         _operation?.Cancel();
         _preparationCancellation?.Cancel();
+        _thumbnailCancellation?.Cancel();
         _viewportCancellation?.Cancel();
         EndScrub();
         EndRangeDrag();
@@ -282,6 +304,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         else
         {
             _ = EnsureWaveformsAsync();
+            _ = EnsureThumbnailsAsync();
             if (_effective is null) { _ = RefreshAsync(); }
             else { _ = ReadWaveformsAsync(); }
         }
@@ -386,6 +409,49 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         finally { if (ReferenceEquals(_viewportCancellation, cancel)) { _viewportCancellation = null; } }
     }
 
+    internal Task EnsureThumbnailsAsync()
+    {
+        if (_closed || _suspended || Exporting || Metadata is null || Thumbnails.Length != 0 || _thumbnailFailed) { return Task.CompletedTask; }
+        if (_thumbnailPreparation is { IsCompleted: false } pending)
+        { return _thumbnailCancellation?.IsCancellationRequested == true ? RetryThumbnailsAsync(pending) : pending; }
+        _thumbnailPreparation = PrepareThumbnailsAsync();
+        return _thumbnailPreparation;
+    }
+    private async Task RetryThumbnailsAsync(Task pending) { await pending; await EnsureThumbnailsAsync(); }
+    private async Task PrepareThumbnailsAsync()
+    {
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _thumbnailCancellation = cancel;
+        string? folder = null;
+        try
+        {
+            folder = Directory.CreateTempSubdirectory("ReplayBuffer-thumbnails-").FullName;
+            var response = await _media.ExecuteAsync(new("prepareThumbnails", Source, Destination: folder), null, cancel.Token);
+            cancel.Token.ThrowIfCancellationRequested();
+            var descriptor = response.Thumbnails ?? throw new IOException("The media worker returned no thumbnails.");
+            var images = await ClipThumbnailCache.LoadAsync(folder, descriptor, Source, Duration, cancel.Token);
+            cancel.Token.ThrowIfCancellationRequested();
+            if (!_closed && !_suspended) { Thumbnails = images; }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception)
+        {
+            // Optional visual aid: never overwrite range/export errors or block editing on a thumbnail failure.
+            if (!_closed && !cancel.IsCancellationRequested) { _thumbnailFailed = true; OnPropertyChanged(nameof(ThumbnailHint)); }
+        }
+        finally
+        {
+            // ExecuteAsync and detached image reads finish before deleting this invocation's scratch.
+            if (folder is not null) { ClipWaveformCache.DeleteOwnedFolder(folder); }
+            if (ReferenceEquals(_thumbnailCancellation, cancel)) { _thumbnailCancellation = null; }
+        }
+    }
+    private async Task StopThumbnailsAsync()
+    {
+        _thumbnailCancellation?.Cancel();
+        if (_thumbnailPreparation is { } preparation) { await preparation; }
+    }
+
     public async Task ExportAsync(string destination)
     {
         if (!CanExport) { return; }
@@ -394,11 +460,13 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         {
             await WorkAsync(async token =>
             {
+                await StopThumbnailsAsync();
+                token.ThrowIfCancellationRequested();
                 var response = await _media.ExecuteAsync(Request("export") with { Destination = destination }, new Progress<double>(p => Progress = p), token);
                 Status = "Exported to " + response.Output;
             });
         }
-        finally { Exporting = false; }
+        finally { Exporting = false; _ = EnsureThumbnailsAsync(); }
     }
 
     public async Task PreviewAsync()
@@ -412,6 +480,8 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         {
             await WorkAsync(async token =>
             {
+                await StopThumbnailsAsync();
+                token.ThrowIfCancellationRequested();
                 folder = _createPreviewFolder();
                 _sourcePlayer?.Pause();
                 var response = await _media.ExecuteAsync(Request("preview") with { Destination = Path.Combine(folder, "preview.mp4") }, new Progress<double>(p => Progress = p), token);
@@ -432,6 +502,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         finally
         {
             Exporting = false;
+            _ = EnsureThumbnailsAsync();
             if (!retained && folder is not null) { DeleteScratch(folder); }
             if (_closed) { InvalidatePreview(); }
         }
@@ -480,6 +551,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         EndRangeDrag();
         var cache = _cache;
         _cache = null;
+        Thumbnails = [];
         if (cache is not null) { _ = Task.Run(cache.Dispose); }
         InvalidatePreview();
         _sourcePlayer?.Dispose(); _sourcePlayer = null;
@@ -488,12 +560,14 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     }
     private void NotifyRange()
     {
-        foreach (var property in new[] { nameof(Start), nameof(End), nameof(StartText), nameof(EndText), nameof(DurationText), nameof(SelectedDurationText) }) { OnPropertyChanged(property); }
+        foreach (var property in new[] { nameof(Start), nameof(End), nameof(StartText), nameof(EndText), nameof(DurationText), nameof(SelectedDurationText), nameof(SelectionLengthText) }) { OnPropertyChanged(property); }
     }
     private void NotifyCommands()
     {
         OnPropertyChanged(nameof(CanExport)); OnPropertyChanged(nameof(CanEdit)); OnPropertyChanged(nameof(CanSave)); OnPropertyChanged(nameof(CanOpenOptions)); OnPropertyChanged(nameof(ValidExportName));
         ((RelayCommand)PreviewCommand).RaiseCanExecuteChanged();
+        foreach (var command in new[] { ZoomInCommand, ZoomOutCommand, PanLeftCommand, PanRightCommand, SkipBackCommand, SkipForwardCommand })
+        { ((RelayCommand)command).RaiseCanExecuteChanged(); }
     }
     public static string FormatTime(double seconds) => FormatTime(TimeSpan.FromSeconds(Math.Max(0, seconds)));
     private static string FormatTime(TimeSpan time)

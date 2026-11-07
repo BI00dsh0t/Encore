@@ -67,6 +67,9 @@ public static class ClipMediaWorker
             case "prepareWaveforms":
                 response = new("complete", Cache: await PrepareWaveformsAsync(request, metadata, cancellationToken).ConfigureAwait(false));
                 break;
+            case "prepareThumbnails":
+                response = new("complete", Thumbnails: await PrepareThumbnailsAsync(request, metadata, cancellationToken).ConfigureAwait(false));
+                break;
             case "waveform":
                 CheckRange(request.Start, request.End, metadata.Duration);
                 var lanes = new List<ClipWaveform>();
@@ -208,6 +211,24 @@ public static class ClipMediaWorker
 
     private static string AudioTrim(int streamIndex, ClipRange range, double origin) =>
         $"[0:{streamIndex}]atrim=start={Number(origin + range.Start)}:end={Number(origin + range.End)},asetpts=PTS-{Number(origin + range.Start)}/TB,aresample=48000:async=1:first_pts=0,apad,atrim=duration={Number(range.End - range.Start)}";
+
+    private static async Task<ClipThumbnailDescriptor> PrepareThumbnailsAsync(ClipMediaRequest request, ClipMetadata metadata, CancellationToken token)
+    {
+        var folder = request.Destination ?? throw new IOException("A thumbnail cache folder is required.");
+        if (!Directory.Exists(folder) || Directory.EnumerateFileSystemEntries(folder).Any())
+        { throw new IOException("The thumbnail cache needs an empty owned folder."); }
+        var interval = Math.Max(1, metadata.Duration / 64);
+        var filter = $"setpts=PTS-{Number(metadata.Origin)}/TB,fps=fps=1/{Number(interval)}:start_time=0:round=down,"
+            + "scale=160:90:force_original_aspect_ratio=decrease,pad=160:90:(ow-iw)/2:(oh-ih)/2,setsar=1";
+        await SharedMediaProcess.RunAsync(Tool("ffmpeg"),
+            ["-v", "error", "-nostdin", "-threads", "2", "-copyts", "-i", "fd:", "-map", "0:v:0", "-an", "-sn", "-dn",
+                "-vf", filter, "-filter_threads", "1", "-threads:v", "2", "-frames:v", "64", "-q:v", "5", "-f", "image2", Path.Combine(folder, "frame-%03d.jpg")],
+            request.Source.Path, async (stream, ct) => await stream.CopyToAsync(Stream.Null, ct).ConfigureAwait(false), token).ConfigureAwait(false);
+        var frames = Directory.EnumerateFiles(folder, "frame-*.jpg").Order(StringComparer.Ordinal).Take(64)
+            .Select((file, index) => new ClipThumbnail(Math.Min(metadata.Duration, index * interval), Path.GetFileName(file))).ToArray();
+        if (frames.Length == 0) { throw new IOException("No video thumbnails could be prepared."); }
+        return new(1, request.Source, metadata.Duration, frames);
+    }
 
     private static async Task<ClipWaveformDescriptor> PrepareWaveformsAsync(ClipMediaRequest request, ClipMetadata metadata, CancellationToken token)
     {
