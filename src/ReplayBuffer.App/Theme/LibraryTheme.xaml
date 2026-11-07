@@ -29,7 +29,16 @@
         </ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style x:Key="RbClipToolButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipButtonStyle}">
-        <Setter Property="Padding" Value="7,5" /><Setter Property="Width" Value="32" /><Setter Property="Height" Value="30" />
+        <Setter Property="Padding" Value="7,5" /><Setter Property="Width" Value="32" /><Setter Property="Height" Value="32" />
+    </Style>
+    <Style x:Key="RbClipSkipButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipToolButtonStyle}"><Setter Property="Width" Value="34" /><Setter Property="Height" Value="34" /></Style>
+    <Style x:Key="RbClipTransportPlayStyle" TargetType="Button">
+        <Setter Property="Width" Value="36" /><Setter Property="Height" Value="36" /><Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" /><Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" CornerRadius="18" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"><Path x:Name="Icon" Width="16" Height="16" Stretch="Uniform" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5" Data="M 4,1 L 14,8 L 4,15 Z" /></Border><ControlTemplate.Triggers>
+         <Trigger Property="Content" Value="&#xE769;"><Setter TargetName="Icon" Property="Data" Value="M 5,1 L 5,15 M 11,1 L 11,15" /></Trigger>
+         <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ControlFillColorTertiaryBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style x:Key="RbClipIconStyle" TargetType="Path">
         <Setter Property="Width" Value="16" /><Setter Property="Height" Value="16" /><Setter Property="Stretch" Value="Uniform" />
@@ -91,9 +100,13 @@
     <!-- AD-28 creator uses the same semantic tokens in both looks. -->
     <Style x:Key="RbClipWaveformStyle" TargetType="local:WaveformView">
         <Setter Property="WaveBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
-        <Setter Property="SelectionBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
-        <Setter Property="RulerBrush" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+        <Setter Property="RulerBrush" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="SurfaceBrush" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="PlayheadBrush" Value="{DynamicResource RbRecordBrush}" />
+        <Setter Property="GripBrush" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+        <Setter Property="DividerBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+        <Setter Property="VeilBrush" Value="{DynamicResource SolidBackgroundFillColorBaseBrush}" />
     </Style>
 
     <!--
@@ -447,6 +460,10 @@
         <Setter Property="Background" Value="{DynamicResource RbOverlayCardBrush}" />
         <Setter Property="Padding" Value="16,10,16,6" />
         <Style.Triggers>
+            <DataTrigger Binding="{Binding IsClipEditor, RelativeSource={RelativeSource AncestorType=local:PlayerView}}" Value="True">
+                <Setter Property="Grid.Row" Value="0" /><Setter Property="VerticalAlignment" Value="Bottom" /><Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="Margin" Value="10" /><Setter Property="Padding" Value="4" /><Setter Property="CornerRadius" Value="6" />
+            </DataTrigger>
             <!-- Full screen: the bar over the video's bottom edge. -->
             <DataTrigger Binding="{Binding IsFullScreen}" Value="True">
                 <Setter Property="Grid.Row" Value="0" />

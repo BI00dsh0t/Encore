@@ -17,6 +17,15 @@ internal partial class ClipCreatorView
     }
     private ClipCreatorPage? Page => DataContext as ClipCreatorPage;
     public void FocusFirstControl() => Timeline.Focus();
+    private void KeyboardHelp(object sender, RoutedEventArgs e)
+    {
+        var trigger = (System.Windows.Controls.Button)sender;
+        var owner = Window.GetWindow(this);
+        var dialog = new ClipShortcutsDialog { Owner = owner };
+        if (owner is not null) { dialog.MaxHeight = Math.Max(240, owner.ActualHeight - 32); }
+        try { dialog.ShowDialog(); }
+        finally { trigger.Focus(); }
+    }
     private void CommitTime(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key != System.Windows.Input.Key.Enter) { return; }

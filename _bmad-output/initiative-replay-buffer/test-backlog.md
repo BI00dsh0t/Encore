@@ -1,5 +1,12 @@
 # Test backlog
 
+## Clip editor refresh / filmstrip (2026-11-07)
+
+- Approved mockup implemented through ordinary coding/review. Release build **0 warnings/errors**; authorized non-Explicit ClipCreatorTests **20 passed, 0 failed/skipped**; ClipMediaWorkerTests **1 passed, 2 Explicit skipped**. Fake-service Fluent/Gaming expanded/rail/narrow renders inspected. Existing shared Windows quoting checks were not repeated.
+- Deferred under existing clearance: real-media filmstrip source-time fidelity (including timestamp offsets/VFR and first/last frames), actual thumbnail FFmpeg output/limits/cancellation and resource costs on long/high-resolution sources; simultaneous capture isolation; source disappearance while preparing; NativeAOT/publish packaging. No real media worker or GPU workload was executed.
+- Deferred HITL: native ruler/filmstrip seek vs grip/double-click thresholds, offscreen bounds, high DPI and Fluent light contrast, complete keyboard/Tab/focus traversal and shortcuts dialog, actual preview/audio-menu/volume interactions and real export/chooser cancellation. Ordinary-player regression suites remain outside clip-creator-only execution clearance; only creator mode was exercised.
+- Existing backlog and night/go restrictions remain unchanged. No Dev App launch/restart or real Library/settings work. See `ux-clip-editor-refresh/implementation-notes.md` and `plan-clip-editor-refresh.md`.
+
 ## Double-click visible waveform selection (2026-11-07)
 
 - Approved `plan-clip-creator-select-visible-waveform-range.md` implemented directly without BMad execution. Double-click inside waveform plot (including handles) selects visible source-time bounds, rounded inward to milliseconds. Ruler/labels/scrollbar and single-click/drag paths preserved. Selection cleans up scrub/trim/capture, uses existing range synchronization/preview invalidation, keeps viewport/peaks/audio choices and adds tooltip/automation help.
