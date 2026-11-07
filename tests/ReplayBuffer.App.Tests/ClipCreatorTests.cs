@@ -31,6 +31,78 @@ public sealed class ClipCreatorTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, true);
 
     [Fact]
+    public async Task PlaybackLoopsTheLiveTrimRangeAndKeepsPausedSeekingIndependent()
+    {
+        var player = new FakePlayer { Media = new(1280, 720, TimeSpan.FromSeconds(90), ["Game"], true) };
+        using var page = new ClipCreatorPage(Source, "source", _media, () => player);
+        await page.OpenAsync(0);
+        page.SetRange(2, 4);
+        page.Seek(8);
+        page.Preview!.PlayPauseCommand.Execute(null);
+        Assert.Equal(TimeSpan.FromSeconds(2), player.Position);
+        player.Position = TimeSpan.FromSeconds(3.999); page.Tick();
+        Assert.Equal(3.999, page.Playhead, 6);
+        player.Position = TimeSpan.FromSeconds(4); page.Tick();
+        Assert.Equal(2, page.Playhead);
+        Assert.True(page.Preview.IsPlaying);
+        page.BeginRangeDrag(); page.SetRange(5, 6);
+        player.Position = TimeSpan.FromSeconds(4); page.Tick();
+        Assert.Equal(5, page.Playhead);
+        player.Position = TimeSpan.FromSeconds(6); page.Tick();
+        Assert.Equal(5, page.Playhead);
+        Assert.Equal((5d, 6d), (page.Start, page.End));
+        page.EndRangeDrag();
+        page.Preview.PlayPauseCommand.Execute(null);
+        page.Seek(9); page.Tick();
+        Assert.Equal(9, page.Playhead);
+        Assert.False(page.Preview.IsPlaying);
+        await page.RefreshAsync();
+    }
+
+    [Fact]
+    public void SourceAndRenderedPreviewLoopAtEndWithoutRestartingAfterHide() => Sta.Run(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        void Finish(Task task) { Sta.PumpUntil(() => task.IsCompleted, "clip playback setup"); task.GetAwaiter().GetResult(); }
+        var players = new List<FakePlayer>();
+        using var page = new ClipCreatorPage(Source, "source", _media, () =>
+        {
+            var player = new FakePlayer { Media = new(1280, 720, TimeSpan.FromSeconds(players.Count == 0 ? 90 : 10), ["Game"], true) };
+            players.Add(player); return player;
+        });
+        Finish(page.OpenAsync(0));
+        page.SetRange(80, 90); Finish(page.RefreshAsync());
+        page.Preview!.PlayPauseCommand.Execute(null);
+        players[0].Seeks.Clear(); players[0].Position = TimeSpan.FromSeconds(90); players[0].RaiseEnded();
+        Sta.PumpUntil(() => players[0].Seeks.Count != 0, "source end to loop");
+        Assert.Equal(TimeSpan.FromSeconds(80), players[0].Seeks.Last());
+        Assert.True(page.Preview.IsPlaying);
+        Finish(page.PreviewAsync());
+        players[1].Seeks.Clear(); players[1].Position = TimeSpan.FromSeconds(10); players[1].RaiseEnded();
+        Sta.PumpUntil(() => players[1].Seeks.Count != 0, "rendered selection end to loop");
+        Assert.Equal(TimeSpan.Zero, players[1].Seeks.Last());
+        page.Tick();
+        Assert.Equal(80, page.Playhead);
+        Assert.Contains("Rendered selection", page.PreviewLabel);
+        page.BeginRangeDrag(); page.SetRange(82, 86);
+        Assert.True(players[1].Disposed);
+        Assert.True(page.Preview!.IsPlaying);
+        players[0].Position = TimeSpan.FromSeconds(86); page.Tick();
+        Assert.Equal(82, page.Playhead);
+        page.EndRangeDrag();
+        page.PauseAndCancel();
+        players[0].Seeks.Clear(); players[0].RaiseEnded(); Sta.Pump(TimeSpan.FromMilliseconds(20));
+        Assert.False(page.Preview.IsPlaying);
+        Assert.Empty(players[0].Seeks);
+        // The shared player stays opt-in: ordinary Library playback still stops at EOF.
+        var ordinary = new FakePlayer();
+        using var ordinaryPage = new PlayerPage(Source.Path, "ordinary", ordinary);
+        Finish(ordinaryPage.OpenAsync()); ordinaryPage.PlayPauseCommand.Execute(null); ordinary.RaiseEnded();
+        Sta.PumpUntil(() => !ordinaryPage.IsPlaying, "ordinary player to stop at end");
+        Assert.Empty(ordinary.Seeks);
+    });
+
+    [Fact]
     public async Task FilmstripIsPreparedOnceAndSeekingNeverChangesTrim()
     {
         using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
