@@ -1,5 +1,11 @@
 # Test backlog
 
+## Double-click visible waveform selection (2026-11-07)
+
+- Approved `plan-clip-creator-select-visible-waveform-range.md` implemented directly without BMad execution. Double-click inside waveform plot (including handles) selects visible source-time bounds, rounded inward to milliseconds. Ruler/labels/scrollbar and single-click/drag paths preserved. Selection cleans up scrub/trim/capture, uses existing range synchronization/preview invalidation, keeps viewport/peaks/audio choices and adds tooltip/automation help.
+- Feature Release build **0 warnings/errors**. Authorized `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --filter-class "*ClipCreatorTests" --explicit off`: **17 executed/passed, 0 failed/skipped**, 16.765 s. Fake-service regression covers fractional zoom/pan, edges/full span, duration, unchanged peaks/playhead/viewport, final track/range request, preview invalidation, one preparation, export/suspend/dispose/uninitialized guards and sub-millisecond interval no-op. Both-look owned-window test covers second-click precedence on handles, ruler/label/outside/single-click exclusion and automatic cleanup/resolution. Ordinary diff review clear.
+- Real pointer double-click threshold/handle-edge behavior, high DPI and real-media/HITL remain deferred. No unrelated/status tests, Heavy runs, media tools, publishing or real Dev App/data/settings operations.
+
 ## Error-only top window notices (2026-11-07)
 
 - Builder requested top-of-window warnings removed unless errors. Main shell status host/card now collapses without errors; capture state, mic-muted and hotkey hints no longer render there. Rows bind only severity Error, preserving newest-first order and existing dismiss/ack behavior. Service failures (restarting after crash, not running, disconnected, crash loop) remain visible; initial connecting/healthy status stays quiet. Session warnings/state remain intact; no auto-dismiss, overlay/settings warning behavior or engine changes.

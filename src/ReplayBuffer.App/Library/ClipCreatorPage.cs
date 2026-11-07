@@ -190,6 +190,14 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     }
 
     public void Nudge(bool end, int milliseconds) => SetRange(Start + (end ? 0 : milliseconds / 1000d), End + (end ? milliseconds / 1000d : 0));
+    internal void SelectVisibleRange()
+    {
+        if (!CanEdit || _suspended) { return; }
+        // Decimal time avoids losing a millisecond to binary noise at an existing boundary.
+        var start = (double)(decimal.Ceiling((decimal)Math.Max(0, ViewportStart) * 1000) / 1000);
+        var end = (double)(decimal.Floor((decimal)Math.Min(Duration, ViewportEnd) * 1000) / 1000);
+        if (end > start) { SetRange(start, end); }
+    }
     internal void BeginRangeDrag()
     {
         if (!CanEdit || _trimming) { return; }

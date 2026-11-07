@@ -95,6 +95,45 @@ public sealed class ClipCreatorTests : IDisposable
     }
 
     [Fact]
+    public async Task SelectingTheVisibleRangeKeepsViewportPeaksAndUsesInwardMillisecondBounds()
+    {
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        page.SelectVisibleRange(); Assert.Equal((0d, 0d), (page.Start, page.End));
+        await page.OpenAsync(45);
+        var sourcePlayer = page.Preview;
+        await page.PreviewAsync();
+        Assert.NotSame(sourcePlayer, page.Preview);
+        page.Zoom(0.5); page.Pan(0.12345); await page.RefreshAsync();
+        var viewport = (page.ViewportStart, page.ViewportEnd);
+        var peaks = page.Waveforms;
+        var playhead = page.Playhead;
+        page.SelectVisibleRange(); await page.RefreshAsync();
+        Assert.Equal((39.352, 54.351), (page.Start, page.End));
+        Assert.Equal("00:00:14.999", page.SelectedDurationText);
+        Assert.Equal(viewport, (page.ViewportStart, page.ViewportEnd));
+        Assert.Equal(playhead, page.Playhead);
+        Assert.Same(peaks, page.Waveforms);
+        Assert.Same(sourcePlayer, page.Preview);
+        Assert.Equal((page.Start, page.End), (_media.Requests[^1].Start, _media.Requests[^1].End));
+        Assert.Equal([1, 2], _media.Requests[^1].Tracks!);
+        page.Pan(-100); page.SelectVisibleRange(); Assert.Equal((0d, 15d), (page.Start, page.End));
+        page.Pan(100); page.SelectVisibleRange(); Assert.Equal((75d, 90d), (page.Start, page.End));
+        page.Zoom(10); page.SelectVisibleRange(); Assert.Equal((0d, 90d), (page.Start, page.End));
+        page.SetRange(1, 2); page.PauseAndCancel(); page.SelectVisibleRange();
+        Assert.Equal((1d, 2d), (page.Start, page.End));
+        page.Resume(); await page.RefreshAsync();
+        _media.ExportRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var export = page.ExportAsync(Path.Combine(_folder, "clip.mp4"));
+        try { page.SelectVisibleRange(); Assert.Equal((1d, 2d), (page.Start, page.End)); }
+        finally { _media.ExportRelease.SetResult(); await export; }
+        Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
+        page.Dispose(); page.SelectVisibleRange(); Assert.Equal((1d, 2d), (page.Start, page.End));
+        using var tiny = new ClipCreatorPage(Source, "tiny", new FakeMedia { Duration = 0.0004 }, () => new FakePlayer());
+        await tiny.OpenAsync(0); tiny.SelectVisibleRange();
+        Assert.Equal((0d, 0.0004), (tiny.Start, tiny.End));
+    }
+
+    [Fact]
     public async Task TrimDragUpdatesSelectionWithoutStartingWorkUntilRelease()
     {
         using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
@@ -448,6 +487,22 @@ public sealed class ClipCreatorTests : IDisposable
                 waveform.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.LostMouseCaptureEvent });
                 Sta.PumpUntil(() => page.CanExport, "trim release to resolve its final range");
                 Assert.True(page.CanExport);
+                page.Zoom(0.5);
+                page.SetRange(2, 10);
+                Assert.False(waveform.TrySelectVisibleRange(new Point(50, 40), 2));
+                Assert.False(waveform.TrySelectVisibleRange(new Point(200, 10), 2));
+                Assert.False(waveform.TrySelectVisibleRange(new Point(200, 40), 1));
+                Assert.False(waveform.TrySelectVisibleRange(new Point(waveform.ActualWidth + 1, 40), 2));
+                Assert.Equal((2d, 10d), (page.Start, page.End));
+                var handleX = 100 + (page.Start - page.ViewportStart) / (page.ViewportEnd - page.ViewportStart) * (waveform.ActualWidth - 100);
+                page.BeginScrub(3); page.BeginRangeDrag();
+                Assert.True(waveform.TrySelectVisibleRange(new Point(handleX, 40), 2));
+                Assert.False(page.IsScrubbing);
+                Assert.False(waveform.IsMouseCaptured);
+                Assert.Equal(page.ViewportStart, page.Start, 6);
+                Assert.Equal(page.ViewportEnd, page.End, 6);
+                waveform.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.LostMouseCaptureEvent });
+                Sta.PumpUntil(() => page.CanExport, "double-click selection to resolve");
                 var firstStartBox = (TextBox)view.FindName("StartBox");
                 var oldEnd = page.End;
                 firstStartBox.Text = "00:00:01.123";
@@ -700,7 +755,9 @@ public sealed class ClipCreatorTests : IDisposable
     {
         public List<ClipMediaRequest> Requests { get; } = [];
         public int TrackCount { get; set; } = 2;
+        public double Duration { get; set; } = 90;
         public TaskCompletionSource? PreparationRelease { get; set; }
+        public TaskCompletionSource? ExportRelease { get; set; }
         public bool CorruptPreparation { get; set; }
         public bool CorruptSummary { get; set; }
         public Func<int, int, float>? PeakAt { get; set; }
@@ -708,6 +765,7 @@ public sealed class ClipCreatorTests : IDisposable
         {
             token.ThrowIfCancellationRequested();
             Requests.Add(request);
+            if (request.Operation == "export" && ExportRelease is { } export) { await export.Task.WaitAsync(token); }
             if (request.Operation == "prepareWaveforms")
             {
                 if (PreparationRelease is { } release) { await release.Task.WaitAsync(token); }
@@ -715,7 +773,7 @@ public sealed class ClipCreatorTests : IDisposable
             }
             return request.Operation switch
             {
-                "probe" => new ClipMediaResponse("complete", Metadata: new(90, 1280, 720, 30,
+                "probe" => new ClipMediaResponse("complete", Metadata: new(Duration, 1280, 720, 30,
                     Enumerable.Range(1, TrackCount).Select(i => new ClipAudioTrack(i, i == 1 ? "Game" : i == 2 ? "Mic" : $"Track {i}", 48000, 2)).ToArray())),
                 "range" => new ClipMediaResponse("complete", Range: new(request.Start, request.End, request.Format == "mp3" ? "audioSamples48000" : "videoFrames")),
                 "waveform" => new ClipMediaResponse("complete", Waveforms: (request.Tracks ?? []).Select(i => new ClipWaveform(request.Start, request.End, i, new float[request.Bins])).ToArray()),
@@ -728,7 +786,7 @@ public sealed class ClipCreatorTests : IDisposable
             for (var track = 1; track <= TrackCount; track++)
             {
                 var levels = new List<ClipPeakLevel>();
-                var values = Enumerable.Range(0, 90000).Select(i => PeakAt?.Invoke(track, i) ?? (i % 1000 == 124 ? 1f : 0f)).ToArray();
+                var values = Enumerable.Range(0, (int)Math.Ceiling(Duration * 1000)).Select(i => PeakAt?.Invoke(track, i) ?? (i % 1000 == 124 ? 1f : 0f)).ToArray();
                 long stride = 1;
                 while (true)
                 {
@@ -752,7 +810,7 @@ public sealed class ClipCreatorTests : IDisposable
                 using var writer = new BinaryWriter(File.OpenWrite(Path.Combine(request.Destination!, tracks[0].Levels[^1].FileName)));
                 writer.BaseStream.Position = 32; writer.Write(float.NaN);
             }
-            return new("complete", Cache: new(1, request.Source, 90, [.. tracks]));
+            return new("complete", Cache: new(1, request.Source, Duration, [.. tracks]));
         }
         private static ClipMediaResponse Render(ClipMediaRequest request)
         {
