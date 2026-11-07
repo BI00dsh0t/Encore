@@ -1,6 +1,6 @@
 # Clip editor refresh — implementation evidence
 
-Approved by the builder on 2026-11-07: “perfect, let's begin implementation.” Implemented through ordinary coding/review on `feature/clip-editor-refresh`, using the approved mockup. This supersedes the initial design-only scope in the session's historical preview notes.
+Approved by the builder on 2026-11-07: “perfect, let's begin implementation.” Implemented through ordinary coding/review on `feature/clip-editor-refresh` at `92571e2`, no-ff merged into develop at `5e7c56afcab2e93355cb274f81ab828f712bc1bf`, using the approved mockup. This supersedes the initial design-only scope in the session's historical preview notes.
 
 ## Result
 

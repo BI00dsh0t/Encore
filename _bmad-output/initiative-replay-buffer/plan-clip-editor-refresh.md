@@ -1,6 +1,6 @@
 # Clip editor refresh — implementation plan
 
-Status: built and verified, 2026-11-07; integration pending commit/merge. Builder: “perfect, let's begin implementation.” Ordinary implementation from the approved `ux-clip-editor-refresh` mockup and visual/behavior contracts; no BMad build workflow. Evidence: `ux-clip-editor-refresh/implementation-notes.md`; deferred checks: `test-backlog.md`.
+Status: built, verified and integrated, 2026-11-07. Feature `92571e2`; no-ff develop merge `5e7c56afcab2e93355cb274f81ab828f712bc1bf`. Builder: “perfect, let's begin implementation.” Ordinary implementation from the approved `ux-clip-editor-refresh` mockup and visual/behavior contracts; no BMad build workflow. Evidence: `ux-clip-editor-refresh/implementation-notes.md`; deferred checks: `test-backlog.md`.
 
 - Compose a single themed editor card: centered −10s / Play-Pause / +10s, source elapsed/total, selection preview, named 40px waveform lanes, 48px filmstrip, independent red seek thumb/line, integrated accent selection/grips, compact viewport tools and retained requested/effective precision controls.
 - Keep the embedded player's volume, track menu and supported fullscreen behavior. Creator mode suppresses duplicate play/time/scrubber without changing ordinary player behavior. Keep preview source-time mapping and cancellation/export semantics.
