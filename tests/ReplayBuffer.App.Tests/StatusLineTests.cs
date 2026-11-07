@@ -18,6 +18,32 @@ public sealed class StatusLineTests
     private readonly FakeEngineSession _engine = new();
 
     [Fact]
+    public void TheHeaderShowsOnlyErrorsAndServiceFailuresAndCollapsesAfterRecovery()
+    {
+        var line = new StatusLine(_engine);
+        var routine = Snapshot(Warning("info", Ten, "Saved.", WarningSeverity.Info), Warning("warning", Ten, "Mic muted."));
+        line.Render(EngineStatus.Connected, null, routine);
+        Assert.False(line.HasErrors);
+        Assert.Empty(line.Errors);
+        Assert.Equal(2, routine.Warnings.Count);
+        var error = Warning("error", Ten.AddMinutes(1), "The disk is full.", WarningSeverity.Error);
+        line.Render(EngineStatus.Connected, null, routine with { Warnings = [.. routine.Warnings, error] });
+        Assert.True(line.HasErrors);
+        Assert.Equal("error", Assert.Single(line.Errors).Id);
+        line.Render(EngineStatus.Connected, null, routine);
+        Assert.False(line.HasErrors);
+        line.Render(EngineStatus.NotRunning, "Service failed.", null);
+        Assert.True(line.HasErrors);
+        Assert.Contains("Service failed.", line.ConnectionError);
+        line.Render(EngineStatus.Connecting, null, null);
+        Assert.False(line.HasErrors);
+        line.Render(EngineStatus.Connected, null, routine);
+        Assert.Empty(line.ConnectionError);
+        Assert.False(line.HasErrors);
+        Assert.Empty(_engine.Sent);
+    }
+
+    [Fact]
     public void EachCaptureStateShowsItsText()
     {
         var line = new StatusLine(_engine);

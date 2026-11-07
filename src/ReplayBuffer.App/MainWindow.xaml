@@ -67,6 +67,7 @@
             <DockPanel x:Name="ContentPanel" Margin="{DynamicResource RbPagePadding}">
                 <ContentControl x:Name="StatusHeader"
                                 Content="{Binding StatusLine.View}"
+                                Visibility="{Binding StatusLine.HasErrors, Converter={StaticResource RbShellVisible}}"
                                 DockPanel.Dock="Top"
                                 Focusable="False" />
                 <ComboBox x:Name="SettingsSections" DockPanel.Dock="Top" Margin="0,12,0,0"

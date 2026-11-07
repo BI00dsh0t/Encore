@@ -10,14 +10,14 @@ using ReplayBuffer.Contracts.Settings;
 namespace ReplayBuffer.App.Status;
 
 /// <summary>
-/// The status line above every page of the Main App (R5): one line of capture state, then the active
-/// warnings newest first. Everything shown comes from the session (AD-3); a row goes only when the
-/// snapshot drops its warning.
+/// Session status for the Main App. The top card displays only active errors and service failures;
+/// routine capture state and warnings remain in the session without distracting banners.
 /// </summary>
 internal sealed class StatusLine(IEngineSession engine) : Observable
 {
     private string _state = "";
     private string _hint = "";
+    private string _connectionError = "";
     private StatusDot _dot;
     private IReadOnlyList<StatusWarning> _warnings = [];
     private IReadOnlyList<Warning> _rendered = [];
@@ -51,7 +51,26 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
     public IReadOnlyList<StatusWarning> Warnings
     {
         get => _warnings;
-        private set => Set(ref _warnings, value);
+        private set
+        {
+            if (!Set(ref _warnings, value)) { return; }
+            OnPropertyChanged(nameof(Errors));
+            OnPropertyChanged(nameof(HasErrors));
+        }
+    }
+
+    public IEnumerable<StatusWarning> Errors => Warnings.Where(w => w.Severity == nameof(WarningSeverity.Error));
+    public bool HasErrors => HasConnectionError || Errors.Any();
+    public bool HasConnectionError => ConnectionError.Length > 0;
+    public string ConnectionError
+    {
+        get => _connectionError;
+        private set
+        {
+            if (!Set(ref _connectionError, value)) { return; }
+            OnPropertyChanged(nameof(HasConnectionError));
+            OnPropertyChanged(nameof(HasErrors));
+        }
     }
 
     public FrameworkElement View => _view ??= new StatusLineView { DataContext = this };
@@ -65,6 +84,8 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
             : ConnectionText(status, problem);
         Dot = connected is null ? StatusDot.Idle : DotFor(connected.Capture);
         Hint = connected is null ? "" : HintText(connected);
+        ConnectionError = connected is null && status is (EngineStatus.Restarting or EngineStatus.NotRunning or EngineStatus.CrashLoop or EngineStatus.Disconnected)
+            ? ConnectionText(status, problem) : "";
 
         // Like the Overlay: a session that isn't connected has no warnings to show or dismiss.
         var warnings = connected?.Warnings ?? [];
