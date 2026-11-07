@@ -1,5 +1,10 @@
 # Test backlog
 
+## Current clip selection playback loop (2026-11-07)
+
+- Builder-requested loop uses live requested In/Out for source playback and effective local boundaries for rendered previews; paused seek is independent, live trim continues source playback after invalidation, and hide/dispose stop restart. Release **0 warnings/errors**; authorized non-Explicit ClipCreatorTests **22 passed, 0 failed/skipped**, including two focused loop regressions. Ordinary non-looping EOF was checked with a fake player inside this clip-creator class; unrelated player suites were not run.
+- Deferred: actual-media wrap timing, audio continuity and seek latency on short/millisecond ranges, source EOF and aligned rendered boundaries, scrubbing/trim input HITL. Existing refresh interval drives boundary observation; no claim of gapless/sample-accurate playback. No Heavy/media/Dev App/publish or test-clearance expansion. See `plan-clip-selection-loop.md`.
+
 ## Clip editor refresh / filmstrip (2026-11-07)
 
 - Approved mockup implemented through ordinary coding/review. Release build **0 warnings/errors**; authorized non-Explicit ClipCreatorTests **20 passed, 0 failed/skipped**; ClipMediaWorkerTests **1 passed, 2 Explicit skipped**. Fake-service Fluent/Gaming expanded/rail/narrow renders inspected. Existing shared Windows quoting checks were not repeated.

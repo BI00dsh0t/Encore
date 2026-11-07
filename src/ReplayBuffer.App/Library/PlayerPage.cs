@@ -369,6 +369,11 @@ internal sealed class PlayerPage : Observable, IDisposable
 
     public ICommand PlayPauseCommand { get; }
 
+    /// <summary>Optional creator-owned live range; ordinary Library players remain non-looping.</summary>
+    internal Func<(TimeSpan Start, TimeSpan End)?>? PlaybackLoop { get; set; }
+
+    private (TimeSpan Start, TimeSpan End)? LoopRange => IsScrubbing ? null : PlaybackLoop?.Invoke();
+
     public ICommand MuteCommand { get; }
 
     /// <summary>The full-screen button and F: toggles <see cref="IsFullScreen"/>.</summary>
@@ -473,7 +478,9 @@ internal sealed class PlayerPage : Observable, IDisposable
     {
         if (!IsScrubbing && !IsClosed && State == PlayerState.Playing)
         {
-            Position = Clamp(Player.Position);
+            var position = Clamp(Player.Position);
+            if (LoopRange is { } loop && (position < loop.Start || position >= loop.End)) { SeekTo(loop.Start); }
+            else { Position = position; }
         }
     }
 
@@ -511,6 +518,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         // Leaving the page leaves full screen (story 14.9).
         IsFullScreen = false;
         IsClosed = true;
+        PlaybackLoop = null;
         Player.Ended -= OnEnded;
         Player.Dispose();
         _stream?.Dispose();
@@ -574,8 +582,12 @@ internal sealed class PlayerPage : Observable, IDisposable
         }
         else if (State == PlayerState.Paused)
         {
+            if (LoopRange is { } loop && (_atEnd || Position < loop.Start || Position >= loop.End))
+            {
+                SeekTo(loop.Start);
+            }
             // From the end, Play starts again from the beginning.
-            if (_atEnd)
+            else if (_atEnd)
             {
                 _atEnd = false;
                 Player.Seek(TimeSpan.Zero);
@@ -592,6 +604,13 @@ internal sealed class PlayerPage : Observable, IDisposable
     {
         if (IsClosed || State != PlayerState.Playing)
         {
+            return;
+        }
+
+        if (LoopRange is { } loop)
+        {
+            SeekTo(loop.Start);
+            Player.Play();
             return;
         }
 

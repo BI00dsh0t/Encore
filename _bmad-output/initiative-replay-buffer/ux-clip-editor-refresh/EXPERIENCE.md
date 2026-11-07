@@ -40,7 +40,7 @@ Use concise task labels: In, Out, selected, Preview selection, Export video/audi
 |---|---|
 | Source transport | **Proposed:** move source Play/Pause to the card center, add −10s/+10s source-time seek buttons clamped to source bounds. These change the independent playhead only. Keep existing playback controls for volume, audio-track audition and fullscreen accessible on picture chrome; move the complete audio menu with its trigger rather than silently replacing it with mute only. The mock shows mute, a volume slider revealed on hover/focus, an audio-track menu and fullscreen; audio playback remains illustrative. |
 | Seek | Existing behavior: ruler thumb drag, waveform click/drag, P then Left/Right by 1ms seek independently of trim. **Proposed extension:** clicking/dragging a thumbnail seeks with the same mapping. Seeking never drags the selection. Line/pointed thumb use `{components.playhead.color}`. |
-| Playback mode | One active playback surface. Source mode plays source to its end; Preview selection retains the current rendered preview workflow and matched export configuration. Display source-mapped elapsed and ruler position even while rendered preview plays. Proposed skip controls use source coordinates; leaving effective preview boundaries returns to source using existing invalidation rules. Preview selection is an action, not a permanent loop toggle. |
+| Playback mode | One active playback surface. Source playback loops over the current requested In/Out range; Preview selection retains the current rendered preview workflow and matched export configuration. Display source-mapped elapsed and ruler position even while rendered preview plays. Proposed skip controls use source coordinates; leaving effective preview boundaries returns to source using existing invalidation rules. Preview selection remains an action; both source playback and rendered selection playback loop by default (builder amendment, 2026-11-07). |
 | Trim | Existing In/Out controls and validity rules apply. **Proposed presentation:** shared grips span audio and video; dragging them edits only the selected endpoint, not the source time. No draggable selection body / range move is introduced. Playhead can be outside the selection, as shown on first load. |
 | Trim responsiveness | Existing behavior: drag updates requested fields/handles/duration locally; defer effective-range work until release or lost capture, coalescing unchanged ranges. Do not read/rebuild whole-source peaks for overlay motion. Preserve the last valid range if a drag crosses the other endpoint. |
 | Numeric precision | HH:MM:SS.mmm, Enter / focus-loss commit, 1ms nudges. Invalid/equal/crossed/out-of-source input preserves the last valid range with a near-field explanation. Never silently swap endpoints or move the opposite one. Text-editing arrows remain native. Requested values stay distinct from aligned effective values. |
@@ -57,7 +57,7 @@ Use concise task labels: In, Out, selected, Preview selection, Export video/audi
 ## State Patterns
 
 - **Ready:** source time and full cached waveform visible; selection, independent playhead, In/Out, effective boundaries and format-specific actions agree.
-- **Playing:** one Play/Pause state, continuous source-mapped cursor, fixed requested trim. Source plays to source end; a rendered preview ends at its effective end.
+- **Playing:** one Play/Pause state, continuous source-mapped cursor, fixed requested trim. Source playback returns to In at Out and follows live trim changes. A rendered preview loops from its local end to zero using effective media boundaries. Paused seeking stays independent, and scrubbing temporarily suspends automatic wrapping. Editing a playing rendered selection invalidates it and continues playback on the source using the updated range. Pause, hide and disposal stop playback without automatic restart.
 - **Dragging trim:** local overlay/time/duration changes; defer effective work until release/lost capture. Preview cannot present an outdated selection as current.
 - **Resolving effective range:** editing preserves requested time; pending caption appears locally. Preview/export gating follows the existing model.
 - **Rendered preview stale:** return to source as existing code requires after valid selection or format/audio changes. Do not leave a “selection preview” badge on stale content.
@@ -96,7 +96,7 @@ Ruler text and waveform labels are never focus indicators. Prefer polite announc
 
 ## Inspiration & Anti-patterns
 
-The supplied reference contributes centered transport, elapsed/total at left, shared ruler above quiet waves and video thumbnails, a continuous red seek line, and a rounded accent selection with integrated grips. Preserve distinct named audio lanes rather than collapsing them into a decorative waveform. Do not copy incidental reference text or hardcode purple. Do not replace requested millisecond entry with thumbnail snapping, add auto-snapping, loop playback, multi-cut editing or selection-body dragging.
+The supplied reference contributes centered transport, elapsed/total at left, shared ruler above quiet waves and video thumbnails, a continuous red seek line, and a rounded accent selection with integrated grips. Preserve distinct named audio lanes rather than collapsing them into a decorative waveform. Do not copy incidental reference text or hardcode purple. Do not replace requested millisecond entry with thumbnail snapping, add auto-snapping, multi-cut editing or selection-body dragging.
 
 ## Responsive & Platform
 
@@ -111,3 +111,5 @@ Review first: overall reference match, accent adaptation, red cursor role, combi
 No builds, product tests, Dev App launches, real Library/settings access, push or implementation occurred in this design session.
 
 Implementation evidence and visual reconciliation: [implementation-notes.md](implementation-notes.md).
+
+Playback-loop amendment (2026-11-07): the builder requested “the playback should loop through the current boundary for the clip sliders”. This supersedes the original non-looping design. Play outside the selection starts at In; Play within it resumes until Out, then wraps. Ordinary Library playback remains non-looping. Native loop timing/short-range audio continuity remains deferred under existing real-media/HITL restrictions.

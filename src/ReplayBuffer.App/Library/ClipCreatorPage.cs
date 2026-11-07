@@ -184,6 +184,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
             OnPropertyChanged(nameof(ViewportStart)); OnPropertyChanged(nameof(ViewportEnd));
             OnPropertyChanged(nameof(ViewportText)); OnPropertyChanged(nameof(ZoomText));
             _sourcePlayer = new PlayerPage(Source.Path, Title, _newPlayer(), embedded: true);
+            ConfigurePlaybackLoop(_sourcePlayer, rendered: false);
             Preview = _sourcePlayer;
             await _sourcePlayer.OpenAsync();
             token.ThrowIfCancellationRequested();
@@ -205,7 +206,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         if (Math.Abs(start - _start) < 0.00000001 && Math.Abs(end - _end) < 0.00000001) { return; }
         (_start, _end) = (start, end);
         NotifyRange();
-        if (!_trimming) { Changed(); }
+        if (!_trimming) { SelectionChanged(); }
     }
 
     public void Nudge(bool end, int milliseconds) => SetRange(Start + (end ? 0 : milliseconds / 1000d), End + (end ? milliseconds / 1000d : 0));
@@ -221,7 +222,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     {
         if (!CanEdit || _trimming) { return; }
         _trimming = true;
-        Changed();
+        SelectionChanged();
     }
     internal void EndRangeDrag()
     {
@@ -230,6 +231,24 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         if (!_closed && !_suspended) { _ = RefreshAsync(); }
     }
     private void RangeError(string message) { _rangeFeedback = message; OnPropertyChanged(nameof(Status)); }
+    private void ConfigurePlaybackLoop(PlayerPage player, bool rendered)
+    {
+        player.PlaybackLoop = () =>
+        {
+            if (_closed || _suspended || _scrubbing) { return null; }
+            var start = rendered ? 0 : Start;
+            var end = rendered ? _effective is { } range ? range.End - range.Start : 0 : End;
+            return end > start ? (TimeSpan.FromSeconds(start), TimeSpan.FromSeconds(end)) : null;
+        };
+    }
+    private void SelectionChanged()
+    {
+        var playing = Preview?.IsPlaying == true;
+        Changed();
+        // A live trim invalidates rendered media. Continue the loop on the source, with the new range.
+        if (playing && !_closed && !_suspended && Preview is { IsPlaying: false } player)
+        { player.PlayPauseCommand.Execute(null); }
+    }
     public void Zoom(double factor)
     {
         if (!CanEdit) { return; }
@@ -489,6 +508,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
                 _effective = response.Range ?? _effective;
                 OnPropertyChanged(nameof(EffectiveText));
                 var player = new PlayerPage(response.Output!, "Selection preview", _newPlayer(), embedded: true);
+                ConfigurePlaybackLoop(player, rendered: true);
                 _previewFolder = folder;
                 _renderedPreview = true;
                 OnPropertyChanged(nameof(PreviewLabel));
