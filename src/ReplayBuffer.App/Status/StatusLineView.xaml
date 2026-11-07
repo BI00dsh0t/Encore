@@ -1,54 +1,24 @@
 <!--
-    The status header (DESIGN.md, EXPERIENCE.md): a card at the top of the content column with the
-    capture dot and state line, then the warnings newest first, scrolling past 120 px.
+    Error-only header: collapses completely when there are no active errors or service failures.
 -->
 <UserControl x:Class="ReplayBuffer.App.Status.StatusLineView"
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:status="clr-namespace:ReplayBuffer.App.Status">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
     </UserControl.Resources>
-    <Border Style="{DynamicResource RbCardStyle}" Padding="16,12">
+    <Border Style="{DynamicResource RbCardStyle}" Padding="16,12" Visibility="{Binding HasErrors, Converter={StaticResource Visible}}">
         <StackPanel>
-            <DockPanel>
-                <Ellipse x:Name="Dot"
-                         Width="10"
-                         Height="10"
-                         Margin="0,0,8,0"
-                         VerticalAlignment="Center">
-                    <Ellipse.Style>
-                        <Style TargetType="Ellipse">
-                            <Setter Property="Fill" Value="{DynamicResource TextFillColorDisabledBrush}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Dot}" Value="{x:Static status:StatusDot.Buffering}">
-                                    <Setter Property="Fill" Value="{DynamicResource SystemFillColorSuccessBrush}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Dot}" Value="{x:Static status:StatusDot.Recording}">
-                                    <Setter Property="Fill" Value="{DynamicResource RbRecordBrush}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Ellipse.Style>
-                </Ellipse>
-                <ContentControl x:Name="StateLine"
-                                VerticalAlignment="Center"
-                                Content="{Binding State}"
-                                Style="{DynamicResource RbStatusStateStyle}" />
-                <!-- Story 10.6: which key saves and how much, while capturing. -->
-                <TextBlock x:Name="HintLine"
-                           Margin="8,0,0,0"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Text="{Binding Hint}"
-                           TextTrimming="CharacterEllipsis" />
-            </DockPanel>
+            <TextBlock Text="{Binding ConnectionError}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                       AutomationProperties.LiveSetting="Assertive"
+                       Visibility="{Binding HasConnectionError, Converter={StaticResource Visible}}" />
             <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Warnings}" Focusable="False">
+                <ItemsControl ItemsSource="{Binding Errors}" Focusable="False">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="18,8,0,0">
+                            <Grid Margin="0,4,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
@@ -70,9 +40,6 @@
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Severity}" Value="Error">
                                                     <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Severity}" Value="Warning">
-                                                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>

@@ -1,5 +1,11 @@
 # Test backlog
 
+## Error-only top window notices (2026-11-07)
+
+- Builder requested top-of-window warnings removed unless errors. Main shell status host/card now collapses without errors; capture state, mic-muted and hotkey hints no longer render there. Rows bind only severity Error, preserving newest-first order and existing dismiss/ack behavior. Service failures (restarting after crash, not running, disconnected, crash loop) remain visible; initial connecting/healthy status stays quiet. Session warnings/state remain intact; no auto-dismiss, overlay/settings warning behavior or engine changes.
+- Feature Release build **0 warnings/errors**. Authorized `dotnet test --project tests/ReplayBuffer.App.Tests -c Release --no-build --filter-class "*ClipCreatorTests" --explicit off`: **16 passed, 0 failed/skipped**, 15.089 s. Inspected generated Gaming expanded fake-media PNG: no routine top card and picture grows into released space. Ordinary binding/diff review clear.
+- Added and compiled `StatusLineTests.TheHeaderShowsOnlyErrorsAndServiceFailuresAndCollapsesAfterRecovery`, covering Info/Warning suppression, Error inclusion/removal, service failure/recovery, quiet connecting and no dismiss commands. **Not executed:** status-specific classes are outside the builder's clip-creator-only clearance. Run non-Explicit StatusLineTests when separately authorized; also defer error/dismiss UI transitions in both looks, MainWindow/status rendering and high DPI/HITL. No unrelated suites, Explicit/Heavy, real app/data/settings operations or push.
+
 ## Trim handle drag lag/freezing fix (2026-11-06)
 
 - Builder reported lag/freezing dragging the range handles. Each move previously restarted the range debounce/worker lifecycle, cancelled/refreshed waveform reads and invalidated viewport drawing despite unchanged viewport. Rendering also recorded up to 8,000 individual peak lines per frame. Now pointer trim sessions update requested selection/time/duration live, invalidate effective range/preview once, and resolve final boundaries after release/lost capture. Pending stale range requests are rejected before launch/publication. Hide/dispose end dragging without restarting work. Unchanged viewport/track selections reuse displayed peak arrays.
