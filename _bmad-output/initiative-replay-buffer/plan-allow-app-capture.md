@@ -2,6 +2,8 @@
 
 Builder request, 2026-11-08: “the app should be allowed to be recorded or screenshotted.” Ordinary implementation on `feature/allow-app-capture`; this overrides the original all-window exclusion portion of R6 / AD-15.
 
+Integrated: feature `67ef139`; no-ff develop merge `5e6cd03c08b0631c1061d35aae25955d2eac30ba`.
+
 Remove the startup-wide `ExcludeNewWindows` hook, `ShellWindow`'s initial affinity application and the tray popup's source-change affinity application. Main window, creator/player, dialogs, tray/menu popups, native pickers and overlay now retain ordinary capturable display affinity. Overlay topmost/click-through/focus behavior, theme decoration, capture-engine target selection and sound routing are unchanged. The standalone low-level exclusion helper remains available to explicit callers/native utility tests but has no App production caller.
 
 Update existing app-window, dialog, tray/overlay and Heavy screen-copy expectations to the new policy; the screen-copy case now expects the app's red test window to be visible rather than the helper behind it. These capture-specific and unrelated shell/overlay suites remain **unrun** under clip-creator-only clearance. Compile all updated tests, review all exclusion call sites, and run only authorized non-Explicit ClipCreatorTests as a shared-window/creator regression. No recording, actual screenshot/Heavy/GPU/HITL or broader suites are authorized here.
