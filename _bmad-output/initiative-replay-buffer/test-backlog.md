@@ -1,5 +1,11 @@
 # Test backlog
 
+## Drag the selected clip area (2026-11-08)
+
+- Builder authorized implementation of the recorded feature request. Whole waveform/video selection body moves both requested endpoints by a common millisecond delta, preserves duration and clamps to source bounds. Click/threshold/grip/ruler/outside seek/double-click roles are distinct. Local movement reuses peaks/thumbnail geometry; effective work resolves after release/lost capture. Preserve displayed source playhead through paused rendered-preview invalidation and retain live loop behavior.
+- Release **0 warnings/errors**; authorized non-Explicit ClipCreatorTests **27 passed, 0 failed/skipped**, including two focused additions covering range/clamping/cache/deferred-work behavior and both-look view gestures with zoom/pan, lost capture, accidental double-click suppression, filmstrip movement and paused-preview position. Scoped ordinary review clear; prototype script syntax checked. No other suites executed.
+- Deferred: physical mouse/stylus routing, native capture-loss/double-click thresholds at high DPI, drag feel and source-edge/offscreen HITL, real-media loop/preview timing and resource measurements. No edge auto-pan/snapping added. Existing Heavy/media/app/data/publish holds remain; see `plan-drag-clip-selection.md`.
+
 ## Allow app screenshots / recording (2026-11-08)
 
 - Builder explicitly supersedes all-window capture exclusion. App startup hook, ShellWindow application and tray-popup application removed. AD-15 and existing app-window/dialog/overlay/Heavy screen-copy expectations updated. Standalone native exclusion helper remains opt-in; App production has no callers.

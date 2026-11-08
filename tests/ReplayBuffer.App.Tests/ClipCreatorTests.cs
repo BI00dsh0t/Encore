@@ -31,6 +31,105 @@ public sealed class ClipCreatorTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, true);
 
     [Fact]
+    public async Task MovingSelectionPreservesDurationAndCachesWhileClampingToTheSource()
+    {
+        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        await page.OpenAsync(45); await page.EnsureThumbnailsAsync();
+        page.SetRange(40.125, 45.875); await page.RefreshAsync();
+        page.Seek(47);
+        var viewport = (page.ViewportStart, page.ViewportEnd);
+        var peaks = page.Waveforms; var thumbnails = page.Thumbnails;
+        var requests = _media.Requests.Count;
+        page.BeginRangeDrag();
+        for (var i = 0; i < 100; i++) { page.MoveSelection(40.125, 45.875, i / 100d); }
+        page.MoveSelection(40.125, 45.875, 1.2346);
+        Assert.Equal(41.360, page.Start, 9); Assert.Equal(47.110, page.End, 9);
+        page.MoveSelection(40.125, 45.875, 1000);
+        Assert.Equal((84.25, 90d), (page.Start, page.End));
+        page.MoveSelection(40.125, 45.875, -1000);
+        Assert.Equal((0d, 5.75), (page.Start, page.End));
+        page.MoveSelection(40.125, 45.875, 0.3335);
+        Assert.Equal(40.459, page.Start, 9); Assert.Equal(46.209, page.End, 9);
+        Assert.Equal(5.75, page.End - page.Start, 9);
+        Assert.Equal(47, page.Playhead);
+        Assert.Equal(viewport, (page.ViewportStart, page.ViewportEnd));
+        Assert.Equal(requests, _media.Requests.Count);
+        Assert.Same(peaks, page.Waveforms); Assert.Same(thumbnails, page.Thumbnails);
+        Assert.False(page.CanExport);
+        page.EndRangeDrag(); await page.RefreshAsync();
+        Assert.Equal(requests + 1, _media.Requests.Count);
+        Assert.Equal(page.StartText, ClipCreatorPage.FormatTime(page.Start));
+        page.PauseAndCancel(); page.MoveSelection(40.125, 45.875, 1);
+        Assert.Equal(40.459, page.Start, 9);
+    }
+
+    [Fact]
+    public void SelectionBodyDragKeepsClickSeekGripRulerAndDoubleClickRolesDistinct() => Sta.Run(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        void Finish(Task task) { Sta.PumpUntil(() => task.IsCompleted, "selection move setup"); task.GetAwaiter().GetResult(); }
+        var players = new List<FakePlayer>();
+        using var page = new ClipCreatorPage(Source, "source", _media, () =>
+        {
+            var player = new FakePlayer { Media = new(1280, 720, TimeSpan.FromSeconds(90), ["Game"], true) };
+            players.Add(player); return player;
+        });
+        Finish(page.OpenAsync(0)); Finish(page.EnsureThumbnailsAsync());
+        page.Zoom(3); page.SetRange(10, 20); Finish(page.RefreshAsync());
+        var view = new ClipCreatorView { DataContext = page };
+        ((PlayerView)view.FindName("Video")).FrontBufferChanged(false);
+        var window = new Window { Content = view, Width = 960, Height = 900, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
+        var theme = ThemeService.ForWindow(window);
+        try
+        {
+            foreach (var look in new[] { AppTheme.Fluent, AppTheme.GamingDark })
+            {
+                theme.Apply(look); window.Show(); window.UpdateLayout();
+                if (look == AppTheme.GamingDark) { page.Zoom(0.5); page.Pan(0.1); Finish(page.RefreshAsync()); }
+                var timeline = (WaveformView)view.FindName("Timeline");
+                Point At(double time, double y = 48) => new(100 + (time - page.ViewportStart) / (page.ViewportEnd - page.ViewportStart) * (timeline.ActualWidth - 100), y);
+                page.SetRange(10, 20); Finish(page.RefreshAsync()); page.Seek(2);
+                var peaks = page.Waveforms; var thumbnails = page.Thumbnails;
+                Assert.True(timeline.BeginPointer(At(15), 1));
+                timeline.MovePointer(new Point(At(15).X + SystemParameters.MinimumHorizontalDragDistance / 2, 48));
+                Assert.Equal(2, page.Playhead); Assert.True(page.CanExport);
+                timeline.EndPointer(commitClick: true);
+                Assert.Equal(15, page.Playhead, 6); Assert.Equal((10d, 20d), (page.Start, page.End));
+                Assert.True(timeline.BeginPointer(At(15), 1)); timeline.MovePointer(At(18));
+                Assert.Equal((13d, 23d), (page.Start, page.End)); Assert.Equal(15, page.Playhead, 6);
+                Assert.False(page.CanExport); Assert.False(page.IsScrubbing);
+                timeline.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.LostMouseCaptureEvent });
+                Sta.PumpUntil(() => page.CanExport, "moved range to resolve after lost capture");
+                Assert.Same(peaks, page.Waveforms); Assert.Same(thumbnails, page.Thumbnails);
+                // A fast click after a drag must not be mistaken for a waveform double-click.
+                Assert.True(timeline.BeginPointer(At(18), 2)); timeline.EndPointer(commitClick: true);
+                Assert.Equal((13d, 23d), (page.Start, page.End));
+                Assert.True(timeline.BeginPointer(At(18), 1)); timeline.EndPointer(commitClick: true);
+                Assert.True(timeline.BeginPointer(At(18), 2));
+                Assert.Equal((page.ViewportStart, page.ViewportEnd), (page.Start, page.End));
+                page.SetRange(10, 20); Finish(page.RefreshAsync());
+                Assert.True(timeline.BeginPointer(At(10), 1)); timeline.MovePointer(At(11)); timeline.EndPointer(commitClick: true);
+                Assert.Equal((11d, 20d), (page.Start, page.End)); Finish(page.RefreshAsync());
+                Assert.True(timeline.BeginPointer(At(15, 10), 1)); timeline.MovePointer(At(18, 10)); timeline.EndPointer(commitClick: true);
+                Assert.Equal(18, page.Playhead, 6); Assert.Equal((11d, 20d), (page.Start, page.End));
+                Assert.True(timeline.BeginPointer(At(30), 1)); timeline.MovePointer(At(29)); timeline.EndPointer(commitClick: true);
+                Assert.Equal(29, page.Playhead, 6); Assert.Equal((11d, 20d), (page.Start, page.End));
+                // The video row moves the same interval as the waveform rows.
+                Assert.True(timeline.BeginPointer(At(15.5, timeline.ActualHeight - 20), 1));
+                timeline.MovePointer(At(17.5, timeline.ActualHeight - 20)); timeline.EndPointer(commitClick: false);
+                Assert.Equal((13d, 22d), (page.Start, page.End)); Finish(page.RefreshAsync());
+                Finish(page.PreviewAsync()); page.Preview!.PlayPauseCommand.Execute(null); page.Seek(15); page.Tick();
+                Assert.True(timeline.BeginPointer(At(17.5), 1)); timeline.MovePointer(At(18.5));
+                Assert.True(players[^1].Disposed); Assert.False(page.Preview!.IsPlaying);
+                page.Tick(); Assert.Equal(15, page.Playhead, 6);
+                Assert.Equal((14d, 23d), (page.Start, page.End));
+                timeline.EndPointer(commitClick: true); Finish(page.RefreshAsync());
+            }
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
     public async Task CalculatedFilmstripSurvivesReopeningAndChangedSourcesMissTheCache()
     {
         var cacheFolder = Path.Combine(_folder, "filmstrip-cache");
