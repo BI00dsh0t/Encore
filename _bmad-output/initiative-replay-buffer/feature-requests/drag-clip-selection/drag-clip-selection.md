@@ -15,7 +15,7 @@ risk: medium
 
 # Move the selected clip range by dragging it left or right
 
-Status: built and verified, 2026-11-08; integration pending. The feature request is recorded as an unnumbered epic, following the existing feature-request convention.
+Status: implemented and verified, 2026-11-08. Feature `768ab85`, no-ff develop merge `6ac2a6f974a3aa8496796f20cf231a86969be34a`. The feature request is recorded as an unnumbered epic, following the existing feature-request convention.
 
 ## Request and outcome
 

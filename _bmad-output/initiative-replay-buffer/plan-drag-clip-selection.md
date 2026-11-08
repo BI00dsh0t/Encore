@@ -2,6 +2,8 @@
 
 Builder authorized implementation on 2026-11-08: “implement the paln”, referring to `feature-requests/drag-clip-selection/drag-clip-selection.md`. Ordinary implementation on `feature/drag-clip-selection`; existing test/data/app restrictions remain binding.
 
+Integrated into develop: feature `768ab85`; no-ff merge `6ac2a6f974a3aa8496796f20cf231a86969be34a`.
+
 ## Implemented behavior
 
 - Pointer down inside the selected waveform/video body records an anchored candidate move without seeking or starting range work. A stationary click seeks on release. Crossing Windows' horizontal/vertical drag threshold starts the existing local range-drag transaction and translates both endpoints by one common millisecond delta from the original interval.
