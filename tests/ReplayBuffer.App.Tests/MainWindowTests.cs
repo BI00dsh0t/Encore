@@ -84,7 +84,7 @@ public sealed class MainWindowTests
     });
 
     [Fact]
-    public void TheWindowIsExcludedFromCaptureAndClosingItOnlyHidesIt() => Sta.Run(() =>
+    public void TheWindowAllowsCaptureAndClosingItOnlyHidesIt() => Sta.Run(() =>
     {
         var window = new MainWindow
         {
@@ -97,7 +97,7 @@ public sealed class MainWindowTests
         try
         {
             var hwnd = new WindowInteropHelper(window).EnsureHandle();
-            Assert.True(CaptureExclusion.IsApplied(hwnd));
+            Assert.False(CaptureExclusion.IsApplied(hwnd));
 
             window.Open();
             Assert.True(window.IsVisible);

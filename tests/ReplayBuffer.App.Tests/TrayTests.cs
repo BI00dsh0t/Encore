@@ -70,7 +70,7 @@ public sealed class TrayTests
     }
 
     [Fact]
-    public void TheMenuOffersOpenStartWithWindowsAndQuitAndItsPopupIsExcludedFromCapture() => Sta.Run(() =>
+    public void TheMenuOffersOpenStartWithWindowsAndQuitAndItsPopupAllowsCapture() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession { Reply = (_, _) => new Contracts.Messages.SettingsUpdateResult(1) };
         var model = new MainViewModel(engine, action => action());
@@ -101,7 +101,7 @@ public sealed class TrayTests
         try
         {
             var source = Assert.IsType<HwndSource>(PresentationSource.FromVisual(menu));
-            Assert.True(CaptureExclusion.IsApplied(source.Handle));
+            Assert.False(CaptureExclusion.IsApplied(source.Handle));
 
             items[0].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             items[2].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));

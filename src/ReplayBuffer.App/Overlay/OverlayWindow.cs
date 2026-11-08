@@ -14,7 +14,7 @@ namespace ReplayBuffer.App.Overlay;
 /// (R2) and a red X while the disk is full (R3); and the queued message below them (R3) on the
 /// theme's card, in its success colour for a notice and its danger colour for an error. The glyphs keep
 /// fixed colours in both themes (AD-23). It is a topmost, click-through window that is never activated
-/// and is excluded from capture (AD-15). The window is one fixed-width strip of fixed slots, so the dot stays
+/// and permits screenshots/recording (AD-15). The window is one fixed-width strip of fixed slots, so the dot stays
 /// put as the icons come and go; while a message shows it grows left and down, the dot still in its
 /// place. It is hidden while there is no dot, icon, X or message. Nothing is drawn in or hooked onto
 /// the game (NFR-3).

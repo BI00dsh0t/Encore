@@ -220,14 +220,16 @@ graph LR
   - **NativeAOT:** the engine builds with trimming and AOT warnings treated as errors, and uses no reflection-based serialization.
   - Epic 1's stack comparison may replace the pipeline adapters with a native C++ core behind the same ports.
 
-### AD-15 — Overlay, sounds and capture exclusion [ADOPTED]
+### AD-15 — Overlay, sounds and app capture visibility [ADOPTED]
+
+**Builder amendment (2026-11-08):** “the app should be allowed to be recorded or screenshotted.” This supersedes the original R6/all-window capture-exclusion policy. App windows, dialogs, tray popups and the overlay retain ordinary capturable Windows display affinity. No process-wide exclusion hook or per-window/tray `WDA_EXCLUDEFROMCAPTURE` is installed by the App. The standalone Platform.Desktop exclusion helper remains available only for explicit callers/native tests. This changes visibility, not capture-engine selection, overlay click-through/topmost/focus behavior or feedback audio routing.
 
 - **Binds:** R6, R8, R13, R18, R21
-- **Prevents:** feedback sounds recorded into Clips; app windows appearing in captures
+- **Prevents:** feedback sounds recorded into Clips through the existing feedback routing/validation policy
 - **Rule:**
   - **Overlay:** a topmost, click-through, never-activated WPF window in the App that renders only `capture.stateChanged` and `warning.raised`. It dies with the App; the engine's sounds cover that gap.
   - **Feedback Sounds** are played by the engine on `global.feedbackSoundDevice`, which defaults to the default communications endpoint. If any Track loopback-captures that endpoint, validation warns with `feedback-device-captured`.
-  - Every window the app creates sets `WDA_EXCLUDEFROMCAPTURE`.
+  - App windows allow screenshots and recording; no display-affinity exclusion is applied.
 
 ### AD-16 — Supervision, lifecycle, privilege, environments [ADOPTED]
 
@@ -334,7 +336,7 @@ graph LR
   - **Gaming dark** is `ThemeMode = Dark` with one App resource dictionary merged after Fluent's, overriding Fluent's brush keys and adding control templates. Its palette is fixed, whatever the Windows mode.
   - **Tokens:** both themes define one set of semantic resource keys, listed in DESIGN.md (epic-modern-ui). App XAML and code take colours, brushes, corner radii and type only from those keys, through `DynamicResource`. The one exception is the Overlay's status glyphs (dot, saving icon, mic-muted icon, red X), which keep fixed colours.
   - **Switching** swaps the merged dictionaries on the UI thread. Every window, the tray context menu, the App's dialogs and the Overlay take their resources from `Application.Resources`, so they restyle with no restart. The theme is applied before the first window shows.
-  - **Dialogs** are App windows, never `MessageBox`, so they follow the theme and keep `WDA_EXCLUDEFROMCAPTURE` (AD-15).
+  - **Dialogs** are App windows, never `MessageBox`, so they follow the theme and permit screenshots/recording (AD-15 amendment).
 
 ### AD-24 — List and audio editing stay App-side, over the existing commands
 

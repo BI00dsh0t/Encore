@@ -67,7 +67,7 @@ public sealed class SurfacesThemeTests
     });
 
     [Fact]
-    public void TheDialogAnswersYesNoAndEscAsTheMessageBoxDidAndIsExcludedFromCapture() => Sta.Run(() =>
+    public void TheDialogAnswersYesNoAndEscAsTheMessageBoxDidAndAllowsCapture() => Sta.Run(() =>
     {
         var view = new Border();
         var owner = Offscreen(new Window { Content = view, Width = 200, Height = 100 });
@@ -111,7 +111,7 @@ public sealed class SurfacesThemeTests
         }
 
         Assert.Equal(("Delete", "Move “clip.mp4” to the Recycle Bin?"), (seen[0].Title, seen[0].Message));
-        Assert.All(seen, s => Assert.True(s.Excluded && s.YesIsDefault && s.Owner == owner));
+        Assert.All(seen, s => Assert.True(!s.Excluded && s.YesIsDefault && s.Owner == owner));
     });
 
     [Fact]
