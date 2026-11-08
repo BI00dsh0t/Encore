@@ -49,7 +49,7 @@
     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
    <local:WaveformView x:Name="Timeline" Style="{DynamicResource RbClipWaveformStyle}" AutomationProperties.Name="Audio waveform and trim selection"
     ToolTip="{Binding ThumbnailHint}"
-    AutomationProperties.HelpText="Double-click the waveform to select the visible time range. Drag the ruler playhead or click and drag the waveform to seek. P selects the playhead; Left and Right seek one millisecond. Home selects start trim handle; End selects end trim handle; Left and Right then trim one millisecond. Plus and minus zoom. Shift and mouse wheel pan. Up and Down scroll audio lanes." />
+    AutomationProperties.HelpText="Drag the selected area to move In and Out together. Click to seek; drag the ruler playhead or outside the selection to scrub. Drag the edge grips to trim. Double-click the waveform to select the visible time range. P selects the playhead; Left and Right seek one millisecond. Home selects start trim handle; End selects end trim handle; Left and Right then trim one millisecond. Plus and minus zoom. Shift and mouse wheel pan. Up and Down scroll audio lanes." />
     <ScrollBar Grid.Column="1" Orientation="Vertical" Minimum="0" Maximum="{Binding ScrollMaximum, ElementName=Timeline}" Value="{Binding LaneOffset, ElementName=Timeline, Mode=TwoWay}" SmallChange="1" LargeChange="5" ViewportSize="5" AutomationProperties.Name="Scroll audio waveform lanes">
      <ScrollBar.Style><Style TargetType="ScrollBar"><Style.Triggers><DataTrigger Binding="{Binding ScrollMaximum, ElementName=Timeline}" Value="0"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></ScrollBar.Style>
     </ScrollBar>

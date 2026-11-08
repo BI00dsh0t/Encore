@@ -143,7 +143,8 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     public double ViewportEnd => _viewportEnd;
     public ClipWaveform[] Waveforms { get => _waveforms; private set => Set(ref _waveforms, value); }
     public ClipThumbnailImage[] Thumbnails { get => _thumbnails; private set => Set(ref _thumbnails, value); }
-    public string ThumbnailHint => _thumbnailFailed ? "Video thumbnails are unavailable. You can still edit and export; reopen the creator to retry thumbnails." : "Click or drag the video strip to seek without changing trim.";
+    public string ThumbnailHint => "Drag the selected area to move the clip; drag its edge grips to trim. Click to seek, or use the ruler to scrub."
+        + (_thumbnailFailed ? " Video thumbnails are unavailable. You can still edit and export; reopen the creator to retry thumbnails." : "");
     public bool Mix { get => _mix; set { if (Set(ref _mix, value)) { Changed(); } } }
     public bool Separate { get => !Mix; set { if (value) { Mix = false; } } }
     public string Format { get => _format; set { if (value is "mp4" or "mp3" && Set(ref _format, value)) { Changed(); } } }
@@ -212,6 +213,14 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     }
 
     public void Nudge(bool end, int milliseconds) => SetRange(Start + (end ? 0 : milliseconds / 1000d), End + (end ? milliseconds / 1000d : 0));
+    internal void MoveSelection(double originalStart, double originalEnd, double delta)
+    {
+        if (!CanEdit || _suspended || !double.IsFinite(delta) || !double.IsFinite(originalStart) || !double.IsFinite(originalEnd)
+            || originalStart < 0 || originalEnd > Duration || originalEnd <= originalStart) { return; }
+        // Anchor every update to the press range; do not accumulate rounding error or clamp to the viewport.
+        var shift = Math.Clamp(Math.Round(delta, 3, MidpointRounding.AwayFromZero), -originalStart, Duration - originalEnd);
+        SetRange(Math.Max(0, originalStart + shift), Math.Min(Duration, originalEnd + shift));
+    }
     internal void SelectVisibleRange()
     {
         if (!CanEdit || _suspended) { return; }
@@ -245,8 +254,11 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     }
     private void SelectionChanged()
     {
+        var previous = Preview;
         var playing = Preview?.IsPlaying == true;
+        var position = Playhead;
         Changed();
+        if (!ReferenceEquals(previous, Preview)) { Seek(position); }
         // A live trim invalidates rendered media. Continue the loop on the source, with the new range.
         if (playing && !_closed && !_suspended && Preview is { IsPlaying: false } player)
         { player.PlayPauseCommand.Execute(null); }

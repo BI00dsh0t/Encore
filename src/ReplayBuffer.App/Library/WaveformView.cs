@@ -28,7 +28,11 @@ internal sealed class WaveformView : FrameworkElement
     private double AudioBottom => Math.Max(28, ActualHeight - FilmstripHeight);
     private double PlotLeft => Math.Min(LabelWidth, Math.Max(0, ActualWidth - 1));
     private ClipCreatorPage? _page;
-    private int _handle;
+    private enum PointerMode { None, In, Out, Seek, PendingMove, Move }
+    private PointerMode _pointerMode;
+    private Point _pressPoint, _lastPoint;
+    private double _moveStart, _moveEnd, _secondsPerPixel;
+    private bool _suppressDoubleClick;
     private bool _endHandle;
     private bool _seekFocus = true;
     private DrawingGroup? _waveformDrawing;
@@ -54,8 +58,12 @@ internal sealed class WaveformView : FrameworkElement
 
     private void Attach(ClipCreatorPage? page)
     {
+        ReleaseMouseCapture();
         _page?.EndScrub();
         _page?.EndRangeDrag();
+        _pointerMode = PointerMode.None;
+        _suppressDoubleClick = false;
+        Cursor = null;
         if (_page is not null) { _page.PropertyChanged -= Changed; }
         _page = page;
         _waveformDrawing = null;
@@ -65,6 +73,12 @@ internal sealed class WaveformView : FrameworkElement
     }
     private void Changed(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(ClipCreatorPage.ViewportStart) or nameof(ClipCreatorPage.ViewportEnd)) { FinishPointerForViewportChange(); }
+        if (e.PropertyName == nameof(ClipCreatorPage.CanEdit))
+        {
+            if (_page is not { CanEdit: true }) { FinishPointerForViewportChange(); }
+            UpdatePointerCursor(_lastPoint);
+        }
         if (e.PropertyName is nameof(ClipCreatorPage.Waveforms) or nameof(ClipCreatorPage.Metadata)) { InvalidateMeasure(); }
         if (e.PropertyName is nameof(ClipCreatorPage.Waveforms) or nameof(ClipCreatorPage.Metadata) or nameof(ClipCreatorPage.ViewportStart) or nameof(ClipCreatorPage.ViewportEnd) or nameof(ClipCreatorPage.Thumbnails)) { _waveformDrawing = null; }
         InvalidateVisual();
@@ -78,6 +92,7 @@ internal sealed class WaveformView : FrameworkElement
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
+        FinishPointerForViewportChange();
         _waveformDrawing = null;
     }
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
@@ -224,19 +239,32 @@ internal sealed class WaveformView : FrameworkElement
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
-        if (_page is not { CanEdit: true } page) { return; }
-        Focus();
-        var point = e.GetPosition(this);
-        if (TrySelectVisibleRange(point, e.ClickCount)) { e.Handled = true; return; }
-        var x = point.X;
-        if (x < PlotLeft) { return; }
-        // Ruler is exclusively seekable, even when the playhead coincides with a trim boundary.
-        _handle = point.Y < 28 ? 3 : Math.Abs(x - X(page.Start)) <= 12 ? 1 : Math.Abs(x - X(page.End)) <= 12 ? 2 : 3;
-        _seekFocus = _handle == 3;
-        if (_seekFocus) { page.BeginScrub(Time(x)); }
-        else { _endHandle = _handle == 2; page.BeginRangeDrag(); }
-        if (!CaptureMouse()) { page.EndScrub(); page.EndRangeDrag(); _handle = 0; }
+        if (!BeginPointer(e.GetPosition(this), e.ClickCount)) { return; }
+        if (_pointerMode != PointerMode.None && !CaptureMouse()) { EndPointer(commitClick: false); }
         e.Handled = true;
+    }
+    internal bool BeginPointer(Point point, int clickCount)
+    {
+        if (_page is not { CanEdit: true } page) { return false; }
+        Focus();
+        var suppressDoubleClick = _suppressDoubleClick;
+        _suppressDoubleClick = false;
+        if (!suppressDoubleClick && TrySelectVisibleRange(point, clickCount)) { return true; }
+        if (point.X < PlotLeft || point.X > ActualWidth || point.Y < 0 || point.Y > ActualHeight) { return false; }
+        _pressPoint = _lastPoint = point;
+        _moveStart = page.Start; _moveEnd = page.End;
+        _secondsPerPixel = (page.ViewportEnd - page.ViewportStart) / Math.Max(1, ActualWidth - PlotLeft);
+        // The ruler always seeks. Grips win over the body, including their expanded hit targets.
+        _pointerMode = point.Y < 28 ? PointerMode.Seek
+            : Math.Abs(point.X - X(page.Start)) <= 12 ? PointerMode.In
+            : Math.Abs(point.X - X(page.End)) <= 12 ? PointerMode.Out
+            : point.X > X(page.Start) && point.X < X(page.End) ? PointerMode.PendingMove : PointerMode.Seek;
+        _seekFocus = _pointerMode is PointerMode.Seek or PointerMode.PendingMove;
+        if (_pointerMode == PointerMode.Seek) { page.BeginScrub(Time(point.X)); }
+        else if (_pointerMode != PointerMode.PendingMove)
+        { _endHandle = _pointerMode == PointerMode.Out; page.BeginRangeDrag(); }
+        UpdatePointerCursor(point);
+        return true;
     }
     internal bool TrySelectVisibleRange(Point point, int clickCount)
     {
@@ -244,7 +272,7 @@ internal sealed class WaveformView : FrameworkElement
             || ActualWidth <= PlotLeft || point.X < PlotLeft || point.X > ActualWidth
             || point.Y < 28 || point.Y > ActualHeight
             || (point.Y >= AudioBottom && Math.Abs(point.X - X(page.Start)) > 12 && Math.Abs(point.X - X(page.End)) > 12)) { return false; }
-        _handle = 0;
+        _pointerMode = PointerMode.None;
         _seekFocus = false;
         _endHandle = false;
         page.EndScrub();
@@ -257,12 +285,59 @@ internal sealed class WaveformView : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        if (IsMouseCaptured && _page is { CanEdit: true } page)
+        var point = e.GetPosition(this);
+        if (IsMouseCaptured) { MovePointer(point); }
+        else { UpdatePointerCursor(point); }
+    }
+    internal void MovePointer(Point point)
+    {
+        _lastPoint = point;
+        if (_page is not { CanEdit: true } page) { return; }
+        if (_pointerMode == PointerMode.PendingMove)
         {
-            var time = Math.Round(Time(e.GetPosition(this).X), 3);
-            if (_handle == 3) { page.Seek(time); }
-            else if (_handle != 0) { MoveBoundary(_handle == 2, time); }
+            if (Math.Abs(point.X - _pressPoint.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(point.Y - _pressPoint.Y) < SystemParameters.MinimumVerticalDragDistance) { return; }
+            _pointerMode = PointerMode.Move;
+            page.BeginRangeDrag();
         }
+        if (_pointerMode == PointerMode.Move)
+        { page.MoveSelection(_moveStart, _moveEnd, (point.X - _pressPoint.X) * _secondsPerPixel); }
+        else if (_pointerMode == PointerMode.Seek) { page.Seek(Math.Round(Time(point.X), 3)); }
+        else if (_pointerMode is PointerMode.In or PointerMode.Out) { MoveBoundary(_pointerMode == PointerMode.Out, Math.Round(Time(point.X), 3)); }
+        UpdatePointerCursor(point);
+    }
+    private void UpdatePointerCursor(Point point)
+    {
+        _lastPoint = point;
+        Cursor = _page is not { CanEdit: true } page ? null
+            : _pointerMode == PointerMode.Move ? Cursors.Hand
+            : _pointerMode is PointerMode.In or PointerMode.Out ? Cursors.SizeWE
+            : _pointerMode == PointerMode.Seek ? Cursors.Cross
+            : point.X < PlotLeft || point.X > ActualWidth || point.Y < 0 || point.Y > ActualHeight ? null
+            : point.Y >= 28 && (Math.Abs(point.X - X(page.Start)) <= 12 || Math.Abs(point.X - X(page.End)) <= 12) ? Cursors.SizeWE
+            : point.Y >= 28 && point.X > X(page.Start) && point.X < X(page.End) ? Cursors.Hand : Cursors.Cross;
+    }
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (!IsMouseCaptured) { Cursor = null; }
+    }
+    internal void EndPointer(bool commitClick)
+    {
+        var mode = _pointerMode;
+        _pointerMode = PointerMode.None;
+        if (mode == PointerMode.Move) { _suppressDoubleClick = true; }
+        if (commitClick && mode == PointerMode.PendingMove && _page is { CanEdit: true } page)
+        { page.Seek(Time(_pressPoint.X)); }
+        _page?.EndScrub();
+        _page?.EndRangeDrag();
+        UpdatePointerCursor(_lastPoint);
+    }
+    private void FinishPointerForViewportChange()
+    {
+        if (_pointerMode == PointerMode.None) { return; }
+        EndPointer(commitClick: false);
+        ReleaseMouseCapture();
     }
     internal void MoveBoundary(bool end, double time)
     {
@@ -270,11 +345,22 @@ internal sealed class WaveformView : FrameworkElement
         if (end) { page.SetRange(page.Start, time); }
         else { page.SetRange(time, page.End); }
     }
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e) { base.OnMouseLeftButtonUp(e); _page?.EndScrub(); _page?.EndRangeDrag(); _handle = 0; ReleaseMouseCapture(); }
-    protected override void OnLostMouseCapture(MouseEventArgs e) { base.OnLostMouseCapture(e); _page?.EndScrub(); _page?.EndRangeDrag(); _handle = 0; }
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseLeftButtonUp(e);
+        if (_pointerMode != PointerMode.None) { e.Handled = true; }
+        EndPointer(commitClick: true);
+        ReleaseMouseCapture();
+    }
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        EndPointer(commitClick: false);
+    }
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
+        FinishPointerForViewportChange();
         if ((Keyboard.Modifiers & ModifierKeys.Control) != 0) { LaneOffset += e.Delta > 0 ? -1 : 1; }
         else if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0) { _page?.Pan(e.Delta > 0 ? -0.2 : 0.2); }
         else { _page?.Zoom(e.Delta > 0 ? 0.5 : 2); }
@@ -283,6 +369,7 @@ internal sealed class WaveformView : FrameworkElement
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        FinishPointerForViewportChange();
         switch (e.Key)
         {
             case Key.Tab:

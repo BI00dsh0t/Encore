@@ -8,6 +8,7 @@
    <Button DockPanel.Dock="Bottom" Content="Close" IsCancel="True" IsDefault="True" Click="CloseHelp" HorizontalAlignment="Right" Margin="0,18,0,0" Style="{DynamicResource RbClipButtonStyle}" />
    <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
     <TextBlock Text="Timeline shortcuts" FontSize="20" FontWeight="Medium" Margin="0,0,0,16" />
+    <TextBlock Text="Drag the selected area to move the clip; drag its edge grips to trim. Click to seek, or scrub using the ruler." Margin="0,0,0,12" TextWrapping="Wrap" />
     <TextBlock Text="P, then ← / →: seek ±1 ms" Margin="0,0,0,12" TextWrapping="Wrap" />
     <TextBlock Text="Home / End, then ← / →: trim In / Out ±1 ms" Margin="0,0,0,12" TextWrapping="Wrap" />
     <TextBlock Text="+ / − or wheel: zoom" Margin="0,0,0,12" TextWrapping="Wrap" />

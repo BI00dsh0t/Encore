@@ -6,6 +6,7 @@ covers: []
 sources:
   - _bmad-output/initiative-replay-buffer/feature-requests/drag-clip-selection/request.md
 companions:
+  - _bmad-output/initiative-replay-buffer/plan-drag-clip-selection.md
   - _bmad-output/initiative-replay-buffer/ux-clip-editor-refresh/EXPERIENCE.md
   - _bmad-output/initiative-replay-buffer/plan-clip-selection-loop.md
 after: []
@@ -14,7 +15,7 @@ risk: medium
 
 # Move the selected clip range by dragging it left or right
 
-Status: requested, unscheduled and unsliced. Captured 2026-11-08; no implementation started. The feature request is recorded as an unnumbered epic, following the existing feature-request convention.
+Status: built and verified, 2026-11-08; integration pending. The feature request is recorded as an unnumbered epic, following the existing feature-request convention.
 
 ## Request and outcome
 
@@ -31,9 +32,9 @@ The builder wants to drag the selected clip area left and right. After choosing 
 
 ## Proposed gesture details
 
-These are implementation-planning defaults, not additional builder instructions: use the normal pointer drag threshold to distinguish a selected-body drag from a stationary seek click; prioritize trim-grip hit targets over the body; keep ruler gestures and dragging outside the selection as seek interactions. Preserve the established double-click behavior on waveform bodies/grips. Confirm the exact interaction during implementation planning rather than silently dropping either range movement or seeking.
+Implementation adopts the recorded defaults: use the normal pointer drag threshold to distinguish a selected-body drag from a stationary seek click; prioritize trim-grip hit targets over the body; keep ruler gestures and dragging outside the selection as seek interactions. Preserve the established double-click behavior on waveform bodies/grips. Stationary selected-body clicks seek on release; moving beyond the Windows threshold starts a range move. Completed moves suppress an accidental subsequent double-click. Zoom/pan/resize or keyboard navigation ends an active pointer gesture before changing its mapping.
 
-Automatic panning at viewport edges is not specified by the builder. Keep it as a follow-up decision; do not assume snapping, automatic viewport movement or a new keyboard shortcut is required.
+Automatic panning at viewport edges is not specified by the builder. Implementation leaves edge auto-pan and snapping out of scope and adds no keyboard shortcut. Existing pan/zoom and numeric/keyboard precision controls remain available.
 
 ## Acceptance examples
 
@@ -51,6 +52,6 @@ Automatic panning at viewport edges is not specified by the builder. Keep it as 
 
 In scope: horizontal translation of the existing single selection and the gesture distinction needed to support it. No media modification, multi-cut editing, per-track clips, timeline rearrangement, new snapping rules or export format changes.
 
-The current UX contract explicitly excludes selection-body dragging. This request proposes superseding that exclusion **when implemented**; it does not change current behavior or mark the feature done. Preserve recent live playback looping, persistent video-thumbnail caching, 40px waveform lanes and deferred effective-range work.
+The current UX contract explicitly excludes selection-body dragging. The builder's implementation authorization supersedes that exclusion. Preserve recent live playback looping, persistent video-thumbnail caching, 40px waveform lanes and deferred effective-range work.
 
-No code, builds/tests, app restart, settings/Library/cache access, scheduling or test-clearance expansion is authorized by this recorded request. Existing restrictions and backlog remain in force.
+The builder explicitly authorized implementation on 2026-11-08. Existing restrictions and backlog remain in force: clip-creator-only non-Explicit verification, no real Dev App/data work, no Heavy/media/HITL or publish, and no push. See [the implementation plan](../../plan-drag-clip-selection.md).
