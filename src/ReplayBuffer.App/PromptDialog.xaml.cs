@@ -5,7 +5,7 @@ namespace ReplayBuffer.App;
 
 /// <summary>
 /// The themed Yes/No dialog behind <see cref="Prompts"/>, in place of <c>MessageBox</c> (AD-23): an owned,
-/// modal <see cref="ShellWindow"/>, so it is excluded from capture (AD-15) and follows the theme live. Yes
+/// modal <see cref="ShellWindow"/> that permits screenshots/recording (AD-15) and follows the theme live. Yes
 /// is the default button and has focus first; Enter activates the focused button. Esc and the close box
 /// answer No, as MessageBox's YesNo does with no Cancel. Members run on the UI thread.
 /// </summary>

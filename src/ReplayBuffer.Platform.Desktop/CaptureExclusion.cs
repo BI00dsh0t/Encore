@@ -9,8 +9,8 @@ using Windows.Win32.UI.WindowsAndMessaging;
 namespace ReplayBuffer.Platform.Desktop;
 
 /// <summary>
-/// Keeps the App's windows out of every capture, its own included (AD-15):
-/// <c>WDA_EXCLUDEFROMCAPTURE</c> on a top-level window of this process.
+/// Opt-in native capture-affinity helper for explicit callers/tests. The App does not enable it
+/// (AD-15 amendment). Apply sets <c>WDA_EXCLUDEFROMCAPTURE</c> on a top-level window of this process.
 /// </summary>
 public static unsafe class CaptureExclusion
 {

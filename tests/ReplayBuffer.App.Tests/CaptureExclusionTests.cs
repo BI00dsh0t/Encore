@@ -16,9 +16,8 @@ namespace ReplayBuffer.App.Tests;
 public sealed class CaptureExclusionTests
 {
     [Fact]
-    public void EveryWindowTheAppShowsIsExcludedFromCapture() => Sta.Run(() =>
+    public void EveryWindowTheAppShowsAllowsCapture() => Sta.Run(() =>
     {
-        IDisposable? hook = null;
         MainWindow? main = null;
         OverlayWindow? overlay = null;
         ContextMenu? menu = null;
@@ -26,7 +25,6 @@ public sealed class CaptureExclusionTests
         Popup? popup = null;
         try
         {
-            hook = CaptureExclusion.ExcludeNewWindows();
             var engine = new FakeEngineSession { Reply = (_, _) => new SettingsUpdateResult(1) };
             var model = new MainViewModel(engine, action => action());
             main = new MainWindow
@@ -68,7 +66,7 @@ public sealed class CaptureExclusionTests
             Assert.NotEmpty(windows);
             Assert.Contains(new WindowInteropHelper(plain).Handle, windows);
             Assert.Contains(((HwndSource)PresentationSource.FromVisual(popup.Child)).Handle, windows);
-            Assert.All(windows, w => Assert.True(CaptureExclusion.IsApplied(w), $"Window {w:X} isn't excluded."));
+            Assert.All(windows, w => Assert.False(CaptureExclusion.IsApplied(w), $"Window {w:X} is excluded."));
         }
         finally
         {
@@ -77,20 +75,18 @@ public sealed class CaptureExclusionTests
             plain?.Close();
             overlay?.Close();
             main?.CloseForQuit();
-            hook?.Dispose();
         }
     });
 
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
-    public void ADialogIsExcludedAndAScreenCopyShowsNoneOfTheAppsWindows() => Sta.Run(() =>
+    public void ADialogAllowsCaptureAndAScreenCopyShowsTheAppsWindow() => Sta.Run(() =>
     {
         using var bench = BenchLock.Take();
 
-        // The lime helper shows before the hook, so it stays capturable: it is what a copy should see.
+        // The red app window sits above the lime helper and should appear in the screen copy.
         var lime = Helper(Brushes.Lime);
         Window? red = null;
-        IDisposable? hook = null;
         try
         {
             lime.Show();
@@ -98,7 +94,6 @@ public sealed class CaptureExclusionTests
             OverlayWindowStyle.ShowWithoutActivation(limeHwnd, 100, 100, 400, 300);
             Sta.Pump(TimeSpan.FromMilliseconds(300));
 
-            hook = CaptureExclusion.ExcludeNewWindows();
             red = Helper(Brushes.Red);
             red.Show();
             const int X = 150, Y = 150, Width = 200, Height = 150;
@@ -125,7 +120,7 @@ public sealed class CaptureExclusionTests
                     return;
                 }
 
-                // Let the hook's show events for the dialog arrive before checking.
+                // Let the dialog finish showing before checking its native window.
                 if (++seen < 3)
                 {
                     return;
@@ -136,9 +131,8 @@ public sealed class CaptureExclusionTests
                 {
                     var windows = CaptureExclusion.VisibleWindows();
                     Assert.All(
-                        windows.Where(w => w != limeHwnd),
-                        w => Assert.True(CaptureExclusion.IsApplied(w), $"Window {w:X} ({ClassName(w)}) isn't excluded."));
-                    AssertCopyIsLime(X, Y, Width, Height);
+                        windows,
+                        w => Assert.False(CaptureExclusion.IsApplied(w), $"Window {w:X} ({ClassName(w)}) is excluded."));
                     checkedDialog = true;
                 }
                 catch (Exception e)
@@ -169,10 +163,11 @@ public sealed class CaptureExclusionTests
             }
 
             Assert.True(checkedDialog);
+            Sta.Pump(TimeSpan.FromMilliseconds(300));
+            AssertCopyIsRed(X, Y, Width, Height);
         }
         finally
         {
-            hook?.Dispose();
             red?.Close();
             lime.Close();
         }
@@ -190,7 +185,7 @@ public sealed class CaptureExclusionTests
         return window;
     }
 
-    private static Window Helper(Brush background) => new()
+    private static Window Helper(Brush background) => new ShellWindow()
     {
         WindowStyle = WindowStyle.None,
         ResizeMode = ResizeMode.NoResize,
@@ -200,7 +195,7 @@ public sealed class CaptureExclusionTests
         Background = background,
     };
 
-    private static void AssertCopyIsLime(int x, int y, int width, int height)
+    private static void AssertCopyIsRed(int x, int y, int width, int height)
     {
         using var bitmap = new System.Drawing.Bitmap(width, height);
         using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
@@ -208,19 +203,17 @@ public sealed class CaptureExclusionTests
             graphics.CopyFromScreen(x, y, 0, 0, new System.Drawing.Size(width, height));
         }
 
-        var limes = 0;
+        var reds = 0;
         for (var px = 0; px < width; px++)
         {
             for (var py = 0; py < height; py++)
             {
                 var c = bitmap.GetPixel(px, py);
-                Assert.False(c.R > 150 && c.G < 100 && c.B < 100, $"A red pixel at {px},{py}: {c}.");
-                limes += c.G > 150 && c.R < 100 ? 1 : 0;
+                reds += c.R > 150 && c.G < 100 && c.B < 100 ? 1 : 0;
             }
         }
 
-        // The lime helper sits under the red window, so the copy did see that part of the screen.
-        Assert.True(limes > width * height / 2, $"Only {limes} of {width * height} pixels were lime.");
+        Assert.True(reds > width * height / 2, $"Only {reds} of {width * height} pixels were red.");
     }
 
     private static string ClassName(nint hwnd)
@@ -251,7 +244,7 @@ public sealed class CaptureExclusionTests
                 {
                     // CreateNew makes the check and the take one step, so two runs can't both hold it.
                     using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-                    file.Write("App capture-exclusion screen copy test"u8);
+                    file.Write("App capture-visibility screen copy test"u8);
                     return new BenchLock(path);
                 }
                 catch (IOException) when (File.Exists(path))

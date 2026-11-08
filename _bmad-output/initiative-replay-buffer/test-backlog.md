@@ -1,5 +1,11 @@
 # Test backlog
 
+## Allow app screenshots / recording (2026-11-08)
+
+- Builder explicitly supersedes all-window capture exclusion. App startup hook, ShellWindow application and tray-popup application removed. AD-15 and existing app-window/dialog/overlay/Heavy screen-copy expectations updated. Standalone native exclusion helper remains opt-in; App production has no callers.
+- Compile-only / unrun under current clearance: changed App CaptureExclusionTests, MainWindowTests, TrayTests, OverlayTests, SurfacesThemeTests and Explicit/Heavy OverlayEndToEndTests. Actual screenshots/screen recording and native affinity/overlay-in-capture HITL remain deferred; no new blanket test or Heavy/night/go permission is inferred from the behavior request.
+- Release build and authorized clip-creator-only regression evidence are recorded in `plan-allow-app-capture.md`. No real Dev App restart, installed app, real settings/Library/caches or Windows/display changes; no push.
+
 ## Persistent video-track thumbnail cache (2026-11-07)
 
 - Builder requested calculated thumbnails be cached. Persist source-bound JPEGs/manifests in the current instance's local cache across editor reopenings/app restarts; no thumbnail worker on a valid hit. Version/source invalidation, bounded image/manifest loading, corrupt-entry regeneration, atomic publication, cancellation cleanup and 128-entry / 256 MiB recency limits are implemented. Test roots are injected temporary directories; real instance caches/settings/Library remain untouched.

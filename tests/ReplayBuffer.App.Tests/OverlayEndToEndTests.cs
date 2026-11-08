@@ -22,8 +22,8 @@ namespace ReplayBuffer.App.Tests;
 /// Story 5.14's closing check of epic 5, unattended: the whole engine (<c>EngineHost</c>) in-process on a throwaway
 /// test instance with the Replay Buffer on, the real foreground Game Detection, the real pipe and Hotkeys, and the
 /// App's own <see cref="EngineConnection"/>, <see cref="OverlayViewModel"/>, <see cref="OverlayWindow"/> and
-/// <see cref="MainViewModel"/> status line on it, wired as <c>ShellApp</c> wires them (the real plane query, the
-/// capture-exclusion hook). Bench's borderless GPU load is the Target Game. Injected Save and Mic Mute presses and
+/// <see cref="MainViewModel"/> status line on it, wired as <c>ShellApp</c> wires them (the real plane query,
+/// capturable app windows). Bench's borderless GPU load is the Target Game. Injected Save and Mic Mute presses and
 /// <c>dev.simulate</c> drive it. The Feedback Sounds go to a recording output: requested, never played aloud.
 /// Needs the GPU, an unlocked console and the Release build of the GPU load.
 /// </summary>
@@ -74,14 +74,12 @@ public sealed class OverlayEndToEndTests : IDisposable
             EnginePath = Path.Combine(_folder, "no-engine.exe"),
             TrustedEnginePath = Environment.ProcessPath!,
         });
-        IDisposable? exclusion = null;
         OverlayWindow? overlay = null;
         LoadProcess? load = null;
         try
         {
             Run(engine.ConnectAsync());
             Assert.Equal(EngineStatus.Connected, engine.Status);
-            exclusion = CaptureExclusion.ExcludeNewWindows();
             var model = new OverlayViewModel(engine, action => dispatcher.BeginInvoke(action), overlayPlanes: Monitors.OverlayPlanes, background: action => Task.Run(action));
             overlay = new OverlayWindow(model);
             var main = new MainViewModel(engine, action => dispatcher.BeginInvoke(action));
@@ -178,11 +176,11 @@ public sealed class OverlayEndToEndTests : IDisposable
             Until(() => model.Dot == OverlayDot.Hollow, "the hollow dot after the Recording");
             Assert.InRange(stop.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(1));
 
-            // R6: every window the App shows is excluded from capture, the Overlay included, and the game kept focus.
+            // AD-15 amendment: app windows allow capture, including the Overlay; the game kept focus.
             Assert.True(overlay.IsVisible);
             var windows = CaptureExclusion.VisibleWindows();
             Assert.Contains(overlay.Handle, windows);
-            Assert.All(windows, w => Assert.True(CaptureExclusion.IsApplied(w), $"Window {w:X} isn't excluded."));
+            Assert.All(windows, w => Assert.False(CaptureExclusion.IsApplied(w), $"Window {w:X} is excluded."));
             Assert.Equal(load.MainWindow, OverlayWindowStyle.ForegroundWindow());
 
             // R4: each notice requested its sound on the default communications endpoint, and nothing played aloud.
@@ -198,7 +196,6 @@ public sealed class OverlayEndToEndTests : IDisposable
         finally
         {
             overlay?.Close();
-            exclusion?.Dispose();
             load?.Dispose();
             Run(engine.DisposeAsync().AsTask());
             Run(host.DisposeAsync().AsTask());

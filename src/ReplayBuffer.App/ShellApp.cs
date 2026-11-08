@@ -4,7 +4,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Interop;
 using System.Windows.Media;
 using H.NotifyIcon;
 using ReplayBuffer.App.Engine;
@@ -57,7 +56,6 @@ internal sealed class ShellApp(Instance instance) : Application
     private ThemeService? _theme;
     private TaskbarIcon? _tray;
     private MenuItem? _restartItem;
-    private IDisposable? _captureExclusion;
     private OverlayDot _trayDot;
     private bool _trayCrashLoop;
     private bool _quitting;
@@ -65,9 +63,6 @@ internal sealed class ShellApp(Instance instance) : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        // Before any window exists: every window of the process, popups and native dialogs included,
-        // is excluded from capture as it appears (AD-15).
-        _captureExclusion = CaptureExclusion.ExcludeNewWindows();
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -233,14 +228,6 @@ internal sealed class ShellApp(Instance instance) : Application
         menu.Items.Add(new Separator());
         menu.Items.Add(quitItem);
 
-        // The menu is a popup with a window of its own; exclude it as soon as it has one (AD-15).
-        PresentationSource.AddSourceChangedHandler(menu, (_, e) =>
-        {
-            if (e.NewSource is HwndSource source)
-            {
-                CaptureExclusion.Apply(source.Handle);
-            }
-        });
         return menu;
     }
 
@@ -361,7 +348,6 @@ internal sealed class ShellApp(Instance instance) : Application
         _overlay!.Close();
         _gallery?.Close();
         _window!.CloseForQuit();
-        _captureExclusion?.Dispose();
         Shutdown();
     }
 }

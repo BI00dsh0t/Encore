@@ -355,7 +355,7 @@ public sealed class OverlayTests
     });
 
     [Fact]
-    public void TheWindowIsTopmostClickThroughNeverActivatedAndExcludedFromCapture() => Sta.Run(() =>
+    public void TheWindowIsTopmostClickThroughNeverActivatedAndAllowsCapture() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession();
         var time = new ManualTime();
@@ -364,7 +364,7 @@ public sealed class OverlayTests
         {
             var hwnd = window.Handle;
             Assert.Equal(OverlayWindowStyle.Styles, OverlayWindowStyle.ExtendedStyle(hwnd) & OverlayWindowStyle.Styles);
-            Assert.True(CaptureExclusion.IsApplied(hwnd));
+            Assert.False(CaptureExclusion.IsApplied(hwnd));
             Assert.False(window.IsVisible);
 
             Shift(engine, Buffering);
