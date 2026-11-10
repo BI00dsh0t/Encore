@@ -91,7 +91,7 @@ internal sealed class IpcServer : IAsyncDisposable
             await listener.DisposeAsync().ConfigureAwait(false);
         }
 
-        await Task.WhenAll(_connections.Values.Select(c => c.CloseAsync(_options.Drain))).ConfigureAwait(false);
+        await Task.WhenAll(_connections.Values.Select(connection => connection.CloseAsync(_options.Drain))).ConfigureAwait(false);
         _stop.Dispose();
         _stopAccepting.Dispose();
     }
@@ -175,17 +175,22 @@ internal sealed class IpcServer : IAsyncDisposable
         {
             while (await timer.WaitForNextTickAsync(_stop.Token).ConfigureAwait(false))
             {
-                foreach (var connection in _connections.Values)
-                {
-                    if (connection.Lag > _options.MaxLag)
-                    {
-                        connection.Drop($"it is more than {_options.MaxLag.TotalSeconds:0.###} s behind");
-                    }
-                }
+                DropLagging();
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
+        }
+    }
+
+    private void DropLagging()
+    {
+        foreach (var connection in _connections.Values)
+        {
+            if (connection.Lag > _options.MaxLag)
+            {
+                connection.Drop($"it is more than {_options.MaxLag.TotalSeconds:0.###} s behind");
+            }
         }
     }
 

@@ -58,16 +58,9 @@ internal sealed class WriterQueue(int maxQueued, TimeProvider time)
                     return null;
                 }
 
-                if (_items.First is { } first)
+                if (TakeFirstLocked() is { } frame)
                 {
-                    _items.RemoveFirst();
-                    if (first.Value.CoalesceKey is { } key)
-                    {
-                        _coalescing.Remove(key);
-                    }
-
-                    _inFlightSince = first.Value.EnqueuedAt;
-                    return first.Value.Frame;
+                    return frame;
                 }
 
                 if (_completed)
@@ -97,6 +90,24 @@ internal sealed class WriterQueue(int maxQueued, TimeProvider time)
 
     /// <summary>Discards every frame and refuses new ones.</summary>
     public void Close() => WakeAfter(CloseLocked);
+
+    /// <summary>Takes the oldest frame and marks it in flight; null when none is queued.</summary>
+    private byte[]? TakeFirstLocked()
+    {
+        if (_items.First is not { } first)
+        {
+            return null;
+        }
+
+        _items.RemoveFirst();
+        if (first.Value.CoalesceKey is { } key)
+        {
+            _coalescing.Remove(key);
+        }
+
+        _inFlightSince = first.Value.EnqueuedAt;
+        return first.Value.Frame;
+    }
 
     private bool EnqueueLocked(byte[] frame, string? coalesceKey)
     {

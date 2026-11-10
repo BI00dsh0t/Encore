@@ -9,9 +9,17 @@ internal sealed class Warnings(EventHub hub, TimeProvider time) : IFeedbackNotic
 {
     private readonly Lock _lock = new();
 
-    public Warning Raise(string code, WarningSeverity severity, string source, string message, bool overlay, string? sound = null, bool dismissable = true)
+    public Warning Raise(
+        string code,
+        WarningSeverity severity,
+        string source,
+        string message,
+        bool overlay,
+        string? sound = null,
+        bool dismissable = true)
     {
-        var warning = new Warning(Guid.NewGuid().ToString("N"), code, severity, source, message, time.GetUtcNow(), overlay, sound, dismissable);
+        var id = Guid.NewGuid().ToString("N");
+        var warning = new Warning(id, code, severity, source, message, time.GetUtcNow(), overlay, sound, dismissable);
         lock (_lock)
         {
             hub.Publish(FeedbackMessages.Raised, warning);
@@ -29,7 +37,7 @@ internal sealed class Warnings(EventHub hub, TimeProvider time) : IFeedbackNotic
     {
         lock (_lock)
         {
-            if (hub.State.Warnings.Any(w => w.Id == id))
+            if (hub.State.Warnings.Any(warning => warning.Id == id))
             {
                 hub.Publish(FeedbackMessages.Dismissed, new WarningDismissed(id));
             }
@@ -41,7 +49,7 @@ internal sealed class Warnings(EventHub hub, TimeProvider time) : IFeedbackNotic
     {
         lock (_lock)
         {
-            var warning = hub.State.Warnings.FirstOrDefault(w => w.Id == dismiss.Id)
+            var warning = hub.State.Warnings.FirstOrDefault(active => active.Id == dismiss.Id)
                 ?? throw new ErrorCodeException(ErrorCodes.WarningNotFound, $"No active warning has id '{dismiss.Id}'.");
             if (!warning.Dismissable)
             {

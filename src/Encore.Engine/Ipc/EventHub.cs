@@ -12,7 +12,13 @@ internal sealed class EventHub
     private StateSnapshot _state;
 
     /// <summary>The optional arguments are the state the engine starts with: in the first snapshot, so no event carries them.</summary>
-    public EventHub(SettingsDocument settings, AudioDeviceList? devices = null, IReadOnlyList<LibraryItem>? library = null, bool cleanupBlocked = false, string? libraryFolder = null, StorageEstimate? estimate = null)
+    public EventHub(
+        SettingsDocument settings,
+        AudioDeviceList? devices = null,
+        IReadOnlyList<LibraryItem>? library = null,
+        bool cleanupBlocked = false,
+        string? libraryFolder = null,
+        StorageEstimate? estimate = null)
     {
         _state = StateSnapshot.Initial(Guid.NewGuid().ToString("N"), Environment.ProcessId, settings) with
         {
@@ -60,7 +66,8 @@ internal sealed class EventHub
     {
         lock (_lock)
         {
-            sink.Enqueue(FrameWriter.Event(EngineMessages.StateSnapshotType, _state.Seq, _state, EngineJsonContext.Default.StateSnapshot), null);
+            var snapshot = FrameWriter.Event(EngineMessages.StateSnapshotType, _state.Seq, _state, EngineJsonContext.Default.StateSnapshot);
+            sink.Enqueue(snapshot, null);
             _sinks.Add(sink);
         }
     }

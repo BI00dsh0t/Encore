@@ -51,7 +51,9 @@ internal sealed class CommandRouter(ILogger log)
         var type = envelope.Type!;
         if (envelope.V != Protocol.Version)
         {
-            return Error(ErrorCodes.InvalidArguments, $"Protocol version {envelope.V} is not supported; this engine speaks {Protocol.Version}.");
+            return Error(
+                ErrorCodes.InvalidArguments,
+                $"Protocol version {envelope.V} is not supported; this engine speaks {Protocol.Version}.");
         }
 
         if (!_handlers.TryGetValue(type, out var handler))
