@@ -8,6 +8,10 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
         <theme:EmptyToCollapsedConverter x:Key="NotEmpty" />
+        <!-- The icons drawn more than once. -->
+        <Geometry x:Key="BackArrowIcon">M 15,8 L 1,8 M 7,2 L 1,8 L 7,14</Geometry>
+        <Geometry x:Key="PlusIcon">M 2,8 L 14,8 M 8,2 L 8,14</Geometry>
+        <Geometry x:Key="MinusIcon">M 2,8 L 14,8</Geometry>
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <local:ClipCreatorPanel Margin="0,0,8,0"
@@ -20,7 +24,7 @@
                         ToolTip="Back to Library"
                         DockPanel.Dock="Left"
                         Margin="0,0,8,0">
-                    <Path Style="{DynamicResource EncoreClipIconStyle}" Data="M 15,8 L 1,8 M 7,2 L 1,8 L 7,14" />
+                    <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource BackArrowIcon}" />
                 </Button>
                 <Border DockPanel.Dock="Right"
                         Background="{DynamicResource AccentFillColorDefaultBrush}"
@@ -199,7 +203,7 @@
                                     Style="{DynamicResource EncoreClipToolButtonStyle}"
                                     AutomationProperties.Name="Pan timeline left"
                                     ToolTip="Pan timeline left">
-                                <Path Style="{DynamicResource EncoreClipIconStyle}" Data="M 15,8 L 1,8 M 7,2 L 1,8 L 7,14" />
+                                <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource BackArrowIcon}" />
                             </Button>
                             <Button Command="{Binding PanRightCommand}"
                                     Style="{DynamicResource EncoreClipToolButtonStyle}"
@@ -214,14 +218,14 @@
                                     Style="{DynamicResource EncoreClipToolButtonStyle}"
                                     AutomationProperties.Name="Zoom timeline out"
                                     ToolTip="Zoom timeline out">
-                                <Path Style="{DynamicResource EncoreClipIconStyle}" Data="M 2,8 L 14,8" />
+                                <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource MinusIcon}" />
                             </Button>
                             <TextBlock Text="{Binding ZoomText}" FontSize="11" VerticalAlignment="Center" Margin="2,0" />
                             <Button Command="{Binding ZoomInCommand}"
                                     Style="{DynamicResource EncoreClipToolButtonStyle}"
                                     AutomationProperties.Name="Zoom timeline in"
                                     ToolTip="Zoom timeline in">
-                                <Path Style="{DynamicResource EncoreClipIconStyle}" Data="M 2,8 L 14,8 M 8,2 L 8,14" />
+                                <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource PlusIcon}" />
                             </Button>
                         </WrapPanel>
                         <TextBlock Text="{Binding ViewportText}"
@@ -255,13 +259,13 @@
                                                 Click="StartMinus"
                                                 ToolTip="Start minus one millisecond"
                                                 AutomationProperties.Name="Start minus one millisecond">
-                                            <Path Style="{DynamicResource EncoreClipIconStyle}" Data="M 2,8 L 14,8" />
+                                            <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource MinusIcon}" />
                                         </Button>
                                         <Button Style="{DynamicResource EncoreClipToolButtonStyle}"
                                                 Click="StartPlus"
                                                 ToolTip="Start plus one millisecond"
                                                 AutomationProperties.Name="Start plus one millisecond">
-                                            <Path Style="{DynamicResource EncoreClipIconStyle}" Data="M 2,8 L 14,8 M 8,2 L 8,14" />
+                                            <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource PlusIcon}" />
                                         </Button>
                                     </StackPanel>
                                 </Border>
@@ -284,13 +288,13 @@
                                                 Click="EndMinus"
                                                 ToolTip="End minus one millisecond"
                                                 AutomationProperties.Name="End minus one millisecond">
-                                            <Path Style="{DynamicResource EncoreClipIconStyle}" Data="M 2,8 L 14,8" />
+                                            <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource MinusIcon}" />
                                         </Button>
                                         <Button Style="{DynamicResource EncoreClipToolButtonStyle}"
                                                 Click="EndPlus"
                                                 ToolTip="End plus one millisecond"
                                                 AutomationProperties.Name="End plus one millisecond">
-                                            <Path Style="{DynamicResource EncoreClipIconStyle}" Data="M 2,8 L 14,8 M 8,2 L 8,14" />
+                                            <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource PlusIcon}" />
                                         </Button>
                                     </StackPanel>
                                 </Border>

@@ -1,4 +1,4 @@
-<!-- The export options dialog: the name, what to include and the quality; Save only closes it with a yes. -->
+<!-- The export options dialog: the output name and which audio tracks go in, apart or mixed; Save only says yes. -->
 <app:ShellWindow x:Class="Encore.App.Library.ClipExportDialog"
                  x:ClassModifier="internal"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
