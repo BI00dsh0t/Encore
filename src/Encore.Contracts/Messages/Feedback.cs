@@ -13,17 +13,7 @@ public enum WarningSeverity
     Error,
 }
 
-/// <summary>
-/// <c>warning.raised</c>, one of the two shapes the Overlay and status line render (AD-3): a
-/// user-facing problem, active until it is dismissed.
-/// </summary>
-/// <param name="Id">The engine's id for this occurrence.</param>
-/// <param name="Code">One of <see cref="ErrorCodes"/>.</param>
-/// <param name="Source">The engine area that raised it, such as <c>settings</c> or <c>audio</c>.</param>
-/// <param name="At">When it was raised, in UTC.</param>
-/// <param name="Overlay">Whether the Overlay shows it.</param>
-/// <param name="Sound">The <c>feedbackSounds</c> name the engine played for it, or <c>null</c>.</param>
-/// <param name="Dismissable">Whether <c>warning.dismiss</c> may remove it.</param>
+/// <c>warning.raised</c>: a user-facing problem, active until it is dismissed. Fields: docs/code-notes.md.
 public sealed record Warning(
     string Id,
     string Code,
@@ -58,7 +48,7 @@ public sealed record WarningDismissed(string Id);
 /// <summary>Feedback messages: warnings, the Overlay and Feedback Sounds.</summary>
 public static class FeedbackMessages
 {
-    /// <summary>Dismissing is a command, never local App state (AD-3).</summary>
+    /// <summary>Dismissing is a command, never local App state.</summary>
     public static CommandType<WarningDismiss, Empty> Dismiss { get; } =
         new("warning.dismiss", FeedbackJsonContext.Default.WarningDismiss, FeedbackJsonContext.Default.Empty);
 

@@ -22,11 +22,7 @@ public enum RecordingState
     Running,
 }
 
-/// <summary>
-/// <c>capture.stateChanged</c>, one of the two shapes the Overlay and status line render (AD-3).
-/// The SessionOrchestrator is its only producer (AD-19).
-/// </summary>
-/// <param name="ClipsWriting">How many Clips are being written right now; JSON without it reads as 0 (AD-22, additive).</param>
+/// <c>capture.stateChanged</c>: what the Overlay and status line show; only the SessionOrchestrator produces it.
 public sealed record CaptureState(
     ReplayState Replay,
     RecordingState Recording,
@@ -35,40 +31,26 @@ public sealed record CaptureState(
     DateTimeOffset? CooldownUntil,
     int ClipsWriting = 0)
 {
-    /// <summary>Nothing running, and the mic muted, as AD-5 restores it with no saved state.</summary>
+    /// <summary>Nothing running, and the mic muted, which is how it starts with no saved state.</summary>
     public static CaptureState Initial { get; } = new(ReplayState.Off, RecordingState.Off, RecordingState.Off, MicMuted: true, CooldownUntil: null);
 }
 
-/// <summary><c>clip.saved</c>: a Clip was written to <see cref="Path"/> (R4). The SessionOrchestrator is its only producer (AD-19).</summary>
+/// <summary><c>clip.saved</c>: a Clip was written to <see cref="Path"/>. The SessionOrchestrator is its only producer.</summary>
 public sealed record ClipSaved(string Path);
 
-/// <summary>
-/// <c>clip.saving</c>: a <c>save</c> press was accepted at <see cref="At"/> and its Clip is on its
-/// way (R6); <c>clip.saved</c> or <c>clip.failed</c> follows. The SessionOrchestrator is its only
-/// producer (AD-19).
-/// </summary>
+/// <c>clip.saving</c>: a save press was accepted at <see cref="At"/>; <c>clip.saved</c> or <c>clip.failed</c> follows.
 public sealed record ClipSaving(DateTimeOffset At);
 
-/// <summary>
-/// <c>clip.failed</c>: a save made no Clip (R4); <see cref="Reason"/> is an error code, e.g.
-/// <see cref="ErrorCodes.ClipTooShort"/>. The SessionOrchestrator is its only producer (AD-19).
-/// </summary>
+/// <c>clip.failed</c>: a save made no Clip; <see cref="Reason"/> is an error code such as <c>clip-too-short</c>.
 public sealed record ClipFailed(string Reason);
 
-/// <summary>A codec this PC can encode, and the FFmpeg encoder the engine's probe chose for it (R2, AD-14).</summary>
-/// <param name="Encoder">The FFmpeg encoder name, e.g. <c>h264_nvenc</c>, or <c>libx264</c> when no hardware H.264 encoder works.</param>
-/// <param name="MayNotPlayEverywhere">True for HEVC and AV1, which some players and sites can't decode.</param>
+/// <summary>A codec this PC can encode, with the FFmpeg encoder the probe chose; HEVC and AV1 may not play everywhere.</summary>
 public sealed record CodecOffer(VideoCodec Codec, string Encoder, bool MayNotPlayEverywhere);
 
 /// <summary>An output resolution the Output Settings offer.</summary>
 public sealed record ResolutionOption(int Width, int Height);
 
-/// <summary>
-/// <c>capture.videoOptions</c>: what the <c>video</c> key can be set to on this PC. The engine probes
-/// the hardware encoders once at startup; until then <see cref="Probed"/> is false and no codec is
-/// offered. The resolutions and <see cref="MaxFps"/> are what's offered: the key itself accepts any
-/// even size up to <see cref="VideoSettings.MaxDimension"/>.
-/// </summary>
+/// <c>capture.videoOptions</c>: what the <c>video</c> key can be set to here; no codec is offered until the probe ran.
 public sealed record VideoOptions(bool Probed, IReadOnlyList<CodecOffer> Codecs, IReadOnlyList<ResolutionOption> Resolutions, int MaxFps)
 {
     /// <summary>The resolutions every PC is offered, smallest first.</summary>
@@ -118,15 +100,7 @@ public sealed record VideoOptions(bool Probed, IReadOnlyList<CodecOffer> Codecs,
     }
 }
 
-/// <summary>
-/// <c>estimate.changed</c>: what the Global Buffer Window costs in RAM or disk (R2), from the Global
-/// <c>video</c>, <c>bufferWindow</c>, <c>replayStorage</c>, <c>ringPath</c> and Track count.
-/// </summary>
-/// <param name="Storage">Where the ring lives, so whether <see cref="Bytes"/> is RAM or disk.</param>
-/// <param name="Bytes">The ring's bytes at worst for the Global settings.</param>
-/// <param name="WorstCase">True for VBR, whose bytes are counted at 1.5 times its bitrate.</param>
-/// <param name="FreeBytes">The free RAM for Memory, the ring folder drive's free space for Disk; null when unknown.</param>
-/// <param name="ExceedsFree">True when <see cref="Bytes"/> is over <see cref="FreeBytes"/>; false when that is unknown.</param>
+/// <c>estimate.changed</c>: what the Global Buffer Window costs in RAM or disk; VBR counts at 1.5 times its bitrate.
 public sealed record StorageEstimate(ReplayStorage Storage, long Bytes, bool WorstCase, long? FreeBytes, bool ExceedsFree);
 
 /// <summary>Capture messages: Rewind, the capture session and the shared capture state.</summary>
@@ -138,35 +112,35 @@ public static class CaptureMessages
         "capture",
         (snapshot, state) => snapshot with { Capture = state });
 
-    /// <summary>The encoder probe's result (R2, AD-14), published once after startup.</summary>
+    /// <summary>The encoder probe's result, published once after startup.</summary>
     public static EventType<VideoOptions> VideoOptionsChanged { get; } = new(
         "capture.videoOptions",
         CaptureJsonContext.Default.VideoOptions,
         "videoOptions",
         (snapshot, options) => snapshot with { VideoOptions = options });
 
-    /// <summary>A Clip was saved (R4); the snapshot keeps the last one.</summary>
+    /// <summary>A Clip was saved; the snapshot keeps the last one.</summary>
     public static EventType<ClipSaved> Saved { get; } = new(
         "clip.saved",
         CaptureJsonContext.Default.ClipSaved,
         "lastClip",
         (snapshot, saved) => snapshot with { LastClip = saved });
 
-    /// <summary>A save press was accepted and its Clip is being made (R6); the snapshot keeps the last one.</summary>
+    /// <summary>A save press was accepted and its Clip is being made; the snapshot keeps the last one.</summary>
     public static EventType<ClipSaving> Saving { get; } = new(
         "clip.saving",
         CaptureJsonContext.Default.ClipSaving,
         "lastClipSaving",
         (snapshot, saving) => snapshot with { LastClipSaving = saving });
 
-    /// <summary>A save made no Clip (R4); the snapshot keeps the last failure.</summary>
+    /// <summary>A save made no Clip; the snapshot keeps the last failure.</summary>
     public static EventType<ClipFailed> Failed { get; } = new(
         "clip.failed",
         CaptureJsonContext.Default.ClipFailed,
         "lastClipFailure",
         (snapshot, failed) => snapshot with { LastClipFailure = failed });
 
-    /// <summary>The Global settings' storage estimate (R2). Coalescing: a connection's queue keeps only the latest.</summary>
+    /// <summary>The Global settings' storage estimate; a connection's queue keeps only the latest.</summary>
     public static EventType<StorageEstimate> EstimateChanged { get; } = new(
         "estimate.changed",
         CaptureJsonContext.Default.StorageEstimate,

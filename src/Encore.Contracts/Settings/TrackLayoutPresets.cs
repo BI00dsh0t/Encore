@@ -2,40 +2,24 @@ using Encore.Contracts.Messages;
 
 namespace Encore.Contracts.Settings;
 
-/// <summary>The Audio Tracks presets (story 10.4, epic 10's EXPERIENCE.md "Presets").</summary>
+/// <summary>The Audio Tracks presets.</summary>
 public enum TrackLayoutPreset
 {
     /// <summary>One "Everything" Track: the default playback device and the default microphone, mute on.</summary>
     Simple,
 
-    /// <summary>"Everything" as in <see cref="Simple"/>, then "Game and chat" (default playback) and "Microphone" (default microphone, mute on).</summary>
+    /// <summary>"Everything" as in Simple, then "Game and chat" (default playback) and "Microphone" (default mic, mute on).</summary>
     ForEditing,
 }
 
-/// <summary>
-/// Builds a preset's <see cref="TrackLayout"/> from the Windows default devices (AD-24). The engine's
-/// first-run seed and the App's presets share it, so the two never differ. Pure, except for the ids
-/// of new devices and Tracks.
-/// </summary>
+/// <summary>Builds a preset's Track Layout from the Windows default devices; the engine's first-run seed and the App share it.</summary>
 public static class TrackLayoutPresets
 {
     public const string EverythingName = "Everything";
     public const string GameAndChatName = "Game and chat";
     public const string MicrophoneName = "Microphone";
 
-    /// <summary>
-    /// The layout <paramref name="preset"/> builds from <paramref name="devices"/>' available defaults
-    /// (<see cref="AudioDevice.IsDefault"/>), replacing <paramref name="current"/>:
-    /// <list type="bullet">
-    /// <item>Track 1 keeps <paramref name="current"/>'s first Track id (or <see cref="Keys.EverythingTrackId"/>
-    /// when it has none); the other Tracks get new ids.</item>
-    /// <item>A default device <paramref name="current"/> already holds (same endpoint, ignoring case, and flow)
-    /// keeps its record and key; the default input is marked a Mic Device. Others are added with new keys.</item>
-    /// <item>A flow with no available default is left out, and its Tracks stay empty.</item>
-    /// <item>The layout holds only the devices its Tracks use.</item>
-    /// </list>
-    /// </summary>
-    /// <param name="newId">Makes new device keys and Track ids; <see cref="Guid.NewGuid"/> by default.</param>
+    /// <summary>The layout a preset builds from the available default devices, replacing the current one. docs/code-notes.md.</summary>
     public static TrackLayout Build(TrackLayoutPreset preset, TrackLayout current, IReadOnlyList<AudioDevice> devices, Func<Guid>? newId = null)
     {
         ArgumentNullException.ThrowIfNull(current);
@@ -72,10 +56,7 @@ public static class TrackLayoutPresets
         return new TrackLayout(used, tracks);
     }
 
-    /// <summary>
-    /// The engine's first-run seed (R6): <see cref="TrackLayoutPreset.Simple"/> over the catalog default,
-    /// so Track 1 is the default layout's "Everything" Track.
-    /// </summary>
+    /// <summary>The engine's first-run seed: the Simple preset, so Track 1 is the default layout's "Everything" Track.</summary>
     public static TrackLayout Seed(IReadOnlyList<AudioDevice> devices, Func<Guid>? newId = null) =>
         Build(TrackLayoutPreset.Simple, Keys.TrackLayout.Default, devices, newId);
 

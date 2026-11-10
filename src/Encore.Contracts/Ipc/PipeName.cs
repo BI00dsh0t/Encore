@@ -2,7 +2,7 @@ using System.Security.Principal;
 
 namespace Encore.Contracts.Ipc;
 
-/// <summary>The engine's pipe (AD-3): <c>Encore.Engine.v1.&lt;instance&gt;.&lt;user SID&gt;</c>.</summary>
+/// <summary>The engine's pipe: <c>Encore.Engine.v1.&lt;instance&gt;.&lt;user SID&gt;</c>.</summary>
 public static class PipeName
 {
     public const string Prefix = "Encore.Engine.v1.";

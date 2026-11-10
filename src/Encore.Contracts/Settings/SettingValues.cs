@@ -25,13 +25,7 @@ public enum RateControl
     Vbr,
 }
 
-/// <summary>The <c>video</c> key: codec, output resolution, fps, bitrate and rate control.</summary>
-/// <param name="MatchSource">
-/// Story 12.1 (R40), optional: the game capture chain takes its size from the game's own captured
-/// size at its first frame (scaled only to fit the codec's largest side) instead of
-/// <paramref name="Width"/> × <paramref name="Height"/>, which stay as the size to fall back to.
-/// False by default, and left out of the JSON when false, so every existing value reads and writes as before.
-/// </param>
+/// <summary>The <c>video</c> key: codec, output resolution, fps, bitrate and rate control. MatchSource: docs/code-notes.md.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record VideoSettings(
     VideoCodec Codec,
@@ -62,7 +56,7 @@ public sealed record LayoutDevice(Guid Key, string EndpointId, string FriendlyNa
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record Track(Guid Id, string Name, IReadOnlyList<Guid> DeviceKeys, bool MuteAffected);
 
-/// <summary>The <c>trackLayout</c> key (AD-4): one inline value, devices and the Tracks that mix them.</summary>
+/// <summary>The <c>trackLayout</c> key: one inline value, devices and the Tracks that mix them.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TrackLayout(IReadOnlyList<LayoutDevice> Devices, IReadOnlyList<Track> Tracks);
 
@@ -91,10 +85,7 @@ public static class HotkeyModifiers
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record HotkeyBinding(int Vk, int Modifiers);
 
-/// <summary>
-/// The <c>hotkeys</c> key (AD-11): one binding, or null for unbound, per <c>HotkeyAction</c>. The
-/// Monitor Record start and stop bindings came later (6.9): a document without them reads them as unbound.
-/// </summary>
+/// <summary>The <c>hotkeys</c> key: one binding, or null for unbound, per action; a missing newer binding reads as unbound.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record HotkeySettings(
     HotkeyBinding? Save,
@@ -121,7 +112,7 @@ public sealed record HotkeySettings(
     };
 }
 
-/// <summary>An action a Hotkey triggers, one per <see cref="HotkeySettings"/> field, in registration order (AD-11).</summary>
+/// <summary>An action a Hotkey triggers, one per <see cref="HotkeySettings"/> field, in registration order.</summary>
 [JsonConverter(typeof(CamelCaseEnumConverter<HotkeyAction>))]
 public enum HotkeyAction
 {
@@ -158,7 +149,7 @@ public sealed record FeedbackSounds(bool ClipSaved, bool SaveFailed, bool Record
         _ => false,
     };
 
-    /// <summary>A copy with <paramref name="sound"/> switched to <paramref name="on"/>; unchanged for a value the enum doesn't name.</summary>
+    /// <summary>A copy with one sound switched on or off; unchanged for a value the enum doesn't name.</summary>
     public FeedbackSounds With(FeedbackSound sound, bool on) => sound switch
     {
         FeedbackSound.ClipSaved => this with { ClipSaved = on },
@@ -170,7 +161,7 @@ public sealed record FeedbackSounds(bool ClipSaved, bool SaveFailed, bool Record
     };
 }
 
-/// <summary>The <c>monitorRecordingScreens</c> key's mode (AD-25).</summary>
+/// <summary>The <c>monitorRecordingScreens</c> key's mode.</summary>
 [JsonConverter(typeof(CamelCaseEnumConverter<MonitorScreensMode>))]
 public enum MonitorScreensMode
 {
@@ -181,13 +172,7 @@ public enum MonitorScreensMode
     Selected,
 }
 
-/// <summary>
-/// The <c>monitorRecordingScreens</c> key (AD-25, story 11.2): which screens a Monitor Recording
-/// composites. <c>{ "mode": "all" }</c>, or <c>{ "mode": "selected", "monitors": [ ... ] }</c> with at
-/// least one monitor id: DisplayConfig's monitor device path (<c>DisplayMonitor.MonitorId</c>), stable
-/// across reboots, or a GDI device name carried over from <c>monitorRecordingMonitor</c>. While the key
-/// is null, the old <c>monitorRecordingMonitor</c> is read as before.
-/// </summary>
+/// <summary>The <c>monitorRecordingScreens</c> key: all screens, or a chosen list of monitor ids. See docs/code-notes.md.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record MonitorRecordingScreens(MonitorScreensMode Mode, IReadOnlyList<string>? Monitors = null)
 {
@@ -202,26 +187,21 @@ public sealed record MonitorRecordingScreens(MonitorScreensMode Mode, IReadOnlyL
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CleanupSettings(long? MaxBytes, long? MaxAgeSeconds);
 
-/// <summary>
-/// The <c>overlayDot</c> key: when the Overlay's dot shows. A topmost window over a borderless game keeps
-/// the game in independent flip only while the game's monitor has a free hardware overlay plane (MPO), so
-/// <see cref="Auto"/> shows the dot always where the monitor reports overlay planes and for a few seconds
-/// after each change where it doesn't.
-/// </summary>
+/// <summary>The <c>overlayDot</c> key: when the Overlay's dot shows, since a dot can cost frame rate. See docs/code-notes.md.</summary>
 [JsonConverter(typeof(CamelCaseEnumConverter<OverlayDotMode>))]
 public enum OverlayDotMode
 {
     /// <summary>Always where the Target Game's monitor reports overlay planes; otherwise on each change.</summary>
     Auto,
 
-    /// <summary>Always, whatever it costs (FR-6 as written).</summary>
+    /// <summary>Always, whatever it costs.</summary>
     Always,
 
     /// <summary>For a few seconds after each change of the dot or the mic mute.</summary>
     OnChange,
 }
 
-/// <summary>The <c>appTheme</c> key: the App's look (AD-23).</summary>
+/// <summary>The <c>appTheme</c> key: the App's look.</summary>
 [JsonConverter(typeof(CamelCaseEnumConverter<AppTheme>))]
 public enum AppTheme
 {

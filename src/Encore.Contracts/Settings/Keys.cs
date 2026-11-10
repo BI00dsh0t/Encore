@@ -4,7 +4,7 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Encore.Contracts.Settings;
 
-/// <summary>One key of the closed catalog (AD-4): its name, value type, default, overridability and when it applies.</summary>
+/// <summary>One key of the closed catalog: its name, value type, default, overridability and when it applies.</summary>
 public abstract class SettingKey
 {
     private protected SettingKey(string name, Type valueType, bool overridable, AppliesAt appliesAt)
@@ -27,10 +27,7 @@ public abstract class SettingKey
     /// <summary>The default, as JSON.</summary>
     public abstract JsonElement DefaultJson { get; }
 
-    /// <summary>
-    /// Checks a raw value against the key's type and range. On success, <paramref name="normalized"/>
-    /// is the value re-serialized in canonical form.
-    /// </summary>
+    /// <summary>Checks a raw value against the key's type and range; normalized is the value in canonical form.</summary>
     public abstract bool TryNormalize(JsonElement value, out JsonElement normalized);
 
     public bool IsValid(JsonElement value) => TryNormalize(value, out _);
@@ -120,7 +117,7 @@ public static class ProfileAttributes
     public static IReadOnlyList<string> All { get; } = [Name, Ignored, RecordingsEnabled];
 }
 
-/// <summary>The closed settings key catalog (AD-4, AD-22). A key missing from the document takes its default.</summary>
+/// <summary>The closed settings key catalog. A key missing from the document takes its default.</summary>
 public static class Keys
 {
     /// <summary>The id of the default layout's one "Everything" Track.</summary>
@@ -175,17 +172,11 @@ public static class Keys
     public static SettingKey<RecordHotkeyMode> RecordHotkeyMode { get; } = new(
         "recordHotkeyMode", Json.RecordHotkeyMode, Settings.RecordHotkeyMode.Toggle, overridable: false, AppliesAt.Immediate, Enum.IsDefined);
 
-    /// <summary>
-    /// The monitor device name for Monitor Recording; null is the primary monitor. Read only while
-    /// <see cref="MonitorRecordingScreens"/> is null (AD-25).
-    /// </summary>
+    /// <summary>The monitor device name for Monitor Recording; null is the primary. Read only while the screens key is null.</summary>
     public static SettingKey<string?> MonitorRecordingMonitor { get; } = new(
         "monitorRecordingMonitor", Json.String, null, overridable: false, AppliesAt.NextSession, IsNotBlank, allowsNull: true);
 
-    /// <summary>
-    /// The screens a Monitor Recording composites (AD-25, story 11.2): all, or a selection of monitor
-    /// ids. Null (the default) reads the old <see cref="MonitorRecordingMonitor"/>.
-    /// </summary>
+    /// <summary>The screens a Monitor Recording composites: all, or chosen monitor ids. Null reads the older single-monitor key.</summary>
     public static SettingKey<MonitorRecordingScreens?> MonitorRecordingScreens { get; } = new(
         "monitorRecordingScreens", Json.MonitorRecordingScreens, null, overridable: false, AppliesAt.NextSession,
         IsValidMonitorRecordingScreens, allowsNull: true);
@@ -210,18 +201,15 @@ public static class Keys
     public static SettingKey<bool> StartWithWindows { get; } = new(
         "startWithWindows", Json.Boolean, false, overridable: false, AppliesAt.Immediate);
 
-    /// <summary>When the Overlay's dot shows (research for story 5.8, the builder's decision of 2026-11-03).</summary>
+    /// <summary>When the Overlay's dot shows.</summary>
     public static SettingKey<OverlayDotMode> OverlayDot { get; } = new(
         "overlayDot", Json.OverlayDotMode, OverlayDotMode.Auto, overridable: false, AppliesAt.Immediate, Enum.IsDefined);
 
-    /// <summary>The Main App's look (AD-23). The engine only stores it; the App applies it on <c>settings.changed</c>.</summary>
+    /// <summary>The Main App's look. The engine only stores it; the App applies it on <c>settings.changed</c>.</summary>
     public static SettingKey<AppTheme> AppTheme { get; } = new(
         "appTheme", Json.AppTheme, Settings.AppTheme.Fluent, overridable: false, AppliesAt.Immediate, Enum.IsDefined);
 
-    /// <summary>
-    /// Whether a game the engine detects for the first time is captured (R41, story 13.1): false creates
-    /// its Game Profile Ignored. Hand-added games and existing profiles are never affected.
-    /// </summary>
+    /// <summary>Whether a game detected for the first time is captured; false creates its Game Profile Ignored.</summary>
     public static SettingKey<bool> CaptureNewGames { get; } = new(
         "captureNewGames", Json.Boolean, true, overridable: false, AppliesAt.Immediate);
 

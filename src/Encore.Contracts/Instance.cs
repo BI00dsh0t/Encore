@@ -1,13 +1,9 @@
 namespace Encore.Contracts;
 
-/// <summary>
-/// The instance a process belongs to (AD-16): <c>Encore</c> for the installed copy,
-/// <c>Encore-Dev</c> for everything else. The name is appended to the data folders.
-/// </summary>
+/// <summary>The instance a process belongs to: <c>Encore</c> for the installed copy, <c>Encore-Dev</c> for everything else.</summary>
 public sealed record Instance(string Name, string RoamingDataFolder, string LocalDataFolder)
 {
-    /// <summary>The instance name. A name starting with <see cref="TestPrefix"/> must be a valid test name.</summary>
-    /// <exception cref="ArgumentException">The name starts with <see cref="TestPrefix"/> but is not a valid test name.</exception>
+    /// <summary>The instance name; one that starts with <see cref="TestPrefix"/> must be a valid test name, or it throws.</summary>
     public string Name { get; init => field = ValidateName(value); } = ValidateName(Name);
 
     public const string InstalledName = "Encore";
@@ -25,10 +21,7 @@ public sealed record Instance(string Name, string RoamingDataFolder, string Loca
     /// <summary>Whether this is a throwaway test instance, which may have test-only commands.</summary>
     public bool IsTest => IsTestName(Name);
 
-    /// <summary>
-    /// Resolves the instance for a process image. Only an image under
-    /// <c>%LOCALAPPDATA%\Programs\Encore\</c> is the installed instance.
-    /// </summary>
+    /// <summary>Resolves the instance of a process image; only one under the user's Programs\Encore folder is installed.</summary>
     public static Instance Resolve(string processPath, string roamingAppData, string localAppData)
     {
         var installFolder = Path.TrimEndingDirectorySeparator(
@@ -57,8 +50,7 @@ public sealed record Instance(string Name, string RoamingDataFolder, string Loca
         return name;
     }
 
-    /// <summary>The test instance named <paramref name="name"/>, with its data folders beside the real ones.</summary>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is not a test instance name.</exception>
+    /// <summary>The test instance with this name, its data folders beside the real ones; throws for a name that isn't one.</summary>
     public static Instance ForTest(string name)
     {
         if (!IsTestName(name))

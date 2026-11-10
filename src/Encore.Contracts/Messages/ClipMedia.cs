@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Encore.Contracts.Messages;
 
-// AD-28: these messages belong only to the short-lived worker, never the live IPC catalog.
+// These messages belong only to the short-lived worker, never the live IPC catalog.
 public sealed record ClipSource(string Path, long Length, long ModifiedUtcTicks);
 public sealed record ClipAudioTrack(int StreamIndex, string Name, int SampleRate, int Channels);
 public sealed record ClipMetadata(double Duration, int Width, int Height, double FrameRate, ClipAudioTrack[] Tracks, double Origin = 0);

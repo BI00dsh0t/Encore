@@ -5,18 +5,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Contracts.Messages;
 
-/// <summary>
-/// An audio device the App can offer (R1): a present endpoint, or one a Track Layout holds that
-/// isn't present now (<see cref="Available"/> false). Two devices with the same
-/// <see cref="FriendlyName"/> are told apart by <see cref="ParentName"/>.
-/// </summary>
-/// <param name="EndpointId">The MMDevice endpoint id.</param>
-/// <param name="ParentName">The name of the audio device that exposes the endpoint, or empty.</param>
-/// <param name="Available">Whether the endpoint is present and active now.</param>
-/// <param name="IsDefault">
-/// Whether it is the Windows default endpoint of its flow (console role), story 10.4. Optional
-/// (AD-22): written only when true, and false from an engine that predates it.
-/// </param>
+/// <summary>An audio device the App can offer: a present endpoint, or one a Track Layout holds that isn't present now.</summary>
 public sealed record AudioDevice(
     string EndpointId,
     string FriendlyName,
@@ -25,13 +14,10 @@ public sealed record AudioDevice(
     bool Available,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool IsDefault = false);
 
-/// <summary>
-/// <c>devices.changed</c> and <c>devices.list</c>'s result: the present endpoints of both flows, with
-/// the absent devices of every Track Layout, Output Devices first, then by name.
-/// </summary>
+/// <c>devices.changed</c> and <c>devices.list</c>'s result: present endpoints plus the layouts' absent devices.
 public sealed record AudioDeviceList(IReadOnlyList<AudioDevice> Devices)
 {
-    /// <summary>No devices: an engine that hasn't listed them, or from before story 2.3.</summary>
+    /// <summary>No devices: the engine hasn't listed them yet, or it is an older engine.</summary>
     public static AudioDeviceList Empty { get; } = new([]);
 
     /// <summary>Equal when the devices are, in order.</summary>
@@ -50,21 +36,16 @@ public sealed record AudioDeviceList(IReadOnlyList<AudioDevice> Devices)
     }
 }
 
-/// <summary>
-/// <c>meters.watch</c>'s arguments (R6): the Track Layout to meter, saved or an unsaved draft.
-/// </summary>
+/// <c>meters.watch</c>'s arguments: the Track Layout to meter, saved or an unsaved draft.
 public sealed record MetersWatch(TrackLayout Layout);
 
 /// <summary>One Track's level: its linear sample peak since the last <c>meters.levels</c>, 0..1, after its limiter.</summary>
 public sealed record TrackLevel(Guid TrackId, float Peak);
 
-/// <summary>
-/// <c>meters.levels</c> (R6): one level per Track of the watched layout, in layout order; no Tracks
-/// when nothing is watched.
-/// </summary>
+/// <c>meters.levels</c>: one level per Track of the watched layout, in layout order; none when nothing is watched.
 public sealed record MeterLevels(IReadOnlyList<TrackLevel> Tracks)
 {
-    /// <summary>No Tracks: nothing watched, or an engine from before story 2.6.</summary>
+    /// <summary>No Tracks: nothing is watched, or the engine is an older one.</summary>
     public static MeterLevels Empty { get; } = new([]);
 
     /// <summary>Equal when the levels are, in order.</summary>
@@ -83,10 +64,7 @@ public sealed record MeterLevels(IReadOnlyList<TrackLevel> Tracks)
     }
 }
 
-/// <summary>
-/// Audio messages (epic-multi-track-audio): Track Layouts, devices and meters. Coalescing events such as <c>meters.levels</c> go here.
-/// The area's payloads, its own JSON context and its entries in these lists are added here only (AD-22).
-/// </summary>
+/// <summary>Audio messages: Track Layouts, devices and meters; this area's payloads and list entries are added here only.</summary>
 public static class AudioMessages
 {
     /// <summary>The current device list, as the snapshot's <c>devices</c> holds it.</summary>
@@ -100,11 +78,7 @@ public static class AudioMessages
         "devices",
         (snapshot, devices) => snapshot with { Devices = devices });
 
-    /// <summary>
-    /// Meters a Track Layout (R6) until <c>meters.unwatch</c> or the next watch, which replaces it;
-    /// one watch at a time, engine-wide. Replies <c>invalid-arguments</c> for a Track naming a device
-    /// key the layout lacks, keeping the previous watch.
-    /// </summary>
+    /// <summary>Meters a Track Layout until <c>meters.unwatch</c> or the next watch; one watch at a time, engine-wide.</summary>
     public static CommandType<MetersWatch, Empty> Watch { get; } =
         new("meters.watch", AudioJsonContext.Default.MetersWatch, AudioJsonContext.Default.Empty);
 
@@ -112,7 +86,7 @@ public static class AudioMessages
     public static CommandType<Empty, Empty> Unwatch { get; } =
         new("meters.unwatch", AudioJsonContext.Default.Empty, AudioJsonContext.Default.Empty);
 
-    /// <summary>The watched Tracks' peaks, at most 20 times a second. Coalescing: a connection's queue keeps only the latest.</summary>
+    /// <summary>The watched Tracks' peaks, at most 20 times a second; a connection's queue keeps only the latest.</summary>
     public static EventType<MeterLevels> Levels { get; } = new(
         "meters.levels",
         AudioJsonContext.Default.MeterLevels,

@@ -4,11 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace Encore.Contracts.Settings;
 
-/// <summary>
-/// The settings document (AD-4), immutable. Values are raw JSON per key, so the document holds
-/// every catalog key's value and keeps keys it doesn't know; <see cref="Keys"/> gives them types.
-/// Maps are keyed ordinally.
-/// </summary>
+/// <summary>The settings document, immutable: raw JSON per key, so it keeps keys it doesn't know. Maps are keyed ordinally.</summary>
 public sealed record SettingsDocument
 {
     public const int CurrentSchemaVersion = 1;
@@ -25,11 +21,11 @@ public sealed record SettingsDocument
     /// <summary>Global values by key name.</summary>
     public ImmutableSortedDictionary<string, JsonElement> Global { get; init; } = SettingsMaps.EmptyValues;
 
-    /// <summary>Game Profiles by profile id (AD-18 <c>Canonicalize</c>).</summary>
+    /// <summary>Game Profiles by profile id, the executable's canonical path.</summary>
     public ImmutableSortedDictionary<string, GameProfile> Profiles { get; init; } = SettingsMaps.EmptyProfiles;
 }
 
-/// <summary>A Game Profile: its attributes, read live (AD-5), and its overrides of overridable keys.</summary>
+/// <summary>A Game Profile: its attributes, read live, and its overrides of overridable keys.</summary>
 public sealed record GameProfile
 {
     public required string Name { get; init; }
@@ -38,10 +34,7 @@ public sealed record GameProfile
 
     public bool RecordingsEnabled { get; init; }
 
-    /// <summary>
-    /// The profile's folder under the Output Folder (AD-21). Assigned once by the engine when it
-    /// first commits the profile, and never changed after; clients can't set it. Null until then.
-    /// </summary>
+    /// <summary>The profile's folder under the Output Folder; set once by the engine and never changed. Null until then.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Folder { get; init; }
 
@@ -84,16 +77,10 @@ public enum SettingsOpKind
     Remove,
 }
 
-/// <summary>
-/// <c>settings.update</c> (AD-4): ops applied all-or-nothing, only when the document is still at
-/// <see cref="ExpectedRevision"/>.
-/// </summary>
+/// <c>settings.update</c>: ops applied all-or-nothing, only while the document is still at the expected revision.
 public sealed record SettingsUpdate(long ExpectedRevision, IReadOnlyList<SettingsOp> Ops);
 
-/// <summary>
-/// One op. A profile-scope op names either an overridable key or a profile attribute
-/// (<see cref="ProfileAttributes"/>). A <c>set</c> value replaces the key whole.
-/// </summary>
+/// <summary>One op; a profile-scope op names an overridable key or a profile attribute. A <c>set</c> replaces the key whole.</summary>
 public sealed record SettingsOp(
     SettingsScope Scope,
     string? ProfileId,
@@ -110,10 +97,7 @@ public sealed record SettingsOp(
     public static SettingsOp RemoveProfile(string profileId, string key) => new(SettingsScope.Profile, profileId, key, SettingsOpKind.Remove);
 }
 
-/// <summary>
-/// Every key resolved for one Game Profile (or Global, for no profile), with the revision of the
-/// document it came from. Sessions snapshot this when they start (AD-5).
-/// </summary>
+/// <summary>Every key resolved for one Game Profile, or Global; a session takes a snapshot of this when it starts.</summary>
 public sealed record EffectiveSettings
 {
     public required string? ProfileId { get; init; }
@@ -129,7 +113,7 @@ public sealed record EffectiveSettings
     public required RecordHotkeyMode RecordHotkeyMode { get; init; }
     public required string? MonitorRecordingMonitor { get; init; }
 
-    /// <summary>The screens a Monitor Recording composites (story 11.2); null reads <see cref="MonitorRecordingMonitor"/>.</summary>
+    /// <summary>The screens a Monitor Recording composites; null reads <see cref="MonitorRecordingMonitor"/>.</summary>
     public MonitorRecordingScreens? MonitorRecordingScreens { get; init; }
     public required FeedbackSounds FeedbackSounds { get; init; }
     public required string? FeedbackSoundDevice { get; init; }
@@ -139,6 +123,6 @@ public sealed record EffectiveSettings
     public required OverlayDotMode OverlayDot { get; init; }
     public required AppTheme AppTheme { get; init; }
 
-    /// <summary>Whether a newly detected game is captured (story 13.1); defaults to true.</summary>
+    /// <summary>Whether a newly detected game is captured; defaults to true.</summary>
     public bool CaptureNewGames { get; init; } = true;
 }

@@ -3,10 +3,10 @@ using System.Text.Json.Serialization;
 
 namespace Encore.Contracts.Ipc;
 
-/// <summary>Protocol constants (AD-3, AD-22).</summary>
+/// <summary>Protocol constants.</summary>
 public static class Protocol
 {
-    /// <summary>The envelope's <c>v</c>; it stays 1 through v1 (AD-22).</summary>
+    /// <summary>The envelope's <c>v</c>; it stays 1 through v1.</summary>
     public const int Version = 1;
 
     /// <summary>The longest frame the engine reads from a client.</summary>
@@ -16,12 +16,7 @@ public static class Protocol
     public const int MaxClientFrameBytes = 64 * 1024 * 1024;
 }
 
-/// <summary>
-/// One frame, as read. A client sends commands <c>{ v, id, type, payload }</c>. The engine sends
-/// replies <c>{ v, id, type, payload | error }</c> and events <c>{ v, type, seq, payload }</c>: a frame
-/// from the engine with an <see cref="Id"/> is a reply, one without is an event. Unknown fields are
-/// ignored, so newer peers can add them (AD-22).
-/// </summary>
+/// <summary>One frame as read; a frame from the engine with an <see cref="Id"/> is a reply, one without is an event.</summary>
 public sealed record Envelope
 {
     public int V { get; init; }
@@ -37,7 +32,7 @@ public sealed record Envelope
     public IpcError? Error { get; init; }
 }
 
-/// <summary>A command's error reply (AD-3); <see cref="Code"/> is one of <see cref="ErrorCodes"/>.</summary>
+/// <summary>A command's error reply; <see cref="Code"/> is one of <see cref="ErrorCodes"/>.</summary>
 public sealed record IpcError(string Code, string Message);
 
 /// <summary>Source-generated serialization of the envelope.</summary>
