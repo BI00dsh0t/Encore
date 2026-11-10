@@ -79,7 +79,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     public bool ShowsSummary => !CanEdit;
 
     /// <summary>The Tracks and their sounds as text, one line per Track: "1  Everything: Speakers, Microphone".</summary>
-    public IReadOnlyList<string> Summary => [.. Tracks.Select(t => $"{t.Number}  {t.Name}: {(t.Sources.Count == 0 ? "no sounds" : string.Join(", ", t.Sources.Select(s => s.Label)))}")];
+    public IReadOnlyList<string> Summary => [.. Tracks.Select(SummaryLine)];
 
     /// <summary>One card per Track, in file order.</summary>
     public ObservableCollection<AudioTrackCard> Tracks { get; } = [];
@@ -164,7 +164,10 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     public IReadOnlyList<AudioPresetChoice> Presets { get; } =
     [
         new(TrackLayoutPreset.Simple, "Simple", "Simple — one track with your PC's sound and your microphone"),
-        new(TrackLayoutPreset.ForEditing, "For editing", "For editing — everything, game and chat, and your microphone on their own tracks"),
+        new(
+            TrackLayoutPreset.ForEditing,
+            "For editing",
+            "For editing — everything, game and chat, and your microphone on their own tracks"),
     ];
 
     /// <summary>Takes the snapshot's device list: refreshes availability, labels and the picker.</summary>
@@ -299,8 +302,15 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     }
 
     // Layouts compare as JSON, because records' lists compare by reference; a device on no Track doesn't count.
-    private static bool Same(TrackLayout a, TrackLayout b) =>
-        JsonElement.DeepEquals(Keys.TrackLayout.ToJson(AudioTracksDraft.From(a).ToLayout()), Keys.TrackLayout.ToJson(AudioTracksDraft.From(b).ToLayout()));
+    private static bool Same(TrackLayout a, TrackLayout b) => JsonElement.DeepEquals(Normalized(a), Normalized(b));
+
+    private static JsonElement Normalized(TrackLayout layout) => Keys.TrackLayout.ToJson(AudioTracksDraft.From(layout).ToLayout());
+
+    private static string SummaryLine(AudioTrackCard track)
+    {
+        var sounds = track.Sources.Count == 0 ? "no sounds" : string.Join(", ", track.Sources.Select(source => source.Label));
+        return $"{track.Number}  {track.Name}: {sounds}";
+    }
 
     private void Load(TrackLayout layout)
     {

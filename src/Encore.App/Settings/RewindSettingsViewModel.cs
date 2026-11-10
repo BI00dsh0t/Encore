@@ -46,13 +46,7 @@ internal sealed class RewindSettingsViewModel : SettingsViewModel
     public VideoQualityViewModel Video { get; }
 
     /// <summary>The cache folder (<c>ringPath</c>): enabled only under Disk.</summary>
-    public FolderPicker CacheFolder => _cacheFolder ??= new FolderPicker(Keys.RingPath, ops => SendForPickerAsync(ops, ErrorCodes.RingPathInvalid))
-    {
-        RefusalText = code => code == ErrorCodes.RingPathInvalid ? FolderRules.CacheInsideClips : null,
-        DialogTitle = "Choose the cache folder",
-        DisabledCaption = "Used only in Disk mode",
-        Validate = ValidateCacheFolder,
-    };
+    public FolderPicker CacheFolder => _cacheFolder ??= CreateCacheFolder();
 
     /// <summary>The cache folder's help: what it holds, with the Clip length.</summary>
     public string CacheHelp =>
@@ -193,6 +187,14 @@ internal sealed class RewindSettingsViewModel : SettingsViewModel
 
         Video.Render(document);
     }
+
+    private FolderPicker CreateCacheFolder() => new(Keys.RingPath, ops => SendForPickerAsync(ops, ErrorCodes.RingPathInvalid))
+    {
+        RefusalText = code => code == ErrorCodes.RingPathInvalid ? FolderRules.CacheInsideClips : null,
+        DialogTitle = "Choose the cache folder",
+        DisabledCaption = "Used only in Disk mode",
+        Validate = ValidateCacheFolder,
+    };
 
     /// <summary>The cache folder's refusals: inside the Clips folder, or not writable.</summary>
     private string? ValidateCacheFolder(string path)

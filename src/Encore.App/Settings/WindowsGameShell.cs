@@ -42,7 +42,8 @@ internal sealed class WindowsGameShell : IGameShell
             {
                 if (ShellThumbnail.TryGetIcon(path, IconSize) is { } image)
                 {
-                    var bitmap = BitmapSource.Create(image.Width, image.Height, 96, 96, PixelFormats.Pbgra32, null, image.Bgra, image.Width * 4);
+                    var stride = image.Width * 4;
+                    var bitmap = BitmapSource.Create(image.Width, image.Height, 96, 96, PixelFormats.Pbgra32, null, image.Bgra, stride);
                     bitmap.Freeze();
                     dispatcher.BeginInvoke(() => loaded(bitmap));
                 }

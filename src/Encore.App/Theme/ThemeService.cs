@@ -218,7 +218,9 @@ internal sealed class ThemeService
     // Based on the style in WPF's Fluent dictionary, which is first in the list once ThemeMode is set.
     private void DimFluentDisabledText(IList<ResourceDictionary> merged)
     {
-        var fluent = merged.FirstOrDefault(d => d.Source?.OriginalString.Contains("PresentationFramework.Fluent", StringComparison.Ordinal) == true);
+        const string FluentAssembly = "PresentationFramework.Fluent";
+        var fluent = merged.FirstOrDefault(
+            dictionary => dictionary.Source?.OriginalString.Contains(FluentAssembly, StringComparison.Ordinal) == true);
         foreach (var type in FluentDimsWhenDisabled)
         {
             if (fluent?[type] is not Style basis)

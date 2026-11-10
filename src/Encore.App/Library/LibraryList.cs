@@ -38,7 +38,8 @@ internal sealed class LibraryList : Observable
         _time = time;
         _thumbnails = thumbnails;
         _newRow = newRow;
-        (_groupBy, _gameFilter, _dateFilter, _favouritesOnly, _sort) = (view.GroupBy, view.Game, view.Date, view.FavouritesOnly, view.Sort);
+        (_groupBy, _gameFilter, _dateFilter) = (view.GroupBy, view.Game, view.Date);
+        (_favouritesOnly, _sort) = (view.FavouritesOnly, view.Sort);
         Games.Add(_allGames);
     }
 

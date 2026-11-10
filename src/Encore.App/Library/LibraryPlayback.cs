@@ -177,8 +177,13 @@ internal sealed class LibraryPlayback : Observable
             return false;
         }
 
-        return libraryFolder is null
-            || !string.Equals(Path.GetFullPath(Path.Combine(libraryFolder, original.Path)), creator.Source.Path, StringComparison.OrdinalIgnoreCase);
+        if (libraryFolder is null)
+        {
+            return true;
+        }
+
+        var path = Path.GetFullPath(Path.Combine(libraryFolder, original.Path));
+        return !string.Equals(path, creator.Source.Path, StringComparison.OrdinalIgnoreCase);
     }
 
     private void OnPlayerVolumeChanged(double volume, bool muted) => (Volume, IsMuted) = (volume, muted);

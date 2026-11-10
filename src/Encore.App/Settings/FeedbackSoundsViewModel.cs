@@ -73,7 +73,8 @@ internal sealed class FeedbackSoundsViewModel : SettingsViewModel
     {
         ArgumentNullException.ThrowIfNull(state);
         // A session that isn't connected has no active warnings, as on the status line.
-        CapturedWarning = EngineSessions.ConnectedState(_engine.Status, state)?.Warnings.FirstOrDefault(w => w.Code == ErrorCodes.FeedbackDeviceCaptured)?.Message;
+        var warnings = EngineSessions.ConnectedState(_engine.Status, state)?.Warnings;
+        CapturedWarning = warnings?.FirstOrDefault(warning => warning.Code == ErrorCodes.FeedbackDeviceCaptured)?.Message;
         if (!Equals(_devices, state.Devices))
         {
             _devices = state.Devices;

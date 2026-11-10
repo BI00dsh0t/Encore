@@ -41,7 +41,15 @@ internal sealed class PlayerViewModel : Observable, IDisposable
     private bool _isFullScreen;
 
     /// <summary>The page owns and disposes the player; the other optional arguments replace shell calls for tests.</summary>
-    public PlayerViewModel(string path, string title, IPlayer player, Func<string, Stream>? openRead = null, Action<string>? openInDefaultPlayer = null, Action<string>? openLink = null, Action<string>? log = null, bool embedded = false)
+    public PlayerViewModel(
+        string path,
+        string title,
+        IPlayer player,
+        Func<string, Stream>? openRead = null,
+        Action<string>? openInDefaultPlayer = null,
+        Action<string>? openLink = null,
+        Action<string>? log = null,
+        bool embedded = false)
     {
         Path = path ?? throw new ArgumentNullException(nameof(path));
         Title = title ?? "";
@@ -56,7 +64,7 @@ internal sealed class PlayerViewModel : Observable, IDisposable
         MuteCommand = new RelayCommand(() => IsMuted = !IsMuted);
         FullScreenCommand = new RelayCommand(() => IsFullScreen = !IsFullScreen, () => SupportsFullScreen);
         OpenInDefaultPlayerCommand = new RelayCommand(() => _openInDefaultPlayer(Path), () => SupportsExternalActions);
-        CreateClipCommand = new RelayCommand(() => { Pause(); IsFullScreen = false; CreateClip?.Invoke(); }, () => !IsClosed && CreateClip is not null);
+        CreateClipCommand = new RelayCommand(StartCreateClip, () => !IsClosed && CreateClip is not null);
         OpenStoreCommand = new RelayCommand(() =>
         {
             if (SupportsExternalActions && _missing is { } extension)
@@ -303,7 +311,8 @@ internal sealed class PlayerViewModel : Observable, IDisposable
         get => _selectedTrack;
         set
         {
-            if (value is null || IsClosed || !HasControls || ReferenceEquals(value, _selectedTrack) || !Tracks.Contains(value) || !value.IsAvailable)
+            if (value is null || IsClosed || !HasControls || ReferenceEquals(value, _selectedTrack)
+                || !Tracks.Contains(value) || !value.IsAvailable)
             {
                 // Re-raised so a list that tried to clear or change it shows the Track that plays.
                 OnPropertyChanged();
@@ -345,39 +354,9 @@ internal sealed class PlayerViewModel : Observable, IDisposable
             Player.IsMuted = _isMuted;
             _stream = _openRead(Path);
             var media = await Player.OpenAsync(_stream);
-            if (IsClosed)
+            if (!IsClosed)
             {
-                return;
-            }
-
-            _log($"player: opened {FileName}: video {Describe(media.VideoCodec)} {(media.VideoDecodable ? "decodable" : "NOT decodable")}, "
-                + $"{media.TrackNames.Count} tracks, {media.TracksPlayable?.Count(p => !p) ?? 0} not decodable");
-            if (!media.VideoDecodable)
-            {
-                // Windows can't decode the picture: say which extension is missing, never a black page.
-                Media = media;
-                Fail(CodecExtension.For(media.VideoCodec) is { } extension
-                    ? (Missing(extension), extension)
-                    : (UnknownCodecText, null));
-                return;
-            }
-
-            if (media.TrackNames.Count > 0)
-            {
-                Player.SelectedTrack = 0;
-            }
-
-            Player.ShowFirstFrame();
-            for (var i = 0; i < media.TrackNames.Count; i++)
-            {
-                Tracks.Add(new PlayerTrack(i, media.TrackNames[i], media.TracksPlayable is not { } playable || i >= playable.Count || playable[i]));
-            }
-
-            Media = media;
-            State = PlayerState.Paused;
-            if (Tracks.Count > 0)
-            {
-                ShowSelected(Tracks[0]);
+                ShowOpened(media);
             }
         }
 #pragma warning disable CA1031 // Any failure to open is the page's plain message, never a crash.
@@ -392,6 +371,51 @@ internal sealed class PlayerViewModel : Observable, IDisposable
 #pragma warning restore CA1031
         {
         }
+    }
+
+    // The opened file: its first frame, paused, with its Tracks; or which extension is missing.
+    private void ShowOpened(PlayerMedia media)
+    {
+        var video = media.VideoDecodable ? "decodable" : "NOT decodable";
+        var undecodableTracks = media.TracksPlayable?.Count(playable => !playable) ?? 0;
+        _log($"player: opened {FileName}: video {Describe(media.VideoCodec)} {video}, "
+            + $"{media.TrackNames.Count} tracks, {undecodableTracks} not decodable");
+        if (!media.VideoDecodable)
+        {
+            // Windows can't decode the picture: say which extension is missing, never a black page.
+            Media = media;
+            Fail(CodecExtension.For(media.VideoCodec) is { } extension
+                ? (Missing(extension), extension)
+                : (UnknownCodecText, null));
+            return;
+        }
+
+        if (media.TrackNames.Count > 0)
+        {
+            Player.SelectedTrack = 0;
+        }
+
+        Player.ShowFirstFrame();
+        for (var i = 0; i < media.TrackNames.Count; i++)
+        {
+            var isAvailable = media.TracksPlayable is not { } playable || i >= playable.Count || playable[i];
+            Tracks.Add(new PlayerTrack(i, media.TrackNames[i], isAvailable));
+        }
+
+        Media = media;
+        State = PlayerState.Paused;
+        if (Tracks.Count > 0)
+        {
+            ShowSelected(Tracks[0]);
+        }
+    }
+
+    // Create clip, from the player: it stops playing and leaves full screen first.
+    private void StartCreateClip()
+    {
+        Pause();
+        IsFullScreen = false;
+        CreateClip?.Invoke();
     }
 
     /// <summary>Moves to a position, clamped to the file; the paused picture follows. A no-op with no known length.</summary>

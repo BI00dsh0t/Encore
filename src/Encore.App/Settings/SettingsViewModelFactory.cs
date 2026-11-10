@@ -6,7 +6,11 @@ namespace Encore.App.Settings;
 internal static class SettingsViewModelFactory
 {
     /// <summary>Every page in nav order: General, Clips, Hotkeys, Audio Tracks, Games, Sounds, then Storage and Cleanup.</summary>
-    public static IReadOnlyList<SettingsViewModel> Create(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null, IGameShell? gameShell = null) =>
+    public static IReadOnlyList<SettingsViewModel> Create(
+        SettingsSender sender,
+        IEngineSession engine,
+        string? defaultCacheFolder = null,
+        IGameShell? gameShell = null) =>
     [
         new GeneralSettingsViewModel(sender),
         new RewindSettingsViewModel(sender, defaultCacheFolder: defaultCacheFolder),

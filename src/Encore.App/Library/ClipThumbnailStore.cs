@@ -19,7 +19,9 @@ internal sealed class ClipThumbnailStore
     private string Entry(ClipSource source, double duration)
     {
         var identity = string.Join('\n', "filmstrip-v1-160x90-64-1fps", Path.GetFullPath(source.Path).ToUpperInvariant(),
-            source.Length.ToString(CultureInfo.InvariantCulture), source.ModifiedUtcTicks.ToString(CultureInfo.InvariantCulture), duration.ToString("R", CultureInfo.InvariantCulture));
+            source.Length.ToString(CultureInfo.InvariantCulture),
+            source.ModifiedUtcTicks.ToString(CultureInfo.InvariantCulture),
+            duration.ToString("R", CultureInfo.InvariantCulture));
         return Path.Combine(_root, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))));
     }
 
@@ -38,7 +40,9 @@ internal sealed class ClipThumbnailStore
             var manifest = new FileInfo(Path.Combine(entry, "manifest.json"));
             if (!MatchesSource(source) || !manifest.Exists || manifest.Length is < 1 or > 65536) { return null; }
             using var stream = manifest.OpenRead();
-            var response = await JsonSerializer.DeserializeAsync(stream, ClipMediaJsonContext.Default.ClipMediaResponse, token).ConfigureAwait(false);
+            var response = await JsonSerializer
+                .DeserializeAsync(stream, ClipMediaJsonContext.Default.ClipMediaResponse, token)
+                .ConfigureAwait(false);
             if (response?.Thumbnails is not { } descriptor) { return null; }
             var images = await ClipThumbnailCache.LoadAsync(entry, descriptor, source, duration, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
@@ -74,7 +78,9 @@ internal sealed class ClipThumbnailStore
                 if (frame.FileName != Path.GetFileName(frame.FileName)) { throw new IOException("Invalid thumbnail path."); }
                 File.Copy(Path.Combine(preparedFolder, frame.FileName), Path.Combine(staging, frame.FileName));
             }
-            File.WriteAllText(Path.Combine(staging, "manifest.json"), JsonSerializer.Serialize(new ClipMediaResponse("complete", Thumbnails: descriptor), ClipMediaJsonContext.Default.ClipMediaResponse));
+            var manifest = new ClipMediaResponse("complete", Thumbnails: descriptor);
+            var json = JsonSerializer.Serialize(manifest, ClipMediaJsonContext.Default.ClipMediaResponse);
+            File.WriteAllText(Path.Combine(staging, "manifest.json"), json);
             token.ThrowIfCancellationRequested();
             if (!MatchesSource(descriptor.Source)) { return; }
             var entry = Entry(descriptor.Source, descriptor.Duration);
@@ -107,7 +113,8 @@ internal sealed class ClipThumbnailStore
     }
 
     private static bool IsEntry(string name) => name.Length == 64 && name.All(char.IsAsciiHexDigit);
-    private static bool IsStaging(string name) => name.Length == 41 && name.StartsWith(".pending-", StringComparison.Ordinal) && name.AsSpan(9).ToString().All(char.IsAsciiHexDigit);
+    private static bool IsStaging(string name) =>
+        name.Length == 41 && name.StartsWith(".pending-", StringComparison.Ordinal) && name.AsSpan(9).ToString().All(char.IsAsciiHexDigit);
     private void DeleteEntry(string path) => DeleteOwned(path, staging: false);
     private void DeleteStaging(string path) => DeleteOwned(path, staging: true);
     private void DeleteOwned(string path, bool staging)

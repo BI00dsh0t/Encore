@@ -12,7 +12,8 @@ internal sealed class PlayerTrack(int index, string? name, bool isAvailable = tr
     public bool IsAvailable { get; } = isAvailable;
 
     /// <summary>The Track's name, or "track n" with none; "(unavailable)" after it when Windows can't decode it.</summary>
-    public string Name { get; } = (string.IsNullOrWhiteSpace(name) ? $"track {index + 1}" : name.Trim()) + (isAvailable ? "" : " (unavailable)");
+    public string Name { get; } =
+        (string.IsNullOrWhiteSpace(name) ? $"track {index + 1}" : name.Trim()) + (isAvailable ? "" : " (unavailable)");
 
     /// <summary>Whether this is the Track that plays.</summary>
     public bool IsPlaying

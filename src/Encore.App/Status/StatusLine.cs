@@ -81,7 +81,8 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
         State = connected is not null ? StatusText.Capture(connected) : StatusText.Connection(status, problem);
         Dot = connected is null ? StatusDot.Idle : StatusText.Dot(connected.Capture);
         Hint = connected is null ? "" : StatusText.Hint(connected);
-        var unreachable = status is EngineStatus.Restarting or EngineStatus.NotRunning or EngineStatus.CrashLoop or EngineStatus.Disconnected;
+        var unreachable = status
+            is EngineStatus.Restarting or EngineStatus.NotRunning or EngineStatus.CrashLoop or EngineStatus.Disconnected;
         ConnectionError = connected is null && unreachable ? StatusText.Connection(status, problem) : "";
 
         // Like the Overlay: a session that isn't connected has no warnings to show or dismiss.

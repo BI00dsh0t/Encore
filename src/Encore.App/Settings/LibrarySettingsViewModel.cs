@@ -149,7 +149,7 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
         }
     }
 
-    /// <summary>Takes the snapshot's Library folder, items and Cleanup block. Called before <see cref="SettingsViewModel.Render"/>.</summary>
+    /// <summary>Takes the snapshot's Library folder, items and Cleanup block. Called before Render.</summary>
     public void ShowState(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);

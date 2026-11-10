@@ -162,7 +162,8 @@ internal sealed class GameViewModel : SettingsViewModel
 
             _recordingsEnabled = value;
             OnPropertyChanged();
-            SendAttribute(ProfileAttributes.RecordingsEnabled, JsonSerializer.SerializeToElement(value, SettingsJsonContext.Default.Boolean));
+            var json = JsonSerializer.SerializeToElement(value, SettingsJsonContext.Default.Boolean);
+            SendAttribute(ProfileAttributes.RecordingsEnabled, json);
         }
     }
 
@@ -268,14 +269,16 @@ internal sealed class GameViewModel : SettingsViewModel
             FolderChanged();
         }
 
-        var manual = SettingsValues.Global(document, Keys.ManualGames).Any(p => string.Equals(p, ProfileId, StringComparison.OrdinalIgnoreCase));
+        var manual = SettingsValues.Global(document, Keys.ManualGames)
+            .Any(path => string.Equals(path, ProfileId, StringComparison.OrdinalIgnoreCase));
         if (Set(ref _isManual, manual, nameof(IsManual)))
         {
             OnPropertyChanged(nameof(Source));
         }
 
         var hotkeys = SettingsValues.Global(document, Keys.Hotkeys);
-        var record = SettingsValues.Global(document, Keys.RecordHotkeyMode) == RecordHotkeyMode.Toggle ? hotkeys.RecordToggle : hotkeys.RecordStart;
+        var toggles = SettingsValues.Global(document, Keys.RecordHotkeyMode) == RecordHotkeyMode.Toggle;
+        var record = toggles ? hotkeys.RecordToggle : hotkeys.RecordStart;
         _recordKey = record is { } key ? HotkeyText.Describe(key) : "the Record key";
         OnPropertyChanged(nameof(RecordingsHelp));
 
@@ -284,7 +287,8 @@ internal sealed class GameViewModel : SettingsViewModel
         var buffer = SettingsValues.Global(document, Keys.BufferWindow);
         Clips.Show(SettingsValues.HasOverride(document, Keys.BufferWindow, ProfileId), $"Save the last {buffer} seconds");
         Video.Show(SettingsValues.HasOverride(document, Keys.Video, ProfileId), VideoSummary(SettingsValues.Global(document, Keys.Video)));
-        AudioTracks.Show(SettingsValues.HasOverride(document, Keys.TrackLayout, ProfileId), string.Join(Environment.NewLine, Tracks.Summary));
+        var tracks = string.Join(Environment.NewLine, Tracks.Summary);
+        AudioTracks.Show(SettingsValues.HasOverride(document, Keys.TrackLayout, ProfileId), tracks);
     }
 
     /// <summary>"H.264 · 1920 × 1080 · 60 fps · 20,000 kbps"; "Source" in place of the size under <c>matchSource</c>.</summary>
@@ -299,7 +303,9 @@ internal sealed class GameViewModel : SettingsViewModel
         };
         var size = video.MatchSource ? "Source" : $"{video.Width} × {video.Height}";
         var variable = video.RateControl == RateControl.Vbr ? " · variable" : "";
-        return string.Create(CultureInfo.InvariantCulture, $"{codec} · {size} · {video.Fps} fps · {video.BitrateKbps:N0} kbps{variable}");
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{codec} · {size} · {video.Fps} fps · {video.BitrateKbps:N0} kbps{variable}");
     }
 
     private void Reset(string section, Action reset)

@@ -22,7 +22,10 @@ internal sealed class EngineConnector(EngineConnectionOptions options, EngineCon
     public EngineRestartReason? LaunchFailure { get; private set; }
 
     /// <summary>Connects, launching the engine when none answers; with a live engine it only reconnects, for a limited time.</summary>
-    public async Task<ConnectOutcome> ConnectOrLaunchAsync(Process? live, EngineRestartReason? restart, CancellationToken cancellationToken)
+    public async Task<ConnectOutcome> ConnectOrLaunchAsync(
+        Process? live,
+        EngineRestartReason? restart,
+        CancellationToken cancellationToken)
     {
         Launched?.Dispose();
         Launched = null;

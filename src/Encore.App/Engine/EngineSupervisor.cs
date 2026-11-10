@@ -162,7 +162,10 @@ internal sealed class EngineSupervisor
     }
 
     /// <summary>Every relaunch after a crash or hang: asks the crash-loop guard, then waits out the backoff.</summary>
-    private async Task<EngineRestartReason?> RestartAsync(EngineRestartReason reason, CancellationToken cancellationToken, bool status = true)
+    private async Task<EngineRestartReason?> RestartAsync(
+        EngineRestartReason reason,
+        CancellationToken cancellationToken,
+        bool status = true)
     {
         if (!_guard.TryRestart())
         {

@@ -48,7 +48,14 @@ internal sealed class AudioTracksDraft
             d.Flow == device.Flow && string.Equals(d.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
         if (record is null)
         {
-            record = new LayoutDevice(Guid.NewGuid(), device.EndpointId, device.FriendlyName, device.ParentName, device.Flow, IsMic: device.Flow == AudioFlow.Input);
+            var isMic = device.Flow == AudioFlow.Input;
+            record = new LayoutDevice(
+                Guid.NewGuid(),
+                device.EndpointId,
+                device.FriendlyName,
+                device.ParentName,
+                device.Flow,
+                IsMic: isMic);
             _devices.Add(record);
         }
 

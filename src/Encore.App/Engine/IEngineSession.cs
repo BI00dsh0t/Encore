@@ -18,5 +18,8 @@ internal interface IEngineSession
     event Action? Changed;
 
     /// <summary>Sends a command; throws ErrorCodeException when the engine refuses it or there is no connection.</summary>
-    Task<TResult> SendAsync<TArgs, TResult>(CommandType<TArgs, TResult> command, TArgs args, CancellationToken cancellationToken = default);
+    Task<TResult> SendAsync<TArgs, TResult>(
+        CommandType<TArgs, TResult> command,
+        TArgs args,
+        CancellationToken cancellationToken = default);
 }
