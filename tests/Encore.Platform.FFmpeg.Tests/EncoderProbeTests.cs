@@ -6,10 +6,7 @@ using Encore.Platform.Capture;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// The encoder probe against an oracle: the encoders that <c>ffmpeg.exe</c> itself can encode a
-/// frame with on this PC. Also the libx264 path and the HEVC tag, on the real D3D11 device.
-/// </summary>
+/// <summary>The encoder probe against the oracle, plus the libx264 path and the HEVC tag, on the real D3D11 device.</summary>
 public sealed class EncoderProbeTests : IDisposable
 {
     private readonly string _directory = Directory.CreateTempSubdirectory("rb-probe-").FullName;

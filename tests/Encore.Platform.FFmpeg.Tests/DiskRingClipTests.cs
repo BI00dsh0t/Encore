@@ -7,12 +7,7 @@ using Encore.Platform.Capture;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// Disk mode's Clips (R3): about 4 s of NVENC and one AAC Track go, packet for packet, into a
-/// Memory-mode and a Disk-mode <see cref="ReplayRingSink"/>; each is cut at the same points and
-/// written with <see cref="ClipWriter"/>, and the two files are byte-identical. Needs an NVIDIA GPU
-/// and the fetched FFmpeg.
-/// </summary>
+/// <summary>Disk mode's Clips: the same packets through a Memory and a Disk ring give byte-identical files. Needs NVENC.</summary>
 public sealed class DiskRingClipTests : IDisposable
 {
     private const int Fps = 30;

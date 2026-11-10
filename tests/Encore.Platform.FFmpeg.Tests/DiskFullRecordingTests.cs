@@ -9,11 +9,7 @@ using static Encore.Platform.FFmpeg.Tests.LongRecordingTests;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// R5: a Recording whose disk fills keeps its file, cut back to its last complete fragment. The full
-/// disk is the writer's capacity seam, which fails a write as <c>ERROR_DISK_FULL</c> does; the
-/// streams are <see cref="LongRecordingTests"/>' synthetic ones. Needs the fetched FFmpeg.
-/// </summary>
+/// <summary>A Recording whose disk fills keeps its file, cut back to its last complete fragment. Needs the fetched FFmpeg.</summary>
 public sealed class DiskFullRecordingTests : IDisposable
 {
     private const long Capacity = 200 * 1024;
@@ -67,10 +63,7 @@ public sealed class DiskFullRecordingTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// <see cref="Seconds"/> of packets in time order: 2 KB video frames and small AAC ones, so the
-    /// capacity fills after a few seconds.
-    /// </summary>
+    /// <summary>Packets in time order: 2 KB video frames and small AAC ones, so the capacity fills after a few seconds.</summary>
     private static unsafe void Feed(RecordingWriter writer)
     {
         var video = ffmpeg.av_packet_alloc();

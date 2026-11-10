@@ -10,11 +10,7 @@ using static Encore.Platform.FFmpeg.Tests.LongRecordingTests;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// Story 14.3: a finalized Recording carries its length in an <c>mehd</c>, the last child of its
-/// <c>mvex</c>, patched in place over the <c>udta</c>'s start, with nothing after the <c>moov</c>
-/// moved. Synthetic packets as in <see cref="LongRecordingTests"/>; needs the fetched FFmpeg.
-/// </summary>
+/// <summary>A finished Recording carries its length in an <c>mehd</c>, patched in place; nothing after the <c>moov</c> moves.</summary>
 public sealed class FragmentDurationTests : IDisposable
 {
     private const int Seconds = 3;
@@ -122,7 +118,7 @@ public sealed class FragmentDurationTests : IDisposable
         }
     }
 
-    /// <summary>The boxes that tile [<paramref name="start"/>, <paramref name="end"/>), each with 32-bit sizes; fails if they don't.</summary>
+    /// <summary>The boxes that tile the given byte range, each with 32-bit sizes; fails if they don't.</summary>
     private static List<(string Type, int Start, int End)> Children(byte[] bytes, int start, int end)
     {
         var boxes = new List<(string, int, int)>();

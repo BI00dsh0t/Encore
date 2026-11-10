@@ -6,12 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// FR-13: a Recording stays one file however long it runs. Four hours of synthetic packets (an
-/// MPEG-4 Part 2 video stream at 30 fps, a keyframe every 2 s, and three AAC Tracks) go through a
-/// <see cref="RecordingWriter"/> far faster than real time, its fragments not flushed to the disk,
-/// and ffprobe reads the one file back. Needs the fetched FFmpeg.
-/// </summary>
+/// <summary>A Recording stays one file however long it runs: four hours of synthetic packets, read back with ffprobe.</summary>
 public sealed class LongRecordingTests : IDisposable
 {
     internal const int Fps = 30;
@@ -108,7 +103,7 @@ public sealed class LongRecordingTests : IDisposable
         }
     }
 
-    /// <summary>Every packet of the four hours in time order, as the encoders would hand them over, a few thousand queued at most.</summary>
+    /// <summary>Every packet of the four hours in time order, as the encoders would hand them over, a few thousand queued.</summary>
     private static unsafe void Feed(RecordingWriter writer)
     {
         var frames = (long)Hours * 3600 * Fps;

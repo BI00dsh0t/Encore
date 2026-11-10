@@ -8,13 +8,7 @@ using Encore.Platform.Capture;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// The exact save cut (story 4.2, AD-10) through the real stack: 21 s of virtual capture at 30 fps
-/// into a <see cref="ReplayRingSink"/> (D3D11 → NVENC, one AAC Track), a keyframe requested one frame
-/// early for presses at 10.02 s and 20.02 s, and two Clips cut as a save and its Reset cut
-/// them, written with <see cref="ClipWriter"/> and read back with ffprobe. Needs an NVIDIA GPU and
-/// the fetched FFmpeg.
-/// </summary>
+/// <summary>The exact save cut through the real stack: two Clips cut at forced keyframes meet with no gap. Needs NVENC.</summary>
 public sealed class ReplayCutTests : IDisposable
 {
     private const int Fps = 30;
@@ -69,8 +63,7 @@ public sealed class ReplayCutTests : IDisposable
             long audioFrames = 0;
             for (var i = 0; i < Fps * Seconds; i++)
             {
-                // One frame early, as when the last frame captured at or before the press is still
-                // in the pacer's hand-off: the keyframe must still land on the first frame after it.
+                // One frame early, as when the last frame before the press is still in the pacer's hand-off.
                 if (ticket is null && pressed < Presses.Length && (double)(i + 1) / Fps > Presses[pressed])
                 {
                     ticket = video.RequestKeyframe(anchor + (long)(Presses[pressed] * qpf));
@@ -103,8 +96,7 @@ public sealed class ReplayCutTests : IDisposable
             audio.Flush();
             Assert.Equal([301, 601], servedAt);
 
-            // A save cuts from its window's start, or the earlier save's end, to its forced keyframe.
-            // Both are cut first, then written by two writers at once (R6): neither corrupts the other.
+            // Both are cut first, then written by two writers at once: neither corrupts the other.
             var sources = new List<IDisposable>();
             try
             {

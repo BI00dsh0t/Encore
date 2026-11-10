@@ -8,10 +8,7 @@ using Encore.Platform.Capture;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// Encodes 3 s of synthetic video and audio through the real stack (D3D11 → NVENC, AAC,
-/// fMP4) and checks the file with ffprobe. Needs an NVIDIA GPU and the fetched FFmpeg.
-/// </summary>
+/// <summary>Encodes 3 s of synthetic video and audio through the real stack and checks the file with ffprobe. Needs NVENC.</summary>
 public sealed class SyntheticEncodeTests : IDisposable
 {
     private const int Fps = 60;
@@ -101,8 +98,7 @@ public sealed class SyntheticEncodeTests : IDisposable
             flushed = video.FlushedPackets;
         }
 
-        // Every encoded packet has one latency sample, except those drained at flush: none, since
-        // NVENC's delay 0 returns each packet as soon as its frame is encoded (story 1.11).
+        // Every encoded packet has one latency sample; none is drained at flush, as NVENC returns each packet at once.
         Assert.Equal(Fps * Seconds, encoded);
         Assert.Equal(0, flushed);
         Assert.Equal(encoded, latency.Count + flushed);
@@ -203,10 +199,7 @@ public sealed class SyntheticEncodeTests : IDisposable
         return stdout.Result;
     }
 
-    /// <summary>
-    /// The stream title as FFmpeg reads it back: the mp4 muxer stores <c>title</c> in the
-    /// track's udta <c>name</c> box, and the hdlr name carries it too.
-    /// </summary>
+    /// <summary>The stream title as FFmpeg reads it back, from the track's <c>name</c> box.</summary>
     private static string? Title(JsonElement stream)
     {
         var tags = stream.GetProperty("tags");

@@ -7,11 +7,7 @@ using Encore.Platform.Capture;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// The encode-stage options through the real stack: the X2 colour path (the scaler's VideoProcessor
-/// blit writing NV12), NVENC preset/tune, and the paced encoder thread. Needs an NVIDIA GPU and the
-/// fetched FFmpeg.
-/// </summary>
+/// <summary>The encode-stage options through the real stack: NV12, NVENC preset and tune, and the paced encoder. Needs NVENC.</summary>
 public sealed class EncodeExperimentTests : IDisposable
 {
     private const int Fps = 60;
@@ -160,8 +156,7 @@ public sealed class EncodeExperimentTests : IDisposable
             flushed = video.FlushedPackets;
         }
 
-        // Correctness first, failing on any attempt: every slot is encoded once, latency is recorded for
-        // new frames only, and every PTS step is one slot.
+        // Correctness first, failing on any attempt: every slot is encoded once, and every PTS step is one slot.
         Assert.Equal(emitted, encoded);
         Assert.Equal(fresh, latency.Count + flushed);
         var pts = Ffprobe($"-v error -select_streams v:0 -show_entries packet=pts -of csv=p=0 {file}")
@@ -175,8 +170,7 @@ public sealed class EncodeExperimentTests : IDisposable
             Assert.Equal(pts[0] + (i * (pts[1] - pts[0])), pts[i]);
         }
 
-        // Then the timing bounds, which a neighbouring GPU test can make this attempt miss: one second of
-        // slots in real time, the static half by repeats, and with delay 0 no frame waits for the flush.
+        // Then the timing bounds, which a neighbouring GPU test can make this attempt miss.
         RealTimeAttempts.InRange(emitted, Fps - 2, Fps + 2, "emitted slots");
         RealTimeAttempts.InRange(fresh, (Fps / 2) - 2, Fps / 2, "fresh slots");
         RealTimeAttempts.InRange(repeated, (Fps / 2) - 2, (Fps / 2) + 2, "repeated slots");

@@ -78,8 +78,7 @@ public sealed class RealTimeAttemptsTests
         var output = new RecordingOutput();
         var calls = 0;
 
-        // SkipException is an IAssertionException too; it must not be retried into a failure. Caught by
-        // hand: Assert.Throws lets a skip through, so this test would be skipped rather than checked.
+        // A skip must not be retried into a failure; caught by hand, as Assert.Throws would let the skip through.
         SkipException? skip = null;
         try
         {

@@ -5,12 +5,7 @@ using static Encore.Platform.FFmpeg.Tests.LongRecordingTests;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// A Clip's first frame is on the frame grid, as <see cref="RecordingStartTests"/> checks for a
-/// Recording: the Clip is cut at the keyframe at 6 s, where each AAC Track has a packet that starts
-/// 256 samples before it and is centred after it. A Clip is a plain MP4 with an edit list, so that
-/// packet's lead is signalled there and the video is not stretched.
-/// </summary>
+/// <summary>A Clip's first frame is on the frame grid: its edit list signals an audio packet's lead, so video isn't stretched.</summary>
 public sealed class ClipStartTests : IDisposable
 {
     private const int KeyFrame = 180;
