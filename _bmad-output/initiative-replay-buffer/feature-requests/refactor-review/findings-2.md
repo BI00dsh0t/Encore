@@ -81,4 +81,47 @@ Code-behind and controls: `PlayerView.xaml.cs` 451, `LibraryView.xaml.cs` 372, `
 
 ## 6. Result
 
-Filled in when the phase ends.
+Branch `claude/refactor-2-views-43e224`, cut from `develop` at `0264f65`. Not merged, not pushed.
+
+**Checks.** Release build: 0 warnings, 0 errors after each step. `Encore.App.Tests`: 289 tests, 264 passed, 25 skipped (explicit Heavy), 0 failed; the baseline was 284 with 2 failed. The run still ends with exit code 1 from the stray foreground thread (T3). `Encore.Platform.Desktop` was not touched. After every XAML step the 72 test screenshots were compared pixel by pixel with copies taken before the phase: all match, except three that differ on every run of unchanged code (`game-page.png`, `tray-menu-fluent.png`, `library-cleanup-settings.png`), which were left out of the comparison. The reformat (X1, X2) was also checked by script: every XAML file has the same elements, attributes in the same order, comments and text as before.
+
+**Done, by finding.**
+
+- T1, T2: fixed first; the App suite was green before any refactor.
+- N1: 137 keys renamed `Rb…` → `Encore…` (560 uses), with `DESIGN.md` and `EXPERIENCE.md`.
+- N2, N3, N4: handlers renamed; `TimelineHandle` replaces the two flags; whole-word names in the files touched.
+- C1, C2: `ShellShared.xaml` holds the nav item and Settings button styles once; each theme keeps only its paddings, layer styles and text colours. Also deleted, as unused: the `Pill` borders, the status state style, the Settings section label template and its trigger (the nav list holds no section item since Settings became a button), the narrow-pane tooltip trigger (it repeated the style's own tooltip), the shell's second uppercase converter, and `EncoreNavWidth`. The unsaved dot's radius is 3 in both themes; a test render showed 3, 4 and 6 draw the same 6 px circle. `NavListBox` stays: it hides section items from screen readers, and the screenshots showed it also changes the list's look.
+- C3, C5, C6: one Gaming button template; the export arrow's style is built on the export button's; the clip creator's repeated icons are named geometries.
+- X1, X2, X3: done by the script, with the exceptions below.
+- L1–L4: `MainViewModel.HandleEscape`, `GoBack`, `OpenSettings`; `NavPaneLayout`; `EnterFullScreen` and `LeaveFullScreen`; `NavItem.cs`.
+- L5–L7: `LibraryPage.ClickRow`, `TryPrepareContextMenu`, `FocusForEntry`, `HandleKey`; `VisualTreeSearch`; `ButtonMenu.OpenBelow`.
+- L8–L10: `NoPictureWatch`, `PictureFit`, `PlayerPage.HandleKey`, `PlayerPage.DrawFrame`; the gear menu in short helpers.
+- L11, L12, L16: the clip creator's code-behind and dialogs tidied; `ClipExportDestination.cs`; one `HandlePickerKey`.
+- L13: `WaveformView.cs`, `WaveformView.Drawing.cs`, `WaveformView.Input.cs`, `TimelineScale`, `TimelineHandle`.
+- L14, L15: `ScreenRow.cs`, `ScreenTile.cs`, `Show` in helpers; `FolderDialogs`, `FolderProbe`.
+- `ShellTheme.cs` held four types: `NavPress.cs` and one code file per dictionary. `SettingsContent` left `SettingsLayout`'s file. The dictionaries' code files are named `.xaml.cs`.
+- New happy-path tests: the shell's Esc, Back and Settings rules and the nav width; the Library list's click, menu, entry focus and keys; the player's keys; the timeline's scale and Tab order.
+
+**Code-behind and controls, lines before → after** (physical lines; the after counts include the blank lines and one-statement-per-line layout the rules ask for):
+
+| File | Before | After |
+|---|---|---|
+| `Library/PlayerView.xaml.cs` | 451 | 395 (plus `NoPictureWatch` 81, `PictureFit` 19) |
+| `Library/LibraryView.xaml.cs` | 372 | 280 |
+| `MainWindow.xaml.cs` | 265 | 283 |
+| `Settings/TrackLayoutView.xaml.cs` | 178 | 178 |
+| `Library/ClipCreatorView.xaml.cs` | 99 | 142 (plus `ClipExportDestination` 38) |
+| `Library/WaveformView.cs` | 401 | 250 + 240 + 425 in three partial files |
+| `Settings/MonitorPicker.cs` | 468 | 411 (plus `ScreenRow`, `ScreenTile`) |
+| `Settings/FolderPicker.cs` | 307 | 241 (plus `FolderDialogs`, `FolderProbe`) |
+
+`MainWindow.xaml.cs` grew because its one-line `if`s and two inline lambdas became braced blocks and named handlers; the decisions left it.
+
+**Left as they are, with reasons** (in addition to section 5):
+
+- Six XAML lines are over 140 characters because each holds one long piece of text (help text, an info bar, a caption). Breaking the attribute would change the text. `TrackLayoutView.xaml` line 174 is a binding nested 18 levels deep; shortening it means moving the track card's context menu into a resource, which changes how the menu is shared.
+- `ClipCreatorView.xaml`'s In and Out groups stay two blocks (C6), and C7, C8's spacing tokens and C9 are unchanged, for the reasons given above.
+- The keys that move the Library's focused row stay in `LibraryView`: they need the viewport's row count.
+- `NavPress.GetTrack`, `SetTrack` and `GetIsPressed` look unused to a search, but are the accessors WPF's XAML needs for an attached property.
+- The view models this phase added methods to (`LibraryPage`, `PlayerPage`, `MainViewModel`) and the pages touched only by the rename or a call site (`RewindSettingsPage`, `LibrarySettingsPage`, `ThemeService`, `OverlayWindow`) still have long lines, long methods and several types per file. They are phase 3's.
+- The pixel check covers what the screenshots show. The gear menu and the export-type menu are built in code and were checked by reading and by their tests, not by pixels.
