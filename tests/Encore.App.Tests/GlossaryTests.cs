@@ -4,7 +4,6 @@ using Encore.App.Engine;
 using Encore.App.Overlay;
 using Encore.App.Status;
 using Encore.Contracts.Messages;
-using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 

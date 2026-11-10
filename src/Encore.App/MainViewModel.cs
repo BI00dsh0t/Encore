@@ -3,7 +3,6 @@ using Encore.App.Engine;
 using Encore.App.Library;
 using Encore.App.Settings;
 using Encore.App.Status;
-using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 
 namespace Encore.App;

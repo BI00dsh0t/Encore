@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Media.Audio;
-using Windows.Win32.System.Com;
 
 namespace Encore.Platform.Audio;
 

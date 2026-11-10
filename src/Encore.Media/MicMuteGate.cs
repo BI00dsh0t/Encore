@@ -4,7 +4,7 @@ namespace Encore.Media;
 /// A session's mic mute over time: its state at Start, then each change with the QPC it applies
 /// from (AD-13). Thread-safe: <see cref="Set"/> comes from the orchestrator thread and swaps an
 /// immutable log, which the audio threads' <see cref="MicMuteGate"/>s read with one
-/// <see cref="Volatile.Read{T}(ref T)"/> per run, without a lock.
+/// <c>Volatile.Read</c> per run, without a lock.
 /// </summary>
 public sealed class MicMuteSchedule
 {

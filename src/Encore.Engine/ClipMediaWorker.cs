@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Encore.Contracts.Messages;
 using Encore.Platform.Windows;

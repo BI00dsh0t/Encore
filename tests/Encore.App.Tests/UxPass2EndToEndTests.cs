@@ -4,7 +4,6 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using Encore.App.Engine;
 using Encore.App.Library;
-using Encore.App.Settings;
 using Encore.Contracts;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;

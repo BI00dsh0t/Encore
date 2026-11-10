@@ -2,8 +2,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using Encore.App.Engine;

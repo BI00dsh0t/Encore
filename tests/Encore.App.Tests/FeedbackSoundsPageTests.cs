@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Encore.Contracts;
-using Encore.Contracts.Ipc;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 

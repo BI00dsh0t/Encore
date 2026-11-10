@@ -8,7 +8,6 @@ using Encore.Core.Monitors;
 using Encore.Core.Output;
 using Encore.Core.Replay;
 using Encore.Core.Sessions;
-using Encore.Engine.Audio;
 using Encore.Media;
 using Encore.Platform.Audio;
 using Encore.Platform.Capture;

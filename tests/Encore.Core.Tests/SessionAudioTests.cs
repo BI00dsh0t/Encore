@@ -1,4 +1,3 @@
-using Encore.Contracts;
 using Encore.Contracts.Settings;
 using Encore.Core.Sessions;
 

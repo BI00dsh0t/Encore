@@ -5,9 +5,7 @@ using System.Windows.Media.Imaging;
 using Encore.App.Engine;
 using Encore.App.Status;
 using Encore.Contracts;
-using Encore.Contracts.Ipc;
 using Encore.Contracts.Messages;
-using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 

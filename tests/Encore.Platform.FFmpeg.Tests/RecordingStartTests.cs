@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Text.Json;
 using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging.Abstractions;

@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Windows;
-using System.Windows.Input;
 using Microsoft.Win32;
 using Encore.Contracts.Settings;
 

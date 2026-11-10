@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO;
 using System.Windows;
 using Encore.App.Engine;
 using Encore.Contracts;

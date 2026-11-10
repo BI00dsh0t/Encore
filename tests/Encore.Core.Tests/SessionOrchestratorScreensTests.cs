@@ -27,7 +27,7 @@ public sealed partial class SessionOrchestratorTests
                 recordingsWith: r => r with { Warn = (code, _) => warns.Enqueue(code) },
                 displays: displays);
             using var owned = orchestrator;
-            var monitor = await StartScreens(orchestrator, events, presses, factory);
+            var monitor = await StartScreens(orchestrator, presses, factory);
 
             Assert.Equal([Screen1, Screen2], monitor.Spec.Screens);
             Assert.Single(factory.Sessions);
@@ -59,7 +59,7 @@ public sealed partial class SessionOrchestratorTests
                 recordingsWith: r => r with { Warn = (code, _) => warns.Enqueue(code) },
                 displays: displays);
             using var owned = orchestrator;
-            var monitor = await StartScreens(orchestrator, events, presses, factory);
+            var monitor = await StartScreens(orchestrator, presses, factory);
             var started = Assert.IsType<RecordingStarted>(await NextAsync(events));
 
             displays.Change(Screen1);
@@ -104,7 +104,7 @@ public sealed partial class SessionOrchestratorTests
 
             // Once DISPLAY2 reads again, only the missing one is skipped.
             displays.Set(Screen1, Screen2);
-            var monitor = await StartScreens(orchestrator, events, presses, factory);
+            var monitor = await StartScreens(orchestrator, presses, factory);
             Assert.Equal([Screen2], monitor.Spec.Screens);
             Assert.Equal(3, warns.Count);
         }
@@ -117,7 +117,6 @@ public sealed partial class SessionOrchestratorTests
     /// <summary>A Monitor Record press: its session gets the resolved screens' devices and anchors.</summary>
     private static async Task<FakeSession> StartScreens(
         SessionOrchestrator orchestrator,
-        System.Threading.Channels.Channel<object> events,
         System.Threading.Channels.Channel<HotkeyPress> presses,
         FakeFactory factory)
     {
