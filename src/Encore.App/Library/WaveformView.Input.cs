@@ -343,7 +343,7 @@ internal sealed partial class WaveformView
     }
 
     // During a press the cursor says what it does; hovering, it says what a press there would do.
-    private Cursor? CursorAt(Point point, ClipCreatorPage page)
+    private Cursor? CursorAt(Point point, ClipCreatorViewModel page)
     {
         switch (_pointerMode)
         {
@@ -369,7 +369,7 @@ internal sealed partial class WaveformView
     }
 
     // The ruler always seeks. Grips win over the range's body, including their wider reach.
-    private PointerMode ModeAt(Point point, ClipCreatorPage page)
+    private PointerMode ModeAt(Point point, ClipCreatorViewModel page)
     {
         if (point.Y < RulerHeight)
         {
@@ -389,7 +389,7 @@ internal sealed partial class WaveformView
         return IsOnRange(point.X, page) ? PointerMode.PendingMove : PointerMode.Seek;
     }
 
-    private bool CanSelectVisibleRangeAt(Point point, ClipCreatorPage page)
+    private bool CanSelectVisibleRangeAt(Point point, ClipCreatorViewModel page)
     {
         if (ActualWidth <= PlotLeft || point.X < PlotLeft || point.X > ActualWidth || point.Y < RulerHeight || point.Y > ActualHeight)
         {
@@ -401,10 +401,10 @@ internal sealed partial class WaveformView
 
     private bool IsOutside(Point point) => point.X < PlotLeft || point.X > ActualWidth || point.Y < 0 || point.Y > ActualHeight;
 
-    private bool IsNearGrip(double x, ClipCreatorPage page) =>
+    private bool IsNearGrip(double x, ClipCreatorViewModel page) =>
         Math.Abs(x - XOf(page.Start)) <= GripReach || Math.Abs(x - XOf(page.End)) <= GripReach;
 
-    private bool IsOnRange(double x, ClipCreatorPage page) => x > XOf(page.Start) && x < XOf(page.End);
+    private bool IsOnRange(double x, ClipCreatorViewModel page) => x > XOf(page.Start) && x < XOf(page.End);
 
     // Until the pointer moves this far, a press on the range is still a click.
     private bool IsWithinDragDistance(Point point) =>

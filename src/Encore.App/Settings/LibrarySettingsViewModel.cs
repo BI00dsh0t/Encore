@@ -8,7 +8,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Settings;
 
 /// <summary>The Library and Cleanup settings; a change that would delete files asks first, with a preview. UI thread.</summary>
-internal sealed class LibrarySettingsPage : SettingsPage
+internal sealed class LibrarySettingsViewModel : SettingsViewModel
 {
     private const long BytesPerGb = 1_000_000_000;
     private const long SecondsPerDay = 86_400;
@@ -33,7 +33,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
     private bool _busy;
 
     /// <param name="defaultCacheFolder">The engine's default cache folder, which the Clips folder may not contain.</param>
-    public LibrarySettingsPage(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null)
+    public LibrarySettingsViewModel(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null)
         : base(sender)
     {
         _engine = engine;
@@ -41,7 +41,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
         Confirm = ConfirmWithPrompt;
         ClipsFolder = new FolderPicker(Keys.OutputFolder, ops => SendForPickerAsync(ops, ErrorCodes.RingPathInvalid))
         {
-            RefusalText = code => code == ErrorCodes.RingPathInvalid ? RewindSettingsPage.ClipsContainsCache : null,
+            RefusalText = code => code == ErrorCodes.RingPathInvalid ? RewindSettingsViewModel.ClipsContainsCache : null,
             DialogTitle = "Choose the Clips folder",
             Help = "Where Clips and Recordings are saved. Each game gets its own folder, and Monitor Recordings have theirs.",
             Validate = ValidateClipsFolder,
@@ -65,7 +65,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
     /// <summary>The folder the Library lists: the engine's, else the setting, else the default.</summary>
     public string FolderSizeText => string.Create(
         CultureInfo.InvariantCulture,
-        $"{RewindSettingsPage.FormatBytes(_folderBytes)} in {_folderCount} {(_folderCount == 1 ? "file" : "files")}");
+        $"{RewindSettingsViewModel.FormatBytes(_folderBytes)} in {_folderCount} {(_folderCount == 1 ? "file" : "files")}");
 
     /// <summary>The note shown while Cleanup is blocked by a rebuilt index; null otherwise.</summary>
     public string? CleanupBlockedText => _cleanupBlocked
@@ -149,7 +149,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
         }
     }
 
-    /// <summary>Takes the snapshot's Library folder, items and Cleanup block. Called before <see cref="SettingsPage.Render"/>.</summary>
+    /// <summary>Takes the snapshot's Library folder, items and Cleanup block. Called before <see cref="SettingsViewModel.Render"/>.</summary>
     public void ShowState(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -222,7 +222,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
             ? "Nothing would be deleted now."
             : string.Create(
                 CultureInfo.InvariantCulture,
-                $"Cleanup would delete {plan.Count} {(plan.Count == 1 ? "file" : "files")} ({RewindSettingsPage.FormatBytes(plan.Bytes)}) now.");
+                $"Cleanup would delete {plan.Count} {(plan.Count == 1 ? "file" : "files")} ({RewindSettingsViewModel.FormatBytes(plan.Bytes)}) now.");
         return now
             + "\n\nCleanup deletes permanently: files don't go to the Recycle Bin."
             + " Favourites and files being written are never deleted."
@@ -317,12 +317,12 @@ internal sealed class LibrarySettingsPage : SettingsPage
     /// <summary>The Clips folder's refusals: it contains the cache folder, or it isn't writable.</summary>
     private string? ValidateClipsFolder(string path)
     {
-        if ((_ringPath ?? DefaultCacheFolder) is { Length: > 0 } cache && RewindSettingsPage.IsInside(cache, path))
+        if ((_ringPath ?? DefaultCacheFolder) is { Length: > 0 } cache && RewindSettingsViewModel.IsInside(cache, path))
         {
-            return RewindSettingsPage.ClipsContainsCache;
+            return RewindSettingsViewModel.ClipsContainsCache;
         }
 
-        return FolderProbe.CanWrite(path) ? null : RewindSettingsPage.CantWrite;
+        return FolderProbe.CanWrite(path) ? null : RewindSettingsViewModel.CantWrite;
     }
 
     // Shows the rendered value again, with why the entry wasn't sent.

@@ -88,7 +88,7 @@ public sealed class UxPass2EndToEndTests : IDisposable
         Until(() => engine.State!.LibraryFolder == output && engine.State.Library.Count == 3, "the fabricated Library");
 
         var shell = new RecordingShell();
-        var library = new LibraryPage(engine, shell: shell, confirmDelete: _ => true);
+        var library = new LibraryViewModel(engine, shell: shell, confirmDelete: _ => true);
         engine.Changed += () => post(() => library.Render(engine.State!));
         library.Render(engine.State!);
         Assert.False(library.ShowsWelcome);
@@ -150,9 +150,9 @@ public sealed class UxPass2EndToEndTests : IDisposable
     private static string? Override(EngineConnection engine, string key) =>
         engine.State!.Settings.Profiles.TryGetValue(GameId, out var profile) && profile.Overrides.TryGetValue(key, out var value) ? value.GetRawText() : null;
 
-    private static List<string> Shown(LibraryPage page) => [.. page.Entries.OfType<LibraryRow>().Select(r => r.Name)];
+    private static List<string> Shown(LibraryViewModel page) => [.. page.Entries.OfType<LibraryRow>().Select(r => r.Name)];
 
-    private static LibraryRow Row(LibraryPage page, string name) => page.Rows.Single(r => r.Name == name);
+    private static LibraryRow Row(LibraryViewModel page, string name) => page.Rows.Single(r => r.Name == name);
 
     /// <summary>Pumps the dispatcher until <paramref name="condition"/> holds.</summary>
     private static void Until(Func<bool> condition, string what)

@@ -5,7 +5,7 @@ namespace Encore.App.Library;
 /// <summary>Owned, themed options. Edits are the creator configuration; dismissal never exports.</summary>
 internal partial class ClipExportDialog
 {
-    public ClipExportDialog(ClipCreatorPage page)
+    public ClipExportDialog(ClipCreatorViewModel page)
     {
         InitializeComponent();
         DataContext = page;
@@ -38,7 +38,7 @@ internal partial class ClipExportDialog
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
-        if (DataContext is ClipCreatorPage { CanSave: true })
+        if (DataContext is ClipCreatorViewModel { CanSave: true })
         {
             DialogResult = true;
         }

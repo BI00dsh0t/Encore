@@ -206,9 +206,9 @@ public sealed class RecordingsEndToEndTests : IDisposable
 
     private static HotkeyBindingStatus? Status(EngineConnection engine, HotkeyAction action) => engine.State!.Hotkeys.Bindings.SingleOrDefault(b => b.Action == action);
 
-    private static Settings.HotkeyRow Row(Settings.HotkeysPage page, HotkeyAction action) => page.Rows.Single(r => r.Action == action);
+    private static Settings.HotkeyRow Row(Settings.HotkeysViewModel page, HotkeyAction action) => page.Rows.Single(r => r.Action == action);
 
-    private static string[] Shown(Settings.HotkeysPage page) => [.. page.Rows.Where(r => r.IsShown).Select(r => r.Label)];
+    private static string[] Shown(Settings.HotkeysViewModel page) => [.. page.Rows.Where(r => r.IsShown).Select(r => r.Label)];
 
     /// <summary>A fragmented MP4 like a Recording's: an empty moov, then 1 s fragments (H.264 and AAC, CPU only).</summary>
     private string Fragmented(string name, int seconds)

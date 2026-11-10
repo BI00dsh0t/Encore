@@ -11,7 +11,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Tests;
 
 [Collection(nameof(WpfCollection))]
-public sealed class LibrarySettingsPageTests
+public sealed class LibrarySettingsViewModelTests
 {
     private const long Gb = 1_000_000_000;
 
@@ -22,7 +22,7 @@ public sealed class LibrarySettingsPageTests
     private LibraryCleanupPlan _plan = new(3, 1_200_000_000, ["a.mp4", "b.mp4", "c.mp4"]);
     private bool _answer;
 
-    public LibrarySettingsPageTests()
+    public LibrarySettingsViewModelTests()
     {
         _engine.Reply = (command, args) =>
         {
@@ -247,7 +247,7 @@ public sealed class LibrarySettingsPageTests
         Assert.Null(model.Rewind.Message);
     }
 
-    private LibrarySettingsPage Create(CleanupSettings? cleanup = null)
+    private LibrarySettingsViewModel Create(CleanupSettings? cleanup = null)
     {
         if (cleanup is not null)
         {

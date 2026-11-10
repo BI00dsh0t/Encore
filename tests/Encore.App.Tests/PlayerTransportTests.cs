@@ -28,10 +28,10 @@ public sealed class PlayerTransportTests : IDisposable
         var player = new FakePlayer { Media = Media(TimeSpan.FromSeconds(30)) };
         var page = Open(player);
 
-        page.SeekBy(PlayerPage.SeekStep);
+        page.SeekBy(PlayerViewModel.SeekStep);
         Assert.Equal(TimeSpan.FromSeconds(5), player.Seeks[^1]);
         page.SeekTo(TimeSpan.FromSeconds(28));
-        page.SeekBy(PlayerPage.SeekStep);
+        page.SeekBy(PlayerViewModel.SeekStep);
         Assert.Equal(TimeSpan.FromSeconds(30), player.Seeks[^1]);
         page.SeekBy(-TimeSpan.FromSeconds(40));
         Assert.Equal(TimeSpan.Zero, player.Seeks[^1]);
@@ -96,7 +96,7 @@ public sealed class PlayerTransportTests : IDisposable
         Assert.Equal((0.4, true), (second.Volume, second.IsMuted));
 
         // Up unmutes and raises the volume a step.
-        again.ChangeVolume(PlayerPage.VolumeStep);
+        again.ChangeVolume(PlayerViewModel.VolumeStep);
         Assert.Equal((0.45, false), (Math.Round(second.Volume, 2), second.IsMuted));
     }
 
@@ -108,7 +108,7 @@ public sealed class PlayerTransportTests : IDisposable
 
         Assert.False(page.CanSeek);
         Assert.Equal("0:00", page.TimeText);
-        page.SeekBy(PlayerPage.SeekStep);
+        page.SeekBy(PlayerViewModel.SeekStep);
         page.PositionSeconds = 3;
         Assert.Empty(player.Seeks);
 
@@ -116,7 +116,7 @@ public sealed class PlayerTransportTests : IDisposable
         player.Position = TimeSpan.FromSeconds(65);
         page.RefreshPosition();
         Assert.Equal("1:05", page.TimeText);
-        Assert.Equal("1:02:03", PlayerPage.Format(TimeSpan.FromSeconds(3723), TimeSpan.FromHours(2)));
+        Assert.Equal("1:02:03", PlayerViewModel.Format(TimeSpan.FromSeconds(3723), TimeSpan.FromHours(2)));
     }
 
     // A view file from before the player existed has no player keys and loads full and unmuted.
@@ -141,24 +141,24 @@ public sealed class PlayerTransportTests : IDisposable
 
         // A slider at 0.333 is told the 0.33 kept, so its thumb snaps.
         var raised = 0;
-        page.PropertyChanged += (_, e) => raised += e.PropertyName == nameof(PlayerPage.Volume) ? 1 : 0;
+        page.PropertyChanged += (_, e) => raised += e.PropertyName == nameof(PlayerViewModel.Volume) ? 1 : 0;
         page.Volume = 0.333333;
         Assert.Equal(0.33, page.Volume);
         Assert.Equal(1, raised);
         page.Volume = 0.1;
-        page.ChangeVolume(-PlayerPage.VolumeStep);
-        page.ChangeVolume(-PlayerPage.VolumeStep);
+        page.ChangeVolume(-PlayerViewModel.VolumeStep);
+        page.ChangeVolume(-PlayerViewModel.VolumeStep);
         Assert.Equal(0.0, page.Volume);
         for (var i = 0; i < 25; i++)
         {
-            page.ChangeVolume(PlayerPage.VolumeStep);
+            page.ChangeVolume(PlayerViewModel.VolumeStep);
         }
 
         Assert.Equal(1.0, page.Volume);
 
         // Up at 1.0 while muted still unmutes, though the volume can't rise.
         page.MuteCommand.Execute(null);
-        page.ChangeVolume(PlayerPage.VolumeStep);
+        page.ChangeVolume(PlayerViewModel.VolumeStep);
         Assert.Equal((1.0, false, false), (page.Volume, page.IsMuted, player.IsMuted));
 
         // The slider, dragged while muted, unmutes, as the keys do.
@@ -170,16 +170,16 @@ public sealed class PlayerTransportTests : IDisposable
 
     private static PlayerMedia Media(TimeSpan? duration) => new(1280, 720, duration, ["Game", "Mic", "Discord", "Desktop"], true);
 
-    private PlayerPage Open(FakePlayer player, string? viewFile = null) => Open(player, viewFile, out _);
+    private PlayerViewModel Open(FakePlayer player, string? viewFile = null) => Open(player, viewFile, out _);
 
-    private PlayerPage Open(FakePlayer player, string? viewFile, out LibraryPage opened)
+    private PlayerViewModel Open(FakePlayer player, string? viewFile, out LibraryViewModel opened)
     {
         _engine.State = _engine.State! with
         {
             LibraryFolder = _folder,
             Library = [new LibraryItem(Clip, null, 1, DateTimeOffset.UnixEpoch, false)],
         };
-        var library = new LibraryPage(_engine, viewStateFile: viewFile, shell: new FakeLibraryShell(), player: () => player);
+        var library = new LibraryViewModel(_engine, viewStateFile: viewFile, shell: new FakeLibraryShell(), player: () => player);
         library.Render(_engine.State);
         library.Click(library.Rows.Single(), ctrl: false, shift: false);
         library.OpenFocused();

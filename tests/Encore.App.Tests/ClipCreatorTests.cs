@@ -48,7 +48,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public async Task MovingSelectionPreservesDurationAndCachesWhileClampingToTheSource()
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await page.OpenAsync(45); await page.EnsureThumbnailsAsync();
         page.SetRange(40.125, 45.875); await page.RefreshAsync();
         page.Seek(47);
@@ -73,7 +73,7 @@ public sealed class ClipCreatorTests : IDisposable
         Assert.False(page.CanExport);
         page.EndRangeDrag(); await page.RefreshAsync();
         Assert.Equal(requests + 1, _media.Requests.Count);
-        Assert.Equal(page.StartText, ClipCreatorPage.FormatTime(page.Start));
+        Assert.Equal(page.StartText, ClipCreatorViewModel.FormatTime(page.Start));
         page.PauseAndCancel(); page.MoveSelection(40.125, 45.875, 1);
         Assert.Equal(40.459, page.Start, 9);
     }
@@ -84,7 +84,7 @@ public sealed class ClipCreatorTests : IDisposable
         SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
         void Finish(Task task) { Sta.PumpUntil(() => task.IsCompleted, "selection move setup"); task.GetAwaiter().GetResult(); }
         var players = new List<FakePlayer>();
-        using var page = new ClipCreatorPage(Source, "source", _media, () =>
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () =>
         {
             var player = new FakePlayer { Media = new(1280, 720, TimeSpan.FromSeconds(90), ["Game"], true) };
             players.Add(player); return player;
@@ -148,14 +148,14 @@ public sealed class ClipCreatorTests : IDisposable
     public async Task CalculatedFilmstripSurvivesReopeningAndChangedSourcesMissTheCache()
     {
         var cacheFolder = Path.Combine(_folder, "filmstrip-cache");
-        using (var first = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
+        using (var first = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
         {
             await first.OpenAsync(0); await first.EnsureThumbnailsAsync();
             Assert.Equal(2, first.Thumbnails.Length);
         }
         Assert.Single(Directory.GetFiles(cacheFolder, "manifest.json", SearchOption.AllDirectories));
         _media.Requests.Clear();
-        using (var reopened = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
+        using (var reopened = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
         {
             await reopened.OpenAsync(0); await reopened.EnsureThumbnailsAsync();
             Assert.Equal(2, reopened.Thumbnails.Length);
@@ -167,7 +167,7 @@ public sealed class ClipCreatorTests : IDisposable
         }
         File.AppendAllText(Source.Path, "changed");
         _media.Requests.Clear();
-        using var changed = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
+        using var changed = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
         await changed.OpenAsync(0); await changed.EnsureThumbnailsAsync();
         Assert.Equal(2, changed.Thumbnails.Length);
         Assert.Single(_media.Requests, request => request.Operation == "prepareThumbnails");
@@ -178,25 +178,25 @@ public sealed class ClipCreatorTests : IDisposable
     {
         var cacheFolder = Path.Combine(_folder, "filmstrip-cache");
         _media.ThumbnailRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var cancelled = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
+        var cancelled = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
         await cancelled.OpenAsync(0);
         var pending = cancelled.EnsureThumbnailsAsync();
         cancelled.Dispose(); await pending;
         Assert.False(Directory.Exists(cacheFolder));
         _media.ThumbnailRelease.SetResult();
-        using (var first = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
+        using (var first = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
         { await first.OpenAsync(0); await first.EnsureThumbnailsAsync(); Assert.Equal(2, first.Thumbnails.Length); }
         var jpeg = Directory.GetFiles(cacheFolder, "*.jpg", SearchOption.AllDirectories).First();
         File.WriteAllBytes(jpeg, [0]);
         _media.Requests.Clear();
-        using (var rebuilt = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
+        using (var rebuilt = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder))
         {
             await rebuilt.OpenAsync(0); await rebuilt.EnsureThumbnailsAsync();
             Assert.Equal(2, rebuilt.Thumbnails.Length);
             Assert.Single(_media.Requests, request => request.Operation == "prepareThumbnails");
         }
         _media.Requests.Clear();
-        using var reused = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
+        using var reused = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
         await reused.OpenAsync(0); await reused.EnsureThumbnailsAsync();
         Assert.Equal(2, reused.Thumbnails.Length);
         Assert.DoesNotContain(_media.Requests, request => request.Operation == "prepareThumbnails");
@@ -213,7 +213,7 @@ public sealed class ClipCreatorTests : IDisposable
         }
         var unrelated = Directory.CreateDirectory(Path.Combine(cacheFolder, "keep-me"));
         File.WriteAllText(Path.Combine(unrelated.FullName, "note.txt"), "keep");
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(), thumbnailCacheFolder: cacheFolder);
         await page.OpenAsync(0); await page.EnsureThumbnailsAsync();
         Assert.Equal(2, page.Thumbnails.Length);
         Assert.Equal(128, Directory.GetDirectories(cacheFolder).Count(path => Path.GetFileName(path).Length == 64));
@@ -226,7 +226,7 @@ public sealed class ClipCreatorTests : IDisposable
     public async Task PlaybackLoopsTheLiveTrimRangeAndKeepsPausedSeekingIndependent()
     {
         var player = new FakePlayer { Media = new(1280, 720, TimeSpan.FromSeconds(90), ["Game"], true) };
-        using var page = new ClipCreatorPage(Source, "source", _media, () => player);
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => player);
         await page.OpenAsync(0);
         page.SetRange(2, 4);
         page.Seek(8);
@@ -257,7 +257,7 @@ public sealed class ClipCreatorTests : IDisposable
         SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
         void Finish(Task task) { Sta.PumpUntil(() => task.IsCompleted, "clip playback setup"); task.GetAwaiter().GetResult(); }
         var players = new List<FakePlayer>();
-        using var page = new ClipCreatorPage(Source, "source", _media, () =>
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () =>
         {
             var player = new FakePlayer { Media = new(1280, 720, TimeSpan.FromSeconds(players.Count == 0 ? 90 : 10), ["Game"], true) };
             players.Add(player); return player;
@@ -288,7 +288,7 @@ public sealed class ClipCreatorTests : IDisposable
         Assert.Empty(players[0].Seeks);
         // The shared player stays opt-in: ordinary Library playback still stops at EOF.
         var ordinary = new FakePlayer();
-        using var ordinaryPage = new PlayerPage(Source.Path, "ordinary", ordinary);
+        using var ordinaryPage = new PlayerViewModel(Source.Path, "ordinary", ordinary);
         Finish(ordinaryPage.OpenAsync()); ordinaryPage.PlayPauseCommand.Execute(null); ordinary.RaiseEnded();
         Sta.PumpUntil(() => !ordinaryPage.IsPlaying, "ordinary player to stop at end");
         Assert.Empty(ordinary.Seeks);
@@ -297,7 +297,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public async Task FilmstripIsPreparedOnceAndSeekingNeverChangesTrim()
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await page.OpenAsync(15);
         await page.EnsureThumbnailsAsync();
         Assert.Equal(2, page.Thumbnails.Length);
@@ -326,7 +326,7 @@ public sealed class ClipCreatorTests : IDisposable
     public async Task OptionalThumbnailWorkCancelsBeforeExportAndRetriesAfterResume()
     {
         _media.ThumbnailRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await page.OpenAsync(0);
         var preparation = page.EnsureThumbnailsAsync();
         var scratch = _media.Requests.Single(r => r.Operation == "prepareThumbnails").Destination!;
@@ -352,7 +352,7 @@ public sealed class ClipCreatorTests : IDisposable
     {
         _media.ThumbnailRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _media.ThumbnailStopRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await page.OpenAsync(0);
         var preparation = page.EnsureThumbnailsAsync();
         var export = page.ExportAsync(Path.Combine(_folder, "cancelled.mp4"));
@@ -369,7 +369,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public async Task MillisecondSelectionSurvivesZoomAndPanAndRequestsFinerSourceBins()
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await page.OpenAsync(45);
         Assert.Equal(30, page.Start);
         Assert.Equal(60, page.End);
@@ -411,7 +411,7 @@ public sealed class ClipCreatorTests : IDisposable
         _media.PeakAt = (track, index) => track == 3 ? 0 :
             index == 1000 ? (track == 1 ? 0.2f : 0.8f) :
             index == 45000 ? (track == 1 ? 0.1f : 0.4f) : 0;
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await page.OpenAsync(0);
         page.Zoom(3); await page.RefreshAsync();
         var folder = _media.Requests.Single(r => r.Operation == "prepareWaveforms").Destination!;
@@ -433,7 +433,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public async Task SelectingTheVisibleRangeKeepsViewportPeaksAndUsesInwardMillisecondBounds()
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         page.SelectVisibleRange(); Assert.Equal((0d, 0d), (page.Start, page.End));
         await page.OpenAsync(45);
         var sourcePlayer = page.Preview;
@@ -464,7 +464,7 @@ public sealed class ClipCreatorTests : IDisposable
         finally { _media.ExportRelease.SetResult(); await export; }
         Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
         page.Dispose(); page.SelectVisibleRange(); Assert.Equal((1d, 2d), (page.Start, page.End));
-        using var tiny = new ClipCreatorPage(Source, "tiny", new FakeMedia { Duration = 0.0004 }, () => new FakePlayer());
+        using var tiny = new ClipCreatorViewModel(Source, "tiny", new FakeMedia { Duration = 0.0004 }, () => new FakePlayer());
         await tiny.OpenAsync(0); tiny.SelectVisibleRange();
         Assert.Equal((0d, 0.0004), (tiny.Start, tiny.End));
     }
@@ -472,7 +472,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public async Task TrimDragUpdatesSelectionWithoutStartingWorkUntilRelease()
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await page.OpenAsync(0);
         var peaks = page.Waveforms;
         var rangeCount = _media.Requests.Count(r => r.Operation == "range");
@@ -518,7 +518,7 @@ public sealed class ClipCreatorTests : IDisposable
     public async Task PreparationSurvivesOrdinaryEditsAndCancelledPreparationCanResume()
     {
         _media.PreparationRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         var opening = page.OpenAsync(0);
         Assert.Single(_media.Requests, r => r.Operation == "prepareWaveforms");
         page.SetRange(1.123, 2.456);
@@ -549,7 +549,7 @@ public sealed class ClipCreatorTests : IDisposable
     public async Task CorruptPreparationIsRejectedAndDisposeWaitsForOwnedWorkerCleanup()
     {
         _media.CorruptPreparation = true;
-        using (var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(),
+        using (var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(),
             createPreviewFolder: () => throw new IOException("Newer preview failure.")))
         {
             await page.OpenAsync(0);
@@ -572,7 +572,7 @@ public sealed class ClipCreatorTests : IDisposable
         _media.Requests.Clear();
         _media.CorruptPreparation = false;
         _media.CorruptSummary = true;
-        using (var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer()))
+        using (var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer()))
         {
             await page.OpenAsync(0);
             Assert.Empty(page.Waveforms);
@@ -580,7 +580,7 @@ public sealed class ClipCreatorTests : IDisposable
         }
         _media.Requests.Clear();
         _media.CorruptSummary = false;
-        using (var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer()))
+        using (var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer()))
         {
             await page.OpenAsync(0);
             var previous = page.Waveforms;
@@ -601,7 +601,7 @@ public sealed class ClipCreatorTests : IDisposable
         }
         _media.Requests.Clear();
         _media.PreparationRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var pending = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        var pending = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         var opening = pending.OpenAsync(0);
         var scratch = _media.Requests.Single(r => r.Operation == "prepareWaveforms").Destination!;
         Assert.True(Directory.Exists(scratch));
@@ -615,7 +615,7 @@ public sealed class ClipCreatorTests : IDisposable
     public async Task IndependentScrubbingKeepsTrimAndMapsRenderedPreviewBackToSource()
     {
         var players = new List<FakePlayer>();
-        using var page = new ClipCreatorPage(Source, "source", _media, () =>
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () =>
         {
             var player = new FakePlayer { Media = new(1280, 720, TimeSpan.FromSeconds(90), ["Game", "Mic"], true) };
             players.Add(player); return player;
@@ -639,7 +639,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public async Task ExportAndRenderedPreviewUseTheSameExplicitTrackSelectionAndMix()
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await page.OpenAsync(0);
         Assert.False(page.Preview!.SupportsFullScreen);
         Assert.False(page.Preview.SupportsExternalActions);
@@ -677,7 +677,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public async Task PreviewFolderFailureIsShownAndLeavesTheEditorUsable()
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer(),
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer(),
             createPreviewFolder: () => throw new IOException("Temporary storage is unavailable."));
         await page.OpenAsync(0);
         await page.PreviewAsync();
@@ -691,13 +691,13 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public void EmbeddedPlayerDisablesUnsupportedActionsWhileTheOrdinaryPlayerKeepsThem()
     {
-        using var embedded = new PlayerPage("source.mp4", "source", new FakePlayer(), embedded: true);
+        using var embedded = new PlayerViewModel("source.mp4", "source", new FakePlayer(), embedded: true);
         Assert.False(embedded.FullScreenCommand.CanExecute(null));
         Assert.False(embedded.OpenInDefaultPlayerCommand.CanExecute(null));
         Assert.False(embedded.OpenStoreCommand.CanExecute(null));
         embedded.IsFullScreen = true;
         Assert.False(embedded.IsFullScreen);
-        using var ordinary = new PlayerPage("source.mp4", "source", new FakePlayer());
+        using var ordinary = new PlayerViewModel("source.mp4", "source", new FakePlayer());
         Assert.True(ordinary.FullScreenCommand.CanExecute(null));
         ordinary.FullScreenCommand.Execute(null);
         Assert.True(ordinary.IsFullScreen);
@@ -706,7 +706,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public void EntryFocusUsesTheEnabledWaveformWhileInitializationIsPending() => Sta.Run(() =>
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         var view = new ClipCreatorView { DataContext = page };
         var window = new Window { Content = view, Width = 960, Height = 900, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
         ThemeService.ForWindow(window).Apply(AppTheme.Fluent);
@@ -727,7 +727,7 @@ public sealed class ClipCreatorTests : IDisposable
     {
         var engine = new FakeEngineSession();
         var source = Source;
-        var library = new LibraryPage(engine, player: () => new FakePlayer(), clipMedia: _media);
+        var library = new LibraryViewModel(engine, player: () => new FakePlayer(), clipMedia: _media);
         var item = new LibraryItem("source.mp4", null, source.Length, DateTimeOffset.UtcNow, false);
         var state = engine.State! with { LibraryFolder = _folder, Library = [item] };
         library.Render(state);
@@ -756,7 +756,7 @@ public sealed class ClipCreatorTests : IDisposable
     {
         SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
         _media.TrackCount = 10;
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         var opening = page.OpenAsync(0);
         Sta.PumpUntil(() => opening.IsCompleted, "fake creator source to open");
         opening.GetAwaiter().GetResult();
@@ -864,7 +864,7 @@ public sealed class ClipCreatorTests : IDisposable
                 waveform.MoveBoundary(false, 1.123);
                 page.Nudge(false, 1);
                 Assert.Equal("00:00:01.124", page.StartText);
-                Assert.Equal(ClipCreatorPage.FormatTime(page.End - page.Start), page.SelectedDurationText);
+                Assert.Equal(ClipCreatorViewModel.FormatTime(page.End - page.Start), page.SelectedDurationText);
                 var refresh = page.RefreshAsync();
                 Sta.PumpUntil(() => refresh.IsCompleted, "edited range to refresh");
                 Assert.True(firstStartBox.TransformToAncestor(view).Transform(new Point()).Y >= waveform.TransformToAncestor(view).Transform(new Point()).Y + waveform.ActualHeight);
@@ -888,7 +888,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public async Task ChooserCancellationAndDuplicatePressesPreserveConfigurationAndStartOnlyOneExport()
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await page.OpenAsync(0);
         page.IsMp3 = true;
         page.ExportName = "my selection";
@@ -916,7 +916,7 @@ public sealed class ClipCreatorTests : IDisposable
     [Fact]
     public void SplitMenuAndOwnedOptionsRetainEditsRestoreFocusAndNeverChooseOnDismissal() => Sta.Run(() =>
     {
-        using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
+        using var page = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         var opening = page.OpenAsync(0);
         Sta.PumpUntil(() => opening.IsCompleted, "source to open");
         opening.GetAwaiter().GetResult();

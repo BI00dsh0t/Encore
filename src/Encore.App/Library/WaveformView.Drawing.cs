@@ -44,11 +44,11 @@ internal sealed partial class WaveformView
         }
     }
 
-    private static string TrackName(ClipCreatorPage page, int streamIndex) =>
+    private static string TrackName(ClipCreatorViewModel page, int streamIndex) =>
         page.Tracks.FirstOrDefault(track => track.Track.StreamIndex == streamIndex)?.Name ?? "Audio";
 
     // Screen readers hear which handle the keys move and which lanes show.
-    private void UpdateAutomationName(ClipCreatorPage page)
+    private void UpdateAutomationName(ClipCreatorViewModel page)
     {
         var role = _focusedHandle switch
         {
@@ -64,7 +64,7 @@ internal sealed partial class WaveformView
         new(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, RulerBrush, dpi);
 
     // Tick lines across the lanes, each with its time; a label that would crowd its neighbours is left out.
-    private void DrawRuler(DrawingContext context, ClipCreatorPage page, double plotWidth, double dpi)
+    private void DrawRuler(DrawingContext context, ClipCreatorViewModel page, double plotWidth, double dpi)
     {
         var labels = Math.Max(1, (int)(plotWidth / RulerLabelSpacing));
         for (var i = 0; i <= labels; i++)
@@ -72,7 +72,7 @@ internal sealed partial class WaveformView
             var x = PlotLeft + plotWidth * i / labels;
             context.DrawLine(new Pen(DividerBrush, 1), new(x, 20), new(x, AudioBottom));
             var time = page.ViewportStart + (page.ViewportEnd - page.ViewportStart) * i / labels;
-            var text = Caption(ClipCreatorPage.FormatTime(time), dpi);
+            var text = Caption(ClipCreatorViewModel.FormatTime(time), dpi);
             if (i > 0 && plotWidth < text.Width * 2 + 8)
             {
                 continue;
@@ -83,7 +83,7 @@ internal sealed partial class WaveformView
         }
     }
 
-    private void DrawCaptions(DrawingContext context, ClipCreatorPage page, double dpi)
+    private void DrawCaptions(DrawingContext context, ClipCreatorViewModel page, double dpi)
     {
         var videoLabel = Caption("Video", dpi);
         context.DrawText(videoLabel, new Point(4, AudioBottom + (FilmstripHeight - videoLabel.Height) / 2));
@@ -94,7 +94,7 @@ internal sealed partial class WaveformView
     }
 
     // The lanes and the video strip move only with the viewport, so they are drawn once and reused.
-    private DrawingGroup CreateWaveformDrawing(ClipCreatorPage page, double plotWidth, double dpi)
+    private DrawingGroup CreateWaveformDrawing(ClipCreatorViewModel page, double plotWidth, double dpi)
     {
         var drawing = new DrawingGroup();
         using (var context = drawing.Open())
@@ -113,7 +113,7 @@ internal sealed partial class WaveformView
         return drawing;
     }
 
-    private void DrawLane(DrawingContext context, ClipCreatorPage page, int lane, double plotWidth, double dpi)
+    private void DrawLane(DrawingContext context, ClipCreatorViewModel page, int lane, double plotWidth, double dpi)
     {
         var data = page.Waveforms[lane];
         var center = RulerHeight + LaneHeight * (lane - LaneOffset + 0.5);
@@ -151,7 +151,7 @@ internal sealed partial class WaveformView
     }
 
     // Each slot shows the latest thumbnail at or before its middle; an empty frame until there is one.
-    private void DrawFilmstrip(DrawingContext context, ClipCreatorPage page, double plotWidth)
+    private void DrawFilmstrip(DrawingContext context, ClipCreatorViewModel page, double plotWidth)
     {
         context.PushClip(new RectangleGeometry(new Rect(PlotLeft, AudioBottom, plotWidth, FilmstripHeight)));
         for (var x = PlotLeft; x < ActualWidth; x += FrameStep)
@@ -173,7 +173,7 @@ internal sealed partial class WaveformView
     }
 
     // The veil dims what lies outside the trim range; the range and its grips fade while it can't be edited.
-    private void DrawRange(DrawingContext context, ClipCreatorPage page, double plotWidth)
+    private void DrawRange(DrawingContext context, ClipCreatorViewModel page, double plotWidth)
     {
         var left = XOf(page.Start);
         var right = XOf(page.End);

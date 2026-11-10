@@ -26,7 +26,7 @@ internal partial class PlayerView
     private readonly DispatcherTimer _settle;
     private readonly DispatcherTimer _position;
     private readonly NoPictureWatch _noPicture;
-    private PlayerPage? _page;
+    private PlayerViewModel? _page;
     private VideoSurface? _surface;
     private int _presentPending;
     private ContextMenu? _menu;
@@ -52,9 +52,9 @@ internal partial class PlayerView
 
         _image.IsFrontBufferAvailableChanged += OnFrontBufferAvailableChanged;
         PictureArea.SizeChanged += OnPictureAreaSizeChanged;
-        DataContextChanged += (_, e) => Attach(e.NewValue as PlayerPage);
+        DataContextChanged += (_, e) => Attach(e.NewValue as PlayerViewModel);
         Unloaded += (_, _) => Attach(null);
-        Loaded += (_, _) => Attach(DataContext as PlayerPage);
+        Loaded += (_, _) => Attach(DataContext as PlayerViewModel);
 
         // The volume slider slides out while the pointer or keyboard focus is in the speaker's group.
         VolumeGroup.MouseEnter += (_, _) => SetVolumeHover(true);
@@ -119,7 +119,7 @@ internal partial class PlayerView
         }
     }
 
-    private void Attach(PlayerPage? page)
+    private void Attach(PlayerViewModel? page)
     {
         if (ReferenceEquals(page, _page))
         {
@@ -268,12 +268,12 @@ internal partial class PlayerView
     // Once the page has its media, the first frame (already shown, paused) is drawn for this view.
     private void OnPagePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PlayerPage.Media))
+        if (e.PropertyName == nameof(PlayerViewModel.Media))
         {
             _noPicture.Start();
             RequestPresent();
         }
-        else if (e.PropertyName == nameof(PlayerPage.IsPlaying) && _page is { } page)
+        else if (e.PropertyName == nameof(PlayerViewModel.IsPlaying) && _page is { } page)
         {
             _position.IsEnabled = page.IsPlaying;
         }
@@ -288,7 +288,7 @@ internal partial class PlayerView
         }
     }
 
-    private ContextMenu BuildSettingsMenu(PlayerPage page)
+    private ContextMenu BuildSettingsMenu(PlayerViewModel page)
     {
         var menu = new ContextMenu { PlacementTarget = Gear, Placement = PlacementMode.Top };
         var itemStyle = (Style)FindResource("EncorePlayerMenuItemStyle");
@@ -317,7 +317,7 @@ internal partial class PlayerView
         IsHitTestVisible = false,
     };
 
-    private static MenuItem TrackItem(PlayerPage page, PlayerTrack track, Style itemStyle)
+    private static MenuItem TrackItem(PlayerViewModel page, PlayerTrack track, Style itemStyle)
     {
         var item = new MenuItem
         {

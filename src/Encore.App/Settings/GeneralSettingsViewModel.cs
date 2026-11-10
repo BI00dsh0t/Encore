@@ -5,7 +5,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Settings;
 
 /// <summary>Global settings with no page of their own. The tray's Start with Windows item binds here too.</summary>
-internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(sender)
+internal sealed class GeneralSettingsViewModel(SettingsSender sender) : SettingsViewModel(sender)
 {
     private bool _startWithWindows;
     private OverlayDotMode _overlayDot = Keys.OverlayDot.Default;

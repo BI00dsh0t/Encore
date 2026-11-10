@@ -9,7 +9,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Tests;
 
 [Collection(nameof(WpfCollection))]
-public sealed class RewindSettingsPageTests
+public sealed class RewindSettingsViewModelTests
 {
     private readonly FakeEngineSession _engine = new();
 
@@ -95,7 +95,7 @@ public sealed class RewindSettingsPageTests
             VideoOptions = VideoOptions.FromProbe([new CodecOffer(VideoCodec.H264, "h264_nvenc", false), new CodecOffer(VideoCodec.Hevc, "hevc_nvenc", true)]),
         };
         var page = Create().Rewind;
-        Assert.Equal(Encore.App.Settings.RewindSettingsPage.SourceLabel, page.Resolutions[0].Label);
+        Assert.Equal(Encore.App.Settings.RewindSettingsViewModel.SourceLabel, page.Resolutions[0].Label);
         Assert.Null(page.SourceHelp);
 
         page.SelectedResolution = page.Resolutions[0];

@@ -15,20 +15,20 @@ internal partial class LibraryView
         DataContextChanged += OnDataContextChanged;
     }
 
-    private LibraryPage? Page => DataContext as LibraryPage;
+    private LibraryViewModel? Page => DataContext as LibraryViewModel;
 
     // The list is hidden while the player page shows, so Delete can't reach the file being played.
-    private LibraryPage? ListPage => Page is { DrillIn.IsOpen: false } page ? page : null;
+    private LibraryViewModel? ListPage => Page is { DrillIn.IsOpen: false } page ? page : null;
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.OldValue is LibraryPage old)
+        if (e.OldValue is LibraryViewModel old)
         {
             old.DrillIn.Opened -= OnPlayerOpened;
             old.DrillIn.Closed -= OnPlayerClosed;
         }
 
-        if (e.NewValue is LibraryPage page)
+        if (e.NewValue is LibraryViewModel page)
         {
             page.DrillIn.Opened += OnPlayerOpened;
             page.DrillIn.Closed += OnPlayerClosed;
@@ -248,7 +248,7 @@ internal partial class LibraryView
     // The More ⋯ button opens its menu under itself.
     private void OnMoreClick(object sender, RoutedEventArgs e) => ButtonMenu.OpenBelow(sender);
 
-    private void Move(LibraryPage page, LibraryMove move, bool ctrl, bool shift)
+    private void Move(LibraryViewModel page, LibraryMove move, bool ctrl, bool shift)
     {
         page.MoveFocus(move, RowsPerPage(), ctrl, shift);
         if (page.FocusedRow is { } row)

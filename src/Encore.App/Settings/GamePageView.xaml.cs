@@ -11,12 +11,12 @@ internal partial class GamePageView
         InitializeComponent();
         DataContextChanged += (_, e) =>
         {
-            if (e.OldValue is GamePage old)
+            if (e.OldValue is GameViewModel old)
             {
                 old.PropertyChanged -= OnPageChanged;
             }
 
-            if (e.NewValue is GamePage page)
+            if (e.NewValue is GameViewModel page)
             {
                 page.PropertyChanged += OnPageChanged;
                 NameBox.Text = page.Name;
@@ -24,11 +24,11 @@ internal partial class GamePageView
         };
     }
 
-    private GamePage? Page => DataContext as GamePage;
+    private GameViewModel? Page => DataContext as GameViewModel;
 
     private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GamePage.Name) && !NameBox.IsKeyboardFocusWithin && Page is { } page)
+        if (e.PropertyName == nameof(GameViewModel.Name) && !NameBox.IsKeyboardFocusWithin && Page is { } page)
         {
             NameBox.Text = page.Name;
         }

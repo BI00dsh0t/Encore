@@ -13,7 +13,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Library;
 
 /// <summary>The Library page: the snapshot's items with selection, filters, sort and actions. UI thread; docs/code-notes.md.</summary>
-internal sealed class LibraryPage : Observable
+internal sealed class LibraryViewModel : Observable
 {
     /// <summary>Core's <c>ProfileFolders.MonitorRecordings</c>; the App doesn't reference Core.</summary>
     private const string MonitorRecordings = "Monitor Recordings";
@@ -35,8 +35,8 @@ internal sealed class LibraryPage : Observable
     private readonly Func<IPlayer> _newPlayer;
     private readonly Func<string, Stream>? _openRead;
     private readonly Action<string> _log;
-    private PlayerPage? _player;
-    private ClipCreatorPage? _creator;
+    private PlayerViewModel? _player;
+    private ClipCreatorViewModel? _creator;
     private LibraryItem? _creatorItem;
     private readonly IClipMediaService _clipMedia;
     private readonly string? _clipThumbnailCacheFolder;
@@ -76,7 +76,7 @@ internal sealed class LibraryPage : Observable
     private string? _actionErrorPath;
 
     /// <summary>Each optional argument replaces a real dependency (thumbnails, shell, prompts, player) for tests.</summary>
-    public LibraryPage(
+    public LibraryViewModel(
         IEngineSession engine,
         LibraryThumbnails? thumbnails = null,
         string? viewStateFile = null,
@@ -203,13 +203,13 @@ internal sealed class LibraryPage : Observable
     /// <summary>"Play": plays the one shown selected item on the in-app player page, once it's written.</summary>
     public ICommand PlayCommand { get; }
     public ICommand CreateClipCommand { get; }
-    public ClipCreatorPage? Creator { get => _creator; private set => Set(ref _creator, value); }
+    public ClipCreatorViewModel? Creator { get => _creator; private set => Set(ref _creator, value); }
 
     /// <summary>The in-app player's drill-in: the Library's item page, with the breadcrumb, keys and close.</summary>
     public DrillIn DrillIn { get; }
 
     /// <summary>The open player page, or null on the list.</summary>
-    public PlayerPage? Player
+    public PlayerViewModel? Player
     {
         get => _player;
         private set => Set(ref _player, value);
@@ -1087,7 +1087,7 @@ internal sealed class LibraryPage : Observable
 
         DrillIn.Close();
         ClearActionError();
-        var page = new PlayerPage(
+        var page = new PlayerViewModel(
             path,
             row.Name,
             _newPlayer(),
@@ -1136,7 +1136,7 @@ internal sealed class LibraryPage : Observable
             var source = new ClipSource(path, file.Length, file.LastWriteTimeUtc.Ticks);
             DrillIn.Close();
             _creatorItem = item;
-            Creator = new ClipCreatorPage(source, row.Name, _clipMedia, _newPlayer, thumbnailCacheFolder: _clipThumbnailCacheFolder) { BackCommand = DrillIn.BackCommand };
+            Creator = new ClipCreatorViewModel(source, row.Name, _clipMedia, _newPlayer, thumbnailCacheFolder: _clipThumbnailCacheFolder) { BackCommand = DrillIn.BackCommand };
             Creator.SourceInvalidated = DrillIn.Close;
             DrillIn.Open(row.Path, "Create clip · " + row.Name);
             _ = Creator.OpenAsync(position);
@@ -1643,8 +1643,8 @@ internal sealed class LibraryRow(
         IsFavourite = item.Favourite;
         Game = game;
         Date = item.Date.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-        Size = item.BeingWritten ? "" : LibraryPage.SizeText(item.Size);
-        Length = item.BeingWritten ? "" : LibraryPage.LengthText(item.LengthSeconds);
+        Size = item.BeingWritten ? "" : LibraryViewModel.SizeText(item.Size);
+        Length = item.BeingWritten ? "" : LibraryViewModel.LengthText(item.LengthSeconds);
         IsLocked = item.BeingWritten;
         Badge = item.Kind switch
         {

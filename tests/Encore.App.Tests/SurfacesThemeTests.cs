@@ -128,7 +128,7 @@ public sealed class SurfacesThemeTests
         PromptDialog.Showing += OnShowing;
         try
         {
-            var library = new LibraryPage(engine);
+            var library = new LibraryViewModel(engine);
             var item = new LibraryItem(@"Game\clip.mp4", null, 48, DateTimeOffset.UnixEpoch, false);
             library.Render(engine.State! with { LibraryFolder = folder, Library = [item] });
             library.Click(library.Rows[0], ctrl: false, shift: false);
@@ -136,7 +136,7 @@ public sealed class SurfacesThemeTests
             Sta.Pump(TimeSpan.FromMilliseconds(50));
             Assert.IsType<LibraryDelete>(Assert.Single(engine.Sent));
 
-            var cleanup = new LibrarySettingsPage(new SettingsSender(engine), engine);
+            var cleanup = new LibrarySettingsViewModel(new SettingsSender(engine), engine);
             Assert.False(cleanup.Confirm("Delete 3 Clips?"));
         }
         finally

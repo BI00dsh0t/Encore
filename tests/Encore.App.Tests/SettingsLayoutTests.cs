@@ -28,7 +28,7 @@ public sealed partial class SettingsLayoutTests
         var model = new MainViewModel(new FakeEngineSession(), action => action());
         var window = Offscreen(new MainWindow { DataContext = model });
         var theme = ThemeService.ForWindow(window);
-        var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
+        var expected = new (SettingsViewModel Page, string Slug, string[] Sections)[]
         {
             (model.General, "general", ["Appearance", "Startup and Overlay", "Games"]),
             (model.Rewind, "clips", ["Clip length", "Where recent gameplay is kept", "Video quality — for Clips and Recordings"]),
@@ -90,7 +90,7 @@ public sealed partial class SettingsLayoutTests
         var model = new MainViewModel(engine, action => action());
         var window = Offscreen(new MainWindow { DataContext = model });
         var theme = ThemeService.ForWindow(window);
-        var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
+        var expected = new (SettingsViewModel Page, string Slug, string[] Sections)[]
         {
             (model.TrackLayout, "audio-tracks", []),
             (model.GameProfiles, "games", []),

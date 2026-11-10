@@ -69,7 +69,7 @@ public sealed class PlayerTrackTests : IDisposable
         Assert.Equal(["Game", "track 2", "track 3"], page.Tracks.Select(t => t.Name));
     }
 
-    private LibraryPage Library(out List<FakePlayer> players, IReadOnlyList<string>? names = null)
+    private LibraryViewModel Library(out List<FakePlayer> players, IReadOnlyList<string>? names = null)
     {
         _engine.State = _engine.State! with
         {
@@ -79,7 +79,7 @@ public sealed class PlayerTrackTests : IDisposable
         var made = new List<FakePlayer>();
         players = made;
         var media = new PlayerMedia(1280, 720, TimeSpan.FromSeconds(10), names ?? ["Game", "Mic", "Discord", "Desktop"], true);
-        var library = new LibraryPage(_engine, shell: new FakeLibraryShell(), player: () =>
+        var library = new LibraryViewModel(_engine, shell: new FakeLibraryShell(), player: () =>
         {
             var player = new FakePlayer { Media = media };
             made.Add(player);
@@ -89,7 +89,7 @@ public sealed class PlayerTrackTests : IDisposable
         return library;
     }
 
-    private static PlayerPage Open(LibraryPage library)
+    private static PlayerViewModel Open(LibraryViewModel library)
     {
         library.Click(library.Rows.Single(), ctrl: false, shift: false);
         library.OpenFocused();

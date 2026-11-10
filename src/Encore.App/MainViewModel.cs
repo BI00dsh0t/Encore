@@ -14,7 +14,7 @@ internal sealed class MainViewModel : Observable
     public const string SettingsLabel = "Settings";
 
     private readonly IEngineSession _engine;
-    private SettingsPage _selectedPage;
+    private SettingsViewModel _selectedPage;
     private bool _isWindowShown;
     private bool _isNavigationExpanded = true;
     private bool _isSettingsTabSelected;
@@ -24,16 +24,16 @@ internal sealed class MainViewModel : Observable
     {
         _engine = engine;
         StatusLine = new StatusLine(engine);
-        Pages = SettingsPages.Create(new SettingsSender(engine), engine, defaultCacheFolder, gameShell);
-        General = Pages.OfType<GeneralSettingsPage>().Single();
-        Rewind = Pages.OfType<RewindSettingsPage>().Single();
-        Hotkeys = Pages.OfType<HotkeysPage>().Single();
-        TrackLayout = Pages.OfType<TrackLayoutPage>().Single();
-        GameProfiles = Pages.OfType<GameProfilesPage>().Single();
-        FeedbackSounds = Pages.OfType<FeedbackSoundsPage>().Single();
-        LibrarySettings = Pages.OfType<LibrarySettingsPage>().Single();
+        Pages = SettingsViewModels.Create(new SettingsSender(engine), engine, defaultCacheFolder, gameShell);
+        General = Pages.OfType<GeneralSettingsViewModel>().Single();
+        Rewind = Pages.OfType<RewindSettingsViewModel>().Single();
+        Hotkeys = Pages.OfType<HotkeysViewModel>().Single();
+        TrackLayout = Pages.OfType<TrackLayoutViewModel>().Single();
+        GameProfiles = Pages.OfType<GameProfilesViewModel>().Single();
+        FeedbackSounds = Pages.OfType<FeedbackSoundsViewModel>().Single();
+        LibrarySettings = Pages.OfType<LibrarySettingsViewModel>().Single();
         _selectedPage = Pages[0];
-        Library = new LibraryPage(engine, LibraryThumbnails.Shell(post), libraryViewFile, player: player, log: log, clipMedia: clipMedia, clipThumbnailCacheFolder: clipThumbnailCacheFolder);
+        Library = new LibraryViewModel(engine, LibraryThumbnails.Shell(post), libraryViewFile, player: player, log: log, clipMedia: clipMedia, clipThumbnailCacheFolder: clipThumbnailCacheFolder);
         LibraryNav = new NavItem(LibraryTitle, null, isSection: false);
         NavItems = [LibraryNav, new NavItem(SettingsLabel, null, isSection: true), .. Pages.Select(p => new NavItem(p.Title, p, isSection: false))];
         foreach (var drillIn in Pages.Select(p => p.DrillIn).OfType<DrillIn>().Append(Library.DrillIn))
@@ -50,8 +50,8 @@ internal sealed class MainViewModel : Observable
         // The shell follows the player page's full screen; a page closing leaves it.
         Library.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(LibraryPage.Creator)) { OnPropertyChanged(nameof(IsCreatingClip)); }
-            if (e.PropertyName == nameof(LibraryPage.Player))
+            if (e.PropertyName == nameof(LibraryViewModel.Creator)) { OnPropertyChanged(nameof(IsCreatingClip)); }
+            if (e.PropertyName == nameof(LibraryViewModel.Player))
             {
                 WatchPlayer(Library.Player);
             }
@@ -60,12 +60,12 @@ internal sealed class MainViewModel : Observable
         // The welcome card's links.
         Library.Welcome.Navigate = link => SelectedNavItem = NavItems.First(i => i.Page == link switch
         {
-            WelcomeLink.AudioTracks => (SettingsPage)TrackLayout,
+            WelcomeLink.AudioTracks => (SettingsViewModel)TrackLayout,
             _ => LibrarySettings,
         });
 
         // Edit the main setting, from a game's page: the page that holds the key.
-        GameProfiles.EditMain = key => SelectedNavItem = NavItems.First(i => i.Page == (key == Keys.TrackLayout ? TrackLayout : (SettingsPage)Rewind));
+        GameProfiles.EditMain = key => SelectedNavItem = NavItems.First(i => i.Page == (key == Keys.TrackLayout ? TrackLayout : (SettingsViewModel)Rewind));
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -73,30 +73,30 @@ internal sealed class MainViewModel : Observable
     /// <summary>The status line above every page: capture state and the active warnings.</summary>
     public StatusLine StatusLine { get; }
 
-    public IReadOnlyList<SettingsPage> Pages { get; }
+    public IReadOnlyList<SettingsViewModel> Pages { get; }
 
     /// <summary>The General page, which the tray's Start with Windows item shares.</summary>
-    public GeneralSettingsPage General { get; }
+    public GeneralSettingsViewModel General { get; }
 
     /// <summary>Rewind page, which takes the snapshot's video options and storage estimate as well as its settings.</summary>
-    public RewindSettingsPage Rewind { get; }
+    public RewindSettingsViewModel Rewind { get; }
 
     /// <summary>The Hotkeys page, which takes the snapshot's <c>hotkey.status</c> as well as its settings.</summary>
-    public HotkeysPage Hotkeys { get; }
+    public HotkeysViewModel Hotkeys { get; }
 
     /// <summary>Audio Tracks, which takes the snapshot's device list and meters as well as its settings.</summary>
-    public TrackLayoutPage TrackLayout { get; }
+    public TrackLayoutViewModel TrackLayout { get; }
 
     /// <summary>Games: the list, and a page per game.</summary>
-    public GameProfilesPage GameProfiles { get; }
+    public GameProfilesViewModel GameProfiles { get; }
 
     /// <summary>The Feedback Sounds page, which takes the snapshot's device list and warnings as well as its settings.</summary>
-    public FeedbackSoundsPage FeedbackSounds { get; }
+    public FeedbackSoundsViewModel FeedbackSounds { get; }
 
     /// <summary>The Library and Cleanup page, which takes the snapshot's Library folder, items and Cleanup block too.</summary>
-    public LibrarySettingsPage LibrarySettings { get; }
+    public LibrarySettingsViewModel LibrarySettings { get; }
 
-    public LibraryPage Library { get; }
+    public LibraryViewModel Library { get; }
 
     /// <summary>The shell's navigation: Library, the Settings label, then every settings page; only the label isn't selectable.</summary>
     public IReadOnlyList<NavItem> NavItems { get; }
@@ -205,7 +205,7 @@ internal sealed class MainViewModel : Observable
     /// <summary>The page on screen: the Library's view or the settings page's.</summary>
     public FrameworkElement CurrentView => IsSettingsTabSelected ? SelectedPage.View : Library.View;
 
-    public SettingsPage SelectedPage
+    public SettingsViewModel SelectedPage
     {
         get => _selectedPage;
         set
@@ -289,9 +289,9 @@ internal sealed class MainViewModel : Observable
         }
     }
 
-    private PlayerPage? _watchedPlayer;
+    private PlayerViewModel? _watchedPlayer;
 
-    private void WatchPlayer(PlayerPage? player)
+    private void WatchPlayer(PlayerViewModel? player)
     {
         if (_watchedPlayer is { } old)
         {
@@ -309,7 +309,7 @@ internal sealed class MainViewModel : Observable
 
     private void OnPlayerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PlayerPage.IsFullScreen))
+        if (e.PropertyName == nameof(PlayerViewModel.IsFullScreen))
         {
             OnPropertyChanged(nameof(IsPlayerFullScreen));
         }

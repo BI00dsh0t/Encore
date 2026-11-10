@@ -16,7 +16,7 @@ internal enum PlayerState
 }
 
 /// <summary>One Library item's player page: opens the file shared, plays one Track at a time. UI thread; docs/code-notes.md.</summary>
-internal sealed class PlayerPage : Observable, IDisposable
+internal sealed class PlayerViewModel : Observable, IDisposable
 {
     /// <summary>The plain line when the file can't be opened, or shows no picture.</summary>
     public const string FailedText = "This file couldn't be played.";
@@ -50,7 +50,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     private bool _isFullScreen;
 
     /// <summary>The page owns and disposes the player; the other optional arguments replace shell calls for tests.</summary>
-    public PlayerPage(string path, string title, IPlayer player, Func<string, Stream>? openRead = null, Action<string>? openInDefaultPlayer = null, Action<string>? openLink = null, Action<string>? log = null, bool embedded = false)
+    public PlayerViewModel(string path, string title, IPlayer player, Func<string, Stream>? openRead = null, Action<string>? openInDefaultPlayer = null, Action<string>? openLink = null, Action<string>? log = null, bool embedded = false)
     {
         Path = path ?? throw new ArgumentNullException(nameof(path));
         Title = title ?? "";

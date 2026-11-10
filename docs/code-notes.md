@@ -1626,7 +1626,7 @@ snapshot holds.
   reply for `ReplyLimit`.
 - It only keeps time. The connection acts on `Check`.
 
-### LibraryPage
+### LibraryViewModel
 
 - It only reads the snapshot. Items are shown newest first, each with its name, game, date and size. An item still
   being written is shown locked.
@@ -1688,7 +1688,7 @@ Other details:
   asks again.
 - `Request` runs on the UI thread.
 
-### PlayerPage
+### PlayerViewModel
 
 - It opens the file read-only, shared for read, write and delete, and hands the stream to the player.
 - It opens paused on the first frame with the first Track. Windows would otherwise pick the last.
@@ -1734,7 +1734,7 @@ Volume:
 - Keys bubble to the page (KeyDown, not PreviewKeyDown), so a focused control's own keys win.
 - The gear's menu is the theme's ContextMenu: Esc, a click outside and a choice close it. Its heading is not an item.
 - The no-picture wait is `NoPictureWatch`, the texture size rule is `PictureFit`, and one present's work and the
-  page's keys are `PlayerPage.DrawFrame` and `PlayerPage.HandleKey`.
+  page's keys are `PlayerViewModel.DrawFrame` and `PlayerViewModel.HandleKey`.
 
 ### WindowsMediaPlayer
 
@@ -1800,7 +1800,7 @@ Volume:
 - It also shows the drive's free space, and a danger line when the last choice was refused.
 - The file variant (`IsFile`) opens a file dialog and has Browse only.
 
-### GamePage and GameProfilesPage
+### GameViewModel and GameProfilesViewModel
 
 - A game's page holds: inline rename, Capture (`ignored`, inverted), then Clips, Video quality and Audio tracks as
   inherited settings over override set and remove ops (Track ids are kept), Recordings, the read-only Files, and
@@ -1810,14 +1810,14 @@ Volume:
 - Add a game picks a program with the file picker and sends `game.add`, which writes `manualGames`.
 - Each game page is kept for the run, keyed by its profile id, so a draft survives going back.
 
-### HotkeysPage
+### HotkeysViewModel
 
 - Each change sends one Global op at once.
 - A combination another action has is refused before sending, by the engine's rule: same key and same modifiers,
   ignoring NoRepeat, whatever the mode.
 - The rows are grouped into Clips, Recordings, Monitor Recording (with the screen picker) and Microphone.
 
-### LibrarySettingsPage
+### LibrarySettingsViewModel
 
 - Cleanup deletes permanently. So turning a limit on, or lowering one, first asks the engine what it would delete
   (`cleanup.preview`) and sends the change only after the user confirms. Raising a limit or turning it off sends at
@@ -1834,7 +1834,7 @@ Volume:
   `monitorRecordingMonitor` key, which is only read while the new key is null.
 - The list comes from `monitors.list` once per engine run and follows `monitors.changed`.
 
-### RewindSettingsPage
+### RewindSettingsViewModel
 
 - It edits `bufferWindow`, `replayStorage`, `ringPath`, `saveCooldown` and `video`, each sent at once as one Global
   op.
@@ -1843,7 +1843,7 @@ Volume:
   not editable, or has the game's own value.
 - The cache folder's picker is enabled only under Disk storage.
 
-### SettingsPage and SettingsSender
+### SettingsViewModel and SettingsSender
 
 - A page renders the settings document it is given and changes it only through `SendAsync`, against the revision it
   rendered.
@@ -1851,7 +1851,7 @@ Volume:
   a refusal it shows its document again.
 - The sender never retries: a conflict comes back as a reload.
 
-### TrackLayoutPage
+### TrackLayoutViewModel
 
 - Save changes sends one `settings.update`.
 - While the page is open it meters the draft through `meters.watch`, with one probe Track per source and, while the

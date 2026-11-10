@@ -14,7 +14,7 @@ internal sealed record CodecItem(VideoCodec Codec, string Label);
 internal sealed record ResolutionItem(int Width, int Height, string Label, bool IsSource = false);
 
 /// <summary>The Clips and Output settings, each edit sent at once; with a profile id it edits that game's overrides.</summary>
-internal sealed class RewindSettingsPage(SettingsSender sender, string? profileId = null, string? defaultCacheFolder = null) : SettingsPage(sender)
+internal sealed class RewindSettingsViewModel(SettingsSender sender, string? profileId = null, string? defaultCacheFolder = null) : SettingsViewModel(sender)
 {
     public const string CacheInsideClips = "The cache folder can't be inside the Clips folder.";
     public const string CantWrite = "Encore can't write to that folder.";
@@ -40,7 +40,7 @@ internal sealed class RewindSettingsPage(SettingsSender sender, string? profileI
 
     /// <summary>The page's intro: what it controls, with the Save Hotkey.</summary>
     public string Intro =>
-        $"Encore keeps the last part of your game ready, so {(_saveKey is { } key ? HotkeysPage.Describe(key) : "the Save Clip key")} can save it as a Clip.";
+        $"Encore keeps the last part of your game ready, so {(_saveKey is { } key ? HotkeysViewModel.Describe(key) : "the Save Clip key")} can save it as a Clip.";
 
     /// <summary>The cache folder (<c>ringPath</c>): enabled only under Disk.</summary>
     public FolderPicker CacheFolder => _cacheFolder ??= new FolderPicker(Keys.RingPath, ops => SendForPickerAsync(ops, ErrorCodes.RingPathInvalid))
@@ -52,7 +52,7 @@ internal sealed class RewindSettingsPage(SettingsSender sender, string? profileI
     };
 
     /// <summary>The cache folder's help: what it holds, with the Clip length.</summary>
-    public string CacheHelp => $"In Disk mode, the last {HotkeysPage.ClipLength(_bufferWindow)} of gameplay is kept here in one file. It doesn't grow.";
+    public string CacheHelp => $"In Disk mode, the last {HotkeysViewModel.ClipLength(_bufferWindow)} of gameplay is kept here in one file. It doesn't grow.";
 
     /// <summary>The Memory option's line, with the estimate.</summary>
     public string MemoryLine => _estimate is { } e ? $"Fastest. Uses about {FormatBytes(e.Bytes)} of RAM." : "Fastest. Uses RAM.";
@@ -283,7 +283,7 @@ internal sealed class RewindSettingsPage(SettingsSender sender, string? profileI
         _ => null,
     };
 
-    /// <summary>Takes the snapshot's video options and storage estimate. Called before <see cref="SettingsPage.Render"/>.</summary>
+    /// <summary>Takes the snapshot's video options and storage estimate. Called before <see cref="SettingsViewModel.Render"/>.</summary>
     public void ShowState(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);

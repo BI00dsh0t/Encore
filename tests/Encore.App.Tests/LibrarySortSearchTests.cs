@@ -30,7 +30,7 @@ public sealed class LibrarySortSearchTests
     [InlineData(nameof(LibrarySort.Game), "Clip 10.mp4|clip 2.mp4|a.mp4|b.mp4")]
     public void EachSortOrdersTheFlatListWithNoHeaders(string sort, string expected)
     {
-        var page = new LibraryPage(_engine);
+        var page = new LibraryViewModel(_engine);
         page.Render(_engine.State! with { Library = Items });
 
         (page.GroupBy, page.Sort) = (LibraryGrouping.None, Enum.Parse<LibrarySort>(sort));
@@ -42,7 +42,7 @@ public sealed class LibrarySortSearchTests
     [Fact]
     public void ASearchNarrowsTheRowsAndKeepsAHiddenSelectedItemSelected()
     {
-        var page = new LibraryPage(_engine);
+        var page = new LibraryViewModel(_engine);
         page.Render(_engine.State! with { Library = Items });
         page.SelectAll();
 
@@ -65,10 +65,10 @@ public sealed class LibrarySortSearchTests
         try
         {
             var file = Path.Combine(folder, "library-view.json");
-            var page = new LibraryPage(_engine, viewStateFile: file);
+            var page = new LibraryViewModel(_engine, viewStateFile: file);
             (page.GroupBy, page.Sort, page.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "kept?");
 
-            var reopened = new LibraryPage(_engine, viewStateFile: file);
+            var reopened = new LibraryViewModel(_engine, viewStateFile: file);
             Assert.Equal((LibraryGrouping.None, LibrarySort.LargestFirst, ""), (reopened.GroupBy, reopened.Sort, reopened.SearchText));
 
             // A file written before the sort existed has no sort.

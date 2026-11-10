@@ -8,7 +8,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Settings;
 
 /// <summary>The Global Hotkeys: each action's binding with the engine's status, grouped by purpose. UI thread.</summary>
-internal sealed class HotkeysPage : SettingsPage
+internal sealed class HotkeysViewModel : SettingsViewModel
 {
     private HotkeySettings _hotkeys = NoBindings;
     private bool _fromDocument;
@@ -16,7 +16,7 @@ internal sealed class HotkeysPage : SettingsPage
     private HotkeyStatus _status = HotkeyStatus.Unbound;
     private int _clipSeconds = Keys.BufferWindow.Default;
 
-    public HotkeysPage(SettingsSender sender, IEngineSession engine)
+    public HotkeysViewModel(SettingsSender sender, IEngineSession engine)
         : base(sender)
     {
         Rows = [.. Enum.GetValues<HotkeyAction>().Select(a => new HotkeyRow(this, a, Label(a)))];
@@ -100,7 +100,7 @@ internal sealed class HotkeysPage : SettingsPage
 
     private static HotkeySettings NoBindings { get; } = new(null, null, null, null, null, null);
 
-    /// <summary>Takes the engine's <c>hotkey.status</c>. Called before <see cref="SettingsPage.Render"/>.</summary>
+    /// <summary>Takes the engine's <c>hotkey.status</c>. Called before <see cref="SettingsViewModel.Render"/>.</summary>
     public void ShowStatus(HotkeyStatus status)
     {
         ArgumentNullException.ThrowIfNull(status);
@@ -360,7 +360,7 @@ internal sealed class HotkeysPage : SettingsPage
     };
 }
 
-/// <summary>One action's row on the <see cref="HotkeysPage"/>.</summary>
+/// <summary>One action's row on the <see cref="HotkeysViewModel"/>.</summary>
 internal sealed class HotkeyRow : Observable
 {
     private string _bindingText = "Not set";
@@ -369,7 +369,7 @@ internal sealed class HotkeyRow : Observable
     private bool _isCapturing;
     private bool _isShown = true;
 
-    public HotkeyRow(HotkeysPage page, HotkeyAction action, string label)
+    public HotkeyRow(HotkeysViewModel page, HotkeyAction action, string label)
     {
         Action = action;
         Label = label;

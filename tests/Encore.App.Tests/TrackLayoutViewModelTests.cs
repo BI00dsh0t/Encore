@@ -12,7 +12,7 @@ namespace Encore.App.Tests;
 
 /// <summary>Audio Tracks: the cards, the picker, presets, save bar and meters.</summary>
 [Collection(nameof(WpfCollection))]
-public sealed class TrackLayoutPageTests
+public sealed class TrackLayoutViewModelTests
 {
     private static readonly AudioDevice Speakers = new("{out-1}", "Speakers", "USB DAC", AudioFlow.Output, true, IsDefault: true);
     private static readonly AudioDevice Headset = new("{out-2}", "Headset", "Arctis", AudioFlow.Output, true);
@@ -217,7 +217,7 @@ public sealed class TrackLayoutPageTests
         var main = new TrackLayout(
             [speakers, mic],
             [new Track(Keys.EverythingTrackId, "Everything", [speakers.Key, mic.Key], true), new Track(Guid.NewGuid(), "Chat", [], false)]);
-        var profile = new TrackLayoutPage(new SettingsSender(_engine), _engine, @"c:\games\game.exe");
+        var profile = new TrackLayoutViewModel(new SettingsSender(_engine), _engine, @"c:\games\game.exe");
 
         profile.Render(Document(1, main));
 

@@ -10,7 +10,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Tests;
 
 [Collection(nameof(WpfCollection))]
-public sealed class LibraryPageTests
+public sealed class LibraryViewModelTests
 {
     private const string AlphaId = @"c:\a\a.exe";
     private const string BetaId = @"c:\b\b.exe";
@@ -90,7 +90,7 @@ public sealed class LibraryPageTests
     public void AThumbnailIsAskedByAbsolutePathOnceTheItemIsWritten()
     {
         var asked = new List<string>();
-        var page = new LibraryPage(_engine, new LibraryThumbnails(path => { asked.Add(path); return null; }, work => work(), work => work()));
+        var page = new LibraryViewModel(_engine, new LibraryThumbnails(path => { asked.Add(path); return null; }, work => work(), work => work()));
         const string Folder = @"C:\Videos\Encore";
         var writing = new LibraryItem(@"Game\clip.mp4", null, 0, DateTimeOffset.UnixEpoch, true);
         var state = _engine.State! with { LibraryFolder = Folder, Library = [writing] };
@@ -111,7 +111,7 @@ public sealed class LibraryPageTests
     [Fact]
     public void AnHourLongTwoGigabyteItemReadsAsHoursAndGigabytes()
     {
-        var page = new LibraryPage(_engine);
+        var page = new LibraryViewModel(_engine);
 
         page.Render(_engine.State! with { Library = [new LibraryItem("long.mp4", null, 2L << 30, DateTimeOffset.UnixEpoch, false, 3723)] });
 
@@ -122,7 +122,7 @@ public sealed class LibraryPageTests
     public void TheStarSendsTheIdentityAndChangesOnlyWithTheSnapshot()
     {
         _engine.Reply = (_, _) => Empty.Value;
-        var page = new LibraryPage(_engine);
+        var page = new LibraryViewModel(_engine);
         var modified = new DateTimeOffset(2026, 11, 3, 10, 0, 0, TimeSpan.Zero);
         var item = new LibraryItem(@"Game\clip.mp4", null, 48, DateTimeOffset.UnixEpoch, false, Modified: modified);
         var state = _engine.State! with { Library = [item] };
@@ -140,7 +140,7 @@ public sealed class LibraryPageTests
     [Fact]
     public void GroupedByGameTheHeadersAreTheGamesThenMonitorRecordingsThenOther()
     {
-        var page = new LibraryPage(_engine, time: Clock);
+        var page = new LibraryViewModel(_engine, time: Clock);
 
         page.Render(ThreeGames());
 
@@ -154,7 +154,7 @@ public sealed class LibraryPageTests
     [Fact]
     public void GroupedByDayTheHeadersAreTodayYesterdayThenEachDate()
     {
-        var page = new LibraryPage(_engine, time: Clock) { GroupBy = LibraryGrouping.Day };
+        var page = new LibraryViewModel(_engine, time: Clock) { GroupBy = LibraryGrouping.Day };
 
         page.Render(ThreeGames());
 
@@ -167,7 +167,7 @@ public sealed class LibraryPageTests
     [Fact]
     public void GameDateAndFavouriteFiltersCombine()
     {
-        var page = new LibraryPage(_engine, time: Clock);
+        var page = new LibraryViewModel(_engine, time: Clock);
         page.Render(ThreeGames());
 
         page.GameFilter = page.Games.Single(g => g.Name == "Alpha").Key;
@@ -180,7 +180,7 @@ public sealed class LibraryPageTests
     [Fact]
     public void ANewItemLandsInItsGroupAndARenamedProfileRenamesItsGroup()
     {
-        var page = new LibraryPage(_engine, time: Clock);
+        var page = new LibraryViewModel(_engine, time: Clock);
         var state = ThreeGames();
         page.Render(state);
 
@@ -205,7 +205,7 @@ public sealed class LibraryPageTests
         var file = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"library-view-{Guid.NewGuid():N}.json");
         try
         {
-            _ = new LibraryPage(_engine, viewStateFile: file)
+            _ = new LibraryViewModel(_engine, viewStateFile: file)
             {
                 GroupBy = LibraryGrouping.Day,
                 GameFilter = "profile:x",
@@ -214,14 +214,14 @@ public sealed class LibraryPageTests
             };
 
             // The first, empty render keeps a filter whose game isn't there yet.
-            var restored = new LibraryPage(_engine, viewStateFile: file);
+            var restored = new LibraryViewModel(_engine, viewStateFile: file);
             restored.Render(_engine.State! with { Library = [] });
             Assert.Equal(
                 (LibraryGrouping.Day, "profile:x", LibraryDateFilter.Last30Days, true),
                 (restored.GroupBy, restored.GameFilter, restored.DateFilter, restored.FavouritesOnly));
 
             System.IO.File.WriteAllText(file, "{ not json");
-            var garbage = new LibraryPage(_engine, viewStateFile: file);
+            var garbage = new LibraryViewModel(_engine, viewStateFile: file);
             Assert.Equal(
                 (LibraryGrouping.Game, (string?)null, LibraryDateFilter.All, false),
                 (garbage.GroupBy, garbage.GameFilter, garbage.DateFilter, garbage.FavouritesOnly));
@@ -236,7 +236,7 @@ public sealed class LibraryPageTests
     [Trait("Category", "Heavy")]
     public void FiveThousandItemsGroupAndFilterInUnder200Milliseconds()
     {
-        var page = new LibraryPage(_engine, time: Clock);
+        var page = new LibraryViewModel(_engine, time: Clock);
         string[] games = [AlphaId, BetaId, GammaId];
         var state = ThreeGames() with
         {
@@ -283,7 +283,7 @@ public sealed class LibraryPageTests
         };
     }
 
-    private static List<string> Shown(LibraryPage page) =>
+    private static List<string> Shown(LibraryViewModel page) =>
         [.. page.Entries.Select(e => e is LibraryGroupHeader h ? "# " + h.Name : ((LibraryRow)e).Name)];
 
     private void SetLibrary()

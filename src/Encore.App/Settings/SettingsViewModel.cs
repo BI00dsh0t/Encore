@@ -5,7 +5,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Settings;
 
 /// <summary>One page of the Settings area; it changes the document only through <see cref="SendAsync"/>. UI thread.</summary>
-internal abstract class SettingsPage(SettingsSender sender) : Observable
+internal abstract class SettingsViewModel(SettingsSender sender) : Observable
 {
     private FrameworkElement? _view;
     private string? _message;
@@ -98,17 +98,17 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
 }
 
 /// <summary>The pages of the Settings area, in navigation order.</summary>
-internal static class SettingsPages
+internal static class SettingsViewModels
 {
     /// <summary>Every page in nav order: General, Clips, Hotkeys, Audio Tracks, Games, Sounds, then Storage and Cleanup.</summary>
-    public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null, IGameShell? gameShell = null) =>
+    public static IReadOnlyList<SettingsViewModel> Create(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null, IGameShell? gameShell = null) =>
     [
-        new GeneralSettingsPage(sender),
-        new RewindSettingsPage(sender, defaultCacheFolder: defaultCacheFolder),
-        new HotkeysPage(sender, engine),
-        new TrackLayoutPage(sender, engine),
-        new GameProfilesPage(sender, engine, gameShell),
-        new FeedbackSoundsPage(sender, engine),
-        new LibrarySettingsPage(sender, engine, defaultCacheFolder),
+        new GeneralSettingsViewModel(sender),
+        new RewindSettingsViewModel(sender, defaultCacheFolder: defaultCacheFolder),
+        new HotkeysViewModel(sender, engine),
+        new TrackLayoutViewModel(sender, engine),
+        new GameProfilesViewModel(sender, engine, gameShell),
+        new FeedbackSoundsViewModel(sender, engine),
+        new LibrarySettingsViewModel(sender, engine, defaultCacheFolder),
     ];
 }

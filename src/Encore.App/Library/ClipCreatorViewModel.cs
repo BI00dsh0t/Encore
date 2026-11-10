@@ -17,7 +17,7 @@ internal sealed class ClipCreatorTrack : Observable
 }
 
 /// <summary>One contiguous selection. Viewport and selection are independent source times.</summary>
-internal sealed class ClipCreatorPage : Observable, IDisposable
+internal sealed class ClipCreatorViewModel : Observable, IDisposable
 {
     private readonly IClipMediaService _media;
     private readonly Func<IPlayer> _newPlayer;
@@ -38,8 +38,8 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     private bool _trimming;
     private bool _suspended;
     private string? _rangeFeedback;
-    private PlayerPage? _sourcePlayer;
-    private PlayerPage? _preview;
+    private PlayerViewModel? _sourcePlayer;
+    private PlayerViewModel? _preview;
     private string? _previewFolder;
     private bool _renderedPreview;
     private ClipMetadata? _metadata;
@@ -54,7 +54,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     private int _sourceCheck;
     private double _openingPosition;
 
-    public ClipCreatorPage(ClipSource source, string title, IClipMediaService media, Func<IPlayer> newPlayer, Func<string>? createPreviewFolder = null, string? thumbnailCacheFolder = null)
+    public ClipCreatorViewModel(ClipSource source, string title, IClipMediaService media, Func<IPlayer> newPlayer, Func<string>? createPreviewFolder = null, string? thumbnailCacheFolder = null)
     {
         Source = source;
         Title = title;
@@ -94,7 +94,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
     public bool CanOpenOptions => CanEdit && !_choosingDestination;
 
     /// <summary>The chooser is separate from encoding and injectable, so cancellation cannot start work.</summary>
-    internal async Task ChooseAndExportAsync(Func<ClipCreatorPage, Task<string?>> choose)
+    internal async Task ChooseAndExportAsync(Func<ClipCreatorViewModel, Task<string?>> choose)
     {
         if (!CanSave) { return; }
         _choosingDestination = true;
@@ -163,7 +163,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         private set { _rangeFeedback = null; _status = value; OnPropertyChanged(); }
     }
     public double Progress { get => _progress; private set => Set(ref _progress, value); }
-    public PlayerPage? Preview { get => _preview; private set => Set(ref _preview, value); }
+    public PlayerViewModel? Preview { get => _preview; private set => Set(ref _preview, value); }
 
     public async Task OpenAsync(double position)
     {
@@ -186,7 +186,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
             NotifyRange();
             OnPropertyChanged(nameof(ViewportStart)); OnPropertyChanged(nameof(ViewportEnd));
             OnPropertyChanged(nameof(ViewportText)); OnPropertyChanged(nameof(ZoomText));
-            _sourcePlayer = new PlayerPage(Source.Path, Title, _newPlayer(), embedded: true);
+            _sourcePlayer = new PlayerViewModel(Source.Path, Title, _newPlayer(), embedded: true);
             ConfigurePlaybackLoop(_sourcePlayer, rendered: false);
             Preview = _sourcePlayer;
             await _sourcePlayer.OpenAsync();
@@ -242,7 +242,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
         if (!_closed && !_suspended) { _ = RefreshAsync(); }
     }
     private void RangeError(string message) { _rangeFeedback = message; OnPropertyChanged(nameof(Status)); }
-    private void ConfigurePlaybackLoop(PlayerPage player, bool rendered)
+    private void ConfigurePlaybackLoop(PlayerViewModel player, bool rendered)
     {
         player.PlaybackLoop = () =>
         {
@@ -533,7 +533,7 @@ internal sealed class ClipCreatorPage : Observable, IDisposable
                 token.ThrowIfCancellationRequested();
                 _effective = response.Range ?? _effective;
                 OnPropertyChanged(nameof(EffectiveText));
-                var player = new PlayerPage(response.Output!, "Selection preview", _newPlayer(), embedded: true);
+                var player = new PlayerViewModel(response.Output!, "Selection preview", _newPlayer(), embedded: true);
                 ConfigurePlaybackLoop(player, rendered: true);
                 _previewFolder = folder;
                 _renderedPreview = true;

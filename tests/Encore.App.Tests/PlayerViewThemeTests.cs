@@ -30,7 +30,7 @@ public sealed class PlayerViewThemeTests : IDisposable
     [Fact]
     public void ThePlayerIconsRenderInBothLooks() => Sta.Run(() =>
     {
-        using var page = new PlayerPage("clip.mp4", "clip", new FakePlayer(), openRead: _ => new MemoryStream([0]));
+        using var page = new PlayerViewModel("clip.mp4", "clip", new FakePlayer(), openRead: _ => new MemoryStream([0]));
         page.OpenAsync().GetAwaiter().GetResult();
         var player = new PlayerView { DataContext = page };
         player.FrontBufferChanged(false);
@@ -259,7 +259,7 @@ public sealed class PlayerViewThemeTests : IDisposable
             page.OpenFocused();
             Sta.Pump(TimeSpan.FromMilliseconds(150));
             var failed = (PlayerView)view.FindName("PlayerContent");
-            Assert.Contains(Descendants<TextBlock>(failed), t => t.Text == PlayerPage.FailedText && t.IsVisible);
+            Assert.Contains(Descendants<TextBlock>(failed), t => t.Text == PlayerViewModel.FailedText && t.IsVisible);
             Assert.Contains(Descendants<Button>(failed), b => b.Content as string == "Open in default player" && b.IsVisible);
             Save(window, "player-failed-gaming.png");
             model.CurrentDrillIn!.Close();
@@ -328,7 +328,7 @@ public sealed class PlayerViewThemeTests : IDisposable
 
             // The fake never raises a frame.
             Sta.PumpUntil(() => model.Library.Player!.IsFailed, "the no-picture timeout");
-            Assert.Equal(PlayerPage.FailedText, model.Library.Player!.Message);
+            Assert.Equal(PlayerViewModel.FailedText, model.Library.Player!.Message);
             Assert.False(player.IsPlaying);
         }
         finally

@@ -72,9 +72,9 @@ internal sealed class InheritedSetting : Observable
 }
 
 /// <summary>A game's page, opened from the Games list: rename, Capture, the game's own settings, and its files. UI thread.</summary>
-internal sealed class GamePage : SettingsPage
+internal sealed class GameViewModel : SettingsViewModel
 {
-    private readonly GameProfilesPage _parent;
+    private readonly GameProfilesViewModel _parent;
     private readonly IGameShell _shell;
     private string _name = "";
     private bool _ignored;
@@ -85,14 +85,14 @@ internal sealed class GamePage : SettingsPage
     private string _recordKey = "the Record key";
     private System.Windows.Media.ImageSource? _icon;
 
-    public GamePage(SettingsSender sender, IEngineSession engine, string profileId, GameProfilesPage parent, IGameShell shell)
+    public GameViewModel(SettingsSender sender, IEngineSession engine, string profileId, GameProfilesViewModel parent, IGameShell shell)
         : base(sender)
     {
         ProfileId = profileId;
         _parent = parent;
         _shell = shell;
-        Output = new RewindSettingsPage(sender, profileId);
-        Tracks = new TrackLayoutPage(sender, engine, profileId);
+        Output = new RewindSettingsViewModel(sender, profileId);
+        Tracks = new TrackLayoutViewModel(sender, engine, profileId);
         Output.PropertyChanged += ChildChanged;
         Tracks.PropertyChanged += ChildChanged;
         Clips = new InheritedSetting(
@@ -145,10 +145,10 @@ internal sealed class GamePage : SettingsPage
     public string ProgramPath => ProfileId;
 
     /// <summary>Clip length and Video quality's editor: a game-scoped Clips page, its view never shown.</summary>
-    public RewindSettingsPage Output { get; }
+    public RewindSettingsViewModel Output { get; }
 
     /// <summary>The game's audio tracks: the Audio Tracks editor, scoped to the game.</summary>
-    public TrackLayoutPage Tracks { get; }
+    public TrackLayoutViewModel Tracks { get; }
 
     public InheritedSetting Clips { get; }
 
@@ -306,7 +306,7 @@ internal sealed class GamePage : SettingsPage
 
         var hotkeys = SettingsValues.Global(document, Keys.Hotkeys);
         var record = SettingsValues.Global(document, Keys.RecordHotkeyMode) == RecordHotkeyMode.Toggle ? hotkeys.RecordToggle : hotkeys.RecordStart;
-        _recordKey = record is { } key ? HotkeysPage.Describe(key) : "the Record key";
+        _recordKey = record is { } key ? HotkeysViewModel.Describe(key) : "the Record key";
         OnPropertyChanged(nameof(RecordingsHelp));
 
         Output.Render(document);
@@ -361,11 +361,11 @@ internal sealed class GamePage : SettingsPage
     // The editors' notes show on the page's error bar; a draft's dirtiness is the page's.
     private void ChildChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(Message) && sender is SettingsPage page)
+        if (e.PropertyName == nameof(Message) && sender is SettingsViewModel page)
         {
             Message = page.Message;
         }
-        else if (e.PropertyName == nameof(TrackLayoutPage.IsDirty))
+        else if (e.PropertyName == nameof(TrackLayoutViewModel.IsDirty))
         {
             OnPropertyChanged(nameof(HasUnsavedChanges));
         }

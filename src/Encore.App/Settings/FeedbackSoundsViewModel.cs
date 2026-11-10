@@ -11,7 +11,7 @@ namespace Encore.App.Settings;
 internal sealed record FeedbackDeviceItem(string? EndpointId, string Label);
 
 /// <summary>The Feedback Sounds page: a switch and a Play button per sound, and the sound device. UI thread.</summary>
-internal sealed class FeedbackSoundsPage : SettingsPage
+internal sealed class FeedbackSoundsViewModel : SettingsViewModel
 {
     private const string DefaultDeviceLabel = "Default communications device";
 
@@ -22,7 +22,7 @@ internal sealed class FeedbackSoundsPage : SettingsPage
     private IReadOnlyList<FeedbackDeviceItem> _deviceItems = [new(null, DefaultDeviceLabel)];
     private string? _capturedWarning;
 
-    public FeedbackSoundsPage(SettingsSender sender, IEngineSession engine)
+    public FeedbackSoundsViewModel(SettingsSender sender, IEngineSession engine)
         : base(sender)
     {
         _engine = engine;
@@ -72,7 +72,7 @@ internal sealed class FeedbackSoundsPage : SettingsPage
         private set => Set(ref _capturedWarning, value);
     }
 
-    /// <summary>Takes the snapshot's devices and warnings. Called before <see cref="SettingsPage.Render"/>.</summary>
+    /// <summary>Takes the snapshot's devices and warnings. Called before <see cref="SettingsViewModel.Render"/>.</summary>
     public void ShowState(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -156,9 +156,9 @@ internal sealed class FeedbackSoundsPage : SettingsPage
 /// <summary>One sound on the Feedback Sounds page: its switch and its Play button.</summary>
 internal sealed class FeedbackSoundRow : Observable
 {
-    private readonly FeedbackSoundsPage _page;
+    private readonly FeedbackSoundsViewModel _page;
 
-    public FeedbackSoundRow(FeedbackSoundsPage page, FeedbackSound sound, string label)
+    public FeedbackSoundRow(FeedbackSoundsViewModel page, FeedbackSound sound, string label)
     {
         _page = page;
         Sound = sound;

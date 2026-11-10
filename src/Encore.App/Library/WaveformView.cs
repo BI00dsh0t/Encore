@@ -37,7 +37,7 @@ internal sealed partial class WaveformView : FrameworkElement
     // How many audio lanes show at once; more scroll.
     private const int VisibleLanes = 5;
 
-    private ClipCreatorPage? _page;
+    private ClipCreatorViewModel? _page;
     private DrawingGroup? _waveformDrawing;
 
     public WaveformView()
@@ -45,8 +45,8 @@ internal sealed partial class WaveformView : FrameworkElement
         Focusable = true;
         ClipToBounds = true;
         MinHeight = 52;
-        DataContextChanged += (_, _) => Attach(DataContext as ClipCreatorPage);
-        Loaded += (_, _) => Attach(DataContext as ClipCreatorPage);
+        DataContextChanged += (_, _) => Attach(DataContext as ClipCreatorViewModel);
+        Loaded += (_, _) => Attach(DataContext as ClipCreatorViewModel);
         Unloaded += (_, _) =>
         {
             ReleaseMouseCapture();
@@ -181,13 +181,13 @@ internal sealed partial class WaveformView : FrameworkElement
         Math.Clamp(Math.Round((double)value), 0, ((WaveformView)view).ScrollMaximum);
 
     // What changes the cached lanes and video strip; anything else only moves the overlays.
-    private static bool ChangesWaveformDrawing(string? property) => property is nameof(ClipCreatorPage.Waveforms)
-        or nameof(ClipCreatorPage.Metadata)
-        or nameof(ClipCreatorPage.ViewportStart)
-        or nameof(ClipCreatorPage.ViewportEnd)
-        or nameof(ClipCreatorPage.Thumbnails);
+    private static bool ChangesWaveformDrawing(string? property) => property is nameof(ClipCreatorViewModel.Waveforms)
+        or nameof(ClipCreatorViewModel.Metadata)
+        or nameof(ClipCreatorViewModel.ViewportStart)
+        or nameof(ClipCreatorViewModel.ViewportEnd)
+        or nameof(ClipCreatorViewModel.Thumbnails);
 
-    private void Attach(ClipCreatorPage? page)
+    private void Attach(ClipCreatorViewModel? page)
     {
         ReleaseMouseCapture();
         _page?.EndScrub();
@@ -213,12 +213,12 @@ internal sealed partial class WaveformView : FrameworkElement
 
     private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(ClipCreatorPage.ViewportStart) or nameof(ClipCreatorPage.ViewportEnd))
+        if (e.PropertyName is nameof(ClipCreatorViewModel.ViewportStart) or nameof(ClipCreatorViewModel.ViewportEnd))
         {
             FinishPointerForViewportChange();
         }
 
-        if (e.PropertyName == nameof(ClipCreatorPage.CanEdit))
+        if (e.PropertyName == nameof(ClipCreatorViewModel.CanEdit))
         {
             if (_page is not { CanEdit: true })
             {
@@ -228,7 +228,7 @@ internal sealed partial class WaveformView : FrameworkElement
             UpdatePointerCursor(_lastPoint);
         }
 
-        if (e.PropertyName is nameof(ClipCreatorPage.Waveforms) or nameof(ClipCreatorPage.Metadata))
+        if (e.PropertyName is nameof(ClipCreatorViewModel.Waveforms) or nameof(ClipCreatorViewModel.Metadata))
         {
             InvalidateMeasure();
         }
@@ -241,7 +241,7 @@ internal sealed partial class WaveformView : FrameworkElement
         InvalidateVisual();
     }
 
-    private TimelineScale ScaleOf(ClipCreatorPage page) =>
+    private TimelineScale ScaleOf(ClipCreatorViewModel page) =>
         new(PlotLeft, ActualWidth, page.ViewportStart, page.ViewportEnd);
 
     private double XOf(double time) => _page is { } page ? ScaleOf(page).XOf(time) : 0;

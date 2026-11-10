@@ -23,7 +23,7 @@ public sealed class LibraryActionsTests : IDisposable
         var absolute = Path.Combine(_folder, Clip);
         Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
         File.WriteAllBytes(absolute, [0]);
-        var page = new LibraryPage(_engine, shell: _shell);
+        var page = new LibraryViewModel(_engine, shell: _shell);
         var writing = new LibraryItem(Clip, null, 0, DateTimeOffset.UnixEpoch, true);
         var state = _engine.State! with { LibraryFolder = _folder, Library = [writing] };
 
@@ -49,7 +49,7 @@ public sealed class LibraryActionsTests : IDisposable
     [Fact]
     public void AMissingFileOrAFailingShellShowsAShortError()
     {
-        var page = new LibraryPage(_engine, shell: _shell);
+        var page = new LibraryViewModel(_engine, shell: _shell);
         page.Render(_engine.State! with { LibraryFolder = _folder, Library = [new LibraryItem("gone.mp4", null, 1, DateTimeOffset.UnixEpoch, false)] });
         page.Click(page.Rows[0], ctrl: false, shift: false);
 
@@ -72,7 +72,7 @@ public sealed class LibraryActionsTests : IDisposable
     public void RenameSendsTheIdentityAndTheBaseNameAndShowsARefusal()
     {
         var item = new LibraryItem(Clip, null, 48, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch.AddDays(1));
-        var page = new LibraryPage(_engine, shell: _shell);
+        var page = new LibraryViewModel(_engine, shell: _shell);
         page.Render(_engine.State! with { LibraryFolder = _folder, Library = [item] });
         var row = page.Rows[0];
         page.Click(row, ctrl: false, shift: false);
@@ -104,7 +104,7 @@ public sealed class LibraryActionsTests : IDisposable
     {
         var answer = false;
         var asked = new List<string>();
-        var page = new LibraryPage(_engine, shell: _shell, confirmDelete: question =>
+        var page = new LibraryViewModel(_engine, shell: _shell, confirmDelete: question =>
         {
             asked.Add(question);
             return answer;

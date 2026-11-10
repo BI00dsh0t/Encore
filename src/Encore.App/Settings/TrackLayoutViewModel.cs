@@ -10,7 +10,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Settings;
 
 /// <summary>Audio Tracks: the Global layout, or one game's, edited as one card per Track, with live meters. UI thread.</summary>
-internal sealed class TrackLayoutPage : SettingsPage
+internal sealed class TrackLayoutViewModel : SettingsViewModel
 {
     public const string PageTitle = "Audio Tracks";
     public const string NameNeeded = "Give every track a name to save.";
@@ -35,7 +35,7 @@ internal sealed class TrackLayoutPage : SettingsPage
     private AudioPickerRow? _pickerSelection;
     private FrameworkElement? _view;
 
-    public TrackLayoutPage(SettingsSender sender, IEngineSession engine, string? profileId = null)
+    public TrackLayoutViewModel(SettingsSender sender, IEngineSession engine, string? profileId = null)
         : base(sender)
     {
         _engine = engine;
@@ -729,7 +729,7 @@ internal sealed class ParameterCommand(Action<object?> execute) : ICommand
 /// <summary>A Track's card. <see cref="Id"/> stays the same across renames and moves.</summary>
 internal sealed class AudioTrackCard : Observable
 {
-    private readonly TrackLayoutPage _page;
+    private readonly TrackLayoutViewModel _page;
     private int _number;
     private string _warning = "";
     private double _level;
@@ -738,7 +738,7 @@ internal sealed class AudioTrackCard : Observable
     private bool _isLast;
     private bool _pendingRename;
 
-    public AudioTrackCard(TrackLayoutPage page, AudioTracksDraftTrack model)
+    public AudioTrackCard(TrackLayoutViewModel page, AudioTracksDraftTrack model)
     {
         _page = page;
         Model = model;
@@ -916,13 +916,13 @@ internal sealed class AudioTrackCard : Observable
 /// <summary>A sound on a Track: one device record, shown with its own level.</summary>
 internal sealed class AudioSourceRow : Observable
 {
-    private readonly TrackLayoutPage _page;
+    private readonly TrackLayoutViewModel _page;
     private LayoutDevice _device;
     private string _label;
     private bool _available = true;
     private double _level;
 
-    public AudioSourceRow(TrackLayoutPage page, AudioTrackCard track, LayoutDevice device)
+    public AudioSourceRow(TrackLayoutViewModel page, AudioTrackCard track, LayoutDevice device)
     {
         _page = page;
         _device = device;

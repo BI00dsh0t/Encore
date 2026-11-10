@@ -5,7 +5,7 @@ namespace Encore.App;
 /// <summary>One item of the shell's navigation: the Library, the Settings section label, or a settings page.</summary>
 internal sealed class NavItem : Observable
 {
-    public NavItem(string title, SettingsPage? page, bool isSection)
+    public NavItem(string title, SettingsViewModel? page, bool isSection)
     {
         Title = title;
         Page = page;
@@ -14,7 +14,7 @@ internal sealed class NavItem : Observable
         {
             page.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(SettingsPage.HasUnsavedChanges))
+                if (e.PropertyName == nameof(SettingsViewModel.HasUnsavedChanges))
                 {
                     OnPropertyChanged(nameof(HasUnsavedChanges));
                 }
@@ -29,7 +29,7 @@ internal sealed class NavItem : Observable
     public string Title { get; }
 
     /// <summary>The settings page it opens; null for the Library and the section label.</summary>
-    public SettingsPage? Page { get; }
+    public SettingsViewModel? Page { get; }
 
     /// <summary>The non-selectable Settings label above the settings pages.</summary>
     public bool IsSection { get; }

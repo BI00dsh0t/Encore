@@ -15,7 +15,7 @@ internal partial class TrackLayoutView
         DataContextChanged += (_, _) => GroupPickerRows();
     }
 
-    private TrackLayoutPage? Page => DataContext as TrackLayoutPage;
+    private TrackLayoutViewModel? Page => DataContext as TrackLayoutViewModel;
 
     private static bool IsControlDown => Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
 

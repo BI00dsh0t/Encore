@@ -36,7 +36,7 @@ public sealed class SourceResolutionViewTests
                 ThemeService.ForWindow(window).Apply(theme);
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 var resolution = Descendants<ComboBox>(window).Single(c => c.SelectedItem is ResolutionItem);
-                Assert.Equal(RewindSettingsPage.SourceLabel, ((ResolutionItem)resolution.SelectedItem).Label);
+                Assert.Equal(RewindSettingsViewModel.SourceLabel, ((ResolutionItem)resolution.SelectedItem).Label);
                 var help = Descendants<TextBlock>(window).Single(t => t.Text == model.Rewind.SourceHelp);
                 Descendants<ScrollViewer>(window).First(v => v.IsVisible && v.ScrollableHeight > 0).ScrollToEnd();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
@@ -74,7 +74,7 @@ public sealed class SourceResolutionViewTests
                 ThemeService.ForWindow(window).Apply(theme);
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 var resolution = Descendants<ComboBox>(window).Single(c => c.SelectedItem is ResolutionItem);
-                Assert.Equal(RewindSettingsPage.SourceLabel, ((ResolutionItem)resolution.SelectedItem).Label);
+                Assert.Equal(RewindSettingsViewModel.SourceLabel, ((ResolutionItem)resolution.SelectedItem).Label);
                 Assert.True(Descendants<TextBlock>(window).Single(t => t.Text == model.Rewind.SourceHelp).IsVisible);
                 Save(window, file);
             }

@@ -11,19 +11,19 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Settings;
 
 /// <summary>Games: every game in the document, Ignored ones last, each opening its own page. UI thread.</summary>
-internal sealed class GameProfilesPage : SettingsPage
+internal sealed class GameProfilesViewModel : SettingsViewModel
 {
     public const string PageTitle = "Games";
 
     private readonly SettingsSender _sender;
     private readonly IEngineSession _engine;
     private readonly IGameShell _shell;
-    private readonly Dictionary<string, GamePage> _pages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, GameViewModel> _pages = new(StringComparer.Ordinal);
     private StateSnapshot? _state;
     private bool _isOpen;
-    private GamePage? _openGame;
+    private GameViewModel? _openGame;
 
-    public GameProfilesPage(SettingsSender sender, IEngineSession engine, IGameShell? shell = null)
+    public GameProfilesViewModel(SettingsSender sender, IEngineSession engine, IGameShell? shell = null)
         : base(sender)
     {
         _sender = sender;
@@ -54,7 +54,7 @@ internal sealed class GameProfilesPage : SettingsPage
     public FolderPicker AddGame { get; }
 
     /// <summary>The game page on screen, or null on the list.</summary>
-    public GamePage? OpenGame
+    public GameViewModel? OpenGame
     {
         get => _openGame;
         private set
@@ -117,11 +117,11 @@ internal sealed class GameProfilesPage : SettingsPage
     }
 
     /// <summary>The game's page, kept for the run so a draft survives going back.</summary>
-    public GamePage Page(string profileId)
+    public GameViewModel Page(string profileId)
     {
         if (!_pages.TryGetValue(profileId, out var page))
         {
-            page = new GamePage(_sender, _engine, profileId, this, _shell);
+            page = new GameViewModel(_sender, _engine, profileId, this, _shell);
             if (_state is { } state)
             {
                 page.ShowState(state);
@@ -238,7 +238,7 @@ internal sealed class GameProfilesPage : SettingsPage
 
     private void GameChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender is not GamePage page)
+        if (sender is not GameViewModel page)
         {
             return;
         }

@@ -15,7 +15,7 @@ namespace Encore.App.Tests;
 
 /// <summary>Games: the list, the drill-in, and a game's page.</summary>
 [Collection(nameof(WpfCollection))]
-public sealed class GameProfilesPageTests
+public sealed class GameProfilesViewModelTests
 {
     private const string AlphaId = @"c:\a\a.exe";
     private const string BetaId = @"c:\b\b.exe";

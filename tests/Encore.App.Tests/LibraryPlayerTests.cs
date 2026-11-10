@@ -36,7 +36,7 @@ public sealed class LibraryPlayerTests : IDisposable
     [Fact]
     public void EnterPlaysAFinishedRowOnItsPageAndNotOneBeingWritten()
     {
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        var page = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         page.Render(State());
 
         page.Click(Row(page, Saving), ctrl: false, shift: false);
@@ -62,7 +62,7 @@ public sealed class LibraryPlayerTests : IDisposable
     [Fact]
     public void ADoubleClickOpensARowAndTheListsKeysAndMenuFollowTheSelection()
     {
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        var page = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         page.Render(State());
 
         // The menu stays shut off a row and with nothing selected; from the keyboard it takes the focused row.
@@ -88,7 +88,7 @@ public sealed class LibraryPlayerTests : IDisposable
     [Fact]
     public void ThePlayerSharesTheFileForRenameAndDeleteAndBackReleasesIt()
     {
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        var page = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         page.Render(State());
         page.Click(Row(page, Clip), ctrl: false, shift: false);
         page.OpenFocused();
@@ -108,7 +108,7 @@ public sealed class LibraryPlayerTests : IDisposable
     [Fact]
     public void AnItemLeavingTheLibraryClosesItsPlayer()
     {
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        var page = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         page.Render(State());
         page.Click(Row(page, Clip), ctrl: false, shift: false);
         page.OpenFocused();
@@ -123,13 +123,13 @@ public sealed class LibraryPlayerTests : IDisposable
     public void AFileThatCantBePlayedSaysSoAndOffersTheDefaultPlayer()
     {
         _player.Fail = true;
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        var page = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         page.Render(State());
         page.Click(Row(page, Clip), ctrl: false, shift: false);
         page.OpenFocused();
 
         Assert.True(page.Player!.IsFailed);
-        Assert.Equal(PlayerPage.FailedText, page.Player.Message);
+        Assert.Equal(PlayerViewModel.FailedText, page.Player.Message);
         page.Player.OpenInDefaultPlayerCommand.Execute(null);
         Assert.Equal([("open", Path.Combine(_folder, Clip))], _shell.Calls);
     }
@@ -179,7 +179,7 @@ public sealed class LibraryPlayerTests : IDisposable
         Assert.True(page.HandleKey(Key.Space));
         Assert.False(_player.IsPlaying);
         Assert.True(page.HandleKey(Key.Right));
-        Assert.Equal([PlayerPage.SeekStep], _player.Seeks);
+        Assert.Equal([PlayerViewModel.SeekStep], _player.Seeks);
         Assert.True(page.HandleKey(Key.Down));
         Assert.Equal(0.95, _player.Volume);
         Assert.True(page.HandleKey(Key.F));
@@ -187,9 +187,9 @@ public sealed class LibraryPlayerTests : IDisposable
         Assert.False(page.HandleKey(Key.B));
     }
 
-    private PlayerPage PlayingPage()
+    private PlayerViewModel PlayingPage()
     {
-        var library = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        var library = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         library.Render(State());
         library.Click(Row(library, Clip), ctrl: false, shift: false);
         library.OpenFocused();
@@ -232,5 +232,5 @@ public sealed class LibraryPlayerTests : IDisposable
     private static LibraryItem Item(string path, bool writing) =>
         new(path, null, 1, path == Clip ? DateTimeOffset.UnixEpoch : DateTimeOffset.UnixEpoch.AddDays(1), writing);
 
-    private static LibraryRow Row(LibraryPage page, string path) => page.Rows.Single(r => r.Path == path);
+    private static LibraryRow Row(LibraryViewModel page, string path) => page.Rows.Single(r => r.Path == path);
 }

@@ -17,13 +17,13 @@ internal partial class GameProfilesView
         InitializeComponent();
         DataContextChanged += (_, e) =>
         {
-            if (e.OldValue is GameProfilesPage old)
+            if (e.OldValue is GameProfilesViewModel old)
             {
                 old.DrillIn.Opened -= OnOpened;
                 old.DrillIn.Closed -= OnClosed;
             }
 
-            if (e.NewValue is GameProfilesPage page)
+            if (e.NewValue is GameProfilesViewModel page)
             {
                 var rows = CollectionViewSource.GetDefaultView(page.Profiles);
                 rows.GroupDescriptions.Clear();
@@ -43,7 +43,7 @@ internal partial class GameProfilesView
         };
     }
 
-    private GameProfilesPage? Page => DataContext as GameProfilesPage;
+    private GameProfilesViewModel? Page => DataContext as GameProfilesViewModel;
 
     private void OnListKeyDown(object sender, KeyEventArgs e)
     {
@@ -72,7 +72,7 @@ internal partial class GameProfilesView
         }
     }
 
-    private void Show(GamePage game)
+    private void Show(GameViewModel game)
     {
         ListScroller.Visibility = Visibility.Collapsed;
         GameHost.Content = game.View;

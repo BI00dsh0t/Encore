@@ -126,7 +126,7 @@ public sealed class LibraryThemeTests
     public void TheEmptyStateShowsOnlyWithoutAFilterAndTheStarFollowsOnlyTheSnapshot() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession { Reply = (_, _) => Empty.Value };
-        var page = new LibraryPage(engine);
+        var page = new LibraryViewModel(engine);
         var view = (LibraryView)page.View;
         Layout(view);
         var empty = (FrameworkElement)view.FindName("EmptyMessage");

@@ -8,20 +8,20 @@ namespace Encore.App.Library;
 internal static class ClipExportDestination
 {
     /// <summary>The chosen path, or null when the builder cancels.</summary>
-    internal static Task<string?> ChooseAsync(ClipCreatorPage page)
+    internal static Task<string?> ChooseAsync(ClipCreatorViewModel page)
     {
         var owner = Application.Current?.Windows.OfType<ClipExportDialog>().FirstOrDefault(window => window.IsVisible)
             ?? Application.Current?.Windows.OfType<Window>().FirstOrDefault(window => window.IsActive);
         return Task.FromResult(page.SeparateAudioFiles ? ChooseFolder(page, owner) : ChooseFile(page, owner));
     }
 
-    private static string? ChooseFolder(ClipCreatorPage page, Window? owner)
+    private static string? ChooseFolder(ClipCreatorViewModel page, Window? owner)
     {
         var folder = new OpenFolderDialog { Title = "Choose the parent folder for the new named MP3 directory", Multiselect = false };
         return folder.ShowDialog(owner) == true ? Path.Combine(folder.FolderName, page.ExportName) : null;
     }
 
-    private static string? ChooseFile(ClipCreatorPage page, Window? owner)
+    private static string? ChooseFile(ClipCreatorViewModel page, Window? owner)
     {
         var dialog = new SaveFileDialog
         {

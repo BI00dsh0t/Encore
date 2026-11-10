@@ -101,7 +101,7 @@ public sealed class LibrarySelectionTests : IDisposable
     public void BulkDeleteAsksOnceLeavesOutFavouritesAndFilesBeingSavedAndReportsARefusal()
     {
         var asked = new List<string>();
-        var page = new LibraryPage(_engine, shell: _shell, confirmDelete: question =>
+        var page = new LibraryViewModel(_engine, shell: _shell, confirmDelete: question =>
         {
             asked.Add(question);
             return true;
@@ -132,7 +132,7 @@ public sealed class LibrarySelectionTests : IDisposable
     [Fact]
     public void ARowStarredWhileABatchRunsIsNotDeleted()
     {
-        var page = new LibraryPage(_engine, shell: _shell, confirmDelete: _ => true);
+        var page = new LibraryViewModel(_engine, shell: _shell, confirmDelete: _ => true);
         var items = new[] { Item(@"G\d1.mp4", 1), Item(@"G\d2.mp4", 2), Item(@"G\d3.mp4", 3) };
         page.Render(State(items));
         page.SelectAll();
@@ -152,7 +152,7 @@ public sealed class LibrarySelectionTests : IDisposable
     public void DeletingASingleFavouriteAsksAndSendsNothing()
     {
         var asked = 0;
-        var page = new LibraryPage(_engine, shell: _shell, confirmDelete: _ => ++asked > 0);
+        var page = new LibraryViewModel(_engine, shell: _shell, confirmDelete: _ => ++asked > 0);
         page.Render(State(Item(@"A\fav.mp4", 1) with { Favourite = true }));
         page.Click(page.Rows[0], ctrl: false, shift: false);
 
@@ -168,7 +168,7 @@ public sealed class LibrarySelectionTests : IDisposable
     [Fact]
     public void CopyIsOneFileDropOfTheShownWrittenFilesAndCopyToFolderCopiesTheSame()
     {
-        var page = new LibraryPage(_engine, shell: _shell, pickFolder: () => @"D:\Share");
+        var page = new LibraryViewModel(_engine, shell: _shell, pickFolder: () => @"D:\Share");
         page.Render(State(Item(@"A\a1.mp4", 1), Item(@"A\a2.mp4", 2), Item(@"A\saving.mp4", 3) with { BeingWritten = true }, Item(@"B\b1.mp4", 4)));
         page.SelectAll();
         page.GameFilter = page.Games.Single(g => g.Name == "A").Key;
@@ -200,7 +200,7 @@ public sealed class LibrarySelectionTests : IDisposable
         Assert.Equal([("folder", _folder)], _shell.Calls);
     }
 
-    private LibraryPage Page() => new(_engine, shell: _shell);
+    private LibraryViewModel Page() => new(_engine, shell: _shell);
 
     // An item of 1 MB whose file exists, the given hours old.
     private LibraryItem Item(string path, int hoursOld)
@@ -214,10 +214,10 @@ public sealed class LibrarySelectionTests : IDisposable
 
     private string Absolute(string path) => Path.Combine(_folder, path);
 
-    private static LibraryRow Row(LibraryPage page, string name) => page.Rows.Single(r => r.Name == name);
+    private static LibraryRow Row(LibraryViewModel page, string name) => page.Rows.Single(r => r.Name == name);
 
-    private static List<string> Selected(LibraryPage page) => [.. page.Rows.Where(r => r.IsSelected).Select(r => r.Name).Order(StringComparer.Ordinal)];
+    private static List<string> Selected(LibraryViewModel page) => [.. page.Rows.Where(r => r.IsSelected).Select(r => r.Name).Order(StringComparer.Ordinal)];
 
-    private static List<string> Shown(LibraryPage page) =>
+    private static List<string> Shown(LibraryViewModel page) =>
         [.. page.Entries.Select(e => e is LibraryGroupHeader h ? "# " + h.Name : ((LibraryRow)e).Name)];
 }

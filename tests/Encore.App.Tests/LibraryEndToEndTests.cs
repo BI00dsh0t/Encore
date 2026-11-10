@@ -234,11 +234,11 @@ public sealed class LibraryEndToEndTests : IDisposable
 
     private static string Gb(long bytes) => (bytes / 1e9).ToString("0.#########", System.Globalization.CultureInfo.InvariantCulture);
 
-    private static LibraryRow Row(LibraryPage page, string path) => page.Rows.Single(r => r.Path == path);
+    private static LibraryRow Row(LibraryViewModel page, string path) => page.Rows.Single(r => r.Path == path);
 
-    private static IReadOnlyList<string> Shown(LibraryPage page) => [.. page.Entries.OfType<LibraryRow>().Select(r => r.Path)];
+    private static IReadOnlyList<string> Shown(LibraryViewModel page) => [.. page.Entries.OfType<LibraryRow>().Select(r => r.Path)];
 
-    private static IReadOnlyList<string> Headers(LibraryPage page) => [.. page.Entries.OfType<LibraryGroupHeader>().Select(h => h.Name)];
+    private static IReadOnlyList<string> Headers(LibraryViewModel page) => [.. page.Entries.OfType<LibraryGroupHeader>().Select(h => h.Name)];
 
     private static HashSet<string> Paths(EngineConnection engine) => engine.State!.Library.Select(i => i.Path).ToHashSet(StringComparer.Ordinal);
 
@@ -369,7 +369,7 @@ public sealed class LibraryEndToEndTests : IDisposable
     /// <summary>The engine, the App's connection, a Library page on a recording shell, and the main view model.</summary>
     private sealed class Session : IDisposable
     {
-        private Session(EngineHost host, EngineConnection engine, LibraryPage page, MainViewModel main, RecordingShell shell, ListLoggers logs)
+        private Session(EngineHost host, EngineConnection engine, LibraryViewModel page, MainViewModel main, RecordingShell shell, ListLoggers logs)
         {
             Host = host;
             Engine = engine;
@@ -383,7 +383,7 @@ public sealed class LibraryEndToEndTests : IDisposable
 
         public EngineConnection Engine { get; }
 
-        public LibraryPage Page { get; }
+        public LibraryViewModel Page { get; }
 
         public MainViewModel Main { get; }
 
@@ -415,7 +415,7 @@ public sealed class LibraryEndToEndTests : IDisposable
 
             var shell = new RecordingShell();
             Session? session = null;
-            var page = new LibraryPage(engine, LibraryThumbnails.Shell(post), shell: shell, confirmDelete: question =>
+            var page = new LibraryViewModel(engine, LibraryThumbnails.Shell(post), shell: shell, confirmDelete: question =>
             {
                 session!.Asked.Add(question);
                 return session.Answer;

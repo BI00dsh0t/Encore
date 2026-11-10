@@ -10,7 +10,7 @@ using Encore.Contracts.Settings;
 namespace Encore.App.Tests;
 
 [Collection(nameof(WpfCollection))]
-public sealed class FeedbackSoundsPageTests
+public sealed class FeedbackSoundsViewModelTests
 {
     private static readonly AudioDevice Speakers = new("{out-1}", "Speakers", "Realtek", AudioFlow.Output, true);
     private static readonly AudioDevice Mic = new("{in-1}", "Microphone", "USB Mic", AudioFlow.Input, true);
@@ -18,7 +18,7 @@ public sealed class FeedbackSoundsPageTests
     private readonly FakeEngineSession _engine = new();
     private readonly List<SettingsUpdate> _updates = [];
 
-    public FeedbackSoundsPageTests()
+    public FeedbackSoundsViewModelTests()
     {
         _engine.Reply = (_, args) => args switch
         {

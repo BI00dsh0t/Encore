@@ -28,9 +28,9 @@ internal partial class ClipCreatorView
     }
 
     /// <summary>Asks where the export goes; tests replace the Windows dialogs.</summary>
-    internal Func<ClipCreatorPage, Task<string?>> ChooseDestination { get; set; } = ClipExportDestination.ChooseAsync;
+    internal Func<ClipCreatorViewModel, Task<string?>> ChooseDestination { get; set; } = ClipExportDestination.ChooseAsync;
 
-    private ClipCreatorPage? Page => DataContext as ClipCreatorPage;
+    private ClipCreatorViewModel? Page => DataContext as ClipCreatorViewModel;
 
     /// <summary>Focuses the timeline, when the creator opens.</summary>
     public void FocusFirstControl() => Timeline.Focus();
@@ -91,7 +91,7 @@ internal partial class ClipCreatorView
         menu.IsOpen = true;
     }
 
-    private MenuItem FormatItem(ClipCreatorPage page, string format, string label, string iconKey)
+    private MenuItem FormatItem(ClipCreatorViewModel page, string format, string label, string iconKey)
     {
         var icon = new Path
         {
