@@ -132,53 +132,20 @@ internal sealed class TrackMeters : IDisposable
         public ActiveWatch(IAudioDeviceHub hub, TrackLayout layout, SessionAudio audio, bool micMuted, Action<MeterLevels> publish, ILogger log)
         {
             _publish = publish;
-            var frequency = Stopwatch.Frequency;
-            var anchorQpc = Stopwatch.GetTimestamp();
+            var anchor = Stopwatch.GetTimestamp();
             Schedule = new MicMuteSchedule(micMuted);
-
             try
             {
-                // Each device's tap drops blocks until its timeline is published below.
-                var taps = new AudioTimelineTap?[audio.Devices.Count];
-                for (var d = 0; d < audio.Devices.Count; d++)
+                var taps = SubscribeTaps(hub, audio, log);
+                _meters = new PeakMeter[audio.Tracks.Count];
+                _trackIds = new Guid[audio.Tracks.Count];
+                for (var track = 0; track < audio.Tracks.Count; track++)
                 {
-                    var device = audio.Devices[d];
-                    var tap = new AudioTimelineTap();
-                    try
-                    {
-                        _subscriptions.Add(hub.Subscribe(device, tap));
-                        taps[d] = tap;
-                    }
-                    catch (ErrorCodeException e)
-                    {
-                        log.LogWarning("Meters leave out {Device}: {Message}", device.FriendlyName, e.Message);
-                    }
+                    _trackIds[track] = layout.Tracks[track].Id;
+                    _meters[track] = new PeakMeter();
                 }
 
-                // Each Track mixes the devices that opened; one with none stays at 0.
-                var tracks = audio.Tracks;
-                _meters = new PeakMeter[tracks.Count];
-                _trackIds = new Guid[tracks.Count];
-                var mixers = new TrackMixer[tracks.Count];
-                var inputs = new List<int>[tracks.Count];
-                for (var t = 0; t < tracks.Count; t++)
-                {
-                    _trackIds[t] = layout.Tracks[t].Id;
-                    _meters[t] = new PeakMeter();
-                    inputs[t] = [.. tracks[t].DeviceIndexes.Where(d => taps[d] is not null)];
-                    mixers[t] = new TrackMixer(inputs[t].Count, _meters[t]);
-                }
-
-                for (var d = 0; d < taps.Length; d++)
-                {
-                    if (taps[d] is not { } tap)
-                    {
-                        continue;
-                    }
-
-                    var sink = TrackWiring.DeviceSink(d, audio.Devices[d].IsMic, tracks, inputs, mixers, Schedule, frequency, anchorQpc);
-                    tap.Publish(new AudioTimeline(frequency, anchorQpc, sink));
-                }
+                WireTracks(audio, taps, anchor);
             }
             catch
             {
@@ -207,6 +174,53 @@ internal sealed class TrackMeters : IDisposable
             _thread.Join();
             DisposeSubscriptions();
             _stop.Dispose();
+        }
+
+        /// <summary>One tap per device that opened; each drops blocks until its timeline is published.</summary>
+        private AudioTimelineTap?[] SubscribeTaps(IAudioDeviceHub hub, SessionAudio audio, ILogger log)
+        {
+            var taps = new AudioTimelineTap?[audio.Devices.Count];
+            for (var index = 0; index < audio.Devices.Count; index++)
+            {
+                var device = audio.Devices[index];
+                var tap = new AudioTimelineTap();
+                try
+                {
+                    _subscriptions.Add(hub.Subscribe(device, tap));
+                    taps[index] = tap;
+                }
+                catch (ErrorCodeException e)
+                {
+                    log.LogWarning("Meters leave out {Device}: {Message}", device.FriendlyName, e.Message);
+                }
+            }
+
+            return taps;
+        }
+
+        /// <summary>Each Track mixes the devices that opened into its meter; one with none stays at 0.</summary>
+        private void WireTracks(SessionAudio audio, AudioTimelineTap?[] taps, long anchor)
+        {
+            var frequency = Stopwatch.Frequency;
+            var tracks = audio.Tracks;
+            var mixers = new TrackMixer[tracks.Count];
+            var inputs = new List<int>[tracks.Count];
+            for (var track = 0; track < tracks.Count; track++)
+            {
+                inputs[track] = [.. tracks[track].DeviceIndexes.Where(device => taps[device] is not null)];
+                mixers[track] = new TrackMixer(inputs[track].Count, _meters[track]);
+            }
+
+            for (var device = 0; device < taps.Length; device++)
+            {
+                if (taps[device] is not { } tap)
+                {
+                    continue;
+                }
+
+                var sink = TrackWiring.DeviceSink(device, audio.Devices[device].IsMic, tracks, inputs, mixers, Schedule, frequency, anchor);
+                tap.Publish(new AudioTimeline(frequency, anchor, sink));
+            }
         }
 
         private void DisposeSubscriptions()
@@ -255,47 +269,4 @@ internal sealed class TrackMeters : IDisposable
             }
         }
     }
-}
-
-/// <summary>A Track's meter: the largest sample since the last <see cref="Take"/>; device threads write it without blocking.</summary>
-internal sealed class PeakMeter : IAudioSampleSink
-{
-    private int _bits;
-
-    public void Write(ReadOnlySpan<float> interleaved)
-    {
-        var peak = 0f;
-        foreach (var sample in interleaved)
-        {
-            var magnitude = Math.Abs(sample);
-            if (magnitude > peak)
-            {
-                peak = magnitude;
-            }
-        }
-
-        if (peak <= 0)
-        {
-            return;
-        }
-
-        var seen = Volatile.Read(ref _bits);
-        while (BitConverter.Int32BitsToSingle(seen) < peak)
-        {
-            var prior = Interlocked.CompareExchange(ref _bits, BitConverter.SingleToInt32Bits(peak), seen);
-            if (prior == seen)
-            {
-                return;
-            }
-
-            seen = prior;
-        }
-    }
-
-    public void WriteSilence(long frames)
-    {
-    }
-
-    /// <summary>The peak since the last take, resetting it to 0.</summary>
-    public float Take() => BitConverter.Int32BitsToSingle(Interlocked.Exchange(ref _bits, 0));
 }
