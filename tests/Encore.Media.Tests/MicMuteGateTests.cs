@@ -20,7 +20,7 @@ public sealed class MicMuteGateTests
         return samples;
     }
 
-    /// <summary>Writes <paramref name="frames"/> frames of seed <paramref name="seed"/> in <paramref name="chunk"/>-frame writes.</summary>
+    /// <summary>Writes a number of frames of a seed, in chunks of the given size.</summary>
     private static void Feed(IAudioSampleSink sink, float seed, long start, int frames, int chunk)
     {
         for (var done = 0; done < frames;)

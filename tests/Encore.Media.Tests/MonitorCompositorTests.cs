@@ -1,6 +1,6 @@
 namespace Encore.Media.Tests;
 
-/// <summary>Story 11.3: the multi-monitor compositor's slot clock and areas, on a fake canvas.</summary>
+/// <summary>The multi-monitor compositor's slot clock and areas, on a fake canvas.</summary>
 public sealed class MonitorCompositorTests
 {
     private const long Qpf = 10_000_000;
@@ -36,7 +36,7 @@ public sealed class MonitorCompositorTests
         Assert.InRange(surface.Presents.Count, 59, 60);
         Assert.True(surface.Presents.Zip(surface.Presents.Skip(1)).All(p => p.Second > p.First), "stamps increase");
 
-        // The frames after the last tick go out at the next slot; then nothing new hands nothing on, and the pacer repeats the last canvas.
+        // The frames after the last tick go out at the next slot; then nothing new hands nothing on.
         compositor.Tick(2 * Qpf);
         Assert.False(compositor.Tick((2 * Qpf) + (Qpf / 30)));
     }
