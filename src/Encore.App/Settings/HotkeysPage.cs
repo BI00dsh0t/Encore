@@ -7,15 +7,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// The Global Hotkeys (story 4.12): each <see cref="HotkeyAction"/>'s binding with the engine's status for
-/// it, set by pressing a combination or cleared, and <c>recordHotkeyMode</c>. Each change sends one Global
-/// op at once. A combination another action has is refused before sending, by the engine's rule (same key,
-/// same modifiers ignoring NoRepeat, whatever the mode). Story 10.9 groups the rows into Clips,
-/// Recordings, Monitor Recording (with the screen picker moved here from the removed Recordings page)
-/// and Microphone, each with its plain sentence. Story 11.4's <see cref="MonitorPicker"/> chooses the
-/// screens a Monitor Recording composites. Members run on the UI thread.
-/// </summary>
+/// <summary>The Global Hotkeys: each action's binding with the engine's status, grouped by purpose. UI thread.</summary>
 internal sealed class HotkeysPage : SettingsPage
 {
     private HotkeySettings _hotkeys = NoBindings;
@@ -74,7 +66,7 @@ internal sealed class HotkeysPage : SettingsPage
         _ => $"{seconds / 60} min {seconds % 60} s",
     };
 
-    /// <summary>Shows the screens a newly connected engine run lists, and the probe's codecs. Called before <see cref="SettingsPage.Render"/>.</summary>
+    /// <summary>Shows the screens a newly connected engine run lists, and the probe's codecs. Called before Render.</summary>
     public void ShowMonitors(StateSnapshot state) => Monitor.ShowState(state);
 
     /// <summary>The row waiting for a combination, or null.</summary>
@@ -146,10 +138,7 @@ internal sealed class HotkeysPage : SettingsPage
         }
     }
 
-    /// <summary>
-    /// Binds <paramref name="action"/> to <paramref name="binding"/> and sends the whole <c>hotkeys</c> value;
-    /// refused, with nothing sent, when another action has the combination.
-    /// </summary>
+    /// <summary>Binds an action and sends the whole <c>hotkeys</c> value; refused when another action has the combination.</summary>
     public void Capture(HotkeyAction action, HotkeyBinding binding)
     {
         ArgumentNullException.ThrowIfNull(binding);
@@ -181,10 +170,7 @@ internal sealed class HotkeysPage : SettingsPage
         Send(With(_hotkeys, action, null));
     }
 
-    /// <summary>
-    /// The binding a key press makes: the key, or <paramref name="systemKey"/> when the key is
-    /// <see cref="Key.System"/> (an Alt combination), with the held modifiers. Null for a modifier alone.
-    /// </summary>
+    /// <summary>The binding a key press makes, with the held modifiers; null for a modifier alone.</summary>
     public static HotkeyBinding? FromKey(Key key, Key systemKey, ModifierKeys modifiers)
     {
         var pressed = key == Key.System ? systemKey : key;

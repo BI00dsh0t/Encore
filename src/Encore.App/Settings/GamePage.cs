@@ -11,11 +11,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// One of a game's three own settings (AD-4's overridable keys), shown "inherited or changed" (story 10.10):
-/// using the main setting it shows the main value as readable text with Change for this game and Edit the
-/// main setting; changed it shows the editor with Reset to the main setting, which asks first.
-/// </summary>
+/// <summary>One of a game's own settings, shown as inherited or changed, with buttons to change it or reset it.</summary>
 internal sealed class InheritedSetting : Observable
 {
     private readonly Func<FrameworkElement> _editor;
@@ -75,12 +71,7 @@ internal sealed class InheritedSetting : Observable
     }
 }
 
-/// <summary>
-/// A game's page (story 10.10, EXPERIENCE.md "A game's page"), opened from the Games list by the drill-in
-/// pattern: inline rename, Capture (<c>ignored</c>, inverted), Clips, Video quality and Audio tracks as
-/// <see cref="InheritedSetting"/>s over today's override set and remove ops (Track ids kept), Recordings,
-/// the read-only Files, and Stop detecting it for a hand-added game. Members run on the UI thread.
-/// </summary>
+/// <summary>A game's page, opened from the Games list: rename, Capture, the game's own settings, and its files. UI thread.</summary>
 internal sealed class GamePage : SettingsPage
 {
     private readonly GameProfilesPage _parent;
@@ -129,7 +120,7 @@ internal sealed class GamePage : SettingsPage
         shell.LoadIcon(profileId, icon => Icon = icon);
     }
 
-    /// <summary>The program's icon from the shell, or null for the letter tile (QA 10.10).</summary>
+    /// <summary>The program's icon from the shell, or null for the letter tile.</summary>
     public System.Windows.Media.ImageSource? Icon
     {
         get => _icon;
@@ -147,7 +138,7 @@ internal sealed class GamePage : SettingsPage
     /// <summary>The game's name, as the breadcrumb shows it.</summary>
     public override string Title => _name;
 
-    /// <summary>The profile id: the program's canonical path (AD-18), shown only on this page.</summary>
+    /// <summary>The profile id: the program's canonical path, shown only on this page.</summary>
     public string ProfileId { get; }
 
     /// <summary>The program's location.</summary>
@@ -156,7 +147,7 @@ internal sealed class GamePage : SettingsPage
     /// <summary>Clip length and Video quality's editor: a game-scoped Clips page, its view never shown.</summary>
     public RewindSettingsPage Output { get; }
 
-    /// <summary>The game's audio tracks: story 10.5's editor, scoped to the game.</summary>
+    /// <summary>The game's audio tracks: the Audio Tracks editor, scoped to the game.</summary>
     public TrackLayoutPage Tracks { get; }
 
     public InheritedSetting Clips { get; }
@@ -190,7 +181,7 @@ internal sealed class GamePage : SettingsPage
     /// <summary>The letter of the generic tile.</summary>
     public string Initial => _name.Length > 0 ? char.ToUpperInvariant(_name[0]).ToString() : "?";
 
-    /// <summary>"Capture this game": <c>ignored</c>, inverted (R25).</summary>
+    /// <summary>"Capture this game": <c>ignored</c>, inverted.</summary>
     public bool Capture
     {
         get => !_ignored;
@@ -232,12 +223,12 @@ internal sealed class GamePage : SettingsPage
 
     public string Source => _isManual ? "Added by hand" : "Detected automatically";
 
-    /// <summary>The game's folder (AD-21: assigned once by the engine), or null before its first save.</summary>
+    /// <summary>The game's folder, assigned once by the engine, or null before its first save.</summary>
     public string? FolderPath => _folder is null || _clipsFolder is null ? null : Path.Combine(_clipsFolder, _folder);
 
     public string FolderText => FolderPath ?? "Made the first time this game saves a Clip or Recording.";
 
-    /// <summary>R26's file name, from the game's current name: "Valorant_2026-11-04_21-03-11.mp4".</summary>
+    /// <summary>An example file name from the game's current name: "Valorant_2026-11-04_21-03-11.mp4".</summary>
     public string FileNameExample => $"{SafeName(_name)}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture)}.mp4";
 
     /// <summary>Whether the game's audio tracks hold an unsaved draft: the row and nav dot.</summary>
@@ -270,7 +261,7 @@ internal sealed class GamePage : SettingsPage
         }
     }
 
-    /// <summary>R26's sanitizer, as the engine's <c>PathNames.Sanitize</c> applies it, for the example only.</summary>
+    /// <summary>The engine's file-name sanitizer, repeated here for the example only.</summary>
     internal static string SafeName(string name)
     {
         var invalid = Path.GetInvalidFileNameChars();
@@ -326,7 +317,7 @@ internal sealed class GamePage : SettingsPage
         AudioTracks.Show(SettingsValues.HasOverride(document, Keys.TrackLayout, ProfileId), string.Join(Environment.NewLine, Tracks.Summary));
     }
 
-    /// <summary>"H.264 · 1920 × 1080 · 60 fps · 20,000 kbps"; "Source" in place of the size under <c>matchSource</c> (story 12.3).</summary>
+    /// <summary>"H.264 · 1920 × 1080 · 60 fps · 20,000 kbps"; "Source" in place of the size under <c>matchSource</c>.</summary>
     internal static string VideoSummary(VideoSettings video) => string.Create(
         CultureInfo.InvariantCulture,
         $"{video.Codec switch { VideoCodec.H264 => "H.264", VideoCodec.Hevc => "HEVC", VideoCodec.Av1 => "AV1", var c => c.ToString() }} · {(video.MatchSource ? "Source" : $"{video.Width} × {video.Height}")} · {video.Fps} fps · {video.BitrateKbps:N0} kbps{(video.RateControl == RateControl.Vbr ? " · variable" : "")}");

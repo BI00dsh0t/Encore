@@ -29,8 +29,7 @@ internal static class ClipThumbnailCache
             var frameImage = decoder.Frames[0];
             if (frameImage.PixelWidth is < 1 or > 160 || frameImage.PixelHeight is < 1 or > 90)
             { throw new IOException("The thumbnail cache image dimensions are invalid."); }
-            // Detach from the thread-affine decoder, not merely its frame wrapper. DrawingGroup may
-            // clone/freeze image drawings later on the UI thread after this decoder thread has left.
+            // Detach from the decoder thread, not just its frame wrapper: the UI thread may clone or freeze the image later.
             var converted = new FormatConvertedBitmap(frameImage, PixelFormats.Pbgra32, null, 0);
             var stride = converted.PixelWidth * 4;
             var pixels = new byte[stride * converted.PixelHeight];

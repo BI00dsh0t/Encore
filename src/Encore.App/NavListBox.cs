@@ -3,10 +3,7 @@ using System.Windows.Controls;
 
 namespace Encore.App;
 
-/// <summary>
-/// The shell's nav list. The Settings section label is shown in the list but isn't one of its items for
-/// UI Automation (EXPERIENCE.md Accessibility), so a screen reader counts only the pages.
-/// </summary>
+/// <summary>The shell's nav list; the Settings label is shown but isn't an item for UI Automation, so screen readers skip it.</summary>
 internal sealed class NavListBox : ListBox
 {
     protected override AutomationPeer OnCreateAutomationPeer() => new NavListBoxAutomationPeer(this);

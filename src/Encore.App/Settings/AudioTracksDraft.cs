@@ -17,17 +17,7 @@ internal sealed class AudioTracksDraftTrack(Guid id, string name, bool muteAffec
     public List<Guid> DeviceKeys { get; } = [.. deviceKeys];
 }
 
-/// <summary>
-/// The Audio Tracks editor's draft (story 10.4, epic 10's EXPERIENCE.md "The new model", AD-24):
-/// Tracks, each listing the sounds it records, over the AD-4 <c>trackLayout</c> shape as it is.
-/// <list type="bullet">
-/// <item>A device is one record across Tracks: adding a source reuses the record of that endpoint
-/// and flow, so "Treat as a microphone" applies on every Track with it.</item>
-/// <item>A recording device added through the picker is a Mic Device; a playback device isn't.</item>
-/// <item><see cref="ToLayout"/> drops a device on no Track; the devices keep their first-use order.</item>
-/// </list>
-/// Not thread-safe: the editor's UI thread owns it.
-/// </summary>
+/// <summary>The Audio Tracks editor's draft: Tracks listing the sounds they record. UI thread only; docs/code-notes.md.</summary>
 internal sealed class AudioTracksDraft
 {
     // Every record the draft has known, in first-use order; ToLayout keeps those on a Track.
@@ -63,11 +53,7 @@ internal sealed class AudioTracksDraft
         return track;
     }
 
-    /// <summary>
-    /// Adds <paramref name="device"/> to <paramref name="track"/>, reusing the draft's record of that
-    /// endpoint and flow, or adding one with a new key (an input as a Mic Device).
-    /// </summary>
-    /// <returns>The record, or <c>null</c> when the Track records it already.</returns>
+    /// <summary>Adds a device to a Track, reusing the draft's record of it; returns the record, or null when already there.</summary>
     public LayoutDevice? AddSource(AudioTracksDraftTrack track, AudioDevice device)
     {
         ArgumentNullException.ThrowIfNull(track);
@@ -106,7 +92,7 @@ internal sealed class AudioTracksDraft
         }
     }
 
-    /// <summary>Replaces the Tracks with <paramref name="preset"/>'s from <paramref name="devices"/>' defaults, keeping Track 1's id.</summary>
+    /// <summary>Replaces the Tracks with a preset's, built from the devices' defaults, keeping Track 1's id.</summary>
     public void ApplyPreset(TrackLayoutPreset preset, IReadOnlyList<AudioDevice> devices)
     {
         var built = TrackLayoutPresets.Build(preset, ToLayout(), devices);

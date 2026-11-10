@@ -115,7 +115,7 @@
                 <StackPanel>
                     <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding MonitorHelp}" />
                     <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding MonitorRows}" />
-                    <!-- Story 11.4: the screens a Monitor Recording composites (design-multi-monitor.md's picker). -->
+                    <!-- The screens a Monitor Recording composites (design-multi-monitor.md's picker). -->
                     <Grid x:Name="ScreenPicker" Margin="0,4,0,0" DataContext="{Binding Monitor}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />

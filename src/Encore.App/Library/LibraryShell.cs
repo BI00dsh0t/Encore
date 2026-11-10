@@ -7,16 +7,13 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Library;
 
-/// <summary>
-/// The shell actions on Library items (stories 7.6 and 10.2), each given absolute paths; the App never
-/// opens the files itself (AD-1). A failure throws. Called on the UI thread.
-/// </summary>
+/// <summary>The shell actions on Library items, given absolute paths; the App never opens the files itself. UI thread.</summary>
 internal interface ILibraryShell
 {
     /// <summary>Opens the file in its default player.</summary>
     void Open(string path);
 
-    /// <summary>Opens <paramref name="folder"/> in one Explorer window with <paramref name="files"/> (absolute paths in it) selected.</summary>
+    /// <summary>Opens a folder in one Explorer window with the given files (absolute paths in it) selected.</summary>
     void ShowInExplorer(string folder, IReadOnlyList<string> files);
 
     /// <summary>Opens <paramref name="folder"/> in Explorer.</summary>
@@ -87,10 +84,7 @@ internal static class LibraryClipboard
 
     private const int DropEffectCopy = 1;
 
-    /// <summary>
-    /// A data object holding exactly <paramref name="absolutePaths"/> as one file drop (CF_HDROP) and
-    /// <c>DROPEFFECT_COPY</c> as the preferred drop effect.
-    /// </summary>
+    /// <summary>A data object holding exactly these paths as one file drop, with copy as the preferred drop effect.</summary>
     public static DataObject Create(IReadOnlyList<string> absolutePaths)
     {
         ArgumentNullException.ThrowIfNull(absolutePaths);

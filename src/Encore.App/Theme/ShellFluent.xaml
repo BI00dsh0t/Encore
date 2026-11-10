@@ -1,8 +1,4 @@
-<!--
-    The shell's styles under Fluent (story 3; DESIGN.md Nav item, Status header, Elevation): the nav pane,
-    its items and section label, the status header's state line and the content layer over Mica. Every
-    colour, corner and type comes from a token key. ShellGamingDark.xaml defines the same keys.
--->
+<!-- The shell's styles under Fluent: the nav pane, its items, the status header and the content layer over Mica. -->
 <ResourceDictionary x:Class="Encore.App.Theme.ShellFluent"
                     x:ClassModifier="internal"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -18,8 +14,7 @@
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
     </Style>
 
-    <!-- The content column's layer: bg-layer over Mica, with a stroke-divider top-left edge and corner
-         (stroke-card is black and vanished against the nav pane in dark mode). -->
+    <!-- The content column's layer: bg-layer over Mica; stroke-card is black and vanished beside the nav pane in dark mode. -->
     <Style x:Key="RbShellContentLayerStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
@@ -86,7 +81,7 @@
                                        VerticalAlignment="Center"
                                        Text="{Binding Title}"
                                        TextTrimming="CharacterEllipsis" />
-                            <!-- Story 10.5: an unsaved draft on the page (6 px, accent; square under Gaming dark). -->
+                            <!-- An unsaved draft on the page (6 px, accent; square under Gaming dark). -->
                             <Border x:Name="UnsavedDot"
                                     Width="6"
                                     Height="6"

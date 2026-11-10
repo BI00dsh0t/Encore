@@ -1,8 +1,4 @@
-<!--
-    What both themes share (DESIGN.md): the spacing constants, which Fluent has no keys for, and the App's
-    own generic styles, which take every colour, corner and type from the token keys, so they restyle
-    with the theme. Merged after Fluent's dictionary and before the theme's own.
--->
+<!-- What both themes share: the spacing constants and the App's own generic styles, built on the token keys. -->
 <ResourceDictionary x:Class="Encore.App.Theme.SharedTheme"
                     x:ClassModifier="internal"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

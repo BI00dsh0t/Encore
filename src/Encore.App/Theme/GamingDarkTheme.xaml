@@ -1,8 +1,4 @@
-<!--
-    Gaming dark (DESIGN.md, AD-23): ThemeMode Dark with this dictionary merged after Fluent's. It redefines
-    Fluent's brush keys with the fixed palette, defines the App's Rb keys, and replaces the templates of
-    every control the App uses, in every state. Started from research/ui-look-render/gaming-theme.xml.
--->
+<!-- Gaming dark: merged after Fluent's dictionary; it redefines Fluent's brush keys and the control templates. -->
 <ResourceDictionary x:Class="Encore.App.Theme.GamingDarkTheme"
                     x:ClassModifier="internal"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -291,8 +287,7 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{DynamicResource ControlCornerRadius}" />
-                        <!-- The padding goes on the host once: its ScrollViewer insets its content by it, so a
-                             margin as well would apply it twice. -->
+                        <!-- The padding goes on the host once: its ScrollViewer insets its content, so a margin too would double it. -->
                         <ScrollViewer x:Name="PART_ContentHost"
                                       Padding="{TemplateBinding Padding}"
                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"

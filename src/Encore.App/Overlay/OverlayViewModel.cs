@@ -14,20 +14,7 @@ internal enum OverlayDot
     Solid,
 }
 
-/// <summary>
-/// The Overlay's state, derived only from <see cref="IEngineSession.State"/> and its status (AD-3, AD-15).
-/// A snapshot read at reconnect is treated as any event: the dot and the saving icon follow it.
-/// The snapshot's <c>overlay: true</c> warnings queue (R3): each shows as <see cref="Message"/> for
-/// <see cref="MessageDuration"/>, oldest first, and an unseen repeat of a waiting one takes its place.
-/// Which warnings were shown is the Overlay's own fact, kept by id, so a reconnect never replays one.
-/// The mic-muted icon shows while the mic is muted and the dot shows, and the red X while a
-/// <c>disk-full</c> Overlay warning is active, whatever the dot (R3).
-/// The dot and the mic-muted icon show always, or only for <see cref="DotOnChangeDuration"/> after each
-/// change of either, as <c>overlayDot</c> says. Its default, <c>auto</c>, shows them always where the Target
-/// Game's monitor reports hardware overlay planes, since 5.8 measured a borderless game kept in independent
-/// flip under a topmost window only with a free plane (the builder's decision, 2026-11-03); 5.12 then
-/// measured <c>always</c> without planes with the game still in independent flip.
-/// </summary>
+/// <summary>The Overlay's state, derived only from the engine's state: the dot, icons and queued messages. docs/code-notes.md.</summary>
 internal sealed class OverlayViewModel : Observable
 {
     private readonly IEngineSession _engine;
@@ -59,19 +46,7 @@ internal sealed class OverlayViewModel : Observable
     private int? _targetProcessId;
     private int _displayChanges;
 
-    /// <param name="post">Runs an action on the UI thread; session changes arrive on background threads.</param>
-    /// <param name="time">
-    /// Times the Save Cooldown's end, each message, the dot's <see cref="DotOnChangeDuration"/> window and
-    /// <see cref="UnknownPlanesRetry"/>; <see cref="TimeProvider.System"/> when null.
-    /// </param>
-    /// <param name="overlayPlanes">
-    /// Whether the monitor of a process (null: the primary) has hardware overlay planes, or null when unknown;
-    /// the App passes <c>Monitors.OverlayPlanes</c>. When null, every monitor is taken to have them.
-    /// </param>
-    /// <param name="background">
-    /// Runs the plane query off the UI thread; its answer comes back through <paramref name="post"/>. The App
-    /// passes the thread pool; when null, the query runs inline (tests).
-    /// </param>
+    /// <summary>Post runs on the UI thread; overlayPlanes and background are null in tests, where every monitor has planes.</summary>
     public OverlayViewModel(
         IEngineSession engine,
         Action<Action> post,
@@ -94,30 +69,21 @@ internal sealed class OverlayViewModel : Observable
         private set => Set(ref _dot, value);
     }
 
-    /// <summary>
-    /// Whether the saving icon shows (R2): a Clip is being written, or the Save Cooldown of the last
-    /// accepted press hasn't ended yet.
-    /// </summary>
+    /// <summary>Whether the saving icon shows: a Clip is being written, or the Save Cooldown hasn't ended yet.</summary>
     public bool Saving
     {
         get => _saving;
         private set => Set(ref _saving, value);
     }
 
-    /// <summary>
-    /// Whether the mic-muted icon shows: the mic is muted while the dot shows. The muted default
-    /// alone never shows it, so nothing shows while nothing runs.
-    /// </summary>
+    /// <summary>Whether the mic-muted icon shows: the mic is muted while the dot shows; muted alone never shows it.</summary>
     public bool MicMuted
     {
         get => _micMuted;
         private set => Set(ref _micMuted, value);
     }
 
-    /// <summary>
-    /// Whether the red X shows: a <c>disk-full</c> Overlay warning is active, until the engine
-    /// dismisses it. It doesn't follow the dot, since a full disk can stop the capture.
-    /// </summary>
+    /// <summary>Whether the red X shows: a <c>disk-full</c> Overlay warning is active; it doesn't follow the dot.</summary>
     public bool DiskFull
     {
         get => _diskFull;
@@ -141,11 +107,11 @@ internal sealed class OverlayViewModel : Observable
         _generation++;
         Refresh();
 
-        // T-03: the window is placed again even when nothing it shows changed.
+        // The window is placed again even when nothing it shows changed.
         DisplayChanges++;
     }
 
-    /// <summary>How many display changes there have been; each one places the window again, on the Target Game's monitor at its DPI.</summary>
+    /// <summary>How many display changes there have been; each one places the window again, on the Target Game's monitor.</summary>
     public int DisplayChanges
     {
         get => _displayChanges;
@@ -169,11 +135,7 @@ internal sealed class OverlayViewModel : Observable
         private set => Set(ref _targetProcessId, value);
     }
 
-    /// <summary>
-    /// The dot the capture state calls for, before <c>overlayDot</c> decides whether it shows: solid while a
-    /// Recording or Monitor Recording runs, hollow while Rewind buffers or drains. The tray icon
-    /// shows the same state in every mode.
-    /// </summary>
+    /// <summary>The dot the capture state calls for: solid while a Recording runs, hollow while Rewind buffers or drains.</summary>
     public static OverlayDot DotFor(CaptureState? capture) =>
         capture is null ? OverlayDot.None
         : capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running ? OverlayDot.Solid
@@ -201,8 +163,7 @@ internal sealed class OverlayViewModel : Observable
         var diskFull = state is not null && state.Warnings.Any(w => w.Overlay && w.Code == ErrorCodes.DiskFull);
         var message = NextMessage(state);
 
-        // The window updates per property: hide before the Target moves, and move before showing,
-        // so the dot, the icons and the message never flash on the wrong monitor.
+        // Hide before the Target moves, and move before showing, so nothing flashes on the wrong monitor.
         if (dot == OverlayDot.None && !saving && message is null && !diskFull)
         {
             Dot = dot;
@@ -239,8 +200,7 @@ internal sealed class OverlayViewModel : Observable
 
         var shown = DotAlways || now < _dotUntil;
 
-        // A timer can fire a little before the clock reaches the end: arm again for what's left, so the dot
-        // never stays up until the next engine change.
+        // A timer can fire a little early: arm again for what's left, so the dot never stays up too long.
         if (!DotAlways && dot != OverlayDot.None && now < _dotUntil && _dotEnd is null)
         {
             _dotEnd = _time.CreateTimer(_ => _post(EndDot), null, _dotUntil - now, Timeout.InfiniteTimeSpan);
@@ -256,9 +216,7 @@ internal sealed class OverlayViewModel : Observable
         Refresh();
     }
 
-    // Asked once per Target Game, and again when the monitors change; an unknown answer is asked again after
-    // UnknownPlanesRetry. The query runs in the background and posts its answer back; until it answers, and
-    // when it can't say, the monitor is taken to have no planes, so the dot shows on change (5.15 QA).
+    // Asked once per Target Game and when the monitors change; until answered, the monitor counts as having no planes.
     private bool? Planes(int? processId)
     {
         var now = _time.GetUtcNow();

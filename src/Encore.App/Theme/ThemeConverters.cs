@@ -4,10 +4,7 @@ using System.Windows.Data;
 
 namespace Encore.App.Theme;
 
-/// <summary>
-/// Uppercases string content inside Gaming dark's templates (DESIGN.md Typography), so view models,
-/// XAML and automation names keep their sentence-case wording. Anything that isn't a string passes through.
-/// </summary>
+/// <summary>Uppercases text inside Gaming dark's templates, so view models and automation names keep sentence case.</summary>
 internal sealed class UppercaseConverter : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>

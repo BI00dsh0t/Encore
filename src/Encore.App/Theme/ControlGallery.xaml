@@ -7,12 +7,7 @@
                  Width="900"
                  Height="700"
                  WindowStartupLocation="CenterScreen">
-    <!--
-        Every generic control of DESIGN.md in every state, for the builder's check in both themes (EXPERIENCE.md).
-        Disabled, checked and selected states are set here; hover, pressed and focus are shown live.
-        The window keeps no resources of its own: a window-scoped ThemeMode (the tests') skips a window
-        whose Resources were set first.
-    -->
+    <!-- Every generic control in every state, for checking both themes; the window keeps no resources of its own. -->
     <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto">
         <StackPanel x:Name="Root" Margin="{DynamicResource RbPagePadding}">
             <ContentControl Content="Control gallery" Style="{DynamicResource RbPageTitleStyle}" />

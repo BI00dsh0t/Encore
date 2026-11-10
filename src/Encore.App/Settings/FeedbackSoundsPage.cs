@@ -10,11 +10,7 @@ namespace Encore.App.Settings;
 /// <summary>A device the Feedback Sounds page offers; a null id is the default communications device.</summary>
 internal sealed record FeedbackDeviceItem(string? EndpointId, string Label);
 
-/// <summary>
-/// The Feedback Sounds page (story 5.11): a switch and a Play button per sound, the sound device, and the
-/// active <c>feedback-device-captured</c> warning. Each edit is one Global op; Play sends
-/// <c>feedback.preview</c>, and the engine plays it (AD-15). Members run on the UI thread.
-/// </summary>
+/// <summary>The Feedback Sounds page: a switch and a Play button per sound, and the sound device. UI thread.</summary>
 internal sealed class FeedbackSoundsPage : SettingsPage
 {
     private const string DefaultDeviceLabel = "Default communications device";

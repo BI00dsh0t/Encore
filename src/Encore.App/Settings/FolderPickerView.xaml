@@ -6,7 +6,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
     </UserControl.Resources>
-    <!-- Story 10.9's folder picker: the path read-only and selectable, its buttons on a row under it. -->
+    <!-- The folder picker: the path read-only and selectable, its buttons on a row under it. -->
     <StackPanel Margin="0,4">
         <TextBox AutomationProperties.Name="Folder"
                  Background="{DynamicResource ControlFillColorDisabledBrush}"

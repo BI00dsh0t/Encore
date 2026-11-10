@@ -9,10 +9,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Status;
 
-/// <summary>
-/// Session status for the Main App. The top card displays only active errors and service failures;
-/// routine capture state and warnings remain in the session without distracting banners.
-/// </summary>
+/// <summary>Session status for the Main App; the top card shows only active errors and service failures.</summary>
 internal sealed class StatusLine(IEngineSession engine) : Observable
 {
     private string _state = "";
@@ -30,10 +27,7 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
         private set => Set(ref _state, value);
     }
 
-    /// <summary>
-    /// "· Alt+F10 saves the last 30 s" while capturing (story 10.6); empty during a Recording, when the
-    /// Save Hotkey isn't set or failed to register, and while not capturing.
-    /// </summary>
+    /// <summary>The save hint shown while capturing; empty during a Recording, without a working Save Hotkey, or when idle.</summary>
     public string Hint
     {
         get => _hint;

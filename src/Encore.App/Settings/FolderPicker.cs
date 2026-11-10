@@ -7,13 +7,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// The folder picker (story 10.9, epic 10's EXPERIENCE.md "Folder picker"): one nullable folder key,
-/// shown read-only with Browse…, Open in Explorer and Use default, the drive's free space, and a danger
-/// line when the last choice was refused. A pick sends the key's Global <c>set</c> at once; Use default
-/// sends <c>remove</c>; a cancelled dialog sends nothing. No path is ever typed. Members run on the UI thread.
-/// The file variant (<see cref="IsFile"/>) opens a file dialog instead and has Browse… only.
-/// </summary>
+/// <summary>The folder picker: one folder setting shown read-only with Browse, Open and Use default. No path is ever typed.</summary>
 internal sealed class FolderPicker : Observable
 {
     private readonly SettingKey<string?> _key;
@@ -23,8 +17,7 @@ internal sealed class FolderPicker : Observable
     private string? _problem;
     private bool _isEnabled = true;
 
-    /// <param name="key">The nullable folder key it sets and removes.</param>
-    /// <param name="send">Sends the ops, as the hosting page's <c>SendAsync</c>; returns a refusal's error code, or null.</param>
+    /// <summary>Send sends the ops through the hosting page and returns a refusal's error code, or null.</summary>
     public FolderPicker(SettingKey<string?> key, Func<IReadOnlyList<SettingsOp>, Task<string?>> send)
     {
         _key = key;
@@ -55,10 +48,7 @@ internal sealed class FolderPicker : Observable
     /// <summary>Why a chosen folder can't be used, in plain words, or null when it can. Checked before anything is sent.</summary>
     public Func<string, string?> Validate { get; set; } = _ => null;
 
-    /// <summary>
-    /// What a chosen path does instead of setting the key, such as Add a game…'s <c>game.add</c> (story 10.10);
-    /// null sets the key. Returns a refusal's error code, or null.
-    /// </summary>
+    /// <summary>What a chosen path does when it should not set the key; null sets the key. Returns a refusal's code, or null.</summary>
     public Func<string, Task<string?>>? Pick { get; init; }
 
     /// <summary>The plain words for an engine refusal's error code, or null to leave it to the page's error bar.</summary>
@@ -170,10 +160,7 @@ internal sealed class FolderPicker : Observable
         RaiseCommands();
     }
 
-    /// <summary>
-    /// A chosen folder: refused with <see cref="Problem"/> (the old path kept) when it isn't a full path or
-    /// <see cref="Validate"/> says why not; otherwise sends the key's <c>set</c>, after <see cref="Confirm"/>.
-    /// </summary>
+    /// <summary>A chosen folder: refused with a problem when it isn't a full path or fails validation; otherwise sent.</summary>
     public void Choose(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
@@ -290,7 +277,7 @@ internal sealed class FolderPicker : Observable
         return dialog.ShowDialog(owner) == true ? dialog.FolderName : null;
     }
 
-    /// <summary>Whether Encore can write to a folder: a missing one is created later, so it counts if its nearest existing parent is writable.</summary>
+    /// <summary>Whether Encore can write to a folder; a missing one counts when its nearest existing parent is writable.</summary>
     internal static bool CanWrite(string folder)
     {
         try

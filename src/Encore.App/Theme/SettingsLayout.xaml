@@ -1,9 +1,4 @@
-<!--
-    The settings pages' shared layout (story 5; EXPERIENCE.md Settings section, Settings row, Page error
-    message): the content column, a section (header above a card), the label column, help and status
-    text, and the page error info bar. Theme-neutral: every colour, corner and type comes from a token or
-    theme key through DynamicResource, so the same dictionary serves both themes. ThemeService places it.
--->
+<!-- The settings pages' shared layout: content column, sections, labels and the error bar. Serves both themes. -->
 <ResourceDictionary x:Class="Encore.App.Theme.SettingsLayout"
                     x:ClassModifier="internal"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

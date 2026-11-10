@@ -8,11 +8,7 @@ using System.Windows.Threading;
 
 namespace Encore.App.Library;
 
-/// <summary>
-/// The Library's view (story 10.2's input routing): the list's own selection is never used. A click, a
-/// right-click and the keys go to the page's selection methods, and the view only scrolls the focused row
-/// into view and puts keyboard focus on its container.
-/// </summary>
+/// <summary>The Library's view: the list's own selection is unused; clicks and keys go to the page's selection methods.</summary>
 internal partial class LibraryView
 {
     public LibraryView()
@@ -36,12 +32,10 @@ internal partial class LibraryView
 
     private LibraryPage? Page => DataContext as LibraryPage;
 
-    // The list is hidden while the player page shows (story 14.2): its keys and clicks must not reach the
-    // hidden selection, where Delete would delete the file being played.
+    // The list is hidden while the player page shows, so Delete can't reach the file being played.
     private LibraryPage? ListPage => Page is { DrillIn.IsOpen: false } page ? page : null;
 
-    // Ctrl+F, anywhere on the page: focus the search box with its text selected (story 10.3). A rename box
-    // keeps every key, so an open rename isn't committed by the focus moving away.
+    // Ctrl+F focuses the search box; an open rename box keeps every key, so the focus move doesn't commit it.
     private void OnViewPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (ListPage is not null
@@ -99,8 +93,7 @@ internal partial class LibraryView
         }
     }
 
-    // The editor's keys stay in it: the list's own navigation never sees them. Only keys that make no text,
-    // since a handled key down makes no text input.
+    // The editor's keys stay in it, so the list's navigation never sees them.
     private void OnRenameKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown or Key.Home or Key.End)
@@ -109,8 +102,7 @@ internal partial class LibraryView
         }
     }
 
-    // A click on a row selects (Explorer's rules) or, double, opens; the star and the rename box keep theirs.
-    // A click on a header does nothing, and one on the empty space clears the selection.
+    // A click on a row selects or, double, opens; a header does nothing, and empty space clears the selection.
     private void OnListPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (ListPage is not { } page || e.OriginalSource is not DependencyObject source || Within<ScrollBar>(source, List))
@@ -146,8 +138,7 @@ internal partial class LibraryView
         container.Focus();
     }
 
-    // Explorer's rule: a right-click outside the selection selects only that row first.
-    // A right-click in the rename box is the box's own (its Cut, Copy and Paste menu), and leaves the edit open.
+    // Explorer's rule: a right-click outside the selection selects only that row; the rename box keeps its own menu.
     private void OnListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (ListPage is { } page
@@ -253,8 +244,7 @@ internal partial class LibraryView
         e.Handled = true;
     }
 
-    // Focus coming into the list from outside (Tab) onto the list or a container lands on the focused row,
-    // else the first. Focus on an element inside a row (the star, the rename box) is left where it is.
+    // Focus tabbing into the list lands on the focused row, else the first; focus inside a row is left alone.
     private void OnListGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         if (Page is not { } page

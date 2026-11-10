@@ -3,10 +3,7 @@ using System.Windows.Input;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// A game's page (story 10.10). View-only code: the inline rename, where F2 focuses the name, Enter or
-/// leaving commits, and Esc cancels (and is handled, so it doesn't also close the page).
-/// </summary>
+/// <summary>A game's page, view-only code: F2 focuses the name, Enter or leaving commits, and Esc cancels the rename.</summary>
 internal partial class GamePageView
 {
     public GamePageView()

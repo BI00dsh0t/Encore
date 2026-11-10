@@ -12,22 +12,10 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Theme;
 
-/// <summary>
-/// Applies <c>appTheme</c> (AD-23). Fluent is WPF's <c>ThemeMode = System</c>, which follows the Windows
-/// mode and accent live; Gaming dark is <c>ThemeMode = Dark</c> with <see cref="GamingDarkTheme"/> merged
-/// after Fluent's dictionary. A switch swaps the merged dictionary in place, on the UI thread, so every
-/// window, popup and menu taking its resources from the host restyles with nothing recreated. It also
-/// sets each window's frame: Mica behind the Main App under Fluent, the Gaming caption colours otherwise.
-/// </summary>
+/// <summary>Applies <c>appTheme</c>: swaps the merged dictionary in place on the UI thread, and sets each window's frame.</summary>
 internal sealed class ThemeService
 {
-    /// <summary>
-    /// WPF's Fluent theme puts Mica behind every window by itself. The App wants it on the Main App only
-    /// (DESIGN.md), and never under Gaming dark, so this switch turns that off and <see cref="Decorate"/> sets
-    /// the backdrop itself. WPF caches the switch the first time any window shows, so the App's (and the
-    /// test host's) runtimeconfig sets it from process start; setting it here would come too late whenever
-    /// a window showed first.
-    /// </summary>
+    /// <summary>Turns off Fluent's automatic Mica on every window; it must be set in runtimeconfig. See docs/code-notes.md.</summary>
     public const string DisableFluentBackdropSwitch = "Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop";
 
     private readonly ResourceDictionary _resources;
@@ -39,10 +27,7 @@ internal sealed class ThemeService
     // Each window with Mica on, and the composition background it had before.
     private readonly ConditionalWeakTable<Window, object> _mica = [];
 
-    /// <summary>
-    /// Fluent's built-in TextBox, ListBoxItem, ListViewItem and TabItem keep full-contrast text when disabled, so the
-    /// App layers a disabled foreground over Fluent's own style for each (R4).
-    /// </summary>
+    /// <summary>Fluent keeps full-contrast text on these controls when disabled, so the App layers a disabled colour on each.</summary>
     private static readonly Type[] FluentDimsWhenDisabled = [typeof(TextBox), typeof(ListBoxItem), typeof(ListViewItem), typeof(TabItem)];
 
     private ThemeService(ResourceDictionary resources, Action<AppTheme> setThemeMode, Func<IEnumerable<Window>> windows)
@@ -52,10 +37,7 @@ internal sealed class ThemeService
         _windows = windows;
     }
 
-    /// <summary>
-    /// Every token key of DESIGN.md (Colors, Shapes and Typography), which both themes resolve: Fluent
-    /// through its own keys plus <see cref="FluentTheme"/>, Gaming dark through <see cref="GamingDarkTheme"/>.
-    /// </summary>
+    /// <summary>Every token key of the design system, which both themes resolve.</summary>
     public static IReadOnlyList<string> TokenKeys { get; } =
     [
         "SolidBackgroundFillColorBaseBrush", "LayerFillColorDefaultBrush", "CardBackgroundFillColorDefaultBrush",
@@ -149,11 +131,7 @@ internal sealed class ThemeService
         return true;
     }
 
-    /// <summary>
-    /// Follows the engine's committed <c>appTheme</c>: the snapshot's, then each <c>settings.changed</c>'s,
-    /// applied through <paramref name="post"/> on the UI thread. A refused update never changes it.
-    /// </summary>
-    /// <param name="applied">Called with each theme newly applied.</param>
+    /// <summary>Follows the engine's committed <c>appTheme</c>, applied on the UI thread; a refused update never changes it.</summary>
     public void Follow(IEngineSession engine, Action<Action> post, Action<AppTheme>? applied = null)
     {
         engine.Changed += () => post(() =>
@@ -165,11 +143,7 @@ internal sealed class ThemeService
         });
     }
 
-    /// <summary>
-    /// Sets the window's frame for the theme in use: Mica behind the Main App under Fluent where Windows
-    /// supports it, and under Gaming dark the title bar in <c>bg-base</c> and <c>text-primary</c>.
-    /// Transparent windows (the Overlay) are left alone. A window with no handle yet is set when it gets one.
-    /// </summary>
+    /// <summary>Sets the window's frame for the theme: Mica under Fluent, the title bar colours under Gaming dark.</summary>
     public void Decorate(Window window)
     {
         if (Theme is not { } theme || window.AllowsTransparency || new WindowInteropHelper(window).Handle is var hwnd && hwnd == 0)
@@ -231,12 +205,7 @@ internal sealed class ThemeService
         }
     }
 
-    /// <summary>
-    /// Adds one <typeparamref name="T"/> to <paramref name="merged"/> unless it has one. The area dictionaries
-    /// (settings layout, Library) serve both themes: their keys are their own and they name the theme's only
-    /// through DynamicResource, so where they sit doesn't matter. Each goes before the last entry so the
-    /// theme's dictionary stays last.
-    /// </summary>
+    /// <summary>Adds one dictionary of a type unless it is there, before the last entry so the theme's dictionary stays last.</summary>
     private static void AddOnce<T>(IList<ResourceDictionary> merged)
         where T : ResourceDictionary, new()
     {

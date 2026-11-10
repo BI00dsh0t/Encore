@@ -14,24 +14,7 @@ internal enum PlayerState
     Failed,
 }
 
-/// <summary>
-/// One Library item's player page (AD-27, stories 14.2 and 14.5).
-/// <list type="bullet">
-/// <item>It opens the file read-only, shared for read, write and delete, and hands the stream to the player.
-/// It opens paused on the first frame with the first Track (Windows would pick the last).</item>
-/// <item>The transport: play and pause, a seek bar over the file's length with the elapsed and total time,
-/// keys that seek 5 s and change the volume 5 %, and one volume with mute, kept by the Library.</item>
-/// <item>A file with no known length (a crash-cut Recording) shows the elapsed time only, and can't be sought.</item>
-/// <item>The Track list (story 14.4): the file's Tracks by name, in file order, one playing at a time, the
-/// first at open. Choosing another switches mid-play, with no restart and no jump in position.</item>
-/// <item>At the end it stops on the last frame, and Play starts again from the beginning.</item>
-/// <item>When Windows can't play the file (story 14.6) it says so in plain words: the missing HEVC or AV1
-/// Video Extension by name, with its Microsoft Store page; a file it can't open or that shows no picture;
-/// and "Open in default player" either way. A Track Windows can't decode shows as unavailable.</item>
-/// <item>Disposing it stops the player and releases the file.</item>
-/// </list>
-/// Created and used on the UI thread; the player's own events are brought back to it.
-/// </summary>
+/// <summary>One Library item's player page: opens the file shared, plays one Track at a time. UI thread; docs/code-notes.md.</summary>
 internal sealed class PlayerPage : Observable, IDisposable
 {
     /// <summary>The plain line when the file can't be opened, or shows no picture.</summary>
@@ -65,13 +48,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     private CodecExtension? _missing;
     private bool _isFullScreen;
 
-    /// <param name="path">The file's absolute path.</param>
-    /// <param name="title">The row's name, shown in the breadcrumb.</param>
-    /// <param name="player">The player; the page owns and disposes it.</param>
-    /// <param name="openRead">Opens the file; read-only and shared for read, write and delete without it (AD-27).</param>
-    /// <param name="openInDefaultPlayer">Hands the path to the shell's default player, offered when this page can't play it.</param>
-    /// <param name="openLink">Opens a Microsoft Store page through the shell (story 14.6).</param>
-    /// <param name="log">Writes a line to the App's log: what was opened, its codec and why it can't play.</param>
+    /// <summary>The page owns and disposes the player; the other optional arguments replace shell calls for tests.</summary>
     public PlayerPage(string path, string title, IPlayer player, Func<string, Stream>? openRead = null, Action<string>? openInDefaultPlayer = null, Action<string>? openLink = null, Action<string>? log = null, bool embedded = false)
     {
         Path = path ?? throw new ArgumentNullException(nameof(path));
@@ -98,7 +75,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         Player.Ended += OnEnded;
     }
 
-    /// <summary>The volume or mute changed: the Library keeps them (story 14.5).</summary>
+    /// <summary>The volume or mute changed: the Library keeps them.</summary>
     public event Action<double, bool>? VolumeChanged;
 
     /// <summary>The file's absolute path.</summary>
@@ -173,13 +150,10 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>The play button's name: "Play" or "Pause".</summary>
     public string PlayPauseLabel => IsPlaying ? "Pause" : "Play";
 
-    /// <summary>The play button's glyph (Segoe Fluent Icons): Play, or Pause while playing (story 14.9).</summary>
+    /// <summary>The play button's glyph (Segoe Fluent Icons): Play, or Pause while playing.</summary>
     public string PlayPauseGlyph => IsPlaying ? "\uE769" : "\uE768";
 
-    /// <summary>
-    /// Whether the player page fills the screen, the bar over the video (story 14.9). The button or F toggles it,
-    /// Esc leaves it (the shell's), and closing the page leaves it.
-    /// </summary>
+    /// <summary>Whether the player page fills the screen; the button or F toggles it, and Esc or closing the page leaves it.</summary>
     public bool IsFullScreen
     {
         get => _isFullScreen;
@@ -210,7 +184,6 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>The Store link's text when an extension is missing: "Get the HEVC Video Extension"; null otherwise.</summary>
     public string? StoreLinkText => SupportsExternalActions && IsFailed && _missing is { } extension ? $"Get the {extension.Name}" : null;
 
-    /// <summary>Whether the Store link shows.</summary>
     public bool HasStoreLink => StoreLinkText is not null;
 
     /// <summary>Whether the file's length is known; a crash-cut Recording's isn't.</summary>
@@ -233,10 +206,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         }
     }
 
-    /// <summary>
-    /// The seek bar's value. Set by a click, it seeks there; set while <see cref="IsScrubbing"/>, it waits for
-    /// <see cref="ApplyPendingScrub"/>, so a drag seeks about once a rendered frame rather than once a pixel.
-    /// </summary>
+    /// <summary>The seek bar's value: a click seeks there; during a drag it waits, so a drag seeks about once per frame.</summary>
     public double PositionSeconds
     {
         get => Position.TotalSeconds;
@@ -276,15 +246,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         }
     }
 
-    /// <summary>
-    /// The volume, 0 to 1, as the slider shows it, rounded to 2 dp so steps don't drift.
-    /// <list type="bullet">
-    /// <item>A set always raises PropertyChanged, so a slider at 0.333 snaps to the 0.33 kept (QA 14.7).</item>
-    /// <item>Any request while muted unmutes, by the slider or the keys, even one that leaves the value as it is
-    /// (Up at 1.0, Down at 0).</item>
-    /// <item><see cref="VolumeChanged"/> is raised once, when the volume or the mute changed.</item>
-    /// </list>
-    /// </summary>
+    /// <summary>The volume, 0 to 1, rounded to two places; any request while muted unmutes. See docs/code-notes.md.</summary>
     public double Volume
     {
         get => _volume;
@@ -337,16 +299,13 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>The mute button's name for screen readers.</summary>
     public string MuteName => IsMuted ? "Unmute" : "Mute";
 
-    /// <summary>The file's Tracks, in file order (story 14.4).</summary>
+    /// <summary>The file's Tracks, in file order.</summary>
     public ObservableCollection<PlayerTrack> Tracks { get; } = [];
 
     /// <summary>Whether the Track list shows: an open, playable file with at least one Track.</summary>
     public bool HasTracks => HasControls && Tracks.Count > 0;
 
-    /// <summary>
-    /// The Track that plays. Choosing another switches to it mid-play (AD-27: one at a time); the position
-    /// doesn't change, and Windows leaves a gap of about 0.1 s.
-    /// </summary>
+    /// <summary>The Track that plays; choosing another switches mid-play without moving the position.</summary>
     public PlayerTrack? SelectedTrack
     {
         get => _selectedTrack;
@@ -403,7 +362,7 @@ internal sealed class PlayerPage : Observable, IDisposable
                 + $"{media.TrackNames.Count} tracks, {media.TracksPlayable?.Count(p => !p) ?? 0} not decodable");
             if (!media.VideoDecodable)
             {
-                // Windows can't decode the picture: say which extension is missing, never a black page (14.6).
+                // Windows can't decode the picture: say which extension is missing, never a black page.
                 Media = media;
                 Fail(CodecExtension.For(media.VideoCodec) is { } extension
                     ? (Missing(extension), extension)
@@ -443,7 +402,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         }
     }
 
-    /// <summary>Moves to <paramref name="target"/>, clamped to the file; the paused picture follows. A no-op with no known length.</summary>
+    /// <summary>Moves to a position, clamped to the file; the paused picture follows. A no-op with no known length.</summary>
     public void SeekTo(TimeSpan target)
     {
         if (!CanSeek || IsClosed)
@@ -463,7 +422,7 @@ internal sealed class PlayerPage : Observable, IDisposable
     /// <summary>Up and Down: <see cref="VolumeStep"/> up or down; while muted it unmutes, even at the end of the range.</summary>
     public void ChangeVolume(double delta) => Volume += delta;
 
-    /// <summary>Seeks to the drag's latest position, if it moved since the last; the view calls it once a rendered frame while dragging.</summary>
+    /// <summary>Seeks to the drag's latest position, if it moved; the view calls it once a rendered frame while dragging.</summary>
     public void ApplyPendingScrub()
     {
         if (_pendingScrub is { } target)
@@ -515,7 +474,7 @@ internal sealed class PlayerPage : Observable, IDisposable
             return;
         }
 
-        // Leaving the page leaves full screen (story 14.9).
+        // Leaving the page leaves full screen.
         IsFullScreen = false;
         IsClosed = true;
         PlaybackLoop = null;
@@ -525,7 +484,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         _stream = null;
     }
 
-    // The plain words for a missing extension (story 14.6, epic 10's glossary).
+    // The plain words for a missing extension.
     private static string Missing(CodecExtension extension) =>
         $"This video is {extension.Codec}, which Windows can't play without the {extension.Name}. "
         + "Get it from the Microsoft Store, then open the file again. The file itself is fine.";
@@ -560,7 +519,7 @@ internal sealed class PlayerPage : Observable, IDisposable
             : $"{(int)whole.TotalMinutes}:{whole.Seconds:00}";
     }
 
-    // Read-only, shared for read, write and delete, so the engine's rename, delete and Cleanup never fail on it (AD-27).
+    // Read-only, shared for read, write and delete, so the engine's rename, delete and Cleanup never fail on it.
     private static FileStream OpenShared(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 

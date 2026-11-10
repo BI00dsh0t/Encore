@@ -12,32 +12,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Library;
 
-/// <summary>
-/// The Library page (story 7.1): the snapshot's Library items, newest first, each with its name, game,
-/// date and size, and an item still being written shown locked. It only reads the snapshot (AD-1).
-/// While Cleanup is blocked by a rebuilt index (story 7.2) a banner says so, and Acknowledge dismisses
-/// the <c>library-corrupt</c> warning. Each row shows its length and the shell's thumbnail (story 7.3),
-/// asked by absolute path once the item is written, never while it is. Each row's star (story 7.4)
-/// sends <c>library.setFavourite</c> and changes only when the snapshot does. The list is grouped by
-/// game or by day and filtered by game, date and Favourite (story 7.5), a choice remembered per
-/// instance. Rows rename inline through the engine by the row's identity (story 7.7), disabled while
-/// locked; a refusal shows its short message.
-/// <para>
-/// Story 10.3 sorts the rows within each group (or in one flat list under Group by None) and searches
-/// them by file name, on top of the filters; the sort is remembered with the view choices, the search
-/// isn't. Both only change what is shown, so the selection keeps a searched-out item.
-/// </para>
-/// <para>
-/// Story 10.2 makes the list selectable with Explorer's rules. The selection is this page's set of item
-/// paths, with an anchor and a focused path, never the list control's: a filter hides selected items but
-/// keeps them, a snapshot drops the ones that left the Library, and the App's own rename carries them to
-/// the new path. Every action acts on the shown selected rows, in shown order, through today's per-item
-/// engine commands sent one at a time (AD-3, AD-24): Favourite, Delete (one confirmation, Favourites and
-/// files being written left out), Rename; or through the shell by absolute path after checking only that
-/// each file exists (AD-1): Open, Copy (one file drop), Copy to folder and Show in Explorer.
-/// </para>
-/// Members run on the UI thread.
-/// </summary>
+/// <summary>The Library page: the snapshot's items with selection, filters, sort and actions. UI thread; docs/code-notes.md.</summary>
 internal sealed class LibraryPage : Observable
 {
     /// <summary>Core's <c>ProfileFolders.MonitorRecordings</c>; the App doesn't reference Core.</summary>
@@ -100,15 +75,7 @@ internal sealed class LibraryPage : Observable
     private string? _actionError;
     private string? _actionErrorPath;
 
-    /// <param name="thumbnails">Where the rows' thumbnails come from; without it, every row shows the generic glyph.</param>
-    /// <param name="viewStateFile">Where the view choices are remembered; without it, they last only this run.</param>
-    /// <param name="time">The clock the date filter and day headers read "today" from.</param>
-    /// <param name="shell">The actions' shell; the Windows shell without it.</param>
-    /// <param name="confirmDelete">Asks the delete's whole question, true for Yes; a themed Yes/No prompt over the view's window without it.</param>
-    /// <param name="pickFolder">Picks the folder Copy to folder copies into, null on a cancel; the Windows folder dialog without it.</param>
-    /// <param name="player">Makes the in-app player; Windows' own media player without it (AD-27).</param>
-    /// <param name="openRead">Opens a file for the player; read-only and shared for read, write and delete without it (AD-27).</param>
-    /// <param name="log">Writes a line to the App's log; the player page logs what it opened and why it can't play (story 14.6).</param>
+    /// <summary>Each optional argument replaces a real dependency (thumbnails, shell, prompts, player) for tests.</summary>
     public LibraryPage(
         IEngineSession engine,
         LibraryThumbnails? thumbnails = null,
@@ -126,7 +93,7 @@ internal sealed class LibraryPage : Observable
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         PropertyChanged += (_, e) =>
         {
-            // The welcome card follows the filters and search (story 10.6).
+            // The welcome card follows the filters and search.
             if (e.PropertyName is nameof(GameFilter) or nameof(DateFilter) or nameof(FavouritesOnly) or nameof(SearchText))
             {
                 OnPropertyChanged(nameof(ShowsWelcome));
@@ -194,7 +161,7 @@ internal sealed class LibraryPage : Observable
     /// <summary>Whether any selected item is shown; the actions act only on those.</summary>
     public bool HasShownSelection => _shownSelected.Count > 0;
 
-    /// <summary>"{n} selected", every selected item still in the Library; "Deleting {k} of {n}…" while a delete of more than ten runs.</summary>
+    /// <summary>"{n} selected" for the selected items still in the Library; "Deleting {k} of {n}…" during a large delete.</summary>
     public string SelectionText => _deleting && _deleteTotal > ProgressFrom
         ? string.Create(CultureInfo.InvariantCulture, $"Deleting {_deleteDone} of {_deleteTotal}…")
         : string.Create(CultureInfo.InvariantCulture, $"{_selected.Count} selected");
@@ -230,15 +197,15 @@ internal sealed class LibraryPage : Observable
     /// <summary>The focused row, when it is shown.</summary>
     public LibraryRow? FocusedRow => _focus is not null && _shownIndex.TryGetValue(_focus, out var i) ? _shownRows[i] : null;
 
-    /// <summary>"Open in default player": hands the one shown selected item to the shell's default player, even while it is being written.</summary>
+    /// <summary>"Open in default player": hands the one selected item to the shell's default player, even while being written.</summary>
     public ICommand OpenCommand { get; }
 
-    /// <summary>"Play": plays the one shown selected item on the in-app player page, once it's written (AD-27).</summary>
+    /// <summary>"Play": plays the one shown selected item on the in-app player page, once it's written.</summary>
     public ICommand PlayCommand { get; }
     public ICommand CreateClipCommand { get; }
     public ClipCreatorPage? Creator { get => _creator; private set => Set(ref _creator, value); }
 
-    /// <summary>The in-app player's drill-in (story 14.2): the Library's item page, with 10.10's breadcrumb, keys and close.</summary>
+    /// <summary>The in-app player's drill-in: the Library's item page, with the breadcrumb, keys and close.</summary>
     public DrillIn DrillIn { get; }
 
     /// <summary>The open player page, or null on the list.</summary>
@@ -263,7 +230,7 @@ internal sealed class LibraryPage : Observable
     /// <summary>Starts the inline rename of the one shown selected item; disabled while it is being written.</summary>
     public ICommand RenameCommand { get; }
 
-    /// <summary>Moves the shown selected items that aren't Favourites or being written to the Recycle Bin, after one confirmation.</summary>
+    /// <summary>Moves the selected items that aren't Favourites or being written to the Recycle Bin, after one confirmation.</summary>
     public ICommand DeleteCommand { get; }
 
     public ICommand ClearSelectionCommand { get; }
@@ -353,10 +320,7 @@ internal sealed class LibraryPage : Observable
         set => SetView(ref _sort, value);
     }
 
-    /// <summary>
-    /// The search: rows whose file name contains it, ignoring case, on top of the other filters. Never
-    /// remembered; the view's binding delays it so it applies at most every 150 ms while typing.
-    /// </summary>
+    /// <summary>The search: rows whose file name contains it, ignoring case, on top of the other filters. Never remembered.</summary>
     public string SearchText
     {
         get => _searchText;
@@ -373,7 +337,7 @@ internal sealed class LibraryPage : Observable
 
     public bool IsSearching => SearchText.Trim().Length > 0;
 
-    /// <summary>The empty Library's welcome card (story 10.6).</summary>
+    /// <summary>The empty Library's welcome card.</summary>
     public LibraryWelcome Welcome { get; } = new();
 
     /// <summary>Whether the welcome card shows: the Library holds nothing, with no filter or search.</summary>
@@ -383,7 +347,7 @@ internal sealed class LibraryPage : Observable
     /// <summary>The list area's message when a search matches nothing; null otherwise.</summary>
     public string? NoResultsText => IsSearching && _hasSnapshot && _shownRows.Count == 0 ? $"No items match “{SearchText.Trim()}”." : null;
 
-    /// <summary>Clears the search. (The view clears its box directly, so Esc and its clear button work within the binding delay.)</summary>
+    /// <summary>Clears the search; the view clears its box directly, so Esc works within the binding delay.</summary>
     public ICommand ClearSearchCommand => _clearSearchCommand ??= new RelayCommand(() => SearchText = "", () => SearchText.Length > 0);
 
     public FrameworkElement View => _view ??= new LibraryView { DataContext = this };
@@ -474,8 +438,7 @@ internal sealed class LibraryPage : Observable
         }
     }
 
-    // A pending rename whose new path has arrived, and whose old one has gone, moves the selection,
-    // anchor and focus there; one whose old path has gone otherwise is dropped.
+    // A pending rename whose new path has arrived moves the selection, anchor and focus there.
     private void CarryRenames()
     {
         foreach (var (from, to) in _renames.ToList())
@@ -531,11 +494,7 @@ internal sealed class LibraryPage : Observable
 
     private static bool Same(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The item's game: its group key and the name its header shows.</summary>
-    /// <remarks>
-    /// Its profile's live name; else the profile whose folder is the item's top-level folder (scanned
-    /// files carry no profile id); else that folder's name; else "Other" at the Output Folder's root.
-    /// </remarks>
+    /// <summary>The item's game, as group key and header name: its profile's name, else its top-level folder's, else "Other".</summary>
     private static (string Key, string Name) GameKeyOf(LibraryItem item, SettingsDocument settings)
     {
         if (item.ProfileId is { } id && settings.Profiles.TryGetValue(id, out var profile))
@@ -716,15 +675,10 @@ internal sealed class LibraryPage : Observable
     private void SaveView() =>
         new LibraryViewState(_groupBy, _gameFilter, _dateFilter, _favouritesOnly, _sort, _playerVolume, _playerMuted).Save(_viewStateFile);
 
-    // The player's volume and mute (story 14.5), held as they change and written with the view choices when
-    // the player page closes, not once a slider step (14.7 sweep).
+    // The player's volume and mute, held as they change and written when the player page closes.
     private void OnPlayerVolumeChanged(double volume, bool muted) => (_playerVolume, _playerMuted) = (volume, muted);
 
-    /// <summary>Makes <paramref name="target"/> equal <paramref name="wanted"/> in place, keeping the items both share.</summary>
-    /// <remarks>
-    /// Linear: the unwanted are dropped, and when what is left is still in the wanted order (a snapshot
-    /// or a filter change) the new items are merged in; a reorder (a grouping change) resets the list.
-    /// </remarks>
+    /// <summary>Makes the target list equal the wanted one in place, keeping shared items; a reorder resets the list.</summary>
     private static void Sync<T>(ObservableCollection<T> target, IReadOnlyList<T> wanted)
         where T : class
     {
@@ -814,11 +768,7 @@ internal sealed class LibraryPage : Observable
         }
     }
 
-    /// <summary>
-    /// A click on a shown row: plain selects only it; Ctrl toggles it; Shift selects the range from the
-    /// anchor to it in shown order, headers skipped; Ctrl+Shift adds that range. Plain and Ctrl make it the
-    /// anchor; every click makes it the focus. With no shown anchor, the row is the anchor.
-    /// </summary>
+    /// <summary>A click on a row, by Explorer's rules: plain selects it, Ctrl toggles it, Shift selects from the anchor.</summary>
     public void Click(LibraryRow row, bool ctrl, bool shift)
     {
         ArgumentNullException.ThrowIfNull(row);
@@ -851,10 +801,7 @@ internal sealed class LibraryPage : Observable
         RefreshSelection();
     }
 
-    /// <summary>
-    /// The arrows, Page Up/Down, Home and End: plain selects only the target; Shift selects the range from
-    /// the anchor; Ctrl moves only the focus. Clamped to the shown rows; <paramref name="pageRows"/> is a page.
-    /// </summary>
+    /// <summary>The arrow and paging keys: plain selects the target, Shift selects from the anchor, Ctrl moves only the focus.</summary>
     public void MoveFocus(LibraryMove move, int pageRows, bool ctrl, bool shift)
     {
         if (_shownRows.Count == 0)
@@ -934,10 +881,7 @@ internal sealed class LibraryPage : Observable
         RefreshSelection();
     }
 
-    /// <summary>
-    /// Before the context menu opens on <paramref name="row"/>: a row outside the selection becomes the only
-    /// one selected; a row in it becomes the focus, the selection unchanged.
-    /// </summary>
+    /// <summary>Before the context menu opens: a row outside the selection becomes the only one selected.</summary>
     public void PrepareContextMenu(LibraryRow? row)
     {
         if (row is null)
@@ -956,7 +900,7 @@ internal sealed class LibraryPage : Observable
         }
     }
 
-    /// <summary>Enter or a double-click: plays the focused row in the app; a row still being written does nothing (AD-27).</summary>
+    /// <summary>Enter or a double-click: plays the focused row in the app; a row still being written does nothing.</summary>
     public void OpenFocused()
     {
         if (!_deleting && FocusedRow is { IsLocked: false } row)
@@ -1006,8 +950,7 @@ internal sealed class LibraryPage : Observable
     private string? Absolute(LibraryRow row) =>
         string.IsNullOrEmpty(_libraryFolder) ? null : System.IO.Path.Combine(_libraryFolder, row.Path);
 
-    // The rows' absolute paths whose files still exist, in order; when none does, the error and null.
-    // Only existence is checked, never the contents (AD-1).
+    // The rows' absolute paths whose files still exist; only existence is checked, never the contents.
     private List<string>? Existing(IReadOnlyList<LibraryRow> rows)
     {
         var paths = rows.Select(Absolute).OfType<string>().Where(System.IO.File.Exists).ToList();
@@ -1207,7 +1150,7 @@ internal sealed class LibraryPage : Observable
         ActionError = null;
     }
 
-    // The row's identity as last shown (AD-3); the star follows the snapshot, never this send.
+    // The row's identity as last shown; the star follows the snapshot, never this send.
     private async Task SetFavouriteAsync(LibraryRow row)
     {
         if (row.Item is not { } item)
@@ -1248,8 +1191,7 @@ internal sealed class LibraryPage : Observable
         return name.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
     }
 
-    // The engine renames by the identity last shown (AD-3); the row follows the snapshot, and the
-    // selection follows it to the new path once the snapshot shows it.
+    // The engine renames by the identity last shown; the row and the selection follow the snapshot to the new path.
     private async Task RenameAsync(LibraryRow row, string text)
     {
         if (row.Item is not { } item)
@@ -1271,11 +1213,7 @@ internal sealed class LibraryPage : Observable
         }
     }
 
-    /// <summary>
-    /// Delete, the key or the command: one confirmation for the shown selected items that aren't Favourites
-    /// or being written, naming the ones kept, then one <c>library.delete</c> each. With nothing deletable,
-    /// nothing is asked or sent and the error says why.
-    /// </summary>
+    /// <summary>Delete: one confirmation for the selected items that aren't Favourites or being written, then one delete each.</summary>
     public void DeleteSelection()
     {
         if (_deleting || _shownSelected.Count == 0)
@@ -1321,7 +1259,7 @@ internal sealed class LibraryPage : Observable
             : $"{question}\n{string.Join(" and ", kept)} {(favourites + saving == 1 ? "is" : "are")} kept.";
     }
 
-    // One send at a time in shown order, by the identity as shown (AD-3); the rows leave as the snapshot says.
+    // One send at a time in shown order, by the identity as shown; the rows leave as the snapshot says.
     private async Task DeleteAsync(List<LibraryItem> items)
     {
         _deleting = true;
@@ -1444,9 +1382,7 @@ internal sealed class LibraryPage : Observable
     }
 }
 
-/// <summary>One Library item as the page shows it.</summary>
-/// <param name="setFavourite">Sends the row's Favourite toggle; the star command's action.</param>
-/// <param name="rename">Sends the row's rename with the edited text; the commit's action.</param>
+/// <summary>One Library item as the page shows it; setFavourite and rename send the row's commands.</summary>
 internal sealed class LibraryRow(
     string path,
     Action<LibraryRow>? setFavourite = null,
@@ -1472,7 +1408,6 @@ internal sealed class LibraryRow(
     /// <summary>The item's key: its path relative to the Output Folder.</summary>
     public string Path { get; } = path;
 
-    /// <summary>The file's name.</summary>
     public string Name { get; } = System.IO.Path.GetFileName(path);
 
     /// <summary>True: a row, which the list can select and focus, unlike a group header.</summary>
@@ -1612,7 +1547,7 @@ internal sealed class LibraryRow(
     /// <summary>Ends the edit, sending nothing.</summary>
     public ICommand CancelRenameCommand => _cancelRenameCommand ??= new RelayCommand(() => IsRenaming = false);
 
-    /// <summary>The kind badge on the thumbnail: "Recording" or "Monitor Recording"; empty for a Clip or an unknown file (story 10.6).</summary>
+    /// <summary>The kind badge on the thumbnail: "Recording" or "Monitor Recording"; empty for a Clip or an unknown file.</summary>
     public string Badge
     {
         get => _badge;
@@ -1676,8 +1611,7 @@ internal sealed class LibraryGroupHeader(string key) : Observable
     }
 }
 
-/// <summary>One entry of the game filter; one instance per game key, so a renamed profile keeps its selection.</summary>
-/// <param name="key">The game's group key; null for "All games".</param>
+/// <summary>One entry of the game filter, one per game key, so a renamed profile keeps its selection; null is "All games".</summary>
 internal sealed class LibraryGameOption(string? key) : Observable
 {
     private string _name = "";
@@ -1691,12 +1625,7 @@ internal sealed class LibraryGameOption(string? key) : Observable
     }
 }
 
-/// <summary>
-/// The Library's row order for a <see cref="LibrarySort"/> (story 10.3): Newest and Oldest first by date then
-/// path; Name in natural order ignoring case; Largest and Longest first (an unknown length last) and Game
-/// by name, each tied by date (newest first) then path.
-/// </summary>
-/// <param name="gameName">The game name a row's group key shows.</param>
+/// <summary>The Library's row order for a sort; ties go by date (newest first), then path.</summary>
 internal sealed class LibraryRowComparer(LibrarySort sort, Func<string, string> gameName) : IComparer<(LibraryItem Item, string Key)>
 {
     public int Compare((LibraryItem Item, string Key) x, (LibraryItem Item, string Key) y)

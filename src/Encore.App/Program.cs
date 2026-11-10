@@ -12,8 +12,7 @@ internal static class Program
             return 2;
         }
 
-        // AD-16: one App per instance, taken before anything else and held for the App's life.
-        // A second launch exits silently (user decision, 2026-10-25).
+        // One App per instance, taken before anything else and held for the App's life; a second launch exits silently.
         using var single = SingleInstance.TryAcquire(SingleInstance.App, instance.Name);
         if (single is null)
         {

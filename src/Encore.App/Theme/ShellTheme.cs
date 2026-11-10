@@ -3,18 +3,10 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Theme;
 
-/// <summary>
-/// The shell's dictionaries (story 3): <see cref="ShellFluent"/> and <see cref="ShellGamingDark"/> define
-/// the same keys, so the Main App's XAML names one key and gets the theme's look. <see cref="ThemeService"/>
-/// places the theme's one in its merged list on each apply.
-/// </summary>
+/// <summary>The shell's dictionaries: both themes define the same keys, so the Main App's XAML names one key.</summary>
 internal static class ShellTheme
 {
-    /// <summary>
-    /// Puts <paramref name="theme"/>'s shell dictionary in <paramref name="merged"/>, replacing the other
-    /// theme's. Its keys are its own, so where it sits doesn't matter; it goes before the theme's dictionary
-    /// so that one stays last.
-    /// </summary>
+    /// <summary>Puts a theme's shell dictionary in the merged list, replacing the other's, before the theme's own dictionary.</summary>
     public static void Place(IList<ResourceDictionary> merged, AppTheme theme)
     {
         var at = IndexOfShell(merged);
@@ -48,10 +40,7 @@ internal static class ShellTheme
     }
 }
 
-/// <summary>
-/// A pressed state for nav items, which <see cref="System.Windows.Controls.ListBoxItem"/> lacks: with
-/// <c>Track</c> on, <c>IsPressed</c> is true while the left button is down over the item.
-/// </summary>
+/// <summary>A pressed state for nav items, which ListBoxItem lacks: IsPressed is true while the left button is down.</summary>
 internal static class NavPress
 {
     public static readonly DependencyProperty TrackProperty = DependencyProperty.RegisterAttached(

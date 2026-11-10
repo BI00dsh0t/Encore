@@ -7,13 +7,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// The Library and Cleanup settings (story 7.9, R8): the Global <c>outputFolder</c> and the
-/// <c>cleanup</c> limits. Cleanup deletes permanently, so turning a limit on or lowering one first asks
-/// the engine what it would delete (<c>cleanup.preview</c>) and sends the change only after the user
-/// confirms (R7). Raising a limit or turning it off sends at once. An invalid entry is not sent: the page
-/// shows the rendered value again with a <see cref="SettingsPage.Message"/>. Members run on the UI thread.
-/// </summary>
+/// <summary>The Library and Cleanup settings; a change that would delete files asks first, with a preview. UI thread.</summary>
 internal sealed class LibrarySettingsPage : SettingsPage
 {
     private const long BytesPerGb = 1_000_000_000;
@@ -62,7 +56,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
     /// <summary>The engine's default cache folder, used while <c>ringPath</c> is unset.</summary>
     public string? DefaultCacheFolder { get; }
 
-    /// <summary>The Clips folder (<c>outputFolder</c>), story 10.9's folder picker.</summary>
+    /// <summary>The Clips folder (<c>outputFolder</c>), as a folder picker.</summary>
     public FolderPicker ClipsFolder { get; }
 
     /// <summary>Asks the user a Yes/No question; true is Yes. Settable for tests.</summary>
@@ -320,7 +314,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
         }
     }
 
-    /// <summary>The Clips folder's refusals: it contains the cache folder (AD-17's rule, from this side), or isn't writable.</summary>
+    /// <summary>The Clips folder's refusals: it contains the cache folder, or it isn't writable.</summary>
     private string? ValidateClipsFolder(string path)
     {
         if ((_ringPath ?? DefaultCacheFolder) is { Length: > 0 } cache && RewindSettingsPage.IsInside(cache, path))

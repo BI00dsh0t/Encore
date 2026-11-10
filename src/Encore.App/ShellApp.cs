@@ -14,25 +14,14 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App;
 
-/// <summary>
-/// The App: a tray icon, the Main App window and the engine connection, which supervises the
-/// engine. It starts in the tray and runs until Quit, or until the engine ends cleanly on its own
-/// (AD-16). <c>--tray</c> starts it with no window, as Start with Windows and the engine's relaunch
-/// do; <c>--instance Encore-Test-*</c> runs it on a test instance, and <c>--rewind</c> (test
-/// instances only) passes the engine's own switch on, so a test instance's engine buffers and saves.
-/// An engine crash loop puts the tray in its error state, with a Restart item, and goes to
-/// <c>logs\app.log</c> in the instance's local data folder.
-/// </summary>
+/// <summary>The App: a tray icon, the Main App window and the engine connection. Switches: docs/code-notes.md.</summary>
 internal sealed class ShellApp(Instance instance) : Application
 {
     public const string TrayArgument = "--tray";
     public const string InstanceArgument = "--instance";
     public const string RewindArgument = "--rewind";
 
-    /// <summary>
-    /// <c>--player-unsupported=hevc</c> or <c>=av1</c>: the in-app player reports that codec as undecodable, to
-    /// check the page Windows shows without its extension (story 14.6). Ignored on the installed instance.
-    /// </summary>
+    /// <summary>A dev switch: the player reports that codec as undecodable, to check the missing-extension page.</summary>
     public const string PlayerUnsupportedArgument = "--player-unsupported=";
 
     /// <summary>The tray menu's Restart item, shown only in <see cref="EngineStatus.CrashLoop"/>.</summary>
@@ -41,10 +30,10 @@ internal sealed class ShellApp(Instance instance) : Application
     /// <summary>The tray menu's Control gallery item, which only dev and test instances have.</summary>
     public const string GalleryItemName = "GalleryItem";
 
-    /// <summary>The tray menu's live status item (story 10.6).</summary>
+    /// <summary>The tray menu's live status item.</summary>
     public const string StatusItemName = "StatusItem";
 
-    /// <summary>How long Quit waits for the engine to exit, so a pending save can finish (AD-16).</summary>
+    /// <summary>How long Quit waits for the engine to exit, so a pending save can finish.</summary>
     private static readonly TimeSpan QuitTimeout = TimeSpan.FromSeconds(5);
 
     private EngineConnection? _engine;
@@ -65,12 +54,10 @@ internal sealed class ShellApp(Instance instance) : Application
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        // The rebrand (2026-11-10): before anything reads its data folders, an Encore instance's first
-        // start copies its old ReplayBuffer data once. The engine does the same for itself.
+        // Before anything reads its data folders, an Encore instance's first start copies its old ReplayBuffer data once.
         LegacyData.CopyIfFirstStart(instance);
 
-        // AD-23: the theme is in place before the first window shows. The engine's settings come later, so
-        // the start uses the theme last applied, and each settings.changed applies the committed one.
+        // The theme is in place before the first window shows, using the theme last applied until the settings arrive.
         _theme = ThemeService.ForApplication(this);
         ThemeService.Current = _theme;
         _theme.Apply(ThemeService.ReadLast(ThemeFile));
@@ -126,7 +113,7 @@ internal sealed class ShellApp(Instance instance) : Application
     /// <summary>Whether the command line asks for no window at start.</summary>
     internal static bool StartsInTray(IEnumerable<string> args) => args.Contains(TrayArgument, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The codec <c>--player-unsupported=</c> names ("HEVC" or "AV1"), on any instance but the installed one; else null.</summary>
+    /// <summary>The codec the player-unsupported switch names ("HEVC" or "AV1"), except on the installed instance; else null.</summary>
     internal static string? PlayerUnsupported(IEnumerable<string> args, Instance instance)
     {
         var codec = args.FirstOrDefault(a => a.StartsWith(PlayerUnsupportedArgument, StringComparison.OrdinalIgnoreCase))?[PlayerUnsupportedArgument.Length..];
@@ -136,10 +123,7 @@ internal sealed class ShellApp(Instance instance) : Application
     /// <summary>Whether the command line passes <c>--rewind</c> on to the engine; valid on a test instance only.</summary>
     internal static bool WantsRewind(IEnumerable<string> args) => args.Contains(RewindArgument, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// The App's command line: <see cref="TryParseInstance"/>, and <c>--rewind</c>, which, like the
-    /// engine's, is for test instances only. False means exit 2.
-    /// </summary>
+    /// <summary>The App's command line: the instance and <c>--rewind</c>, both for test instances only. False means exit 2.</summary>
     internal static bool TryParseArguments(IReadOnlyList<string> args, [NotNullWhen(true)] out Instance? instance)
     {
         if (TryParseInstance(args, out instance) && (instance.IsTest || !WantsRewind(args)))
@@ -151,10 +135,7 @@ internal sealed class ShellApp(Instance instance) : Application
         return false;
     }
 
-    /// <summary>
-    /// The instance the command line names with <c>--instance</c>, which must be a test instance (the
-    /// engine's rule), or the process's own. False when <c>--instance</c> is malformed.
-    /// </summary>
+    /// <summary>The instance <c>--instance</c> names, which must be a test instance, or the process's own; false when malformed.</summary>
     internal static bool TryParseInstance(IReadOnlyList<string> args, [NotNullWhen(true)] out Instance? instance)
     {
         instance = Instance.Current;
@@ -177,13 +158,7 @@ internal sealed class ShellApp(Instance instance) : Application
         return true;
     }
 
-    /// <summary>
-    /// The tray's menu (story 10.6, EXPERIENCE.md "Tray menu"): the live status, disabled and named
-    /// <see cref="StatusItemName"/>; Open, Open Library and Open the Clips folder; Start with Windows, a
-    /// hidden Restart item, named <see cref="RestartItemName"/>, shown only while the background service is
-    /// in a crash loop; and Quit. With <paramref name="gallery"/>, which dev and test instances pass, it has
-    /// a Control gallery item too. <paramref name="openFolder"/> opens the Clips folder; by default, in Explorer.
-    /// </summary>
+    /// <summary>The tray's menu: the live status, the Open items, Start with Windows, a Restart item for a crash loop, and Quit.</summary>
     internal static ContextMenu CreateTrayMenu(MainViewModel model, Action open, Action quit, Action? restart = null, Action? gallery = null, Action<string>? openFolder = null)
     {
         var restartItem = new MenuItem { Header = "Restart", Name = RestartItemName, Visibility = Visibility.Collapsed };
@@ -297,7 +272,7 @@ internal sealed class ShellApp(Instance instance) : Application
         return tray;
     }
 
-    // The tray carries the capture state in every overlayDot mode (story 5.15), and the engine's crash loop.
+    // The tray carries the capture state in every overlayDot mode, and the engine's crash loop.
     private void SyncTray()
     {
         var dot = TrayCapture.For(_engine!);
@@ -342,8 +317,7 @@ internal sealed class ShellApp(Instance instance) : Application
 
         _quitting = true;
 
-        // The Library's player page closes first: the player stops, its surface and devices go, and the
-        // file is released (AD-27, QA 14.2).
+        // The Library's player page closes first, so the player stops and the file is released.
         (_window!.DataContext as MainViewModel)?.Library.DrillIn.Close();
         await _engine!.ShutdownAsync(QuitTimeout);
         await _engine.DisposeAsync();

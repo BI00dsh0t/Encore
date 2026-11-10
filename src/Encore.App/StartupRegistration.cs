@@ -8,12 +8,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App;
 
-/// <summary>
-/// Keeps the Run value in step with the engine's committed <c>startWithWindows</c> (R3, AD-16): the
-/// one place the Run key policy lives. Only the installed instance touches the key; a dev or test
-/// instance saves the setting and leaves the key alone. Start with Windows launches the App with
-/// <c>--tray</c>, and the App starts its engine.
-/// </summary>
+/// <summary>Keeps the Run value in step with the committed <c>startWithWindows</c>; only the installed instance writes it.</summary>
 internal sealed class StartupRegistration(Instance instance, RunKey runKey, string appPath)
 {
     private bool? _synced;
@@ -27,12 +22,7 @@ internal sealed class StartupRegistration(Instance instance, RunKey runKey, stri
     /// <summary>Whether this instance owns the Run value.</summary>
     public bool Applies => instance.Name == Instance.InstalledName;
 
-    /// <summary>
-    /// Applies the committed <c>startWithWindows</c> when it differs from the last one synced. The
-    /// first call always reconciles, so a key that is missing, stale or points elsewhere is fixed at
-    /// start. A failed registry write leaves the key as it is and is retried on the next committed
-    /// revision, not on every state change that carries the same document.
-    /// </summary>
+    /// <summary>Applies the committed setting when it differs from the last one synced; the first call always reconciles.</summary>
     public void Sync(SettingsDocument settings)
     {
         ArgumentNullException.ThrowIfNull(settings);

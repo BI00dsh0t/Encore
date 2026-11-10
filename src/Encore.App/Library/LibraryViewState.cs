@@ -10,11 +10,11 @@ internal enum LibraryGrouping
     Game,
     Day,
 
-    /// <summary>One flat list with no headers (story 10.3).</summary>
+    /// <summary>One flat list with no headers.</summary>
     None,
 }
 
-/// <summary>How the Library orders its rows within each group (story 10.3).</summary>
+/// <summary>How the Library orders its rows within each group.</summary>
 internal enum LibrarySort
 {
     NewestFirst,
@@ -34,15 +34,7 @@ internal enum LibraryDateFilter
     Last30Days,
 }
 
-/// <summary>
-/// The Library's view choices (story 7.5), remembered per instance in a small JSON file. Any failure
-/// to read or write the file is ignored: a load gives the defaults, a save is dropped. Story 10.3 adds
-/// the sort; a file from before it has none and loads with Newest first. The search text isn't kept.
-/// Story 14.5 adds the in-app player's volume and mute, full and unmuted for a file from before it.
-/// </summary>
-/// <param name="Game">The game filter's group key; null for all games.</param>
-/// <param name="PlayerVolume">The player's volume, 0 to 1.</param>
-/// <param name="PlayerMuted">Whether the player is muted.</param>
+/// <summary>The Library's view choices, remembered per instance in a small JSON file; any read or write failure is ignored.</summary>
 internal sealed record LibraryViewState(
     LibraryGrouping GroupBy = LibraryGrouping.Game,
     string? Game = null,

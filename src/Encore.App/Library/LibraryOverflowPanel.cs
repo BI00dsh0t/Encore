@@ -3,13 +3,7 @@ using System.Windows.Controls;
 
 namespace Encore.App.Library;
 
-/// <summary>
-/// The Library command bar's actions (story 10.2; DESIGN.md Library command bar): a horizontal row, spaced
-/// by <see cref="Spacing"/>. When every child doesn't fit, the children marked <c>Overflows</c> are hidden
-/// and the child marked <c>IsMore</c> (the "More ⋯" menu holding them) shows; otherwise More is hidden.
-/// Hidden children are still measured, so the panel can tell when they fit again, and are arranged at zero
-/// width. A collapsed child takes no space.
-/// </summary>
+/// <summary>The Library command bar's actions in a row; those that don't fit move into the More menu.</summary>
 internal sealed class LibraryOverflowPanel : Panel
 {
     public static readonly DependencyProperty SpacingProperty = DependencyProperty.Register(
@@ -80,8 +74,7 @@ internal sealed class LibraryOverflowPanel : Panel
         return finalSize;
     }
 
-    // Whether the child takes space in the given state: never collapsed; More only when overflowing,
-    // an overflowing child only when not.
+    // Whether the child takes space: never when collapsed; More only when overflowing, an overflow child only when not.
     private static bool Takes(UIElement child, bool overflowing) =>
         child.Visibility != Visibility.Collapsed
         && (GetIsMore(child) ? overflowing : !GetOverflows(child) || !overflowing);

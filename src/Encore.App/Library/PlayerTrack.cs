@@ -1,11 +1,6 @@
 namespace Encore.App.Library;
 
-/// <summary>
-/// One of the file's Tracks in the player's Track list (story 14.4): its index in file order and its name, the
-/// stream's <c>handler_name</c>, which our writers set to the Track's name (AD-9). A Track with no name is
-/// "track n", as epic 10's glossary counts them from 1. A Track Windows can't decode (story 14.6) is shown as
-/// unavailable and can't be chosen.
-/// </summary>
+/// <summary>One of the file's Tracks in the player's list: its index and name; one Windows can't decode can't be chosen.</summary>
 internal sealed class PlayerTrack(int index, string? name, bool isAvailable = true) : Observable
 {
     private bool _isPlaying;

@@ -78,8 +78,7 @@ internal sealed class ClipThumbnailStore
             token.ThrowIfCancellationRequested();
             if (!MatchesSource(descriptor.Source)) { return; }
             var entry = Entry(descriptor.Source, descriptor.Duration);
-            // An invalid entry is replaced only after the new filmstrip is complete. Another reader
-            // or writer may win this race; cache IO failure never invalidates the in-memory images.
+            // An invalid entry is replaced only once the new filmstrip is complete; a cache failure never drops the images.
             if (Directory.Exists(entry)) { DeleteEntry(entry); }
             Directory.Move(staging, entry);
             staging = null;
