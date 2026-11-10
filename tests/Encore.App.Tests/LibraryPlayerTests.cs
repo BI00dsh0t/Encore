@@ -36,62 +36,62 @@ public sealed class LibraryPlayerTests : IDisposable
     [Fact]
     public void EnterPlaysAFinishedRowOnItsPageAndNotOneBeingWritten()
     {
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
-        page.Render(State());
+        var viewModel = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
+        viewModel.Render(State());
 
-        page.Click(Row(page, Saving), ctrl: false, shift: false);
-        Assert.False(page.PlayCommand.CanExecute(null));
-        page.OpenFocused();
-        Assert.False(page.DrillIn.IsOpen);
-        Assert.Null(page.Player);
+        viewModel.Selection.Click(Row(viewModel, Saving), ctrl: false, shift: false);
+        Assert.False(viewModel.PlayCommand.CanExecute(null));
+        viewModel.OpenFocused();
+        Assert.False(viewModel.DrillIn.IsOpen);
+        Assert.Null(viewModel.Playback.Player);
 
-        page.Click(Row(page, Clip), ctrl: false, shift: false);
-        page.OpenFocused();
-        Assert.True(page.DrillIn.IsOpen);
-        Assert.Equal("clip.mp4", page.DrillIn.ItemTitle);
-        Assert.Equal(PlayerState.Paused, page.Player!.State);
+        viewModel.Selection.Click(Row(viewModel, Clip), ctrl: false, shift: false);
+        viewModel.OpenFocused();
+        Assert.True(viewModel.DrillIn.IsOpen);
+        Assert.Equal("clip.mp4", viewModel.DrillIn.ItemTitle);
+        Assert.Equal(PlayerState.Paused, viewModel.Playback.Player!.State);
         Assert.Equal(0, _player.SelectedTrack);
         Assert.Equal(1, _player.FirstFrames);
         Assert.Empty(_shell.Calls);
 
         // "Open in default player" still hands the path to the shell.
-        page.OpenCommand.Execute(null);
+        viewModel.OpenCommand.Execute(null);
         Assert.Equal([("open", Path.Combine(_folder, Clip))], _shell.Calls);
     }
 
     [Fact]
     public void ADoubleClickOpensARowAndTheListsKeysAndMenuFollowTheSelection()
     {
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
-        page.Render(State());
+        var viewModel = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
+        viewModel.Render(State());
 
         // The menu stays shut off a row and with nothing selected; from the keyboard it takes the focused row.
-        Assert.False(page.TryPrepareContextMenu(fromKeyboard: false, onRow: false));
-        Assert.False(page.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
-        var entry = page.FocusForEntry();
+        Assert.False(viewModel.Selection.TryPrepareContextMenu(fromKeyboard: false, onRow: false));
+        Assert.False(viewModel.Selection.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
+        var entry = viewModel.Selection.FocusForEntry();
         Assert.NotNull(entry);
-        Assert.Same(entry, page.FocusedRow);
-        Assert.True(page.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
+        Assert.Same(entry, viewModel.Selection.FocusedRow);
+        Assert.True(viewModel.Selection.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
 
         // Escape is the list's key and clears the selection; a key the list doesn't know is left alone.
-        Assert.True(page.HandleKey(Key.Escape, ctrl: false));
-        Assert.False(page.HasShownSelection);
-        Assert.False(page.HandleKey(Key.B, ctrl: false));
+        Assert.True(viewModel.HandleKey(Key.Escape, ctrl: false));
+        Assert.False(viewModel.Selection.HasShownSelection);
+        Assert.False(viewModel.HandleKey(Key.B, ctrl: false));
 
         // A double click with Ctrl only selects; a plain one opens the player page.
-        page.ClickRow(Row(page, Clip), clickCount: 2, ctrl: true, shift: false);
-        Assert.False(page.DrillIn.IsOpen);
-        page.ClickRow(Row(page, Clip), clickCount: 2, ctrl: false, shift: false);
-        Assert.True(page.DrillIn.IsOpen);
+        viewModel.ClickRow(Row(viewModel, Clip), clickCount: 2, ctrl: true, shift: false);
+        Assert.False(viewModel.DrillIn.IsOpen);
+        viewModel.ClickRow(Row(viewModel, Clip), clickCount: 2, ctrl: false, shift: false);
+        Assert.True(viewModel.DrillIn.IsOpen);
     }
 
     [Fact]
     public void ThePlayerSharesTheFileForRenameAndDeleteAndBackReleasesIt()
     {
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
-        page.Render(State());
-        page.Click(Row(page, Clip), ctrl: false, shift: false);
-        page.OpenFocused();
+        var viewModel = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
+        viewModel.Render(State());
+        viewModel.Selection.Click(Row(viewModel, Clip), ctrl: false, shift: false);
+        viewModel.OpenFocused();
         var absolute = Path.Combine(_folder, Clip);
 
         // Read-only and shared for read, write and delete: the engine can rename and delete it while it plays.
@@ -99,8 +99,8 @@ public sealed class LibraryPlayerTests : IDisposable
         File.Move(absolute, absolute + ".renamed");
         File.Delete(absolute + ".renamed");
 
-        page.DrillIn.Close();
-        Assert.Null(page.Player);
+        viewModel.DrillIn.Close();
+        Assert.Null(viewModel.Playback.Player);
         Assert.True(_player.Disposed);
         Assert.False(_player.File.CanRead);
     }
@@ -108,14 +108,14 @@ public sealed class LibraryPlayerTests : IDisposable
     [Fact]
     public void AnItemLeavingTheLibraryClosesItsPlayer()
     {
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
-        page.Render(State());
-        page.Click(Row(page, Clip), ctrl: false, shift: false);
-        page.OpenFocused();
+        var viewModel = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
+        viewModel.Render(State());
+        viewModel.Selection.Click(Row(viewModel, Clip), ctrl: false, shift: false);
+        viewModel.OpenFocused();
 
-        page.Render(State() with { Library = [Item(Saving, writing: true)] });
+        viewModel.Render(State() with { Library = [Item(Saving, writing: true)] });
 
-        Assert.False(page.DrillIn.IsOpen);
+        Assert.False(viewModel.DrillIn.IsOpen);
         Assert.True(_player.Disposed);
     }
 
@@ -123,14 +123,14 @@ public sealed class LibraryPlayerTests : IDisposable
     public void AFileThatCantBePlayedSaysSoAndOffersTheDefaultPlayer()
     {
         _player.Fail = true;
-        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
-        page.Render(State());
-        page.Click(Row(page, Clip), ctrl: false, shift: false);
-        page.OpenFocused();
+        var viewModel = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
+        viewModel.Render(State());
+        viewModel.Selection.Click(Row(viewModel, Clip), ctrl: false, shift: false);
+        viewModel.OpenFocused();
 
-        Assert.True(page.Player!.IsFailed);
-        Assert.Equal(PlayerPage.FailedText, page.Player.Message);
-        page.Player.OpenInDefaultPlayerCommand.Execute(null);
+        Assert.True(viewModel.Playback.Player!.IsFailed);
+        Assert.Equal(PlayerViewModel.FailedText, viewModel.Playback.Player.Message);
+        viewModel.Playback.Player.OpenInDefaultPlayerCommand.Execute(null);
         Assert.Equal([("open", Path.Combine(_folder, Clip))], _shell.Calls);
     }
 
@@ -141,10 +141,10 @@ public sealed class LibraryPlayerTests : IDisposable
     [InlineData("unsupported size")]
     public void APictureTheGpuRefusesShowsTheFailureAndPauses(string failure)
     {
-        var page = PlayingPage();
+        var viewModel = PlayingViewModel();
         var released = false;
 
-        page.DrawFrame(() => throw failure switch
+        viewModel.DrawFrame(() => throw failure switch
             {
                 "out of video memory" => new OutOfMemoryException(),
                 "com" => new COMException("device removed", unchecked((int)0x887A0005)),
@@ -154,48 +154,48 @@ public sealed class LibraryPlayerTests : IDisposable
             () => released = true);
 
         Assert.True(released);
-        Assert.True(page.IsFailed);
+        Assert.True(viewModel.IsFailed);
         Assert.False(_player.IsPlaying);
-        Assert.False(page.PlayPauseCommand.CanExecute(null));
+        Assert.False(viewModel.PlayPauseCommand.CanExecute(null));
     }
 
     [Fact]
     public void AFrameThatCantBeCopiedIsSkippedAndThePageKeepsPlaying() => Sta.Run(() =>
     {
-        var page = PlayingPage();
+        var viewModel = PlayingViewModel();
         _player.CopyFails = new COMException("lost", unchecked((int)0x887A0007));
         using var surface = new VideoSurface(64, 36, new WindowInteropHelper(new Window()).EnsureHandle());
 
-        page.DrawFrame(() => surface, _ => Assert.Fail("A skipped frame isn't shown."), () => Assert.Fail("The surface is kept."));
+        viewModel.DrawFrame(() => surface, _ => Assert.Fail("A skipped frame isn't shown."), () => Assert.Fail("The surface is kept."));
 
-        Assert.Equal(PlayerState.Playing, page.State);
+        Assert.Equal(PlayerState.Playing, viewModel.State);
     });
 
     [Fact]
     public void ThePagesKeysPauseSeekAndChangeTheVolume()
     {
-        var page = PlayingPage();
+        var viewModel = PlayingViewModel();
 
-        Assert.True(page.HandleKey(Key.Space));
+        Assert.True(viewModel.HandleKey(Key.Space));
         Assert.False(_player.IsPlaying);
-        Assert.True(page.HandleKey(Key.Right));
-        Assert.Equal([PlayerPage.SeekStep], _player.Seeks);
-        Assert.True(page.HandleKey(Key.Down));
+        Assert.True(viewModel.HandleKey(Key.Right));
+        Assert.Equal([PlayerViewModel.SeekStep], _player.Seeks);
+        Assert.True(viewModel.HandleKey(Key.Down));
         Assert.Equal(0.95, _player.Volume);
-        Assert.True(page.HandleKey(Key.F));
-        Assert.True(page.IsFullScreen);
-        Assert.False(page.HandleKey(Key.B));
+        Assert.True(viewModel.HandleKey(Key.F));
+        Assert.True(viewModel.IsFullScreen);
+        Assert.False(viewModel.HandleKey(Key.B));
     }
 
-    private PlayerPage PlayingPage()
+    private PlayerViewModel PlayingViewModel()
     {
-        var library = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        var library = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         library.Render(State());
-        library.Click(Row(library, Clip), ctrl: false, shift: false);
+        library.Selection.Click(Row(library, Clip), ctrl: false, shift: false);
         library.OpenFocused();
-        library.Player!.PlayPauseCommand.Execute(null);
+        library.Playback.Player!.PlayPauseCommand.Execute(null);
         Assert.True(_player.IsPlaying);
-        return library.Player;
+        return library.Playback.Player;
     }
 
     [Fact]
@@ -203,13 +203,13 @@ public sealed class LibraryPlayerTests : IDisposable
     {
         _engine.State = State();
         var model = new MainViewModel(_engine, action => action(), player: () => _player);
-        model.Library.Click(Row(model.Library, Clip), ctrl: false, shift: false);
+        model.Library.Selection.Click(Row(model.Library, Clip), ctrl: false, shift: false);
         model.Library.OpenFocused();
 
         Assert.Same(model.Library.DrillIn, model.CurrentDrillIn);
         Assert.True(model.IsDrilledIn);
 
-        model.SelectedNavItem = model.NavItems.First(i => i.Page == model.General);
+        model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == model.General);
 
         Assert.False(model.Library.DrillIn.IsOpen);
         Assert.True(_player.Disposed);
@@ -232,5 +232,5 @@ public sealed class LibraryPlayerTests : IDisposable
     private static LibraryItem Item(string path, bool writing) =>
         new(path, null, 1, path == Clip ? DateTimeOffset.UnixEpoch : DateTimeOffset.UnixEpoch.AddDays(1), writing);
 
-    private static LibraryRow Row(LibraryPage page, string path) => page.Rows.Single(r => r.Path == path);
+    private static LibraryRow Row(LibraryViewModel viewModel, string path) => viewModel.List.Rows.Single(r => r.Path == path);
 }

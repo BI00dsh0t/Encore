@@ -40,31 +40,3 @@ internal interface IPlayer : IDisposable
     /// <summary>Copies the current frame into <paramref name="target"/>, scaled to its size.</summary>
     void CopyFrame(VideoSurface target);
 }
-
-/// <summary>What an opened file holds: video size, length when known, Track names, and what Windows can decode.</summary>
-internal sealed record PlayerMedia(
-    int Width,
-    int Height,
-    TimeSpan? Duration,
-    IReadOnlyList<string> TrackNames,
-    bool VideoDecodable,
-    string VideoCodec = "",
-    IReadOnlyList<bool>? TracksPlayable = null);
-
-/// <summary>The file couldn't be opened for playback.</summary>
-internal sealed class PlayerException : Exception
-{
-    public PlayerException()
-    {
-    }
-
-    public PlayerException(string message)
-        : base(message)
-    {
-    }
-
-    public PlayerException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
-}

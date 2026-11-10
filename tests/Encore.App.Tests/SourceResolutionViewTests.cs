@@ -30,14 +30,14 @@ public sealed class SourceResolutionViewTests
         {
             window.Show();
             model.IsSettingsTabSelected = true;
-            model.SelectedPage = model.Rewind;
+            model.SelectedSettingsViewModel = model.Rewind;
             foreach (var (theme, file) in new[] { (AppTheme.Fluent, "clips-source-fluent.png"), (AppTheme.GamingDark, "clips-source-gaming.png") })
             {
                 ThemeService.ForWindow(window).Apply(theme);
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 var resolution = Descendants<ComboBox>(window).Single(c => c.SelectedItem is ResolutionItem);
-                Assert.Equal(RewindSettingsPage.SourceLabel, ((ResolutionItem)resolution.SelectedItem).Label);
-                var help = Descendants<TextBlock>(window).Single(t => t.Text == model.Rewind.SourceHelp);
+                Assert.Equal(VideoQualityViewModel.SourceLabel, ((ResolutionItem)resolution.SelectedItem).Label);
+                var help = Descendants<TextBlock>(window).Single(t => t.Text == model.Rewind.Video.SourceHelp);
                 Descendants<ScrollViewer>(window).First(v => v.IsVisible && v.ScrollableHeight > 0).ScrollToEnd();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 Assert.True(help.IsVisible);
@@ -57,7 +57,7 @@ public sealed class SourceResolutionViewTests
         var model = new MainViewModel(SourceEngine(), action => action());
         var window = new Window
         {
-            Content = new Border { Padding = new Thickness(16), Child = new GameVideoEditor { DataContext = model.Rewind } },
+            Content = new Border { Padding = new Thickness(16), Child = new GameVideoEditor { DataContext = model.Rewind.Video } },
             Width = 720,
             SizeToContent = SizeToContent.Height,
             WindowStartupLocation = WindowStartupLocation.Manual,
@@ -74,8 +74,8 @@ public sealed class SourceResolutionViewTests
                 ThemeService.ForWindow(window).Apply(theme);
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 var resolution = Descendants<ComboBox>(window).Single(c => c.SelectedItem is ResolutionItem);
-                Assert.Equal(RewindSettingsPage.SourceLabel, ((ResolutionItem)resolution.SelectedItem).Label);
-                Assert.True(Descendants<TextBlock>(window).Single(t => t.Text == model.Rewind.SourceHelp).IsVisible);
+                Assert.Equal(VideoQualityViewModel.SourceLabel, ((ResolutionItem)resolution.SelectedItem).Label);
+                Assert.True(Descendants<TextBlock>(window).Single(t => t.Text == model.Rewind.Video.SourceHelp).IsVisible);
                 Save(window, file);
             }
         }

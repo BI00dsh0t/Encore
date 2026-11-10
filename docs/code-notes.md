@@ -1609,6 +1609,9 @@ snapshot holds.
 
 ### EngineConnection
 
+- The class is the session the views use (state, send, Quit). `EngineConnector` makes one attempt with the server
+  check and launches the engine; `EngineSupervisor` runs the supervise loop; `EngineConnectionState` holds the
+  status, the problem and the live link for all three.
 - `ConnectAsync` connects, launching the engine when none answers. It doesn't supervise.
 - `StartSupervising` keeps the engine running: it attaches with `app.attach`, kills an engine that is hung, and
   relaunches one that crashed, with backoff and `serve --restarted crashed|hung`.
@@ -1626,8 +1629,11 @@ snapshot holds.
   reply for `ReplyLimit`.
 - It only keeps time. The connection acts on `Check`.
 
-### LibraryPage
+### LibraryViewModel
 
+- The class builds its parts and gives each snapshot to them: `LibraryList` (rows, grouping, filters, sort, search),
+  `LibrarySelection` (selected and focused rows), `LibraryFileActions` (the commands' work and the error line),
+  `LibraryPlayback` (the player page and the clip creator) and `LibraryBanner`. The notes below say what each does.
 - It only reads the snapshot. Items are shown newest first, each with its name, game, date and size. An item still
   being written is shown locked.
 - While Cleanup is blocked by a rebuilt index a banner says so, and Acknowledge dismisses the `library-corrupt`
@@ -1688,7 +1694,7 @@ Other details:
   asks again.
 - `Request` runs on the UI thread.
 
-### PlayerPage
+### PlayerViewModel
 
 - It opens the file read-only, shared for read, write and delete, and hands the stream to the player.
 - It opens paused on the first frame with the first Track. Windows would otherwise pick the last.
@@ -1734,7 +1740,7 @@ Volume:
 - Keys bubble to the page (KeyDown, not PreviewKeyDown), so a focused control's own keys win.
 - The gear's menu is the theme's ContextMenu: Esc, a click outside and a choice close it. Its heading is not an item.
 - The no-picture wait is `NoPictureWatch`, the texture size rule is `PictureFit`, and one present's work and the
-  page's keys are `PlayerPage.DrawFrame` and `PlayerPage.HandleKey`.
+  page's keys are `PlayerViewModel.DrawFrame` and `PlayerViewModel.HandleKey`.
 
 ### WindowsMediaPlayer
 
@@ -1747,11 +1753,15 @@ Volume:
 
 ### MainViewModel
 
+- A settings page that needs more than its settings takes the snapshot through its own method before `Render`. The
+  calls stay in one fixed order, because that order decides the order of the meter watch and unwatch commands.
 - Everything shown comes from the engine session's state.
 - Audio Tracks and a game's page meter only while on screen, so a hidden window doesn't keep the engine metering.
 
 ### OverlayViewModel
 
+- `OverlayPlaneQuery` asks about the monitor's overlay planes and `OverlayMessageQueue` queues the messages; the view
+  model keeps the dot, the icons and the order they show in.
 - A snapshot read at reconnect is treated as any event: the dot and the saving icon follow it.
 - Messages: the snapshot's warnings with `overlay: true` queue up. Each shows for `MessageDuration`, oldest first, and
   an unseen repeat of a waiting one takes its place.
@@ -1800,7 +1810,7 @@ Volume:
 - It also shows the drive's free space, and a danger line when the last choice was refused.
 - The file variant (`IsFile`) opens a file dialog and has Browse only.
 
-### GamePage and GameProfilesPage
+### GameViewModel and GameProfilesViewModel
 
 - A game's page holds: inline rename, Capture (`ignored`, inverted), then Clips, Video quality and Audio tracks as
   inherited settings over override set and remove ops (Track ids are kept), Recordings, the read-only Files, and
@@ -1810,14 +1820,14 @@ Volume:
 - Add a game picks a program with the file picker and sends `game.add`, which writes `manualGames`.
 - Each game page is kept for the run, keyed by its profile id, so a draft survives going back.
 
-### HotkeysPage
+### HotkeysViewModel
 
 - Each change sends one Global op at once.
 - A combination another action has is refused before sending, by the engine's rule: same key and same modifiers,
   ignoring NoRepeat, whatever the mode.
 - The rows are grouped into Clips, Recordings, Monitor Recording (with the screen picker) and Microphone.
 
-### LibrarySettingsPage
+### LibrarySettingsViewModel
 
 - Cleanup deletes permanently. So turning a limit on, or lowering one, first asks the engine what it would delete
   (`cleanup.preview`) and sends the change only after the user confirms. Raising a limit or turning it off sends at
@@ -1834,8 +1844,10 @@ Volume:
   `monitorRecordingMonitor` key, which is only read while the new key is null.
 - The list comes from `monitors.list` once per engine run and follows `monitors.changed`.
 
-### RewindSettingsPage
+### RewindSettingsViewModel
 
+- The video quality editor is `VideoQualityViewModel` (`Video`), shared by the Clips page and a game's page. The
+  estimate's wording is in `StorageEstimateText`.
 - It edits `bufferWindow`, `replayStorage`, `ringPath`, `saveCooldown` and `video`, each sent at once as one Global
   op.
 - It shows the engine's storage estimate and warns, blocking nothing, when it is over the free bytes.
@@ -1843,16 +1855,20 @@ Volume:
   not editable, or has the game's own value.
 - The cache folder's picker is enabled only under Disk storage.
 
-### SettingsPage and SettingsSender
+### SettingsViewModel and SettingsSender
 
+- `SetAndSend`, `ShowGlobal` and `Refuse` are the three steps most settings repeat: keep and send a value, show a
+  rendered value, and show a refused entry's old value with the reason.
 - A page renders the settings document it is given and changes it only through `SendAsync`, against the revision it
   rendered.
 - On success the `settings.changed` event renders the result. On a conflict the page reloads the current document. On
   a refusal it shows its document again.
 - The sender never retries: a conflict comes back as a reload.
 
-### TrackLayoutPage
+### TrackLayoutViewModel
 
+- `SoundPicker` (`Picker`) is the sound picker, and `MeterWatch` keeps the engine's meter watch in step with the
+  page.
 - Save changes sends one `settings.update`.
 - While the page is open it meters the draft through `meters.watch`, with one probe Track per source and, while the
   sound picker is open, one per listed device.
@@ -1860,6 +1876,8 @@ Volume:
 
 ### ShellApp
 
+- `AppArguments` reads the switches, `TrayMenu` builds the tray menu, `AppTray` owns the icon and `AppLog` writes the
+  log file.
 - The App starts in the tray and runs until Quit, or until the engine ends cleanly on its own.
 - `--tray` starts it with no window, as Start with Windows and the engine's relaunch do.
 - `--instance Encore-Test-*` runs it on a test instance. `--rewind` (test instances only) passes the engine's own
@@ -1868,8 +1886,8 @@ Volume:
   installed instance.
 - An engine crash loop puts the tray in its error state, with a Restart item, and is written to `logs\app.log` in the
   instance's local data folder.
-- The tray menu's status item and Restart item have fixed automation names (`StatusItemName`, `RestartItemName`). Dev
-  and test instances also get a Control gallery item.
+- The tray menu's status item and Restart item have fixed automation names (`TrayMenu.StatusItemName`,
+  `TrayMenu.RestartItemName`). Dev and test instances also get a Control gallery item.
 
 ### StartupRegistration
 

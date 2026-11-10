@@ -28,7 +28,7 @@ public sealed partial class SettingsLayoutTests
         var model = new MainViewModel(new FakeEngineSession(), action => action());
         var window = Offscreen(new MainWindow { DataContext = model });
         var theme = ThemeService.ForWindow(window);
-        var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
+        var expected = new (SettingsViewModel ViewModel, string Slug, string[] Sections)[]
         {
             (model.General, "general", ["Appearance", "Startup and Overlay", "Games"]),
             (model.Rewind, "clips", ["Clip length", "Where recent gameplay is kept", "Video quality — for Clips and Recordings"]),
@@ -42,13 +42,13 @@ public sealed partial class SettingsLayoutTests
                 theme.Apply(which);
                 window.Show();
                 var card = (Style)window.FindResource("EncoreCardStyle");
-                foreach (var (page, slug, sections) in expected)
+                foreach (var (viewModel, slug, sections) in expected)
                 {
-                    model.SelectedNavItem = model.NavItems.First(i => i.Page == page);
+                    model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == viewModel);
                     Sta.Pump(TimeSpan.FromMilliseconds(100));
 
-                    Assert.True(page.View.IsLoaded, $"{page.Title} didn't load under {which}");
-                    var found = Descendants<HeaderedContentControl>(page.View).Where(s => s.Visibility == Visibility.Visible).ToList();
+                    Assert.True(viewModel.View.IsLoaded, $"{viewModel.Title} didn't load under {which}");
+                    var found = Descendants<HeaderedContentControl>(viewModel.View).Where(s => s.Visibility == Visibility.Visible).ToList();
                     Assert.Equal(sections, found.Select(s => s.Header as string));
                     Assert.All(found, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
                     Save(window, $"settings-{slug}-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
@@ -90,7 +90,7 @@ public sealed partial class SettingsLayoutTests
         var model = new MainViewModel(engine, action => action());
         var window = Offscreen(new MainWindow { DataContext = model });
         var theme = ThemeService.ForWindow(window);
-        var expected = new (SettingsPage Page, string Slug, string[] Sections)[]
+        var expected = new (SettingsViewModel ViewModel, string Slug, string[] Sections)[]
         {
             (model.TrackLayout, "audio-tracks", []),
             (model.GameProfiles, "games", []),
@@ -105,11 +105,11 @@ public sealed partial class SettingsLayoutTests
                 var card = (Style)window.FindResource("EncoreCardStyle");
                 var meter = (Style)window.FindResource("EncoreLevelMeterStyle");
                 var accent = window.FindResource("AccentButtonStyle");
-                foreach (var (page, slug, sections) in expected)
+                foreach (var (viewModel, slug, sections) in expected)
                 {
-                    model.SelectedNavItem = model.NavItems.First(i => i.Page == page);
+                    model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == viewModel);
                     Sta.Pump(TimeSpan.FromMilliseconds(100));
-                    if (page == model.TrackLayout)
+                    if (viewModel == model.TrackLayout)
                     {
                         // An unsaved draft (the save bar), fabricated levels, and the picker open.
                         var tracks = model.TrackLayout.Tracks;
@@ -123,21 +123,21 @@ public sealed partial class SettingsLayoutTests
                         tracks[0].Sources[0].ShowPeak(0.3f);
                         Sta.Pump(TimeSpan.FromMilliseconds(50));
                         Assert.True(tracks[0].HasWarning);
-                        Assert.True(((FrameworkElement)page.View.FindName("SaveBar")).IsVisible);
-                        var meters = Descendants<ProgressBar>(page.View).ToList();
+                        Assert.True(((FrameworkElement)viewModel.View.FindName("SaveBar")).IsVisible);
+                        var meters = Descendants<ProgressBar>(viewModel.View).ToList();
                         Assert.Equal(5, meters.Count);
                         Assert.All(meters, m => Assert.Same(meter, m.Style));
 
-                        var picker = (System.Windows.Controls.Primitives.Popup)page.View.FindName("Picker");
-                        picker.PlacementTarget = page.View;
-                        model.TrackLayout.OpenPicker(tracks[1]);
+                        var picker = (System.Windows.Controls.Primitives.Popup)viewModel.View.FindName("Picker");
+                        picker.PlacementTarget = viewModel.View;
+                        model.TrackLayout.Picker.Open(tracks[1]);
                         Sta.Pump(TimeSpan.FromMilliseconds(100));
                         Assert.True(picker.IsOpen);
                         var flyout = (FrameworkElement)picker.Child;
                         Assert.Equal(2, Descendants<ListBoxItem>(flyout).Count());
                         Assert.All(Descendants<ProgressBar>(flyout), m => Assert.Same(meter, m.Style));
                         SaveElement(flyout, $"settings-audio-tracks-picker-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png", window);
-                        model.TrackLayout.ClosePicker();
+                        model.TrackLayout.Picker.Close();
                         tracks[0].ShowPeak(1f);
                         tracks[1].ShowPeak(0.0316f);
                         tracks[0].Sources[0].ShowPeak(0.3f);
@@ -149,17 +149,17 @@ public sealed partial class SettingsLayoutTests
                         }
                     }
 
-                    Assert.True(page.View.IsLoaded, $"{page.Title} didn't load under {which}");
-                    var found = Descendants<HeaderedContentControl>(page.View).Where(s => s.Visibility == Visibility.Visible).ToList();
+                    Assert.True(viewModel.View.IsLoaded, $"{viewModel.Title} didn't load under {which}");
+                    var found = Descendants<HeaderedContentControl>(viewModel.View).Where(s => s.Visibility == Visibility.Visible).ToList();
                     Assert.Equal(sections, found.Select(s => s.Header as string));
                     Assert.All(found, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
 
                     // A bug that bit: a keyed local style hid Gaming dark's implicit Button style. Save changes is the one accent button.
-                    Assert.All(Descendants<Button>(page.View).Where(b => b.Style != accent), b => Assert.Equal(DependencyProperty.UnsetValue, b.ReadLocalValue(FrameworkElement.StyleProperty)));
+                    Assert.All(Descendants<Button>(viewModel.View).Where(b => b.Style != accent), b => Assert.Equal(DependencyProperty.UnsetValue, b.ReadLocalValue(FrameworkElement.StyleProperty)));
                     Save(window, $"settings-{slug}-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
 
                     // A game's page, with the breadcrumb in the page header.
-                    if (page == model.GameProfiles)
+                    if (viewModel == model.GameProfiles)
                     {
                         model.GameProfiles.Open(model.GameProfiles.Profiles[0]);
                         Sta.Pump(TimeSpan.FromMilliseconds(150));
@@ -194,7 +194,7 @@ public sealed partial class SettingsLayoutTests
         try
         {
             window.Show();
-            model.SelectedNavItem = model.NavItems.First(i => i.Page == model.General);
+            model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == model.General);
             Sta.Pump(TimeSpan.FromMilliseconds(100));
             Assert.False(message.IsVisible);
 

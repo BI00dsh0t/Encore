@@ -31,16 +31,16 @@ public sealed class PlayerFailureTests : IDisposable
     public void AMissingExtensionIsNamedWithItsStorePageAndTheDefaultPlayer(string codec, string extension, string store)
     {
         var player = new FakePlayer { Media = Media(decodable: false, codec) };
-        var (library, page) = Open(player);
+        var (library, viewModel) = Open(player);
 
-        Assert.True(page.IsFailed);
-        Assert.Equal($"This video is {codec}, which Windows can't play without the {extension}. Get it from the Microsoft Store, then open the file again. The file itself is fine.", page.Message);
-        Assert.Equal($"Get the {extension}", page.StoreLinkText);
+        Assert.True(viewModel.IsFailed);
+        Assert.Equal($"This video is {codec}, which Windows can't play without the {extension}. Get it from the Microsoft Store, then open the file again. The file itself is fine.", viewModel.Message);
+        Assert.Equal($"Get the {extension}", viewModel.StoreLinkText);
         Assert.Equal(0, player.FirstFrames);
         Assert.Contains(_log, l => l.Contains($"video {codec} NOT decodable", StringComparison.Ordinal));
 
-        page.OpenStoreCommand.Execute(null);
-        page.OpenInDefaultPlayerCommand.Execute(null);
+        viewModel.OpenStoreCommand.Execute(null);
+        viewModel.OpenInDefaultPlayerCommand.Execute(null);
         Assert.Equal([("open", store), ("open", Path.Combine(_folder, Clip))], _shell.Calls);
 
         library.DrillIn.Close();
@@ -51,11 +51,11 @@ public sealed class PlayerFailureTests : IDisposable
     public void AnUnknownFormatOrAFileThatWontOpenSaysSoWithNoStoreLink()
     {
         var (_, unknown) = Open(new FakePlayer { Media = Media(decodable: false, "VP9") });
-        Assert.Equal(PlayerPage.UnknownCodecText, unknown.Message);
+        Assert.Equal(PlayerViewModel.UnknownCodecText, unknown.Message);
         Assert.False(unknown.HasStoreLink);
 
         var (_, corrupt) = Open(new FakePlayer { Fail = true });
-        Assert.Equal(PlayerPage.FailedText, corrupt.Message);
+        Assert.Equal(PlayerViewModel.FailedText, corrupt.Message);
         Assert.False(corrupt.HasStoreLink);
         Assert.Contains(_log, l => l.Contains("couldn't open clip.mp4", StringComparison.Ordinal));
     }
@@ -64,11 +64,11 @@ public sealed class PlayerFailureTests : IDisposable
     public void ATrackWindowsCantDecodeIsUnavailableAndCantBeChosen()
     {
         var player = new FakePlayer { Media = Media(decodable: true, "H264") with { TracksPlayable = [true, false, true, true] } };
-        var (_, page) = Open(player);
+        var (_, viewModel) = Open(player);
 
-        Assert.Equal(["Game", "Mic (unavailable)", "Discord", "Desktop"], page.Tracks.Select(t => t.Name));
-        page.SelectedTrack = page.Tracks[1];
-        Assert.Same(page.Tracks[0], page.SelectedTrack);
+        Assert.Equal(["Game", "Mic (unavailable)", "Discord", "Desktop"], viewModel.Tracks.Select(t => t.Name));
+        viewModel.SelectedTrack = viewModel.Tracks[1];
+        Assert.Same(viewModel.Tracks[0], viewModel.SelectedTrack);
         Assert.Equal(0, player.SelectedTrack);
     }
 
@@ -78,27 +78,27 @@ public sealed class PlayerFailureTests : IDisposable
         var dev = new Instance(Instance.DevName, _folder, _folder);
         var installed = new Instance(Instance.InstalledName, _folder, _folder);
 
-        Assert.Equal("AV1", ShellApp.PlayerUnsupported(["--player-unsupported=av1"], dev));
-        Assert.Equal("HEVC", ShellApp.PlayerUnsupported(["--tray", "--player-unsupported=HEVC"], dev));
-        Assert.Null(ShellApp.PlayerUnsupported(["--player-unsupported=hevc"], installed));
-        Assert.Null(ShellApp.PlayerUnsupported(["--player-unsupported=vp9"], dev));
-        Assert.Null(ShellApp.PlayerUnsupported([], dev));
+        Assert.Equal("AV1", AppArguments.PlayerUnsupported(["--player-unsupported=av1"], dev));
+        Assert.Equal("HEVC", AppArguments.PlayerUnsupported(["--tray", "--player-unsupported=HEVC"], dev));
+        Assert.Null(AppArguments.PlayerUnsupported(["--player-unsupported=hevc"], installed));
+        Assert.Null(AppArguments.PlayerUnsupported(["--player-unsupported=vp9"], dev));
+        Assert.Null(AppArguments.PlayerUnsupported([], dev));
     }
 
     private static PlayerMedia Media(bool decodable, string codec) =>
         new(1280, 720, TimeSpan.FromSeconds(10), ["Game", "Mic", "Discord", "Desktop"], decodable, codec);
 
-    private (LibraryPage Library, PlayerPage Page) Open(FakePlayer player)
+    private (LibraryViewModel Library, PlayerViewModel ViewModel) Open(FakePlayer player)
     {
         _engine.State = _engine.State! with
         {
             LibraryFolder = _folder,
             Library = [new LibraryItem(Clip, null, 1, DateTimeOffset.UnixEpoch, false)],
         };
-        var library = new LibraryPage(_engine, shell: _shell, player: () => player, log: _log.Add);
+        var library = new LibraryViewModel(_engine, shell: _shell, player: () => player, log: _log.Add);
         library.Render(_engine.State);
-        library.Click(library.Rows.Single(), ctrl: false, shift: false);
+        library.Selection.Click(library.List.Rows.Single(), ctrl: false, shift: false);
         library.OpenFocused();
-        return (library, library.Player!);
+        return (library, library.Playback.Player!);
     }
 }

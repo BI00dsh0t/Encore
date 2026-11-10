@@ -30,13 +30,13 @@ public sealed class GamingTextBoxPaddingTests
         try
         {
             window.Show();
-            model.Library.SearchText = "clutch";
+            model.Library.List.SearchText = "clutch";
             Sta.Pump(TimeSpan.FromMilliseconds(150));
             var offsets = Insets(window);
             Save(window, "gaming-textbox-library.png");
 
             model.IsSettingsTabSelected = true;
-            model.SelectedPage = model.Pages.OfType<RewindSettingsPage>().Single();
+            model.SelectedSettingsViewModel = model.SettingsViewModels.OfType<RewindSettingsViewModel>().Single();
             Sta.Pump(TimeSpan.FromMilliseconds(150));
             offsets.AddRange(Insets(window));
             Save(window, "gaming-textbox-clips.png");

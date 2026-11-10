@@ -1,38 +1,7 @@
 using System.IO;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Encore.App.Library;
-
-/// <summary>How the Library list is grouped.</summary>
-internal enum LibraryGrouping
-{
-    Game,
-    Day,
-
-    /// <summary>One flat list with no headers.</summary>
-    None,
-}
-
-/// <summary>How the Library orders its rows within each group.</summary>
-internal enum LibrarySort
-{
-    NewestFirst,
-    OldestFirst,
-    Name,
-    LargestFirst,
-    LongestFirst,
-    Game,
-}
-
-/// <summary>Which dates the Library list shows, against the local today.</summary>
-internal enum LibraryDateFilter
-{
-    All,
-    Today,
-    Last7Days,
-    Last30Days,
-}
 
 /// <summary>The Library's view choices, remembered per instance in a small JSON file; any read or write failure is ignored.</summary>
 internal sealed record LibraryViewState(
@@ -91,7 +60,3 @@ internal sealed record LibraryViewState(
         }
     }
 }
-
-[JsonSourceGenerationOptions(UseStringEnumConverter = true, WriteIndented = true)]
-[JsonSerializable(typeof(LibraryViewState))]
-internal sealed partial class LibraryViewStateJson : JsonSerializerContext;

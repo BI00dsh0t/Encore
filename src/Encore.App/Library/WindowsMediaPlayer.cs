@@ -116,10 +116,10 @@ internal sealed class WindowsMediaPlayer : IPlayer
             (int)session.NaturalVideoWidth,
             (int)session.NaturalVideoHeight,
             duration > TimeSpan.Zero && duration < TimeSpan.FromDays(1) ? duration : null,
-            item.AudioTracks.Select(t => t.Name).ToList(),
+            item.AudioTracks.Select(track => track.Name).ToList(),
             _forcedUnsupported is null && video is not null && Playable(video.SupportInfo.DecoderStatus),
             _forcedUnsupported ?? video?.GetEncodingProperties().Subtype ?? "",
-            item.AudioTracks.Select(t => Playable(t.SupportInfo.DecoderStatus)).ToList());
+            item.AudioTracks.Select(track => Playable(track.SupportInfo.DecoderStatus)).ToList());
     }
 
     // Paused, a position set delivers that frame through the frame server.

@@ -107,7 +107,7 @@
 
             <HeaderedContentControl Header="Video quality — for Clips and Recordings" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
-                    <Grid IsEnabled="{Binding CanEditVideo}">
+                    <Grid DataContext="{Binding Video}" IsEnabled="{Binding CanEdit}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
                             <ColumnDefinition Width="*" />

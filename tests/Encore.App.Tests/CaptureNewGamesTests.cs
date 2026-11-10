@@ -43,7 +43,7 @@ public sealed class CaptureNewGamesTests
         {
             window.Show();
             model.IsSettingsTabSelected = true;
-            model.SelectedPage = model.General;
+            model.SelectedSettingsViewModel = model.General;
             foreach (var (theme, file) in new[] { (AppTheme.Fluent, "general-games-fluent.png"), (AppTheme.GamingDark, "general-games-gaming.png") })
             {
                 ThemeService.ForWindow(window).Apply(theme);

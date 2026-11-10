@@ -75,7 +75,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId), "the profile on the Game Profiles page");
 
             // Recordings are off by default; the Game Profiles page switches them on.
-            var profile = main.GameProfiles.Page(ProfileId);
+            var profile = main.GameProfiles.GameFor(ProfileId);
             Assert.False(profile.RecordingsEnabled);
             profile.RecordingsEnabled = true;
             Until(() => engine.State!.Settings.Profiles[ProfileId].RecordingsEnabled, "recordingsEnabled saved");
@@ -121,7 +121,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             var engine = second.Engine;
             var main = second.Main;
             Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId) && main.Hotkeys.Monitor.IsAllScreens, "the pages after a restart");
-            Assert.True(main.GameProfiles.Page(ProfileId).RecordingsEnabled);
+            Assert.True(main.GameProfiles.GameFor(ProfileId).RecordingsEnabled);
             Assert.True(main.Hotkeys.IsSeparateMode);
             Assert.Equal("Ctrl+Alt+Shift+F20", Row(main.Hotkeys, HotkeyAction.RecordStart).BindingText);
             Assert.Equal("Ctrl+Alt+Shift+F21", Row(main.Hotkeys, HotkeyAction.RecordStop).BindingText);
@@ -148,9 +148,9 @@ public sealed class RecordingsEndToEndTests : IDisposable
             File.Copy(fragmented, game, overwrite: true);
             File.Copy(fragmented, screen, overwrite: true);
             var library = main.Library;
-            Until(() => library.Rows.Count == 2 && library.Rows.All(r => r.Length != ""), "both Recordings listed with a length");
-            library.GroupBy = Library.LibraryGrouping.Game;
-            Assert.Equal(["Alpha", "Monitor Recordings"], library.Entries.OfType<Library.LibraryGroupHeader>().Select(h => h.Name));
+            Until(() => library.List.Rows.Count == 2 && library.List.Rows.All(r => r.Length != ""), "both Recordings listed with a length");
+            library.List.GroupBy = Library.LibraryGrouping.Game;
+            Assert.Equal(["Alpha", "Monitor Recordings"], library.List.Entries.OfType<Library.LibraryGroupHeader>().Select(h => h.Name));
             Assert.Contains(engine.State!.Library, i => i.Path == Path.GetRelativePath(output, game));
         }
 
@@ -187,7 +187,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             Log?.WriteLine($"trimmed: {new FileInfo(torn).Length} bytes, {seconds:0.###} s");
             Assert.InRange(seconds, 2.0, 3.5);
             Assert.Equal("", Decode(torn));
-            Until(() => third.Main.Library.Rows.Any(r => r.Path == @"Alpha\Alpha_torn.mp4" && r.Length != ""), "the trimmed Recording listed with a length");
+            Until(() => third.Main.Library.List.Rows.Any(r => r.Path == @"Alpha\Alpha_torn.mp4" && r.Length != ""), "the trimmed Recording listed with a length");
         }
 
         Log?.WriteLine("engine log:\n" + string.Join("\n", logs.Messages));
@@ -206,9 +206,9 @@ public sealed class RecordingsEndToEndTests : IDisposable
 
     private static HotkeyBindingStatus? Status(EngineConnection engine, HotkeyAction action) => engine.State!.Hotkeys.Bindings.SingleOrDefault(b => b.Action == action);
 
-    private static Settings.HotkeyRow Row(Settings.HotkeysPage page, HotkeyAction action) => page.Rows.Single(r => r.Action == action);
+    private static Settings.HotkeyRow Row(Settings.HotkeysViewModel viewModel, HotkeyAction action) => viewModel.Rows.Single(r => r.Action == action);
 
-    private static string[] Shown(Settings.HotkeysPage page) => [.. page.Rows.Where(r => r.IsShown).Select(r => r.Label)];
+    private static string[] Shown(Settings.HotkeysViewModel viewModel) => [.. viewModel.Rows.Where(r => r.IsShown).Select(r => r.Label)];
 
     /// <summary>A fragmented MP4 like a Recording's: an empty moov, then 1 s fragments (H.264 and AAC, CPU only).</summary>
     private string Fragmented(string name, int seconds)

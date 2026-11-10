@@ -1,38 +1,13 @@
-using System.ComponentModel;
 using System.Windows.Input;
 
 namespace Encore.App.Settings;
 
-/// <summary>A game's page, view-only code: F2 focuses the name, Enter or leaving commits, and Esc cancels the rename.</summary>
+/// <summary>A game's page, view-only code: F2 focuses the name, and the name box's keys go to the view model's draft.</summary>
 internal partial class GamePageView
 {
-    public GamePageView()
-    {
-        InitializeComponent();
-        DataContextChanged += (_, e) =>
-        {
-            if (e.OldValue is GamePage old)
-            {
-                old.PropertyChanged -= OnPageChanged;
-            }
+    public GamePageView() => InitializeComponent();
 
-            if (e.NewValue is GamePage page)
-            {
-                page.PropertyChanged += OnPageChanged;
-                NameBox.Text = page.Name;
-            }
-        };
-    }
-
-    private GamePage? Page => DataContext as GamePage;
-
-    private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(GamePage.Name) && !NameBox.IsKeyboardFocusWithin && Page is { } page)
-        {
-            NameBox.Text = page.Name;
-        }
-    }
+    private GameViewModel? ViewModel => DataContext as GameViewModel;
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -44,34 +19,41 @@ internal partial class GamePageView
         }
     }
 
+    private void OnNameGotFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (ViewModel is { } viewModel)
+        {
+            viewModel.IsEditingName = true;
+        }
+    }
+
+    // Enter commits the name and Esc puts it back; an Esc with nothing to put back is left for the page to close.
     private void OnNameKeyDown(object sender, KeyEventArgs e)
     {
-        if (Page is not { } page)
+        if (ViewModel is not { } viewModel)
         {
             return;
         }
 
         if (e.Key == Key.Enter)
         {
-            page.Name = NameBox.Text;
-            NameBox.Text = page.Name;
-            NameBox.SelectAll();
-            e.Handled = true;
+            viewModel.CommitName();
         }
-        else if (e.Key == Key.Escape && NameBox.Text != page.Name)
+        else if (e.Key != Key.Escape || !viewModel.RevertName())
         {
-            NameBox.Text = page.Name;
-            NameBox.SelectAll();
-            e.Handled = true;
+            return;
         }
+
+        NameBox.SelectAll();
+        e.Handled = true;
     }
 
     private void OnNameLostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (Page is { } page)
+        if (ViewModel is { } viewModel)
         {
-            page.Name = NameBox.Text;
-            NameBox.Text = page.Name;
+            viewModel.IsEditingName = false;
+            viewModel.CommitName();
         }
     }
 }

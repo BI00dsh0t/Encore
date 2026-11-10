@@ -26,7 +26,7 @@ internal partial class PlayerView
     private readonly DispatcherTimer _settle;
     private readonly DispatcherTimer _position;
     private readonly NoPictureWatch _noPicture;
-    private PlayerPage? _page;
+    private PlayerViewModel? _viewModel;
     private VideoSurface? _surface;
     private int _presentPending;
     private ContextMenu? _menu;
@@ -52,9 +52,9 @@ internal partial class PlayerView
 
         _image.IsFrontBufferAvailableChanged += OnFrontBufferAvailableChanged;
         PictureArea.SizeChanged += OnPictureAreaSizeChanged;
-        DataContextChanged += (_, e) => Attach(e.NewValue as PlayerPage);
+        DataContextChanged += (_, e) => Attach(e.NewValue as PlayerViewModel);
         Unloaded += (_, _) => Attach(null);
-        Loaded += (_, _) => Attach(DataContext as PlayerPage);
+        Loaded += (_, _) => Attach(DataContext as PlayerViewModel);
 
         // The volume slider slides out while the pointer or keyboard focus is in the speaker's group.
         VolumeGroup.MouseEnter += (_, _) => SetVolumeHover(true);
@@ -87,13 +87,13 @@ internal partial class PlayerView
     /// <summary>Opens the gear's menu: the Tracks in file order with the playing one ticked, then "Open in default player".</summary>
     internal ContextMenu? OpenSettingsMenu()
     {
-        if (_page is not { IsClosed: false } page)
+        if (_viewModel is not { IsClosed: false } viewModel)
         {
             return null;
         }
 
         CloseSettingsMenu();
-        var menu = BuildSettingsMenu(page);
+        var menu = BuildSettingsMenu(viewModel);
         menu.Closed += (_, _) => Gear.IsChecked = false;
         _menu = menu;
         menu.IsOpen = true;
@@ -112,34 +112,34 @@ internal partial class PlayerView
         }
 
         _noPicture.Resume();
-        if (_page is { IsClosed: false })
+        if (_viewModel is { IsClosed: false })
         {
             ReleaseSurface();
             RequestPresent();
         }
     }
 
-    private void Attach(PlayerPage? page)
+    private void Attach(PlayerViewModel? viewModel)
     {
-        if (ReferenceEquals(page, _page))
+        if (ReferenceEquals(viewModel, _viewModel))
         {
             return;
         }
 
         Detach();
-        if (page is null || !IsLoaded)
+        if (viewModel is null || !IsLoaded)
         {
             return;
         }
 
-        _page = page;
+        _viewModel = viewModel;
         _noPicture.ForgetFrames();
-        page.Player.FrameAvailable += OnPlayerFrame;
-        page.PropertyChanged += OnPagePropertyChanged;
-        _position.IsEnabled = page.IsPlaying;
+        viewModel.Player.FrameAvailable += OnPlayerFrame;
+        viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _position.IsEnabled = viewModel.IsPlaying;
 
         // A page that opened before this view attached already has its media: wait for its picture from now.
-        if (page.Media is not null && !page.IsFailed)
+        if (viewModel.Media is not null && !viewModel.IsFailed)
         {
             _noPicture.Start();
         }
@@ -147,16 +147,16 @@ internal partial class PlayerView
 
     private void Detach()
     {
-        if (_page is { } old)
+        if (_viewModel is { } old)
         {
             old.Player.FrameAvailable -= OnPlayerFrame;
-            old.PropertyChanged -= OnPagePropertyChanged;
+            old.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
         // The scrub stops while its page is still known, so the page's IsScrubbing is cleared.
         StopScrub();
         CloseSettingsMenu();
-        _page = null;
+        _viewModel = null;
         _settle.Stop();
         _position.Stop();
         _noPicture.Cancel();
@@ -182,9 +182,9 @@ internal partial class PlayerView
     private void Present()
     {
         Interlocked.Exchange(ref _presentPending, 0);
-        if (_page is { IsClosed: false, IsFailed: false, Media: { } media } page && _frontBufferAvailable)
+        if (_viewModel is { IsClosed: false, IsFailed: false, Media: { } media } viewModel && _frontBufferAvailable)
         {
-            page.DrawFrame(() => EnsureSurface(media), Show, ReleaseSurface);
+            viewModel.DrawFrame(() => EnsureSurface(media), Show, ReleaseSurface);
         }
     }
 
@@ -243,13 +243,13 @@ internal partial class PlayerView
     // No frame since the file opened, such as a cut-off file: the page says it can't be played.
     private void OnNoPicture()
     {
-        if (_page is { IsClosed: false, IsFailed: false } page)
+        if (_viewModel is { IsClosed: false, IsFailed: false } viewModel)
         {
-            page.ShowFailure();
+            viewModel.ShowFailure();
         }
     }
 
-    private void OnPositionTick(object? sender, EventArgs e) => _page?.RefreshPosition();
+    private void OnPositionTick(object? sender, EventArgs e) => _viewModel?.RefreshPosition();
 
     // The texture is remade only once the size has held for a moment.
     private void OnPictureAreaSizeChanged(object sender, SizeChangedEventArgs e)
@@ -266,42 +266,42 @@ internal partial class PlayerView
     }
 
     // Once the page has its media, the first frame (already shown, paused) is drawn for this view.
-    private void OnPagePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PlayerPage.Media))
+        if (e.PropertyName == nameof(PlayerViewModel.Media))
         {
             _noPicture.Start();
             RequestPresent();
         }
-        else if (e.PropertyName == nameof(PlayerPage.IsPlaying) && _page is { } page)
+        else if (e.PropertyName == nameof(PlayerViewModel.IsPlaying) && _viewModel is { } viewModel)
         {
-            _position.IsEnabled = page.IsPlaying;
+            _position.IsEnabled = viewModel.IsPlaying;
         }
     }
 
     // The page's keys, after the focused control's own; they take no modifier. Esc is the shell's.
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (Keyboard.Modifiers == ModifierKeys.None && _page?.HandleKey(e.Key) == true)
+        if (Keyboard.Modifiers == ModifierKeys.None && _viewModel?.HandleKey(e.Key) == true)
         {
             e.Handled = true;
         }
     }
 
-    private ContextMenu BuildSettingsMenu(PlayerPage page)
+    private ContextMenu BuildSettingsMenu(PlayerViewModel viewModel)
     {
         var menu = new ContextMenu { PlacementTarget = Gear, Placement = PlacementMode.Top };
         var itemStyle = (Style)FindResource("EncorePlayerMenuItemStyle");
         menu.Items.Add(HeadingItem("Audio track", itemStyle));
-        foreach (var track in page.Tracks)
+        foreach (var track in viewModel.Tracks)
         {
-            menu.Items.Add(TrackItem(page, track, itemStyle));
+            menu.Items.Add(TrackItem(viewModel, track, itemStyle));
         }
 
-        if (page.SupportsExternalActions)
+        if (viewModel.SupportsExternalActions)
         {
             menu.Items.Add(new Separator());
-            var open = new MenuItem { Header = "Open in default player", Style = itemStyle, Command = page.OpenInDefaultPlayerCommand };
+            var open = new MenuItem { Header = "Open in default player", Style = itemStyle, Command = viewModel.OpenInDefaultPlayerCommand };
             menu.Items.Add(open);
         }
 
@@ -317,7 +317,7 @@ internal partial class PlayerView
         IsHitTestVisible = false,
     };
 
-    private static MenuItem TrackItem(PlayerPage page, PlayerTrack track, Style itemStyle)
+    private static MenuItem TrackItem(PlayerViewModel viewModel, PlayerTrack track, Style itemStyle)
     {
         var item = new MenuItem
         {
@@ -327,7 +327,7 @@ internal partial class PlayerView
             IsChecked = track.IsPlaying,
             IsEnabled = track.IsAvailable,
         };
-        item.Click += (_, _) => page.SelectedTrack = track;
+        item.Click += (_, _) => viewModel.SelectedTrack = track;
         return item;
     }
 
@@ -369,9 +369,9 @@ internal partial class PlayerView
     // Dragging the seek bar's thumb: the page keeps only the latest position, applied once a rendered frame.
     private void OnScrubStarted(object sender, DragStartedEventArgs e)
     {
-        if (_page is { } page)
+        if (_viewModel is { } viewModel)
         {
-            page.IsScrubbing = true;
+            viewModel.IsScrubbing = true;
             CompositionTarget.Rendering += OnRendering;
         }
     }
@@ -381,13 +381,13 @@ internal partial class PlayerView
     private void StopScrub()
     {
         CompositionTarget.Rendering -= OnRendering;
-        if (_page is { IsScrubbing: true } page)
+        if (_viewModel is { IsScrubbing: true } viewModel)
         {
-            page.IsScrubbing = false;
+            viewModel.IsScrubbing = false;
         }
     }
 
-    private void OnRendering(object? sender, EventArgs e) => _page?.ApplyPendingScrub();
+    private void OnRendering(object? sender, EventArgs e) => _viewModel?.ApplyPendingScrub();
 
     // A lock screen or display change loses the D3D9 device: remake the surface and redraw the current frame.
     private void OnFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e) =>

@@ -71,8 +71,10 @@
                              AutomationProperties.Name="Game name"
                              FontSize="20"
                              FontWeight="SemiBold"
+                             GotKeyboardFocus="OnNameGotFocus"
                              KeyDown="OnNameKeyDown"
                              LostKeyboardFocus="OnNameLostFocus"
+                             Text="{Binding NameDraft, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Rename (F2)" />
                     <WrapPanel Margin="0,6,0,0">
                         <TextBlock VerticalAlignment="Center" Style="{DynamicResource EncoreGameCaptionStyle}">

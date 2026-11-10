@@ -6,38 +6,18 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Overlay;
 
-/// <summary>What the Overlay shows: no dot, a hollow one (Rewind on) or a solid one (recording).</summary>
-internal enum OverlayDot
-{
-    None,
-    Hollow,
-    Solid,
-}
-
 /// <summary>The Overlay's state, derived only from the engine's state: the dot, icons and queued messages. docs/code-notes.md.</summary>
 internal sealed class OverlayViewModel : Observable
 {
     private readonly IEngineSession _engine;
     private readonly Action<Action> _post;
     private readonly TimeProvider _time;
-    private readonly List<Warning> _waiting = [];
-    private readonly HashSet<string> _seen = [];
-    private readonly Func<int?, bool?> _overlayPlanes;
-    private readonly Action<Action> _background;
-    // Whether a query is out, and for which Target Game process.
-    private bool _askOut;
-    private int? _askFor;
-
-    // Bumped by a display change, so an answer asked before it is dropped.
-    private int _generation;
-    private bool _inQuery;
+    private readonly OverlayPlaneQuery _planes;
+    private readonly OverlayMessageQueue _messages;
     private ITimer? _cooldownEnd;
     private ITimer? _dotEnd;
     private DateTimeOffset _dotUntil;
     private (OverlayDot Dot, bool Muted) _steady;
-    private (int? ProcessId, bool? Planes, DateTimeOffset At)? _planes;
-    private ITimer? _messageEnd;
-    private Warning? _shown;
     private Warning? _message;
     private OverlayDot _dot;
     private bool _saving;
@@ -57,8 +37,8 @@ internal sealed class OverlayViewModel : Observable
         _engine = engine;
         _post = post;
         _time = time ?? TimeProvider.System;
-        _overlayPlanes = overlayPlanes ?? (_ => true);
-        _background = background ?? (action => action());
+        _planes = new OverlayPlaneQuery(_time, overlayPlanes ?? (_ => true), background ?? (action => action()), post, Refresh);
+        _messages = new OverlayMessageQueue(_time, post, Refresh);
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -102,9 +82,7 @@ internal sealed class OverlayViewModel : Observable
     /// <summary>The monitors changed: ask again whether the Target Game's has overlay planes. Runs on the UI thread.</summary>
     public void DisplaysChanged()
     {
-        _planes = null;
-        _askOut = false;
-        _generation++;
+        _planes.Reset();
         Refresh();
 
         // The window is placed again even when nothing it shows changed.
@@ -160,27 +138,24 @@ internal sealed class OverlayViewModel : Observable
 
         var saving = current is not null && (current.ClipsWriting > 0 || remaining > TimeSpan.Zero);
         (dot, var micMuted) = Present(state, dot, dot != OverlayDot.None && current!.MicMuted);
-        var diskFull = state is not null && state.Warnings.Any(w => w.Overlay && w.Code == ErrorCodes.DiskFull);
-        var message = NextMessage(state);
+        var diskFull = state is not null && state.Warnings.Any(warning => warning.Overlay && warning.Code == ErrorCodes.DiskFull);
+        var message = _messages.Next(state);
 
         // Hide before the Target moves, and move before showing, so nothing flashes on the wrong monitor.
-        if (dot == OverlayDot.None && !saving && message is null && !diskFull)
+        var hides = dot == OverlayDot.None && !saving && message is null && !diskFull;
+        if (!hides)
         {
-            Dot = dot;
-            Saving = saving;
-            Message = message;
-            MicMuted = micMuted;
-            DiskFull = diskFull;
             TargetProcessId = state?.TargetGame?.ProcessId;
         }
-        else
+
+        Dot = dot;
+        Saving = saving;
+        Message = message;
+        MicMuted = micMuted;
+        DiskFull = diskFull;
+        if (hides)
         {
             TargetProcessId = state?.TargetGame?.ProcessId;
-            Dot = dot;
-            Saving = saving;
-            Message = message;
-            MicMuted = micMuted;
-            DiskFull = diskFull;
         }
     }
 
@@ -188,7 +163,7 @@ internal sealed class OverlayViewModel : Observable
     private (OverlayDot Dot, bool Muted) Present(StateSnapshot? state, OverlayDot dot, bool muted)
     {
         var mode = state is null ? OverlayDotMode.Auto : SettingsValues.Global(state.Settings, Keys.OverlayDot);
-        DotAlways = mode == OverlayDotMode.Always || (mode == OverlayDotMode.Auto && Planes(state?.TargetGame?.ProcessId) == true);
+        DotAlways = mode == OverlayDotMode.Always || (mode == OverlayDotMode.Auto && _planes.Planes(state?.TargetGame?.ProcessId) == true);
         var now = _time.GetUtcNow();
         if ((dot, muted) != _steady)
         {
@@ -214,129 +189,5 @@ internal sealed class OverlayViewModel : Observable
         _dotEnd?.Dispose();
         _dotEnd = null;
         Refresh();
-    }
-
-    // Asked once per Target Game and when the monitors change; until answered, the monitor counts as having no planes.
-    private bool? Planes(int? processId)
-    {
-        var now = _time.GetUtcNow();
-        var stale = _planes is not { } known || known.ProcessId != processId
-            || (known.Planes is null && now - known.At >= UnknownPlanesRetry);
-        if (stale && !(_askOut && _askFor == processId))
-        {
-            (_askOut, _askFor) = (true, processId);
-            var generation = _generation;
-            _inQuery = true;
-            try
-            {
-                _background(() =>
-                {
-                    bool? planes;
-                    try
-                    {
-                        planes = _overlayPlanes(processId);
-                    }
-                    catch (Exception)
-                    {
-                        planes = null;
-                    }
-
-                    _post(() => Answered(generation, processId, planes));
-                });
-            }
-            finally
-            {
-                _inQuery = false;
-            }
-        }
-
-        return _planes is { } answer && answer.ProcessId == processId ? answer.Planes : null;
-    }
-
-    // Runs on the UI thread. An answer that comes back inline, inside Planes, is read by the Refresh that asked.
-    private void Answered(int generation, int? processId, bool? planes)
-    {
-        if (generation != _generation)
-        {
-            return;
-        }
-
-        if (_askOut && _askFor == processId)
-        {
-            _askOut = false;
-        }
-
-        _planes = (processId, planes, _time.GetUtcNow());
-        if (!_inQuery)
-        {
-            Refresh();
-        }
-    }
-
-    // Queues the unseen Overlay warnings and picks the one to show; null while disconnected.
-    private Warning? NextMessage(StateSnapshot? state)
-    {
-        if (state is null)
-        {
-            // What was showing has been seen; what was waiting still waits.
-            EndMessage();
-            return null;
-        }
-
-        var active = state.Warnings.Where(w => w.Overlay).ToList();
-        var activeIds = active.Select(w => w.Id).ToHashSet();
-        _seen.RemoveWhere(id => !activeIds.Contains(id));
-        foreach (var warning in active.OrderBy(w => w.At))
-        {
-            if (!_seen.Add(warning.Id))
-            {
-                continue;
-            }
-
-            // A repeat of a waiting message takes its place; a repeat of the one on screen queues.
-            var repeat = _waiting.FindIndex(w => w.Code == warning.Code && w.Message == warning.Message);
-            if (repeat >= 0)
-            {
-                _waiting[repeat] = warning;
-            }
-            else
-            {
-                _waiting.Add(warning);
-            }
-        }
-
-        // Dismissed before their turn, or while showing.
-        _waiting.RemoveAll(w => !activeIds.Contains(w.Id));
-        if (_shown is not null && !activeIds.Contains(_shown.Id))
-        {
-            EndMessage();
-        }
-
-        if (_shown is null && _waiting.Count > 0)
-        {
-            var shown = _waiting[0];
-            _waiting.RemoveAt(0);
-            _shown = shown;
-            _messageEnd = _time.CreateTimer(_ => _post(() => Expire(shown)), null, MessageDuration, Timeout.InfiniteTimeSpan);
-        }
-
-        return _shown;
-    }
-
-    // A timer already queued when its message ended early must not end the next one.
-    private void Expire(Warning shown)
-    {
-        if (ReferenceEquals(_shown, shown))
-        {
-            EndMessage();
-            Refresh();
-        }
-    }
-
-    private void EndMessage()
-    {
-        _messageEnd?.Dispose();
-        _messageEnd = null;
-        _shown = null;
     }
 }

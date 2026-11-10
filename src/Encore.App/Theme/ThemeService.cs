@@ -209,7 +209,7 @@ internal sealed class ThemeService
     private static void AddOnce<T>(IList<ResourceDictionary> merged)
         where T : ResourceDictionary, new()
     {
-        if (!merged.Any(d => d is T))
+        if (!merged.Any(dictionary => dictionary is T))
         {
             merged.Insert(Math.Max(0, merged.Count - 1), new T());
         }
@@ -218,7 +218,9 @@ internal sealed class ThemeService
     // Based on the style in WPF's Fluent dictionary, which is first in the list once ThemeMode is set.
     private void DimFluentDisabledText(IList<ResourceDictionary> merged)
     {
-        var fluent = merged.FirstOrDefault(d => d.Source?.OriginalString.Contains("PresentationFramework.Fluent", StringComparison.Ordinal) == true);
+        const string FluentAssembly = "PresentationFramework.Fluent";
+        var fluent = merged.FirstOrDefault(
+            dictionary => dictionary.Source?.OriginalString.Contains(FluentAssembly, StringComparison.Ordinal) == true);
         foreach (var type in FluentDimsWhenDisabled)
         {
             if (fluent?[type] is not Style basis)

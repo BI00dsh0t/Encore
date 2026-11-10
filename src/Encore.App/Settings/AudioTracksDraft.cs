@@ -3,20 +3,6 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
-/// <summary>One Track of an <see cref="AudioTracksDraft"/>: its id (kept across renames and moves), name, mute rule and sources.</summary>
-internal sealed class AudioTracksDraftTrack(Guid id, string name, bool muteAffected, IEnumerable<Guid> deviceKeys)
-{
-    public Guid Id { get; } = id;
-
-    public string Name { get; set; } = name;
-
-    /// <summary>Whether the Mic mute key silences this Track's Mic Devices.</summary>
-    public bool MuteAffected { get; set; } = muteAffected;
-
-    /// <summary>The keys of the devices it records, in order.</summary>
-    public List<Guid> DeviceKeys { get; } = [.. deviceKeys];
-}
-
 /// <summary>The Audio Tracks editor's draft: Tracks listing the sounds they record. UI thread only; docs/code-notes.md.</summary>
 internal sealed class AudioTracksDraft
 {
@@ -35,14 +21,14 @@ internal sealed class AudioTracksDraft
     public static AudioTracksDraft From(TrackLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
-        return new(layout.Devices, layout.Tracks.Select(t => new AudioTracksDraftTrack(t.Id, t.Name, t.MuteAffected, t.DeviceKeys)));
+        return new(layout.Devices, layout.Tracks.Select(DraftOf));
     }
 
     /// <summary>The device records <paramref name="track"/> records, in order.</summary>
     public IReadOnlyList<LayoutDevice> SourcesOf(AudioTracksDraftTrack track)
     {
         ArgumentNullException.ThrowIfNull(track);
-        return [.. track.DeviceKeys.Select(key => _devices.First(d => d.Key == key))];
+        return [.. track.DeviceKeys.Select(key => _devices.First(device => device.Key == key))];
     }
 
     /// <summary>Appends an empty Track named <paramref name="name"/> with a new id.</summary>
@@ -62,7 +48,14 @@ internal sealed class AudioTracksDraft
             d.Flow == device.Flow && string.Equals(d.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
         if (record is null)
         {
-            record = new LayoutDevice(Guid.NewGuid(), device.EndpointId, device.FriendlyName, device.ParentName, device.Flow, IsMic: device.Flow == AudioFlow.Input);
+            var isMic = device.Flow == AudioFlow.Input;
+            record = new LayoutDevice(
+                Guid.NewGuid(),
+                device.EndpointId,
+                device.FriendlyName,
+                device.ParentName,
+                device.Flow,
+                IsMic: isMic);
             _devices.Add(record);
         }
 
@@ -85,7 +78,7 @@ internal sealed class AudioTracksDraft
     /// <summary>"Treat as a microphone": sets the record's Mic flag, on every Track with it.</summary>
     public void SetMic(Guid deviceKey, bool isMic)
     {
-        var index = _devices.FindIndex(d => d.Key == deviceKey);
+        var index = _devices.FindIndex(device => device.Key == deviceKey);
         if (index >= 0)
         {
             _devices[index] = _devices[index] with { IsMic = isMic };
@@ -98,7 +91,7 @@ internal sealed class AudioTracksDraft
         var built = TrackLayoutPresets.Build(preset, ToLayout(), devices);
         foreach (var device in built.Devices)
         {
-            var index = _devices.FindIndex(d => d.Key == device.Key);
+            var index = _devices.FindIndex(known => known.Key == device.Key);
             if (index >= 0)
             {
                 _devices[index] = device;
@@ -110,15 +103,17 @@ internal sealed class AudioTracksDraft
         }
 
         Tracks.Clear();
-        Tracks.AddRange(built.Tracks.Select(t => new AudioTracksDraftTrack(t.Id, t.Name, t.MuteAffected, t.DeviceKeys)));
+        Tracks.AddRange(built.Tracks.Select(DraftOf));
     }
+
+    private static AudioTracksDraftTrack DraftOf(Track track) => new(track.Id, track.Name, track.MuteAffected, track.DeviceKeys);
 
     /// <summary>The draft as the <c>trackLayout</c> to save: only the devices some Track records.</summary>
     public TrackLayout ToLayout()
     {
-        var used = Tracks.SelectMany(t => t.DeviceKeys).ToHashSet();
+        var used = Tracks.SelectMany(track => track.DeviceKeys).ToHashSet();
         return new TrackLayout(
-            [.. _devices.Where(d => used.Contains(d.Key))],
-            [.. Tracks.Select(t => new Track(t.Id, t.Name, [.. t.DeviceKeys], t.MuteAffected))]);
+            [.. _devices.Where(device => used.Contains(device.Key))],
+            [.. Tracks.Select(track => new Track(track.Id, track.Name, [.. track.DeviceKeys], track.MuteAffected))]);
     }
 }

@@ -38,7 +38,7 @@ public sealed class CaptureExclusionTests
             // The notice expires on a timer thread later, so the Overlay's updates go through the dispatcher.
             var dispatcher = Dispatcher.CurrentDispatcher;
             overlay = new OverlayWindow(new OverlayViewModel(engine, action => dispatcher.BeginInvoke(action)));
-            menu = ShellApp.CreateTrayMenu(model, () => { }, () => { });
+            menu = TrayMenu.Create(model, () => { }, () => { });
             plain = OffScreen(new Window { Width = 200, Height = 100 });
             popup = new Popup
             {

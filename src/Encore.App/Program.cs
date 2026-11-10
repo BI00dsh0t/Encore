@@ -7,7 +7,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        if (!ShellApp.TryParseArguments(args, out var instance))
+        if (!AppArguments.TryParse(args, out var instance))
         {
             return 2;
         }

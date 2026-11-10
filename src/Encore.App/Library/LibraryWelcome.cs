@@ -5,13 +5,6 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Library;
 
-/// <summary>Where a welcome card link goes: the settings page it names.</summary>
-internal enum WelcomeLink
-{
-    AudioTracks,
-    Storage,
-}
-
 /// <summary>The empty Library's welcome card: what to press, what is recorded and where Clips go, from the live settings.</summary>
 internal sealed class LibraryWelcome : Observable
 {
@@ -90,20 +83,24 @@ internal sealed class LibraryWelcome : Observable
         ArgumentNullException.ThrowIfNull(state);
         var settings = state.Settings;
         var hotkeys = SettingsValues.Global(settings, Keys.Hotkeys);
-        SaveKey = hotkeys.Save is { } save ? HotkeysPage.Describe(save) : "the Save Clip key";
-        ClipLength = HotkeysPage.ClipLength(SettingsValues.Global(settings, Keys.BufferWindow));
+        SaveKey = hotkeys.Save is { } save ? HotkeyText.Describe(save) : "the Save Clip key";
+        ClipLength = HotkeyText.ClipLength(SettingsValues.Global(settings, Keys.BufferWindow));
         OnPropertyChanged(nameof(LeadTail));
 
         var layout = SettingsValues.Global(settings, Keys.TrackLayout);
         var sources = layout.Tracks.Count == 0
             ? []
-            : layout.Tracks[0].DeviceKeys.Select(k => layout.Devices.FirstOrDefault(d => d.Key == k)?.FriendlyName).OfType<string>().ToList();
+            : layout.Tracks[0].DeviceKeys
+                .Select(key => layout.Devices.FirstOrDefault(device => device.Key == key)?.FriendlyName)
+                .OfType<string>()
+                .ToList();
         IsSilent = sources.Count == 0;
         Audio = IsSilent ? "Audio: none yet — your Clips will be silent" : "Audio: " + string.Join(", ", sources);
         Folder = $"Clips are saved in {(state.LibraryFolder is { Length: > 0 } folder ? folder : "your Videos folder")}";
 
-        var record = SettingsValues.Global(settings, Keys.RecordHotkeyMode) == RecordHotkeyMode.Toggle ? hotkeys.RecordToggle : hotkeys.RecordStart;
-        _recordKey = record is { } key ? HotkeysPage.Describe(key) : "the Record key";
+        var toggles = SettingsValues.Global(settings, Keys.RecordHotkeyMode) == RecordHotkeyMode.Toggle;
+        var record = toggles ? hotkeys.RecordToggle : hotkeys.RecordStart;
+        _recordKey = record is { } key ? HotkeyText.Describe(key) : "the Record key";
         OnPropertyChanged(nameof(Recordings));
     }
 }

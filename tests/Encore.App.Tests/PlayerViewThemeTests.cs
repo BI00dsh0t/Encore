@@ -30,9 +30,9 @@ public sealed class PlayerViewThemeTests : IDisposable
     [Fact]
     public void ThePlayerIconsRenderInBothLooks() => Sta.Run(() =>
     {
-        using var page = new PlayerPage("clip.mp4", "clip", new FakePlayer(), openRead: _ => new MemoryStream([0]));
-        page.OpenAsync().GetAwaiter().GetResult();
-        var player = new PlayerView { DataContext = page };
+        using var viewModel = new PlayerViewModel("clip.mp4", "clip", new FakePlayer(), openRead: _ => new MemoryStream([0]));
+        viewModel.OpenAsync().GetAwaiter().GetResult();
+        var player = new PlayerView { DataContext = viewModel };
         player.FrontBufferChanged(false);
         var window = new Window
         {
@@ -56,14 +56,14 @@ public sealed class PlayerViewThemeTests : IDisposable
                 CheckIcons(theme);
                 Save(window, file);
 
-                page.PlayPauseCommand.Execute(null);
-                page.MuteCommand.Execute(null);
-                page.FullScreenCommand.Execute(null);
+                viewModel.PlayPauseCommand.Execute(null);
+                viewModel.MuteCommand.Execute(null);
+                viewModel.FullScreenCommand.Execute(null);
                 window.UpdateLayout();
                 CheckIcons(theme);
-                page.PlayPauseCommand.Execute(null);
-                page.MuteCommand.Execute(null);
-                page.FullScreenCommand.Execute(null);
+                viewModel.PlayPauseCommand.Execute(null);
+                viewModel.MuteCommand.Execute(null);
+                viewModel.FullScreenCommand.Execute(null);
             }
         }
         finally
@@ -131,15 +131,15 @@ public sealed class PlayerViewThemeTests : IDisposable
         try
         {
             window.Show();
-            var page = model.Library;
-            var row = page.Rows.Single();
-            var view = (LibraryView)page.View;
+            var viewModel = model.Library;
+            var row = viewModel.List.Rows.Single();
+            var view = (LibraryView)viewModel.View;
             Sta.PumpUntil(() => view.IsLoaded, "the Library to load");
             foreach (var (theme, file) in new[] { (AppTheme.Fluent, "player-fluent.png"), (AppTheme.GamingDark, "player-gaming.png") })
             {
                 looks.Apply(theme);
-                page.Click(row, ctrl: false, shift: false);
-                page.OpenFocused();
+                viewModel.Selection.Click(row, ctrl: false, shift: false);
+                viewModel.OpenFocused();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
 
                 var player = (PlayerView)view.FindName("PlayerContent");
@@ -150,7 +150,7 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.Equal(("Play", true), (AutomationProperties.GetName(play), play.IsVisible));
 
                 // Resting: the seek bar over one row; the volume slider is hidden until the speaker is hovered or focused.
-                page.Player!.SeekTo(TimeSpan.FromSeconds(4));
+                viewModel.Playback.Player!.SeekTo(TimeSpan.FromSeconds(4));
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
                 Assert.True(((FrameworkElement)player.FindName("SeekBar")).IsVisible);
                 Assert.True(((FrameworkElement)player.FindName("Gear")).IsVisible);
@@ -179,7 +179,7 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.Equal(TimeSpan.FromSeconds(9), last!.Seeks[^1]);
                 Assert.Equal(0.95, Math.Round(last.Volume, 2));
                 Assert.True(last.IsPlaying);
-                page.Player.Volume = 1;
+                viewModel.Playback.Player.Volume = 1;
 
                 // The gear's menu: the heading isn't a choice; the Tracks and the last item take arrow-key focus.
                 var menu = player.OpenSettingsMenu()!;
@@ -224,7 +224,7 @@ public sealed class PlayerViewThemeTests : IDisposable
                 pageHost.Margin = margin;
                 player.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.F) { RoutedEvent = Keyboard.KeyDownEvent });
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
-                Assert.True(page.Player!.IsFullScreen);
+                Assert.True(viewModel.Playback.Player!.IsFullScreen);
                 Assert.True(window.IsFullScreen);
                 Assert.Equal((WindowStyle.None, Visibility.Collapsed), (window.WindowStyle, ((FrameworkElement)window.FindName("NavPane")).Visibility));
                 Save(window, file.Replace("player-", "player-fullscreen-", StringComparison.Ordinal));
@@ -240,12 +240,12 @@ public sealed class PlayerViewThemeTests : IDisposable
                 window.Close();
                 Assert.False(window.IsVisible);
                 Assert.False(window.IsFullScreen);
-                Assert.False(page.Player.IsFullScreen);
+                Assert.False(viewModel.Playback.Player.IsFullScreen);
                 Assert.Equal(margin, pageHost.Margin);
                 window.Show();
                 Assert.True(model.IsDrilledIn);
                 Assert.False(window.IsFullScreen);
-                page.Player.FullScreenCommand.Execute(null);
+                viewModel.Playback.Player.FullScreenCommand.Execute(null);
 
                 model.CurrentDrillIn!.Close();
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
@@ -255,11 +255,11 @@ public sealed class PlayerViewThemeTests : IDisposable
 
             // A file Windows can't play: the plain line and Open in default player.
             failing = true;
-            page.Click(row, ctrl: false, shift: false);
-            page.OpenFocused();
+            viewModel.Selection.Click(row, ctrl: false, shift: false);
+            viewModel.OpenFocused();
             Sta.Pump(TimeSpan.FromMilliseconds(150));
             var failed = (PlayerView)view.FindName("PlayerContent");
-            Assert.Contains(Descendants<TextBlock>(failed), t => t.Text == PlayerPage.FailedText && t.IsVisible);
+            Assert.Contains(Descendants<TextBlock>(failed), t => t.Text == PlayerViewModel.FailedText && t.IsVisible);
             Assert.Contains(Descendants<Button>(failed), b => b.Content as string == "Open in default player" && b.IsVisible);
             Save(window, "player-failed-gaming.png");
             model.CurrentDrillIn!.Close();
@@ -269,8 +269,8 @@ public sealed class PlayerViewThemeTests : IDisposable
             foreach (var (theme, file) in new[] { (AppTheme.Fluent, "player-codec-fluent.png"), (AppTheme.GamingDark, "player-codec-gaming.png") })
             {
                 looks.Apply(theme);
-                page.Click(row, ctrl: false, shift: false);
-                page.OpenFocused();
+                viewModel.Selection.Click(row, ctrl: false, shift: false);
+                viewModel.OpenFocused();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 var codec = (PlayerView)view.FindName("PlayerContent");
                 Assert.Contains(Descendants<TextBlock>(codec), t => t.Text.Contains("HEVC Video Extension", StringComparison.Ordinal) && t.IsVisible);
@@ -316,19 +316,19 @@ public sealed class PlayerViewThemeTests : IDisposable
             window.Show();
             var view = (LibraryView)model.Library.View;
             Sta.PumpUntil(() => view.IsLoaded, "the Library to load");
-            model.Library.Click(model.Library.Rows.Single(), ctrl: false, shift: false);
+            model.Library.Selection.Click(model.Library.List.Rows.Single(), ctrl: false, shift: false);
             model.Library.OpenFocused();
 
             // While the front buffer is gone (a lock screen) the timer waits; it restarts when it's back.
             var player2 = (PlayerView)view.FindName("PlayerContent");
             player2.FrontBufferChanged(false);
             Sta.Pump(TimeSpan.FromMilliseconds(700));
-            Assert.False(model.Library.Player!.IsFailed);
+            Assert.False(model.Library.Playback.Player!.IsFailed);
             player2.FrontBufferChanged(true);
 
             // The fake never raises a frame.
-            Sta.PumpUntil(() => model.Library.Player!.IsFailed, "the no-picture timeout");
-            Assert.Equal(PlayerPage.FailedText, model.Library.Player!.Message);
+            Sta.PumpUntil(() => model.Library.Playback.Player!.IsFailed, "the no-picture timeout");
+            Assert.Equal(PlayerViewModel.FailedText, model.Library.Playback.Player!.Message);
             Assert.False(player.IsPlaying);
         }
         finally

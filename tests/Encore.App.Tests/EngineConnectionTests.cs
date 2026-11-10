@@ -101,7 +101,7 @@ public sealed class EngineConnectionTests : IAsyncDisposable
     public async Task TheThemePickerSendsAppThemeAndTheEngineReadsItBackAfterARestart()
     {
         var connection = await ConnectAsync();
-        var general = new GeneralSettingsPage(new SettingsSender(connection));
+        var general = new GeneralSettingsViewModel(new SettingsSender(connection));
         general.Render(connection.State!.Settings);
         Assert.Equal(AppTheme.Fluent, general.AppTheme);
 

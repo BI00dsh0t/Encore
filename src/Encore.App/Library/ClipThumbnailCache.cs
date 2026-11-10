@@ -5,14 +5,18 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Library;
 
-internal sealed record ClipThumbnailImage(double Time, BitmapSource Image);
-
 /// <summary>Loads a bounded, source-bound filmstrip once. Frozen images need no live file handles or UI-thread decoding.</summary>
 internal static class ClipThumbnailCache
 {
-    internal static Task<ClipThumbnailImage[]> LoadAsync(string folder, ClipThumbnailDescriptor descriptor, ClipSource source, double duration, CancellationToken token) => Task.Run(() =>
+    internal static Task<ClipThumbnailImage[]> LoadAsync(
+        string folder,
+        ClipThumbnailDescriptor descriptor,
+        ClipSource source,
+        double duration,
+        CancellationToken token) => Task.Run(() =>
     {
-        if (descriptor.Version != 1 || descriptor.Source != source || descriptor.Duration != duration || descriptor.Frames is null || descriptor.Frames.Length is < 1 or > 64)
+        if (descriptor.Version != 1 || descriptor.Source != source || descriptor.Duration != duration
+            || descriptor.Frames is null || descriptor.Frames.Length is < 1 or > 64)
         { throw new IOException("The thumbnail cache does not match this source."); }
         var images = new List<ClipThumbnailImage>();
         var previous = -1d;
@@ -34,7 +38,8 @@ internal static class ClipThumbnailCache
             var stride = converted.PixelWidth * 4;
             var pixels = new byte[stride * converted.PixelHeight];
             converted.CopyPixels(pixels, stride, 0);
-            var image = BitmapSource.Create(converted.PixelWidth, converted.PixelHeight, 96, 96, PixelFormats.Pbgra32, null, pixels, stride);
+            var (width, height) = (converted.PixelWidth, converted.PixelHeight);
+            var image = BitmapSource.Create(width, height, 96, 96, PixelFormats.Pbgra32, null, pixels, stride);
             image.Freeze();
             images.Add(new(frame.Time, image));
             previous = frame.Time;

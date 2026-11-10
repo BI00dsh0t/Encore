@@ -23,80 +23,80 @@ public sealed class LibraryActionsTests : IDisposable
         var absolute = Path.Combine(_folder, Clip);
         Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
         File.WriteAllBytes(absolute, [0]);
-        var page = new LibraryPage(_engine, shell: _shell);
+        var viewModel = new LibraryViewModel(_engine, shell: _shell);
         var writing = new LibraryItem(Clip, null, 0, DateTimeOffset.UnixEpoch, true);
         var state = _engine.State! with { LibraryFolder = _folder, Library = [writing] };
 
-        page.Render(state);
-        page.Click(page.Rows[0], ctrl: false, shift: false);
+        viewModel.Render(state);
+        viewModel.Selection.Click(viewModel.List.Rows[0], ctrl: false, shift: false);
         var changed = 0;
-        page.CopyCommand.CanExecuteChanged += (_, _) => changed++;
-        Assert.False(page.CopyCommand.CanExecute(null));
-        page.CopyCommand.Execute(null);
-        page.OpenCommand.Execute(null);
+        viewModel.CopyCommand.CanExecuteChanged += (_, _) => changed++;
+        Assert.False(viewModel.CopyCommand.CanExecute(null));
+        viewModel.CopyCommand.Execute(null);
+        viewModel.OpenCommand.Execute(null);
         Assert.Equal([("open", absolute)], _shell.Calls);
 
-        page.Render(state with { Library = [writing with { Size = 1, BeingWritten = false }] });
+        viewModel.Render(state with { Library = [writing with { Size = 1, BeingWritten = false }] });
         Assert.True(changed > 0);
-        Assert.True(page.CopyCommand.CanExecute(null));
-        page.ShowInExplorerCommand.Execute(null);
-        page.CopyCommand.Execute(null);
+        Assert.True(viewModel.CopyCommand.CanExecute(null));
+        viewModel.ShowInExplorerCommand.Execute(null);
+        viewModel.CopyCommand.Execute(null);
 
         Assert.Equal([("open", absolute), ("show " + Path.GetDirectoryName(absolute), absolute), ("copy", absolute)], _shell.Calls);
-        Assert.Null(page.ActionError);
+        Assert.Null(viewModel.Actions.ActionError);
     }
 
     [Fact]
     public void AMissingFileOrAFailingShellShowsAShortError()
     {
-        var page = new LibraryPage(_engine, shell: _shell);
-        page.Render(_engine.State! with { LibraryFolder = _folder, Library = [new LibraryItem("gone.mp4", null, 1, DateTimeOffset.UnixEpoch, false)] });
-        page.Click(page.Rows[0], ctrl: false, shift: false);
+        var viewModel = new LibraryViewModel(_engine, shell: _shell);
+        viewModel.Render(_engine.State! with { LibraryFolder = _folder, Library = [new LibraryItem("gone.mp4", null, 1, DateTimeOffset.UnixEpoch, false)] });
+        viewModel.Selection.Click(viewModel.List.Rows[0], ctrl: false, shift: false);
 
-        page.OpenCommand.Execute(null);
-        Assert.Equal("That file no longer exists.", page.ActionError);
-        Assert.True(page.HasActionError);
+        viewModel.OpenCommand.Execute(null);
+        Assert.Equal("That file no longer exists.", viewModel.Actions.ActionError);
+        Assert.True(viewModel.Actions.HasActionError);
         Assert.Empty(_shell.Calls);
 
         File.WriteAllBytes(Path.Combine(_folder, "gone.mp4"), [0]);
         _shell.Fail = true;
-        page.CopyCommand.Execute(null);
-        Assert.Equal("Couldn't copy the file.", page.ActionError);
+        viewModel.CopyCommand.Execute(null);
+        Assert.Equal("Couldn't copy the file.", viewModel.Actions.ActionError);
 
         _shell.Fail = false;
-        page.OpenCommand.Execute(null);
-        Assert.Null(page.ActionError);
+        viewModel.OpenCommand.Execute(null);
+        Assert.Null(viewModel.Actions.ActionError);
     }
 
     [Fact]
     public void RenameSendsTheIdentityAndTheBaseNameAndShowsARefusal()
     {
         var item = new LibraryItem(Clip, null, 48, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch.AddDays(1));
-        var page = new LibraryPage(_engine, shell: _shell);
-        page.Render(_engine.State! with { LibraryFolder = _folder, Library = [item] });
-        var row = page.Rows[0];
-        page.Click(row, ctrl: false, shift: false);
+        var viewModel = new LibraryViewModel(_engine, shell: _shell);
+        viewModel.Render(_engine.State! with { LibraryFolder = _folder, Library = [item] });
+        var row = viewModel.List.Rows[0];
+        viewModel.Selection.Click(row, ctrl: false, shift: false);
         _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.FileNameTaken, "taken");
 
-        page.RenameCommand.Execute(null);
+        viewModel.RenameCommand.Execute(null);
         Assert.Equal((true, "clip"), (row.IsRenaming, row.RenameText));
         row.RenameText = "  best.MP4 ";
         row.CommitRenameCommand.Execute(null);
 
         Assert.Equal(new LibraryRename(Clip, 48, item.Modified, "best"), Assert.Single(_engine.Sent));
         Assert.False(row.IsRenaming);
-        Assert.Equal("A file with that name already exists.", page.ActionError);
+        Assert.Equal("A file with that name already exists.", viewModel.Actions.ActionError);
 
         // Escape sends nothing; a success clears the error.
-        page.RenameCommand.Execute(null);
+        viewModel.RenameCommand.Execute(null);
         row.CancelRenameCommand.Execute(null);
         row.CommitRenameCommand.Execute(null);
         Assert.Single(_engine.Sent);
         _engine.Reply = (_, _) => Empty.Value;
-        page.RenameCommand.Execute(null);
+        viewModel.RenameCommand.Execute(null);
         row.CommitRenameCommand.Execute(null);
         Assert.Equal(2, _engine.Sent.Count);
-        Assert.Null(page.ActionError);
+        Assert.Null(viewModel.Actions.ActionError);
     }
 
     [Fact]
@@ -104,28 +104,28 @@ public sealed class LibraryActionsTests : IDisposable
     {
         var answer = false;
         var asked = new List<string>();
-        var page = new LibraryPage(_engine, shell: _shell, confirmDelete: question =>
+        var viewModel = new LibraryViewModel(_engine, shell: _shell, confirmDelete: question =>
         {
             asked.Add(question);
             return answer;
         });
         var writing = new LibraryItem(Clip, null, 0, DateTimeOffset.UnixEpoch, true);
         var state = _engine.State! with { LibraryFolder = _folder, Library = [writing] };
-        page.Render(state);
-        page.Click(page.Rows[0], ctrl: false, shift: false);
-        Assert.False(page.RenameCommand.CanExecute(null));
-        Assert.False(page.DeleteCommand.CanExecute(null));
+        viewModel.Render(state);
+        viewModel.Selection.Click(viewModel.List.Rows[0], ctrl: false, shift: false);
+        Assert.False(viewModel.RenameCommand.CanExecute(null));
+        Assert.False(viewModel.DeleteCommand.CanExecute(null));
 
         var written = writing with { Size = 48, BeingWritten = false, Modified = DateTimeOffset.UnixEpoch };
-        page.Render(state with { Library = [written] });
-        Assert.True(page.RenameCommand.CanExecute(null));
+        viewModel.Render(state with { Library = [written] });
+        Assert.True(viewModel.RenameCommand.CanExecute(null));
         _engine.Reply = (_, _) => Empty.Value;
 
-        page.DeleteCommand.Execute(null);
+        viewModel.DeleteCommand.Execute(null);
         Assert.Empty(_engine.Sent);
 
         answer = true;
-        page.DeleteCommand.Execute(null);
+        viewModel.DeleteCommand.Execute(null);
         Assert.Equal(["Move “clip.mp4” to the Recycle Bin?", "Move “clip.mp4” to the Recycle Bin?"], asked);
         Assert.Equal(new LibraryDelete(Clip, 48, written.Modified), Assert.Single(_engine.Sent));
     }

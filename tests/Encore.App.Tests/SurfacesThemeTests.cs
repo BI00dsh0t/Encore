@@ -28,7 +28,7 @@ public sealed class SurfacesThemeTests
     public void TheTrayMenuResolvesItsStylesFromTheThemeAndFollowsASwitch() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
-        var menu = ShellApp.CreateTrayMenu(model, () => { }, () => { }, gallery: () => { });
+        var menu = TrayMenu.Create(model, () => { }, () => { }, gallery: () => { });
         var target = new Border { Width = 10, Height = 10, ContextMenu = menu };
         var window = Offscreen(new Window { Content = target, Width = 100, Height = 100 });
         var theme = ThemeService.ForWindow(window);
@@ -93,10 +93,10 @@ public sealed class SurfacesThemeTests
         PromptDialog.Showing += OnShowing;
         try
         {
-            Assert.True(Prompts.YesNo(view, "Move “clip.mp4” to the Recycle Bin?", "Delete", MessageBoxImage.Question));
-            Assert.False(Prompts.YesNo(view, "Delete it?", "Delete", MessageBoxImage.Warning));
-            Assert.False(Prompts.YesNo(view, "Delete it?", "Delete", MessageBoxImage.Question));
-            Assert.False(Prompts.YesNo(view, "Delete it?", "Delete", MessageBoxImage.Question));
+            Assert.True(Prompts.Ask(view, "Move “clip.mp4” to the Recycle Bin?", "Delete"));
+            Assert.False(Prompts.Warn(view, "Delete it?", "Delete"));
+            Assert.False(Prompts.Ask(view, "Delete it?", "Delete"));
+            Assert.False(Prompts.Ask(view, "Delete it?", "Delete"));
         }
         finally
         {
@@ -128,15 +128,15 @@ public sealed class SurfacesThemeTests
         PromptDialog.Showing += OnShowing;
         try
         {
-            var library = new LibraryPage(engine);
+            var library = new LibraryViewModel(engine);
             var item = new LibraryItem(@"Game\clip.mp4", null, 48, DateTimeOffset.UnixEpoch, false);
             library.Render(engine.State! with { LibraryFolder = folder, Library = [item] });
-            library.Click(library.Rows[0], ctrl: false, shift: false);
+            library.Selection.Click(library.List.Rows[0], ctrl: false, shift: false);
             library.DeleteCommand.Execute(null);
             Sta.Pump(TimeSpan.FromMilliseconds(50));
             Assert.IsType<LibraryDelete>(Assert.Single(engine.Sent));
 
-            var cleanup = new LibrarySettingsPage(new SettingsSender(engine), engine);
+            var cleanup = new LibrarySettingsViewModel(new SettingsSender(engine), engine);
             Assert.False(cleanup.Confirm("Delete 3 Clips?"));
         }
         finally

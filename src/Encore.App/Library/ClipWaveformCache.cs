@@ -18,7 +18,7 @@ internal sealed class ClipWaveformCache : IDisposable
         _folder = Path.GetFullPath(folder);
         _descriptor = descriptor;
         if (descriptor.Version != ClipPeakFile.Version || descriptor.Source != source || descriptor.Duration != metadata.Duration
-            || !descriptor.Tracks.Select(t => t.StreamIndex).SequenceEqual(metadata.Tracks.Select(t => t.StreamIndex)))
+            || !descriptor.Tracks.Select(track => track.StreamIndex).SequenceEqual(metadata.Tracks.Select(track => track.StreamIndex)))
         { throw new IOException("The waveform cache does not match this source. Reopen the clip creator."); }
         foreach (var track in descriptor.Tracks)
         {
@@ -56,11 +56,11 @@ internal sealed class ClipWaveformCache : IDisposable
             token.ThrowIfCancellationRequested();
             bins = Math.Clamp(bins, 1, 4096);
             var result = new List<ClipWaveform>();
-            foreach (var track in _descriptor.Tracks.Where(t => tracks.Contains(t.StreamIndex)))
+            foreach (var track in _descriptor.Tracks.Where(candidate => tracks.Contains(candidate.StreamIndex)))
             {
                 // Choose the finest level that keeps reads bounded by roughly sixteen peaks per output bin.
                 var target = (end - start) * 1000 / bins;
-                var level = track.Levels.LastOrDefault(l => l.MillisecondsPerPeak <= target) ?? track.Levels[0];
+                var level = track.Levels.LastOrDefault(level => level.MillisecondsPerPeak <= target) ?? track.Levels[0];
                 var first = Math.Clamp((long)Math.Floor(start * 1000 / level.MillisecondsPerPeak), 0, level.Count - 1);
                 var last = Math.Clamp((long)Math.Ceiling(end * 1000 / level.MillisecondsPerPeak), first + 1, level.Count);
                 var outputCount = (int)Math.Min(bins, last - first);

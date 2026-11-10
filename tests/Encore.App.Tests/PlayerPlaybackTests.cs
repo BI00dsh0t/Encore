@@ -36,11 +36,11 @@ public sealed class PlayerPlaybackTests : IDisposable
         var absolute = MakeFixture("-f lavfi -i testsrc2=size=1280x720:rate=60:duration=2", "-c:v libx264 -preset ultrafast -g 60 -pix_fmt yuv420p", "-movflags +faststart");
         Run(absolute, (model, view) =>
         {
-            var page = model.Library.Player!;
-            Assert.Equal(["Game", "Mic", "Discord", "Desktop"], page.Media!.TrackNames);
-            Assert.Equal(0, page.Player.SelectedTrack);
+            var viewModel = model.Library.Playback.Player!;
+            Assert.Equal(["Game", "Mic", "Discord", "Desktop"], viewModel.Media!.TrackNames);
+            Assert.Equal(0, viewModel.Player.SelectedTrack);
 
-            page.PlayPauseCommand.Execute(null);
+            viewModel.PlayPauseCommand.Execute(null);
             Sta.Pump(TimeSpan.FromSeconds(1));
             Assert.True(PictureShare(view) > 0.5, "the picture is mostly video");
 
@@ -77,7 +77,7 @@ public sealed class PlayerPlaybackTests : IDisposable
             {
                 model.Library.DrillIn.Close();
                 model.Library.OpenFocused();
-                Sta.PumpUntil(() => model.Library.Player?.State == PlayerState.Paused, "the player to open");
+                Sta.PumpUntil(() => model.Library.Playback.Player?.State == PlayerState.Paused, "the player to open");
                 Sta.PumpUntil(() => view.SurfaceSize is not null, "a frame");
                 if (i == 10)
                 {
@@ -100,18 +100,18 @@ public sealed class PlayerPlaybackTests : IDisposable
         var absolute = MakeFixture("-f lavfi -i testsrc2=size=1280x720:rate=60:duration=12", "-c:v libx264 -preset ultrafast -g 60 -pix_fmt yuv420p", "-movflags +faststart", seconds: 12);
         Run(absolute, (model, view) =>
         {
-            var page = model.Library.Player!;
-            page.Volume = 0.001;
-            page.IsMuted = false;
+            var viewModel = model.Library.Playback.Player!;
+            viewModel.Volume = 0.001;
+            viewModel.IsMuted = false;
             using var loopback = ProcessLoopback.Start();
-            page.PlayPauseCommand.Execute(null);
+            viewModel.PlayPauseCommand.Execute(null);
             Sta.Pump(TimeSpan.FromMilliseconds(500));
 
             var marks = new List<(TimeSpan At, int Track)>();
             foreach (var track in new[] { 2, 0, 1, 3, 0, 2, 0, 3, 1, 0 })
             {
                 marks.Add((loopback.Now, track));
-                page.SelectedTrack = page.Tracks[track];
+                viewModel.SelectedTrack = viewModel.Tracks[track];
                 Sta.Pump(TimeSpan.FromMilliseconds(700));
             }
 
@@ -119,14 +119,14 @@ public sealed class PlayerPlaybackTests : IDisposable
             Assert.Equal(marks.Select(m => m.Track), heard);
 
             // Paused at 3 s, a switch, then Play: it plays on from 3 s, not from the start.
-            page.PlayPauseCommand.Execute(null);
-            page.SeekTo(TimeSpan.FromSeconds(3));
+            viewModel.PlayPauseCommand.Execute(null);
+            viewModel.SeekTo(TimeSpan.FromSeconds(3));
             Sta.Pump(TimeSpan.FromMilliseconds(300));
-            page.SelectedTrack = page.Tracks[1];
+            viewModel.SelectedTrack = viewModel.Tracks[1];
             Sta.Pump(TimeSpan.FromMilliseconds(300));
-            page.PlayPauseCommand.Execute(null);
+            viewModel.PlayPauseCommand.Execute(null);
             Sta.Pump(TimeSpan.FromMilliseconds(500));
-            Assert.True(page.Player.Position > TimeSpan.FromSeconds(3), $"resumed at {page.Player.Position}");
+            Assert.True(viewModel.Player.Position > TimeSpan.FromSeconds(3), $"resumed at {viewModel.Player.Position}");
         });
     }
 
@@ -138,13 +138,13 @@ public sealed class PlayerPlaybackTests : IDisposable
         var absolute = MakeFixture("-f lavfi -i testsrc2=size=1280x720:rate=60:duration=10", "-c:v libx264 -preset ultrafast -g 60 -pix_fmt yuv420p", "-movflags frag_keyframe+empty_moov+default_base_moof -frag_duration 1000000", seconds: 10);
         Run(absolute, (model, view) =>
         {
-            var page = model.Library.Player!;
-            page.SeekTo(TimeSpan.FromSeconds(5));
-            page.SelectedTrack = page.Tracks[2];
-            page.PlayPauseCommand.Execute(null);
+            var viewModel = model.Library.Playback.Player!;
+            viewModel.SeekTo(TimeSpan.FromSeconds(5));
+            viewModel.SelectedTrack = viewModel.Tracks[2];
+            viewModel.PlayPauseCommand.Execute(null);
             Sta.Pump(TimeSpan.FromMilliseconds(800));
-            Assert.Equal(2, page.Player.SelectedTrack);
-            Assert.True(page.Player.Position > TimeSpan.FromSeconds(5), $"played on from 5 s: {page.Player.Position}");
+            Assert.Equal(2, viewModel.Player.SelectedTrack);
+            Assert.True(viewModel.Player.Position > TimeSpan.FromSeconds(5), $"played on from 5 s: {viewModel.Player.Position}");
             Assert.True(PictureShare(view) > 0.5, "the picture is mostly video");
         });
     }
@@ -175,12 +175,12 @@ public sealed class PlayerPlaybackTests : IDisposable
             window.Show();
             var view = (LibraryView)model.Library.View;
             Sta.PumpUntil(() => view.IsLoaded, "the Library to load");
-            model.Library.Click(model.Library.Rows.Single(), ctrl: false, shift: false);
+            model.Library.Selection.Click(model.Library.List.Rows.Single(), ctrl: false, shift: false);
             model.Library.OpenFocused();
-            Sta.PumpUntil(() => model.Library.Player?.State == PlayerState.Paused, "the player to open");
+            Sta.PumpUntil(() => model.Library.Playback.Player?.State == PlayerState.Paused, "the player to open");
 
             // Muted through the page: it applies its own volume and mute to the player as it opens.
-            model.Library.Player!.IsMuted = true;
+            model.Library.Playback.Player!.IsMuted = true;
             var player = (PlayerView)view.FindName("PlayerContent");
             Sta.PumpUntil(() => player.SurfaceSize is not null, "the first frame");
 
@@ -188,7 +188,7 @@ public sealed class PlayerPlaybackTests : IDisposable
 
             model.CurrentDrillIn!.Close();
             Sta.Pump(TimeSpan.FromMilliseconds(200));
-            Assert.Null(model.Library.Player);
+            Assert.Null(model.Library.Playback.Player);
         }
         finally
         {

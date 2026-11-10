@@ -17,15 +17,15 @@ internal partial class GameProfilesView
         InitializeComponent();
         DataContextChanged += (_, e) =>
         {
-            if (e.OldValue is GameProfilesPage old)
+            if (e.OldValue is GameProfilesViewModel old)
             {
                 old.DrillIn.Opened -= OnOpened;
                 old.DrillIn.Closed -= OnClosed;
             }
 
-            if (e.NewValue is GameProfilesPage page)
+            if (e.NewValue is GameProfilesViewModel viewModel)
             {
-                var rows = CollectionViewSource.GetDefaultView(page.Profiles);
+                var rows = CollectionViewSource.GetDefaultView(viewModel.Profiles);
                 rows.GroupDescriptions.Clear();
                 rows.GroupDescriptions.Add(new PropertyGroupDescription(nameof(GameProfileItem.Group)));
                 if (rows is ICollectionViewLiveShaping { CanChangeLiveGrouping: true } live)
@@ -33,9 +33,9 @@ internal partial class GameProfilesView
                     live.LiveGroupingProperties.Add(nameof(GameProfileItem.Group));
                     live.IsLiveGrouping = true;
                 }
-                page.DrillIn.Opened += OnOpened;
-                page.DrillIn.Closed += OnClosed;
-                if (page.OpenGame is { } open)
+                viewModel.DrillIn.Opened += OnOpened;
+                viewModel.DrillIn.Closed += OnClosed;
+                if (viewModel.OpenGame is { } open)
                 {
                     Show(open);
                 }
@@ -43,13 +43,13 @@ internal partial class GameProfilesView
         };
     }
 
-    private GameProfilesPage? Page => DataContext as GameProfilesPage;
+    private GameProfilesViewModel? ViewModel => DataContext as GameProfilesViewModel;
 
     private void OnListKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && GameList.SelectedItem is GameProfileItem item)
         {
-            Page?.Open(item);
+            ViewModel?.Open(item);
             e.Handled = true;
         }
     }
@@ -59,20 +59,20 @@ internal partial class GameProfilesView
         if (e.OriginalSource is DependencyObject hit
             && ItemsControl.ContainerFromElement(GameList, hit) is ListBoxItem { DataContext: GameProfileItem item })
         {
-            Page?.Open(item);
+            ViewModel?.Open(item);
         }
     }
 
     private void OnOpened(string id)
     {
-        if (Page?.OpenGame is { } game)
+        if (ViewModel?.OpenGame is { } game)
         {
             _listOffset = ListScroller.VerticalOffset;
             Show(game);
         }
     }
 
-    private void Show(GamePage game)
+    private void Show(GameViewModel game)
     {
         ListScroller.Visibility = Visibility.Collapsed;
         GameHost.Content = game.View;
@@ -86,7 +86,7 @@ internal partial class GameProfilesView
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
             ListScroller.ScrollToVerticalOffset(_listOffset);
-            if (Page?.Profiles.FirstOrDefault(p => p.ProfileId == id) is { } row)
+            if (ViewModel?.Profiles.FirstOrDefault(profile => profile.ProfileId == id) is { } row)
             {
                 GameList.SelectedItem = row;
                 GameList.UpdateLayout();
