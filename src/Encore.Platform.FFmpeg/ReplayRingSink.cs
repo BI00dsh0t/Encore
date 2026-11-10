@@ -27,18 +27,6 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
     /// <summary>Clips carry their codec headers in the sample entry.</summary>
     internal override bool NeedsGlobalHeader => true;
 
-    /// <summary>The current generation's streams.</summary>
-    public int StreamCount
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _streams[_generations.Current].Count;
-            }
-        }
-    }
-
     /// <summary>The current ring generation, counting from 1.</summary>
     public int Generation => _generations.Current;
 

@@ -181,17 +181,9 @@ public sealed class TrackMixer
         {
             lock (_lock)
             {
-                // Frames the mix has already passed (written as silence for this input) are dropped.
-                var late = Math.Min(frames - offset, Math.Max(0, _emitted - _written[input]));
-                if (late > 0)
+                if (SkipLate(input, frames, ref offset))
                 {
-                    _dropped += late;
-                    _written[input] += late;
-                    offset += late;
-                    if (offset >= frames)
-                    {
-                        return;
-                    }
+                    return;
                 }
 
                 var chunk = (int)Math.Min(ChunkFrames, frames - offset);
@@ -202,6 +194,21 @@ public sealed class TrackMixer
                 Advance();
             }
         }
+    }
+
+    /// <summary>Drops the frames the mix has already passed, written as silence for this input; true when none are left.</summary>
+    private bool SkipLate(int input, long frames, ref long offset)
+    {
+        var late = Math.Min(frames - offset, Math.Max(0, _emitted - _written[input]));
+        if (late <= 0)
+        {
+            return false;
+        }
+
+        _dropped += late;
+        _written[input] += late;
+        offset += late;
+        return offset >= frames;
     }
 
     /// <summary>Copies one chunk, or as much silence, into an input's ring from a frame position, wrapping at its end.</summary>

@@ -67,8 +67,6 @@ public sealed unsafe class WindowCapture : CaptureSource
             window == 0 ? "monitor" : "window", _item.DisplayName, _poolSize.Width, _poolSize.Height, 2 * fps);
     }
 
-    public VideoSize ItemSize => new(_item.Size.Width, _item.Size.Height);
-
     /// <summary>Captures a whole monitor; only the item's own Closed (the monitor detached) ends it.</summary>
     public static WindowCapture ForMonitor(D3D11Device device, nint monitor, int fps, CapturedFrameHandler onFrame, ILogger logger)
     {

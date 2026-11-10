@@ -9,7 +9,6 @@ public sealed class FramePacer
     private readonly long _timeBase;
     private readonly bool _firstFrameTakesNearestSlot;
     private long _newestQpc = long.MinValue;
-    private long _heldQpc;
     private bool _running;
 
     /// <summary>With firstFrameTakesNearestSlot, a chain that starts mid-session gets no repeats for the slots before it.</summary>
@@ -99,12 +98,8 @@ public sealed class FramePacer
         }
 
         HasHeld = true;
-        _heldQpc = captureQpc;
         return new PacerDecision(PacerAction.Hold, NextSlot, Pts(NextSlot), replaced);
     }
-
-    /// <summary>The capture QPC of the held frame; meaningful only while <see cref="HasHeld"/>.</summary>
-    public long HeldQpc => _heldQpc;
 
     /// <summary>The next piece of time-driven work at <paramref name="nowQpc"/>, or <see cref="PacerAction.None"/>.</summary>
     public PacerDecision Poll(long nowQpc)
