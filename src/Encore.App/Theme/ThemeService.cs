@@ -209,7 +209,7 @@ internal sealed class ThemeService
     private static void AddOnce<T>(IList<ResourceDictionary> merged)
         where T : ResourceDictionary, new()
     {
-        if (!merged.Any(d => d is T))
+        if (!merged.Any(dictionary => dictionary is T))
         {
             merged.Insert(Math.Max(0, merged.Count - 1), new T());
         }

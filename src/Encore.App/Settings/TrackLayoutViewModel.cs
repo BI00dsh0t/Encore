@@ -36,7 +36,8 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
         AddTrackCommand = new RelayCommand(AddTrack);
         SaveCommand = new RelayCommand(() => _ = SaveAsync());
         DiscardCommand = new RelayCommand(Discard);
-        ApplyPresetCommand = new ParameterCommand(p => ApplyPreset(p is TrackLayoutPreset preset ? preset : TrackLayoutPreset.Simple));
+        ApplyPresetCommand = new ParameterCommand(
+            parameter => ApplyPreset(parameter is TrackLayoutPreset preset ? preset : TrackLayoutPreset.Simple));
         Confirm = (message, caption) => Prompts.Ask(_view, message, caption);
         Load(_basis);
     }
@@ -326,7 +327,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     private void StructureChanged()
     {
         // Cards are kept by Track id, so a focused card or name box survives a move or an added sound.
-        var cards = Tracks.ToDictionary(c => c.Id);
+        var cards = Tracks.ToDictionary(card => card.Id);
         for (var i = 0; i < _draft.Tracks.Count; i++)
         {
             var model = _draft.Tracks[i];
@@ -370,7 +371,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     /// <summary>After any draft edit: each Track's double-count line, the summary, whether the draft is dirty, and the watch.</summary>
     internal void DraftChanged()
     {
-        if (SaveProblem == NameNeeded && Tracks.All(t => !string.IsNullOrWhiteSpace(t.Name)))
+        if (SaveProblem == NameNeeded && Tracks.All(track => !string.IsNullOrWhiteSpace(track.Name)))
         {
             SaveProblem = null;
         }
@@ -379,8 +380,8 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
         {
             // Outputs from two or more parent devices may carry the same audio twice. Inputs never count.
             var parents = card.Sources
-                .Where(s => s.Device.Flow == AudioFlow.Output)
-                .Select(s => s.Device.ParentName)
+                .Where(source => source.Device.Flow == AudioFlow.Output)
+                .Select(source => source.Device.ParentName)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             card.Warning = parents.Count >= 2
@@ -406,7 +407,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
         var levels = _meters.Levels;
         foreach (var card in Tracks)
         {
-            card.ShowPeak(levels.Tracks.FirstOrDefault(l => l.TrackId == card.Id)?.Peak ?? 0);
+            card.ShowPeak(levels.Tracks.FirstOrDefault(level => level.TrackId == card.Id)?.Peak ?? 0);
             foreach (var source in card.Sources)
             {
                 source.ShowPeak(MeterProbes.LevelOf(levels, source.Device.EndpointId, source.Device.Flow));
@@ -426,11 +427,12 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     /// <summary>Every distinct device the page knows, so a name two devices share shows its parent.</summary>
     internal Func<string, bool> SharedNames()
     {
-        var known = _devices.Devices.Select(d => (d.EndpointId, d.Flow, d.FriendlyName))
-            .Concat(Tracks.SelectMany(t => t.Sources).Select(s => (s.Device.EndpointId, s.Device.Flow, s.Device.FriendlyName)))
-            .DistinctBy(d => (d.EndpointId.ToUpperInvariant(), d.Flow))
+        var held = Tracks.SelectMany(track => track.Sources).Select(source => source.Device);
+        var known = _devices.Devices.Select(device => (device.EndpointId, device.Flow, device.FriendlyName))
+            .Concat(held.Select(device => (device.EndpointId, device.Flow, device.FriendlyName)))
+            .DistinctBy(device => (device.EndpointId.ToUpperInvariant(), device.Flow))
             .ToList();
-        return name => known.Count(d => string.Equals(d.FriendlyName, name, StringComparison.OrdinalIgnoreCase)) > 1;
+        return name => known.Count(device => string.Equals(device.FriendlyName, name, StringComparison.OrdinalIgnoreCase)) > 1;
     }
 
     internal static string Label(string name, string parent, bool shared) =>
@@ -439,12 +441,12 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     private void RefreshSources()
     {
         var shared = SharedNames();
-        foreach (var source in Tracks.SelectMany(t => t.Sources))
+        foreach (var source in Tracks.SelectMany(track => track.Sources))
         {
             var device = source.Device;
             source.Label = Label(device.FriendlyName, device.ParentName, shared(device.FriendlyName));
-            source.Available = _devices.Devices.Any(d => d.Available && d.Flow == device.Flow
-                && string.Equals(d.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
+            source.Available = _devices.Devices.Any(listed => listed.Available && listed.Flow == device.Flow
+                && string.Equals(listed.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
         }
 
         OnPropertyChanged(nameof(Summary));
@@ -454,7 +456,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     {
         var model = _draft.AddTrack($"Track {_draft.Tracks.Count + 1}");
         StructureChanged();
-        Tracks.First(t => t.Model == model).RequestRename();
+        Tracks.First(track => track.Model == model).RequestRename();
     }
 
     private void ApplyPreset(TrackLayoutPreset preset)
@@ -464,7 +466,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
             return;
         }
 
-        var name = Presets.First(p => p.Preset == preset).Name;
+        var name = Presets.First(choice => choice.Preset == preset).Name;
         if (!Confirm($"Replace your audio tracks with {name}?", "Use a preset"))
         {
             return;
@@ -484,7 +486,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
             return;
         }
 
-        if (Tracks.Any(t => string.IsNullOrWhiteSpace(t.Name)))
+        if (Tracks.Any(track => string.IsNullOrWhiteSpace(track.Name)))
         {
             SaveProblem = NameNeeded;
             DraftChanged();

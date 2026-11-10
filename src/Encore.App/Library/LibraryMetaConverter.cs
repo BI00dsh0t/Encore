@@ -7,7 +7,7 @@ namespace Encore.App.Library;
 internal sealed class LibraryMetaConverter : IMultiValueConverter
 {
     public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture) =>
-        string.Join(" · ", values.OfType<string>().Where(v => v.Length > 0));
+        string.Join(" · ", values.OfType<string>().Where(value => value.Length > 0));
 
     public object[] ConvertBack(object value, Type[] targetTypes, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();

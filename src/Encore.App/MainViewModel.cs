@@ -275,7 +275,7 @@ internal sealed class MainViewModel : Observable
     /// <summary>Selects the next or previous selectable navigation item, wrapping round: Ctrl+Tab and Ctrl+Shift+Tab.</summary>
     public void NavigateBy(int step)
     {
-        var items = NavItems.Where(i => !i.IsSection).ToList();
+        var items = NavItems.Where(item => !item.IsSection).ToList();
         var at = items.IndexOf(SelectedNavItem);
         SelectedNavItem = items[(((at + step) % items.Count) + items.Count) % items.Count];
     }

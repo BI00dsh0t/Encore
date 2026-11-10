@@ -88,7 +88,7 @@ internal sealed class AudioTrackCard : Observable
     public bool IsSilent => Sources.Count == 0;
 
     /// <summary>The mute switch shows only when the Track has a microphone.</summary>
-    public bool HasMicrophone => Sources.Any(s => s.IsMic);
+    public bool HasMicrophone => Sources.Any(source => source.IsMic);
 
     /// <summary>The double-count line; empty when there is none. It never blocks Save.</summary>
     public string Warning
@@ -169,7 +169,7 @@ internal sealed class AudioTrackCard : Observable
 
     internal void ShowSources(IReadOnlyList<LayoutDevice> devices)
     {
-        var rows = Sources.ToDictionary(s => s.Key);
+        var rows = Sources.ToDictionary(source => source.Key);
         Sources.Clear();
         foreach (var device in devices)
         {

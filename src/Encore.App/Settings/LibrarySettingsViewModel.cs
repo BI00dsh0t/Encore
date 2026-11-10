@@ -159,7 +159,7 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
             ClipsFolder.Show(_outputFolder, _libraryFolder ?? "");
         }
 
-        var bytes = state.Library.Sum(i => i.Size);
+        var bytes = state.Library.Sum(item => item.Size);
         var count = state.Library.Count;
         if (bytes != _folderBytes || count != _folderCount)
         {

@@ -85,7 +85,7 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
     public Action<SettingKey>? EditMain { get; set; }
 
     /// <inheritdoc/>
-    public override bool HasUnsavedChanges => _games.Values.Any(p => p.HasUnsavedChanges);
+    public override bool HasUnsavedChanges => _games.Values.Any(game => game.HasUnsavedChanges);
 
     /// <summary>Whether the page is on screen; the open game's audio tracks meter only then.</summary>
     public bool IsOpen
@@ -175,14 +175,14 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
     private void ShowRows(SettingsDocument document)
     {
         var manual = SettingsValues.Global(document, Keys.ManualGames);
-        var existing = Profiles.ToDictionary(p => p.ProfileId, StringComparer.Ordinal);
+        var existing = Profiles.ToDictionary(profile => profile.ProfileId, StringComparer.Ordinal);
         var ordered = document.Profiles
-            .OrderBy(p => p.Value.Ignored)
-            .ThenBy(p => p.Value.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(p => p.Key, StringComparer.Ordinal)
+            .OrderBy(entry => entry.Value.Ignored)
+            .ThenBy(entry => entry.Value.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.Key, StringComparer.Ordinal)
             .ToList();
 
-        foreach (var item in Profiles.Where(p => !document.Profiles.ContainsKey(p.ProfileId)).ToList())
+        foreach (var item in Profiles.Where(profile => !document.Profiles.ContainsKey(profile.ProfileId)).ToList())
         {
             Profiles.Remove(item);
         }
@@ -203,7 +203,7 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
 
             item.Show(
                 profile,
-                manual.Any(p => string.Equals(p, id, StringComparison.OrdinalIgnoreCase)),
+                manual.Any(path => string.Equals(path, id, StringComparison.OrdinalIgnoreCase)),
                 new[] { Keys.BufferWindow.Name, Keys.Video.Name, Keys.TrackLayout.Name }.Count(profile.Overrides.ContainsKey));
             item.IsCapturing = string.Equals(id, _state?.TargetGame?.ProfileId, StringComparison.OrdinalIgnoreCase);
             item.HasUnsavedChanges = _games.TryGetValue(id, out var cached) && cached.HasUnsavedChanges;
@@ -256,7 +256,7 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
                 Message = viewModel.Message;
                 break;
             case nameof(HasUnsavedChanges):
-                if (Profiles.FirstOrDefault(p => p.ProfileId == viewModel.ProfileId) is { } row)
+                if (Profiles.FirstOrDefault(profile => profile.ProfileId == viewModel.ProfileId) is { } row)
                 {
                     row.HasUnsavedChanges = viewModel.HasUnsavedChanges;
                 }

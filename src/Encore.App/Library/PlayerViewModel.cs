@@ -134,7 +134,6 @@ internal sealed class PlayerViewModel : Observable, IDisposable
                 OnPropertyChanged(nameof(HasStoreLink));
                 OnPropertyChanged(nameof(CanSeek));
                 OnPropertyChanged(nameof(HasControls));
-                OnPropertyChanged(nameof(HasTracks));
                 ((RelayCommand)PlayPauseCommand).RaiseCanExecuteChanged();
             }
         }
@@ -301,9 +300,6 @@ internal sealed class PlayerViewModel : Observable, IDisposable
 
     /// <summary>The file's Tracks, in file order.</summary>
     public ObservableCollection<PlayerTrack> Tracks { get; } = [];
-
-    /// <summary>Whether the Track list shows: an open, playable file with at least one Track.</summary>
-    public bool HasTracks => HasControls && Tracks.Count > 0;
 
     /// <summary>The Track that plays; choosing another switches mid-play without moving the position.</summary>
     public PlayerTrack? SelectedTrack

@@ -243,7 +243,7 @@ internal sealed class GameViewModel : SettingsViewModel
         }
 
         var safe = builder.ToString().Trim().TrimEnd('.', ' ');
-        return safe.Length == 0 || safe.All(c => c == '_') ? "Game" : safe;
+        return safe.Length == 0 || safe.All(character => character == '_') ? "Game" : safe;
     }
 
     protected override FrameworkElement CreateView() => new GamePageView { DataContext = this };
@@ -319,7 +319,7 @@ internal sealed class GameViewModel : SettingsViewModel
     private void StopDetecting()
     {
         var manual = SettingsValues.Global(Document, Keys.ManualGames);
-        IReadOnlyList<string> next = [.. manual.Where(p => !string.Equals(p, ProfileId, StringComparison.OrdinalIgnoreCase))];
+        IReadOnlyList<string> next = [.. manual.Where(path => !string.Equals(path, ProfileId, StringComparison.OrdinalIgnoreCase))];
         if (next.Count != manual.Count)
         {
             _ = SendAsync([SettingsValues.SetGlobal(Keys.ManualGames, next)]);

@@ -86,7 +86,7 @@ internal partial class GameProfilesView
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
             ListScroller.ScrollToVerticalOffset(_listOffset);
-            if (ViewModel?.Profiles.FirstOrDefault(p => p.ProfileId == id) is { } row)
+            if (ViewModel?.Profiles.FirstOrDefault(profile => profile.ProfileId == id) is { } row)
             {
                 GameList.SelectedItem = row;
                 GameList.UpdateLayout();

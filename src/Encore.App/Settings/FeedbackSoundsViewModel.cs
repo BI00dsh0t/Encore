@@ -46,7 +46,7 @@ internal sealed class FeedbackSoundsViewModel : SettingsViewModel
 
     public FeedbackDeviceItem? SelectedDevice
     {
-        get => _deviceItems.FirstOrDefault(d => SameEndpoint(d.EndpointId, _device));
+        get => _deviceItems.FirstOrDefault(device => SameEndpoint(device.EndpointId, _device));
         set
         {
             // A combo box whose list changed clears its selection; that isn't a choice.
@@ -127,16 +127,18 @@ internal sealed class FeedbackSoundsViewModel : SettingsViewModel
 
     private void ShowDevices()
     {
-        var outputs = _devices.Devices.Where(d => d.Flow == AudioFlow.Output && d.Available).ToList();
-        bool Shared(string name) => outputs.Count(d => string.Equals(d.FriendlyName, name, StringComparison.OrdinalIgnoreCase)) > 1;
+        var outputs = _devices.Devices.Where(device => device.Flow == AudioFlow.Output && device.Available).ToList();
+        bool Shared(string name) =>
+            outputs.Count(device => string.Equals(device.FriendlyName, name, StringComparison.OrdinalIgnoreCase)) > 1;
+        string Label(AudioDevice device) => Shared(device.FriendlyName) && device.ParentName.Length > 0
+            ? $"{device.FriendlyName} — {device.ParentName}"
+            : device.FriendlyName;
 
         List<FeedbackDeviceItem> items = [new(null, DefaultDeviceLabel)];
-        items.AddRange(outputs.Select(d => new FeedbackDeviceItem(
-            d.EndpointId,
-            Shared(d.FriendlyName) && d.ParentName.Length > 0 ? $"{d.FriendlyName} — {d.ParentName}" : d.FriendlyName)));
-        if (_device is { } id && !items.Any(i => SameEndpoint(i.EndpointId, id)))
+        items.AddRange(outputs.Select(device => new FeedbackDeviceItem(device.EndpointId, Label(device))));
+        if (_device is { } id && !items.Any(item => SameEndpoint(item.EndpointId, id)))
         {
-            var known = _devices.Devices.FirstOrDefault(d => SameEndpoint(d.EndpointId, id));
+            var known = _devices.Devices.FirstOrDefault(device => SameEndpoint(device.EndpointId, id));
             items.Add(new(id, (known?.FriendlyName is { Length: > 0 } name ? name : id) + " (not connected)"));
         }
 

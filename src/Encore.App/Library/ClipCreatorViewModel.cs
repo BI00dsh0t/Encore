@@ -281,8 +281,6 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
         }
     }
 
-    public string PlayheadText => FormatTime(Playhead);
-
     public string PlaybackText => $"{FormatTime(Playhead)} / {FormatTime(Duration)}";
 
     public string ViewportText => $"Visible {FormatTime(ViewportStart)} – {FormatTime(ViewportEnd)}";
@@ -296,7 +294,6 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
         {
             if (Set(ref _playhead, value))
             {
-                OnPropertyChanged(nameof(PlayheadText));
                 OnPropertyChanged(nameof(PlaybackText));
             }
         }
@@ -875,10 +872,10 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
             return;
         }
 
-        var tracks = Tracks.Where(t => t.Included).Select(t => t.Track.StreamIndex).ToArray();
+        var tracks = Tracks.Where(track => track.Included).Select(track => track.Track.StreamIndex).ToArray();
         // Trimming changes the overlay, not the source peaks in this viewport.
-        if (Waveforms.Length == tracks.Length && Waveforms.Select(w => w.StreamIndex).SequenceEqual(tracks)
-            && Waveforms.All(w => w.Start == ViewportStart && w.End == ViewportEnd))
+        if (Waveforms.Length == tracks.Length && Waveforms.Select(waveform => waveform.StreamIndex).SequenceEqual(tracks)
+            && Waveforms.All(waveform => waveform.Start == ViewportStart && waveform.End == ViewportEnd))
         {
             return;
         }
@@ -945,33 +942,14 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
         string? folder = null;
         try
         {
-            if (_thumbnailStore is not null)
+            var images = await LoadStoredThumbnailsAsync(cancel.Token);
+            if (images is null)
             {
-                var cached = await _thumbnailStore.TryLoadAsync(Source, Duration, cancel.Token);
+                folder = Directory.CreateTempSubdirectory("Encore-thumbnails-").FullName;
+                images = await MakeThumbnailsAsync(folder, cancel.Token);
                 cancel.Token.ThrowIfCancellationRequested();
-                if (cached is not null)
-                {
-                    if (!_closed && !_suspended)
-                    {
-                        Thumbnails = cached;
-                    }
-
-                    return;
-                }
             }
 
-            folder = Directory.CreateTempSubdirectory("Encore-thumbnails-").FullName;
-            var response = await _media.ExecuteAsync(new("prepareThumbnails", Source, Destination: folder), null, cancel.Token);
-            cancel.Token.ThrowIfCancellationRequested();
-            var descriptor = response.Thumbnails ?? throw new IOException("The media worker returned no thumbnails.");
-            var images = await ClipThumbnailCache.LoadAsync(folder, descriptor, Source, Duration, cancel.Token);
-            cancel.Token.ThrowIfCancellationRequested();
-            if (_thumbnailStore is not null)
-            {
-                await _thumbnailStore.SaveAsync(folder, descriptor, cancel.Token);
-            }
-
-            cancel.Token.ThrowIfCancellationRequested();
             if (!_closed && !_suspended)
             {
                 Thumbnails = images;
@@ -1004,6 +982,35 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
         }
     }
 
+    // The thumbnails kept from an earlier session, or null when there are none.
+    private async Task<ClipThumbnailImage[]?> LoadStoredThumbnailsAsync(CancellationToken token)
+    {
+        if (_thumbnailStore is null)
+        {
+            return null;
+        }
+
+        var stored = await _thumbnailStore.TryLoadAsync(Source, Duration, token);
+        token.ThrowIfCancellationRequested();
+        return stored;
+    }
+
+    // Asks the worker for the thumbnails, reads them from its scratch folder, and keeps them for next time.
+    private async Task<ClipThumbnailImage[]> MakeThumbnailsAsync(string folder, CancellationToken token)
+    {
+        var response = await _media.ExecuteAsync(new("prepareThumbnails", Source, Destination: folder), null, token);
+        token.ThrowIfCancellationRequested();
+        var descriptor = response.Thumbnails ?? throw new IOException("The media worker returned no thumbnails.");
+        var images = await ClipThumbnailCache.LoadAsync(folder, descriptor, Source, Duration, token);
+        token.ThrowIfCancellationRequested();
+        if (_thumbnailStore is not null)
+        {
+            await _thumbnailStore.SaveAsync(folder, descriptor, token);
+        }
+
+        return images;
+    }
+
     private async Task StopThumbnailsAsync()
     {
         _thumbnailCancellation?.Cancel();
@@ -1030,7 +1037,7 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
                 var response = await _media.ExecuteAsync(Request("export") with
                 {
                     Destination = destination
-                }, new Progress<double>(p => Progress = p), token);
+                }, new Progress<double>(value => Progress = value), token);
                 Status = "Exported to " + response.Output;
             });
         }
@@ -1063,7 +1070,7 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
                 var response = await _media.ExecuteAsync(Request("preview") with
                 {
                     Destination = Path.Combine(folder, "preview.mp4")
-                }, new Progress<double>(p => Progress = p), token);
+                }, new Progress<double>(value => Progress = value), token);
                 token.ThrowIfCancellationRequested();
                 _effective = response.Range ?? _effective;
                 OnPropertyChanged(nameof(EffectiveText));
@@ -1096,7 +1103,7 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
     }
 
     private ClipMediaRequest Request(string operation) => new(operation, Source, Start, End,
-        Tracks: Tracks.Where(t => t.Included).Select(t => t.Track.StreamIndex).ToArray(), Mix: Mix, Format: Format);
+        Tracks: Tracks.Where(track => track.Included).Select(track => track.Track.StreamIndex).ToArray(), Mix: Mix, Format: Format);
 
     private async Task WorkAsync(Func<CancellationToken, Task> action)
     {
