@@ -10,7 +10,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>The Main App's shell (story 9.3): the navigation, the page header and the status header, in both themes.</summary>
+/// <summary>The Main App's shell: the navigation, the page header and the status header, in both themes.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class ShellTests
 {

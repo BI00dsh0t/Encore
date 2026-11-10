@@ -10,7 +10,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>Audio Tracks (story 10.5; the Track Layout page of story 2.5 before it): the cards, the picker, presets, save bar and meters.</summary>
+/// <summary>Audio Tracks: the cards, the picker, presets, save bar and meters.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class TrackLayoutPageTests
 {
@@ -394,7 +394,7 @@ public sealed class TrackLayoutPageTests
     [Fact]
     public void AReloadClosesThePickerSoNoPickLandsOnAStaleTrack()
     {
-        // QA 10.5: a settings.changed on a clean page rebuilds the cards.
+        // A settings.changed on a clean page rebuilds the cards.
         SetState(revision: 1, layout: null, Speakers);
         var page = Create().TrackLayout;
         page.OpenPicker(page.Tracks[0]);
@@ -532,7 +532,7 @@ public sealed class TrackLayoutPageTests
     [Fact]
     public void AnOpenPageWatchesAgainAfterAReconnectToTheSameEngineRun()
     {
-        // Story 10.4: the engine stops a watch when its last client leaves.
+        // The engine stops a watch when its last client leaves.
         var model = CreateMetered(out _);
         Open(model);
         Assert.Single(_engine.Sent);

@@ -9,13 +9,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Story 8.6 (R6, NFR-6; PLAN.md T-05 to T-07) with the real <c>Encore.App.exe</c> and the engine it
-/// launches, on a throwaway test instance: settings, a Game Profile, the Track Layout's device ids, the
-/// Hotkeys, <c>runtime.json</c>'s mic mute and <c>library.json</c>'s Favourite stay as they were through an
-/// App kill (the engine relaunches it), an engine kill (the App relaunches it) and a Quit followed by a
-/// launch from the Run key's command line. Real processes and supervision timing, so Heavy.
-/// </summary>
+/// <summary>With the real App and engine: settings and choices survive an App kill, an engine kill and a restart. Heavy.</summary>
 [Collection(nameof(SupervisionCollection))]
 public sealed class NothingToReselectPairTests : IAsyncDisposable
 {
@@ -163,10 +157,7 @@ public sealed class NothingToReselectPairTests : IAsyncDisposable
         Assert.Equal(files, Snapshot());
     }
 
-    /// <summary>
-    /// 64 bytes the Library's scan lists: an <c>ftyp</c> box, then a <c>moov</c> box, ending at the file's
-    /// length (<c>Mp4File.IsComplete</c>). Zeros alone aren't an MP4, and a scan never lists them.
-    /// </summary>
+    /// <summary>64 bytes the Library's scan lists: an <c>ftyp</c> box then a <c>moov</c> box; zeros alone aren't an MP4.</summary>
     private static byte[] CompleteMp4()
     {
         var bytes = new byte[64];
@@ -189,11 +180,7 @@ public sealed class NothingToReselectPairTests : IAsyncDisposable
         process.Kill();
     }
 
-    /// <summary>
-    /// The bytes of settings.json and runtime.json, and library.json's items. library.json is compared by
-    /// its parsed items, not its bytes: the engine may save it again with the same items (a re-read length,
-    /// its Output Folder), which is no change to anything the user chose.
-    /// </summary>
+    /// <summary>The bytes of the settings and runtime files, and the Library's parsed items, as the engine may re-save its file.</summary>
     private Dictionary<string, string> Snapshot() => new()
     {
         ["settings.json"] = Convert.ToBase64String(ReadShared(Path.Combine(TestInstance.RoamingDataFolder, "settings.json"))),

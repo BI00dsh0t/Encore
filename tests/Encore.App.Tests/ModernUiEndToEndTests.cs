@@ -20,16 +20,7 @@ using Encore.Engine.Supervision;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Story 9.9's closing check of epic 9, unattended and without the GPU: the whole engine (<c>EngineHost</c>)
-/// in-process on a throwaway test instance in temp folders, the App's own <see cref="EngineConnection"/>, and
-/// the real Main App window, tray menu, Control gallery, Overlay and Yes/No dialog, each following the
-/// engine's committed <c>appTheme</c> as the App's <see cref="ThemeService"/> does. It opens the App in
-/// Fluent, switches the theme through the General page's <c>settings.update</c> with every page, the tray
-/// menu and the delete confirmation open, and checks each surface restyles in place with no restart and every
-/// resource key resolving; then it restarts the App (and engine) on the same instance and checks Gaming dark
-/// is kept, before the snapshot and after it. Rewind and Recordings stay off; nothing is captured.
-/// </summary>
+/// <summary>The theme end to end, unattended and without the GPU: every surface restyles in place and the theme is kept.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed partial class ModernUiEndToEndTests : IDisposable
 {
@@ -56,8 +47,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
     [Trait("Category", "Heavy")]
     public void TheThemeSwitchesLiveOnEverySurfaceAndSurvivesAnAppRestart() => Sta.Run(() =>
     {
-        // The temp folder's name has a dot, which isn't a test instance name: the engine would treat it as a
-        // real instance and start Rewind on the foreground window.
+        // A Guid name: a dotted temp-folder name isn't a test instance name, and the engine would start Rewind for real.
         var instance = new Instance(Instance.TestPrefix + "theme-" + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
         Assert.True(instance.IsTest);
         var output = Directory.CreateDirectory(Path.Combine(_folder, "out")).FullName;
@@ -75,12 +65,11 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
         {
             using (var first = Session.Start(instance, _folder, post))
             {
-                // R1: a fresh instance opens in Fluent, the default, on every surface.
+                // A fresh instance opens in Fluent, the default, on every surface.
                 Assert.Equal(AppTheme.Fluent, first.Main.General.AppTheme);
                 AssertTheme(first, AppTheme.Fluent, keys);
 
-                // A Clip in the Output Folder, so the Library has a row to delete.
-                // The smallest file the Library takes as a complete MP4: an ftyp box, then an empty moov.
+                // A Clip to delete: the smallest file the Library takes as a complete MP4, an ftyp box then an empty moov.
                 File.WriteAllBytes(Path.Combine(output, "clip.mp4"), [0, 0, 0, 16, .. "ftypisom"u8, 0, 0, 2, 0, 0, 0, 0, 8, .. "moov"u8]);
                 first.Main.LibrarySettings.Confirm = _ => true;
                 first.Main.LibrarySettings.ClipsFolder.Choose(output);
@@ -89,12 +78,11 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                 Until(() => first.Main.Library.Rows.Count == 1, "the Clip's Library row");
                 Pump(TimeSpan.FromMilliseconds(300));
 
-                // The row's thumbnail brush traces "no governing element" as its container is prepared; once the
-                // row is in the window its binding is active, so that trace is filtered below.
+                // The row's thumbnail brush traces a binding error while its container is prepared; that trace is filtered below.
                 var brush = Assert.Single(Descendants(first.Main.Library.View).OfType<Border>().Select(b => b.Background).OfType<ImageBrush>());
                 Assert.Equal(BindingStatus.Active, BindingOperations.GetBindingExpression(brush, ImageBrush.ImageSourceProperty)!.Status);
 
-                // R1, R5: the switch with each page open restyles every surface in place.
+                // The switch with each page open restyles every surface in place.
                 var expected = AppTheme.Fluent;
                 foreach (var item in first.Main.NavItems.Where(i => !i.IsSection))
                 {
@@ -115,7 +103,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                     Log?.WriteLine($"{item.Title}: {expected}");
                 }
 
-                // R5: the switch with the delete confirmation open restyles it in place; No keeps the file.
+                // The switch with the delete confirmation open restyles it in place; No keeps the file.
                 first.Main.SelectedNavItem = first.Main.LibraryNav;
                 Pump(TimeSpan.FromMilliseconds(50));
                 var before = expected;
@@ -169,7 +157,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                 logs.AddRange(first.Logs);
             }
 
-            // R1: restarted, the App opens in Gaming dark before the engine answers, and the snapshot keeps it.
+            // Restarted, the App opens in Gaming dark before the engine answers, and the snapshot keeps it.
             using var second = Session.Start(instance, _folder, post);
             Assert.Equal(AppTheme.GamingDark, second.StartTheme);
             Assert.Equal(AppTheme.GamingDark, SettingsValues.Global(second.Engine.State!.Settings, Keys.AppTheme));
@@ -288,11 +276,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
     [GeneratedRegex(@"\{DynamicResource\s+([^}\s]+)\s*\}")]
     private static partial Regex DynamicResource();
 
-    /// <summary>
-    /// The engine and the App as <see cref="ShellApp"/> starts them: the theme last applied before any window
-    /// shows, then the engine's committed one; the Main App, the tray menu (open over the Main App, as the
-    /// App's menu takes the App's resources), the Control gallery and the Overlay.
-    /// </summary>
+    /// <summary>The engine and the App as the real App starts them: the last theme first, then the engine's committed one.</summary>
     private sealed class Session : IDisposable
     {
         private readonly EngineHost _host;

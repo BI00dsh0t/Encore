@@ -316,7 +316,6 @@ public sealed class LibraryPageTests
     [Fact]
     public void TheWelcomeCardShowsOnlyOnAnEmptyUnfilteredLibraryAndFollowsTheSettings()
     {
-        // Story 10.6.
         var page = new MainViewModel(_engine, action => action()).Library;
         Assert.True(page.ShowsWelcome);
         Assert.Equal("Audio: none yet — your Clips will be silent", page.Welcome.Audio);

@@ -9,10 +9,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Bugfix: Gaming dark's TextBox template applied a box's Padding twice, as the content host's margin and
-/// again inside the content host's ScrollViewer, so every Gaming text box sat twice as far inset.
-/// </summary>
+/// <summary>A bug that bit: Gaming dark's TextBox template applied a box's Padding twice, so text sat twice as far inset.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class GamingTextBoxPaddingTests
 {

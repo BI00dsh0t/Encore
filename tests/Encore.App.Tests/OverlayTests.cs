@@ -334,7 +334,7 @@ public sealed class OverlayTests
             Shift(engine, Buffering);
             AssertDotOn(primary);
 
-            // The primary moves to a 150 % monitor (T-03): nothing the Overlay shows changed, but it moves there.
+            // The primary moves to a 150 % monitor: nothing the Overlay shows changed, but it moves there.
             primary = new MonitorArea(0, 0, 1600, 900, 144);
             model.DisplaysChanged();
             AssertDotOn(primary);

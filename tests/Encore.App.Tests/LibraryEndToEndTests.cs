@@ -13,17 +13,7 @@ using Encore.Engine.Supervision;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Story 7.11's closing check of epic 7, unattended and without the GPU: the whole engine (<c>EngineHost</c>)
-/// in-process on a throwaway test instance, the App's own <see cref="EngineConnection"/>, a
-/// <see cref="LibraryPage"/> with the real shell thumbnails and a recording shell, and the real
-/// <c>MainViewModel</c>'s Library and Cleanup settings page, over a temp Output Folder of small MP4s that
-/// <c>ffmpeg.exe</c> makes on the CPU. It walks the epic's Done when: the folder chosen on the settings page,
-/// a corrupt index rebuilt and blocking Cleanup, length and thumbnails, grouping and filters, Favourite,
-/// changes made outside the app, Open, Show in Explorer and Copy (the shell calls recorded, nothing
-/// launched), rename and delete to the real Recycle Bin (restored after), a growing file locked, and
-/// Cleanup's guards: a Favourite, a file being written and a junction's target kept, oldest first, and its log.
-/// </summary>
+/// <summary>The Library end to end, unattended and without the GPU: the whole engine in-process and the App's Library page.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class LibraryEndToEndTests : IDisposable
 {
@@ -69,14 +59,13 @@ public sealed class LibraryEndToEndTests : IDisposable
         var victim = Place(two, outside, "victim.mp4", now.AddDays(-100));
         Junction(Path.Combine(output, "Linked"), outside);
 
-        // The temp folder's name has a dot, which isn't a test instance name: the engine would treat it as a
-        // real instance and start Rewind on the foreground window.
+        // A Guid name: a dotted temp-folder name isn't a test instance name, and the engine would start Rewind for real.
         var instance = new Instance(Instance.TestPrefix + "library-" + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
         Assert.True(instance.IsTest);
         var dispatcher = Dispatcher.CurrentDispatcher;
         Action<Action> post = action => dispatcher.BeginInvoke(action);
 
-        // R8: the Output Folder chosen on the settings page; the scan lists the five files and not the junction's.
+        // The Output Folder chosen on the settings page; the scan lists the five files and not the junction's.
         using (var first = Session.Start(instance, _folder, post, new ShiftedTime()))
         {
             var settings = first.Main.LibrarySettings;
@@ -93,7 +82,7 @@ public sealed class LibraryEndToEndTests : IDisposable
             Assert.DoesNotContain(first.Engine.State!.Library, i => i.Path.Contains("victim", StringComparison.OrdinalIgnoreCase));
         }
 
-        // R2: neither copy of the index parses; it is rebuilt from the folder and Cleanup is off until acknowledged.
+        // Neither copy of the index parses; it is rebuilt from the folder and Cleanup is off until acknowledged.
         var libraryFile = Path.Combine(instance.RoamingDataFolder, "library.json");
         File.WriteAllText(libraryFile, "{ not json");
         File.WriteAllText(libraryFile + ".bak", "{ not json either");
@@ -108,13 +97,13 @@ public sealed class LibraryEndToEndTests : IDisposable
         Assert.True(page.IsCleanupBlocked);
         Assert.NotNull(session.Main.LibrarySettings.CleanupBlockedText);
 
-        // R3: each row's length from the engine and its thumbnail from the shell.
+        // Each row's length from the engine and its thumbnail from the shell.
         Until(() => page.Rows.All(r => r.Length != "" && r.HasThumbnail), "every row's length and thumbnail");
         Assert.Equal("0:03", Row(page, @"Alpha\a-fav.mp4").Length);
         Assert.Equal("0:02", Row(page, @"Beta\b-new.mp4").Length);
         Log?.WriteLine("rows: " + string.Join("; ", page.Rows.Select(r => $"{r.Path} {r.Game} {r.Date} {r.Length} {r.Size}")));
 
-        // R4: grouped by game and by day, and filtered by game, date and Favourite.
+        // Grouped by game and by day, and filtered by game, date and Favourite.
         page.GroupBy = LibraryGrouping.Game;
         Assert.Equal(["Alpha", "Beta"], Headers(page));
         page.SelectedGame = page.Games.Single(g => g.Name == "Alpha");
@@ -131,7 +120,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         Assert.Equal(4, Headers(page).Count);
         Assert.Equal("Today", Headers(page)[0]);
 
-        // R6: Favourite kept in the index; the Favourites filter shows only it.
+        // Favourite kept in the index; the Favourites filter shows only it.
         Row(page, @"Alpha\a-fav.mp4").FavouriteCommand.Execute(null);
         Row(page, @"Beta\b-rename.mp4").FavouriteCommand.Execute(null);
         Until(() => engine.State!.Library.Count(i => i.Favourite) == 2 && page.Rows.Count(r => r.IsFavourite) == 2, "two Favourites");
@@ -139,7 +128,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         Assert.Equal([@"Beta\b-rename.mp4", @"Alpha\a-fav.mp4"], Shown(page));
         page.FavouritesOnly = false;
 
-        // R2: a rename outside the app keeps the Favourite; a delete outside removes; a copy in adds.
+        // A rename outside the app keeps the Favourite; a delete outside removes; a copy in adds.
         File.Move(Path.Combine(output, @"Beta\b-rename.mp4"), Path.Combine(output, @"Beta\b-moved.mp4"));
         File.Delete(Path.Combine(output, @"Beta\b-gone.mp4"));
         File.Copy(two, Path.Combine(output, @"Beta\b-copied.mp4"));
@@ -149,7 +138,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         Assert.True(Item(engine, @"Beta\b-moved.mp4").Favourite);
         Until(() => page.Rows.Count == 5, "the rows following");
 
-        // R5: Open, Show in Explorer and Copy pass the absolute path to the shell; Copy's data is one file drop.
+        // Open, Show in Explorer and Copy pass the absolute path to the shell; Copy's data is one file drop.
         page.Click(Row(page, @"Alpha\a-old.mp4"), ctrl: false, shift: false);
         var oldPath = Path.Combine(output, @"Alpha\a-old.mp4");
         page.OpenCommand.Execute(null);
@@ -159,7 +148,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         Assert.Equal([oldPath], LibraryClipboard.Create([oldPath]).GetFileDropList().Cast<string>());
         Assert.Null(page.ActionError);
 
-        // R6: rename in place (the selection follows it); delete asks, No keeps the file, Yes sends it to the Recycle Bin.
+        // Rename in place (the selection follows it); delete asks, No keeps the file, Yes sends it to the Recycle Bin.
         var copied = Row(page, @"Beta\b-copied.mp4");
         page.Click(copied, ctrl: false, shift: false);
         page.RenameCommand.Execute(null);
@@ -180,7 +169,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         Assert.Equal(["Move “b-best.mp4” to the Recycle Bin?", "Move “b-best.mp4” to the Recycle Bin?"], session.Asked);
         Assert.Null(page.ActionError);
 
-        // R6: a growing file being written is locked: no Copy, Rename or Delete, and the engine refuses a rename.
+        // A growing file being written is locked: no Copy, Rename or Delete, and the engine refuses a rename.
         var recording = Path.Combine(output, @"Beta\rec.mp4");
         using var growing = new FileStream(recording, FileMode.CreateNew, FileAccess.Write, FileShare.Read | FileShare.Delete);
         session.Host.Library.BeginWrite(recording, null);
@@ -197,8 +186,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         growing.Write(new byte[4096]);
         growing.Flush();
 
-        // R7: past the 60 s start delay (shifted clock), a confirmed size limit needing one file is previewed
-        // and saved, but nothing goes while library-corrupt is unacknowledged.
+        // Past the 60 s start delay, a size limit is previewed and saved, but nothing goes while the index is unacknowledged.
         time.Offset = TimeSpan.FromSeconds(61);
         var settingsPage = session.Main.LibrarySettings;
         var limitPrompts = new List<string>();
@@ -225,8 +213,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         Until(() => session.Logs.Any(l => l.Contains(@"Cleanup deleted Alpha\a-old.mp4", StringComparison.Ordinal)), "the Cleanup log");
         Assert.Contains(session.Logs, l => l.StartsWith("Cleanup plan: 1 files", StringComparison.Ordinal));
 
-        // Lowered to one byte: every non-Favourite that isn't being written goes; the Favourites, the file being
-        // written and the junction's target stay, and cleanup-limit-unreachable is raised.
+        // Lowered to one byte: everything goes except Favourites, the file being written and the junction's target.
         settingsPage.SizeLimitText = Gb(1);
         Until(() => limitPrompts.Count == 2, "the second preview prompt");
         Assert.Contains("Cleanup would delete 1 file", limitPrompts[^1], StringComparison.Ordinal);
@@ -240,7 +227,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         Log?.WriteLine("engine log:\n" + string.Join("\n", session.Logs));
         Assert.DoesNotContain(session.Logs, l => l.StartsWith("Capturing", StringComparison.Ordinal) || l.StartsWith("Detected", StringComparison.Ordinal));
 
-        // R8's page: the folder size follows the snapshot.
+        // The folder size follows the snapshot.
         Assert.Contains("in 3 files", settingsPage.FolderSizeText, StringComparison.Ordinal);
         Assert.Null(page.ActionError);
     });

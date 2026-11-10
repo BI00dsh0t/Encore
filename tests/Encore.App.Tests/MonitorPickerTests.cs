@@ -11,11 +11,11 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 11.4: the Hotkeys screen picker, on a fabricated monitor list.</summary>
+/// <summary>The Hotkeys screen picker, on a fabricated monitor list.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class MonitorPickerTests
 {
-    // The builder's two screens (spike 11.1) and a portable one, left of the primary and lower.
+    // The builder's two screens and a portable one, left of the primary and lower.
     private static readonly DisplayMonitor Dell = new(@"\\.\DISPLAY1", "DELL", 2560, 1440, true, "path-dell", 0, 0, 240);
     private static readonly DisplayMonitor Lg = new(@"\\.\DISPLAY2", "LG", 3840, 2160, false, "path-lg", 2560, 0, 144, Hdr: true);
     private static readonly DisplayMonitor Portable = new(@"\\.\DISPLAY3", "Portable", 1920, 1080, false, "path-portable", -1920, 600, 60);
@@ -123,7 +123,7 @@ public sealed class MonitorPickerTests
         var picker = model.Hotkeys.Monitor;
         Assert.Equal(3, picker.Rows.Count);
 
-        // The LG is unplugged (T-03): the list follows the event, without a fetch.
+        // The LG is unplugged: the list follows the event, without a fetch.
         _engine.State = RecordingMessages.MonitorsChanged.Apply(_engine.State!, new MonitorList([Dell, Portable]));
         model.Refresh();
         Assert.Equal(1, _engine.MonitorFetches);

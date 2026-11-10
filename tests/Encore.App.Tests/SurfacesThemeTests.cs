@@ -18,12 +18,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// The surfaces outside the Main App window follow the theme (story 9.7, AD-23): the tray menu, the
-/// dialog behind <see cref="Prompts"/> and the Overlay's message card. Each test scopes the theme to its
-/// own window, as <see cref="ThemeTests"/> does. PNGs of each surface in both themes go beside the test
-/// binary for the builder's check.
-/// </summary>
+/// <summary>The surfaces outside the Main App window follow the theme: the tray menu, the dialog and the Overlay's card.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class SurfacesThemeTests
 {

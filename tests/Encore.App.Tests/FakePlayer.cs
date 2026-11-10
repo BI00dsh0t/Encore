@@ -40,7 +40,7 @@ internal sealed class FakePlayer : IPlayer
         Position = position;
     }
 
-    // Windows picks the last Track at open (AD-27).
+    // Windows picks the last Track at open.
     public int SelectedTrack { get; set; } = 3;
 
     public Task<PlayerMedia> OpenAsync(Stream file)

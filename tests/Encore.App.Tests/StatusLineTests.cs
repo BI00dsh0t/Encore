@@ -181,7 +181,7 @@ public sealed class StatusLineRenderTests
     [Fact]
     public void TheHintSaysWhichKeySavesHowMuchWhileCapturingOnly()
     {
-        // Story 10.6: hidden during a Recording and when the Save Hotkey failed to register.
+        // Hidden during a Recording and when the Save Hotkey failed to register.
         var engine = new FakeEngineSession();
         var line = new StatusLine(engine);
         var settings = Contracts.Settings.SettingsDocument.Empty with

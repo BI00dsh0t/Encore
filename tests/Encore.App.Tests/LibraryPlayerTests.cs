@@ -8,7 +8,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 14.2: the Library's in-app player page, over a fake player (AD-27). Real playback is Heavy (<see cref="PlayerPlaybackTests"/>).</summary>
+/// <summary>The Library's in-app player page, over a fake player. Real playback is Heavy (<see cref="PlayerPlaybackTests"/>).</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class LibraryPlayerTests : IDisposable
 {
@@ -67,7 +67,7 @@ public sealed class LibraryPlayerTests : IDisposable
         page.OpenFocused();
         var absolute = Path.Combine(_folder, Clip);
 
-        // Read-only and shared for read, write and delete (AD-27): the engine can rename and delete it while it plays.
+        // Read-only and shared for read, write and delete: the engine can rename and delete it while it plays.
         Assert.False(_player.File!.CanWrite);
         File.Move(absolute, absolute + ".renamed");
         File.Delete(absolute + ".renamed");
@@ -107,8 +107,7 @@ public sealed class LibraryPlayerTests : IDisposable
         Assert.Equal([("open", Path.Combine(_folder, Clip))], _shell.Calls);
     }
 
-    // QA 14.2 rounds 1 and 2: any GPU failure building the picture, however its HRESULT is mapped, is the
-    // page's failure through the view's own catch, never a blank picture or a crash.
+    // Any GPU failure building the picture, however its HRESULT is mapped, fails the page, never a blank or a crash.
     [Theory]
     [InlineData("out of video memory")]
     [InlineData("com")]

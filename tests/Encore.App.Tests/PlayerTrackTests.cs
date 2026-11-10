@@ -4,7 +4,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 14.4: the player page's Track list, over a fake player with the four-Track fixture's names.</summary>
+/// <summary>The player page's Track list, over a fake player with the four-Track fixture's names.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class PlayerTrackTests : IDisposable
 {

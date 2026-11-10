@@ -3,10 +3,7 @@ using System.Windows.Threading;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// The test classes that build WPF views or windows. WPF on several STA threads at once in one process
-/// deadlocked the full run, so they take turns.
-/// </summary>
+/// <summary>The test classes that build WPF views; WPF on several STA threads at once deadlocked, so they take turns.</summary>
 [CollectionDefinition(nameof(WpfCollection), DisableParallelization = true)]
 public sealed class WpfCollection;
 
@@ -43,7 +40,7 @@ internal static class Sta
         timer.Stop();
     }
 
-    /// <summary>Pumps the dispatcher until <paramref name="condition"/> holds, failing after five seconds; a loaded machine can take longer than a fixed pump.</summary>
+    /// <summary>Pumps the dispatcher until the condition holds, failing after five seconds, as a loaded machine can be slow.</summary>
     public static void PumpUntil(Func<bool> condition, string what)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();

@@ -9,7 +9,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 13.1: the General page's Games section and its Capture new games switch.</summary>
+/// <summary>The General page's Games section and its Capture new games switch.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class CaptureNewGamesTests
 {

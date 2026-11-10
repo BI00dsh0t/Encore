@@ -9,10 +9,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Story 14.2, Heavy (nights only): real playback through Windows' media player, the frame server and the
-/// D3DImage, on fixtures made with the bundled FFmpeg. Muted. Skipped without <c>native/ffmpeg/ffmpeg.exe</c>.
-/// </summary>
+/// <summary>Heavy (nights only): real playback through Windows' media player on FFmpeg-made fixtures. Muted.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class PlayerPlaybackTests : IDisposable
 {
@@ -47,7 +44,7 @@ public sealed class PlayerPlaybackTests : IDisposable
             Sta.Pump(TimeSpan.FromSeconds(1));
             Assert.True(PictureShare(view) > 0.5, "the picture is mostly video");
 
-            // The engine's rename and delete never fail on a playing file (AD-27).
+            // The engine's rename and delete never fail on a playing file.
             File.Move(absolute, absolute + ".renamed");
             File.Delete(absolute + ".renamed");
             Sta.Pump(TimeSpan.FromMilliseconds(300));
@@ -94,8 +91,7 @@ public sealed class PlayerPlaybackTests : IDisposable
         });
     }
 
-    // Story 14.4: the research's check. At an inaudible volume, this process's own audio says which Track plays
-    // after each of ten switches while playing; and a switch while paused then Play resumes in place (the 14.5 probe).
+    // At an inaudible volume, this process's own audio says which Track plays after each switch.
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public void TheChosenTrackIsTheOneHeardAndAPausedSwitchResumesInPlace()
@@ -134,7 +130,7 @@ public sealed class PlayerPlaybackTests : IDisposable
         });
     }
 
-    // Story 14.7 (the sweep's check): a Recording, fragmented as AD-9 writes it, plays, seeks and switches Track.
+    // A fragmented Recording plays, seeks and switches Track.
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public void ARecordingFixturePlaysSeeksAndSwitchesTrack()
@@ -183,7 +179,7 @@ public sealed class PlayerPlaybackTests : IDisposable
             model.Library.OpenFocused();
             Sta.PumpUntil(() => model.Library.Player?.State == PlayerState.Paused, "the player to open");
 
-            // Muted through the page: it applies its own volume and mute to the player as it opens (story 14.5).
+            // Muted through the page: it applies its own volume and mute to the player as it opens.
             model.Library.Player!.IsMuted = true;
             var player = (PlayerView)view.FindName("PlayerContent");
             Sta.PumpUntil(() => player.SurfaceSize is not null, "the first frame");
@@ -229,8 +225,7 @@ public sealed class PlayerPlaybackTests : IDisposable
         return process.PrivateMemorySize64;
     }
 
-    // The research's fixture: the video, four AAC Tracks of different tones named Game, Mic, Discord and Desktop,
-    // only the first marked default, written where the Library item points.
+    // The fixture: the video and four AAC Tracks of different tones, only the first marked default.
     private string MakeFixture(string video, string encode, string mux, int seconds = 2)
     {
         var ffmpeg = FindFFmpeg();

@@ -14,7 +14,7 @@ public sealed class MainViewModelTests
     [Fact]
     public void TheNavListsTheEightPagesInOrderWithNoRecordingsPage()
     {
-        // Story 10.9: the builder's approved order; Games has its own title since story 10.10.
+        // The builder's approved order; Games has its own title.
         var model = Create();
 
         Assert.Equal(

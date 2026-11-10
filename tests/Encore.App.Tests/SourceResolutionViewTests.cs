@@ -9,7 +9,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 12.3: the Clips page's and a game's Video quality with Source chosen, in both themes.</summary>
+/// <summary>The Clips page's and a game's Video quality with Source chosen, in both themes.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class SourceResolutionViewTests
 {

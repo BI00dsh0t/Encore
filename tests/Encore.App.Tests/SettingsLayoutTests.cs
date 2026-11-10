@@ -12,7 +12,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>The shared settings layout (stories 9.5 and 9.6): sections as cards in both themes, and the page error info bar.</summary>
+/// <summary>The shared settings layout: sections as cards in both themes, and the page error info bar.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed partial class SettingsLayoutTests
 {
@@ -111,7 +111,7 @@ public sealed partial class SettingsLayoutTests
                     Sta.Pump(TimeSpan.FromMilliseconds(100));
                     if (page == model.TrackLayout)
                     {
-                        // Story 10.5: an unsaved draft (the save bar), fabricated levels, and the picker open.
+                        // An unsaved draft (the save bar), fabricated levels, and the picker open.
                         var tracks = model.TrackLayout.Tracks;
                         if (tracks[1].Sources.Count == 0)
                         {
@@ -154,12 +154,11 @@ public sealed partial class SettingsLayoutTests
                     Assert.Equal(sections, found.Select(s => s.Header as string));
                     Assert.All(found, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
 
-                    // A keyed local style hid Gaming dark's implicit Button style and showed the default look.
-                    // Save changes is the one accent button.
+                    // A bug that bit: a keyed local style hid Gaming dark's implicit Button style. Save changes is the one accent button.
                     Assert.All(Descendants<Button>(page.View).Where(b => b.Style != accent), b => Assert.Equal(DependencyProperty.UnsetValue, b.ReadLocalValue(FrameworkElement.StyleProperty)));
                     Save(window, $"settings-{slug}-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
 
-                    // Story 10.10: a game's page, with the breadcrumb in the page header.
+                    // A game's page, with the breadcrumb in the page header.
                     if (page == model.GameProfiles)
                     {
                         model.GameProfiles.Open(model.GameProfiles.Profiles[0]);
@@ -230,10 +229,7 @@ public sealed partial class SettingsLayoutTests
         }
     }
 
-    /// <summary>
-    /// Every theme resource key the views stories 10.5 and 10.9 built look up: Audio Tracks, its dictionary,
-    /// the folder picker, Clips, Hotkeys and Storage. Keys the files define themselves are left out.
-    /// </summary>
+    /// <summary>Every theme resource key the settings views look up; keys the files define themselves are left out.</summary>
     private static IEnumerable<string> ViewResourceKeys()
     {
         var folder = Path.Combine(MainFolder(), "src", "Encore.App");
