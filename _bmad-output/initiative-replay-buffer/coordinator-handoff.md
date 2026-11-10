@@ -4,7 +4,7 @@ Read root `CLAUDE.md`, this file, `test-backlog.md`, then the last ~30 Log lines
 
 ## The job
 
-Codex works directly in `%USERPROFILE%/Documents/repos/ReplayBuffer`. The former Claude worker-session, SendMessage and Trello instructions are retired for this takeover. Follow the builder's current scope; do not resume the remaining initiative work without their word.
+Codex works directly in `%USERPROFILE%/Documents/repos/Encore`. The former Claude worker-session, SendMessage and Trello instructions are retired for this takeover. Follow the builder's current scope; do not resume the remaining initiative work without their word.
 
 - **Tickets:** `python _bmad/method/scripts/tickets.py next|status|find|mark _bmad-output/initiative-replay-buffer [ref] [state]`.
 - **Git:** git flow (AVH); code on `feature/...` or `bugfix/...` from develop. Conventional Commits, lowercase imperative summary of at most 72 characters, and a `Refs: <story>` footer when applicable. Planning artifacts may be committed directly on develop.
@@ -21,7 +21,7 @@ Codex works directly in `%USERPROFILE%/Documents/repos/ReplayBuffer`. The former
    - The sole exception for the blank-player-controls bug has been used: one focused icon-render test passed. It does not authorize further test runs.
 2. **GPU work at night only.** Heavy, GPU, capture, bench and soak runs happen at night, after the builder's go. Tonight's 23:03 timer was **deleted** at the builder's request; nothing is scheduled.
 3. **Measurement runs need a quiet PC.** Before any fps or bench run, pause every session's builds and suites. `.bench-running` doesn't stop other sessions. Keep an overlap log.
-4. **Merges:** in the main folder `%USERPROFILE%/Documents/repos/ReplayBuffer` on develop, with exactly `git merge --no-ff <branch> -m "<type>(<scope>): merge <name>"`, serialized. Never push; there's no remote.
+4. **Merges:** in the main folder `%USERPROFILE%/Documents/repos/Encore` on develop, with exactly `git merge --no-ff <branch> -m "<type>(<scope>): merge <name>"`, serialized. Never push; there's no remote.
 5. **Never:**
    - touch the installed app (`%LOCALAPPDATA%\Programs\ReplayBuffer`), the builder's real settings or Library, or the builder's Dev App;
    - change Windows, driver, NVIDIA, display or audio settings;
@@ -31,7 +31,7 @@ Codex works directly in `%USERPROFILE%/Documents/repos/ReplayBuffer`. The former
 
 ## Where things stand
 
-- **Rebranded to Encore (2026-11-10):** the app is Encore and its always-on capture feature is Rewind ("Do all phases"). The solution is now `Encore.slnx`, with `Encore.*` projects and exes, and data and install folders under Encore with a one-time copy of the old ReplayBuffer data. Merge `6f41cea`; build clean; tests in `test-backlog.md`. See `feature-requests/rebrand-encore/rebrand-encore.md`. **Phase 4 is open:** the builder renames the repo folder `%USERPROFILE%\Documents\repos\ReplayBuffer` to `...\Encore` with nothing running. After that, every path in this file and in the memory notes needs updating.
+- **Rebranded to Encore (2026-11-10):** the app is Encore and its always-on capture feature is Rewind ("Do all phases"). The solution is now `Encore.slnx`, with `Encore.*` projects and exes, and data and install folders under Encore with a one-time copy of the old ReplayBuffer data. Merge `6f41cea`; build clean; tests in `test-backlog.md`. See `feature-requests/rebrand-encore/rebrand-encore.md`. **Phase 4 is open:** the builder renames the repo folder `%USERPROFILE%\Documents\repos\Encore` to `...\Encore` with nothing running. After that, every path in this file and in the memory notes needs updating.
 
 - **Selected clip area dragging integrated (2026-11-08):** builder authorized the recorded request with “implement the paln”. Feature `768ab85`; no-ff develop merge `6ac2a6f974a3aa8496796f20cf231a86969be34a`. Drag selected waveform/video body after the Windows threshold to translate In/Out together by a common millisecond delta; preserve duration, clamp to source bounds and keep viewport/cache/playhead independent. Stationary body click seeks on release; grips resize, ruler/outside body scrub, waveform double-click selects viewport, and completed moves suppress an accidental double-click. Release/lost capture resolves effective media boundaries; cursor/help updated. Preserve displayed source position when a paused rendered preview is invalidated; live loops follow moved bounds. Release build **0 warnings/errors**; authorized ClipCreatorTests **27 passed, 0 failed/skipped**, including two new both-look/zoom-pan/gesture/cache tests. Existing double-click regression caught and verified the playhead-preservation correction. Scoped ordinary review clear. Native pointer/high DPI/drag feel/media/HITL remain deferred. See `plan-drag-clip-selection.md`; feature request now built. No real Dev App/data/system changes or push; restart the updated Dev App from develop to see it.
 
