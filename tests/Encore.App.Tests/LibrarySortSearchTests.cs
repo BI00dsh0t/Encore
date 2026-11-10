@@ -30,32 +30,32 @@ public sealed class LibrarySortSearchTests
     [InlineData(nameof(LibrarySort.Game), "Clip 10.mp4|clip 2.mp4|a.mp4|b.mp4")]
     public void EachSortOrdersTheFlatListWithNoHeaders(string sort, string expected)
     {
-        var page = new LibraryViewModel(_engine);
-        page.Render(_engine.State! with { Library = Items });
+        var viewModel = new LibraryViewModel(_engine);
+        viewModel.Render(_engine.State! with { Library = Items });
 
-        (page.GroupBy, page.Sort) = (LibraryGrouping.None, Enum.Parse<LibrarySort>(sort));
+        (viewModel.GroupBy, viewModel.Sort) = (LibraryGrouping.None, Enum.Parse<LibrarySort>(sort));
 
-        Assert.All(page.Entries, e => Assert.IsType<LibraryRow>(e));
-        Assert.Equal(expected, string.Join('|', page.Entries.Cast<LibraryRow>().Select(r => r.Name)));
+        Assert.All(viewModel.Entries, e => Assert.IsType<LibraryRow>(e));
+        Assert.Equal(expected, string.Join('|', viewModel.Entries.Cast<LibraryRow>().Select(r => r.Name)));
     }
 
     [Fact]
     public void ASearchNarrowsTheRowsAndKeepsAHiddenSelectedItemSelected()
     {
-        var page = new LibraryViewModel(_engine);
-        page.Render(_engine.State! with { Library = Items });
-        page.SelectAll();
+        var viewModel = new LibraryViewModel(_engine);
+        viewModel.Render(_engine.State! with { Library = Items });
+        viewModel.SelectAll();
 
-        page.SearchText = "CLIP";
+        viewModel.SearchText = "CLIP";
 
-        Assert.Equal(["Clip 10.mp4", "clip 2.mp4"], page.Entries.OfType<LibraryRow>().Select(r => r.Name));
-        Assert.Equal(("4 selected", "(2 hidden by filters)"), (page.SelectionText, page.HiddenText));
-        Assert.Null(page.NoResultsText);
+        Assert.Equal(["Clip 10.mp4", "clip 2.mp4"], viewModel.Entries.OfType<LibraryRow>().Select(r => r.Name));
+        Assert.Equal(("4 selected", "(2 hidden by filters)"), (viewModel.SelectionText, viewModel.HiddenText));
+        Assert.Null(viewModel.NoResultsText);
 
-        page.SearchText = "zzz";
-        Assert.Equal("No items match “zzz”.", page.NoResultsText);
-        page.ClearSearchCommand.Execute(null);
-        Assert.Equal(4, page.Entries.OfType<LibraryRow>().Count(r => r.IsSelected));
+        viewModel.SearchText = "zzz";
+        Assert.Equal("No items match “zzz”.", viewModel.NoResultsText);
+        viewModel.ClearSearchCommand.Execute(null);
+        Assert.Equal(4, viewModel.Entries.OfType<LibraryRow>().Count(r => r.IsSelected));
     }
 
     [Fact]
@@ -65,8 +65,8 @@ public sealed class LibrarySortSearchTests
         try
         {
             var file = Path.Combine(folder, "library-view.json");
-            var page = new LibraryViewModel(_engine, viewStateFile: file);
-            (page.GroupBy, page.Sort, page.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "kept?");
+            var viewModel = new LibraryViewModel(_engine, viewStateFile: file);
+            (viewModel.GroupBy, viewModel.Sort, viewModel.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "kept?");
 
             var reopened = new LibraryViewModel(_engine, viewStateFile: file);
             Assert.Equal((LibraryGrouping.None, LibrarySort.LargestFirst, ""), (reopened.GroupBy, reopened.Sort, reopened.SearchText));

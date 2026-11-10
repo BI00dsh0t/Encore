@@ -36,40 +36,40 @@ public sealed class GameProfilesViewModelTests
     {
         SetProfilesWithAlpha(revision: 3, ("bufferWindow", Keys.BufferWindow.ToJson(60)), ("video", Keys.Video.ToJson(GlobalVideo)));
         _engine.State = _engine.State! with { TargetGame = new TargetGame(BetaId, "Beta", 7) };
-        var page = Create().GameProfiles;
+        var viewModel = Create().GameProfiles;
 
-        Assert.Equal("Games", page.Title);
-        Assert.Equal([("Beta", ""), ("Chad", ""), ("Alpha", "Ignored games")], page.Profiles.Select(p => (p.Name, p.Group)));
-        Assert.Equal(["Detected automatically", "Added by hand", "Detected automatically · 2 settings changed"], page.Profiles.Select(p => p.Caption));
-        Assert.Equal([true, false, false], page.Profiles.Select(p => p.IsCapturing));
-        Assert.All(page.Profiles, p => Assert.DoesNotContain(@":\", p.Name + p.Caption, StringComparison.Ordinal));
+        Assert.Equal("Games", viewModel.Title);
+        Assert.Equal([("Beta", ""), ("Chad", ""), ("Alpha", "Ignored games")], viewModel.Profiles.Select(p => (p.Name, p.Group)));
+        Assert.Equal(["Detected automatically", "Added by hand", "Detected automatically · 2 settings changed"], viewModel.Profiles.Select(p => p.Caption));
+        Assert.Equal([true, false, false], viewModel.Profiles.Select(p => p.IsCapturing));
+        Assert.All(viewModel.Profiles, p => Assert.DoesNotContain(@":\", p.Name + p.Caption, StringComparison.Ordinal));
     }
 
     [Fact]
     public void OpeningAGameShowsItsPageAndBackReturnsToItsRow()
     {
         SetProfiles(revision: 3);
-        var page = Create().GameProfiles;
-        var chad = page.Profiles[1];
+        var viewModel = Create().GameProfiles;
+        var chad = viewModel.Profiles[1];
 
-        page.Open(chad);
+        viewModel.Open(chad);
 
-        Assert.True(page.DrillIn.IsOpen);
-        Assert.Equal(("Games", "Chad"), (page.DrillIn.ParentTitle, page.DrillIn.ItemTitle));
-        Assert.Equal(ChadId, page.OpenGame!.ProgramPath);
-        Assert.Equal("Added by hand", page.OpenGame.Source);
+        Assert.True(viewModel.DrillIn.IsOpen);
+        Assert.Equal(("Games", "Chad"), (viewModel.DrillIn.ParentTitle, viewModel.DrillIn.ItemTitle));
+        Assert.Equal(ChadId, viewModel.OpenGame!.ProgramPath);
+        Assert.Equal("Added by hand", viewModel.OpenGame.Source);
 
-        page.DrillIn.BackCommand.Execute(null);
+        viewModel.DrillIn.BackCommand.Execute(null);
 
-        Assert.Null(page.OpenGame);
-        Assert.Equal(ChadId, page.LastOpenedId);
+        Assert.Null(viewModel.OpenGame);
+        Assert.Equal(ChadId, viewModel.LastOpenedId);
 
         // Choosing Games in the nav again (click, Enter or Space) goes back too; another item doesn't.
         var model = Create();
-        model.SelectedPage = model.GameProfiles;
+        model.SelectedSettingsViewModel = model.GameProfiles;
         model.IsSettingsTabSelected = true;
         model.GameProfiles.Open(model.GameProfiles.Profiles[0]);
-        model.ReselectNavItem(model.NavItems.Single(i => i.Page == model.General));
+        model.ReselectNavItem(model.NavItems.Single(i => i.ViewModel == model.General));
         Assert.True(model.IsDrilledIn);
         model.ReselectNavItem(model.SelectedNavItem);
         Assert.False(model.IsDrilledIn);
@@ -80,9 +80,9 @@ public sealed class GameProfilesViewModelTests
     {
         SetProfiles(revision: 3);
         var updates = Capture();
-        var page = Create().GameProfiles;
-        page.Open(page.Profiles[0]);
-        var game = page.OpenGame!;
+        var viewModel = Create().GameProfiles;
+        viewModel.Open(viewModel.Profiles[0]);
+        var game = viewModel.OpenGame!;
         Assert.Equal(("Uses the main setting", "Save the last 300 seconds"), (game.Clips.Chip, game.Clips.Summary));
         Assert.Equal("1  Everything: Microphone" + Environment.NewLine + "2  Chat: no sounds", game.AudioTracks.Summary);
 
@@ -120,14 +120,14 @@ public sealed class GameProfilesViewModelTests
     public void AMainChangeShowsAtOnceInAGameThatUsesIt()
     {
         SetProfiles(revision: 3);
-        var page = Create().GameProfiles;
-        page.Open(page.Profiles[0]);
+        var viewModel = Create().GameProfiles;
+        viewModel.Open(viewModel.Profiles[0]);
 
         SetProfiles(revision: 4, global: [("bufferWindow", Keys.BufferWindow.ToJson(60))]);
         _engine.RaiseChanged();
 
-        Assert.Equal("Save the last 60 seconds", page.OpenGame!.Clips.Summary);
-        Assert.Equal("H.264 · 1280 × 720 · 60 fps · 40,000 kbps", page.OpenGame.Video.Summary);
+        Assert.Equal("Save the last 60 seconds", viewModel.OpenGame!.Clips.Summary);
+        Assert.Equal("H.264 · 1280 × 720 · 60 fps · 40,000 kbps", viewModel.OpenGame.Video.Summary);
     }
 
     [Fact]
@@ -136,8 +136,8 @@ public sealed class GameProfilesViewModelTests
         // The main Video quality is Source; the game's summary says so and its own copy carries matchSource.
         SetProfiles(revision: 3, global: [("video", Keys.Video.ToJson(GlobalVideo with { MatchSource = true }))]);
         var updates = Capture();
-        var page = Create().GameProfiles;
-        var game = page.Page(BetaId);
+        var viewModel = Create().GameProfiles;
+        var game = viewModel.GameFor(BetaId);
         Assert.Equal("H.264 · Source · 60 fps · 40,000 kbps", game.Video.Summary);
 
         game.Video.ChangeCommand.Execute(null);
@@ -152,8 +152,8 @@ public sealed class GameProfilesViewModelTests
     {
         SetProfiles(revision: 3);
         var updates = Capture();
-        var page = Create().GameProfiles;
-        var chad = page.Page(ChadId);
+        var viewModel = Create().GameProfiles;
+        var chad = viewModel.GameFor(ChadId);
 
         chad.Capture = false;
         chad.StopDetectingCommand.Execute(null);
@@ -169,52 +169,52 @@ public sealed class GameProfilesViewModelTests
         SetProfiles(revision: 3, beta: [("trackLayout", Keys.TrackLayout.ToJson(GlobalLayout))]);
         _engine.Reply = (_, _) => Empty.Value;
         var model = Create();
-        var page = model.GameProfiles;
-        page.Open(page.Profiles[0]);
-        var game = page.OpenGame!;
+        var viewModel = model.GameProfiles;
+        viewModel.Open(viewModel.Profiles[0]);
+        var game = viewModel.OpenGame!;
         game.Tracks.AddTrackCommand.Execute(null);
         Assert.True(game.HasUnsavedChanges);
 
-        page.DrillIn.Close();
-        page.Open(page.Profiles[0]);
+        viewModel.DrillIn.Close();
+        viewModel.Open(viewModel.Profiles[0]);
 
-        Assert.Same(game, page.OpenGame);
+        Assert.Same(game, viewModel.OpenGame);
         Assert.Equal(3, game.Tracks.Tracks.Count);
-        Assert.True(page.Profiles[0].HasUnsavedChanges);
-        Assert.True(model.NavItems.Single(i => i.Page == page).HasUnsavedChanges);
+        Assert.True(viewModel.Profiles[0].HasUnsavedChanges);
+        Assert.True(model.NavItems.Single(i => i.ViewModel == viewModel).HasUnsavedChanges);
     }
 
     [Fact]
     public void AGameRemovedFromTheDocumentReturnsItsPageToTheList()
     {
         SetProfiles(revision: 3);
-        var page = Create().GameProfiles;
-        page.Open(page.Profiles[0]);
+        var viewModel = Create().GameProfiles;
+        viewModel.Open(viewModel.Profiles[0]);
 
         _engine.State = _engine.State! with { Settings = _engine.State.Settings with { Revision = 4, Profiles = _engine.State.Settings.Profiles.Remove(BetaId) } };
         _engine.RaiseChanged();
 
-        Assert.False(page.DrillIn.IsOpen);
-        Assert.Null(page.OpenGame);
-        Assert.Equal("Beta is no longer in the list.", page.Message);
-        Assert.Equal(["Chad", "Alpha"], page.Profiles.Select(p => p.Name));
+        Assert.False(viewModel.DrillIn.IsOpen);
+        Assert.Null(viewModel.OpenGame);
+        Assert.Equal("Beta is no longer in the list.", viewModel.Message);
+        Assert.Equal(["Chad", "Alpha"], viewModel.Profiles.Select(p => p.Name));
     }
 
     [Fact]
     public void AddAGameSendsTheChosenProgramAndShowsARefusal()
     {
         _engine.Reply = (_, args) => new GameAdded(@"c:\games\game.exe");
-        var page = Create().GameProfiles;
-        page.AddGame.Dialog = _ => @"C:\Games\Game.exe";
+        var viewModel = Create().GameProfiles;
+        viewModel.AddGame.Dialog = _ => @"C:\Games\Game.exe";
 
-        page.AddGame.BrowseCommand.Execute(null);
+        viewModel.AddGame.BrowseCommand.Execute(null);
 
         Assert.Equal(new GameAdd(@"C:\Games\Game.exe"), Assert.Single(_engine.Sent));
-        Assert.Equal("Added. Game appears here the next time it runs.", page.Message);
+        Assert.Equal("Added. Game appears here the next time it runs.", viewModel.Message);
 
         _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.InvalidArguments, "No such file.");
-        page.AddGame.BrowseCommand.Execute(null);
-        Assert.Equal("Not added: No such file.", page.Message);
+        viewModel.AddGame.BrowseCommand.Execute(null);
+        Assert.Equal("Not added: No such file.", viewModel.Message);
     }
 
     [Fact]
@@ -223,31 +223,31 @@ public sealed class GameProfilesViewModelTests
         SetProfilesWithAlpha(revision: 3, ("trackLayout", Keys.TrackLayout.ToJson(GlobalLayout)));
         _engine.Reply = (_, _) => Empty.Value;
         var model = Create();
-        model.SelectedPage = model.GameProfiles;
-        var page = model.GameProfiles;
+        model.SelectedSettingsViewModel = model.GameProfiles;
+        var viewModel = model.GameProfiles;
 
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
         PresentationTraceSources.Refresh();
         PresentationTraceSources.DataBindingSource.Listeners.Add(errors);
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
-        var window = new Window { Content = page.View, Width = 700, Height = 1400, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
+        var window = new Window { Content = viewModel.View, Width = 700, Height = 1400, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
             window.Show();
             Sta.Pump(TimeSpan.FromMilliseconds(100));
-            Render(page.View, "games-list.png");
+            Render(viewModel.View, "games-list.png");
 
-            page.Open(page.Profiles[2]);
+            viewModel.Open(viewModel.Profiles[2]);
             Sta.Pump(TimeSpan.FromMilliseconds(100));
-            Render(page.OpenGame!.View, "game-page.png");
-            Assert.True(page.OpenGame.View.IsVisible);
+            Render(viewModel.OpenGame!.View, "game-page.png");
+            Assert.True(viewModel.OpenGame.View.IsVisible);
 
-            page.DrillIn.Close();
+            viewModel.DrillIn.Close();
             Sta.Pump(TimeSpan.FromMilliseconds(100));
-            var list = (ListBox)page.View.FindName("GameList");
-            Assert.Same(page.Profiles[2], list.SelectedItem);
-            Assert.True(((ListBoxItem)list.ItemContainerGenerator.ContainerFromItem(page.Profiles[2])).IsKeyboardFocused);
+            var list = (ListBox)viewModel.View.FindName("GameList");
+            Assert.Same(viewModel.Profiles[2], list.SelectedItem);
+            Assert.True(((ListBoxItem)list.ItemContainerGenerator.ContainerFromItem(viewModel.Profiles[2])).IsKeyboardFocused);
         }
         finally
         {

@@ -20,33 +20,33 @@ public sealed class ShellTests
         var model = new MainViewModel(new FakeEngineSession(), action => action());
 
         Assert.Equal(
-            ["Library", "Settings", .. model.Pages.Select(p => p.Title)],
+            ["Library", "Settings", .. model.SettingsViewModels.Select(p => p.Title)],
             model.NavItems.Select(i => i.Title));
         Assert.Same(model.LibraryNav, model.SelectedNavItem);
         foreach (var item in model.NavItems.Where(i => !i.IsSection))
         {
             model.SelectedNavItem = item;
             Assert.Equal(item.Title, model.CurrentTitle);
-            Assert.Equal(item.Page is not null, model.IsSettingsTabSelected);
-            Assert.Same(item.Page?.View ?? model.Library.View, model.CurrentView);
+            Assert.Equal(item.ViewModel is not null, model.IsSettingsTabSelected);
+            Assert.Same(item.ViewModel?.View ?? model.Library.View, model.CurrentView);
         }
 
         // The section label is never selected, and the tray's path (IsSettingsTabSelected) selects the page's item.
         model.SelectedNavItem = model.NavItems[1];
-        Assert.Same(model.LibrarySettings, model.SelectedNavItem.Page);
+        Assert.Same(model.LibrarySettings, model.SelectedNavItem.ViewModel);
         model.IsSettingsTabSelected = false;
-        model.SelectedPage = model.Hotkeys;
+        model.SelectedSettingsViewModel = model.Hotkeys;
         Assert.Same(model.LibraryNav, model.SelectedNavItem);
         model.IsSettingsTabSelected = true;
-        Assert.Same(model.Hotkeys, model.SelectedNavItem.Page);
+        Assert.Same(model.Hotkeys, model.SelectedNavItem.ViewModel);
 
         // Ctrl+Tab steps over the label and wraps round.
         model.SelectedNavItem = model.LibraryNav;
         model.NavigateBy(1);
-        Assert.Same(model.General, model.SelectedPage);
+        Assert.Same(model.General, model.SelectedSettingsViewModel);
         model.NavigateBy(-1);
         model.NavigateBy(-1);
-        Assert.Same(model.LibrarySettings, model.SelectedNavItem.Page);
+        Assert.Same(model.LibrarySettings, model.SelectedNavItem.ViewModel);
     });
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed class ShellTests
         var theme = ThemeService.ForWindow(window);
         var nav = (ListBox)window.FindName("Nav");
         var sections = (ComboBox)window.FindName("SettingsSections");
-        var page = (ContentControl)window.FindName("Page");
+        var pageHost = (ContentControl)window.FindName("Page");
         try
         {
             foreach (var which in new[] { AppTheme.Fluent, AppTheme.GamingDark })
@@ -83,13 +83,13 @@ public sealed class ShellTests
 
                 // The nav list holds the Library; the settings pages are chosen in the section list.
                 Assert.Equal([model.LibraryNav], nav.Items.Cast<NavItem>());
-                Assert.Equal(model.Pages.Select(p => p.Title), sections.Items.Cast<NavItem>().Select(i => i.Title));
+                Assert.Equal(model.SettingsViewModels.Select(p => p.Title), sections.Items.Cast<NavItem>().Select(i => i.Title));
                 foreach (var item in model.NavItems.Where(i => !i.IsSection))
                 {
-                    (item.Page is null ? (System.Windows.Controls.Primitives.Selector)nav : sections).SelectedItem = item;
+                    (item.ViewModel is null ? (System.Windows.Controls.Primitives.Selector)nav : sections).SelectedItem = item;
                     Sta.Pump(TimeSpan.FromMilliseconds(30));
-                    Assert.Same(item.Page?.View ?? model.Library.View, page.Content);
-                    Assert.True(((FrameworkElement)page.Content).IsLoaded, $"{item.Title} didn't load under {which}");
+                    Assert.Same(item.ViewModel?.View ?? model.Library.View, pageHost.Content);
+                    Assert.True(((FrameworkElement)pageHost.Content).IsLoaded, $"{item.Title} didn't load under {which}");
                 }
 
                 var peer = UIElementAutomationPeer.CreatePeerForElement(nav);
@@ -102,7 +102,7 @@ public sealed class ShellTests
                 NavPress.SetIsPressed(library, false);
                 Assert.Equal("Library", ((TextBlock)library.Template.FindName("Label", library)).Text);
 
-                model.SelectedNavItem = model.NavItems.First(i => i.Page == model.General);
+                model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == model.General);
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
                 Save(window, $"shell-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
                 model.SelectedNavItem = model.LibraryNav;

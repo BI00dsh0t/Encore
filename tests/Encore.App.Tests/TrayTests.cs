@@ -86,7 +86,7 @@ public sealed class TrayTests
         engine.State = engine.State! with { Capture = engine.State.Capture with { Replay = Contracts.Messages.ReplayState.Buffering, MicMuted = false }, LibraryFolder = @"C:\Clips" };
         engine.RaiseChanged();
         Assert.Equal("Ready to save Clips", (string)all[0].Header);
-        model.SelectedNavItem = model.NavItems.First(i => i.Page == model.General);
+        model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == model.General);
         all[2].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Assert.Same(model.LibraryNav, model.SelectedNavItem);
         all[3].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));

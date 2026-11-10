@@ -24,7 +24,7 @@ internal partial class HotkeysView
     // While a row captures, the next key press is its combination; Escape cancels.
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (DataContext is not HotkeysViewModel { CapturingRow: { } row } page)
+        if (DataContext is not HotkeysViewModel { CapturingRow: { } row } viewModel)
         {
             return;
         }
@@ -32,13 +32,13 @@ internal partial class HotkeysView
         e.Handled = true;
         if (e.Key == Key.Escape)
         {
-            page.CancelCapture();
+            viewModel.CancelCapture();
             return;
         }
 
         if (HotkeysViewModel.FromKey(e.Key, e.SystemKey, Keyboard.Modifiers) is { } binding)
         {
-            page.Capture(row.Action, binding);
+            viewModel.Capture(row.Action, binding);
         }
     }
 }

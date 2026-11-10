@@ -13,24 +13,24 @@ internal partial class GamePageView
         {
             if (e.OldValue is GameViewModel old)
             {
-                old.PropertyChanged -= OnPageChanged;
+                old.PropertyChanged -= OnViewModelChanged;
             }
 
-            if (e.NewValue is GameViewModel page)
+            if (e.NewValue is GameViewModel viewModel)
             {
-                page.PropertyChanged += OnPageChanged;
-                NameBox.Text = page.Name;
+                viewModel.PropertyChanged += OnViewModelChanged;
+                NameBox.Text = viewModel.Name;
             }
         };
     }
 
-    private GameViewModel? Page => DataContext as GameViewModel;
+    private GameViewModel? ViewModel => DataContext as GameViewModel;
 
-    private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GameViewModel.Name) && !NameBox.IsKeyboardFocusWithin && Page is { } page)
+        if (e.PropertyName == nameof(GameViewModel.Name) && !NameBox.IsKeyboardFocusWithin && ViewModel is { } viewModel)
         {
-            NameBox.Text = page.Name;
+            NameBox.Text = viewModel.Name;
         }
     }
 
@@ -46,21 +46,21 @@ internal partial class GamePageView
 
     private void OnNameKeyDown(object sender, KeyEventArgs e)
     {
-        if (Page is not { } page)
+        if (ViewModel is not { } viewModel)
         {
             return;
         }
 
         if (e.Key == Key.Enter)
         {
-            page.Name = NameBox.Text;
-            NameBox.Text = page.Name;
+            viewModel.Name = NameBox.Text;
+            NameBox.Text = viewModel.Name;
             NameBox.SelectAll();
             e.Handled = true;
         }
-        else if (e.Key == Key.Escape && NameBox.Text != page.Name)
+        else if (e.Key == Key.Escape && NameBox.Text != viewModel.Name)
         {
-            NameBox.Text = page.Name;
+            NameBox.Text = viewModel.Name;
             NameBox.SelectAll();
             e.Handled = true;
         }
@@ -68,10 +68,10 @@ internal partial class GamePageView
 
     private void OnNameLostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (Page is { } page)
+        if (ViewModel is { } viewModel)
         {
-            page.Name = NameBox.Text;
-            NameBox.Text = page.Name;
+            viewModel.Name = NameBox.Text;
+            NameBox.Text = viewModel.Name;
         }
     }
 }

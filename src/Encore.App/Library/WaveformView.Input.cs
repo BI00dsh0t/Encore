@@ -32,7 +32,7 @@ internal sealed partial class WaveformView
     /// <summary>Starts a press: a double click selects the visible range; else it seeks, grabs a grip or the range.</summary>
     internal bool BeginPointer(Point point, int clickCount)
     {
-        if (_page is not { CanEdit: true } page)
+        if (_viewModel is not { CanEdit: true } viewModel)
         {
             return false;
         }
@@ -51,10 +51,10 @@ internal sealed partial class WaveformView
         }
 
         _pressPoint = _lastPoint = point;
-        _moveStart = page.Start;
-        _moveEnd = page.End;
-        _secondsPerPixel = ScaleOf(page).SecondsPerPixel;
-        _pointerMode = ModeAt(point, page);
+        _moveStart = viewModel.Start;
+        _moveEnd = viewModel.End;
+        _secondsPerPixel = ScaleOf(viewModel).SecondsPerPixel;
+        _pointerMode = ModeAt(point, viewModel);
         _focusedHandle = _pointerMode switch
         {
             PointerMode.In => TimelineHandle.In,
@@ -63,11 +63,11 @@ internal sealed partial class WaveformView
         };
         if (_pointerMode == PointerMode.Seek)
         {
-            page.BeginScrub(TimeAt(point.X));
+            viewModel.BeginScrub(TimeAt(point.X));
         }
         else if (_pointerMode != PointerMode.PendingMove)
         {
-            page.BeginRangeDrag();
+            viewModel.BeginRangeDrag();
         }
 
         UpdatePointerCursor(point);
@@ -77,16 +77,16 @@ internal sealed partial class WaveformView
     /// <summary>A double click on the lanes, or on a grip in the video strip, selects the visible time range.</summary>
     internal bool TrySelectVisibleRange(Point point, int clickCount)
     {
-        if (clickCount != 2 || _page is not { CanEdit: true } page || !CanSelectVisibleRangeAt(point, page))
+        if (clickCount != 2 || _viewModel is not { CanEdit: true } viewModel || !CanSelectVisibleRangeAt(point, viewModel))
         {
             return false;
         }
 
         _pointerMode = PointerMode.None;
         _focusedHandle = TimelineHandle.In;
-        page.EndScrub();
-        page.SelectVisibleRange();
-        page.EndRangeDrag();
+        viewModel.EndScrub();
+        viewModel.SelectVisibleRange();
+        viewModel.EndRangeDrag();
         ReleaseMouseCapture();
         InvalidateVisual();
         return true;
@@ -96,7 +96,7 @@ internal sealed partial class WaveformView
     internal void MovePointer(Point point)
     {
         _lastPoint = point;
-        if (_page is not { CanEdit: true } page)
+        if (_viewModel is not { CanEdit: true } viewModel)
         {
             return;
         }
@@ -109,16 +109,16 @@ internal sealed partial class WaveformView
             }
 
             _pointerMode = PointerMode.Move;
-            page.BeginRangeDrag();
+            viewModel.BeginRangeDrag();
         }
 
         if (_pointerMode == PointerMode.Move)
         {
-            page.MoveSelection(_moveStart, _moveEnd, (point.X - _pressPoint.X) * _secondsPerPixel);
+            viewModel.MoveSelection(_moveStart, _moveEnd, (point.X - _pressPoint.X) * _secondsPerPixel);
         }
         else if (_pointerMode == PointerMode.Seek)
         {
-            page.Seek(Math.Round(TimeAt(point.X), 3));
+            viewModel.Seek(Math.Round(TimeAt(point.X), 3));
         }
         else if (_pointerMode is PointerMode.In or PointerMode.Out)
         {
@@ -138,31 +138,31 @@ internal sealed partial class WaveformView
             _suppressDoubleClick = true;
         }
 
-        if (commitClick && mode == PointerMode.PendingMove && _page is { CanEdit: true } page)
+        if (commitClick && mode == PointerMode.PendingMove && _viewModel is { CanEdit: true } viewModel)
         {
-            page.Seek(TimeAt(_pressPoint.X));
+            viewModel.Seek(TimeAt(_pressPoint.X));
         }
 
-        _page?.EndScrub();
-        _page?.EndRangeDrag();
+        _viewModel?.EndScrub();
+        _viewModel?.EndRangeDrag();
         UpdatePointerCursor(_lastPoint);
     }
 
     /// <summary>Moves the In or the Out trim to a time.</summary>
     internal void MoveBoundary(bool end, double time)
     {
-        if (_page is not { CanEdit: true } page)
+        if (_viewModel is not { CanEdit: true } viewModel)
         {
             return;
         }
 
         if (end)
         {
-            page.SetRange(page.Start, time);
+            viewModel.SetRange(viewModel.Start, time);
         }
         else
         {
-            page.SetRange(time, page.End);
+            viewModel.SetRange(time, viewModel.End);
         }
     }
 
@@ -244,11 +244,11 @@ internal sealed partial class WaveformView
         }
         else if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0)
         {
-            _page?.Pan(e.Delta > 0 ? -0.2 : 0.2);
+            _viewModel?.Pan(e.Delta > 0 ? -0.2 : 0.2);
         }
         else
         {
-            _page?.Zoom(e.Delta > 0 ? 0.5 : 2);
+            _viewModel?.Zoom(e.Delta > 0 ? 0.5 : 2);
         }
 
         e.Handled = true;
@@ -300,10 +300,10 @@ internal sealed partial class WaveformView
                 StepFocusedHandle(1);
                 break;
             case Key.Add or Key.OemPlus:
-                _page?.Zoom(0.5);
+                _viewModel?.Zoom(0.5);
                 break;
             case Key.Subtract or Key.OemMinus:
-                _page?.Zoom(2);
+                _viewModel?.Zoom(2);
                 break;
             default:
                 return false;
@@ -328,22 +328,22 @@ internal sealed partial class WaveformView
     {
         if (_focusedHandle == TimelineHandle.Playhead)
         {
-            _page?.Seek(_page.Playhead + direction * 0.001);
+            _viewModel?.Seek(_viewModel.Playhead + direction * 0.001);
         }
         else
         {
-            _page?.Nudge(_focusedHandle == TimelineHandle.Out, direction);
+            _viewModel?.Nudge(_focusedHandle == TimelineHandle.Out, direction);
         }
     }
 
     private void UpdatePointerCursor(Point point)
     {
         _lastPoint = point;
-        Cursor = _page is { CanEdit: true } page ? CursorAt(point, page) : null;
+        Cursor = _viewModel is { CanEdit: true } viewModel ? CursorAt(point, viewModel) : null;
     }
 
     // During a press the cursor says what it does; hovering, it says what a press there would do.
-    private Cursor? CursorAt(Point point, ClipCreatorViewModel page)
+    private Cursor? CursorAt(Point point, ClipCreatorViewModel viewModel)
     {
         switch (_pointerMode)
         {
@@ -360,51 +360,51 @@ internal sealed partial class WaveformView
             return null;
         }
 
-        if (point.Y >= RulerHeight && IsNearGrip(point.X, page))
+        if (point.Y >= RulerHeight && IsNearGrip(point.X, viewModel))
         {
             return Cursors.SizeWE;
         }
 
-        return point.Y >= RulerHeight && IsOnRange(point.X, page) ? Cursors.Hand : Cursors.Cross;
+        return point.Y >= RulerHeight && IsOnRange(point.X, viewModel) ? Cursors.Hand : Cursors.Cross;
     }
 
     // The ruler always seeks. Grips win over the range's body, including their wider reach.
-    private PointerMode ModeAt(Point point, ClipCreatorViewModel page)
+    private PointerMode ModeAt(Point point, ClipCreatorViewModel viewModel)
     {
         if (point.Y < RulerHeight)
         {
             return PointerMode.Seek;
         }
 
-        if (Math.Abs(point.X - XOf(page.Start)) <= GripReach)
+        if (Math.Abs(point.X - XOf(viewModel.Start)) <= GripReach)
         {
             return PointerMode.In;
         }
 
-        if (Math.Abs(point.X - XOf(page.End)) <= GripReach)
+        if (Math.Abs(point.X - XOf(viewModel.End)) <= GripReach)
         {
             return PointerMode.Out;
         }
 
-        return IsOnRange(point.X, page) ? PointerMode.PendingMove : PointerMode.Seek;
+        return IsOnRange(point.X, viewModel) ? PointerMode.PendingMove : PointerMode.Seek;
     }
 
-    private bool CanSelectVisibleRangeAt(Point point, ClipCreatorViewModel page)
+    private bool CanSelectVisibleRangeAt(Point point, ClipCreatorViewModel viewModel)
     {
         if (ActualWidth <= PlotLeft || point.X < PlotLeft || point.X > ActualWidth || point.Y < RulerHeight || point.Y > ActualHeight)
         {
             return false;
         }
 
-        return point.Y < AudioBottom || IsNearGrip(point.X, page);
+        return point.Y < AudioBottom || IsNearGrip(point.X, viewModel);
     }
 
     private bool IsOutside(Point point) => point.X < PlotLeft || point.X > ActualWidth || point.Y < 0 || point.Y > ActualHeight;
 
-    private bool IsNearGrip(double x, ClipCreatorViewModel page) =>
-        Math.Abs(x - XOf(page.Start)) <= GripReach || Math.Abs(x - XOf(page.End)) <= GripReach;
+    private bool IsNearGrip(double x, ClipCreatorViewModel viewModel) =>
+        Math.Abs(x - XOf(viewModel.Start)) <= GripReach || Math.Abs(x - XOf(viewModel.End)) <= GripReach;
 
-    private bool IsOnRange(double x, ClipCreatorViewModel page) => x > XOf(page.Start) && x < XOf(page.End);
+    private bool IsOnRange(double x, ClipCreatorViewModel viewModel) => x > XOf(viewModel.Start) && x < XOf(viewModel.End);
 
     // Until the pointer moves this far, a press on the range is still a click.
     private bool IsWithinDragDistance(Point point) =>

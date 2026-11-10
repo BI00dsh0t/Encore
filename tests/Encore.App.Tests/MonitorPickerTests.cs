@@ -161,7 +161,7 @@ public sealed class MonitorPickerTests
             {
                 theme.Apply(which);
                 window.Show();
-                model.SelectedNavItem = model.NavItems.First(i => i.Page == model.Hotkeys);
+                model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == model.Hotkeys);
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
                 var picker = (FrameworkElement)model.Hotkeys.View.FindName("ScreenPicker");
                 picker.BringIntoView();

@@ -19,7 +19,7 @@ internal partial class ClipCreatorView
     public ClipCreatorView()
     {
         InitializeComponent();
-        _position = new DispatcherTimer(PositionInterval, DispatcherPriority.Background, (_, _) => Page?.Tick(), Dispatcher)
+        _position = new DispatcherTimer(PositionInterval, DispatcherPriority.Background, (_, _) => ViewModel?.Tick(), Dispatcher)
         {
             IsEnabled = false,
         };
@@ -30,7 +30,7 @@ internal partial class ClipCreatorView
     /// <summary>Asks where the export goes; tests replace the Windows dialogs.</summary>
     internal Func<ClipCreatorViewModel, Task<string?>> ChooseDestination { get; set; } = ClipExportDestination.ChooseAsync;
 
-    private ClipCreatorViewModel? Page => DataContext as ClipCreatorViewModel;
+    private ClipCreatorViewModel? ViewModel => DataContext as ClipCreatorViewModel;
 
     /// <summary>Focuses the timeline, when the creator opens.</summary>
     public void FocusFirstControl() => Timeline.Focus();
@@ -66,32 +66,32 @@ internal partial class ClipCreatorView
         e.Handled = true;
     }
 
-    private void OnStartMinusClick(object sender, RoutedEventArgs e) => Page?.Nudge(false, -1);
+    private void OnStartMinusClick(object sender, RoutedEventArgs e) => ViewModel?.Nudge(false, -1);
 
-    private void OnStartPlusClick(object sender, RoutedEventArgs e) => Page?.Nudge(false, 1);
+    private void OnStartPlusClick(object sender, RoutedEventArgs e) => ViewModel?.Nudge(false, 1);
 
-    private void OnEndMinusClick(object sender, RoutedEventArgs e) => Page?.Nudge(true, -1);
+    private void OnEndMinusClick(object sender, RoutedEventArgs e) => ViewModel?.Nudge(true, -1);
 
-    private void OnEndPlusClick(object sender, RoutedEventArgs e) => Page?.Nudge(true, 1);
+    private void OnEndPlusClick(object sender, RoutedEventArgs e) => ViewModel?.Nudge(true, 1);
 
     // The arrow beside Export: a menu to choose video or audio, with the current one ticked.
     private void OnExportTypeClick(object sender, RoutedEventArgs e)
     {
-        if (Page is not { CanOpenOptions: true } page)
+        if (ViewModel is not { CanOpenOptions: true } viewModel)
         {
             return;
         }
 
         var menu = new ContextMenu { PlacementTarget = ExportArrow };
         menu.SetResourceReference(StyleProperty, "EncoreClipMenuStyle");
-        menu.Items.Add(FormatItem(page, "mp4", "Export as video", "VideoIcon"));
-        menu.Items.Add(FormatItem(page, "mp3", "Export as audio", "AudioIcon"));
+        menu.Items.Add(FormatItem(viewModel, "mp4", "Export as video", "VideoIcon"));
+        menu.Items.Add(FormatItem(viewModel, "mp3", "Export as audio", "AudioIcon"));
         menu.Closed += (_, _) => ExportArrow.Focus();
         ExportArrow.ContextMenu = menu;
         menu.IsOpen = true;
     }
 
-    private MenuItem FormatItem(ClipCreatorViewModel page, string format, string label, string iconKey)
+    private MenuItem FormatItem(ClipCreatorViewModel viewModel, string format, string label, string iconKey)
     {
         var icon = new Path
         {
@@ -112,26 +112,26 @@ internal partial class ClipCreatorView
             FontSize = 14,
             FontWeight = FontWeights.Normal,
         });
-        var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = page.Format == format };
+        var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = viewModel.Format == format };
         AutomationProperties.SetName(item, label);
         item.SetResourceReference(StyleProperty, "EncoreClipMenuItemStyle");
-        item.Click += (_, _) => page.Format = format;
+        item.Click += (_, _) => viewModel.Format = format;
         return item;
     }
 
     private async void OnExportClick(object sender, RoutedEventArgs e)
     {
-        if (Page is not { CanOpenOptions: true } page)
+        if (ViewModel is not { CanOpenOptions: true } viewModel)
         {
             return;
         }
 
-        var dialog = new ClipExportDialog(page);
+        var dialog = new ClipExportDialog(viewModel);
         try
         {
             if (dialog.Ask(Window.GetWindow(this)))
             {
-                await page.ChooseAndExportAsync(ChooseDestination);
+                await viewModel.ChooseAndExportAsync(ChooseDestination);
             }
         }
         finally

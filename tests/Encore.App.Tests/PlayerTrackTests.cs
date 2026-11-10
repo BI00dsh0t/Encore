@@ -26,12 +26,12 @@ public sealed class PlayerTrackTests : IDisposable
     public void TheListShowsTheTracksByNameWithTheFirstPlayingAndAgainOnReopen()
     {
         var library = Library(out var players);
-        var page = Open(library);
+        var viewModel = Open(library);
 
-        Assert.Equal(["Game", "Mic", "Discord", "Desktop"], page.Tracks.Select(t => t.Name));
-        Assert.Same(page.Tracks[0], page.SelectedTrack);
-        Assert.Equal([true, false, false, false], page.Tracks.Select(t => t.IsPlaying));
-        page.SelectedTrack = page.Tracks[3];
+        Assert.Equal(["Game", "Mic", "Discord", "Desktop"], viewModel.Tracks.Select(t => t.Name));
+        Assert.Same(viewModel.Tracks[0], viewModel.SelectedTrack);
+        Assert.Equal([true, false, false, false], viewModel.Tracks.Select(t => t.IsPlaying));
+        viewModel.SelectedTrack = viewModel.Tracks[3];
 
         library.DrillIn.Close();
         var again = Open(library);
@@ -42,31 +42,31 @@ public sealed class PlayerTrackTests : IDisposable
     [Fact]
     public void ChoosingATrackWhilePlayingSwitchesWithoutMovingThePosition()
     {
-        var page = Open(Library(out var players));
+        var viewModel = Open(Library(out var players));
         var player = players[^1];
-        page.PlayPauseCommand.Execute(null);
+        viewModel.PlayPauseCommand.Execute(null);
         player.Position = TimeSpan.FromSeconds(4);
-        page.RefreshPosition();
+        viewModel.RefreshPosition();
 
-        page.SelectedTrack = page.Tracks[2];
+        viewModel.SelectedTrack = viewModel.Tracks[2];
 
         Assert.Equal(2, player.SelectedTrack);
         Assert.Empty(player.Seeks);
-        Assert.Equal(TimeSpan.FromSeconds(4), page.Position);
-        Assert.Equal(PlayerState.Playing, page.State);
-        Assert.Equal([false, false, true, false], page.Tracks.Select(t => t.IsPlaying));
+        Assert.Equal(TimeSpan.FromSeconds(4), viewModel.Position);
+        Assert.Equal(PlayerState.Playing, viewModel.State);
+        Assert.Equal([false, false, true, false], viewModel.Tracks.Select(t => t.IsPlaying));
 
         // A list that clears its selection never stops the Track that plays.
-        page.SelectedTrack = null;
-        Assert.Same(page.Tracks[2], page.SelectedTrack);
+        viewModel.SelectedTrack = null;
+        Assert.Same(viewModel.Tracks[2], viewModel.SelectedTrack);
     }
 
     [Fact]
     public void AnUnnamedTrackIsCountedFromOne()
     {
-        var page = Open(Library(out _, ["Game", "", " "]));
+        var viewModel = Open(Library(out _, ["Game", "", " "]));
 
-        Assert.Equal(["Game", "track 2", "track 3"], page.Tracks.Select(t => t.Name));
+        Assert.Equal(["Game", "track 2", "track 3"], viewModel.Tracks.Select(t => t.Name));
     }
 
     private LibraryViewModel Library(out List<FakePlayer> players, IReadOnlyList<string>? names = null)

@@ -31,13 +31,13 @@ public sealed class FeedbackSoundsViewModelTests
     public void SwitchingASoundOffSendsOneGlobalOpWithThatFlagOff()
     {
         SetState(revision: 3);
-        var page = Create().FeedbackSounds;
-        Assert.Equal(["Clip saved", "Save failed", "Recording started", "Recording stopped", "Disk full"], page.Sounds.Select(s => s.Label));
+        var viewModel = Create().FeedbackSounds;
+        Assert.Equal(["Clip saved", "Save failed", "Recording started", "Recording stopped", "Disk full"], viewModel.Sounds.Select(s => s.Label));
 
-        page.Sounds[1].IsOn = true;
+        viewModel.Sounds[1].IsOn = true;
         Assert.Empty(_updates);
 
-        page.Sounds[1].IsOn = false;
+        viewModel.Sounds[1].IsOn = false;
 
         var update = Assert.Single(_updates);
         Assert.Equal(3, update.ExpectedRevision);
@@ -45,7 +45,7 @@ public sealed class FeedbackSoundsViewModelTests
         Assert.Equal(SettingsScope.Global, op.Scope);
         Assert.Equal(Keys.FeedbackSounds.Name, op.Key);
         Assert.Equal(Keys.FeedbackSounds.ToJson(Keys.FeedbackSounds.Default with { SaveFailed = false }).GetRawText(), op.Value.GetRawText());
-        Assert.False(page.Sounds[1].IsOn);
+        Assert.False(viewModel.Sounds[1].IsOn);
     }
 
     [Fact]
@@ -53,37 +53,37 @@ public sealed class FeedbackSoundsViewModelTests
     {
         SetState(revision: 1, device: null, Speakers, Mic);
         var model = Create();
-        var page = model.FeedbackSounds;
-        Assert.Equal(["Default communications device", "Speakers"], page.Devices.Select(d => d.Label));
-        Assert.Null(page.SelectedDevice!.EndpointId);
+        var viewModel = model.FeedbackSounds;
+        Assert.Equal(["Default communications device", "Speakers"], viewModel.Devices.Select(d => d.Label));
+        Assert.Null(viewModel.SelectedDevice!.EndpointId);
 
-        page.SelectedDevice = page.Devices[1];
+        viewModel.SelectedDevice = viewModel.Devices[1];
         Assert.Equal("\"{out-1}\"", Assert.Single(Assert.Single(_updates).Ops).Value.GetRawText());
 
         SetState(revision: 2, device: "{OUT-1}", Speakers, Mic);
         model.Refresh();
-        Assert.Equal("{out-1}", page.SelectedDevice!.EndpointId);
-        page.SelectedDevice = page.Devices[0];
+        Assert.Equal("{out-1}", viewModel.SelectedDevice!.EndpointId);
+        viewModel.SelectedDevice = viewModel.Devices[0];
         Assert.Equal("null", Assert.Single(_updates[^1].Ops).Value.GetRawText());
 
         SetState(revision: 3, device: "{gone}", Speakers);
         model.Refresh();
-        Assert.Equal(["Default communications device", "Speakers", "{gone} (not connected)"], page.Devices.Select(d => d.Label));
-        Assert.Equal("{gone}", page.SelectedDevice!.EndpointId);
+        Assert.Equal(["Default communications device", "Speakers", "{gone} (not connected)"], viewModel.Devices.Select(d => d.Label));
+        Assert.Equal("{gone}", viewModel.SelectedDevice!.EndpointId);
     }
 
     [Fact]
     public void PlaySendsThePreviewForASwitchedOffSoundAndShowsAnError()
     {
         SetState(revision: 1, sounds: Keys.FeedbackSounds.Default with { ClipSaved = false });
-        var page = Create().FeedbackSounds;
+        var viewModel = Create().FeedbackSounds;
 
-        page.Sounds[0].PlayCommand.Execute(null);
+        viewModel.Sounds[0].PlayCommand.Execute(null);
         Assert.Equal(new FeedbackPreview(FeedbackSound.ClipSaved), _engine.Sent[^1]);
 
         _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.FeedbackDeviceCaptured, "The device is in use.");
-        page.Sounds[4].PlayCommand.Execute(null);
-        Assert.Equal($"Couldn't play ({ErrorCodes.FeedbackDeviceCaptured}): The device is in use.", page.Message);
+        viewModel.Sounds[4].PlayCommand.Execute(null);
+        Assert.Equal($"Couldn't play ({ErrorCodes.FeedbackDeviceCaptured}): The device is in use.", viewModel.Message);
     }
 
     [Fact]
@@ -98,8 +98,8 @@ public sealed class FeedbackSoundsViewModelTests
             ],
         };
         var model = Create();
-        Assert.Contains(model.Pages, p => p.Title == "Sounds");
-        model.SelectedPage = model.FeedbackSounds;
+        Assert.Contains(model.SettingsViewModels, p => p.Title == "Sounds");
+        model.SelectedSettingsViewModel = model.FeedbackSounds;
         Assert.Equal("Another app has the sound device to itself.", model.FeedbackSounds.CapturedWarning);
 
         var errors = new BindingErrors();
@@ -109,7 +109,7 @@ public sealed class FeedbackSoundsViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedPage.View;
+            var view = model.SelectedSettingsViewModel.View;
             view.Measure(new Size(600, 400));
             view.Arrange(new Rect(0, 0, 600, 400));
             view.UpdateLayout();

@@ -98,7 +98,7 @@ internal abstract class SettingsViewModel(SettingsSender sender) : Observable
 }
 
 /// <summary>The pages of the Settings area, in navigation order.</summary>
-internal static class SettingsViewModels
+internal static class SettingsViewModelFactory
 {
     /// <summary>Every page in nav order: General, Clips, Hotkeys, Audio Tracks, Games, Sounds, then Storage and Cleanup.</summary>
     public static IReadOnlyList<SettingsViewModel> Create(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null, IGameShell? gameShell = null) =>

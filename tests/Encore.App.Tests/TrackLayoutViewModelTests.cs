@@ -23,45 +23,45 @@ public sealed class TrackLayoutViewModelTests
     [Fact]
     public void AFreshDocumentShowsTheDefaultLayoutAndIsNotDirty()
     {
-        var page = Create().TrackLayout;
+        var viewModel = Create().TrackLayout;
 
-        var track = Assert.Single(page.Tracks);
+        var track = Assert.Single(viewModel.Tracks);
         Assert.Equal((Keys.EverythingTrackId, "Everything", 1), (track.Id, track.Name, track.Number));
         Assert.Empty(track.Sources);
         Assert.Equal("No sounds — this track will be silent", track.Summary);
-        Assert.False(page.IsDirty);
-        Assert.Equal("Audio Tracks", page.Title);
+        Assert.False(viewModel.IsDirty);
+        Assert.Equal("Audio Tracks", viewModel.Title);
     }
 
     [Fact]
     public void ASoundFromThePickerGoesOnThatTrackOnlyAndAnInputIsAMicrophone()
     {
         SetState(revision: 1, layout: null, Speakers, Headset, Mic);
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
-        var chat = page.Tracks[1];
+        var viewModel = Create().TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
+        var chat = viewModel.Tracks[1];
 
-        page.OpenPicker(chat);
-        Assert.Equal(["Sounds from your PC (playback)", "Sounds from your PC (playback)", "Microphones and other inputs"], page.PickerRows.Select(r => r.Section));
-        Assert.Equal(["Windows default", "Arctis", "Windows default"], page.PickerRows.Select(r => r.Caption));
-        page.Pick(page.PickerRows.Single(r => r.Device == Mic));
+        viewModel.OpenPicker(chat);
+        Assert.Equal(["Sounds from your PC (playback)", "Sounds from your PC (playback)", "Microphones and other inputs"], viewModel.PickerRows.Select(r => r.Section));
+        Assert.Equal(["Windows default", "Arctis", "Windows default"], viewModel.PickerRows.Select(r => r.Caption));
+        viewModel.Pick(viewModel.PickerRows.Single(r => r.Device == Mic));
 
-        Assert.False(page.IsPickerOpen);
-        var layout = page.ToLayout();
+        Assert.False(viewModel.IsPickerOpen);
+        var layout = viewModel.ToLayout();
         var mic = Assert.Single(layout.Devices);
         Assert.True(mic.IsMic);
         Assert.Empty(layout.Tracks[0].DeviceKeys);
         Assert.Equal([mic.Key], layout.Tracks[1].DeviceKeys);
         Assert.Equal(("Microphone", "microphone", "1 sound"), (chat.Sources[0].Label, chat.Sources[0].Kind, chat.Summary));
         Assert.True(chat.HasMicrophone);
-        Assert.True(page.IsDirty);
+        Assert.True(viewModel.IsDirty);
 
         // Ctrl+click keeps the picker open; a sound already on the Track is listed but can't be added.
-        page.OpenPicker(chat);
-        Assert.False(page.PickerRows.Single(r => r.Device == Mic).CanAdd);
-        page.Pick(page.PickerRows.Single(r => r.Device == Speakers), keepOpen: true);
-        Assert.True(page.IsPickerOpen);
-        Assert.True(page.PickerRows.Single(r => r.Device == Speakers).IsAdded);
+        viewModel.OpenPicker(chat);
+        Assert.False(viewModel.PickerRows.Single(r => r.Device == Mic).CanAdd);
+        viewModel.Pick(viewModel.PickerRows.Single(r => r.Device == Speakers), keepOpen: true);
+        Assert.True(viewModel.IsPickerOpen);
+        Assert.True(viewModel.PickerRows.Single(r => r.Device == Speakers).IsAdded);
         Assert.Equal(2, chat.Sources.Count);
     }
 
@@ -69,64 +69,64 @@ public sealed class TrackLayoutViewModelTests
     public void RemovingASoundFromItsLastTrackDropsItFromTheSavedLayout()
     {
         SetState(revision: 1, layout: null, Speakers);
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
-        page.AddSound(page.Tracks[0], Speakers);
-        page.AddSound(page.Tracks[1], Speakers);
-        var key = Assert.Single(page.ToLayout().Devices).Key;
-        Assert.Equal([key], page.ToLayout().Tracks[1].DeviceKeys);
+        var viewModel = Create().TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
+        viewModel.AddSound(viewModel.Tracks[0], Speakers);
+        viewModel.AddSound(viewModel.Tracks[1], Speakers);
+        var key = Assert.Single(viewModel.ToLayout().Devices).Key;
+        Assert.Equal([key], viewModel.ToLayout().Tracks[1].DeviceKeys);
 
-        page.RemoveSound(page.Tracks[0], page.Tracks[0].Sources[0]);
-        Assert.Single(page.ToLayout().Devices);
+        viewModel.RemoveSound(viewModel.Tracks[0], viewModel.Tracks[0].Sources[0]);
+        Assert.Single(viewModel.ToLayout().Devices);
 
-        page.RemoveSound(page.Tracks[1], page.Tracks[1].Sources[0]);
-        Assert.Empty(page.ToLayout().Devices);
+        viewModel.RemoveSound(viewModel.Tracks[1], viewModel.Tracks[1].Sources[0]);
+        Assert.Empty(viewModel.ToLayout().Devices);
     }
 
     [Fact]
     public void MoveUpAndDownReorderTheTracksKeepingTheirIds()
     {
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
-        var a = page.Tracks[1];
+        var viewModel = Create().TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
+        var a = viewModel.Tracks[1];
         Assert.Equal("Track 2", a.Name);
-        page.AddTrackCommand.Execute(null);
-        var b = page.Tracks[2];
+        viewModel.AddTrackCommand.Execute(null);
+        var b = viewModel.Tracks[2];
         b.Name = "Chat";
 
         b.MoveUpCommand.Execute(null);
-        Assert.Equal([Keys.EverythingTrackId, b.Id, a.Id], page.ToLayout().Tracks.Select(t => t.Id));
-        Assert.Equal([1, 2, 3], page.Tracks.Select(t => t.Number));
-        page.Tracks[0].MoveUpCommand.Execute(null);
+        Assert.Equal([Keys.EverythingTrackId, b.Id, a.Id], viewModel.ToLayout().Tracks.Select(t => t.Id));
+        Assert.Equal([1, 2, 3], viewModel.Tracks.Select(t => t.Number));
+        viewModel.Tracks[0].MoveUpCommand.Execute(null);
         a.MoveDownCommand.Execute(null);
-        Assert.Equal([Keys.EverythingTrackId, b.Id, a.Id], page.ToLayout().Tracks.Select(t => t.Id));
+        Assert.Equal([Keys.EverythingTrackId, b.Id, a.Id], viewModel.ToLayout().Tracks.Select(t => t.Id));
 
         // An empty Track is removed without asking.
-        page.Confirm = (_, _) => throw new InvalidOperationException("Asked.");
+        viewModel.Confirm = (_, _) => throw new InvalidOperationException("Asked.");
         a.RemoveCommand.Execute(null);
-        Assert.Equal([(Keys.EverythingTrackId, "Everything", true), (b.Id, "Chat", false)], page.ToLayout().Tracks.Select(t => (t.Id, t.Name, t.MuteAffected)));
+        Assert.Equal([(Keys.EverythingTrackId, "Everything", true), (b.Id, "Chat", false)], viewModel.ToLayout().Tracks.Select(t => (t.Id, t.Name, t.MuteAffected)));
     }
 
     [Fact]
     public void RemovingATrackWithSoundsAsksFirst()
     {
         SetState(revision: 1, layout: null, Speakers);
-        var page = Create().TrackLayout;
-        page.AddSound(page.Tracks[0], Speakers);
+        var viewModel = Create().TrackLayout;
+        viewModel.AddSound(viewModel.Tracks[0], Speakers);
         var asked = new List<string>();
-        page.Confirm = (message, _) =>
+        viewModel.Confirm = (message, _) =>
         {
             asked.Add(message);
             return false;
         };
 
-        page.Tracks[0].RemoveCommand.Execute(null);
-        Assert.Single(page.Tracks);
-        page.Confirm = (_, _) => true;
-        page.Tracks[0].RemoveCommand.Execute(null);
+        viewModel.Tracks[0].RemoveCommand.Execute(null);
+        Assert.Single(viewModel.Tracks);
+        viewModel.Confirm = (_, _) => true;
+        viewModel.Tracks[0].RemoveCommand.Execute(null);
 
         Assert.Equal(["Remove \"Everything\" and its 1 sound?"], asked);
-        Assert.True(page.HasNoTracks);
+        Assert.True(viewModel.HasNoTracks);
     }
 
     [Fact]
@@ -134,24 +134,24 @@ public sealed class TrackLayoutViewModelTests
     {
         SetState(revision: 1, layout: null, Speakers, Mic);
         _engine.Reply = (_, _) => new SettingsUpdateResult(2);
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
-        var chat = page.Tracks[1];
+        var viewModel = Create().TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
+        var chat = viewModel.Tracks[1];
         chat.Name = "Chat";
-        page.AddSound(page.Tracks[0], Mic);
-        page.AddSound(chat, Mic);
-        page.AddSound(chat, Speakers);
+        viewModel.AddSound(viewModel.Tracks[0], Mic);
+        viewModel.AddSound(chat, Mic);
+        viewModel.AddSound(chat, Speakers);
         Assert.Equal([true, false], chat.Sources.Select(s => s.CanBeMic));
 
         // One record: unmarking it on one Track unmarks it on both, and hides the mute switch.
         chat.Sources[0].IsMic = false;
-        Assert.False(page.Tracks[0].Sources[0].IsMic);
-        Assert.Equal("input", page.Tracks[0].Sources[0].Kind);
+        Assert.False(viewModel.Tracks[0].Sources[0].IsMic);
+        Assert.Equal("input", viewModel.Tracks[0].Sources[0].Kind);
         Assert.False(chat.HasMicrophone);
         chat.Sources[0].IsMic = true;
         Assert.True(chat.HasMicrophone);
         chat.MuteAffected = true;
-        page.SaveCommand.Execute(null);
+        viewModel.SaveCommand.Execute(null);
 
         var op = Assert.Single(Assert.IsType<SettingsUpdate>(Assert.Single(_engine.Sent)).Ops);
         Assert.True(Keys.TrackLayout.TryRead(op.Value, out var saved));
@@ -163,26 +163,26 @@ public sealed class TrackLayoutViewModelTests
     public void APresetReplacesTheDraftOnlyAfterItsConfirmation()
     {
         SetState(revision: 1, layout: null, Speakers, Headset, Mic);
-        var page = Create().TrackLayout;
+        var viewModel = Create().TrackLayout;
         string? asked = null;
-        page.Confirm = (message, _) =>
+        viewModel.Confirm = (message, _) =>
         {
             asked = message;
             return false;
         };
 
-        page.ApplyPresetCommand.Execute(TrackLayoutPreset.ForEditing);
+        viewModel.ApplyPresetCommand.Execute(TrackLayoutPreset.ForEditing);
         Assert.Equal("Replace your audio tracks with For editing?", asked);
-        Assert.Single(page.Tracks);
-        Assert.False(page.IsDirty);
+        Assert.Single(viewModel.Tracks);
+        Assert.False(viewModel.IsDirty);
 
-        page.Confirm = (_, _) => true;
-        page.ApplyPresetCommand.Execute(TrackLayoutPreset.ForEditing);
+        viewModel.Confirm = (_, _) => true;
+        viewModel.ApplyPresetCommand.Execute(TrackLayoutPreset.ForEditing);
 
-        Assert.Equal(["Everything", "Game and chat", "Microphone"], page.Tracks.Select(t => t.Name));
-        Assert.Equal(Keys.EverythingTrackId, page.Tracks[0].Id);
-        Assert.Equal([["Speakers", "Microphone"], ["Speakers"], ["Microphone"]], page.Tracks.Select(t => t.Sources.Select(s => s.Label).ToArray()));
-        Assert.True(page.IsDirty);
+        Assert.Equal(["Everything", "Game and chat", "Microphone"], viewModel.Tracks.Select(t => t.Name));
+        Assert.Equal(Keys.EverythingTrackId, viewModel.Tracks[0].Id);
+        Assert.Equal([["Speakers", "Microphone"], ["Speakers"], ["Microphone"]], viewModel.Tracks.Select(t => t.Sources.Select(s => s.Label).ToArray()));
+        Assert.True(viewModel.IsDirty);
     }
 
     [Fact]
@@ -192,21 +192,21 @@ public sealed class TrackLayoutViewModelTests
         var rendered = new TrackLayout([device], [new Track(Keys.EverythingTrackId, "All", [device.Key], MuteAffected: true)]);
         SetState(revision: 3, layout: rendered, Speakers);
         var model = Create();
-        var page = model.TrackLayout;
-        var nav = model.NavItems.Single(i => i.Page == page);
-        Assert.False(page.IsDirty);
+        var viewModel = model.TrackLayout;
+        var nav = model.NavItems.Single(i => i.ViewModel == viewModel);
+        Assert.False(viewModel.IsDirty);
         Assert.False(nav.HasUnsavedChanges);
 
-        page.Tracks[0].Name = "Renamed";
-        page.AddTrackCommand.Execute(null);
-        Assert.True(page.IsDirty);
+        viewModel.Tracks[0].Name = "Renamed";
+        viewModel.AddTrackCommand.Execute(null);
+        Assert.True(viewModel.IsDirty);
         Assert.True(nav.HasUnsavedChanges);
 
-        page.DiscardCommand.Execute(null);
+        viewModel.DiscardCommand.Execute(null);
 
-        Assert.False(page.IsDirty);
+        Assert.False(viewModel.IsDirty);
         Assert.False(nav.HasUnsavedChanges);
-        Assert.Equal(Json(rendered), Json(page.ToLayout()));
+        Assert.Equal(Json(rendered), Json(viewModel.ToLayout()));
     }
 
     [Fact]
@@ -232,33 +232,33 @@ public sealed class TrackLayoutViewModelTests
         var a = new AudioDevice("{a}", "Speakers", "Realtek", AudioFlow.Output, true);
         var b = new AudioDevice("{b}", "speakers", "USB DAC", AudioFlow.Output, true);
         SetState(revision: 1, layout: null, a, b, Mic);
-        var page = Create().TrackLayout;
+        var viewModel = Create().TrackLayout;
 
-        page.OpenPicker(page.Tracks[0]);
-        Assert.Equal(["Speakers (Realtek)", "speakers (USB DAC)", "Microphone"], page.PickerRows.Select(r => r.Label));
+        viewModel.OpenPicker(viewModel.Tracks[0]);
+        Assert.Equal(["Speakers (Realtek)", "speakers (USB DAC)", "Microphone"], viewModel.PickerRows.Select(r => r.Label));
 
-        page.Pick(page.PickerRows[0]);
-        Assert.Equal("Speakers (Realtek)", page.Tracks[0].Sources[0].Label);
+        viewModel.Pick(viewModel.PickerRows[0]);
+        Assert.Equal("Speakers (Realtek)", viewModel.Tracks[0].Sources[0].Label);
     }
 
     [Fact]
     public void AnUnpluggedSourceShowsAsNotConnectedAndTheDraftIsKept()
     {
         SetState(revision: 1, layout: null, Speakers, Headset, Mic);
-        var page = Create().TrackLayout;
-        page.AddSound(page.Tracks[0], Speakers);
-        page.AddSound(page.Tracks[0], Headset);
-        var draft = page.ToLayout();
+        var viewModel = Create().TrackLayout;
+        viewModel.AddSound(viewModel.Tracks[0], Speakers);
+        viewModel.AddSound(viewModel.Tracks[0], Headset);
+        var draft = viewModel.ToLayout();
 
         _engine.State = _engine.State! with { Seq = 2, Devices = new AudioDeviceList([Speakers, Mic]) };
         _engine.RaiseChanged();
 
-        var sources = page.Tracks[0].Sources;
+        var sources = viewModel.Tracks[0].Sources;
         Assert.False(sources[1].Available);
         Assert.Equal("Not connected — records silence until it's back", sources[1].Note);
         Assert.True(sources[0].Available);
-        Assert.Equal(Json(draft), Json(page.ToLayout()));
-        Assert.True(page.IsDirty);
+        Assert.Equal(Json(draft), Json(viewModel.ToLayout()));
+        Assert.True(viewModel.IsDirty);
     }
 
     [Fact]
@@ -266,20 +266,20 @@ public sealed class TrackLayoutViewModelTests
     {
         SetState(revision: 4, layout: null, Speakers, Headset, Mic);
         _engine.Reply = (_, _) => new SettingsUpdateResult(5);
-        var page = Create().TrackLayout;
+        var viewModel = Create().TrackLayout;
         foreach (var device in new[] { Speakers, Headset, Mic })
         {
-            page.AddSound(page.Tracks[0], device);
+            viewModel.AddSound(viewModel.Tracks[0], device);
         }
 
         foreach (var (name, device) in new[] { ("Game", Speakers), ("Chat", Headset), ("Mic", Mic) })
         {
-            page.AddTrackCommand.Execute(null);
-            page.Tracks[^1].Name = name;
-            page.AddSound(page.Tracks[^1], device);
+            viewModel.AddTrackCommand.Execute(null);
+            viewModel.Tracks[^1].Name = name;
+            viewModel.AddSound(viewModel.Tracks[^1], device);
         }
 
-        page.SaveCommand.Execute(null);
+        viewModel.SaveCommand.Execute(null);
 
         var update = Assert.IsType<SettingsUpdate>(Assert.Single(_engine.Sent));
         Assert.Equal(4, update.ExpectedRevision);
@@ -292,103 +292,103 @@ public sealed class TrackLayoutViewModelTests
         Assert.Equal(keys, saved.Tracks[0].DeviceKeys);
         Assert.Equal([[keys[0]], [keys[1]], [keys[2]]], saved.Tracks.Skip(1).Select(t => t.DeviceKeys.ToArray()));
         Assert.Equal(Keys.EverythingTrackId, saved.Tracks[0].Id);
-        Assert.True(page.IsDirty);
+        Assert.True(viewModel.IsDirty);
 
         // The engine's settings.changed carries the saved value.
         _engine.State = _engine.State! with { Seq = 2, Settings = Document(5, saved) };
         _engine.RaiseChanged();
 
-        Assert.False(page.IsDirty);
-        Assert.Null(page.Message);
-        Assert.Equal(4, page.Tracks.Count);
+        Assert.False(viewModel.IsDirty);
+        Assert.Null(viewModel.Message);
+        Assert.Equal(4, viewModel.Tracks.Count);
     }
 
     [Fact]
     public void ASaveWhileOneIsInFlightDoesNothing()
     {
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
+        var viewModel = Create().TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
         _engine.Reply = (_, _) =>
         {
             // A second click before the first save's reply.
-            page.SaveCommand.Execute(null);
+            viewModel.SaveCommand.Execute(null);
             return new SettingsUpdateResult(1);
         };
 
-        page.SaveCommand.Execute(null);
+        viewModel.SaveCommand.Execute(null);
 
         Assert.Single(_engine.Sent);
-        Assert.Null(page.Message);
+        Assert.Null(viewModel.Message);
     }
 
     [Fact]
     public void ABlankTrackNameRefusesTheSaveOnTheBarAndOutlinesTheName()
     {
-        var page = Create().TrackLayout;
-        page.Tracks[0].Name = "  ";
+        var viewModel = Create().TrackLayout;
+        viewModel.Tracks[0].Name = "  ";
 
-        page.SaveCommand.Execute(null);
+        viewModel.SaveCommand.Execute(null);
 
         Assert.Empty(_engine.Sent);
-        Assert.Equal("Give every track a name to save.", page.SaveProblem);
-        Assert.True(page.Tracks[0].HasNameProblem);
-        Assert.True(page.IsDirty);
+        Assert.Equal("Give every track a name to save.", viewModel.SaveProblem);
+        Assert.True(viewModel.Tracks[0].HasNameProblem);
+        Assert.True(viewModel.IsDirty);
 
-        page.Tracks[0].Name = "All";
-        Assert.Null(page.SaveProblem);
-        Assert.False(page.Tracks[0].HasNameProblem);
+        viewModel.Tracks[0].Name = "All";
+        Assert.Null(viewModel.SaveProblem);
+        Assert.False(viewModel.Tracks[0].HasNameProblem);
     }
 
     [Fact]
     public void ARefusalKeepsTheDraft()
     {
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
-        var draft = Json(page.ToLayout());
+        var viewModel = Create().TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
+        var draft = Json(viewModel.ToLayout());
         _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.SettingsWriteFailed, "Disk full.");
 
-        page.SaveCommand.Execute(null);
+        viewModel.SaveCommand.Execute(null);
 
-        Assert.Equal(draft, Json(page.ToLayout()));
-        Assert.True(page.IsDirty);
-        Assert.Equal("Not saved (settings-write-failed): Disk full.", page.Message);
+        Assert.Equal(draft, Json(viewModel.ToLayout()));
+        Assert.True(viewModel.IsDirty);
+        Assert.Equal("Not saved (settings-write-failed): Disk full.", viewModel.Message);
     }
 
     [Fact]
     public void AConflictWithTheLayoutUnchangedKeepsTheDraftAndSavesAgainstTheNewRevision()
     {
         SetState(revision: 1, layout: null);
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
-        var draft = Json(page.ToLayout());
+        var viewModel = Create().TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
+        var draft = Json(viewModel.ToLayout());
         _engine.Reply = (_, _) =>
         {
             _engine.State = _engine.State! with { Settings = Document(2, null) };
             throw new ErrorCodeException(ErrorCodes.SettingsConflict, "Stale.");
         };
 
-        page.SaveCommand.Execute(null);
+        viewModel.SaveCommand.Execute(null);
 
-        Assert.Equal(draft, Json(page.ToLayout()));
-        Assert.Contains("reloaded", page.Message);
+        Assert.Equal(draft, Json(viewModel.ToLayout()));
+        Assert.Contains("reloaded", viewModel.Message);
         _engine.Reply = (_, _) => new SettingsUpdateResult(3);
-        page.SaveCommand.Execute(null);
+        viewModel.SaveCommand.Execute(null);
         Assert.Equal(2, ((SettingsUpdate)_engine.Sent[^1]).ExpectedRevision);
     }
 
     [Fact]
     public void ALayoutChangedElsewhereReloadsTheDraftWithAMessage()
     {
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
+        var viewModel = Create().TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
         var elsewhere = new TrackLayout([], [new Track(Guid.NewGuid(), "Other", [], false)]);
 
         _engine.State = _engine.State! with { Seq = 2, Settings = Document(2, elsewhere) };
         _engine.RaiseChanged();
 
-        Assert.Equal(Json(elsewhere), Json(page.ToLayout()));
-        Assert.False(page.IsDirty);
-        Assert.Equal("Audio tracks were changed somewhere else, so this page shows the new ones.", page.Message);
+        Assert.Equal(Json(elsewhere), Json(viewModel.ToLayout()));
+        Assert.False(viewModel.IsDirty);
+        Assert.Equal("Audio tracks were changed somewhere else, so this page shows the new ones.", viewModel.Message);
     }
 
     [Fact]
@@ -396,24 +396,24 @@ public sealed class TrackLayoutViewModelTests
     {
         // A settings.changed on a clean page rebuilds the cards.
         SetState(revision: 1, layout: null, Speakers);
-        var page = Create().TrackLayout;
-        page.OpenPicker(page.Tracks[0]);
+        var viewModel = Create().TrackLayout;
+        viewModel.OpenPicker(viewModel.Tracks[0]);
 
         _engine.State = _engine.State! with { Seq = 2, Settings = Document(2, null) with { Global = SettingsMaps.EmptyValues.Add(Keys.StartWithWindows.Name, Keys.StartWithWindows.ToJson(true)) } };
         _engine.RaiseChanged();
 
-        Assert.False(page.IsPickerOpen);
-        page.OpenPicker(page.Tracks[0]);
-        page.Pick(page.PickerRows.Single());
-        Assert.Single(page.ToLayout().Tracks[0].DeviceKeys);
+        Assert.False(viewModel.IsPickerOpen);
+        viewModel.OpenPicker(viewModel.Tracks[0]);
+        viewModel.Pick(viewModel.PickerRows.Single());
+        Assert.Single(viewModel.ToLayout().Tracks[0].DeviceKeys);
     }
 
     [Fact]
     public void AnotherKeyChangingKeepsTheDraftAndTheNextSaveUsesTheNewRevision()
     {
-        var page = Create().TrackLayout;
-        page.AddTrackCommand.Execute(null);
-        var draft = Json(page.ToLayout());
+        var viewModel = Create().TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
+        var draft = Json(viewModel.ToLayout());
 
         _engine.State = _engine.State! with
         {
@@ -425,10 +425,10 @@ public sealed class TrackLayoutViewModelTests
         };
         _engine.RaiseChanged();
 
-        Assert.Equal(draft, Json(page.ToLayout()));
-        Assert.True(page.IsDirty);
+        Assert.Equal(draft, Json(viewModel.ToLayout()));
+        Assert.True(viewModel.IsDirty);
         _engine.Reply = (_, _) => new SettingsUpdateResult(8);
-        page.SaveCommand.Execute(null);
+        viewModel.SaveCommand.Execute(null);
         Assert.Equal(7, ((SettingsUpdate)Assert.Single(_engine.Sent)).ExpectedRevision);
     }
 
@@ -447,18 +447,18 @@ public sealed class TrackLayoutViewModelTests
             ]);
         SetState(revision: 1, layout: rendered, Speakers, Headset, Mic);
         _engine.Reply = (_, _) => new SettingsUpdateResult(2);
-        var page = Create().TrackLayout;
+        var viewModel = Create().TrackLayout;
 
-        Assert.Equal("You may hear some sounds twice: USB DAC and Arctis can both carry the same audio.", page.Tracks[0].Warning);
-        Assert.True(page.Tracks[0].HasWarning);
-        Assert.Equal(["", ""], page.Tracks.Skip(1).Select(t => t.Warning));
+        Assert.Equal("You may hear some sounds twice: USB DAC and Arctis can both carry the same audio.", viewModel.Tracks[0].Warning);
+        Assert.True(viewModel.Tracks[0].HasWarning);
+        Assert.Equal(["", ""], viewModel.Tracks.Skip(1).Select(t => t.Warning));
 
-        page.Tracks[0].Name = "All";
-        page.SaveCommand.Execute(null);
+        viewModel.Tracks[0].Name = "All";
+        viewModel.SaveCommand.Execute(null);
         Assert.Single(_engine.Sent);
 
-        page.RemoveSound(page.Tracks[0], page.Tracks[0].Sources[1]);
-        Assert.Equal("", page.Tracks[0].Warning);
+        viewModel.RemoveSound(viewModel.Tracks[0], viewModel.Tracks[0].Sources[1]);
+        Assert.Equal("", viewModel.Tracks[0].Warning);
     }
 
     [Fact]
@@ -470,14 +470,14 @@ public sealed class TrackLayoutViewModelTests
         Open(model);
         Assert.Equal(Json(saved), Json(Assert.IsType<MetersWatch>(Assert.Single(_engine.Sent)).Layout));
 
-        var page = model.TrackLayout;
-        page.AddTrackCommand.Execute(null);
+        var viewModel = model.TrackLayout;
+        viewModel.AddTrackCommand.Execute(null);
         var draft = Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout;
         Assert.Equal(2, _engine.Sent.Count);
         Assert.Equal(3, draft.Tracks.Count);
-        Assert.Equal(Json(page.ToLayout()), Json(draft));
+        Assert.Equal(Json(viewModel.ToLayout()), Json(draft));
 
-        page.Tracks[^1].Name = "Renamed";
+        viewModel.Tracks[^1].Name = "Renamed";
         Assert.Equal(2, _engine.Sent.Count);
 
         _engine.State = _engine.State! with
@@ -486,15 +486,15 @@ public sealed class TrackLayoutViewModelTests
             Meters = new MeterLevels([new TrackLevel(saved.Tracks[0].Id, 0), new TrackLevel(saved.Tracks[1].Id, 0.5f)]),
         };
         _engine.RaiseChanged();
-        Assert.Equal(0, page.Tracks[0].Level);
-        Assert.True(page.Tracks[1].Level > 0);
-        Assert.Equal(0, page.Tracks[2].Level);
-        Assert.True(page.IsDirty);
+        Assert.Equal(0, viewModel.Tracks[0].Level);
+        Assert.True(viewModel.Tracks[1].Level > 0);
+        Assert.Equal(0, viewModel.Tracks[2].Level);
+        Assert.True(viewModel.IsDirty);
 
         _engine.State = _engine.State with { Seq = 1, EngineInstanceId = "run-2" };
         _engine.RaiseChanged();
         Assert.Equal(3, _engine.Sent.Count);
-        Assert.Equal(Json(page.ToLayout()), Json(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout));
+        Assert.Equal(Json(viewModel.ToLayout()), Json(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout));
     }
 
     [Fact]
@@ -504,15 +504,15 @@ public sealed class TrackLayoutViewModelTests
         _engine.State = _engine.State! with { Devices = new AudioDeviceList([Speakers, Headset, Mic]) };
         _engine.RaiseChanged();
         Open(model);
-        var page = model.TrackLayout;
-        page.AddSound(page.Tracks[0], Speakers);
+        var viewModel = model.TrackLayout;
+        viewModel.AddSound(viewModel.Tracks[0], Speakers);
 
         // A probe per source; the picker adds one per listed device, and the saved layout has none.
         Assert.Single(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout.Tracks, t => t.Name == MeterProbes.ProbeName);
-        page.OpenPicker(page.Tracks[1]);
+        viewModel.OpenPicker(viewModel.Tracks[1]);
         var watched = Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout;
         Assert.Equal(3, watched.Tracks.Count(t => t.Name == MeterProbes.ProbeName));
-        Assert.DoesNotContain(page.ToLayout().Tracks, t => t.Name == MeterProbes.ProbeName);
+        Assert.DoesNotContain(viewModel.ToLayout().Tracks, t => t.Name == MeterProbes.ProbeName);
 
         _engine.State = _engine.State! with
         {
@@ -521,11 +521,11 @@ public sealed class TrackLayoutViewModelTests
         };
         _engine.RaiseChanged();
 
-        Assert.True(page.Tracks[0].Sources[0].Level > 0);
-        Assert.Equal(1, page.PickerRows.Single(r => r.Device == Mic).Level);
-        Assert.Equal(0, page.PickerRows.Single(r => r.Device == Headset).Level);
+        Assert.True(viewModel.Tracks[0].Sources[0].Level > 0);
+        Assert.Equal(1, viewModel.PickerRows.Single(r => r.Device == Mic).Level);
+        Assert.Equal(0, viewModel.PickerRows.Single(r => r.Device == Headset).Level);
 
-        page.ClosePicker();
+        viewModel.ClosePicker();
         Assert.Single(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout.Tracks, t => t.Name == MeterProbes.ProbeName);
     }
 
@@ -555,13 +555,13 @@ public sealed class TrackLayoutViewModelTests
         _engine.RaiseChanged();
         Assert.True(model.TrackLayout.Tracks[1].Level > 0);
 
-        model.SelectedPage = model.General;
+        model.SelectedSettingsViewModel = model.General;
 
         Assert.Same(Empty.Value, _engine.Sent[^1]);
         Assert.Single(_engine.Sent, a => a is Empty);
         Assert.All(model.TrackLayout.Tracks, t => Assert.Equal(0, t.Level));
 
-        model.SelectedPage = model.TrackLayout;
+        model.SelectedSettingsViewModel = model.TrackLayout;
         Assert.IsType<MetersWatch>(_engine.Sent[^1]);
         model.IsWindowShown = false;
         Assert.Same(Empty.Value, _engine.Sent[^1]);
@@ -582,15 +582,15 @@ public sealed class TrackLayoutViewModelTests
     {
         SetState(revision: 1, layout: null, Speakers, Headset with { Available = false }, Mic, new AudioDevice("{out-3}", "Line Out", "Realtek", AudioFlow.Output, true));
         var model = new MainViewModel(_engine, action => action());
-        Assert.Equal(["General", "Clips", "Hotkeys", "Audio Tracks", "Games", "Sounds", "Storage and Cleanup"], model.Pages.Select(p => p.Title));
-        model.SelectedPage = model.TrackLayout;
-        var page = model.TrackLayout;
-        page.AddSound(page.Tracks[0], Speakers);
-        page.AddSound(page.Tracks[0], Headset with { Available = false });
-        page.AddSound(page.Tracks[0], Mic);
-        page.AddTrackCommand.Execute(null);
-        page.Tracks[1].MuteAffected = true;
-        Assert.True(page.Tracks[0].HasWarning);
+        Assert.Equal(["General", "Clips", "Hotkeys", "Audio Tracks", "Games", "Sounds", "Storage and Cleanup"], model.SettingsViewModels.Select(p => p.Title));
+        model.SelectedSettingsViewModel = model.TrackLayout;
+        var viewModel = model.TrackLayout;
+        viewModel.AddSound(viewModel.Tracks[0], Speakers);
+        viewModel.AddSound(viewModel.Tracks[0], Headset with { Available = false });
+        viewModel.AddSound(viewModel.Tracks[0], Mic);
+        viewModel.AddTrackCommand.Execute(null);
+        viewModel.Tracks[1].MuteAffected = true;
+        Assert.True(viewModel.Tracks[0].HasWarning);
 
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
@@ -599,7 +599,7 @@ public sealed class TrackLayoutViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedPage.View;
+            var view = model.SelectedSettingsViewModel.View;
             view.Measure(new Size(600, 800));
             view.Arrange(new Rect(0, 0, 600, 800));
             view.UpdateLayout();
@@ -645,6 +645,6 @@ public sealed class TrackLayoutViewModelTests
     {
         model.IsWindowShown = true;
         model.IsSettingsTabSelected = true;
-        model.SelectedPage = model.TrackLayout;
+        model.SelectedSettingsViewModel = model.TrackLayout;
     }
 }

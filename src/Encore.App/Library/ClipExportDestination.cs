@@ -8,28 +8,28 @@ namespace Encore.App.Library;
 internal static class ClipExportDestination
 {
     /// <summary>The chosen path, or null when the builder cancels.</summary>
-    internal static Task<string?> ChooseAsync(ClipCreatorViewModel page)
+    internal static Task<string?> ChooseAsync(ClipCreatorViewModel viewModel)
     {
         var owner = Application.Current?.Windows.OfType<ClipExportDialog>().FirstOrDefault(window => window.IsVisible)
             ?? Application.Current?.Windows.OfType<Window>().FirstOrDefault(window => window.IsActive);
-        return Task.FromResult(page.SeparateAudioFiles ? ChooseFolder(page, owner) : ChooseFile(page, owner));
+        return Task.FromResult(viewModel.SeparateAudioFiles ? ChooseFolder(viewModel, owner) : ChooseFile(viewModel, owner));
     }
 
-    private static string? ChooseFolder(ClipCreatorViewModel page, Window? owner)
+    private static string? ChooseFolder(ClipCreatorViewModel viewModel, Window? owner)
     {
         var folder = new OpenFolderDialog { Title = "Choose the parent folder for the new named MP3 directory", Multiselect = false };
-        return folder.ShowDialog(owner) == true ? Path.Combine(folder.FolderName, page.ExportName) : null;
+        return folder.ShowDialog(owner) == true ? Path.Combine(folder.FolderName, viewModel.ExportName) : null;
     }
 
-    private static string? ChooseFile(ClipCreatorViewModel page, Window? owner)
+    private static string? ChooseFile(ClipCreatorViewModel viewModel, Window? owner)
     {
         var dialog = new SaveFileDialog
         {
-            Title = page.SaveLabel,
-            FileName = page.ExportName + "." + page.Format,
-            Filter = page.IsMp4 ? "MP4 video|*.mp4" : "MP3 audio|*.mp3",
+            Title = viewModel.SaveLabel,
+            FileName = viewModel.ExportName + "." + viewModel.Format,
+            Filter = viewModel.IsMp4 ? "MP4 video|*.mp4" : "MP3 audio|*.mp3",
             AddExtension = true,
-            DefaultExt = page.Format,
+            DefaultExt = viewModel.Format,
             OverwritePrompt = false,
             CheckFileExists = false,
         };

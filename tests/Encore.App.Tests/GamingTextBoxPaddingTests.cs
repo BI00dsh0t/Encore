@@ -36,7 +36,7 @@ public sealed class GamingTextBoxPaddingTests
             Save(window, "gaming-textbox-library.png");
 
             model.IsSettingsTabSelected = true;
-            model.SelectedPage = model.Pages.OfType<RewindSettingsViewModel>().Single();
+            model.SelectedSettingsViewModel = model.SettingsViewModels.OfType<RewindSettingsViewModel>().Single();
             Sta.Pump(TimeSpan.FromMilliseconds(150));
             offsets.AddRange(Insets(window));
             Save(window, "gaming-textbox-clips.png");

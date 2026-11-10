@@ -18,20 +18,20 @@ internal sealed partial class WaveformView
     protected override void OnRender(DrawingContext context)
     {
         context.DrawRectangle(SurfaceBrush, null, new Rect(RenderSize));
-        if (_page is not { Metadata: not null } page || page.ViewportEnd <= page.ViewportStart)
+        if (_viewModel is not { Metadata: not null } viewModel || viewModel.ViewportEnd <= viewModel.ViewportStart)
         {
             return;
         }
 
-        var plotWidth = ScaleOf(page).PlotWidth;
+        var plotWidth = ScaleOf(viewModel).PlotWidth;
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        UpdateAutomationName(page);
-        DrawRuler(context, page, plotWidth, dpi);
-        _waveformDrawing ??= CreateWaveformDrawing(page, plotWidth, dpi);
+        UpdateAutomationName(viewModel);
+        DrawRuler(context, viewModel, plotWidth, dpi);
+        _waveformDrawing ??= CreateWaveformDrawing(viewModel, plotWidth, dpi);
         context.DrawDrawing(_waveformDrawing);
-        DrawCaptions(context, page, dpi);
-        DrawRange(context, page, plotWidth);
-        var head = XOf(page.Playhead);
+        DrawCaptions(context, viewModel, dpi);
+        DrawRange(context, viewModel, plotWidth);
+        var head = XOf(viewModel.Playhead);
         if (head >= PlotLeft && head <= ActualWidth)
         {
             DrawPlayhead(context, head);
@@ -44,11 +44,11 @@ internal sealed partial class WaveformView
         }
     }
 
-    private static string TrackName(ClipCreatorViewModel page, int streamIndex) =>
-        page.Tracks.FirstOrDefault(track => track.Track.StreamIndex == streamIndex)?.Name ?? "Audio";
+    private static string TrackName(ClipCreatorViewModel viewModel, int streamIndex) =>
+        viewModel.Tracks.FirstOrDefault(track => track.Track.StreamIndex == streamIndex)?.Name ?? "Audio";
 
     // Screen readers hear which handle the keys move and which lanes show.
-    private void UpdateAutomationName(ClipCreatorViewModel page)
+    private void UpdateAutomationName(ClipCreatorViewModel viewModel)
     {
         var role = _focusedHandle switch
         {
@@ -56,7 +56,7 @@ internal sealed partial class WaveformView
             TimelineHandle.Out => "Out trim",
             _ => "In trim",
         };
-        var lanes = page.Waveforms.Skip((int)LaneOffset).Take(VisibleLanes).Select(lane => TrackName(page, lane.StreamIndex));
+        var lanes = viewModel.Waveforms.Skip((int)LaneOffset).Take(VisibleLanes).Select(lane => TrackName(viewModel, lane.StreamIndex));
         AutomationProperties.SetName(this, $"{role}. Audio waveform, video strip and trim selection. " + string.Join(", ", lanes));
     }
 
@@ -64,14 +64,14 @@ internal sealed partial class WaveformView
         new(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, RulerBrush, dpi);
 
     // Tick lines across the lanes, each with its time; a label that would crowd its neighbours is left out.
-    private void DrawRuler(DrawingContext context, ClipCreatorViewModel page, double plotWidth, double dpi)
+    private void DrawRuler(DrawingContext context, ClipCreatorViewModel viewModel, double plotWidth, double dpi)
     {
         var labels = Math.Max(1, (int)(plotWidth / RulerLabelSpacing));
         for (var i = 0; i <= labels; i++)
         {
             var x = PlotLeft + plotWidth * i / labels;
             context.DrawLine(new Pen(DividerBrush, 1), new(x, 20), new(x, AudioBottom));
-            var time = page.ViewportStart + (page.ViewportEnd - page.ViewportStart) * i / labels;
+            var time = viewModel.ViewportStart + (viewModel.ViewportEnd - viewModel.ViewportStart) * i / labels;
             var text = Caption(ClipCreatorViewModel.FormatTime(time), dpi);
             if (i > 0 && plotWidth < text.Width * 2 + 8)
             {
@@ -83,41 +83,41 @@ internal sealed partial class WaveformView
         }
     }
 
-    private void DrawCaptions(DrawingContext context, ClipCreatorViewModel page, double dpi)
+    private void DrawCaptions(DrawingContext context, ClipCreatorViewModel viewModel, double dpi)
     {
         var videoLabel = Caption("Video", dpi);
         context.DrawText(videoLabel, new Point(4, AudioBottom + (FilmstripHeight - videoLabel.Height) / 2));
-        if (page.Waveforms.Length == 0 && !page.Tracks.Any(track => track.Included))
+        if (viewModel.Waveforms.Length == 0 && !viewModel.Tracks.Any(track => track.Included))
         {
             context.DrawText(Caption("No audio tracks selected", dpi), new Point(4, 30));
         }
     }
 
     // The lanes and the video strip move only with the viewport, so they are drawn once and reused.
-    private DrawingGroup CreateWaveformDrawing(ClipCreatorViewModel page, double plotWidth, double dpi)
+    private DrawingGroup CreateWaveformDrawing(ClipCreatorViewModel viewModel, double plotWidth, double dpi)
     {
         var drawing = new DrawingGroup();
         using (var context = drawing.Open())
         {
-            for (var lane = (int)LaneOffset; lane < Math.Min(page.Waveforms.Length, (int)LaneOffset + VisibleLanes); lane++)
+            for (var lane = (int)LaneOffset; lane < Math.Min(viewModel.Waveforms.Length, (int)LaneOffset + VisibleLanes); lane++)
             {
-                DrawLane(context, page, lane, plotWidth, dpi);
+                DrawLane(context, viewModel, lane, plotWidth, dpi);
             }
         }
 
         using (var context = drawing.Append())
         {
-            DrawFilmstrip(context, page, plotWidth);
+            DrawFilmstrip(context, viewModel, plotWidth);
         }
 
         return drawing;
     }
 
-    private void DrawLane(DrawingContext context, ClipCreatorViewModel page, int lane, double plotWidth, double dpi)
+    private void DrawLane(DrawingContext context, ClipCreatorViewModel viewModel, int lane, double plotWidth, double dpi)
     {
-        var data = page.Waveforms[lane];
+        var data = viewModel.Waveforms[lane];
         var center = RulerHeight + LaneHeight * (lane - LaneOffset + 0.5);
-        var label = Caption(TrackName(page, data.StreamIndex), dpi);
+        var label = Caption(TrackName(viewModel, data.StreamIndex), dpi);
         label.MaxTextWidth = LabelWidth - 8;
         label.MaxTextHeight = LaneHeight;
         label.Trimming = TextTrimming.CharacterEllipsis;
@@ -151,13 +151,13 @@ internal sealed partial class WaveformView
     }
 
     // Each slot shows the latest thumbnail at or before its middle; an empty frame until there is one.
-    private void DrawFilmstrip(DrawingContext context, ClipCreatorViewModel page, double plotWidth)
+    private void DrawFilmstrip(DrawingContext context, ClipCreatorViewModel viewModel, double plotWidth)
     {
         context.PushClip(new RectangleGeometry(new Rect(PlotLeft, AudioBottom, plotWidth, FilmstripHeight)));
         for (var x = PlotLeft; x < ActualWidth; x += FrameStep)
         {
             var time = TimeAt(Math.Min(ActualWidth, x + FrameStep / 2));
-            var thumbnail = page.Thumbnails.LastOrDefault(frame => frame.Time <= time) ?? page.Thumbnails.FirstOrDefault();
+            var thumbnail = viewModel.Thumbnails.LastOrDefault(frame => frame.Time <= time) ?? viewModel.Thumbnails.FirstOrDefault();
             var slot = new Rect(x, AudioBottom + 3, FrameStep - 1, 42);
             if (thumbnail is not null)
             {
@@ -173,10 +173,10 @@ internal sealed partial class WaveformView
     }
 
     // The veil dims what lies outside the trim range; the range and its grips fade while it can't be edited.
-    private void DrawRange(DrawingContext context, ClipCreatorViewModel page, double plotWidth)
+    private void DrawRange(DrawingContext context, ClipCreatorViewModel viewModel, double plotWidth)
     {
-        var left = XOf(page.Start);
-        var right = XOf(page.End);
+        var left = XOf(viewModel.Start);
+        var right = XOf(viewModel.End);
         var below = Math.Max(0, ActualHeight - RulerHeight);
         context.PushClip(new RectangleGeometry(new Rect(PlotLeft, RulerHeight, plotWidth, below)));
         context.PushOpacity(0.55);
@@ -184,7 +184,7 @@ internal sealed partial class WaveformView
         var after = Math.Clamp(right, PlotLeft, ActualWidth);
         context.DrawRectangle(VeilBrush, null, new Rect(after, RulerHeight, ActualWidth - after, below));
         context.Pop();
-        context.PushOpacity(page.CanEdit ? 1 : 0.45);
+        context.PushOpacity(viewModel.CanEdit ? 1 : 0.45);
         DrawSelection(context, left, right);
         context.Pop();
         context.Pop();

@@ -89,44 +89,44 @@ public sealed class LibraryEndToEndTests : IDisposable
         var time = new ShiftedTime();
         using var session = Session.Start(instance, _folder, post, time);
         var engine = session.Engine;
-        var page = session.Page;
+        var viewModel = session.ViewModel;
         var shell = session.Shell;
-        Until(() => engine.State!.Library.Count == 5 && page.Rows.Count == 5, "the rebuilt index");
+        Until(() => engine.State!.Library.Count == 5 && viewModel.Rows.Count == 5, "the rebuilt index");
         Assert.True(engine.State!.CleanupBlocked);
         Assert.Contains(engine.State.Warnings, w => w.Code == ErrorCodes.LibraryCorrupt);
-        Assert.True(page.IsCleanupBlocked);
+        Assert.True(viewModel.IsCleanupBlocked);
         Assert.NotNull(session.Main.LibrarySettings.CleanupBlockedText);
 
         // Each row's length from the engine and its thumbnail from the shell.
-        Until(() => page.Rows.All(r => r.Length != "" && r.HasThumbnail), "every row's length and thumbnail");
-        Assert.Equal("0:03", Row(page, @"Alpha\a-fav.mp4").Length);
-        Assert.Equal("0:02", Row(page, @"Beta\b-new.mp4").Length);
-        Log?.WriteLine("rows: " + string.Join("; ", page.Rows.Select(r => $"{r.Path} {r.Game} {r.Date} {r.Length} {r.Size}")));
+        Until(() => viewModel.Rows.All(r => r.Length != "" && r.HasThumbnail), "every row's length and thumbnail");
+        Assert.Equal("0:03", Row(viewModel, @"Alpha\a-fav.mp4").Length);
+        Assert.Equal("0:02", Row(viewModel, @"Beta\b-new.mp4").Length);
+        Log?.WriteLine("rows: " + string.Join("; ", viewModel.Rows.Select(r => $"{r.Path} {r.Game} {r.Date} {r.Length} {r.Size}")));
 
         // Grouped by game and by day, and filtered by game, date and Favourite.
-        page.GroupBy = LibraryGrouping.Game;
-        Assert.Equal(["Alpha", "Beta"], Headers(page));
-        page.SelectedGame = page.Games.Single(g => g.Name == "Alpha");
-        Assert.Equal([@"Alpha\a-fav.mp4", @"Alpha\a-old.mp4"], Shown(page));
-        page.SelectedGame = page.Games[0];
-        page.DateFilter = LibraryDateFilter.Today;
-        Assert.Equal([@"Beta\b-new.mp4"], Shown(page));
-        page.DateFilter = LibraryDateFilter.Last7Days;
-        Assert.Equal(3, Shown(page).Count);
-        page.DateFilter = LibraryDateFilter.Last30Days;
-        Assert.Equal(4, Shown(page).Count);
-        page.DateFilter = LibraryDateFilter.All;
-        page.GroupBy = LibraryGrouping.Day;
-        Assert.Equal(4, Headers(page).Count);
-        Assert.Equal("Today", Headers(page)[0]);
+        viewModel.GroupBy = LibraryGrouping.Game;
+        Assert.Equal(["Alpha", "Beta"], Headers(viewModel));
+        viewModel.SelectedGame = viewModel.Games.Single(g => g.Name == "Alpha");
+        Assert.Equal([@"Alpha\a-fav.mp4", @"Alpha\a-old.mp4"], Shown(viewModel));
+        viewModel.SelectedGame = viewModel.Games[0];
+        viewModel.DateFilter = LibraryDateFilter.Today;
+        Assert.Equal([@"Beta\b-new.mp4"], Shown(viewModel));
+        viewModel.DateFilter = LibraryDateFilter.Last7Days;
+        Assert.Equal(3, Shown(viewModel).Count);
+        viewModel.DateFilter = LibraryDateFilter.Last30Days;
+        Assert.Equal(4, Shown(viewModel).Count);
+        viewModel.DateFilter = LibraryDateFilter.All;
+        viewModel.GroupBy = LibraryGrouping.Day;
+        Assert.Equal(4, Headers(viewModel).Count);
+        Assert.Equal("Today", Headers(viewModel)[0]);
 
         // Favourite kept in the index; the Favourites filter shows only it.
-        Row(page, @"Alpha\a-fav.mp4").FavouriteCommand.Execute(null);
-        Row(page, @"Beta\b-rename.mp4").FavouriteCommand.Execute(null);
-        Until(() => engine.State!.Library.Count(i => i.Favourite) == 2 && page.Rows.Count(r => r.IsFavourite) == 2, "two Favourites");
-        page.FavouritesOnly = true;
-        Assert.Equal([@"Beta\b-rename.mp4", @"Alpha\a-fav.mp4"], Shown(page));
-        page.FavouritesOnly = false;
+        Row(viewModel, @"Alpha\a-fav.mp4").FavouriteCommand.Execute(null);
+        Row(viewModel, @"Beta\b-rename.mp4").FavouriteCommand.Execute(null);
+        Until(() => engine.State!.Library.Count(i => i.Favourite) == 2 && viewModel.Rows.Count(r => r.IsFavourite) == 2, "two Favourites");
+        viewModel.FavouritesOnly = true;
+        Assert.Equal([@"Beta\b-rename.mp4", @"Alpha\a-fav.mp4"], Shown(viewModel));
+        viewModel.FavouritesOnly = false;
 
         // A rename outside the app keeps the Favourite; a delete outside removes; a copy in adds.
         File.Move(Path.Combine(output, @"Beta\b-rename.mp4"), Path.Combine(output, @"Beta\b-moved.mp4"));
@@ -136,38 +136,38 @@ public sealed class LibraryEndToEndTests : IDisposable
             () => Paths(engine) is var p && p.Contains(@"Beta\b-moved.mp4") && p.Contains(@"Beta\b-copied.mp4") && !p.Contains(@"Beta\b-rename.mp4") && !p.Contains(@"Beta\b-gone.mp4"),
             "the outside rename, delete and copy reflected");
         Assert.True(Item(engine, @"Beta\b-moved.mp4").Favourite);
-        Until(() => page.Rows.Count == 5, "the rows following");
+        Until(() => viewModel.Rows.Count == 5, "the rows following");
 
         // Open, Show in Explorer and Copy pass the absolute path to the shell; Copy's data is one file drop.
-        page.Click(Row(page, @"Alpha\a-old.mp4"), ctrl: false, shift: false);
+        viewModel.Click(Row(viewModel, @"Alpha\a-old.mp4"), ctrl: false, shift: false);
         var oldPath = Path.Combine(output, @"Alpha\a-old.mp4");
-        page.OpenCommand.Execute(null);
-        page.ShowInExplorerCommand.Execute(null);
-        page.CopyCommand.Execute(null);
+        viewModel.OpenCommand.Execute(null);
+        viewModel.ShowInExplorerCommand.Execute(null);
+        viewModel.CopyCommand.Execute(null);
         Assert.Equal([("open", oldPath), ("show", oldPath), ("copy", oldPath)], shell.Calls);
         Assert.Equal([oldPath], LibraryClipboard.Create([oldPath]).GetFileDropList().Cast<string>());
-        Assert.Null(page.ActionError);
+        Assert.Null(viewModel.ActionError);
 
         // Rename in place (the selection follows it); delete asks, No keeps the file, Yes sends it to the Recycle Bin.
-        var copied = Row(page, @"Beta\b-copied.mp4");
-        page.Click(copied, ctrl: false, shift: false);
-        page.RenameCommand.Execute(null);
+        var copied = Row(viewModel, @"Beta\b-copied.mp4");
+        viewModel.Click(copied, ctrl: false, shift: false);
+        viewModel.RenameCommand.Execute(null);
         copied.RenameText = "b-best";
         copied.CommitRenameCommand.Execute(null);
-        Until(() => Paths(engine).Contains(@"Beta\b-best.mp4") && page.Rows.Any(r => r.Path == @"Beta\b-best.mp4"), "the rename");
-        Assert.True(Row(page, @"Beta\b-best.mp4").IsSelected);
+        Until(() => Paths(engine).Contains(@"Beta\b-best.mp4") && viewModel.Rows.Any(r => r.Path == @"Beta\b-best.mp4"), "the rename");
+        Assert.True(Row(viewModel, @"Beta\b-best.mp4").IsSelected);
         var best = Path.Combine(output, @"Beta\b-best.mp4");
         Assert.True(File.Exists(best));
         session.Answer = false;
-        page.DeleteCommand.Execute(null);
+        viewModel.DeleteCommand.Execute(null);
         Pump(TimeSpan.FromMilliseconds(300));
         Assert.True(File.Exists(best));
         session.Answer = true;
         _recycled.Add(best);
-        page.DeleteCommand.Execute(null);
+        viewModel.DeleteCommand.Execute(null);
         Until(() => !Paths(engine).Contains(@"Beta\b-best.mp4") && !File.Exists(best), "the delete to the Recycle Bin");
         Assert.Equal(["Move “b-best.mp4” to the Recycle Bin?", "Move “b-best.mp4” to the Recycle Bin?"], session.Asked);
-        Assert.Null(page.ActionError);
+        Assert.Null(viewModel.ActionError);
 
         // A growing file being written is locked: no Copy, Rename or Delete, and the engine refuses a rename.
         var recording = Path.Combine(output, @"Beta\rec.mp4");
@@ -175,11 +175,11 @@ public sealed class LibraryEndToEndTests : IDisposable
         session.Host.Library.BeginWrite(recording, null);
         growing.Write(new byte[4096]);
         growing.Flush();
-        Until(() => page.Rows.FirstOrDefault(r => r.Path == @"Beta\rec.mp4") is { IsLocked: true }, "the locked row");
-        page.Click(Row(page, @"Beta\rec.mp4"), ctrl: false, shift: false);
-        Assert.False(page.CopyCommand.CanExecute(null));
-        Assert.False(page.RenameCommand.CanExecute(null));
-        Assert.False(page.DeleteCommand.CanExecute(null));
+        Until(() => viewModel.Rows.FirstOrDefault(r => r.Path == @"Beta\rec.mp4") is { IsLocked: true }, "the locked row");
+        viewModel.Click(Row(viewModel, @"Beta\rec.mp4"), ctrl: false, shift: false);
+        Assert.False(viewModel.CopyCommand.CanExecute(null));
+        Assert.False(viewModel.RenameCommand.CanExecute(null));
+        Assert.False(viewModel.DeleteCommand.CanExecute(null));
         var recItem = Item(engine, @"Beta\rec.mp4");
         var refused = Assert.Throws<ErrorCodeException>(() => Run(engine.SendAsync(LibraryMessages.Rename, new LibraryRename(recItem.Path, recItem.Size, recItem.Modified, "x"), TestContext.Current.CancellationToken)));
         Assert.Equal(ErrorCodes.FileBeingWritten, refused.Code);
@@ -188,25 +188,25 @@ public sealed class LibraryEndToEndTests : IDisposable
 
         // Past the 60 s start delay, a size limit is previewed and saved, but nothing goes while the index is unacknowledged.
         time.Offset = TimeSpan.FromSeconds(61);
-        var settingsPage = session.Main.LibrarySettings;
+        var settingsViewModel = session.Main.LibrarySettings;
         var limitPrompts = new List<string>();
-        settingsPage.Confirm = text =>
+        settingsViewModel.Confirm = text =>
         {
             limitPrompts.Add(text);
             return true;
         };
         var total = engine.State!.Library.Sum(i => i.Size);
         var oldSize = Item(engine, @"Alpha\a-old.mp4").Size;
-        settingsPage.SizeLimitText = Gb(total - oldSize + 1000);
-        settingsPage.SizeLimitEnabled = true;
-        Until(() => engine.State!.Settings.Global.ContainsKey(Contracts.Settings.Keys.Cleanup.Name) && settingsPage.SizeLimitEnabled, "the size limit saved");
+        settingsViewModel.SizeLimitText = Gb(total - oldSize + 1000);
+        settingsViewModel.SizeLimitEnabled = true;
+        Until(() => engine.State!.Settings.Global.ContainsKey(Contracts.Settings.Keys.Cleanup.Name) && settingsViewModel.SizeLimitEnabled, "the size limit saved");
         Assert.Contains("Cleanup would delete 1 file", Assert.Single(limitPrompts), StringComparison.Ordinal);
         Pump(TimeSpan.FromSeconds(1.5));
         Assert.True(File.Exists(oldPath), "Cleanup ran while library-corrupt was unacknowledged.");
 
         // Acknowledged: Cleanup deletes the oldest non-Favourite only, and logs its plan and each delete.
-        page.AcknowledgeCommand.Execute(null);
-        Until(() => !engine.State!.CleanupBlocked && !page.IsCleanupBlocked, "Cleanup unblocked");
+        viewModel.AcknowledgeCommand.Execute(null);
+        Until(() => !engine.State!.CleanupBlocked && !viewModel.IsCleanupBlocked, "Cleanup unblocked");
         Until(() => !File.Exists(oldPath) && !Paths(engine).Contains(@"Alpha\a-old.mp4"), "the oldest non-Favourite cleaned up");
         Assert.True(File.Exists(Path.Combine(output, @"Beta\b-new.mp4")));
         Assert.True(File.Exists(Path.Combine(output, @"Alpha\a-fav.mp4")));
@@ -214,7 +214,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         Assert.Contains(session.Logs, l => l.StartsWith("Cleanup plan: 1 files", StringComparison.Ordinal));
 
         // Lowered to one byte: everything goes except Favourites, the file being written and the junction's target.
-        settingsPage.SizeLimitText = Gb(1);
+        settingsViewModel.SizeLimitText = Gb(1);
         Until(() => limitPrompts.Count == 2, "the second preview prompt");
         Assert.Contains("Cleanup would delete 1 file", limitPrompts[^1], StringComparison.Ordinal);
         Until(() => !File.Exists(Path.Combine(output, @"Beta\b-new.mp4")), "the newer non-Favourite cleaned up");
@@ -228,17 +228,17 @@ public sealed class LibraryEndToEndTests : IDisposable
         Assert.DoesNotContain(session.Logs, l => l.StartsWith("Capturing", StringComparison.Ordinal) || l.StartsWith("Detected", StringComparison.Ordinal));
 
         // The folder size follows the snapshot.
-        Assert.Contains("in 3 files", settingsPage.FolderSizeText, StringComparison.Ordinal);
-        Assert.Null(page.ActionError);
+        Assert.Contains("in 3 files", settingsViewModel.FolderSizeText, StringComparison.Ordinal);
+        Assert.Null(viewModel.ActionError);
     });
 
     private static string Gb(long bytes) => (bytes / 1e9).ToString("0.#########", System.Globalization.CultureInfo.InvariantCulture);
 
-    private static LibraryRow Row(LibraryViewModel page, string path) => page.Rows.Single(r => r.Path == path);
+    private static LibraryRow Row(LibraryViewModel viewModel, string path) => viewModel.Rows.Single(r => r.Path == path);
 
-    private static IReadOnlyList<string> Shown(LibraryViewModel page) => [.. page.Entries.OfType<LibraryRow>().Select(r => r.Path)];
+    private static IReadOnlyList<string> Shown(LibraryViewModel viewModel) => [.. viewModel.Entries.OfType<LibraryRow>().Select(r => r.Path)];
 
-    private static IReadOnlyList<string> Headers(LibraryViewModel page) => [.. page.Entries.OfType<LibraryGroupHeader>().Select(h => h.Name)];
+    private static IReadOnlyList<string> Headers(LibraryViewModel viewModel) => [.. viewModel.Entries.OfType<LibraryGroupHeader>().Select(h => h.Name)];
 
     private static HashSet<string> Paths(EngineConnection engine) => engine.State!.Library.Select(i => i.Path).ToHashSet(StringComparer.Ordinal);
 
@@ -369,11 +369,11 @@ public sealed class LibraryEndToEndTests : IDisposable
     /// <summary>The engine, the App's connection, a Library page on a recording shell, and the main view model.</summary>
     private sealed class Session : IDisposable
     {
-        private Session(EngineHost host, EngineConnection engine, LibraryViewModel page, MainViewModel main, RecordingShell shell, ListLoggers logs)
+        private Session(EngineHost host, EngineConnection engine, LibraryViewModel viewModel, MainViewModel main, RecordingShell shell, ListLoggers logs)
         {
             Host = host;
             Engine = engine;
-            Page = page;
+            ViewModel = viewModel;
             Main = main;
             Shell = shell;
             LogsSource = logs;
@@ -383,7 +383,7 @@ public sealed class LibraryEndToEndTests : IDisposable
 
         public EngineConnection Engine { get; }
 
-        public LibraryViewModel Page { get; }
+        public LibraryViewModel ViewModel { get; }
 
         public MainViewModel Main { get; }
 
@@ -415,21 +415,21 @@ public sealed class LibraryEndToEndTests : IDisposable
 
             var shell = new RecordingShell();
             Session? session = null;
-            var page = new LibraryViewModel(engine, LibraryThumbnails.Shell(post), shell: shell, confirmDelete: question =>
+            var viewModel = new LibraryViewModel(engine, LibraryThumbnails.Shell(post), shell: shell, confirmDelete: question =>
             {
                 session!.Asked.Add(question);
                 return session.Answer;
             });
             var main = new MainViewModel(engine, post);
-            session = new Session(host, engine, page, main, shell, logs);
+            session = new Session(host, engine, viewModel, main, shell, logs);
             engine.Changed += () => post(() =>
             {
                 if (engine.ConnectedState() is { } state)
                 {
-                    page.Render(state);
+                    viewModel.Render(state);
                 }
             });
-            page.Render(engine.State!);
+            viewModel.Render(engine.State!);
             return session;
         }
 

@@ -37,7 +37,7 @@ internal sealed partial class WaveformView : FrameworkElement
     // How many audio lanes show at once; more scroll.
     private const int VisibleLanes = 5;
 
-    private ClipCreatorViewModel? _page;
+    private ClipCreatorViewModel? _viewModel;
     private DrawingGroup? _waveformDrawing;
 
     public WaveformView()
@@ -150,7 +150,7 @@ internal sealed partial class WaveformView : FrameworkElement
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        var lanes = Math.Max(_page?.Waveforms.Length ?? 0, _page?.Tracks.Count(track => track.Included) ?? 0);
+        var lanes = Math.Max(_viewModel?.Waveforms.Length ?? 0, _viewModel?.Tracks.Count(track => track.Included) ?? 0);
         ScrollMaximum = Math.Max(0, lanes - VisibleLanes);
         CoerceValue(LaneOffsetProperty);
         var width = double.IsPositiveInfinity(availableSize.Width) ? 0 : availableSize.Width;
@@ -187,31 +187,31 @@ internal sealed partial class WaveformView : FrameworkElement
         or nameof(ClipCreatorViewModel.ViewportEnd)
         or nameof(ClipCreatorViewModel.Thumbnails);
 
-    private void Attach(ClipCreatorViewModel? page)
+    private void Attach(ClipCreatorViewModel? viewModel)
     {
         ReleaseMouseCapture();
-        _page?.EndScrub();
-        _page?.EndRangeDrag();
+        _viewModel?.EndScrub();
+        _viewModel?.EndRangeDrag();
         _pointerMode = PointerMode.None;
         _suppressDoubleClick = false;
         Cursor = null;
-        if (_page is not null)
+        if (_viewModel is not null)
         {
-            _page.PropertyChanged -= OnPageChanged;
+            _viewModel.PropertyChanged -= OnViewModelChanged;
         }
 
-        _page = page;
+        _viewModel = viewModel;
         _waveformDrawing = null;
-        if (_page is not null)
+        if (_viewModel is not null)
         {
-            _page.PropertyChanged += OnPageChanged;
+            _viewModel.PropertyChanged += OnViewModelChanged;
         }
 
         InvalidateMeasure();
         InvalidateVisual();
     }
 
-    private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ClipCreatorViewModel.ViewportStart) or nameof(ClipCreatorViewModel.ViewportEnd))
         {
@@ -220,7 +220,7 @@ internal sealed partial class WaveformView : FrameworkElement
 
         if (e.PropertyName == nameof(ClipCreatorViewModel.CanEdit))
         {
-            if (_page is not { CanEdit: true })
+            if (_viewModel is not { CanEdit: true })
             {
                 FinishPointerForViewportChange();
             }
@@ -241,10 +241,10 @@ internal sealed partial class WaveformView : FrameworkElement
         InvalidateVisual();
     }
 
-    private TimelineScale ScaleOf(ClipCreatorViewModel page) =>
-        new(PlotLeft, ActualWidth, page.ViewportStart, page.ViewportEnd);
+    private TimelineScale ScaleOf(ClipCreatorViewModel viewModel) =>
+        new(PlotLeft, ActualWidth, viewModel.ViewportStart, viewModel.ViewportEnd);
 
-    private double XOf(double time) => _page is { } page ? ScaleOf(page).XOf(time) : 0;
+    private double XOf(double time) => _viewModel is { } viewModel ? ScaleOf(viewModel).XOf(time) : 0;
 
-    private double TimeAt(double x) => _page is { } page ? ScaleOf(page).TimeAt(x) : 0;
+    private double TimeAt(double x) => _viewModel is { } viewModel ? ScaleOf(viewModel).TimeAt(x) : 0;
 }

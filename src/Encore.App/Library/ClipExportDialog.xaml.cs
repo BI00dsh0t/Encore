@@ -5,10 +5,10 @@ namespace Encore.App.Library;
 /// <summary>Owned, themed options. Edits are the creator configuration; dismissal never exports.</summary>
 internal partial class ClipExportDialog
 {
-    public ClipExportDialog(ClipCreatorViewModel page)
+    public ClipExportDialog(ClipCreatorViewModel viewModel)
     {
         InitializeComponent();
-        DataContext = page;
+        DataContext = viewModel;
         Loaded += (_, _) =>
         {
             NameBox.Focus();

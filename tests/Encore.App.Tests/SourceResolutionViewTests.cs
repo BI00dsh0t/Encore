@@ -30,7 +30,7 @@ public sealed class SourceResolutionViewTests
         {
             window.Show();
             model.IsSettingsTabSelected = true;
-            model.SelectedPage = model.Rewind;
+            model.SelectedSettingsViewModel = model.Rewind;
             foreach (var (theme, file) in new[] { (AppTheme.Fluent, "clips-source-fluent.png"), (AppTheme.GamingDark, "clips-source-gaming.png") })
             {
                 ThemeService.ForWindow(window).Apply(theme);

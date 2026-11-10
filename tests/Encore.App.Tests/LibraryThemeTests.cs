@@ -55,16 +55,16 @@ public sealed class LibraryThemeTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var page = model.Library;
+            var viewModel = model.Library;
             foreach (var which in new[] { AppTheme.Fluent, AppTheme.GamingDark })
             {
                 var name = which == AppTheme.Fluent ? "fluent" : "gaming-dark";
-                page.ClearSelection();
+                viewModel.ClearSelection();
                 theme.Apply(which);
                 window.Show();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
 
-                var view = (LibraryView)page.View;
+                var view = (LibraryView)viewModel.View;
                 Sta.PumpUntil(() => view.IsLoaded, $"the Library to load under {which}");
                 Assert.Equal(Visibility.Visible, ((FrameworkElement)view.FindName("Banner")).Visibility);
                 var bar = (FrameworkElement)view.FindName("CommandBar");
@@ -74,7 +74,7 @@ public sealed class LibraryThemeTests
                 Assert.True(VirtualizingPanel.GetIsVirtualizing(list));
                 Assert.Single(Descendants<VirtualizingStackPanel>(list));
 
-                var rows = page.Rows.ToDictionary(r => r.Name);
+                var rows = viewModel.Rows.ToDictionary(r => r.Name);
                 var ace = RowCard(list, rows["ace.mp4"]);
                 Assert.Same(window.FindResource("EncoreLibraryRowStyle"), ace.Style);
                 Assert.True(Descendants<ToggleButton>(ace).Single().IsChecked);
@@ -84,8 +84,8 @@ public sealed class LibraryThemeTests
                 Save(window, $"library-{name}.png");
 
                 // Two rows selected, the second focused, with keyboard focus in the list.
-                page.Click(rows["ace.mp4"], ctrl: false, shift: false);
-                page.Click(rows["no-thumbnail.mp4"], ctrl: true, shift: false);
+                viewModel.Click(rows["ace.mp4"], ctrl: false, shift: false);
+                viewModel.Click(rows["no-thumbnail.mp4"], ctrl: true, shift: false);
                 window.Activate();
                 Container(list, rows["no-thumbnail.mp4"]).Focus();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
@@ -101,15 +101,15 @@ public sealed class LibraryThemeTests
                 Save(window, $"library-selected-{name}.png");
 
                 // A search with Largest first and Group by None, nothing selected.
-                page.ClearSelection();
-                (page.GroupBy, page.Sort, page.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "a");
+                viewModel.ClearSelection();
+                (viewModel.GroupBy, viewModel.Sort, viewModel.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "a");
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 Assert.Equal("a", ((TextBox)view.FindName("SearchBox")).Text);
-                Assert.Equal(["ace.mp4", "no-thumbnail.mp4", "saving.mp4"], page.Entries.Cast<LibraryRow>().Select(r => r.Name));
+                Assert.Equal(["ace.mp4", "no-thumbnail.mp4", "saving.mp4"], viewModel.Entries.Cast<LibraryRow>().Select(r => r.Name));
                 Assert.Equal(Visibility.Collapsed, ((FrameworkElement)view.FindName("NoResultsMessage")).Visibility);
                 Save(window, $"library-search-{name}.png");
-                (page.GroupBy, page.Sort, page.SearchText) = (LibraryGrouping.Game, LibrarySort.NewestFirst, "");
-                list.ScrollIntoView(page.Entries[0]);
+                (viewModel.GroupBy, viewModel.Sort, viewModel.SearchText) = (LibraryGrouping.Game, LibrarySort.NewestFirst, "");
+                list.ScrollIntoView(viewModel.Entries[0]);
             }
         }
         finally
@@ -126,27 +126,27 @@ public sealed class LibraryThemeTests
     public void TheEmptyStateShowsOnlyWithoutAFilterAndTheStarFollowsOnlyTheSnapshot() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession { Reply = (_, _) => Empty.Value };
-        var page = new LibraryViewModel(engine);
-        var view = (LibraryView)page.View;
+        var viewModel = new LibraryViewModel(engine);
+        var view = (LibraryView)viewModel.View;
         Layout(view);
         var empty = (FrameworkElement)view.FindName("EmptyMessage");
 
         Assert.Equal(Visibility.Visible, empty.Visibility);
-        page.FavouritesOnly = true;
+        viewModel.FavouritesOnly = true;
         Assert.Equal(Visibility.Collapsed, empty.Visibility);
-        page.FavouritesOnly = false;
+        viewModel.FavouritesOnly = false;
 
-        page.Render(engine.State! with { Library = [new LibraryItem("clip.mp4", null, 1024, Day, false, 10, Modified: Day)] });
+        viewModel.Render(engine.State! with { Library = [new LibraryItem("clip.mp4", null, 1024, Day, false, 10, Modified: Day)] });
         Layout(view);
         Assert.Equal(Visibility.Collapsed, empty.Visibility);
 
         // A search that matches nothing says so, apart from the empty Library's message.
         var noResults = (TextBlock)view.FindName("NoResultsMessage");
         Assert.Equal(Visibility.Collapsed, noResults.Visibility);
-        page.SearchText = "zzz";
+        viewModel.SearchText = "zzz";
         Layout(view);
         Assert.Equal((Visibility.Visible, "No items match \u201czzz\u201d.", Visibility.Collapsed), (noResults.Visibility, noResults.Text, empty.Visibility));
-        page.SearchText = "";
+        viewModel.SearchText = "";
         Layout(view);
 
         var star = Descendants<ToggleButton>((ItemsControl)view.FindName("List")).Single();
@@ -161,7 +161,7 @@ public sealed class LibraryThemeTests
         // A screen reader's Toggle skips the click: it mustn't flip the star out of step with the snapshot.
         ((IToggleProvider)UIElementAutomationPeer.CreatePeerForElement(star).GetPattern(PatternInterface.Toggle)).Toggle();
         Assert.False(star.IsChecked);
-        page.Render(engine.State! with { Library = [new LibraryItem("clip.mp4", null, 1024, Day, false, 10, Favourite: true, Modified: Day)] });
+        viewModel.Render(engine.State! with { Library = [new LibraryItem("clip.mp4", null, 1024, Day, false, 10, Favourite: true, Modified: Day)] });
         Assert.True(star.IsChecked);
     });
 

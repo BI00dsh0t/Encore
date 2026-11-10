@@ -45,40 +45,40 @@ public sealed class LibrarySettingsViewModelTests
     [Fact]
     public void EnablingTheSizeLimitPreviewsAndSendsOnlyAfterYes()
     {
-        var page = Create();
+        var viewModel = Create();
 
-        page.SizeLimitText = "50";
+        viewModel.SizeLimitText = "50";
         Assert.Empty(_engine.Sent);
 
         _answer = false;
-        page.SizeLimitEnabled = true;
+        viewModel.SizeLimitEnabled = true;
         Assert.Equal([new LibraryCleanupPreview(50 * Gb, null)], _previews);
         Assert.Contains("3 files (1.2 GB)", Assert.Single(_prompts), StringComparison.Ordinal);
         Assert.Contains("Recycle Bin", _prompts[0], StringComparison.Ordinal);
         Assert.Empty(_updates);
-        Assert.False(page.SizeLimitEnabled);
+        Assert.False(viewModel.SizeLimitEnabled);
 
         _answer = true;
-        page.SizeLimitEnabled = true;
+        viewModel.SizeLimitEnabled = true;
         var op = Assert.Single(Assert.Single(_updates).Ops);
         Assert.Equal(Keys.Cleanup.Name, op.Key);
         Assert.Equal(Keys.Cleanup.ToJson(new CleanupSettings(50 * Gb, null)).GetRawText(), op.Value.GetRawText());
-        Assert.True(page.SizeLimitEnabled);
+        Assert.True(viewModel.SizeLimitEnabled);
     }
 
     [Fact]
     public void LoweringAsksAgainButRaisingAndTurningOffDoNot()
     {
-        var page = Create(new CleanupSettings(50 * Gb, null));
+        var viewModel = Create(new CleanupSettings(50 * Gb, null));
         _answer = true;
         _plan = new LibraryCleanupPlan(0, 0, []);
 
-        page.SizeLimitText = "40";
+        viewModel.SizeLimitText = "40";
         Assert.Contains("Nothing would be deleted now.", Assert.Single(_prompts), StringComparison.Ordinal);
         Assert.Single(_updates);
 
-        page.SizeLimitText = "60";
-        page.SizeLimitEnabled = false;
+        viewModel.SizeLimitText = "60";
+        viewModel.SizeLimitEnabled = false;
         Assert.Single(_prompts);
         Assert.Single(_previews);
         Assert.Equal(
@@ -89,22 +89,22 @@ public sealed class LibrarySettingsViewModelTests
     [Fact]
     public void BadValuesSendNothing()
     {
-        var page = Create(new CleanupSettings(50 * Gb, 30 * 86_400));
+        var viewModel = Create(new CleanupSettings(50 * Gb, 30 * 86_400));
 
         foreach (var text in (string[])["0", "-1", "abc", ""])
         {
-            page.SizeLimitText = text;
-            Assert.Equal("50", page.SizeLimitText);
+            viewModel.SizeLimitText = text;
+            Assert.Equal("50", viewModel.SizeLimitText);
         }
 
         foreach (var text in (string[])["0", "1.5"])
         {
-            page.AgeLimitText = text;
-            Assert.Equal("30", page.AgeLimitText);
+            viewModel.AgeLimitText = text;
+            Assert.Equal("30", viewModel.AgeLimitText);
         }
 
         Assert.Empty(_engine.Sent);
-        Assert.NotNull(page.Message);
+        Assert.NotNull(viewModel.Message);
     }
 
     [Fact]
@@ -119,19 +119,19 @@ public sealed class LibrarySettingsViewModelTests
             ],
             CleanupBlocked = true,
         };
-        var page = Create();
-        Assert.Equal("1.2 GB in 2 files", page.FolderSizeText);
-        Assert.Equal("Storage and Cleanup", page.Title);
-        Assert.NotNull(page.CleanupBlockedText);
-        Assert.False(page.ClipsFolder.CanUseDefault);
+        var viewModel = Create();
+        Assert.Equal("1.2 GB in 2 files", viewModel.FolderSizeText);
+        Assert.Equal("Storage and Cleanup", viewModel.Title);
+        Assert.NotNull(viewModel.CleanupBlockedText);
+        Assert.False(viewModel.ClipsFolder.CanUseDefault);
 
-        page.ClipsFolder.Choose("Clips");
+        viewModel.ClipsFolder.Choose("Clips");
         Assert.Empty(_engine.Sent);
-        Assert.NotNull(page.ClipsFolder.Problem);
+        Assert.NotNull(viewModel.ClipsFolder.Problem);
 
         _answer = true;
-        page.ClipsFolder.Validate = _ => null;
-        page.ClipsFolder.Choose(@"D:\Clips");
+        viewModel.ClipsFolder.Validate = _ => null;
+        viewModel.ClipsFolder.Choose(@"D:\Clips");
         Assert.Contains("Existing files aren't moved.", Assert.Single(_prompts), StringComparison.Ordinal);
         var op = Assert.Single(Assert.Single(_updates).Ops);
         Assert.Equal((Keys.OutputFolder.Name, "\"D:\\\\Clips\""), (op.Key, op.Value.GetRawText()));
@@ -147,7 +147,7 @@ public sealed class LibrarySettingsViewModelTests
             CleanupBlocked = true,
         };
         var model = new MainViewModel(_engine, action => action());
-        model.SelectedPage = model.LibrarySettings;
+        model.SelectedSettingsViewModel = model.LibrarySettings;
 
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
@@ -156,7 +156,7 @@ public sealed class LibrarySettingsViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedPage.View;
+            var view = model.SelectedSettingsViewModel.View;
             view.Measure(new Size(600, 400));
             view.Arrange(new Rect(0, 0, 600, 400));
             view.UpdateLayout();
@@ -192,17 +192,17 @@ public sealed class LibrarySettingsViewModelTests
     [Fact]
     public void AConfirmedLimitTheEngineRefusesShowsTheSavedLimitsAgain()
     {
-        var page = Create();
+        var viewModel = Create();
         _answer = true;
         _engine.Reply = (command, _) => command == LibraryMessages.CleanupPreview
             ? _plan
             : throw new Encore.Contracts.ErrorCodeException("settings-invalid", "refused");
 
-        page.SizeLimitEnabled = true;
+        viewModel.SizeLimitEnabled = true;
 
         Assert.Single(_prompts);
-        Assert.False(page.SizeLimitEnabled);
-        Assert.NotNull(page.Message);
+        Assert.False(viewModel.SizeLimitEnabled);
+        Assert.NotNull(viewModel.Message);
     }
 
     [Fact]
@@ -211,12 +211,12 @@ public sealed class LibrarySettingsViewModelTests
         // The cache folder can't be inside the Clips folder, from this side too.
         var global = SettingsDocument.Empty.Global.Add(Keys.RingPath.Name, Keys.RingPath.ToJson(@"D:\Encore Cache"));
         _engine.State = _engine.State! with { Settings = SettingsDocument.Empty with { Revision = 1, Global = global } };
-        var page = Create();
+        var viewModel = Create();
         _answer = true;
 
-        page.ClipsFolder.Choose(@"D:\");
+        viewModel.ClipsFolder.Choose(@"D:\");
 
-        Assert.Equal("The Clips folder can't contain the cache folder.", page.ClipsFolder.Problem);
+        Assert.Equal("The Clips folder can't contain the cache folder.", viewModel.ClipsFolder.Problem);
         Assert.Empty(_updates);
 
         // With no ringPath, the engine's default cache folder counts.
@@ -255,12 +255,12 @@ public sealed class LibrarySettingsViewModelTests
             _engine.State = _engine.State! with { Settings = SettingsDocument.Empty with { Revision = 1, Global = global } };
         }
 
-        var page = new MainViewModel(_engine, action => action()).LibrarySettings;
-        page.Confirm = text =>
+        var viewModel = new MainViewModel(_engine, action => action()).LibrarySettings;
+        viewModel.Confirm = text =>
         {
             _prompts.Add(text);
             return _answer;
         };
-        return page;
+        return viewModel;
     }
 }

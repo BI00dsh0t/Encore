@@ -32,12 +32,12 @@ public sealed class MainWindowTests
             var settings = (System.Windows.Controls.Primitives.ToggleButton)window.FindName("SettingsButton");
             settings.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             Assert.True(model.IsSettingsTabSelected);
-            Assert.Same(model.Pages[0], model.SelectedPage);
+            Assert.Same(model.SettingsViewModels[0], model.SelectedSettingsViewModel);
             Assert.False(model.IsNavigationExpanded);
             var sections = (System.Windows.Controls.ComboBox)window.FindName("SettingsSections");
-            Assert.Equal(model.Pages.Select(p => p.Title), sections.Items.Cast<NavItem>().Select(i => i.Title));
+            Assert.Equal(model.SettingsViewModels.Select(p => p.Title), sections.Items.Cast<NavItem>().Select(i => i.Title));
             model.IsNavigationExpanded = true;
-            Assert.Same(model.SelectedPage.View, model.CurrentView);
+            Assert.Same(model.SelectedSettingsViewModel.View, model.CurrentView);
         }
         finally { window.CloseForQuit(); }
     });
@@ -47,7 +47,7 @@ public sealed class MainWindowTests
     public void CurrentSettingsSectionReselectionClosesDrillInWhileEscapeOnlyDismissesTheMenu() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
-        model.SelectedNavItem = model.SettingsNavItems.Single(item => ReferenceEquals(item.Page, model.GameProfiles));
+        model.SelectedNavItem = model.SettingsNavItems.Single(item => ReferenceEquals(item.ViewModel, model.GameProfiles));
         var window = new MainWindow { DataContext = model, Width = 960, Height = 900, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
         try
         {

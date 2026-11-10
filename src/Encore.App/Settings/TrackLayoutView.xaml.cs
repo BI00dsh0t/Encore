@@ -15,16 +15,16 @@ internal partial class TrackLayoutView
         DataContextChanged += (_, _) => GroupPickerRows();
     }
 
-    private TrackLayoutViewModel? Page => DataContext as TrackLayoutViewModel;
+    private TrackLayoutViewModel? ViewModel => DataContext as TrackLayoutViewModel;
 
     private static bool IsControlDown => Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
 
     // The sound picker lists its rows under their section headings.
     private void GroupPickerRows()
     {
-        if (Page is { } page)
+        if (ViewModel is { } viewModel)
         {
-            var rows = CollectionViewSource.GetDefaultView(page.PickerRows);
+            var rows = CollectionViewSource.GetDefaultView(viewModel.PickerRows);
             rows.GroupDescriptions.Clear();
             rows.GroupDescriptions.Add(new PropertyGroupDescription(nameof(AudioPickerRow.Section)));
         }
@@ -49,21 +49,21 @@ internal partial class TrackLayoutView
     {
         if (e.OriginalSource is MenuItem { DataContext: AudioPresetChoice choice })
         {
-            Page?.ApplyPresetCommand.Execute(choice.Preset);
+            ViewModel?.ApplyPresetCommand.Execute(choice.Preset);
         }
     }
 
     private void OnAddSoundClick(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { DataContext: AudioTrackCard card } button && Page is { } page)
+        if (sender is Button { DataContext: AudioTrackCard card } button && ViewModel is { } viewModel)
         {
             Picker.PlacementTarget = button;
-            page.OpenPicker(card);
+            viewModel.OpenPicker(card);
             Dispatcher.BeginInvoke(() => PickerSearchBox.Focus(), DispatcherPriority.Input);
         }
     }
 
-    private void OnPickerClosed(object? sender, EventArgs e) => Page?.ClosePicker();
+    private void OnPickerClosed(object? sender, EventArgs e) => ViewModel?.ClosePicker();
 
     // Down moves from the search box into the list; Enter and Escape work as they do in the list.
     private void OnPickerSearchKeyDown(object sender, KeyEventArgs e)
@@ -90,15 +90,15 @@ internal partial class TrackLayoutView
     // Enter adds the selected row (with Ctrl the picker stays open); Escape closes the picker.
     private bool HandlePickerKey(Key key)
     {
-        if (key == Key.Enter && Page?.PickerSelection is { } row)
+        if (key == Key.Enter && ViewModel?.PickerSelection is { } row)
         {
-            Page.Pick(row, IsControlDown);
+            ViewModel.Pick(row, IsControlDown);
             return true;
         }
 
         if (key == Key.Escape)
         {
-            Page?.ClosePicker();
+            ViewModel?.ClosePicker();
             return true;
         }
 
@@ -119,9 +119,9 @@ internal partial class TrackLayoutView
     {
         if (e.OriginalSource is DependencyObject hit
             && ItemsControl.ContainerFromElement(PickerList, hit) is ListBoxItem { DataContext: AudioPickerRow row, IsEnabled: true }
-            && Page is { } page)
+            && ViewModel is { } viewModel)
         {
-            page.Pick(row, IsControlDown);
+            viewModel.Pick(row, IsControlDown);
             e.Handled = true;
         }
     }

@@ -369,12 +369,12 @@ internal sealed class HotkeyRow : Observable
     private bool _isCapturing;
     private bool _isShown = true;
 
-    public HotkeyRow(HotkeysViewModel page, HotkeyAction action, string label)
+    public HotkeyRow(HotkeysViewModel viewModel, HotkeyAction action, string label)
     {
         Action = action;
         Label = label;
-        SetCommand = new RelayCommand(() => page.StartCapture(action));
-        ClearCommand = new RelayCommand(() => page.Clear(action));
+        SetCommand = new RelayCommand(() => viewModel.StartCapture(action));
+        ClearCommand = new RelayCommand(() => viewModel.Clear(action));
     }
 
     public HotkeyAction Action { get; }

@@ -28,26 +28,26 @@ public sealed class HotkeysViewModelTests
             updates.Add((SettingsUpdate)args);
             return new SettingsUpdateResult(4);
         };
-        var page = Create().Hotkeys;
-        Assert.Equal("Alt+F10", page.Rows[0].BindingText);
+        var viewModel = Create().Hotkeys;
+        Assert.Equal("Alt+F10", viewModel.Rows[0].BindingText);
 
-        page.Rows[0].SetCommand.Execute(null);
-        Assert.Same(page.Rows[0], page.CapturingRow);
+        viewModel.Rows[0].SetCommand.Execute(null);
+        Assert.Same(viewModel.Rows[0], viewModel.CapturingRow);
         var combo = HotkeysViewModel.FromKey(Key.F5, Key.None, ModifierKeys.Control | ModifierKeys.Shift)!;
         Assert.Equal(new HotkeyBinding(0x74, HotkeyModifiers.Control | HotkeyModifiers.Shift), combo);
-        page.Capture(HotkeyAction.Save, combo);
-        Assert.Null(page.CapturingRow);
-        Assert.Equal("Ctrl+Shift+F5", page.Rows[0].BindingText);
+        viewModel.Capture(HotkeyAction.Save, combo);
+        Assert.Null(viewModel.CapturingRow);
+        Assert.Equal("Ctrl+Shift+F5", viewModel.Rows[0].BindingText);
 
-        page.Capture(HotkeyAction.MicMute, combo);
+        viewModel.Capture(HotkeyAction.MicMute, combo);
         Assert.Single(updates);
-        Assert.Equal("Ctrl+Shift+F5 is already the Save Clip Hotkey.", page.Message);
+        Assert.Equal("Ctrl+Shift+F5 is already the Save Clip Hotkey.", viewModel.Message);
 
-        page.Capture(HotkeyAction.MicMute, HotkeysViewModel.FromKey(Key.A, Key.None, ModifierKeys.None)!);
+        viewModel.Capture(HotkeyAction.MicMute, HotkeysViewModel.FromKey(Key.A, Key.None, ModifierKeys.None)!);
         Assert.Single(updates);
-        Assert.Equal("Add Ctrl, Alt, Shift or Win; only F1 to F24 work alone.", page.Message);
+        Assert.Equal("Add Ctrl, Alt, Shift or Win; only F1 to F24 work alone.", viewModel.Message);
 
-        page.IsSeparateMode = true;
+        viewModel.IsSeparateMode = true;
 
         var saved = defaults with { Save = combo };
         Assert.All(updates, u => Assert.Equal(3, u.ExpectedRevision));
@@ -85,35 +85,35 @@ public sealed class HotkeysViewModelTests
     public void ATakenHotkeyShowsFailedAndTheOthersShowTheirOwnStatus()
     {
         _engine.State = _engine.State! with { Hotkeys = Status() };
-        var page = Create().Hotkeys;
+        var viewModel = Create().Hotkeys;
 
-        Assert.Equal("Failed: another app holds this combination", page.Rows[0].StatusText);
-        Assert.True(page.Rows[0].IsFailed);
-        Assert.Equal("Working", page.Rows[1].StatusText);
-        Assert.False(page.Rows[1].IsFailed);
-        Assert.Equal("Not used in this Record mode", page.Rows[3].StatusText);
-        Assert.False(page.Rows[3].IsFailed);
+        Assert.Equal("Failed: another app holds this combination", viewModel.Rows[0].StatusText);
+        Assert.True(viewModel.Rows[0].IsFailed);
+        Assert.Equal("Working", viewModel.Rows[1].StatusText);
+        Assert.False(viewModel.Rows[1].IsFailed);
+        Assert.Equal("Not used in this Record mode", viewModel.Rows[3].StatusText);
+        Assert.False(viewModel.Rows[3].IsFailed);
 
         // No document value: the engine's effective bindings are shown.
-        Assert.Equal("Alt+F10", page.Rows[0].BindingText);
-        Assert.Equal("Alt+F11", page.Rows[3].BindingText);
-        Assert.Equal("Not set", page.Rows[4].BindingText);
-        Assert.Equal("Not set", page.Rows[4].StatusText);
+        Assert.Equal("Alt+F10", viewModel.Rows[0].BindingText);
+        Assert.Equal("Alt+F11", viewModel.Rows[3].BindingText);
+        Assert.Equal("Not set", viewModel.Rows[4].BindingText);
+        Assert.Equal("Not set", viewModel.Rows[4].StatusText);
     }
 
     [Fact]
     public void EachRecordModeShowsOnlyTheRowsItUses()
     {
         _engine.Reply = (_, _) => new SettingsUpdateResult(1);
-        var page = Create().Hotkeys;
-        string[] Shown() => [.. page.Rows.Where(r => r.IsShown).Select(r => r.Label)];
+        var viewModel = Create().Hotkeys;
+        string[] Shown() => [.. viewModel.Rows.Where(r => r.IsShown).Select(r => r.Label)];
 
         Assert.Equal(["Save Clip", "Mic mute", "Record", "Monitor Recording"], Shown());
-        page.StartCapture(HotkeyAction.RecordToggle);
+        viewModel.StartCapture(HotkeyAction.RecordToggle);
 
-        page.IsSeparateMode = true;
+        viewModel.IsSeparateMode = true;
 
-        Assert.Null(page.CapturingRow);
+        Assert.Null(viewModel.CapturingRow);
 
         Assert.Equal(["Save Clip", "Mic mute", "Record start", "Record stop", "Monitor Recording start", "Monitor Recording stop"], Shown());
     }
@@ -123,7 +123,7 @@ public sealed class HotkeysViewModelTests
     {
         _engine.State = _engine.State! with { Hotkeys = Status() };
         var model = Create();
-        model.SelectedPage = model.Hotkeys;
+        model.SelectedSettingsViewModel = model.Hotkeys;
         model.Hotkeys.StartCapture(HotkeyAction.MicMute);
 
         var errors = new BindingErrors();
@@ -133,7 +133,7 @@ public sealed class HotkeysViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedPage.View;
+            var view = model.SelectedSettingsViewModel.View;
             view.Measure(new Size(600, 500));
             view.Arrange(new Rect(0, 0, 600, 500));
             view.UpdateLayout();

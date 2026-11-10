@@ -152,7 +152,7 @@
                     </Border.Style>
                     <ContentControl x:Name="PageMessage"
                                     Margin="0,12,0,0"
-                                    Content="{Binding SelectedPage.Message}"
+                                    Content="{Binding SelectedSettingsViewModel.Message}"
                                     Style="{DynamicResource EncoreSettingsPageMessageStyle}" />
                 </Border>
                 <ContentControl x:Name="Page"

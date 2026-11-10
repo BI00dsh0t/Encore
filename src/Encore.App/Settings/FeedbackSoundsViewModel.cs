@@ -156,14 +156,14 @@ internal sealed class FeedbackSoundsViewModel : SettingsViewModel
 /// <summary>One sound on the Feedback Sounds page: its switch and its Play button.</summary>
 internal sealed class FeedbackSoundRow : Observable
 {
-    private readonly FeedbackSoundsViewModel _page;
+    private readonly FeedbackSoundsViewModel _viewModel;
 
-    public FeedbackSoundRow(FeedbackSoundsViewModel page, FeedbackSound sound, string label)
+    public FeedbackSoundRow(FeedbackSoundsViewModel viewModel, FeedbackSound sound, string label)
     {
-        _page = page;
+        _viewModel = viewModel;
         Sound = sound;
         Label = label;
-        PlayCommand = new RelayCommand(() => _ = page.PlayAsync(sound));
+        PlayCommand = new RelayCommand(() => _ = viewModel.PlayAsync(sound));
     }
 
     public FeedbackSound Sound { get; }
@@ -173,8 +173,8 @@ internal sealed class FeedbackSoundRow : Observable
     /// <summary>The sound's <c>feedbackSounds</c> flag; setting it sends the whole value with that flag changed.</summary>
     public bool IsOn
     {
-        get => _page.IsOn(Sound);
-        set => _page.Switch(this, value);
+        get => _viewModel.IsOn(Sound);
+        set => _viewModel.Switch(this, value);
     }
 
     /// <summary>Sends <c>feedback.preview</c> for the sound, whether or not it is switched on.</summary>

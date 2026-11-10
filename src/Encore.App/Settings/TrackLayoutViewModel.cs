@@ -729,7 +729,7 @@ internal sealed class ParameterCommand(Action<object?> execute) : ICommand
 /// <summary>A Track's card. <see cref="Id"/> stays the same across renames and moves.</summary>
 internal sealed class AudioTrackCard : Observable
 {
-    private readonly TrackLayoutViewModel _page;
+    private readonly TrackLayoutViewModel _viewModel;
     private int _number;
     private string _warning = "";
     private double _level;
@@ -738,15 +738,15 @@ internal sealed class AudioTrackCard : Observable
     private bool _isLast;
     private bool _pendingRename;
 
-    public AudioTrackCard(TrackLayoutViewModel page, AudioTracksDraftTrack model)
+    public AudioTrackCard(TrackLayoutViewModel viewModel, AudioTracksDraftTrack model)
     {
-        _page = page;
+        _viewModel = viewModel;
         Model = model;
         RenameCommand = new RelayCommand(RequestRename);
-        MoveUpCommand = new RelayCommand(() => page.MoveTrack(this, -1));
-        MoveDownCommand = new RelayCommand(() => page.MoveTrack(this, 1));
-        RemoveCommand = new RelayCommand(() => page.RemoveTrack(this));
-        AddSoundCommand = new RelayCommand(() => page.OpenPicker(this));
+        MoveUpCommand = new RelayCommand(() => viewModel.MoveTrack(this, -1));
+        MoveDownCommand = new RelayCommand(() => viewModel.MoveTrack(this, 1));
+        RemoveCommand = new RelayCommand(() => viewModel.RemoveTrack(this));
+        AddSoundCommand = new RelayCommand(() => viewModel.OpenPicker(this));
     }
 
     /// <summary>Raised when the card's name box should take focus (Rename, F2, a new Track).</summary>
@@ -775,7 +775,7 @@ internal sealed class AudioTrackCard : Observable
 
             Model.Name = value ?? "";
             OnPropertyChanged();
-            _page.DraftChanged();
+            _viewModel.DraftChanged();
         }
     }
 
@@ -792,7 +792,7 @@ internal sealed class AudioTrackCard : Observable
 
             Model.MuteAffected = value;
             OnPropertyChanged();
-            _page.DraftChanged();
+            _viewModel.DraftChanged();
         }
     }
 
@@ -901,7 +901,7 @@ internal sealed class AudioTrackCard : Observable
             }
             else
             {
-                row = new AudioSourceRow(_page, this, device);
+                row = new AudioSourceRow(_viewModel, this, device);
             }
 
             Sources.Add(row);
@@ -916,18 +916,18 @@ internal sealed class AudioTrackCard : Observable
 /// <summary>A sound on a Track: one device record, shown with its own level.</summary>
 internal sealed class AudioSourceRow : Observable
 {
-    private readonly TrackLayoutViewModel _page;
+    private readonly TrackLayoutViewModel _viewModel;
     private LayoutDevice _device;
     private string _label;
     private bool _available = true;
     private double _level;
 
-    public AudioSourceRow(TrackLayoutViewModel page, AudioTrackCard track, LayoutDevice device)
+    public AudioSourceRow(TrackLayoutViewModel viewModel, AudioTrackCard track, LayoutDevice device)
     {
-        _page = page;
+        _viewModel = viewModel;
         _device = device;
         _label = device.FriendlyName;
-        RemoveCommand = new RelayCommand(() => page.RemoveSound(track, this));
+        RemoveCommand = new RelayCommand(() => viewModel.RemoveSound(track, this));
     }
 
     public Guid Key => Device.Key;
@@ -969,7 +969,7 @@ internal sealed class AudioSourceRow : Observable
         {
             if (value != Device.IsMic)
             {
-                _page.SetMicrophone(this, value);
+                _viewModel.SetMicrophone(this, value);
             }
         }
     }

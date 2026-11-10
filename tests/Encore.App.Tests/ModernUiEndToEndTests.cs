@@ -363,7 +363,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
             trayHost.Show();
             Run(engine.ConnectAsync());
             Assert.Equal(EngineStatus.Connected, engine.Status);
-            Until(() => main.Pages.All(p => p.View is not null), "the pages");
+            Until(() => main.SettingsViewModels.All(p => p.View is not null), "the pages");
 
             var menu = ShellApp.CreateTrayMenu(main, () => { }, () => { }, gallery: () => { });
             menu.PlacementTarget = trayTarget;

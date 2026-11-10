@@ -18,7 +18,7 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
     private readonly SettingsSender _sender;
     private readonly IEngineSession _engine;
     private readonly IGameShell _shell;
-    private readonly Dictionary<string, GameViewModel> _pages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, GameViewModel> _games = new(StringComparer.Ordinal);
     private StateSnapshot? _state;
     private bool _isOpen;
     private GameViewModel? _openGame;
@@ -86,7 +86,7 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
     public Action<SettingKey>? EditMain { get; set; }
 
     /// <inheritdoc/>
-    public override bool HasUnsavedChanges => _pages.Values.Any(p => p.HasUnsavedChanges);
+    public override bool HasUnsavedChanges => _games.Values.Any(p => p.HasUnsavedChanges);
 
     /// <summary>Whether the page is on screen; the open game's audio tracks meter only then.</summary>
     public bool IsOpen
@@ -110,30 +110,30 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
     public void Open(GameProfileItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        var page = Page(item.ProfileId);
+        var viewModel = GameFor(item.ProfileId);
         LastOpenedId = item.ProfileId;
-        OpenGame = page;
-        DrillIn.Open(item.ProfileId, page.Title);
+        OpenGame = viewModel;
+        DrillIn.Open(item.ProfileId, viewModel.Title);
     }
 
     /// <summary>The game's page, kept for the run so a draft survives going back.</summary>
-    public GameViewModel Page(string profileId)
+    public GameViewModel GameFor(string profileId)
     {
-        if (!_pages.TryGetValue(profileId, out var page))
+        if (!_games.TryGetValue(profileId, out var viewModel))
         {
-            page = new GameViewModel(_sender, _engine, profileId, this, _shell);
+            viewModel = new GameViewModel(_sender, _engine, profileId, this, _shell);
             if (_state is { } state)
             {
-                page.ShowState(state);
+                viewModel.ShowState(state);
             }
 
             // A new page shows nothing until rendered, and Render skips a revision already shown.
-            page.Render(Document);
-            page.PropertyChanged += GameChanged;
-            _pages.Add(profileId, page);
+            viewModel.Render(Document);
+            viewModel.PropertyChanged += GameChanged;
+            _games.Add(profileId, viewModel);
         }
 
-        return page;
+        return viewModel;
     }
 
     /// <summary>Takes the snapshot: the game being captured, and each game page's devices and meters. Called before Render.</summary>
@@ -146,9 +146,9 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
             item.IsCapturing = string.Equals(item.ProfileId, state.TargetGame?.ProfileId, StringComparison.OrdinalIgnoreCase);
         }
 
-        foreach (var page in _pages.Values)
+        foreach (var viewModel in _games.Values)
         {
-            page.ShowState(state);
+            viewModel.ShowState(state);
         }
     }
 
@@ -188,27 +188,27 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
                 manual.Any(p => string.Equals(p, id, StringComparison.OrdinalIgnoreCase)),
                 new[] { Keys.BufferWindow.Name, Keys.Video.Name, Keys.TrackLayout.Name }.Count(profile.Overrides.ContainsKey));
             item.IsCapturing = string.Equals(id, _state?.TargetGame?.ProfileId, StringComparison.OrdinalIgnoreCase);
-            item.HasUnsavedChanges = _pages.TryGetValue(id, out var cached) && cached.HasUnsavedChanges;
+            item.HasUnsavedChanges = _games.TryGetValue(id, out var cached) && cached.HasUnsavedChanges;
         }
 
         OnPropertyChanged(nameof(IsEmpty));
 
         // A game that went away takes its page with it; an open one returns to the list.
-        foreach (var gone in _pages.Keys.Where(id => !document.Profiles.ContainsKey(id)).ToList())
+        foreach (var gone in _games.Keys.Where(id => !document.Profiles.ContainsKey(id)).ToList())
         {
-            var page = _pages[gone];
-            page.PropertyChanged -= GameChanged;
-            _pages.Remove(gone);
-            if (ReferenceEquals(page, _openGame))
+            var viewModel = _games[gone];
+            viewModel.PropertyChanged -= GameChanged;
+            _games.Remove(gone);
+            if (ReferenceEquals(viewModel, _openGame))
             {
                 DrillIn.Close();
-                Message = $"{page.Title} is no longer in the list.";
+                Message = $"{viewModel.Title} is no longer in the list.";
             }
         }
 
-        foreach (var page in _pages.Values)
+        foreach (var viewModel in _games.Values)
         {
-            page.Render(document);
+            viewModel.Render(document);
         }
 
         if (_openGame is { } open)
@@ -238,7 +238,7 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
 
     private void GameChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender is not GameViewModel page)
+        if (sender is not GameViewModel viewModel)
         {
             return;
         }
@@ -246,18 +246,18 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
         switch (e.PropertyName)
         {
             case nameof(Message):
-                Message = page.Message;
+                Message = viewModel.Message;
                 break;
             case nameof(HasUnsavedChanges):
-                if (Profiles.FirstOrDefault(p => p.ProfileId == page.ProfileId) is { } row)
+                if (Profiles.FirstOrDefault(p => p.ProfileId == viewModel.ProfileId) is { } row)
                 {
-                    row.HasUnsavedChanges = page.HasUnsavedChanges;
+                    row.HasUnsavedChanges = viewModel.HasUnsavedChanges;
                 }
 
                 OnPropertyChanged(nameof(HasUnsavedChanges));
                 break;
-            case nameof(Title) when ReferenceEquals(page, _openGame):
-                DrillIn.ItemTitle = page.Title;
+            case nameof(Title) when ReferenceEquals(viewModel, _openGame):
+                DrillIn.ItemTitle = viewModel.Title;
                 break;
         }
     }

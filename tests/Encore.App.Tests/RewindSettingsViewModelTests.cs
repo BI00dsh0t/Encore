@@ -23,17 +23,17 @@ public sealed class RewindSettingsViewModelTests
             updates.Add((SettingsUpdate)args);
             return new SettingsUpdateResult(4);
         };
-        var page = Create().Rewind;
+        var viewModel = Create().Rewind;
 
-        page.BufferWindowText = "0";
+        viewModel.BufferWindowText = "0";
         Assert.Empty(updates);
-        Assert.Equal("300", page.BufferWindowText);
-        Assert.NotNull(page.Message);
+        Assert.Equal("300", viewModel.BufferWindowText);
+        Assert.NotNull(viewModel.Message);
 
-        page.BufferWindowText = "120";
-        page.IsDisk = true;
-        page.BitrateText = "20000";
-        page.IsVbr = true;
+        viewModel.BufferWindowText = "120";
+        viewModel.IsDisk = true;
+        viewModel.BitrateText = "20000";
+        viewModel.IsVbr = true;
 
         var video = Keys.Video.Default with { BitrateKbps = 20000 };
         Assert.All(updates, u => Assert.Equal(3, u.ExpectedRevision));
@@ -46,26 +46,26 @@ public sealed class RewindSettingsViewModelTests
             ],
             updates.Select(u => Assert.Single(u.Ops)).Select(o => (o.Key, o.Value.GetRawText())));
         Assert.All(updates, u => Assert.Equal(SettingsScope.Global, u.Ops[0].Scope));
-        Assert.Null(page.Message);
+        Assert.Null(viewModel.Message);
     }
 
     [Fact]
     public void TheEstimateAndItsWarningFollowTheSnapshotAndHevcMayNotPlayEverywhere()
     {
         var model = Create();
-        var page = model.Rewind;
-        Assert.Equal("Estimate not available yet", page.EstimateText);
+        var viewModel = model.Rewind;
+        Assert.Equal("Estimate not available yet", viewModel.EstimateText);
 
         Show(model, new StorageEstimate(ReplayStorage.Memory, 1_600_000_000, WorstCase: false, 32_000_000_000, ExceedsFree: false));
-        Assert.Equal("Estimated RAM use: 1.6 GB", page.EstimateText);
-        Assert.Null(page.EstimateWarning);
+        Assert.Equal("Estimated RAM use: 1.6 GB", viewModel.EstimateText);
+        Assert.Null(viewModel.EstimateWarning);
 
         Show(model, new StorageEstimate(ReplayStorage.Disk, 2_400_000_000, WorstCase: true, 900_000_000, ExceedsFree: true));
-        Assert.Equal("Estimated disk use: 2.4 GB (worst case for VBR)", page.EstimateText);
-        Assert.Equal("More than the free space on the cache folder's drive (900.0 MB). The value is kept.", page.EstimateWarning);
+        Assert.Equal("Estimated disk use: 2.4 GB (worst case for VBR)", viewModel.EstimateText);
+        Assert.Equal("More than the free space on the cache folder's drive (900.0 MB). The value is kept.", viewModel.EstimateWarning);
 
         Show(model, new StorageEstimate(ReplayStorage.Memory, 2_400_000_000, WorstCase: false, 1_000_000_000, ExceedsFree: true));
-        Assert.Equal("More than the free RAM (1.0 GB). The value is kept; Clips may be shorter.", page.EstimateWarning);
+        Assert.Equal("More than the free RAM (1.0 GB). The value is kept; Clips may be shorter.", viewModel.EstimateWarning);
 
         _engine.State = _engine.State! with
         {
@@ -76,9 +76,9 @@ public sealed class RewindSettingsViewModelTests
             ]),
         };
         model.Refresh();
-        Assert.Equal(["H.264 (plays everywhere)", "HEVC (smaller files) — may not play everywhere"], page.Codecs.Select(c => c.Label));
-        Assert.Equal(VideoCodec.H264, page.SelectedCodec?.Codec);
-        Assert.Contains(page.Resolutions, r => r.Label == "1920 × 1080");
+        Assert.Equal(["H.264 (plays everywhere)", "HEVC (smaller files) — may not play everywhere"], viewModel.Codecs.Select(c => c.Label));
+        Assert.Equal(VideoCodec.H264, viewModel.SelectedCodec?.Codec);
+        Assert.Contains(viewModel.Resolutions, r => r.Label == "1920 × 1080");
     }
 
     [Fact]
@@ -94,17 +94,17 @@ public sealed class RewindSettingsViewModelTests
         {
             VideoOptions = VideoOptions.FromProbe([new CodecOffer(VideoCodec.H264, "h264_nvenc", false), new CodecOffer(VideoCodec.Hevc, "hevc_nvenc", true)]),
         };
-        var page = Create().Rewind;
-        Assert.Equal(Encore.App.Settings.RewindSettingsViewModel.SourceLabel, page.Resolutions[0].Label);
-        Assert.Null(page.SourceHelp);
+        var viewModel = Create().Rewind;
+        Assert.Equal(Encore.App.Settings.RewindSettingsViewModel.SourceLabel, viewModel.Resolutions[0].Label);
+        Assert.Null(viewModel.SourceHelp);
 
-        page.SelectedResolution = page.Resolutions[0];
-        Assert.True(page.SelectedResolution!.IsSource);
-        Assert.Contains("4096 px", page.SourceHelp, StringComparison.Ordinal);
-        page.SelectedCodec = page.Codecs.Single(c => c.Codec == VideoCodec.Hevc);
-        Assert.DoesNotContain("4096", page.SourceHelp, StringComparison.Ordinal);
-        page.SelectedResolution = page.Resolutions.Single(r => r.Label == "1280 × 720");
-        Assert.Null(page.SourceHelp);
+        viewModel.SelectedResolution = viewModel.Resolutions[0];
+        Assert.True(viewModel.SelectedResolution!.IsSource);
+        Assert.Contains("4096 px", viewModel.SourceHelp, StringComparison.Ordinal);
+        viewModel.SelectedCodec = viewModel.Codecs.Single(c => c.Codec == VideoCodec.Hevc);
+        Assert.DoesNotContain("4096", viewModel.SourceHelp, StringComparison.Ordinal);
+        viewModel.SelectedResolution = viewModel.Resolutions.Single(r => r.Label == "1280 × 720");
+        Assert.Null(viewModel.SourceHelp);
 
         Assert.Equal(
             [
@@ -129,22 +129,22 @@ public sealed class RewindSettingsViewModelTests
             updates.Add((SettingsUpdate)args);
             return new SettingsUpdateResult(3);
         };
-        var page = Create().Rewind;
-        Assert.Equal("Clips", page.Title);
-        Assert.False(page.CacheFolder.IsEnabled);
-        Assert.Equal("Used only in Disk mode", page.CacheFolder.Caption);
+        var viewModel = Create().Rewind;
+        Assert.Equal("Clips", viewModel.Title);
+        Assert.False(viewModel.CacheFolder.IsEnabled);
+        Assert.Equal("Used only in Disk mode", viewModel.CacheFolder.Caption);
 
-        page.IsDisk = true;
-        Assert.True(page.CacheFolder.IsEnabled);
+        viewModel.IsDisk = true;
+        Assert.True(viewModel.CacheFolder.IsEnabled);
 
-        page.CacheFolder.Dialog = _ => @"D:\Clips\cache";
-        page.CacheFolder.BrowseCommand.Execute(null);
-        Assert.Equal("The cache folder can't be inside the Clips folder.", page.CacheFolder.Problem);
+        viewModel.CacheFolder.Dialog = _ => @"D:\Clips\cache";
+        viewModel.CacheFolder.BrowseCommand.Execute(null);
+        Assert.Equal("The cache folder can't be inside the Clips folder.", viewModel.CacheFolder.Problem);
 
         var cache = Path.TrimEndingDirectorySeparator(Path.GetTempPath());
-        page.CacheFolder.Dialog = _ => cache;
-        page.CacheFolder.BrowseCommand.Execute(null);
-        page.SaveCooldownText = "7";
+        viewModel.CacheFolder.Dialog = _ => cache;
+        viewModel.CacheFolder.BrowseCommand.Execute(null);
+        viewModel.SaveCooldownText = "7";
 
         Assert.Equal(
             [(Keys.ReplayStorage.Name, "\"disk\""), (Keys.RingPath.Name, Keys.RingPath.ToJson(cache).GetRawText()), (Keys.SaveCooldown.Name, "7")],
@@ -160,7 +160,7 @@ public sealed class RewindSettingsViewModelTests
             Estimate = new StorageEstimate(ReplayStorage.Memory, 2_400_000_000, WorstCase: true, 1_000_000_000, ExceedsFree: true),
         };
         var model = Create();
-        model.SelectedPage = model.Rewind;
+        model.SelectedSettingsViewModel = model.Rewind;
 
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
@@ -169,7 +169,7 @@ public sealed class RewindSettingsViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedPage.View;
+            var view = model.SelectedSettingsViewModel.View;
             view.Measure(new Size(600, 500));
             view.Arrange(new Rect(0, 0, 600, 500));
             view.UpdateLayout();

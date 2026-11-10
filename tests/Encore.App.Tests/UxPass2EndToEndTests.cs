@@ -150,9 +150,9 @@ public sealed class UxPass2EndToEndTests : IDisposable
     private static string? Override(EngineConnection engine, string key) =>
         engine.State!.Settings.Profiles.TryGetValue(GameId, out var profile) && profile.Overrides.TryGetValue(key, out var value) ? value.GetRawText() : null;
 
-    private static List<string> Shown(LibraryViewModel page) => [.. page.Entries.OfType<LibraryRow>().Select(r => r.Name)];
+    private static List<string> Shown(LibraryViewModel viewModel) => [.. viewModel.Entries.OfType<LibraryRow>().Select(r => r.Name)];
 
-    private static LibraryRow Row(LibraryViewModel page, string name) => page.Rows.Single(r => r.Name == name);
+    private static LibraryRow Row(LibraryViewModel viewModel, string name) => viewModel.Rows.Single(r => r.Name == name);
 
     /// <summary>Pumps the dispatcher until <paramref name="condition"/> holds.</summary>
     private static void Until(Func<bool> condition, string what)

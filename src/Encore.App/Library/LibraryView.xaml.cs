@@ -15,10 +15,10 @@ internal partial class LibraryView
         DataContextChanged += OnDataContextChanged;
     }
 
-    private LibraryViewModel? Page => DataContext as LibraryViewModel;
+    private LibraryViewModel? ViewModel => DataContext as LibraryViewModel;
 
     // The list is hidden while the player page shows, so Delete can't reach the file being played.
-    private LibraryViewModel? ListPage => Page is { DrillIn.IsOpen: false } page ? page : null;
+    private LibraryViewModel? ListViewModel => ViewModel is { DrillIn.IsOpen: false } viewModel ? viewModel : null;
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
@@ -28,17 +28,17 @@ internal partial class LibraryView
             old.DrillIn.Closed -= OnPlayerClosed;
         }
 
-        if (e.NewValue is LibraryViewModel page)
+        if (e.NewValue is LibraryViewModel viewModel)
         {
-            page.DrillIn.Opened += OnPlayerOpened;
-            page.DrillIn.Closed += OnPlayerClosed;
+            viewModel.DrillIn.Opened += OnPlayerOpened;
+            viewModel.DrillIn.Closed += OnPlayerClosed;
         }
     }
 
     // Ctrl+F focuses the search box; an open rename box keeps every key, so the focus move doesn't commit it.
     private void OnViewPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (ListPage is not null
+        if (ListViewModel is not null
             && e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control
             && (e.OriginalSource is not TextBox box || ReferenceEquals(box, SearchBox)))
         {
@@ -105,7 +105,7 @@ internal partial class LibraryView
     // A click on a row selects or, double, opens; a header does nothing, and empty space clears the selection.
     private void OnListPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (ListPage is not { } page
+        if (ListViewModel is not { } viewModel
             || e.OriginalSource is not DependencyObject source
             || VisualTreeSearch.IsInside<ScrollBar>(source, List))
         {
@@ -114,7 +114,7 @@ internal partial class LibraryView
 
         if (ContainerOf(source) is not { } container)
         {
-            page.ClearSelection();
+            viewModel.ClearSelection();
             return;
         }
 
@@ -131,19 +131,19 @@ internal partial class LibraryView
         }
 
         var (ctrl, shift) = Modifiers();
-        page.ClickRow(row, e.ClickCount, ctrl, shift);
+        viewModel.ClickRow(row, e.ClickCount, ctrl, shift);
         container.Focus();
     }
 
     // Explorer's rule: a right-click outside the selection selects only that row; the rename box keeps its own menu.
     private void OnListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (ListPage is { } page
+        if (ListViewModel is { } viewModel
             && e.OriginalSource is DependencyObject source
             && ContainerOf(source) is { DataContext: LibraryRow row } container
             && !VisualTreeSearch.IsInside<TextBox>(source, container))
         {
-            page.PrepareContextMenu(row);
+            viewModel.PrepareContextMenu(row);
             container.Focus();
         }
     }
@@ -151,7 +151,7 @@ internal partial class LibraryView
     // The menu acts on the shown selection, so it opens only on a row (or, from the keyboard, the focused row).
     private void OnListContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        if (ListPage is not { } page)
+        if (ListViewModel is not { } viewModel)
         {
             e.Handled = true;
             return;
@@ -165,7 +165,7 @@ internal partial class LibraryView
         // A pointer reports where it opened the menu; the keyboard reports -1, -1.
         var fromKeyboard = e.CursorLeft < 0 && e.CursorTop < 0;
         var onRow = e.OriginalSource is DependencyObject source && ContainerOf(source) is { DataContext: LibraryRow };
-        if (!page.TryPrepareContextMenu(fromKeyboard, onRow))
+        if (!viewModel.TryPrepareContextMenu(fromKeyboard, onRow))
         {
             e.Handled = true;
         }
@@ -174,7 +174,7 @@ internal partial class LibraryView
     private void OnListPreviewKeyDown(object sender, KeyEventArgs e)
     {
         // The rename box takes every key; a focused button (the star) takes Space and Enter.
-        if (ListPage is not { } page
+        if (ListViewModel is not { } viewModel
             || e.OriginalSource is TextBox
             || (e.OriginalSource is ButtonBase && e.Key is Key.Space or Key.Enter))
         {
@@ -184,10 +184,10 @@ internal partial class LibraryView
         var (ctrl, shift) = Modifiers();
         if (MoveFor(e.Key) is { } move)
         {
-            Move(page, move, ctrl, shift);
+            Move(viewModel, move, ctrl, shift);
             e.Handled = true;
         }
-        else if (page.HandleKey(e.Key, ctrl))
+        else if (viewModel.HandleKey(e.Key, ctrl))
         {
             e.Handled = true;
         }
@@ -208,14 +208,14 @@ internal partial class LibraryView
     // Focus tabbing into the list lands on the focused row, else the first; focus inside a row is left alone.
     private void OnListGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (Page is not { } page
+        if (ViewModel is not { } viewModel
             || (e.OldFocus is DependencyObject old && VisualTreeSearch.IsInside(old, List))
             || !(ReferenceEquals(e.NewFocus, List) || e.NewFocus is ListBoxItem))
         {
             return;
         }
 
-        if (page.FocusForEntry() is { } row && !ReferenceEquals((e.NewFocus as FrameworkElement)?.DataContext, row))
+        if (viewModel.FocusForEntry() is { } row && !ReferenceEquals((e.NewFocus as FrameworkElement)?.DataContext, row))
         {
             Dispatcher.BeginInvoke(DispatcherPriority.Input, () => FocusRow(row));
         }
@@ -225,7 +225,7 @@ internal partial class LibraryView
     private void OnPlayerOpened(string path) =>
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
-            if (Page?.Creator is not null)
+            if (ViewModel?.Creator is not null)
             {
                 CreatorContent.FocusFirstControl();
             }
@@ -239,7 +239,7 @@ internal partial class LibraryView
     private void OnPlayerClosed(string path) =>
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
-            if (Page?.FocusedRow is { } row)
+            if (ViewModel?.FocusedRow is { } row)
             {
                 FocusRow(row);
             }
@@ -248,10 +248,10 @@ internal partial class LibraryView
     // The More ⋯ button opens its menu under itself.
     private void OnMoreClick(object sender, RoutedEventArgs e) => ButtonMenu.OpenBelow(sender);
 
-    private void Move(LibraryViewModel page, LibraryMove move, bool ctrl, bool shift)
+    private void Move(LibraryViewModel viewModel, LibraryMove move, bool ctrl, bool shift)
     {
-        page.MoveFocus(move, RowsPerPage(), ctrl, shift);
-        if (page.FocusedRow is { } row)
+        viewModel.MoveFocus(move, RowsPerPage(), ctrl, shift);
+        if (viewModel.FocusedRow is { } row)
         {
             FocusRow(row);
         }
@@ -268,7 +268,7 @@ internal partial class LibraryView
     private int RowsPerPage()
     {
         var viewer = VisualTreeSearch.Descendant<ScrollViewer>(List);
-        var row = Page?.FocusedRow is { } focused ? List.ItemContainerGenerator.ContainerFromItem(focused) as FrameworkElement : null;
+        var row = ViewModel?.FocusedRow is { } focused ? List.ItemContainerGenerator.ContainerFromItem(focused) as FrameworkElement : null;
         return viewer is null || row is not { ActualHeight: > 0 } ? 1 : Math.Max(1, (int)(viewer.ViewportHeight / row.ActualHeight));
     }
 

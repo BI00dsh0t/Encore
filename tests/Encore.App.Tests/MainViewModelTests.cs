@@ -33,7 +33,7 @@ public sealed class MainViewModelTests
 
         model.OpenSettings();
         Assert.True(model.IsSettingsTabSelected);
-        model.SelectedPage = model.GameProfiles;
+        model.SelectedSettingsViewModel = model.GameProfiles;
         var drillIn = model.CurrentDrillIn!;
         drillIn.Open("game", "Game");
         Assert.True(model.HandleEscape());
@@ -47,7 +47,7 @@ public sealed class MainViewModelTests
         drillIn.Open("game", "Game");
         model.OpenSettings();
         Assert.False(drillIn.IsOpen);
-        Assert.Same(model.GameProfiles, model.SelectedPage);
+        Assert.Same(model.GameProfiles, model.SelectedSettingsViewModel);
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class MainViewModelTests
         Assert.Equal("Ready to save Clips in Game.exe", model.StatusLine.State);
         Assert.Equal("Defaults in use.", Assert.Single(model.StatusLine.Warnings).Message);
         Assert.True(model.General.StartWithWindows);
-        Assert.Same(model.General, model.SelectedPage);
+        Assert.Same(model.General, model.SelectedSettingsViewModel);
     }
 
     [Fact]

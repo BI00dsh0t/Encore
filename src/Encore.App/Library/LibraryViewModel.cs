@@ -810,13 +810,13 @@ internal sealed class LibraryViewModel : Observable
         }
 
         var current = FocusedRow is { } focused ? _shownIndex[focused.Path] : -1;
-        var page = Math.Max(1, pageRows);
+        var step = Math.Max(1, pageRows);
         var target = move switch
         {
             LibraryMove.Up => current < 0 ? 0 : current - 1,
             LibraryMove.Down => current < 0 ? 0 : current + 1,
-            LibraryMove.PageUp => current < 0 ? 0 : current - page,
-            LibraryMove.PageDown => current < 0 ? 0 : current + page,
+            LibraryMove.PageUp => current < 0 ? 0 : current - step,
+            LibraryMove.PageDown => current < 0 ? 0 : current + step,
             LibraryMove.Home => 0,
             _ => _shownRows.Count - 1,
         };
@@ -1087,7 +1087,7 @@ internal sealed class LibraryViewModel : Observable
 
         DrillIn.Close();
         ClearActionError();
-        var page = new PlayerViewModel(
+        var viewModel = new PlayerViewModel(
             path,
             row.Name,
             _newPlayer(),
@@ -1099,24 +1099,24 @@ internal sealed class LibraryViewModel : Observable
             Volume = _playerVolume,
             IsMuted = _playerMuted,
         };
-        page.VolumeChanged += OnPlayerVolumeChanged;
-        page.CreateClip = () => CreateClip(row, page.Position.TotalSeconds);
-        Player = page;
+        viewModel.VolumeChanged += OnPlayerVolumeChanged;
+        viewModel.CreateClip = () => CreateClip(row, viewModel.Position.TotalSeconds);
+        Player = viewModel;
         DrillIn.Open(row.Path, row.Name);
-        _ = page.OpenAsync();
+        _ = viewModel.OpenAsync();
     }
 
     private void ClosePlayer()
     {
-        var page = Player;
+        var viewModel = Player;
         Player = null;
-        if (page is null)
+        if (viewModel is null)
         {
             return;
         }
 
-        page.VolumeChanged -= OnPlayerVolumeChanged;
-        page.Dispose();
+        viewModel.VolumeChanged -= OnPlayerVolumeChanged;
+        viewModel.Dispose();
         SaveView();
     }
 

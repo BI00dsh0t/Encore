@@ -31,16 +31,16 @@ public sealed class PlayerFailureTests : IDisposable
     public void AMissingExtensionIsNamedWithItsStorePageAndTheDefaultPlayer(string codec, string extension, string store)
     {
         var player = new FakePlayer { Media = Media(decodable: false, codec) };
-        var (library, page) = Open(player);
+        var (library, viewModel) = Open(player);
 
-        Assert.True(page.IsFailed);
-        Assert.Equal($"This video is {codec}, which Windows can't play without the {extension}. Get it from the Microsoft Store, then open the file again. The file itself is fine.", page.Message);
-        Assert.Equal($"Get the {extension}", page.StoreLinkText);
+        Assert.True(viewModel.IsFailed);
+        Assert.Equal($"This video is {codec}, which Windows can't play without the {extension}. Get it from the Microsoft Store, then open the file again. The file itself is fine.", viewModel.Message);
+        Assert.Equal($"Get the {extension}", viewModel.StoreLinkText);
         Assert.Equal(0, player.FirstFrames);
         Assert.Contains(_log, l => l.Contains($"video {codec} NOT decodable", StringComparison.Ordinal));
 
-        page.OpenStoreCommand.Execute(null);
-        page.OpenInDefaultPlayerCommand.Execute(null);
+        viewModel.OpenStoreCommand.Execute(null);
+        viewModel.OpenInDefaultPlayerCommand.Execute(null);
         Assert.Equal([("open", store), ("open", Path.Combine(_folder, Clip))], _shell.Calls);
 
         library.DrillIn.Close();
@@ -64,11 +64,11 @@ public sealed class PlayerFailureTests : IDisposable
     public void ATrackWindowsCantDecodeIsUnavailableAndCantBeChosen()
     {
         var player = new FakePlayer { Media = Media(decodable: true, "H264") with { TracksPlayable = [true, false, true, true] } };
-        var (_, page) = Open(player);
+        var (_, viewModel) = Open(player);
 
-        Assert.Equal(["Game", "Mic (unavailable)", "Discord", "Desktop"], page.Tracks.Select(t => t.Name));
-        page.SelectedTrack = page.Tracks[1];
-        Assert.Same(page.Tracks[0], page.SelectedTrack);
+        Assert.Equal(["Game", "Mic (unavailable)", "Discord", "Desktop"], viewModel.Tracks.Select(t => t.Name));
+        viewModel.SelectedTrack = viewModel.Tracks[1];
+        Assert.Same(viewModel.Tracks[0], viewModel.SelectedTrack);
         Assert.Equal(0, player.SelectedTrack);
     }
 
@@ -88,7 +88,7 @@ public sealed class PlayerFailureTests : IDisposable
     private static PlayerMedia Media(bool decodable, string codec) =>
         new(1280, 720, TimeSpan.FromSeconds(10), ["Game", "Mic", "Discord", "Desktop"], decodable, codec);
 
-    private (LibraryViewModel Library, PlayerViewModel Page) Open(FakePlayer player)
+    private (LibraryViewModel Library, PlayerViewModel ViewModel) Open(FakePlayer player)
     {
         _engine.State = _engine.State! with
         {

@@ -107,11 +107,11 @@ public sealed partial class ThemeTests
                 Save(gallery, $"gallery-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
 
                 model.IsSettingsTabSelected = true;
-                foreach (var page in model.Pages)
+                foreach (var viewModel in model.SettingsViewModels)
                 {
-                    model.SelectedPage = page;
+                    model.SelectedSettingsViewModel = viewModel;
                     Sta.Pump(TimeSpan.FromMilliseconds(50));
-                    Assert.True(page.View.IsLoaded, $"{page.Title} didn't load under {which}");
+                    Assert.True(viewModel.View.IsLoaded, $"{viewModel.Title} didn't load under {which}");
                 }
 
                 model.SelectedNavItem = model.LibraryNav;

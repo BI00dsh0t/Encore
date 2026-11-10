@@ -361,9 +361,9 @@ internal sealed class GameViewModel : SettingsViewModel
     // The editors' notes show on the page's error bar; a draft's dirtiness is the page's.
     private void ChildChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(Message) && sender is SettingsViewModel page)
+        if (e.PropertyName == nameof(Message) && sender is SettingsViewModel viewModel)
         {
-            Message = page.Message;
+            Message = viewModel.Message;
         }
         else if (e.PropertyName == nameof(TrackLayoutViewModel.IsDirty))
         {
