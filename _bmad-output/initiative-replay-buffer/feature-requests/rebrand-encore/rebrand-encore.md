@@ -11,7 +11,19 @@ risk: high
 
 # Rebrand the app to Encore, and the Replay Buffer feature to Rewind
 
-Status: recorded 2026-11-10; waits for the builder's go to implement.
+Status: phases 1–3 implemented 2026-11-10 at the builder's "Do all phases". Feature `d979da3`, no-ff develop merge `6f41cea`. Release build 0 warnings; no tests run (the no-tests rule), so they're in `test-backlog.md`. Phase 4, the repo folder, waits for the builder.
+
+**As built:** one bulk rename plus hand fixes.
+- The visible name, Rewind and the code all changed in one pass.
+- `LegacyData.CopyIfFirstStart` (Contracts) runs at App and engine start, before anything reads the data folders. It copies the old `ReplayBuffer` / `ReplayBuffer-Dev` roaming and local folders once, without `ring`, staged then renamed into place, and leaves the old folders alone.
+- `RunKey` drops the old `ReplayBuffer` Run value whenever the startup value is written or deleted. The App syncs it from the first settings snapshot.
+- `GameMonitor` skips `replaybuffer.app.exe` and `replaybuffer.engine.exe` as well as the Encore exes.
+- `GlossaryTests` now bans "Replay Buffer" and "ReplayBuffer".
+- The meter-probe hash salt keeps its old text, so probe ids don't change.
+
+**A change from R3:** a Clips folder left at its default now becomes `Videos\Encore`. Old Clips stay where they are and stay in the Library through their saved paths. A Clips folder the user chose is kept.
+
+**Note for the builder:** the app's screens already avoided "Replay Buffer" (epic 10's glossary uses "Clips" and "recent gameplay"), so "Rewind" shows only in a few messages. Making Rewind a visible label, such as the Clips page heading or a status line, is a small follow-up if wanted.
 
 ## Requirements
 

@@ -160,3 +160,7 @@ Scoped QA ran only the three non-Explicit clip-creator classes. Final result: **
 - Final scoped ClipCreatorTests: **11 passed, 0 failed, 0 skipped** (12 s), including both-look minimum-shell timeline-button bounds/scroll reachability. Feature and merged-develop Release builds: **0 warnings/errors**. Quick review's narrow toolbar and Settings reselection findings fixed; follow-up inspection clear.
 - Additional compiled/unrun shell test: `MainWindowTests.CurrentSettingsSectionReselectionClosesDrillInWhileEscapeOnlyDismissesTheMenu` (pointer, Enter/Space and Escape). Run only after shared-shell clearance, together with the other two new shell tests recorded above.
 - Full pending-work navigation, high-scale, native chooser/HITL and real-media/Heavy checks remain deferred. No unrelated tests ran; rejected unchanged quoting run was not retried. Merge: `4dfbebaa8c55f5fb3415a5317d74962b9bf87e07`.
+
+## Rebrand to Encore (2026-11-10)
+
+The whole solution was renamed (`6f41cea`). Every default suite under its new name is the first thing to run, now with `dotnet test --solution Encore.slnx -c Release --no-build`. New: `Encore.Contracts.Tests.LegacyDataTests` (2 tests). By hand: start the renamed installed app once on a PC with an old ReplayBuffer install, and check that settings, Library and view state carried over, the old Run value is gone, and the old folders are untouched.
