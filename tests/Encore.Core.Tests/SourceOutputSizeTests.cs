@@ -3,7 +3,7 @@ using Encore.Core.Output;
 
 namespace Encore.Core.Tests;
 
-/// <summary>Story 12.1: a game chain's output size under matchSource.</summary>
+/// <summary>A game chain's output size under matchSource.</summary>
 public sealed class SourceOutputSizeTests
 {
     [Fact]

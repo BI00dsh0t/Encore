@@ -7,7 +7,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Core.Tests;
 
-/// <summary>Monitor changes (8.5, T-03): what a removed monitor ends and what a display change leaves alone.</summary>
+/// <summary>Monitor changes: what a removed monitor ends and what a display change leaves alone.</summary>
 public sealed partial class SessionOrchestratorTests
 {
     private static readonly DisplayMonitor Display1 = new(@"\\.\DISPLAY1", "DELL", 2560, 1440, true);
@@ -92,7 +92,7 @@ public sealed partial class SessionOrchestratorTests
         }
     }
 
-    /// <summary>A Monitor Record press, its session capturing <paramref name="device"/>, anchored: the Monitor Recording started.</summary>
+    /// <summary>A Monitor Record press, its session capturing the given device, anchored: the Monitor Recording started.</summary>
     private static async Task<RecordingStarted> StartMonitorRecording(
         SessionOrchestrator orchestrator,
         System.Threading.Channels.Channel<object> events,

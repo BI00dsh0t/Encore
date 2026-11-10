@@ -5,7 +5,7 @@ using Encore.Core.Settings;
 
 namespace Encore.Core.Tests;
 
-/// <summary>The storage estimate (R2) against a real ring, and the flags <see cref="ReplayStorageEstimate.For"/> sets.</summary>
+/// <summary>The storage estimate against a real ring, and the flags <see cref="ReplayStorageEstimate.For"/> sets.</summary>
 public sealed class ReplayStorageEstimateTests
 {
     private const long Second = 1_000_000;

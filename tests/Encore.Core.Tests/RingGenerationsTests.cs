@@ -150,10 +150,7 @@ public sealed class RingGenerationsTests
         generations.AddStream(1, AudioTimeBase, isVideo: false);
     }
 
-    /// <summary>
-    /// Video (stream 0) at 30 fps with a keyframe each second and on the first frame (a restarted
-    /// encoder starts on one), and AAC-sized audio (stream 1), interleaved, over <c>[fromUs, toUs)</c>.
-    /// </summary>
+    /// <summary>Video at 30 fps with a keyframe each second and on the first frame, and AAC-sized audio, interleaved.</summary>
     private static void Feed(RingGenerations generations, long fromUs, long toUs)
     {
         var first = ((fromUs * Fps) + Second - 1) / Second;

@@ -5,7 +5,7 @@ using Encore.Core.Library;
 
 namespace Encore.Core.Tests;
 
-/// <summary>Cleanup (story 7.8) in the LibraryActor, on a manual clock, over the test's own temp folder.</summary>
+/// <summary>Cleanup in the LibraryActor, on a manual clock, over the test's own temp folder.</summary>
 public sealed class LibraryCleanupTests : IDisposable
 {
     private static readonly TimeSpan Within = TimeSpan.FromSeconds(2);

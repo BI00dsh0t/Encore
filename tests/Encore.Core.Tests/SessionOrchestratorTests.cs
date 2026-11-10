@@ -404,7 +404,7 @@ public sealed partial class SessionOrchestratorTests : IDisposable
                 return Assert.IsType<RecordingStarted>(await NextAsync(events));
             }
 
-            // The Target exits: the session drains (R1), game-exit, and the exit isn't held.
+            // The Target exits: the session drains, game-exit, and the exit isn't held.
             var first = await RecordOnA(TargetChangeReason.Detected);
             orchestrator.Post(new ProposeTarget(null, TargetChangeReason.Exit));
             Assert.Equal(new TargetChanged(a.ToTargetGame(), null, TargetChangeReason.Exit), await NextAsync(changes));
@@ -1128,13 +1128,11 @@ public sealed partial class SessionOrchestratorTests : IDisposable
             var press = System.Diagnostics.Stopwatch.GetTimestamp();
             orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
 
-            // 1 s later: inside the cooldown. Messages are handled in order, so once it is ignored the
-            // first press's turn is over, with the gate still closed.
+            // 1 s later, inside the cooldown: messages are handled in order, so the first press's turn is over.
             orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press + System.Diagnostics.Stopwatch.Frequency));
             await NextAsync(ignored);
 
-            // Both states leave in the press's own orchestrator turn, which keeps them inside 250 ms;
-            // the ignored press adds none.
+            // Both states leave in the press's own orchestrator turn; the ignored press adds none.
             var states = published.Skip(before).ToList();
             Assert.Equal(2, states.Count);
             Assert.NotNull(states[1].CooldownUntil);
@@ -1600,7 +1598,7 @@ public sealed partial class SessionOrchestratorTests : IDisposable
 
     private static TaskCompletionSource NewGate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    /// <summary>The Global values with the Output Folder <paramref name="folder"/> and, when given, <paramref name="cooldown"/> as <c>saveCooldown</c>.</summary>
+    /// <summary>The Global values with the given Output Folder and, when given, the Save Cooldown.</summary>
     private static System.Collections.Immutable.ImmutableSortedDictionary<string, System.Text.Json.JsonElement> InFolder(string folder, int? cooldown = null)
     {
         var global = SettingsDocument.Empty.Global.SetItem(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(folder));
@@ -1725,7 +1723,7 @@ public sealed partial class SessionOrchestratorTests : IDisposable
             orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, press + 2));
             Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
             Assert.Equal([press + 2], recording.Stops);
-            // The path is open from just after the Library's begin to just after its end (FR-12).
+            // The path is open from just after the Library's begin to just after its end.
             Assert.Equal([$"begin {started.Path} {ProfileId}", $"opened {started.Path}", $"end {started.Path} Written", $"closed {started.Path}"], library.Calls);
             Assert.Equal([RecordingState.Off, RecordingState.Running, RecordingState.Off], published.Select(p => p.Recording));
             Assert.Single(made);
@@ -1767,8 +1765,7 @@ public sealed partial class SessionOrchestratorTests : IDisposable
             await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 3);
             Assert.Equal(new RecordingStopped(first.Path, RecordingStopReasons.Stopped), await NextAsync(events));
 
-            // Separate mode, committed mid-session: the toggle does nothing, Start twice gives one
-            // Recording, Stop stops it, and Stop with none running does nothing.
+            // Separate mode, committed mid-session: the toggle does nothing, and Start and Stop each act once.
             var document = Volatile.Read(ref _document);
             Volatile.Write(ref _document, document with { Global = document.Global.SetItem(Keys.RecordHotkeyMode.Name, Keys.RecordHotkeyMode.ToJson(RecordHotkeyMode.Separate)) });
             await Press(orchestrator, presses, HotkeyAction.RecordToggle, qpc + 4);
@@ -1849,11 +1846,7 @@ public sealed partial class SessionOrchestratorTests : IDisposable
         await NextPress(presses);
     }
 
-    /// <summary>
-    /// An orchestrator whose sessions record with <see cref="FakeRecording"/>s; with
-    /// <paramref name="targetChanged"/>, it also follows the Target with a game session, and with
-    /// <paramref name="drains"/>, it has Replay Clips, so a game session drains on its Target's exit (R1).
-    /// </summary>
+    /// <summary>An orchestrator whose sessions record with fakes; optionally it follows the Target and has Replay Clips.</summary>
     private (SessionOrchestrator Orchestrator, System.Threading.Channels.Channel<object> Events, System.Threading.Channels.Channel<HotkeyPress> Presses, ConcurrentQueue<FakeRecording> Made, ConcurrentQueue<CaptureState> Published, FakeFactory Factory) NewRecordingOrchestrator(
         Action<TargetChanged>? targetChanged = null,
         FakeLibraryWrites? library = null,
@@ -1978,11 +1971,7 @@ public sealed partial class SessionOrchestratorTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// A write that records its path and completes from another thread, at once or once
-    /// <paramref name="gate"/> completes, leaving the reserved file, or failing with
-    /// <paramref name="failure"/>; it counts its Resets.
-    /// </summary>
+    /// <summary>A write that records its path and completes from another thread, or fails; it counts its Resets.</summary>
     private sealed class FakeWrite(ConcurrentQueue<string> writes, Exception? failure = null, Task? gate = null, ConcurrentQueue<string>? log = null) : IClipWrite
     {
         private int _resets;
@@ -2026,7 +2015,7 @@ public sealed partial class SessionOrchestratorTests : IDisposable
             Finish();
         }
 
-        /// <summary>Finishes as the session's output ending would, from another thread, with <paramref name="error"/> as the writer's.</summary>
+        /// <summary>Finishes as the session's output ending would, from another thread, with the given writer error.</summary>
         public void Finish(Exception? error = null)
         {
             var done = _done!;
@@ -2177,12 +2166,12 @@ public sealed partial class SessionOrchestratorTests : IDisposable
 
         private volatile string[]? _monitorDevices;
 
-        /// <summary>Story 11.3: the composited monitors a test set (<see cref="SetMonitorDevices"/>), less the dropped; else <see cref="MonitorDevice"/>.</summary>
+        /// <summary>The composited monitors a test set, less the dropped ones; else the single monitor device.</summary>
         public IReadOnlyList<string> MonitorDevices => _monitorDevices ?? (MonitorDevice is { } device ? [device] : []);
 
         public ConcurrentQueue<string> Dropped { get; } = new();
 
-        /// <summary>Story 12.2: each SetBuildAhead call, in order.</summary>
+        /// <summary>Each SetBuildAhead call, in order.</summary>
         public ConcurrentQueue<bool> BuildAhead { get; } = new();
 
         public void SetBuildAhead(bool allowed) => BuildAhead.Enqueue(allowed);

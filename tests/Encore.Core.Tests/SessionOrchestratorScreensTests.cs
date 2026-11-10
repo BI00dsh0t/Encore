@@ -7,7 +7,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Core.Tests;
 
-/// <summary>Story 11.3: a Monitor Recording of several screens, as the orchestrator resolves and follows them.</summary>
+/// <summary>A Monitor Recording of several screens, as the orchestrator resolves and follows them.</summary>
 public sealed partial class SessionOrchestratorTests
 {
     private static readonly DisplayMonitor Screen1 = new(@"\\.\DISPLAY1", "Odyssey", 2560, 1440, true, "path-1", 0, 0, 240);

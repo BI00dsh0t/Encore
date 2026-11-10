@@ -7,7 +7,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Core.Tests;
 
-/// <summary>Sleep and resume (8.4, T-02): what a suspend stops and what a resume rebuilds.</summary>
+/// <summary>Sleep and resume: what a suspend stops and what a resume rebuilds.</summary>
 public sealed partial class SessionOrchestratorTests
 {
     [Fact]

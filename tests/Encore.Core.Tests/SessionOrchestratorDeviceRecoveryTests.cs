@@ -6,7 +6,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Core.Tests;
 
-/// <summary>GPU driver reset recovery (8.3): the orchestrator's retries, give-up and Recording handovers.</summary>
+/// <summary>GPU driver reset recovery: the orchestrator's retries, give-up and Recording handovers.</summary>
 public sealed partial class SessionOrchestratorTests
 {
     [Fact]

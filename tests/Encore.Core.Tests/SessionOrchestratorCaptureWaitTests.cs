@@ -64,9 +64,7 @@ public sealed partial class SessionOrchestratorTests
             orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, press));
             var before = await NextAsync(saved);
 
-            // The placeholder is destroyed and the game shows its real window, a new handle: the
-            // session moves to it rather than ending, so its ring is kept. The new window shows before the
-            // old one goes, so the 20 ms follow poll never sees the process without a window.
+            // The placeholder is replaced by the real window: the session moves to it, so its ring is kept.
             windows[2] = true;
             windows.TryRemove(1, out _);
             second.Events.Closed("window closed");
@@ -78,8 +76,7 @@ public sealed partial class SessionOrchestratorTests
             Assert.Equal(2, factory.Sessions.Count);
             Assert.StartsWith("failure:", first.EndReason, StringComparison.Ordinal);
             Assert.Null(second.EndReason);
-            // The follow poll can reach window 2 before the Closed event does, and the event then moves the
-            // session there again: once or twice, but only ever to window 2.
+            // The follow poll can reach window 2 before the Closed event does: once or twice, but only ever to window 2.
             Assert.All(second.Retargets, window => Assert.Equal(2, window));
             Assert.False(waiting.Reader.TryRead(out _));
             Assert.Empty(failures);

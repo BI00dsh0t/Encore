@@ -8,7 +8,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Core.Tests;
 
-/// <summary>The Monitor session's slot (6.9): Monitor Recording by its own Hotkey.</summary>
+/// <summary>The Monitor session's slot: Monitor Recording by its own Hotkey.</summary>
 public sealed partial class SessionOrchestratorTests
 {
     [Fact]
@@ -205,7 +205,7 @@ public sealed partial class SessionOrchestratorTests
             Assert.Equal([ErrorCodes.EncoderBudget], warnings);
             Assert.Single(factory.Sessions);
 
-            // Story 12.2 (QA): no size move may build ahead from before the check; restored on the refusal.
+            // No size move may build ahead from before the check; restored on the refusal.
             Assert.Equal([false, true], game.BuildAhead);
             Assert.All(published, p => Assert.Equal(RecordingState.Off, p.MonitorRecording));
         }
