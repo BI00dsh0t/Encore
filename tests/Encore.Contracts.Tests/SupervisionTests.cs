@@ -134,8 +134,7 @@ public sealed class SupervisionTests
 
         try
         {
-            // Join returns when the managed thread is done; Windows abandons the mutex only once the OS
-            // thread has ended, a moment later on a loaded machine, so the take is retried briefly.
+            // Windows abandons the mutex only once the OS thread has ended, a moment after Join, so the take is retried.
             var clock = System.Diagnostics.Stopwatch.StartNew();
             var taken = SingleInstance.TryAcquire(SingleInstance.Engine, instance);
             while (taken is null && clock.Elapsed < TimeSpan.FromSeconds(5))

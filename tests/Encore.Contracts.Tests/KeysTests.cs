@@ -22,7 +22,7 @@ public sealed partial class KeysTests
     [Fact]
     public void CaptureNewGamesIsGlobalOnlyAndOnByDefault()
     {
-        // Story 13.1: today's behaviour unless the builder turns it off.
+        // Today's behaviour unless the builder turns it off.
         Assert.True(Keys.CaptureNewGames.Default);
         Assert.False(Keys.CaptureNewGames.Overridable);
     }
@@ -89,7 +89,7 @@ public sealed partial class KeysTests
     [Fact]
     public void AVideoValueWithoutMatchSourceReadsAsOffAndOneWithItRoundTrips()
     {
-        // Story 12.1: an existing value has no matchSource, and writes back without one.
+        // An existing value has no matchSource, and writes back without one.
         using var old = JsonDocument.Parse("""{"codec":"h264","width":1920,"height":1080,"fps":60,"bitrateKbps":40000,"rateControl":"cbr"}""");
         Assert.True(Keys.Video.TryRead(old.RootElement, out var read));
         Assert.False(read.MatchSource);
