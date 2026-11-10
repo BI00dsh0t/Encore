@@ -41,7 +41,7 @@ internal partial class ClipCreatorView
     {
         if (Page is not { CanOpenOptions: true } page) { return; }
         var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = ExportArrow };
-        menu.SetResourceReference(StyleProperty, "RbClipMenuStyle");
+        menu.SetResourceReference(StyleProperty, "EncoreClipMenuStyle");
         foreach (var (format, label) in new[] { ("mp4", "Export as video"), ("mp3", "Export as audio") })
         {
             var header = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
@@ -57,7 +57,7 @@ internal partial class ClipCreatorView
             header.Children.Add(new System.Windows.Controls.TextBlock { Text = label, Margin = new Thickness(8, 0, 0, 0), FontFamily = new System.Windows.Media.FontFamily("Segoe UI"), FontSize = 14, FontWeight = FontWeights.Normal });
             var item = new System.Windows.Controls.MenuItem { Header = header, IsCheckable = true, IsChecked = page.Format == format };
             System.Windows.Automation.AutomationProperties.SetName(item, label);
-            item.SetResourceReference(StyleProperty, "RbClipMenuItemStyle");
+            item.SetResourceReference(StyleProperty, "EncoreClipMenuItemStyle");
             item.Click += (_, _) => { page.Format = format; };
             menu.Items.Add(item);
         }

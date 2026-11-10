@@ -27,11 +27,11 @@
                     Content="Use default"
                     Visibility="{Binding CanUseDefault, Converter={StaticResource Visible}}" />
         </StackPanel>
-        <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding Caption}" />
-        <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding FreeSpaceText}" />
+        <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding Caption}" />
+        <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding FreeSpaceText}" />
         <TextBlock Margin="0,4,0,0"
                    FontSize="{DynamicResource CaptionTextBlockFontSize}"
-                   Style="{DynamicResource RbSettingsErrorTextStyle}"
+                   Style="{DynamicResource EncoreSettingsErrorTextStyle}"
                    Text="{Binding Problem}"
                    Visibility="{Binding HasProblem, Converter={StaticResource Visible}}" />
     </StackPanel>

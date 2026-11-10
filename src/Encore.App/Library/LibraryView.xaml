@@ -12,38 +12,38 @@
         <theme:EmptyToCollapsedConverter x:Key="NotEmpty" />
         <local:LibraryMetaConverter x:Key="Meta" />
         <DataTemplate DataType="{x:Type local:LibraryGroupHeader}">
-            <ContentControl Content="{Binding Name}" Style="{DynamicResource RbLibraryGroupHeaderStyle}" />
+            <ContentControl Content="{Binding Name}" Style="{DynamicResource EncoreLibraryGroupHeaderStyle}" />
         </DataTemplate>
         <DataTemplate DataType="{x:Type local:LibraryRow}">
             <Grid>
-                <Border Style="{DynamicResource RbLibraryRowStyle}">
+                <Border Style="{DynamicResource EncoreLibraryRowStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border Style="{DynamicResource RbLibrarySelectionBarStyle}" />
+                        <Border Style="{DynamicResource EncoreLibrarySelectionBarStyle}" />
                         <!-- The thumbnail, or the generic video glyph until the shell has one; the length on it. -->
                         <Grid>
-                            <Border Style="{DynamicResource RbLibraryThumbnailStyle}">
-                                <Path Style="{DynamicResource RbLibraryPlaceholderGlyphStyle}" />
+                            <Border Style="{DynamicResource EncoreLibraryThumbnailStyle}">
+                                <Path Style="{DynamicResource EncoreLibraryPlaceholderGlyphStyle}" />
                             </Border>
-                            <Border Style="{DynamicResource RbLibraryThumbnailImageStyle}"
+                            <Border Style="{DynamicResource EncoreLibraryThumbnailImageStyle}"
                                     Visibility="{Binding HasThumbnail, Converter={StaticResource Visible}}">
                                 <Border.Background>
                                     <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
                                 </Border.Background>
                             </Border>
-                            <Border Style="{DynamicResource RbLibraryLengthBadgeStyle}">
-                                <TextBlock Style="{DynamicResource RbLibraryLengthTextStyle}" Text="{Binding Length}" />
+                            <Border Style="{DynamicResource EncoreLibraryLengthBadgeStyle}">
+                                <TextBlock Style="{DynamicResource EncoreLibraryLengthTextStyle}" Text="{Binding Length}" />
                             </Border>
                             <!-- A Recording's or Monitor Recording's kind, top left; a Clip shows none. -->
                             <Border HorizontalAlignment="Left"
                                     VerticalAlignment="Top"
-                                    Style="{DynamicResource RbLibraryLengthBadgeStyle}"
+                                    Style="{DynamicResource EncoreLibraryLengthBadgeStyle}"
                                     Visibility="{Binding HasBadge, Converter={StaticResource Visible}}">
-                                <TextBlock Style="{DynamicResource RbLibraryLengthTextStyle}" Text="{Binding Badge}" />
+                                <TextBlock Style="{DynamicResource EncoreLibraryLengthTextStyle}" Text="{Binding Badge}" />
                             </Border>
                         </Grid>
                         <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
@@ -59,7 +59,7 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
-                                    <TextBlock Style="{DynamicResource RbLibraryNameStyle}" Text="{Binding Name}" ToolTip="{Binding Path}" />
+                                    <TextBlock Style="{DynamicResource EncoreLibraryNameStyle}" Text="{Binding Name}" ToolTip="{Binding Path}" />
                                 </Border>
                                 <TextBox IsVisibleChanged="OnRenameVisibleChanged"
                                          KeyDown="OnRenameKeyDown"
@@ -72,7 +72,7 @@
                                     </TextBox.InputBindings>
                                 </TextBox>
                             </Grid>
-                            <TextBlock Style="{DynamicResource RbLibraryMetaStyle}">
+                            <TextBlock Style="{DynamicResource EncoreLibraryMetaStyle}">
                                 <TextBlock.Text>
                                     <MultiBinding Converter="{StaticResource Meta}">
                                         <Binding Path="Game" />
@@ -81,9 +81,9 @@
                                     </MultiBinding>
                                 </TextBlock.Text>
                             </TextBlock>
-                            <Border Style="{DynamicResource RbLibraryLockPillStyle}"
+                            <Border Style="{DynamicResource EncoreLibraryLockPillStyle}"
                                     Visibility="{Binding IsLocked, Converter={StaticResource Visible}}">
-                                <TextBlock Style="{DynamicResource RbLibraryLockTextStyle}" Text="{Binding Lock, Mode=OneWay}" />
+                                <TextBlock Style="{DynamicResource EncoreLibraryLockTextStyle}" Text="{Binding Lock, Mode=OneWay}" />
                             </Border>
                         </StackPanel>
                         <!-- The star follows the snapshot: a click only sends library.setFavourite, and leaves the selection. -->
@@ -91,11 +91,11 @@
                                           AutomationProperties.Name="Favourite"
                                           Command="{Binding FavouriteCommand}"
                                           IsChecked="{Binding IsFavourite, Mode=OneWay}"
-                                          Style="{DynamicResource RbStarToggleStyle}"
+                                          Style="{DynamicResource EncoreStarToggleStyle}"
                                           ToolTip="Favourite" />
                     </Grid>
                 </Border>
-                <Border Style="{DynamicResource RbLibraryFocusRingStyle}" />
+                <Border Style="{DynamicResource EncoreLibraryFocusRingStyle}" />
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
@@ -116,7 +116,7 @@
                          AutomationProperties.Name="Search by name"
                          PreviewKeyDown="OnSearchPreviewKeyDown"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
-                <TextBlock Style="{DynamicResource RbLibrarySearchGlyphStyle}" Text="&#xE721;" />
+                <TextBlock Style="{DynamicResource EncoreLibrarySearchGlyphStyle}" Text="&#xE721;" />
                 <!-- The hint shows only while the box itself is empty, not waiting for the delayed search. -->
                 <ContentControl Focusable="False" IsHitTestVisible="False">
                     <ContentControl.Style>
@@ -129,7 +129,7 @@
                             </Style.Triggers>
                         </Style>
                     </ContentControl.Style>
-                    <TextBlock Style="{DynamicResource RbLibrarySearchHintStyle}" Text="Search by name" />
+                    <TextBlock Style="{DynamicResource EncoreLibrarySearchHintStyle}" Text="Search by name" />
                 </ContentControl>
                 <!-- The clear button follows the box's own text, not the delayed search. -->
                 <ContentControl Focusable="False" HorizontalAlignment="Right">
@@ -145,12 +145,12 @@
                     <Button AutomationProperties.Name="Clear search"
                             Click="OnClearSearchClick"
                             Content="&#xE711;"
-                            Style="{DynamicResource RbLibrarySearchClearStyle}"
+                            Style="{DynamicResource EncoreLibrarySearchClearStyle}"
                             ToolTip="Clear search" />
                 </ContentControl>
             </Grid>
             <StackPanel Orientation="Horizontal">
-                <TextBlock Style="{DynamicResource RbLibraryFilterCaptionStyle}" Text="Group by" />
+                <TextBlock Style="{DynamicResource EncoreLibraryFilterCaptionStyle}" Text="Group by" />
                 <ComboBox MinWidth="80"
                           Margin="0,0,12,4"
                           DisplayMemberPath="Name"
@@ -159,7 +159,7 @@
                           SelectedValuePath="Value" />
             </StackPanel>
             <StackPanel Orientation="Horizontal">
-                <TextBlock Style="{DynamicResource RbLibraryFilterCaptionStyle}" Text="Sort" />
+                <TextBlock Style="{DynamicResource EncoreLibraryFilterCaptionStyle}" Text="Sort" />
                 <ComboBox MinWidth="130"
                           Margin="0,0,12,4"
                           DisplayMemberPath="Name"
@@ -168,7 +168,7 @@
                           SelectedValuePath="Value" />
             </StackPanel>
             <StackPanel Orientation="Horizontal">
-                <TextBlock Style="{DynamicResource RbLibraryFilterCaptionStyle}" Text="Game" />
+                <TextBlock Style="{DynamicResource EncoreLibraryFilterCaptionStyle}" Text="Game" />
                 <ComboBox MinWidth="140"
                           Margin="0,0,12,4"
                           DisplayMemberPath="Name"
@@ -176,7 +176,7 @@
                           SelectedItem="{Binding SelectedGame}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal">
-                <TextBlock Style="{DynamicResource RbLibraryFilterCaptionStyle}" Text="Date" />
+                <TextBlock Style="{DynamicResource EncoreLibraryFilterCaptionStyle}" Text="Date" />
                 <ComboBox MinWidth="110"
                           Margin="0,0,12,4"
                           DisplayMemberPath="Name"
@@ -193,7 +193,7 @@
         <ContentControl x:Name="Banner"
                         DockPanel.Dock="Top"
                         Margin="0,0,0,8"
-                        Style="{DynamicResource RbInfoBarCautionStyle}"
+                        Style="{DynamicResource EncoreInfoBarCautionStyle}"
                         Visibility="{Binding IsCleanupBlocked, Converter={StaticResource Visible}}">
             <DockPanel>
                 <Button Margin="12,0,0,0"
@@ -207,11 +207,11 @@
             </DockPanel>
         </ContentControl>
         <TextBlock DockPanel.Dock="Top"
-                   Style="{DynamicResource RbLibraryActionErrorStyle}"
+                   Style="{DynamicResource EncoreLibraryActionErrorStyle}"
                    Text="{Binding ActionError}"
                    Visibility="{Binding HasActionError, Converter={StaticResource Visible}}" />
         <!-- The command bar: the summary with nothing selected, else the count and the actions. Always 40 px. -->
-        <Border x:Name="CommandBar" DockPanel.Dock="Top" Style="{DynamicResource RbLibraryCommandBarStyle}">
+        <Border x:Name="CommandBar" DockPanel.Dock="Top" Style="{DynamicResource EncoreLibraryCommandBarStyle}">
             <Grid>
                 <StackPanel Orientation="Horizontal">
                     <StackPanel.Style>
@@ -223,9 +223,9 @@
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
-                    <TextBlock Style="{DynamicResource RbLibraryBarTextStyle}" Text="{Binding SummaryText}" />
+                    <TextBlock Style="{DynamicResource EncoreLibraryBarTextStyle}" Text="{Binding SummaryText}" />
                     <TextBlock Margin="12,0,0,0"
-                               Style="{DynamicResource RbLibraryBarCaptionStyle}"
+                               Style="{DynamicResource EncoreLibraryBarCaptionStyle}"
                                Text="Click to select. Ctrl or Shift selects more." />
                 </StackPanel>
                 <DockPanel Visibility="{Binding HasSelection, Converter={StaticResource Visible}}">
@@ -233,14 +233,14 @@
                             Command="{Binding ClearSelectionCommand}"
                             Content="✕"
                             DockPanel.Dock="Right"
-                            Style="{DynamicResource RbLibraryClearSelectionButtonStyle}"
+                            Style="{DynamicResource EncoreLibraryClearSelectionButtonStyle}"
                             ToolTip="Clear selection (Esc)" />
                     <StackPanel DockPanel.Dock="Left" Margin="0,0,12,0" Orientation="Horizontal">
                         <TextBlock x:Name="SelectionCount"
                                    AutomationProperties.LiveSetting="Polite"
-                                   Style="{DynamicResource RbLibraryBarCountStyle}"
+                                   Style="{DynamicResource EncoreLibraryBarCountStyle}"
                                    Text="{Binding SelectionText}" />
-                        <TextBlock Style="{DynamicResource RbLibraryBarCaptionStyle}" Text="{Binding HiddenText}" />
+                        <TextBlock Style="{DynamicResource EncoreLibraryBarCaptionStyle}" Text="{Binding HiddenText}" />
                     </StackPanel>
                     <local:LibraryOverflowPanel x:Name="Actions" HorizontalAlignment="Left" VerticalAlignment="Center">
                         <Button Command="{Binding CreateClipCommand}" Content="Create clip" Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
@@ -293,12 +293,12 @@
             <ListBox x:Name="List"
                      ContextMenuOpening="OnListContextMenuOpening"
                      GotKeyboardFocus="OnListGotKeyboardFocus"
-                     ItemContainerStyle="{DynamicResource RbLibraryItemContainerStyle}"
+                     ItemContainerStyle="{DynamicResource EncoreLibraryItemContainerStyle}"
                      ItemsSource="{Binding Entries}"
                      PreviewKeyDown="OnListPreviewKeyDown"
                      PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
                      PreviewMouseRightButtonDown="OnListPreviewMouseRightButtonDown"
-                     Style="{DynamicResource RbLibraryListStyle}">
+                     Style="{DynamicResource EncoreLibraryListStyle}">
                 <ListBox.ContextMenu>
                     <ContextMenu>
                         <MenuItem Command="{Binding CreateClipCommand}" Header="Create clip" Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
@@ -351,7 +351,7 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     DataContext="{Binding Welcome}"
-                    Style="{DynamicResource RbCardStyle}">
+                    Style="{DynamicResource EncoreCardStyle}">
                 <Border.Visibility>
                     <Binding Path="DataContext.ShowsWelcome" RelativeSource="{RelativeSource AncestorType=UserControl}" Converter="{StaticResource Visible}" />
                 </Border.Visibility>
@@ -362,7 +362,7 @@
                                 Padding="8,2"
                                 VerticalAlignment="Center"
                                 Background="{DynamicResource ControlFillColorDefaultBrush}"
-                                CornerRadius="{DynamicResource RbSmallCornerRadius}">
+                                CornerRadius="{DynamicResource EncoreSmallCornerRadius}">
                             <TextBlock FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="{Binding SaveKey}" />
                         </Border>
                         <TextBlock VerticalAlignment="Center" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="{Binding LeadTail}" TextWrapping="Wrap" />

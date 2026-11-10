@@ -7,31 +7,31 @@
                     xmlns:theme="clr-namespace:Encore.App.Theme">
 
     <!-- Spacing: the Windows 4 px grid, the same in both themes. -->
-    <sys:Double x:Key="RbSpacingXS">4</sys:Double>
-    <sys:Double x:Key="RbSpacingSM">8</sys:Double>
-    <sys:Double x:Key="RbSpacingMD">12</sys:Double>
-    <sys:Double x:Key="RbSpacingLG">16</sys:Double>
-    <sys:Double x:Key="RbSpacingXL">24</sys:Double>
-    <sys:Double x:Key="RbSpacingXXL">32</sys:Double>
-    <sys:Double x:Key="RbNavWidth">200</sys:Double>
-    <Thickness x:Key="RbPagePadding">24</Thickness>
-    <Thickness x:Key="RbCardPadding">16</Thickness>
-    <Thickness x:Key="RbDialogContentPadding">24,32,24,24</Thickness>
-    <Thickness x:Key="RbDialogButtonBarPadding">24,16</Thickness>
+    <sys:Double x:Key="EncoreSpacingXS">4</sys:Double>
+    <sys:Double x:Key="EncoreSpacingSM">8</sys:Double>
+    <sys:Double x:Key="EncoreSpacingMD">12</sys:Double>
+    <sys:Double x:Key="EncoreSpacingLG">16</sys:Double>
+    <sys:Double x:Key="EncoreSpacingXL">24</sys:Double>
+    <sys:Double x:Key="EncoreSpacingXXL">32</sys:Double>
+    <sys:Double x:Key="EncoreNavWidth">200</sys:Double>
+    <Thickness x:Key="EncorePagePadding">24</Thickness>
+    <Thickness x:Key="EncoreCardPadding">16</Thickness>
+    <Thickness x:Key="EncoreDialogContentPadding">24,32,24,24</Thickness>
+    <Thickness x:Key="EncoreDialogButtonBarPadding">24,16</Thickness>
 
-    <theme:LevelPeakConverter x:Key="RbLevelPeak" />
+    <theme:LevelPeakConverter x:Key="EncoreLevelPeak" />
 
     <!-- Card: settings sections, the status header. No states. -->
-    <Style x:Key="RbCardStyle" TargetType="Border">
+    <Style x:Key="EncoreCardStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}" />
-        <Setter Property="Padding" Value="{StaticResource RbCardPadding}" />
+        <Setter Property="Padding" Value="{StaticResource EncoreCardPadding}" />
     </Style>
 
     <!-- Info bar: a tinted bar with a 3 px status edge. Content is the message, plus an optional action. -->
-    <Style x:Key="RbInfoBarDangerStyle" TargetType="ContentControl">
+    <Style x:Key="EncoreInfoBarDangerStyle" TargetType="ContentControl">
         <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource SystemFillColorCriticalBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -58,13 +58,13 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="RbInfoBarCautionStyle" TargetType="ContentControl" BasedOn="{StaticResource RbInfoBarDangerStyle}">
+    <Style x:Key="EncoreInfoBarCautionStyle" TargetType="ContentControl" BasedOn="{StaticResource EncoreInfoBarDangerStyle}">
         <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource SystemFillColorCautionBrush}" />
     </Style>
 
     <!-- Star toggle: the Library row's Favourite, borderless in both themes. -->
-    <Style x:Key="RbStarToggleStyle" TargetType="ToggleButton">
+    <Style x:Key="EncoreStarToggleStyle" TargetType="ToggleButton">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -96,7 +96,7 @@
     </Style>
 
     <!-- Level meter: signal, not selection, so success with a caution peak; muted (disabled) in text-disabled. -->
-    <Style x:Key="RbLevelMeterStyle" TargetType="ProgressBar">
+    <Style x:Key="EncoreLevelMeterStyle" TargetType="ProgressBar">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="Height" Value="8" />
         <Setter Property="Minimum" Value="0" />
@@ -106,8 +106,8 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ProgressBar">
                     <Grid>
-                        <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource RbSmallCornerRadius}" />
-                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="{DynamicResource RbSmallCornerRadius}" />
+                        <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
+                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
@@ -115,7 +115,7 @@
         <Style.Triggers>
             <DataTrigger Value="True">
                 <DataTrigger.Binding>
-                    <MultiBinding Converter="{StaticResource RbLevelPeak}">
+                    <MultiBinding Converter="{StaticResource EncoreLevelPeak}">
                         <Binding Path="Value" RelativeSource="{RelativeSource Self}" />
                         <Binding Path="Maximum" RelativeSource="{RelativeSource Self}" />
                     </MultiBinding>

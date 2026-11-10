@@ -6,16 +6,16 @@
                     xmlns:theme="clr-namespace:Encore.App.Theme">
 
     <!-- The nav pane sits on Mica (or bg-base where there is none), with a gutter round the items. -->
-    <Thickness x:Key="RbNavPanePadding">4,0,4,8</Thickness>
-    <Thickness x:Key="RbNavBrandMargin">12,16,12,16</Thickness>
+    <Thickness x:Key="EncoreNavPanePadding">4,0,4,8</Thickness>
+    <Thickness x:Key="EncoreNavBrandMargin">12,16,12,16</Thickness>
 
     <!-- The nav pane shows Mica straight through; the content layer's edge marks the boundary. -->
-    <Style x:Key="RbShellNavLayerStyle" TargetType="Border">
+    <Style x:Key="EncoreShellNavLayerStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
     </Style>
 
     <!-- The content column's layer: bg-layer over Mica; stroke-card is black and vanished beside the nav pane in dark mode. -->
-    <Style x:Key="RbShellContentLayerStyle" TargetType="Border">
+    <Style x:Key="EncoreShellContentLayerStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
@@ -24,7 +24,7 @@
     </Style>
 
     <!-- The status header's state line: body-strong, sentence case. -->
-    <Style x:Key="RbStatusStateStyle" TargetType="ContentControl">
+    <Style x:Key="EncoreStatusStateStyle" TargetType="ContentControl">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -40,7 +40,7 @@
     </Style>
 
     <!-- The Settings section label: caption, text-secondary, never focusable or selectable. -->
-    <ControlTemplate x:Key="RbNavSectionTemplate" TargetType="ListBoxItem">
+    <ControlTemplate x:Key="EncoreNavSectionTemplate" TargetType="ListBoxItem">
         <TextBlock Margin="12,12,12,4"
                    FontSize="12"
                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -48,7 +48,7 @@
     </ControlTemplate>
 
     <!-- Nav item: subtle fill, a 3x16 accent pill when selected (WinUI's NavigationView). -->
-    <Style x:Key="RbNavItemStyle" TargetType="ListBoxItem">
+    <Style x:Key="EncoreNavItemStyle" TargetType="ListBoxItem">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
@@ -72,7 +72,7 @@
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
                                 Background="{DynamicResource AccentFillColorDefaultBrush}"
-                                CornerRadius="{DynamicResource RbSmallCornerRadius}"
+                                CornerRadius="{DynamicResource EncoreSmallCornerRadius}"
                                 Visibility="Collapsed" />
                         <DockPanel x:Name="NavContent" Margin="{TemplateBinding Padding}" LastChildFill="False">
                             <TextBlock x:Name="NavGlyph" DockPanel.Dock="Left" Text="{Binding Glyph}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center" Margin="0,0,12,0" />
@@ -88,7 +88,7 @@
                                     Margin="8,0,0,0"
                                     VerticalAlignment="Center"
                                     Background="{DynamicResource AccentFillColorDefaultBrush}"
-                                    CornerRadius="{DynamicResource RbSmallCornerRadius}"
+                                    CornerRadius="{DynamicResource EncoreSmallCornerRadius}"
                                     DockPanel.Dock="Left"
                                     Visibility="Collapsed" />
                         </DockPanel>
@@ -117,7 +117,7 @@
         </Setter>
         <Style.Triggers>
             <DataTrigger Binding="{Binding IsSection}" Value="True">
-                <Setter Property="Template" Value="{StaticResource RbNavSectionTemplate}" />
+                <Setter Property="Template" Value="{StaticResource EncoreNavSectionTemplate}" />
                 <Setter Property="Height" Value="NaN" />
                 <Setter Property="IsEnabled" Value="False" />
                 <Setter Property="Focusable" Value="False" />
@@ -129,7 +129,7 @@
             </DataTrigger>
         </Style.Triggers>
     </Style>
-    <Style x:Key="RbSettingsNavStyle" TargetType="ToggleButton"><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" />
+    <Style x:Key="EncoreSettingsNavStyle" TargetType="ToggleButton"><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="Height" Value="40" /><Setter Property="Margin" Value="4,8,4,0" /><Setter Property="Padding" Value="12,0" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -141,7 +141,7 @@
             <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
         </Grid><ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger>
-            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" /></Trigger>
+            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" /></Trigger>
         <Trigger Property="IsPressed" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
         <Style.Triggers><DataTrigger Binding="{Binding IsNavigationExpanded}" Value="False"><Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="Padding" Value="0" /></DataTrigger></Style.Triggers>
     </Style>

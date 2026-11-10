@@ -6,7 +6,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
     </UserControl.Resources>
-    <Border Style="{DynamicResource RbCardStyle}" Padding="16,12" Visibility="{Binding HasErrors, Converter={StaticResource Visible}}">
+    <Border Style="{DynamicResource EncoreCardStyle}" Padding="16,12" Visibility="{Binding HasErrors, Converter={StaticResource Visible}}">
         <StackPanel>
             <TextBlock Text="{Binding ConnectionError}" TextWrapping="Wrap"
                        Foreground="{DynamicResource SystemFillColorCriticalBrush}"

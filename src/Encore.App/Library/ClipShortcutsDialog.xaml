@@ -5,7 +5,7 @@
  Foreground="{DynamicResource TextFillColorPrimaryBrush}" Title="Timeline shortcuts">
  <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="12" Padding="22" Margin="8">
   <DockPanel KeyboardNavigation.TabNavigation="Cycle">
-   <Button DockPanel.Dock="Bottom" Content="Close" IsCancel="True" IsDefault="True" Click="CloseHelp" HorizontalAlignment="Right" Margin="0,18,0,0" Style="{DynamicResource RbClipButtonStyle}" />
+   <Button DockPanel.Dock="Bottom" Content="Close" IsCancel="True" IsDefault="True" Click="CloseHelp" HorizontalAlignment="Right" Margin="0,18,0,0" Style="{DynamicResource EncoreClipButtonStyle}" />
    <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
     <TextBlock Text="Timeline shortcuts" FontSize="20" FontWeight="Medium" Margin="0,0,0,16" />
     <TextBlock Text="Drag the selected area to move the clip; drag its edge grips to trim. Click to seek, or scrub using the ruler." Margin="0,0,0,12" TextWrapping="Wrap" />

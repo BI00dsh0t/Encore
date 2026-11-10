@@ -19,7 +19,7 @@
         <!-- The sticky save bar: only while the draft differs from the saved tracks. -->
         <ContentControl x:Name="SaveBar"
                         Width="{Binding ActualWidth, ElementName=Column}"
-                        Style="{DynamicResource RbAudioSaveBarStyle}"
+                        Style="{DynamicResource EncoreAudioSaveBarStyle}"
                         Visibility="{Binding IsDirty, Converter={StaticResource Visible}}">
             <DockPanel>
                 <StackPanel Margin="12,0,0,0"
@@ -40,7 +40,7 @@
                                Text="Changes apply from your next game, or right after your next saved Clip."
                                TextWrapping="Wrap" />
                     <TextBlock Margin="0,4,0,0"
-                               Style="{DynamicResource RbSettingsErrorTextStyle}"
+                               Style="{DynamicResource EncoreSettingsErrorTextStyle}"
                                Text="{Binding SaveProblem}"
                                Visibility="{Binding HasSaveProblem, Converter={StaticResource Visible}}" />
                 </StackPanel>
@@ -51,7 +51,7 @@
                       Grid.Row="1"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
-            <theme:SettingsContent x:Name="Column" Style="{DynamicResource RbSettingsContentStyle}">
+            <theme:SettingsContent x:Name="Column" Style="{DynamicResource EncoreSettingsContentStyle}">
 
 
                 <!-- The read-only summary, for a game that uses the main tracks. -->
@@ -89,7 +89,7 @@
                     <ItemsControl x:Name="Cards" Focusable="False" ItemsSource="{Binding Tracks}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border AutomationProperties.Name="{Binding Name}" Style="{DynamicResource RbAudioTrackCardStyle}">
+                                <Border AutomationProperties.Name="{Binding Name}" Style="{DynamicResource EncoreAudioTrackCardStyle}">
                                     <Border.InputBindings>
                                         <KeyBinding Command="{Binding RenameCommand}" Key="F2" />
                                         <KeyBinding Command="{Binding MoveUpCommand}" Gesture="Alt+Up" />
@@ -98,7 +98,7 @@
                                     <StackPanel>
                                         <!-- Header: number, name and summary, the Track's meter, its menu. -->
                                         <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left" Style="{DynamicResource RbAudioTrackNumberStyle}" Text="{Binding Number}" />
+                                            <TextBlock DockPanel.Dock="Left" Style="{DynamicResource EncoreAudioTrackNumberStyle}" Text="{Binding Number}" />
                                             <Button Margin="8,0,0,0"
                                                     VerticalAlignment="Center"
                                                     AutomationProperties.Name="Track options"
@@ -122,10 +122,10 @@
                                                          AutomationProperties.Name="Track level"
                                                          DockPanel.Dock="Right"
                                                          Maximum="1"
-                                                         Style="{DynamicResource RbLevelMeterStyle}"
+                                                         Style="{DynamicResource EncoreLevelMeterStyle}"
                                                          Value="{Binding Level, Mode=OneWay}" />
                                             <StackPanel VerticalAlignment="Center">
-                                                <Border HorizontalAlignment="Left" Style="{DynamicResource RbAudioNameOutlineStyle}">
+                                                <Border HorizontalAlignment="Left" Style="{DynamicResource EncoreAudioNameOutlineStyle}">
                                                     <TextBox MinWidth="200"
                                                              AutomationProperties.Name="Track name"
                                                              FontWeight="SemiBold"
@@ -133,7 +133,7 @@
                                                              Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
                                                              Unloaded="OnNameBoxUnloaded" />
                                                 </Border>
-                                                <TextBlock Style="{DynamicResource RbAudioSummaryStyle}" Text="{Binding Summary}" />
+                                                <TextBlock Style="{DynamicResource EncoreAudioSummaryStyle}" Text="{Binding Summary}" />
                                             </StackPanel>
                                         </DockPanel>
 
@@ -141,12 +141,12 @@
                                         <ItemsControl Margin="28,8,0,0" Focusable="False" ItemsSource="{Binding Sources}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border AutomationProperties.Name="{Binding Label}" Style="{DynamicResource RbAudioSourceRowStyle}">
+                                                    <Border AutomationProperties.Name="{Binding Label}" Style="{DynamicResource EncoreAudioSourceRowStyle}">
                                                         <Border.InputBindings>
                                                             <KeyBinding Command="{Binding RemoveCommand}" Key="Delete" />
                                                         </Border.InputBindings>
                                                         <DockPanel>
-                                                            <TextBlock DockPanel.Dock="Left" Style="{DynamicResource RbAudioGlyphStyle}" />
+                                                            <TextBlock DockPanel.Dock="Left" Style="{DynamicResource EncoreAudioGlyphStyle}" />
                                                             <Button Margin="8,0,0,0"
                                                                     AutomationProperties.Name="Sound options"
                                                                     Click="OnMenuButtonClick"
@@ -171,14 +171,14 @@
                                                                          AutomationProperties.Name="Sound level"
                                                                          DockPanel.Dock="Right"
                                                                          Maximum="1"
-                                                                         Style="{DynamicResource RbLevelMeterStyle}"
+                                                                         Style="{DynamicResource EncoreLevelMeterStyle}"
                                                                          Value="{Binding Level, Mode=OneWay}" />
                                                             <WrapPanel VerticalAlignment="Center">
                                                                 <TextBlock VerticalAlignment="Center" Text="{Binding Label}" />
-                                                                <TextBlock Style="{DynamicResource RbAudioCaptionStyle}" Text="{Binding Kind}" />
+                                                                <TextBlock Style="{DynamicResource EncoreAudioCaptionStyle}" Text="{Binding Kind}" />
                                                                 <TextBlock Margin="8,0,0,0"
                                                                            VerticalAlignment="Center"
-                                                                           Style="{DynamicResource RbSettingsErrorTextStyle}"
+                                                                           Style="{DynamicResource EncoreSettingsErrorTextStyle}"
                                                                            Text="{Binding Note}"
                                                                            Visibility="{Binding HasNote, Converter={StaticResource Visible}}" />
                                                             </WrapPanel>
@@ -198,9 +198,9 @@
                                                   IsChecked="{Binding MuteAffected}"
                                                   Visibility="{Binding HasMicrophone, Converter={StaticResource Visible}}" />
                                         <TextBlock Margin="28,8,0,0"
-                                                   Style="{DynamicResource RbSettingsCautionTextStyle}"
+                                                   Style="{DynamicResource EncoreSettingsCautionTextStyle}"
                                                    Visibility="{Binding HasWarning, Converter={StaticResource Visible}}">
-                                            <Run FontFamily="{DynamicResource RbAudioGlyphFont}" Text="&#xE7BA;" />
+                                            <Run FontFamily="{DynamicResource EncoreAudioGlyphFont}" Text="&#xE7BA;" />
                                             <Run Text="{Binding Warning, Mode=OneWay}" />
                                         </TextBlock>
                                     </StackPanel>
@@ -210,7 +210,7 @@
                     </ItemsControl>
 
                     <TextBlock Margin="0,0,0,8"
-                               Style="{DynamicResource RbSettingsCautionTextStyle}"
+                               Style="{DynamicResource EncoreSettingsCautionTextStyle}"
                                Text="No tracks — Clips will have video only"
                                Visibility="{Binding HasNoTracks, Converter={StaticResource Visible}}" />
                     <Button Margin="0,4,0,8"
@@ -228,7 +228,7 @@
                IsOpen="{Binding IsPickerOpen, Mode=OneWay}"
                Placement="Bottom"
                StaysOpen="False">
-            <Border Style="{DynamicResource RbAudioPickerStyle}">
+            <Border Style="{DynamicResource EncoreAudioPickerStyle}">
                 <DockPanel>
                     <TextBox x:Name="PickerSearchBox"
                              Margin="0,0,0,8"
@@ -240,7 +240,7 @@
                              AutomationProperties.Name="Sounds"
                              Background="{DynamicResource SubtleFillColorTransparentBrush}"
                              BorderThickness="0"
-                             ItemContainerStyle="{DynamicResource RbAudioPickerItemStyle}"
+                             ItemContainerStyle="{DynamicResource EncoreAudioPickerItemStyle}"
                              ItemsSource="{Binding PickerRows}"
                              PreviewKeyDown="OnPickerListKeyDown"
                              PreviewMouseLeftButtonUp="OnPickerListClick"
@@ -251,7 +251,7 @@
                             <GroupStyle>
                                 <GroupStyle.HeaderTemplate>
                                     <DataTemplate>
-                                        <ContentControl Margin="8,8,0,4" Content="{Binding Name}" Style="{DynamicResource RbSectionHeaderStyle}" />
+                                        <ContentControl Margin="8,8,0,4" Content="{Binding Name}" Style="{DynamicResource EncoreSectionHeaderStyle}" />
                                     </DataTemplate>
                                 </GroupStyle.HeaderTemplate>
                             </GroupStyle>
@@ -259,14 +259,14 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <DockPanel>
-                                    <TextBlock DockPanel.Dock="Left" Style="{DynamicResource RbAudioGlyphStyle}" />
+                                    <TextBlock DockPanel.Dock="Left" Style="{DynamicResource EncoreAudioGlyphStyle}" />
                                     <ProgressBar Width="80"
                                                  Height="4"
                                                  Margin="12,0,0,0"
                                                  VerticalAlignment="Center"
                                                  DockPanel.Dock="Right"
                                                  Maximum="1"
-                                                 Style="{DynamicResource RbLevelMeterStyle}"
+                                                 Style="{DynamicResource EncoreLevelMeterStyle}"
                                                  Value="{Binding Level, Mode=OneWay}" />
                                     <TextBlock Margin="8,0,0,0"
                                                VerticalAlignment="Center"
@@ -277,10 +277,10 @@
                                     <StackPanel>
                                         <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Style="{DynamicResource RbAudioPickerCaptionStyle}" Text="{Binding Caption}" />
+                                            <TextBlock Style="{DynamicResource EncoreAudioPickerCaptionStyle}" Text="{Binding Caption}" />
                                             <TextBlock Margin="8,0,0,0"
                                                        FontSize="{DynamicResource CaptionTextBlockFontSize}"
-                                                       Style="{DynamicResource RbSettingsErrorTextStyle}"
+                                                       Style="{DynamicResource EncoreSettingsErrorTextStyle}"
                                                        Text="{Binding Note}" />
                                         </StackPanel>
                                     </StackPanel>

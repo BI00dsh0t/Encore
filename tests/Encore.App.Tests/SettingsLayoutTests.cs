@@ -41,7 +41,7 @@ public sealed partial class SettingsLayoutTests
             {
                 theme.Apply(which);
                 window.Show();
-                var card = (Style)window.FindResource("RbCardStyle");
+                var card = (Style)window.FindResource("EncoreCardStyle");
                 foreach (var (page, slug, sections) in expected)
                 {
                     model.SelectedNavItem = model.NavItems.First(i => i.Page == page);
@@ -102,8 +102,8 @@ public sealed partial class SettingsLayoutTests
             {
                 theme.Apply(which);
                 window.Show();
-                var card = (Style)window.FindResource("RbCardStyle");
-                var meter = (Style)window.FindResource("RbLevelMeterStyle");
+                var card = (Style)window.FindResource("EncoreCardStyle");
+                var meter = (Style)window.FindResource("EncoreLevelMeterStyle");
                 var accent = window.FindResource("AccentButtonStyle");
                 foreach (var (page, slug, sections) in expected)
                 {

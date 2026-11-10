@@ -9,15 +9,15 @@
         <theme:EmptyToCollapsedConverter x:Key="Collapsed" />
     </UserControl.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
-            <HeaderedContentControl Header="Clips folder" Style="{DynamicResource RbSettingsSectionStyle}">
+        <theme:SettingsContent Style="{DynamicResource EncoreSettingsContentStyle}">
+            <HeaderedContentControl Header="Clips folder" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
                     <settings:FolderPickerView x:Name="ClipsFolderPicker" DataContext="{Binding ClipsFolder}" />
-                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding FolderSizeText}" />
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding FolderSizeText}" />
                 </StackPanel>
             </HeaderedContentControl>
 
-            <HeaderedContentControl Header="Cleanup" Style="{DynamicResource RbSettingsSectionStyle}">
+            <HeaderedContentControl Header="Cleanup" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -42,12 +42,12 @@
                                   IsChecked="{Binding AgeLimitEnabled}" />
                         <TextBox Grid.Row="1" Grid.Column="1" Margin="0,4" Text="{Binding AgeLimitText}" />
                     </Grid>
-                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}"
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
                                Text="Cleanup deletes the oldest files permanently, not to the Recycle Bin." />
-                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}"
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
                                Text="Cleanup never deletes a Favourite or a file being written." />
                     <TextBlock Margin="0,8,0,0"
-                               Style="{DynamicResource RbSettingsErrorTextStyle}"
+                               Style="{DynamicResource EncoreSettingsErrorTextStyle}"
                                Text="{Binding CleanupBlockedText}"
                                Visibility="{Binding CleanupBlockedText, Converter={StaticResource Collapsed}}" />
                 </StackPanel>

@@ -45,10 +45,10 @@
     <SolidColorBrush x:Key="SystemFillColorSuccessBrush" Color="#4ADE80" />
     <SolidColorBrush x:Key="FocusStrokeColorOuterBrush" Color="#2DD4BF" />
     <SolidColorBrush x:Key="FocusStrokeColorInnerBrush" Color="#0A0B0E" />
-    <SolidColorBrush x:Key="RbAccentSubtleBrush" Color="#1A2DD4BF" />
-    <SolidColorBrush x:Key="RbLibraryRowSelectedBrush" Color="#1A2DD4BF" />
-    <SolidColorBrush x:Key="RbRecordBrush" Color="#FF4655" />
-    <SolidColorBrush x:Key="RbOverlayCardBrush" Color="#E61E222A" />
+    <SolidColorBrush x:Key="EncoreAccentSubtleBrush" Color="#1A2DD4BF" />
+    <SolidColorBrush x:Key="EncoreLibraryRowSelectedBrush" Color="#1A2DD4BF" />
+    <SolidColorBrush x:Key="EncoreRecordBrush" Color="#FF4655" />
+    <SolidColorBrush x:Key="EncoreOverlayCardBrush" Color="#E61E222A" />
 
     <!-- Fluent's Window style paints these: bg-base and text-primary. -->
     <StaticResource x:Key="WindowBackground" ResourceKey="SolidBackgroundFillColorBaseBrush" />
@@ -57,11 +57,11 @@
     <!-- Shapes -->
     <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
     <CornerRadius x:Key="OverlayCornerRadius">4</CornerRadius>
-    <CornerRadius x:Key="RbSmallCornerRadius">2</CornerRadius>
-    <CornerRadius x:Key="RbNavItemCornerRadius">0</CornerRadius>
+    <CornerRadius x:Key="EncoreSmallCornerRadius">2</CornerRadius>
+    <CornerRadius x:Key="EncoreNavItemCornerRadius">0</CornerRadius>
 
-    <theme:UppercaseConverter x:Key="RbUppercase" />
-    <FontFamily x:Key="RbFontFamily">Segoe UI</FontFamily>
+    <theme:UppercaseConverter x:Key="EncoreUppercase" />
+    <FontFamily x:Key="EncoreFontFamily">Segoe UI</FontFamily>
 
     <!-- Focus visual: 2 px focus-outer outside 1 px focus-inner, the control's corner plus 2. -->
     <Style x:Key="DefaultControlFocusVisualStyle">
@@ -79,63 +79,63 @@
 
     <!-- Typography -->
     <Style TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource RbFontFamily}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncoreFontFamily}" />
     </Style>
     <Style x:Key="CaptionTextBlockStyle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource RbFontFamily}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncoreFontFamily}" />
         <Setter Property="FontSize" Value="12" />
     </Style>
     <Style x:Key="BodyTextBlockStyle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource RbFontFamily}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncoreFontFamily}" />
         <Setter Property="FontSize" Value="14" />
     </Style>
     <Style x:Key="BodyStrongTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
         <Setter Property="FontWeight" Value="Bold" />
     </Style>
     <Style x:Key="SubtitleTextBlockStyle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource RbFontFamily}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncoreFontFamily}" />
         <Setter Property="FontSize" Value="20" />
         <Setter Property="FontWeight" Value="Bold" />
     </Style>
-    <Style x:Key="RbTextStyleBase" TargetType="ContentControl">
+    <Style x:Key="EncoreTextStyleBase" TargetType="ContentControl">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
-        <Setter Property="FontFamily" Value="{StaticResource RbFontFamily}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncoreFontFamily}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContentControl">
-                    <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource RbUppercase}}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EncoreUppercase}}" TextTrimming="CharacterEllipsis" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="RbSectionHeaderStyle" TargetType="ContentControl" BasedOn="{StaticResource RbTextStyleBase}">
+    <Style x:Key="EncoreSectionHeaderStyle" TargetType="ContentControl" BasedOn="{StaticResource EncoreTextStyleBase}">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     </Style>
-    <Style x:Key="RbPageTitleStyle" TargetType="ContentControl" BasedOn="{StaticResource RbTextStyleBase}">
+    <Style x:Key="EncorePageTitleStyle" TargetType="ContentControl" BasedOn="{StaticResource EncoreTextStyleBase}">
         <Setter Property="FontSize" Value="26" />
         <Setter Property="FontWeight" Value="Black" />
     </Style>
-    <Style x:Key="RbBrandStyle" TargetType="ContentControl" BasedOn="{StaticResource RbTextStyleBase}">
+    <Style x:Key="EncoreBrandStyle" TargetType="ContentControl" BasedOn="{StaticResource EncoreTextStyleBase}">
         <Setter Property="FontSize" Value="15" />
         <Setter Property="FontWeight" Value="Black" />
     </Style>
 
     <!-- What every Gaming control starts from. -->
-    <Style x:Key="RbGamingControl" TargetType="Control">
+    <Style x:Key="EncoreGamingControl" TargetType="Control">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
-        <Setter Property="FontFamily" Value="{StaticResource RbFontFamily}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncoreFontFamily}" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
     </Style>
 
     <!-- Button: uppercase Bold 13 labels; states as Style triggers, so Accent can restate them. -->
-    <Style TargetType="Button" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="Button" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -155,7 +155,7 @@
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          Content="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource RbUppercase}}"
+                                          Content="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EncoreUppercase}}"
                                           ContentTemplate="{TemplateBinding ContentTemplate}"
                                           RecognizesAccessKey="True" />
                     </Border>
@@ -202,7 +202,7 @@
     </Style>
 
     <!-- Toggle button: muted label; checked is accent-subtle with an accent border and label. -->
-    <Style TargetType="ToggleButton" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="ToggleButton" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -223,7 +223,7 @@
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          Content="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource RbUppercase}}"
+                                          Content="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EncoreUppercase}}"
                                           ContentTemplate="{TemplateBinding ContentTemplate}"
                                           RecognizesAccessKey="True" />
                     </Border>
@@ -239,7 +239,7 @@
                 <Setter Property="Background" Value="{DynamicResource ControlFillColorTertiaryBrush}" />
             </Trigger>
             <Trigger Property="IsChecked" Value="True">
-                <Setter Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" />
+                <Setter Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
                 <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
             </Trigger>
@@ -266,7 +266,7 @@
     </Style>
 
     <!-- Text box: the accent underline is its focus cue, so it has no separate focus ring. -->
-    <Style TargetType="TextBox" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="TextBox" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
@@ -326,7 +326,7 @@
     </Style>
 
     <!-- Scroll bar: a thin thumb with no track or arrows; wider and solid on hover. -->
-    <Style x:Key="RbScrollBarPageButton" TargetType="RepeatButton">
+    <Style x:Key="EncoreScrollBarPageButton" TargetType="RepeatButton">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
@@ -338,7 +338,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="RbScrollBarThumb" TargetType="Thumb">
+    <Style x:Key="EncoreScrollBarThumb" TargetType="Thumb">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
@@ -367,13 +367,13 @@
                     <Border x:Name="Rail" Background="Transparent" CornerRadius="4">
                         <Track x:Name="PART_Track" IsDirectionReversed="True">
                             <Track.DecreaseRepeatButton>
-                                <RepeatButton Command="ScrollBar.PageUpCommand" Style="{StaticResource RbScrollBarPageButton}" />
+                                <RepeatButton Command="ScrollBar.PageUpCommand" Style="{StaticResource EncoreScrollBarPageButton}" />
                             </Track.DecreaseRepeatButton>
                             <Track.IncreaseRepeatButton>
-                                <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource RbScrollBarPageButton}" />
+                                <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource EncoreScrollBarPageButton}" />
                             </Track.IncreaseRepeatButton>
                             <Track.Thumb>
-                                <Thumb x:Name="Thumb" Width="4" HorizontalAlignment="Center" Opacity="0.6" Style="{StaticResource RbScrollBarThumb}" />
+                                <Thumb x:Name="Thumb" Width="4" HorizontalAlignment="Center" Opacity="0.6" Style="{StaticResource EncoreScrollBarThumb}" />
                             </Track.Thumb>
                         </Track>
                     </Border>
@@ -399,13 +399,13 @@
                             <Border x:Name="Rail" Background="Transparent" CornerRadius="4">
                                 <Track x:Name="PART_Track">
                                     <Track.DecreaseRepeatButton>
-                                        <RepeatButton Command="ScrollBar.PageLeftCommand" Style="{StaticResource RbScrollBarPageButton}" />
+                                        <RepeatButton Command="ScrollBar.PageLeftCommand" Style="{StaticResource EncoreScrollBarPageButton}" />
                                     </Track.DecreaseRepeatButton>
                                     <Track.IncreaseRepeatButton>
-                                        <RepeatButton Command="ScrollBar.PageRightCommand" Style="{StaticResource RbScrollBarPageButton}" />
+                                        <RepeatButton Command="ScrollBar.PageRightCommand" Style="{StaticResource EncoreScrollBarPageButton}" />
                                     </Track.IncreaseRepeatButton>
                                     <Track.Thumb>
-                                        <Thumb x:Name="Thumb" Height="4" VerticalAlignment="Center" Opacity="0.6" Style="{StaticResource RbScrollBarThumb}" />
+                                        <Thumb x:Name="Thumb" Height="4" VerticalAlignment="Center" Opacity="0.6" Style="{StaticResource EncoreScrollBarThumb}" />
                                     </Track.Thumb>
                                 </Track>
                             </Border>
@@ -472,7 +472,7 @@
     </Style>
 
     <!-- Combo box and its items. -->
-    <Style x:Key="RbComboBoxToggle" TargetType="ToggleButton">
+    <Style x:Key="EncoreComboBoxToggle" TargetType="ToggleButton">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
@@ -485,7 +485,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style TargetType="ComboBox" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="ComboBox" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -504,7 +504,7 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{DynamicResource ControlCornerRadius}" />
-                        <ToggleButton IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Style="{StaticResource RbComboBoxToggle}" />
+                        <ToggleButton IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Style="{StaticResource EncoreComboBoxToggle}" />
                         <DockPanel Margin="{TemplateBinding Padding}" IsHitTestVisible="False">
                             <Path x:Name="Chevron"
                                   Margin="8,0,0,0"
@@ -585,7 +585,7 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" />
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" />
                             <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
@@ -601,7 +601,7 @@
     </Style>
 
     <!-- Check box: 18 px box, accent when checked. The App has no three-state boxes. -->
-    <Style TargetType="CheckBox" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="CheckBox" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="8,0,0,0" />
         <Setter Property="MinHeight" Value="24" />
@@ -622,7 +622,7 @@
                                 Background="Transparent"
                                 BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}"
                                 BorderThickness="1.5"
-                                CornerRadius="{DynamicResource RbSmallCornerRadius}">
+                                CornerRadius="{DynamicResource EncoreSmallCornerRadius}">
                             <Path x:Name="Tick"
                                   Data="M2.5,7.5 L6,11 L12.5,3.5"
                                   Stroke="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
@@ -683,7 +683,7 @@
     </Style>
 
     <!-- Radio button: 18 px ring, an 8 px accent dot when checked. -->
-    <Style TargetType="RadioButton" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="RadioButton" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="8,0,0,0" />
         <Setter Property="MinHeight" Value="24" />
@@ -731,7 +731,7 @@
     </Style>
 
     <!-- Slider: 4 px track, accent value side, 12x18 thumb. -->
-    <Style x:Key="RbSliderTrackButton" TargetType="RepeatButton">
+    <Style x:Key="EncoreSliderTrackButton" TargetType="RepeatButton">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
@@ -746,7 +746,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="RbSliderValueButton" TargetType="RepeatButton" BasedOn="{StaticResource RbSliderTrackButton}">
+    <Style x:Key="EncoreSliderValueButton" TargetType="RepeatButton" BasedOn="{StaticResource EncoreSliderTrackButton}">
         <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
         <Style.Triggers>
             <Trigger Property="IsEnabled" Value="False">
@@ -754,7 +754,7 @@
             </Trigger>
         </Style.Triggers>
     </Style>
-    <Style x:Key="RbSliderThumb" TargetType="Thumb">
+    <Style x:Key="EncoreSliderThumb" TargetType="Thumb">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="Width" Value="12" />
         <Setter Property="Height" Value="18" />
@@ -762,7 +762,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="{DynamicResource RbSmallCornerRadius}" />
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -778,7 +778,7 @@
             </Trigger>
         </Style.Triggers>
     </Style>
-    <Style TargetType="Slider" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="Slider" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="Background" Value="{DynamicResource ControlStrongFillColorDefaultBrush}" />
         <Setter Property="MinHeight" Value="24" />
         <Setter Property="Template">
@@ -786,13 +786,13 @@
                 <ControlTemplate TargetType="Slider">
                     <Track x:Name="PART_Track" VerticalAlignment="Center">
                         <Track.DecreaseRepeatButton>
-                            <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Style="{StaticResource RbSliderValueButton}" />
+                            <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Style="{StaticResource EncoreSliderValueButton}" />
                         </Track.DecreaseRepeatButton>
                         <Track.IncreaseRepeatButton>
-                            <RepeatButton x:Name="Rest" Background="{TemplateBinding Background}" Command="{x:Static Slider.IncreaseLarge}" Style="{StaticResource RbSliderTrackButton}" />
+                            <RepeatButton x:Name="Rest" Background="{TemplateBinding Background}" Command="{x:Static Slider.IncreaseLarge}" Style="{StaticResource EncoreSliderTrackButton}" />
                         </Track.IncreaseRepeatButton>
                         <Track.Thumb>
-                            <Thumb Style="{StaticResource RbSliderThumb}" />
+                            <Thumb Style="{StaticResource EncoreSliderThumb}" />
                         </Track.Thumb>
                     </Track>
                 </ControlTemplate>
@@ -806,7 +806,7 @@
     </Style>
 
     <!-- List box, list view and their items. -->
-    <Style TargetType="ListBox" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="ListBox" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
@@ -881,7 +881,7 @@
                             <Setter TargetName="Hover" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Selection" Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" />
+                            <Setter TargetName="Selection" Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" />
                             <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
@@ -899,7 +899,7 @@
     <Style TargetType="ContextMenu">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="FontFamily" Value="{StaticResource RbFontFamily}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncoreFontFamily}" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorQuarternaryBrush}" />
@@ -937,9 +937,9 @@
                     <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="{TemplateBinding Padding}">
                         <Grid VerticalAlignment="Center">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="RbMenuCheck" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="EncoreMenuCheck" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="RbMenuGesture" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="EncoreMenuGesture" />
                             </Grid.ColumnDefinitions>
                             <TextBlock x:Name="Check"
                                        Width="20"
@@ -992,7 +992,7 @@
     <Style TargetType="ToolTip">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="HasDropShadow" Value="False" />
-        <Setter Property="FontFamily" Value="{StaticResource RbFontFamily}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncoreFontFamily}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorQuarternaryBrush}" />
@@ -1022,7 +1022,7 @@
     </Style>
 
     <!-- Tab control: uppercase muted headers, accent with an underline (a left bar when the strip is on the left). -->
-    <Style TargetType="TabControl" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="TabControl" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Template">
@@ -1067,7 +1067,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style TargetType="TabItem" BasedOn="{StaticResource RbGamingControl}">
+    <Style TargetType="TabItem" BasedOn="{StaticResource EncoreGamingControl}">
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="SemiBold" />
@@ -1079,7 +1079,7 @@
                         <ContentPresenter Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="Left"
                                           VerticalAlignment="Center"
-                                          Content="{Binding Header, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource RbUppercase}}"
+                                          Content="{Binding Header, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EncoreUppercase}}"
                                           ContentTemplate="{TemplateBinding HeaderTemplate}"
                                           RecognizesAccessKey="True" />
                         <Border x:Name="Marker"
@@ -1126,8 +1126,8 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ProgressBar">
                     <Grid>
-                        <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource RbSmallCornerRadius}" />
-                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="{DynamicResource RbSmallCornerRadius}" />
+                        <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
+                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>

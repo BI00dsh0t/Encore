@@ -6,7 +6,7 @@
                     xmlns:local="clr-namespace:Encore.App.Library">
 
     <!-- Creator-only chrome deliberately replaces theme button and field templates. -->
-    <Style x:Key="RbClipButtonStyle" TargetType="Button">
+    <Style x:Key="EncoreClipButtonStyle" TargetType="Button">
         <Setter Property="FontFamily" Value="Segoe UI" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Padding" Value="10,7" /><Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -23,11 +23,11 @@
             </ControlTemplate.Triggers>
         </ControlTemplate></Setter.Value></Setter>
     </Style>
-    <Style x:Key="RbClipToolButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipButtonStyle}">
+    <Style x:Key="EncoreClipToolButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipButtonStyle}">
         <Setter Property="Padding" Value="7,5" /><Setter Property="Width" Value="32" /><Setter Property="Height" Value="32" />
     </Style>
-    <Style x:Key="RbClipSkipButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipToolButtonStyle}"><Setter Property="Width" Value="34" /><Setter Property="Height" Value="34" /></Style>
-    <Style x:Key="RbClipTransportPlayStyle" TargetType="Button">
+    <Style x:Key="EncoreClipSkipButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipToolButtonStyle}"><Setter Property="Width" Value="34" /><Setter Property="Height" Value="34" /></Style>
+    <Style x:Key="EncoreClipTransportPlayStyle" TargetType="Button">
         <Setter Property="Width" Value="36" /><Setter Property="Height" Value="36" /><Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" /><Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" CornerRadius="18" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"><Path x:Name="Icon" Width="16" Height="16" Stretch="Uniform" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5" Data="M 4,1 L 14,8 L 4,15 Z" /></Border><ControlTemplate.Triggers>
@@ -35,34 +35,34 @@
          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ControlFillColorTertiaryBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
         </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
-    <Style x:Key="RbClipIconStyle" TargetType="Path">
+    <Style x:Key="EncoreClipIconStyle" TargetType="Path">
         <Setter Property="Width" Value="16" /><Setter Property="Height" Value="16" /><Setter Property="Stretch" Value="Uniform" />
         <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" /><Setter Property="StrokeThickness" Value="1.5" />
         <Setter Property="StrokeStartLineCap" Value="Round" /><Setter Property="StrokeEndLineCap" Value="Round" /><Setter Property="StrokeLineJoin" Value="Round" />
     </Style>
-    <Style x:Key="RbClipPreviewButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipButtonStyle}">
+    <Style x:Key="EncoreClipPreviewButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipButtonStyle}">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
     </Style>
-    <Style x:Key="RbClipPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipButtonStyle}">
+    <Style x:Key="EncoreClipPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipButtonStyle}">
         <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" /><Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" /><Setter Property="FontWeight" Value="Medium" /><Setter Property="Padding" Value="14,9" />
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
             <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
             <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.94" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers>
         </ControlTemplate></Setter.Value></Setter>
     </Style>
-    <Style x:Key="RbClipJoinedButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipPrimaryButtonStyle}">
+    <Style x:Key="EncoreClipJoinedButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipPrimaryButtonStyle}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" CornerRadius="6,0,0,6" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
         </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
-    <Style x:Key="RbClipJoinedArrowButtonStyle" TargetType="Button" BasedOn="{StaticResource RbClipPrimaryButtonStyle}">
+    <Style x:Key="EncoreClipJoinedArrowButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipPrimaryButtonStyle}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" CornerRadius="0,6,6,0" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
         </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
-    <Style x:Key="RbClipInputStyle" TargetType="TextBox">
+    <Style x:Key="EncoreClipInputStyle" TargetType="TextBox">
         <Setter Property="FontFamily" Value="Segoe UI" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" /><Setter Property="Typography.NumeralAlignment" Value="Tabular" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" /><Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Padding" Value="10,8" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
@@ -70,13 +70,13 @@
             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
         </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
-    <Style x:Key="RbClipTimeInputStyle" TargetType="TextBox" BasedOn="{StaticResource RbClipInputStyle}"><Setter Property="Width" Value="115" /><Setter Property="Height" Value="34" /><Setter Property="MinHeight" Value="0" /><Setter Property="Padding" Value="8,7" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" /></Style>
-    <Style x:Key="RbClipTimeGroupStyle" TargetType="Border"><Setter Property="CornerRadius" Value="6" /><Setter Property="BorderThickness" Value="1" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" /><Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Style.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></Style.Triggers></Style>
-    <Style x:Key="RbClipMenuStyle" TargetType="ContextMenu"><Setter Property="OverridesDefaultStyle" Value="True" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu"><Border Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="9" Padding="5"><Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.2" /></Border.Effect><StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" /></Border></ControlTemplate></Setter.Value></Setter></Style>
+    <Style x:Key="EncoreClipTimeInputStyle" TargetType="TextBox" BasedOn="{StaticResource EncoreClipInputStyle}"><Setter Property="Width" Value="115" /><Setter Property="Height" Value="34" /><Setter Property="MinHeight" Value="0" /><Setter Property="Padding" Value="8,7" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" /></Style>
+    <Style x:Key="EncoreClipTimeGroupStyle" TargetType="Border"><Setter Property="CornerRadius" Value="6" /><Setter Property="BorderThickness" Value="1" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" /><Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Style.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></Style.Triggers></Style>
+    <Style x:Key="EncoreClipMenuStyle" TargetType="ContextMenu"><Setter Property="OverridesDefaultStyle" Value="True" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu"><Border Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="9" Padding="5"><Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.2" /></Border.Effect><StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" /></Border></ControlTemplate></Setter.Value></Setter></Style>
 
 
     <!-- Scoped by the creator's embedded PlayerView resources; ordinary players keep their templates. -->
-    <ControlTemplate x:Key="RbClipPlaybackTemplate" TargetType="ButtonBase">
+    <ControlTemplate x:Key="EncoreClipPlaybackTemplate" TargetType="ButtonBase">
         <Border x:Name="Chrome" CornerRadius="6" Background="{TemplateBinding Background}">
             <Path x:Name="Icon" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
                   Stroke="{TemplateBinding Foreground}" StrokeThickness="1.4" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
@@ -93,19 +93,19 @@
         </ControlTemplate.Triggers>
     </ControlTemplate>
     <!-- The clip creator uses the same semantic tokens in both looks. -->
-    <Style x:Key="RbClipWaveformStyle" TargetType="local:WaveformView">
+    <Style x:Key="EncoreClipWaveformStyle" TargetType="local:WaveformView">
         <Setter Property="WaveBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
         <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
         <Setter Property="RulerBrush" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="SurfaceBrush" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
-        <Setter Property="PlayheadBrush" Value="{DynamicResource RbRecordBrush}" />
+        <Setter Property="PlayheadBrush" Value="{DynamicResource EncoreRecordBrush}" />
         <Setter Property="GripBrush" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
         <Setter Property="DividerBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
         <Setter Property="VeilBrush" Value="{DynamicResource SolidBackgroundFillColorBaseBrush}" />
     </Style>
 
     <!-- Library row: a card that takes the hover fill on hover and, when selected, the selected brush with the accent bar. -->
-    <Style x:Key="RbLibraryRowStyle" TargetType="Border">
+    <Style x:Key="EncoreLibraryRowStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -117,19 +117,19 @@
                 <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
             </Trigger>
             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                <Setter Property="Background" Value="{DynamicResource RbLibraryRowSelectedBrush}" />
+                <Setter Property="Background" Value="{DynamicResource EncoreLibraryRowSelectedBrush}" />
             </DataTrigger>
         </Style.Triggers>
     </Style>
 
     <!-- The selected row's 3 px accent bar on the card's left edge, as the nav item's; square under Gaming dark. -->
-    <Style x:Key="RbLibrarySelectionBarStyle" TargetType="Border">
+    <Style x:Key="EncoreLibrarySelectionBarStyle" TargetType="Border">
         <Setter Property="Width" Value="3" />
         <Setter Property="Margin" Value="-7,8,0,8" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="IsHitTestVisible" Value="False" />
         <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RbNavItemCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreNavItemCornerRadius}" />
         <Setter Property="Visibility" Value="Collapsed" />
         <Style.Triggers>
             <DataTrigger Binding="{Binding IsSelected}" Value="True">
@@ -139,7 +139,7 @@
     </Style>
 
     <!-- The focused row's ring, shown while the row is the page's focused one and keyboard focus is in the list. -->
-    <Style x:Key="RbLibraryFocusRingStyle" TargetType="Border">
+    <Style x:Key="EncoreLibraryFocusRingStyle" TargetType="Border">
         <Setter Property="Margin" Value="0,0,0,6" />
         <Setter Property="BorderThickness" Value="2" />
         <Setter Property="BorderBrush" Value="{DynamicResource FocusStrokeColorOuterBrush}" />
@@ -158,7 +158,7 @@
     </Style>
 
     <!-- The list: transparent, borderless, one virtualized panel; the background takes clicks below the rows. -->
-    <Style x:Key="RbLibraryListStyle" TargetType="ListBox">
+    <Style x:Key="EncoreLibraryListStyle" TargetType="ListBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
@@ -194,7 +194,7 @@
     </Style>
 
     <!-- The list's containers: only the content, no selection look of their own; a group header can't take focus. -->
-    <Style x:Key="RbLibraryItemContainerStyle" TargetType="ListBoxItem">
+    <Style x:Key="EncoreLibraryItemContainerStyle" TargetType="ListBoxItem">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Background" Value="Transparent" />
@@ -213,7 +213,7 @@
     </Style>
 
     <!-- Command bar (DESIGN.md addendum Library command bar): a one-line card, 40 px tall in both states. -->
-    <Style x:Key="RbLibraryCommandBarStyle" TargetType="Border">
+    <Style x:Key="EncoreLibraryCommandBarStyle" TargetType="Border">
         <Setter Property="Height" Value="40" />
         <Setter Property="Margin" Value="0,0,0,8" />
         <Setter Property="Padding" Value="12,0,4,0" />
@@ -224,7 +224,7 @@
     </Style>
 
     <!-- The ✕: a subtle (transparent) button, fill-subtle on hover. -->
-    <Style x:Key="RbLibraryClearSelectionButtonStyle" TargetType="Button">
+    <Style x:Key="EncoreLibraryClearSelectionButtonStyle" TargetType="Button">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="Width" Value="32" />
         <Setter Property="Height" Value="32" />
@@ -253,23 +253,23 @@
     </Style>
 
     <!-- The bar's texts: the count in body-strong, the summary in body, captions in text-secondary. -->
-    <Style x:Key="RbLibraryBarTextStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreLibraryBarTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="14" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
-    <Style x:Key="RbLibraryBarCountStyle" TargetType="TextBlock" BasedOn="{StaticResource RbLibraryBarTextStyle}">
+    <Style x:Key="EncoreLibraryBarCountStyle" TargetType="TextBlock" BasedOn="{StaticResource EncoreLibraryBarTextStyle}">
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
-    <Style x:Key="RbLibraryBarCaptionStyle" TargetType="TextBlock" BasedOn="{StaticResource RbLibraryBarTextStyle}">
+    <Style x:Key="EncoreLibraryBarCaptionStyle" TargetType="TextBlock" BasedOn="{StaticResource EncoreLibraryBarTextStyle}">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Margin" Value="8,0,0,0" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     </Style>
 
     <!-- Group header: the section header in text-secondary, then a divider rule filling the row. -->
-    <Style x:Key="RbLibraryGroupHeaderStyle" TargetType="ContentControl">
+    <Style x:Key="EncoreLibraryGroupHeaderStyle" TargetType="ContentControl">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Margin" Value="0,12,0,6" />
@@ -284,7 +284,7 @@
                         <ContentControl VerticalAlignment="Center"
                                         Content="{TemplateBinding Content}"
                                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                        Style="{DynamicResource RbSectionHeaderStyle}" />
+                                        Style="{DynamicResource EncoreSectionHeaderStyle}" />
                         <Border Grid.Column="1"
                                 Height="1"
                                 Margin="12,0,0,0"
@@ -297,16 +297,16 @@
     </Style>
 
     <!-- Thumbnail: 128 × 72 in the small corner; the placeholder is fill-control with a ▶ in text-secondary. -->
-    <Style x:Key="RbLibraryThumbnailStyle" TargetType="Border">
+    <Style x:Key="EncoreLibraryThumbnailStyle" TargetType="Border">
         <Setter Property="Width" Value="128" />
         <Setter Property="Height" Value="72" />
         <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RbSmallCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreSmallCornerRadius}" />
     </Style>
-    <Style x:Key="RbLibraryThumbnailImageStyle" TargetType="Border">
-        <Setter Property="CornerRadius" Value="{DynamicResource RbSmallCornerRadius}" />
+    <Style x:Key="EncoreLibraryThumbnailImageStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreSmallCornerRadius}" />
     </Style>
-    <Style x:Key="RbLibraryPlaceholderGlyphStyle" TargetType="Path">
+    <Style x:Key="EncoreLibraryPlaceholderGlyphStyle" TargetType="Path">
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Data" Value="M 0,0 L 14,8 L 0,16 Z" />
@@ -314,9 +314,9 @@
     </Style>
 
     <!-- Length badge: bottom-right on the thumbnail; hidden while the length is unknown (or the file is being written). -->
-    <Style x:Key="RbLibraryLengthBadgeStyle" TargetType="Border">
+    <Style x:Key="EncoreLibraryLengthBadgeStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource ControlOnImageFillColorDefaultBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RbSmallCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreSmallCornerRadius}" />
         <Setter Property="Padding" Value="6,1" />
         <Setter Property="Margin" Value="4" />
         <Setter Property="HorizontalAlignment" Value="Right" />
@@ -327,32 +327,32 @@
             </DataTrigger>
         </Style.Triggers>
     </Style>
-    <Style x:Key="RbLibraryLengthTextStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreLibraryLengthTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
     </Style>
 
     <!-- Lock pill: "Saving…" while the file is being written. -->
-    <Style x:Key="RbLibraryLockPillStyle" TargetType="Border">
+    <Style x:Key="EncoreLibraryLockPillStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBackgroundBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RbSmallCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreSmallCornerRadius}" />
         <Setter Property="Padding" Value="6,1" />
         <Setter Property="Margin" Value="0,6,0,0" />
         <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
-    <Style x:Key="RbLibraryLockTextStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreLibraryLockTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
     </Style>
 
     <!-- The row's text: the name in body-strong, then "game · date · size" in caption. -->
-    <Style x:Key="RbLibraryNameStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreLibraryNameStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="14" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
-    <Style x:Key="RbLibraryMetaStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreLibraryMetaStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Margin" Value="0,2,0,0" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -360,14 +360,14 @@
     </Style>
 
     <!-- Filters: the combos' captions. -->
-    <Style x:Key="RbLibraryFilterCaptionStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreLibraryFilterCaptionStyle" TargetType="TextBlock">
         <Setter Property="Margin" Value="0,0,6,4" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     </Style>
 
     <!-- The search box's glyph, hint and clear button. -->
-    <Style x:Key="RbLibrarySearchGlyphStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreLibrarySearchGlyphStyle" TargetType="TextBlock">
         <Setter Property="Margin" Value="10,0,0,0" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="VerticalAlignment" Value="Center" />
@@ -376,14 +376,14 @@
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     </Style>
-    <Style x:Key="RbLibrarySearchHintStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreLibrarySearchHintStyle" TargetType="TextBlock">
         <Setter Property="Margin" Value="32,0,0,0" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="IsHitTestVisible" Value="False" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     </Style>
-    <Style x:Key="RbLibrarySearchClearStyle" TargetType="Button">
+    <Style x:Key="EncoreLibrarySearchClearStyle" TargetType="Button">
         <Setter Property="Margin" Value="0,0,4,0" />
         <Setter Property="Width" Value="24" />
         <Setter Property="Height" Value="24" />
@@ -397,7 +397,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Chrome" Background="{DynamicResource SubtleFillColorTransparentBrush}" CornerRadius="{DynamicResource RbSmallCornerRadius}">
+                    <Border x:Name="Chrome" Background="{DynamicResource SubtleFillColorTransparentBrush}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -411,18 +411,18 @@
     </Style>
 
     <!-- The last row action's failure, under the filters. -->
-    <Style x:Key="RbLibraryActionErrorStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreLibraryActionErrorStyle" TargetType="TextBlock">
         <Setter Property="Margin" Value="0,0,0,8" />
         <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
     <!-- The in-app player's page: the video on black, a thin seek bar and one control row; tokens only, in both looks. -->
-    <FontFamily x:Key="RbPlayerGlyphFont">Segoe MDL2 Assets, Segoe Fluent Icons</FontFamily>
-    <SolidColorBrush x:Key="RbPlayerBackdropBrush" Color="Black" />
+    <FontFamily x:Key="EncorePlayerGlyphFont">Segoe MDL2 Assets, Segoe Fluent Icons</FontFamily>
+    <SolidColorBrush x:Key="EncorePlayerBackdropBrush" Color="Black" />
 
-    <Style x:Key="RbPlayerBackdropStyle" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource RbPlayerBackdropBrush}" />
+    <Style x:Key="EncorePlayerBackdropStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource EncorePlayerBackdropBrush}" />
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}" />
         <Setter Property="ClipToBounds" Value="True" />
         <Style.Triggers>
@@ -432,8 +432,8 @@
         </Style.Triggers>
     </Style>
 
-    <Style x:Key="RbPlayerBarStyle" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource RbOverlayCardBrush}" />
+    <Style x:Key="EncorePlayerBarStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource EncoreOverlayCardBrush}" />
         <Setter Property="Padding" Value="16,10,16,6" />
         <Style.Triggers>
             <DataTrigger Binding="{Binding IsClipEditor, RelativeSource={RelativeSource AncestorType=local:PlayerView}}" Value="True">
@@ -449,14 +449,14 @@
     </Style>
 
     <!-- The time, elapsed / total: text-primary, tabular figures so it doesn't jitter as it counts. -->
-    <Style x:Key="RbPlayerTimeStyle" TargetType="TextBlock">
+    <Style x:Key="EncorePlayerTimeStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="14" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
     </Style>
 
-    <Style x:Key="RbPlayerMessageStyle" TargetType="TextBlock">
+    <Style x:Key="EncorePlayerMessageStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="TextWrapping" Value="Wrap" />
@@ -465,7 +465,7 @@
     </Style>
 
     <!-- A 40 px icon button: transparent, subtle fills on hover and press, the glyph in text-primary. -->
-    <ControlTemplate x:Key="RbPlayerIconTemplate" TargetType="ButtonBase">
+    <ControlTemplate x:Key="EncorePlayerIconTemplate" TargetType="ButtonBase">
         <Border x:Name="Fill"
                 Background="{TemplateBinding Background}"
                 CornerRadius="{DynamicResource ControlCornerRadius}">
@@ -490,26 +490,26 @@
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
-    <Style x:Key="RbPlayerIconButtonStyle" TargetType="Button">
+    <Style x:Key="EncorePlayerIconButtonStyle" TargetType="Button">
         <Setter Property="Width" Value="40" />
         <Setter Property="Height" Value="40" />
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-        <Setter Property="FontFamily" Value="{StaticResource RbPlayerGlyphFont}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncorePlayerGlyphFont}" />
         <Setter Property="FontSize" Value="18" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
-        <Setter Property="Template" Value="{StaticResource RbPlayerIconTemplate}" />
+        <Setter Property="Template" Value="{StaticResource EncorePlayerIconTemplate}" />
     </Style>
     <!-- The gear: the same button, held in the subtle fill while its menu is open. -->
-    <Style x:Key="RbPlayerIconToggleStyle" TargetType="ToggleButton">
+    <Style x:Key="EncorePlayerIconToggleStyle" TargetType="ToggleButton">
         <Setter Property="Width" Value="40" />
         <Setter Property="Height" Value="40" />
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-        <Setter Property="FontFamily" Value="{StaticResource RbPlayerGlyphFont}" />
+        <Setter Property="FontFamily" Value="{StaticResource EncorePlayerGlyphFont}" />
         <Setter Property="FontSize" Value="18" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
-        <Setter Property="Template" Value="{StaticResource RbPlayerIconTemplate}" />
+        <Setter Property="Template" Value="{StaticResource EncorePlayerIconTemplate}" />
         <Style.Triggers>
             <Trigger Property="IsChecked" Value="True">
                 <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
@@ -518,7 +518,7 @@
     </Style>
 
     <!-- The sliders' parts: a 4 px rounded line in a 16 px hit area, and a 12 px round thumb. -->
-    <Style x:Key="RbPlayerLineStyle" TargetType="RepeatButton">
+    <Style x:Key="EncorePlayerLineStyle" TargetType="RepeatButton">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
@@ -531,7 +531,7 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="RbPlayerThumbStyle" TargetType="Thumb">
+    <Style x:Key="EncorePlayerThumbStyle" TargetType="Thumb">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
@@ -541,47 +541,47 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <ControlTemplate x:Key="RbPlayerSliderTemplate" TargetType="Slider">
+    <ControlTemplate x:Key="EncorePlayerSliderTemplate" TargetType="Slider">
         <Grid Background="Transparent">
             <Track x:Name="PART_Track">
                 <Track.DecreaseRepeatButton>
-                    <RepeatButton Background="{TemplateBinding Foreground}" Command="Slider.DecreaseLarge" Style="{StaticResource RbPlayerLineStyle}" />
+                    <RepeatButton Background="{TemplateBinding Foreground}" Command="Slider.DecreaseLarge" Style="{StaticResource EncorePlayerLineStyle}" />
                 </Track.DecreaseRepeatButton>
                 <Track.IncreaseRepeatButton>
-                    <RepeatButton Background="{TemplateBinding BorderBrush}" Command="Slider.IncreaseLarge" Style="{StaticResource RbPlayerLineStyle}" />
+                    <RepeatButton Background="{TemplateBinding BorderBrush}" Command="Slider.IncreaseLarge" Style="{StaticResource EncorePlayerLineStyle}" />
                 </Track.IncreaseRepeatButton>
                 <Track.Thumb>
-                    <Thumb Style="{StaticResource RbPlayerThumbStyle}" />
+                    <Thumb Style="{StaticResource EncorePlayerThumbStyle}" />
                 </Track.Thumb>
             </Track>
         </Grid>
     </ControlTemplate>
     <!-- The seek bar: the played part in the accent (Foreground), the rest a strong stroke (BorderBrush). -->
-    <Style x:Key="RbPlayerSeekStyle" TargetType="Slider">
+    <Style x:Key="EncorePlayerSeekStyle" TargetType="Slider">
         <Setter Property="Height" Value="16" />
         <Setter Property="Foreground" Value="{DynamicResource AccentFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlStrongStrokeColorDisabledBrush}" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
-        <Setter Property="Template" Value="{StaticResource RbPlayerSliderTemplate}" />
+        <Setter Property="Template" Value="{StaticResource EncorePlayerSliderTemplate}" />
     </Style>
     <!-- The volume: its played part in the text colour, as the thumb. -->
-    <Style x:Key="RbPlayerVolumeStyle" TargetType="Slider">
+    <Style x:Key="EncorePlayerVolumeStyle" TargetType="Slider">
         <Setter Property="Height" Value="16" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlStrongStrokeColorDisabledBrush}" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
-        <Setter Property="Template" Value="{StaticResource RbPlayerSliderTemplate}" />
+        <Setter Property="Template" Value="{StaticResource EncorePlayerSliderTemplate}" />
     </Style>
 
     <!-- The gear menu's heading, "Audio track": caption size, text-secondary, not a choice. -->
-    <Style x:Key="RbPlayerMenuHeadingStyle" TargetType="TextBlock">
+    <Style x:Key="EncorePlayerMenuHeadingStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="TextAlignment" Value="Center" />
     </Style>
 
     <!-- Only the player's flat menu: the selected track has an accent check on the right. -->
-    <Style x:Key="RbPlayerMenuItemStyle" TargetType="MenuItem">
+    <Style x:Key="EncorePlayerMenuItemStyle" TargetType="MenuItem">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
@@ -626,5 +626,5 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="RbClipMenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource RbPlayerMenuItemStyle}"><Setter Property="Padding" Value="11" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" /></Style>
+    <Style x:Key="EncoreClipMenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource EncorePlayerMenuItemStyle}"><Setter Property="Padding" Value="11" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" /></Style>
 </ResourceDictionary>

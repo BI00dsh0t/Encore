@@ -5,14 +5,14 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:theme="clr-namespace:Encore.App.Theme">
 
-    <theme:UppercaseConverter x:Key="RbShellUppercase" />
+    <theme:UppercaseConverter x:Key="EncoreShellUppercase" />
 
     <!-- Nav items run the pane's full width, flush with its edge. -->
-    <Thickness x:Key="RbNavPanePadding">0,0,0,8</Thickness>
-    <Thickness x:Key="RbNavBrandMargin">16,16,16,24</Thickness>
+    <Thickness x:Key="EncoreNavPanePadding">0,0,0,8</Thickness>
+    <Thickness x:Key="EncoreNavBrandMargin">16,16,16,24</Thickness>
 
     <!-- The nav pane sits a step above bg-base with a divider on its right edge, so it reads as its own surface. -->
-    <Style x:Key="RbShellNavLayerStyle" TargetType="Border">
+    <Style x:Key="EncoreShellNavLayerStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="0,0,1,0" />
@@ -20,12 +20,12 @@
     </Style>
 
     <!-- The content stays on bg-base; the nav layer's edge marks the boundary. -->
-    <Style x:Key="RbShellContentLayerStyle" TargetType="Border">
+    <Style x:Key="EncoreShellContentLayerStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
     </Style>
 
     <!-- The status header's state line: body-strong, uppercase. -->
-    <Style x:Key="RbStatusStateStyle" TargetType="ContentControl">
+    <Style x:Key="EncoreStatusStateStyle" TargetType="ContentControl">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -34,22 +34,22 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContentControl">
-                    <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource RbShellUppercase}}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EncoreShellUppercase}}" TextWrapping="Wrap" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
 
     <!-- The Settings section label: caption, uppercase, text-disabled, so it never reads as a nav item. -->
-    <ControlTemplate x:Key="RbNavSectionTemplate" TargetType="ListBoxItem">
+    <ControlTemplate x:Key="EncoreNavSectionTemplate" TargetType="ListBoxItem">
         <TextBlock Margin="16,16,16,4"
                    FontSize="12"
                    Foreground="{DynamicResource TextFillColorDisabledBrush}"
-                   Text="{Binding Title, Converter={StaticResource RbShellUppercase}}" />
+                   Text="{Binding Title, Converter={StaticResource EncoreShellUppercase}}" />
     </ControlTemplate>
 
     <!-- Nav item: text-secondary, uppercase; selected is accent-subtle with a full-height accent bar. -->
-    <Style x:Key="RbNavItemStyle" TargetType="ListBoxItem">
+    <Style x:Key="EncoreNavItemStyle" TargetType="ListBoxItem">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
@@ -117,7 +117,7 @@
         </Setter>
         <Style.Triggers>
             <DataTrigger Binding="{Binding IsSection}" Value="True">
-                <Setter Property="Template" Value="{StaticResource RbNavSectionTemplate}" />
+                <Setter Property="Template" Value="{StaticResource EncoreNavSectionTemplate}" />
                 <Setter Property="Height" Value="NaN" />
                 <Setter Property="IsEnabled" Value="False" />
                 <Setter Property="Focusable" Value="False" />
@@ -129,7 +129,7 @@
             </DataTrigger>
         </Style.Triggers>
     </Style>
-    <Style x:Key="RbSettingsNavStyle" TargetType="ToggleButton"><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" />
+    <Style x:Key="EncoreSettingsNavStyle" TargetType="ToggleButton"><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="Height" Value="40" /><Setter Property="Margin" Value="4,8,4,0" /><Setter Property="Padding" Value="12,0" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -141,7 +141,7 @@
             <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
         </Grid><ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger>
-            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" /></Trigger>
+            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" /></Trigger>
         <Trigger Property="IsPressed" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
         <Style.Triggers><DataTrigger Binding="{Binding IsNavigationExpanded}" Value="False"><Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="Padding" Value="0" /></DataTrigger></Style.Triggers>
     </Style>

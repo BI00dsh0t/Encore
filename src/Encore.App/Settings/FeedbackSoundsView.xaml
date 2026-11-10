@@ -7,11 +7,11 @@
         <theme:EmptyToCollapsedConverter x:Key="Collapsed" />
     </UserControl.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
-            <HeaderedContentControl Header="Sounds" Style="{DynamicResource RbSettingsSectionStyle}">
+        <theme:SettingsContent Style="{DynamicResource EncoreSettingsContentStyle}">
+            <HeaderedContentControl Header="Sounds" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
                     <TextBlock Margin="0,0,0,8"
-                               Style="{DynamicResource RbSettingsErrorTextStyle}"
+                               Style="{DynamicResource EncoreSettingsErrorTextStyle}"
                                Text="{Binding CapturedWarning}"
                                Visibility="{Binding CapturedWarning, Converter={StaticResource Collapsed}}" />
                     <Grid>
@@ -19,7 +19,7 @@
                             <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Sound device" />
+                        <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Sound device" />
                         <ComboBox Grid.Column="1"
                                   Margin="0,4"
                                   DisplayMemberPath="Label"

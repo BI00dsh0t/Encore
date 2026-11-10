@@ -196,7 +196,7 @@ internal partial class MainWindow
             Page.SetCurrentValue(MarginProperty, new Thickness(0));
             ContentLayer.BorderThickness = new Thickness(0);
             ContentLayer.CornerRadius = new CornerRadius(0);
-            ContentLayer.SetResourceReference(Border.BackgroundProperty, "RbPlayerBackdropBrush");
+            ContentLayer.SetResourceReference(Border.BackgroundProperty, "EncorePlayerBackdropBrush");
 
             // Normal first, so the maximized borderless window covers the taskbar too.
             WindowState = System.Windows.WindowState.Normal;

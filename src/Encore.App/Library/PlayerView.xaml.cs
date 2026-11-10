@@ -342,10 +342,10 @@ internal partial class PlayerView
 
         CloseSettingsMenu();
         var menu = new ContextMenu { PlacementTarget = Gear, Placement = PlacementMode.Top };
-        var itemStyle = (Style)FindResource("RbPlayerMenuItemStyle");
+        var itemStyle = (Style)FindResource("EncorePlayerMenuItemStyle");
         menu.Items.Add(new MenuItem
         {
-            Header = new TextBlock { Text = "Audio track", Style = (Style)FindResource("RbPlayerMenuHeadingStyle") },
+            Header = new TextBlock { Text = "Audio track", Style = (Style)FindResource("EncorePlayerMenuHeadingStyle") },
             Style = itemStyle,
             Focusable = false,
             IsHitTestVisible = false,
