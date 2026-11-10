@@ -7,7 +7,7 @@ using Windows.Win32.System.Com;
 namespace Encore.Platform.Capture;
 
 /// <summary>DXGI's <c>IDXGIOutputDuplication</c> of the device adapter's output that shows a monitor.</summary>
-internal sealed unsafe class DxgiOutputDuplication(D3D11Device device, nint hmonitor) : IOutputDuplication
+internal sealed unsafe class DxgiOutputDuplication(D3D11Device device, nint monitor) : IOutputDuplication
 {
     public static readonly HRESULT DeviceRemoved = new(unchecked((int)0x887A0005)); // DXGI_ERROR_DEVICE_REMOVED
     public static readonly HRESULT DeviceReset = new(unchecked((int)0x887A0007));   // DXGI_ERROR_DEVICE_RESET
@@ -18,7 +18,7 @@ internal sealed unsafe class DxgiOutputDuplication(D3D11Device device, nint hmon
     private const int AcquireNextFrameSlot = 8;  // IDXGIOutputDuplication
     private const int ReleaseFrameSlot = 14;
 
-    private readonly HMONITOR _monitor = new((void*)hmonitor);
+    private readonly HMONITOR _monitor = new((void*)monitor);
     private IDXGIOutputDuplication* _duplication;
     private IDXGIResource* _resource;
     private ID3D11Texture2D* _texture;

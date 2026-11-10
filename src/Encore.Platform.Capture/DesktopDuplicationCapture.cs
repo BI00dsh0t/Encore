@@ -23,9 +23,9 @@ public sealed class DesktopDuplicationCapture : CaptureSource
     private bool _disposed;
 
     /// <summary>Frames are delivered at most 2 × fps a second; throws when the monitor isn't an output of the device's adapter.</summary>
-    public DesktopDuplicationCapture(D3D11Device device, nint hmonitor, int fps, CapturedFrameHandler onFrame, ILogger logger)
+    public DesktopDuplicationCapture(D3D11Device device, nint monitor, int fps, CapturedFrameHandler onFrame, ILogger logger)
         : this(
-            new DxgiOutputDuplication(device ?? throw new ArgumentNullException(nameof(device)), ValidMonitor(hmonitor)),
+            new DxgiOutputDuplication(device ?? throw new ArgumentNullException(nameof(device)), ValidMonitor(monitor)),
             fps,
             onFrame,
             logger)
@@ -134,8 +134,8 @@ public sealed class DesktopDuplicationCapture : CaptureSource
         // Called from the thread itself (a frame handler ending the session), it closes the handles as it exits.
     }
 
-    private static nint ValidMonitor(nint hmonitor) =>
-        hmonitor == 0 ? throw new ArgumentException("No monitor was given.", nameof(hmonitor)) : hmonitor;
+    private static nint ValidMonitor(nint monitor) =>
+        monitor == 0 ? throw new ArgumentException("No monitor was given.", nameof(monitor)) : monitor;
 
     private void Run()
     {

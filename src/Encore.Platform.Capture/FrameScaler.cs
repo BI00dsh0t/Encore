@@ -8,7 +8,7 @@ using Windows.Win32.System.Com;
 namespace Encore.Platform.Capture;
 
 /// <summary>Draws captured frames into the fixed output: fitted, centred, black bars. One thread draws at a time.</summary>
-public sealed unsafe class FrameScaler : IDisposable
+public sealed unsafe partial class FrameScaler : IDisposable
 {
     private const int InputCacheSize = 4;
 
@@ -65,9 +65,8 @@ public sealed unsafe class FrameScaler : IDisposable
     {
         // A simulated reset: the next device call fails, as on a real one.
         _device.ThrowIfSimulatedLoss();
-        var src = (ID3D11Texture2D*)source;
-        src->GetDesc(out var srcDesc);
-        var content = contentSize.Intersect(new VideoSize((int)srcDesc.Width, (int)srcDesc.Height));
+        ((ID3D11Texture2D*)source)->GetDesc(out var sourceDescription);
+        var content = contentSize.Intersect(new VideoSize((int)sourceDescription.Width, (int)sourceDescription.Height));
         if (content.Width <= 0 || content.Height <= 0)
         {
             _device.Clear(target, slice, 0f, 0f, 0f);
@@ -76,8 +75,8 @@ public sealed unsafe class FrameScaler : IDisposable
 
         if (!IsNv12 && content == Output)
         {
-            var box = new D3D11_BOX { left = 0, top = 0, front = 0, right = (uint)content.Width, bottom = (uint)content.Height, back = 1 };
-            _device.Context->CopySubresourceRegion((ID3D11Resource*)target, slice, 0, 0, 0, (ID3D11Resource*)src, 0, &box);
+            var box = D3D11Device.BoxOf(content);
+            _device.Context->CopySubresourceRegion((ID3D11Resource*)target, slice, 0, 0, 0, (ID3D11Resource*)source, 0, &box);
             return;
         }
 
@@ -86,7 +85,7 @@ public sealed unsafe class FrameScaler : IDisposable
             Rebuild(content);
         }
 
-        var input = InputView(source, srcDesc);
+        var input = InputView(source, sourceDescription);
         var output = OutputView(target, slice);
         var stream = new D3D11_VIDEO_PROCESSOR_STREAM { Enable = true, pInputSurface = input };
         _videoContext->VideoProcessorBlt(_processor, output, 0, 1, &stream);
@@ -107,6 +106,16 @@ public sealed unsafe class FrameScaler : IDisposable
         }
     }
 
+    private static void Release<T>(ref T* pointer)
+        where T : unmanaged
+    {
+        if (pointer is not null)
+        {
+            ((IUnknown*)pointer)->Release();
+            pointer = null;
+        }
+    }
+
     /// <summary>A processor for this content size: source rect the content, dest rect its letterbox, black around it.</summary>
     private void Rebuild(VideoSize content)
     {
@@ -115,8 +124,17 @@ public sealed unsafe class FrameScaler : IDisposable
         _outputs.Clear();
         Release(ref _processor);
         Release(ref _enumerator);
+        CreateProcessor(content);
+        var fit = Letterbox.Fit(content.Width, content.Height, Output.Width, Output.Height);
+        ConfigureStream(content, fit);
+        _processorContent = content;
+        _logger.LogInformation("Scaling {Content} into {Output} at {X},{Y} {Width}x{Height} ({Format})",
+            content, Output, fit.X, fit.Y, fit.Width, fit.Height, IsNv12 ? "NV12" : "BGRA");
+    }
 
-        var desc = new D3D11_VIDEO_PROCESSOR_CONTENT_DESC
+    private void CreateProcessor(VideoSize content)
+    {
+        var description = new D3D11_VIDEO_PROCESSOR_CONTENT_DESC
         {
             InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT.D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
             InputFrameRate = new DXGI_RATIONAL { Numerator = 60, Denominator = 1 },
@@ -128,16 +146,19 @@ public sealed unsafe class FrameScaler : IDisposable
             Usage = D3D11_VIDEO_USAGE.D3D11_VIDEO_USAGE_PLAYBACK_NORMAL,
         };
         ID3D11VideoProcessorEnumerator* enumerator = null;
-        _videoDevice->CreateVideoProcessorEnumerator(&desc, &enumerator);
+        _videoDevice->CreateVideoProcessorEnumerator(&description, &enumerator);
         _enumerator = enumerator;
 
         ID3D11VideoProcessor* processor = null;
         _videoDevice->CreateVideoProcessor(_enumerator, 0, &processor);
         _processor = processor;
+    }
 
-        var fit = Letterbox.Fit(content.Width, content.Height, Output.Width, Output.Height);
+    /// <summary>The content drawn into its letterbox, black around it, from full-range RGB to the output's colour space.</summary>
+    private void ConfigureStream(VideoSize content, LetterboxRect fit)
+    {
         var source = new RECT { left = 0, top = 0, right = content.Width, bottom = content.Height };
-        var dest = new RECT { left = fit.X, top = fit.Y, right = fit.X + fit.Width, bottom = fit.Y + fit.Height };
+        var destination = new RECT { left = fit.X, top = fit.Y, right = fit.X + fit.Width, bottom = fit.Y + fit.Height };
         var whole = new RECT { left = 0, top = 0, right = Output.Width, bottom = Output.Height };
         var black = new D3D11_VIDEO_COLOR();
         black.Anonymous.RGBA = new D3D11_VIDEO_COLOR_RGBA { R = 0f, G = 0f, B = 0f, A = 1f };
@@ -145,20 +166,16 @@ public sealed unsafe class FrameScaler : IDisposable
         _videoContext->VideoProcessorSetStreamFrameFormat(_processor, 0, D3D11_VIDEO_FRAME_FORMAT.D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
         _videoContext->VideoProcessorSetStreamAutoProcessingMode(_processor, 0, false);
         _videoContext->VideoProcessorSetStreamSourceRect(_processor, 0, true, &source);
-        _videoContext->VideoProcessorSetStreamDestRect(_processor, 0, true, &dest);
+        _videoContext->VideoProcessorSetStreamDestRect(_processor, 0, true, &destination);
         _videoContext->VideoProcessorSetOutputTargetRect(_processor, true, &whole);
         _videoContext->VideoProcessorSetOutputBackgroundColor(_processor, false, &black);
         _videoContext->VideoProcessorSetStreamColorSpace1(_processor, 0, DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
         _videoContext->VideoProcessorSetOutputColorSpace1(_processor, IsNv12
             ? DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709
             : DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
-
-        _processorContent = content;
-        _logger.LogInformation("Scaling {Content} into {Output} at {X},{Y} {Width}x{Height} ({Format})",
-            content, Output, fit.X, fit.Y, fit.Width, fit.Height, IsNv12 ? "NV12" : "BGRA");
     }
 
-    private ID3D11VideoProcessorInputView* InputView(nint source, D3D11_TEXTURE2D_DESC desc)
+    private ID3D11VideoProcessorInputView* InputView(nint source, D3D11_TEXTURE2D_DESC description)
     {
         if (!ForceCopyIn && _copyIn == 0)
         {
@@ -175,28 +192,15 @@ public sealed unsafe class FrameScaler : IDisposable
             }
         }
 
-        // The fallback: copy the frame into a texture of our own, which always takes a view.
-        var copySize = new VideoSize((int)desc.Width, (int)desc.Height);
-        if (_copyIn == 0 || _copyInSize != copySize)
+        return CopyInView(source, new VideoSize((int)description.Width, (int)description.Height));
+    }
+
+    /// <summary>The fallback: the frame copied into a texture of our own, which always takes a view.</summary>
+    private ID3D11VideoProcessorInputView* CopyInView(nint source, VideoSize size)
+    {
+        if (_copyIn == 0 || _copyInSize != size)
         {
-            if (_copyIn != 0)
-            {
-                _inputs.Remove(_copyIn);
-                D3D11Device.ReleaseTexture(_copyIn);
-            }
-
-            _copyIn = _device.CreateTexture(copySize);
-            if (_copyIn == 0)
-            {
-                throw new InvalidOperationException("Could not create the scaler's copy-in texture.");
-            }
-
-            _copyInSize = copySize;
-            if (!_copyInLogged)
-            {
-                _copyInLogged = true;
-                _logger.LogWarning("The captured texture can't be a VideoProcessor input; frames are copied in first");
-            }
+            ReplaceCopyIn(size);
         }
 
         _device.Context->CopySubresourceRegion((ID3D11Resource*)_copyIn, 0, 0, 0, 0, (ID3D11Resource*)source, 0, null);
@@ -215,14 +219,40 @@ public sealed unsafe class FrameScaler : IDisposable
         return created;
     }
 
+    private void ReplaceCopyIn(VideoSize size)
+    {
+        if (_copyIn != 0)
+        {
+            _inputs.Remove(_copyIn);
+            D3D11Device.ReleaseTexture(_copyIn);
+        }
+
+        _copyIn = _device.CreateTexture(size);
+        if (_copyIn == 0)
+        {
+            throw new InvalidOperationException("Could not create the scaler's copy-in texture.");
+        }
+
+        _copyInSize = size;
+        if (!_copyInLogged)
+        {
+            _copyInLogged = true;
+            _logger.LogWarning("The captured texture can't be a VideoProcessor input; frames are copied in first");
+        }
+    }
+
     private ID3D11VideoProcessorInputView* TryCreateInputView(nint texture)
     {
-        var desc = new D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC { FourCC = 0, ViewDimension = D3D11_VPIV_DIMENSION.D3D11_VPIV_DIMENSION_TEXTURE2D };
-        desc.Texture2D = new D3D11_TEX2D_VPIV { MipSlice = 0, ArraySlice = 0 };
+        var description = new D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC
+        {
+            FourCC = 0,
+            ViewDimension = D3D11_VPIV_DIMENSION.D3D11_VPIV_DIMENSION_TEXTURE2D,
+        };
+        description.Texture2D = new D3D11_TEX2D_VPIV { MipSlice = 0, ArraySlice = 0 };
         ID3D11VideoProcessorInputView* view = null;
         try
         {
-            _videoDevice->CreateVideoProcessorInputView((ID3D11Resource*)texture, _enumerator, &desc, &view);
+            _videoDevice->CreateVideoProcessorInputView((ID3D11Resource*)texture, _enumerator, &description, &view);
         }
         catch (Exception e) when (e.HResult < 0)
         {
@@ -239,99 +269,21 @@ public sealed unsafe class FrameScaler : IDisposable
             return (ID3D11VideoProcessorOutputView*)cached;
         }
 
-        ((ID3D11Texture2D*)target)->GetDesc(out var desc);
-        var outputDesc = new D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC();
-        if (desc.ArraySize > 1)
+        ((ID3D11Texture2D*)target)->GetDesc(out var targetDescription);
+        var description = new D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC();
+        if (targetDescription.ArraySize > 1)
         {
-            outputDesc.ViewDimension = D3D11_VPOV_DIMENSION.D3D11_VPOV_DIMENSION_TEXTURE2DARRAY;
-            outputDesc.Texture2DArray = new D3D11_TEX2D_ARRAY_VPOV { MipSlice = 0, FirstArraySlice = slice, ArraySize = 1 };
+            description.ViewDimension = D3D11_VPOV_DIMENSION.D3D11_VPOV_DIMENSION_TEXTURE2DARRAY;
+            description.Texture2DArray = new D3D11_TEX2D_ARRAY_VPOV { MipSlice = 0, FirstArraySlice = slice, ArraySize = 1 };
         }
         else
         {
-            outputDesc.ViewDimension = D3D11_VPOV_DIMENSION.D3D11_VPOV_DIMENSION_TEXTURE2D;
+            description.ViewDimension = D3D11_VPOV_DIMENSION.D3D11_VPOV_DIMENSION_TEXTURE2D;
         }
 
         ID3D11VideoProcessorOutputView* view = null;
-        _videoDevice->CreateVideoProcessorOutputView((ID3D11Resource*)target, _enumerator, &outputDesc, &view);
+        _videoDevice->CreateVideoProcessorOutputView((ID3D11Resource*)target, _enumerator, &description, &view);
         _outputs.Add(target, slice, (nint)view);
         return view;
-    }
-
-    private static void Release<T>(ref T* pointer)
-        where T : unmanaged
-    {
-        if (pointer is not null)
-        {
-            ((IUnknown*)pointer)->Release();
-            pointer = null;
-        }
-    }
-
-    /// <summary>A fixed set of views keyed by texture and slice, each holding its texture alive; when full, the oldest goes.</summary>
-    private sealed class ViewCache(int capacity)
-    {
-        private readonly nint[] _textures = new nint[capacity];
-        private readonly uint[] _slices = new uint[capacity];
-        private readonly nint[] _views = new nint[capacity];
-        private int _nextEviction;
-
-        public nint Find(nint texture, uint slice)
-        {
-            for (var i = 0; i < _views.Length; i++)
-            {
-                if (_views[i] != 0 && _textures[i] == texture && _slices[i] == slice)
-                {
-                    return _views[i];
-                }
-            }
-
-            return 0;
-        }
-
-        public void Add(nint texture, uint slice, nint view)
-        {
-            var free = Array.IndexOf(_views, (nint)0);
-            if (free < 0)
-            {
-                free = _nextEviction;
-                _nextEviction = (_nextEviction + 1) % _views.Length;
-                ReleaseAt(free);
-            }
-
-            ((IUnknown*)texture)->AddRef();
-            _textures[free] = texture;
-            _slices[free] = slice;
-            _views[free] = view;
-        }
-
-        public void Remove(nint texture)
-        {
-            for (var i = 0; i < _views.Length; i++)
-            {
-                if (_textures[i] == texture)
-                {
-                    ReleaseAt(i);
-                }
-            }
-        }
-
-        public void Clear()
-        {
-            for (var i = 0; i < _views.Length; i++)
-            {
-                ReleaseAt(i);
-            }
-        }
-
-        private void ReleaseAt(int index)
-        {
-            if (_views[index] != 0)
-            {
-                ((IUnknown*)_views[index])->Release();
-                ((IUnknown*)_textures[index])->Release();
-                _views[index] = 0;
-                _textures[index] = 0;
-            }
-        }
     }
 }
