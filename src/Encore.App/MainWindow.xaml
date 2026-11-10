@@ -29,6 +29,7 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
+        <Border x:Name="NavLayer" Style="{DynamicResource RbShellNavLayerStyle}" />
         <DockPanel x:Name="NavPane" Margin="{DynamicResource RbNavPanePadding}">
             <ToggleButton x:Name="NavigationToggle" DockPanel.Dock="Top" Height="36" Margin="4,8,4,0"
                           IsChecked="{Binding IsNavigationExpanded, Mode=TwoWay}"

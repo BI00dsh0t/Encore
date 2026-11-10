@@ -13,10 +13,17 @@
     <Thickness x:Key="RbNavPanePadding">4,0,4,8</Thickness>
     <Thickness x:Key="RbNavBrandMargin">12,16,12,16</Thickness>
 
-    <!-- The content column's layer: bg-layer over Mica, with a stroke-card top-left edge and corner. -->
+    <!-- The nav pane shows Mica straight through; the content layer's edge marks the boundary. -->
+    <Style x:Key="RbShellNavLayerStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
+    </Style>
+
+    <!-- The content column's layer: bg-layer over Mica, with a stroke-divider top-left edge and corner
+         (stroke-card is black and vanished against the nav pane in dark mode). -->
     <Style x:Key="RbShellContentLayerStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="BorderThickness" Value="1,1,0,0" />
         <Setter Property="CornerRadius" Value="8,0,0,0" />
     </Style>
