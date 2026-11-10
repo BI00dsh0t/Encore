@@ -20,10 +20,7 @@ public static unsafe class FFmpegLibrary
         "swscale-10.dll",
     ];
 
-    /// <summary>
-    /// <c>AVERROR(EAGAIN)</c> and <c>AVERROR_EOF</c>, read once: FFmpeg.AutoGen computes them on
-    /// every read, which allocates under NativeAOT, and the encoders test them for every packet (AD-7).
-    /// </summary>
+    /// <summary>Read once: FFmpeg.AutoGen computes these on every read, which allocates, and encoders test them per packet.</summary>
     internal static readonly int ErrorAgain = ffmpeg.AVERROR(ffmpeg.EAGAIN);
 
     internal static readonly int ErrorEof = ffmpeg.AVERROR_EOF;
@@ -48,10 +45,7 @@ public static unsafe class FFmpegLibrary
         }
     }
 
-    /// <summary>
-    /// Binds the libraries once. Throws <see cref="ErrorCodes.FFmpegMissing"/> when they are
-    /// not beside the executable.
-    /// </summary>
+    /// <summary>Binds the libraries once; throws <see cref="ErrorCodes.FFmpegMissing"/> when they are not beside the executable.</summary>
     public static void Initialize(ILogger logger)
     {
         lock (Gate)
@@ -69,11 +63,7 @@ public static unsafe class FFmpegLibrary
         }
     }
 
-    /// <summary>
-    /// Throws when an FFmpeg call returned an error: <see cref="ErrorCodes.DiskFull"/> for
-    /// <c>AVERROR(ENOSPC)</c>, <see cref="ErrorCodes.AccessDenied"/> for <c>AVERROR(EACCES)</c>, and
-    /// <see cref="ErrorCodes.EncodeFailed"/> for any other.
-    /// </summary>
+    /// <summary>Throws when an FFmpeg call failed: DiskFull for ENOSPC, AccessDenied for EACCES, EncodeFailed for any other.</summary>
     internal static int Check(int result, string operation)
     {
         if (result < 0)

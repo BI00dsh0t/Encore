@@ -5,13 +5,7 @@ using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>
-/// Writes a Clip (AD-9): a complete MP4 with the index first (<c>movflags +faststart</c>), written to
-/// <c>&lt;final&gt;.rbpart</c> beside the final path and then renamed over it, the empty file the
-/// allocator reserved (AD-21). Each stream is rebased to the Clip's first keyframe in its own time
-/// base, and the packets go through <c>av_interleaved_write_frame</c> in time order. The calling thread
-/// runs in background I/O mode for the write (AD-7).
-/// </summary>
+/// <summary>Writes a Clip as a complete MP4, to a part file that is then renamed over the final path. docs/code-notes.md.</summary>
 public static unsafe class ClipWriter
 {
     /// <summary>What a Clip is written to before its rename.</summary>
@@ -20,10 +14,7 @@ public static unsafe class ClipWriter
     // MKTAG('h', 'v', 'c', '1'), as the fMP4 muxer tags HEVC.
     private const uint HevcTag = 'h' | ('v' << 8) | ('c' << 16) | ((uint)'1' << 24);
 
-    /// <summary>
-    /// Writes <paramref name="source"/> to <paramref name="finalPath"/>. On failure both the
-    /// <c>.rbpart</c> and <paramref name="finalPath"/> are deleted, and the failure is rethrown.
-    /// </summary>
+    /// <summary>Writes the source to the final path; on failure both files are deleted and the failure is rethrown.</summary>
     public static void Write(ClipSource source, string finalPath, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -143,7 +134,7 @@ public static unsafe class ClipWriter
         }
     }
 
-    /// <summary>Background I/O and memory priority for the calling thread (AD-7); false when Windows refused it.</summary>
+    /// <summary>Background I/O and memory priority for the calling thread; false when Windows refused it.</summary>
     internal static bool EnterBackgroundMode(ILogger logger)
     {
         if (PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_BEGIN))

@@ -6,23 +6,13 @@ using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>
-/// Reads a media file's length with FFmpeg's demuxer (story 7.3): <c>avformat_open_input</c> and
-/// <c>avformat_find_stream_info</c>, with no decode. A fragmented MP4 cut mid-fragment reads as the end
-/// of its last complete fragment. The calling thread runs in background I/O mode for the read (AD-7).
-/// </summary>
+/// <summary>Reads a media file's length with FFmpeg's demuxer, without decoding; a cut-off file ends at its last whole fragment.</summary>
 public static unsafe class MediaLength
 {
-    /// <summary>
-    /// The length of <paramref name="path"/> in seconds: the container's duration when it has one, else
-    /// its longest stream's. Null, with a warning naming the file, when FFmpeg can't read it.
-    /// </summary>
+    /// <summary>The file's length in seconds: the container's when it has one, else its longest stream's; null when unreadable.</summary>
     public static double? Read(string path, ILogger logger) => Read(path, logger, whileOpen: null);
 
-    /// <summary>
-    /// <see cref="Read(string, ILogger)"/>, with a test seam: <paramref name="whileOpen"/> runs once the
-    /// file is open for the read, as a rename or delete from the user may land.
-    /// </summary>
+    /// <summary>The same read with a test seam: whileOpen runs once the file is open, when a rename or delete may land.</summary>
     internal static double? Read(string path, ILogger logger, Action? whileOpen)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);

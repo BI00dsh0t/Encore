@@ -44,12 +44,7 @@ public sealed unsafe class VideoSurface : IDisposable
     }
 }
 
-/// <summary>
-/// A pool texture held by value, for paths that must not allocate per frame. From
-/// <see cref="VideoEncoder.TryAcquire(long, out EncoderFrame)"/> (its PTS set from the capture QPC)
-/// or <see cref="VideoEncoder.TryAcquireFrame"/> (PTS left to the pacer); it must reach a submit or
-/// <see cref="VideoEncoder.Release"/> exactly once.
-/// </summary>
+/// <summary>A pool texture held by value, for paths that must not allocate; it must reach a submit or Release exactly once.</summary>
 public readonly unsafe struct EncoderFrame
 {
     internal EncoderFrame(AVFrame* frame, long pts)
@@ -69,17 +64,7 @@ public readonly unsafe struct EncoderFrame
     internal long Pts { get; }
 }
 
-/// <summary>
-/// What a <see cref="VideoEncoder"/> encodes with. The defaults are the tracer's: h264_nvenc, p5,
-/// 60 fps, CBR 20 Mbps.
-/// </summary>
-/// <param name="Preset">NVENC preset, <c>p1</c> (fastest) to <c>p7</c>; other encoders ignore it.</param>
-/// <param name="Tune">NVENC tune (<c>hq</c>, <c>ll</c>, <c>ull</c>), or null to leave FFmpeg's default; other encoders ignore it.</param>
-/// <param name="Encoder">The FFmpeg encoder name, e.g. <c>hevc_nvenc</c> or <c>libx264</c>.</param>
-/// <param name="Codec">The codec <paramref name="Encoder"/> must encode.</param>
-/// <param name="Fps">The nominal frame rate: the GOP is this many frames (1 s).</param>
-/// <param name="BitrateKbps">The target bitrate.</param>
-/// <param name="RateControl">CBR, or VBR peaking at 1.5× the target.</param>
+/// <summary>What a <see cref="VideoEncoder"/> encodes with; Preset and Tune apply to NVENC only, and the GOP is one second.</summary>
 public sealed record VideoEncoderOptions(
     string Preset = VideoEncoderOptions.DefaultPreset,
     string? Tune = null,
@@ -97,26 +82,13 @@ public sealed record VideoEncoderOptions(
     public static VideoEncoderOptions Default { get; } = new();
 }
 
-/// <summary>
-/// One video encoder over D3D11 frames: NVENC, AMF or QSV read the pool textures directly; libx264
-/// gets each frame copied back through a staging texture (FFmpeg's D3D11 transfer) and converted
-/// from BGRA to yuv420p by swscale into preallocated native frames. No B-frames; the GOP is the fps
-/// (1 s). PTS are in 1/90000: a session's pacer gives each frame its slot's PTS
-/// (<see cref="PacedVideoEncoder"/>); the variable-rate API (<see cref="TryAcquire(long)"/>, for the
-/// probe and tests) takes capture QPC relative to the anchor. An IDR is also forced once a second
-/// of PTS has passed since the last one, and on the first frame captured after a save's press
-/// (<see cref="RequestKeyframe"/>, the save's cut, AD-10). NVENC and QSV return each packet as soon as its frame is
-/// encoded. BGRA frames go in as-is (X1); NV12 frames (X2) are tagged BT.709 limited range.
-/// </summary>
+/// <summary>One video encoder over D3D11 frames; hardware encoders read the pool textures directly. docs/code-notes.md.</summary>
 public sealed unsafe class VideoEncoder : IDisposable
 {
     public const int TimeBase = 90_000;
     public const int NvencSurfaces = 8;
 
-    /// <summary>
-    /// The frame pool: NVENC's surfaces, plus the frame being drawn, the pacer's hand-off, its held
-    /// frame and the last frame it keeps for repeats.
-    /// </summary>
+    /// <summary>The frame pool: NVENC's surfaces, plus the frames the capture thread and the pacer hold.</summary>
     public const int PoolSize = NvencSurfaces + 6;
 
     // Frames whose capture QPC is remembered for the latency of their packet.
@@ -152,9 +124,7 @@ public sealed unsafe class VideoEncoder : IDisposable
     private long _lastPts = long.MinValue;
     private long _lastKeyPts = long.MinValue;
 
-    // Keyframe requests (AD-10): the latest ticket handed out and the latest press QPC asked for,
-    // and the latest ticket an encoded frame served, with that frame's PTS. _keyLock guards them
-    // all, and is only ever held for these reads and writes, never across an encode.
+    // Keyframe requests and what served them; _keyLock guards them and is never held across an encode.
     private readonly Lock _keyLock = new();
     private long _keyRequests;
     private long _keyAfterQpc = long.MinValue;
@@ -165,13 +135,7 @@ public sealed unsafe class VideoEncoder : IDisposable
     private long _flushed;
     private long _poolMisses;
 
-    /// <param name="muxer">Where packets go (a file or Rewind); null counts and discards them (the encoder probe).</param>
-    /// <param name="latency">
-    /// When given, each new frame's capture→encoded latency is recorded into it: QPC as its packet
-    /// leaves <c>avcodec_receive_packet</c> minus the frame's capture QPC. Repeated frames have no
-    /// capture QPC and record nothing. Packets drained by <see cref="Flush"/> are counted in
-    /// <see cref="FlushedPackets"/> instead, since their latency includes shutdown.
-    /// </param>
+    /// <summary>A null muxer counts and discards packets; latency, when given, records each new frame's capture-to-encoded time.</summary>
     public VideoEncoder(
         D3D11VAFrames frames,
         PacketSink? muxer,
@@ -292,20 +256,14 @@ public sealed unsafe class VideoEncoder : IDisposable
     /// <summary>Video packets written to the muxer.</summary>
     public long EncodedFrames => Interlocked.Read(ref _encoded);
 
-    /// <summary>New frames' packets drained by <see cref="Flush"/>; their latency is not recorded. Repeats aren't counted.</summary>
+    /// <summary>New frames' packets drained by <see cref="Flush"/>; their latency is not recorded.</summary>
     public long FlushedPackets => Interlocked.Read(ref _flushed);
 
-    /// <summary>
-    /// Takes a pool texture for a frame captured at <paramref name="qpc"/>, or returns null
-    /// when that frame's PTS isn't above the last one's (it is dropped).
-    /// </summary>
+    /// <summary>Takes a pool texture for a frame captured at a QPC time; null when its PTS isn't above the last one's.</summary>
     public VideoSurface? TryAcquire(long qpc) =>
         TryAcquire(qpc, out var frame) ? new VideoSurface(frame.Frame, frame.Pts) : null;
 
-    /// <summary>
-    /// The allocation-free form of <see cref="TryAcquire(long)"/>: false when the frame's PTS
-    /// isn't above the last one's (it is dropped).
-    /// </summary>
+    /// <summary>The allocation-free form of <see cref="TryAcquire(long)"/>: false when the PTS isn't above the last one's.</summary>
     public bool TryAcquire(long qpc, out EncoderFrame frame)
     {
         var pts = QpcClock.ToUnits(qpc - _anchorQpc, _qpcFrequency, TimeBase);
@@ -325,10 +283,7 @@ public sealed unsafe class VideoEncoder : IDisposable
         return true;
     }
 
-    /// <summary>
-    /// Takes a pool texture to draw a frame into, its PTS left to the pacer: false, counted in
-    /// <see cref="PoolMisses"/>, when the pool is exhausted.
-    /// </summary>
+    /// <summary>Takes a pool texture with its PTS left to the pacer; false, counted in PoolMisses, when the pool is exhausted.</summary>
     public bool TryAcquireFrame(out EncoderFrame frame)
     {
         var pointer = _context is null ? null : _frames.TryAcquire();
@@ -346,14 +301,7 @@ public sealed unsafe class VideoEncoder : IDisposable
     /// <summary>Frames <see cref="TryAcquireFrame"/> could not take because the pool was exhausted.</summary>
     public long PoolMisses => Interlocked.Read(ref _poolMisses);
 
-    /// <summary>
-    /// Asks for an IDR on the first frame encoded whose capture QPC is after
-    /// <paramref name="afterQpc"/> (the press, AD-10), and returns the request's ticket for
-    /// <see cref="TryGetForcedKey"/>. A frame captured at or before the press, still in the pacer's
-    /// hand-off or held for its slot, is not it; a repeat counts as captured at its slot's QPC. Safe
-    /// from any thread; it never waits on an encode. Requests outstanding together share one
-    /// keyframe, after the latest of their QPCs, which also restarts the once-a-second count.
-    /// </summary>
+    /// <summary>Asks for an IDR on the first frame captured after a QPC time and returns a ticket. Safe from any thread.</summary>
     public long RequestKeyframe(long afterQpc)
     {
         lock (_keyLock)
@@ -363,11 +311,7 @@ public sealed unsafe class VideoEncoder : IDisposable
         }
     }
 
-    /// <summary>
-    /// The PTS of the keyframe that served <paramref name="ticket"/> from <see cref="RequestKeyframe"/>;
-    /// false until a frame captured after its press has been encoded. Requests are seconds apart, so the
-    /// answer is the ticket's own keyframe.
-    /// </summary>
+    /// <summary>The PTS of the keyframe that served a ticket; false until a frame captured after its press has been encoded.</summary>
     public bool TryGetForcedKey(long ticket, out long pts)
     {
         lock (_keyLock)
@@ -377,11 +321,7 @@ public sealed unsafe class VideoEncoder : IDisposable
         }
     }
 
-    /// <summary>
-    /// Encodes <paramref name="frame"/> (consumed) at slot PTS <paramref name="pts"/>.
-    /// <paramref name="captureQpc"/> is the new frame's capture QPC, or 0 for a repeat, which
-    /// records no latency.
-    /// </summary>
+    /// <summary>Encodes a frame (consumed) at a slot's PTS; a captureQpc of 0 marks a repeat, which records no latency.</summary>
     internal void SubmitSlot(AVFrame* frame, long pts, long captureQpc) => Encode(frame, pts, captureQpc);
 
     /// <summary>A new reference to <paramref name="frame"/>'s texture, for a repeat; native, never managed.</summary>
@@ -441,8 +381,7 @@ public sealed unsafe class VideoEncoder : IDisposable
                 input->pict_type = AVPictureType.AV_PICTURE_TYPE_NONE;
                 input->flags &= ~ffmpeg.AV_FRAME_FLAG_KEY;
 
-                // Every request outstanding when this frame is taken is served by it, if it was
-                // captured after the requests' press; a repeat (0) is taken at its slot's QPC.
+                // This frame serves every outstanding request when it was captured after the press; a repeat counts at its slot.
                 var frameQpc = captureQpc != 0 ? captureQpc : CaptureQpcOf(pts);
                 long requested;
                 bool forced;
@@ -638,11 +577,7 @@ public sealed unsafe class VideoEncoder : IDisposable
         return frame;
     }
 
-    /// <summary>
-    /// Copies a pool texture to system memory through FFmpeg's staging texture and, for BGRA,
-    /// converts it to yuv420p. Both frames are reused; one the encoder still holds is reallocated
-    /// natively by <c>av_frame_make_writable</c>.
-    /// </summary>
+    /// <summary>Copies a pool texture to system memory and, for BGRA, converts it to yuv420p; both frames are reused.</summary>
     private AVFrame* Download(AVFrame* hardware)
     {
         FFmpegLibrary.Check(ffmpeg.av_frame_make_writable(_download), "av_frame_make_writable");

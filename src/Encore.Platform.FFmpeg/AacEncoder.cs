@@ -4,10 +4,7 @@ using Encore.Media;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>
-/// AAC-LC at 48 kHz stereo (AD-9), fed by an <see cref="AudioTimeline"/>. Samples go
-/// through an audio FIFO into 1024-sample frames; PTS is the sample count since the anchor.
-/// </summary>
+/// <summary>AAC-LC at 48 kHz stereo: samples go into 1024-sample frames, and PTS is the sample count since the anchor.</summary>
 public sealed unsafe class AacEncoder : IAudioSampleSink, IDisposable
 {
     private const int BitRate = 192_000;
@@ -25,12 +22,7 @@ public sealed unsafe class AacEncoder : IAudioSampleSink, IDisposable
     private long _startSample;
     private long _samplesSent;
 
-    /// <param name="muxer">Where packets go: a file or Rewind.</param>
-    /// <param name="startSample">
-    /// The PTS of its first sample, in samples since the session anchor: 0 for a stream that starts
-    /// at the anchor; later for an encoder chain that starts mid-session (4.9), whose priming
-    /// packets, ending at or before it, are dropped here as a sink drops them at 0.
-    /// </param>
+    /// <summary>The startSample is the first sample's PTS since the anchor; a chain that starts mid-session passes a later one.</summary>
     public AacEncoder(PacketSink muxer, string title, bool isDefault, ILogger logger, long startSample = 0)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(startSample);
@@ -74,11 +66,7 @@ public sealed unsafe class AacEncoder : IAudioSampleSink, IDisposable
     /// <summary>Frames written into the encoder so far, silence included.</summary>
     public long SamplesWritten { get; private set; }
 
-    /// <summary>
-    /// Sets the first sample's PTS, as the constructor's <c>startSample</c> does, for an encoder
-    /// opened before its start is known (a chain built in advance, 4.9). Only before the first write.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">A sample has already been written.</exception>
+    /// <summary>Sets the first sample's PTS for an encoder opened before its start is known; only before the first write.</summary>
     public void StartAt(long startSample)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(startSample);

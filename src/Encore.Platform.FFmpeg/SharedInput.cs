@@ -4,12 +4,7 @@ using FFmpeg.AutoGen.Abstractions;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>
-/// A read-only custom AVIO over a <see cref="FileStream"/> shared for reading, writing and deleting.
-/// FFmpeg's own file protocol opens with <c>_SH_DENYNO</c>, which leaves out delete sharing, so a
-/// read on a starved low-priority thread blocked the user's rename or delete of the same file
-/// (bugfix full-run-flaky-tests). Every call comes from one thread, the reader's.
-/// </summary>
+/// <summary>A read-only AVIO over a file shared for read, write and delete, so a read never blocks a rename or delete.</summary>
 internal sealed unsafe class SharedInput : IDisposable
 {
     private const int BufferSize = 64 * 1024;
@@ -22,7 +17,7 @@ internal sealed unsafe class SharedInput : IDisposable
     private GCHandle _handle;
     private AVIOContext* _context;
 
-    /// <exception cref="IOException">The file can't be opened.</exception>
+    /// <summary>Opens the file; throws IOException when it can't be opened.</summary>
     public SharedInput(string path)
     {
         _file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 0);

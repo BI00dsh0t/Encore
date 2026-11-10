@@ -8,22 +8,10 @@ using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>
-/// The session's encoder thread (story 1.11): emits exactly one frame per slot of the output fps
-/// through a <see cref="FramePacer"/>. The capture thread only draws a new frame into a pool texture
-/// and posts it with its capture QPC through a fixed-size, allocation-free hand-off; a frame that
-/// finds the hand-off full is not drawn at all and counts in <see cref="QueueDrops"/>. This thread
-/// holds at most one pending frame (for the next slot) and a reference to the last emitted one (for
-/// repeats), and wakes on a posted frame or on a high-resolution waitable timer at the pacer's next
-/// deadline, so repeats go out in real time even while nothing is captured. PTS come from the slot
-/// index, never from the wake time.
-/// </summary>
+/// <summary>The session's encoder thread: emits exactly one frame per slot of the output fps. See docs/code-notes.md.</summary>
 public sealed unsafe class PacedVideoEncoder : IDisposable
 {
-    /// <summary>
-    /// The hand-off holds what the frame pool can spare beside NVENC's surfaces, the frame being
-    /// drawn, the held frame and the last frame (<see cref="VideoEncoder.PoolSize"/>).
-    /// </summary>
+    /// <summary>The hand-off holds what the frame pool can spare beside NVENC's surfaces and the frames in use.</summary>
     public const int Capacity = 2;
 
     private const uint Infinite = 0xFFFFFFFF;
@@ -76,10 +64,7 @@ public sealed unsafe class PacedVideoEncoder : IDisposable
 
     public Exception? Fault => _fault;
 
-    /// <summary>
-    /// Called by the (single) capture thread before it draws a frame: false, counting a queue
-    /// drop, when the hand-off is full. A true result guarantees the next <see cref="Post"/> fits.
-    /// </summary>
+    /// <summary>Called by the capture thread before it draws a frame: false when the hand-off is full; true means Post will fit.</summary>
     public bool TryReserve()
     {
         if (!_queue.IsFull)
@@ -91,10 +76,7 @@ public sealed unsafe class PacedVideoEncoder : IDisposable
         return false;
     }
 
-    /// <summary>
-    /// Hands a drawn frame (from <see cref="VideoEncoder.TryAcquireFrame"/>) captured at
-    /// <paramref name="captureQpc"/> to the encoder thread; after <see cref="Complete"/> it is released unencoded.
-    /// </summary>
+    /// <summary>Hands a drawn frame and its capture QPC to the encoder thread; after Complete it is released unencoded.</summary>
     public void Post(EncoderFrame frame, long captureQpc)
     {
         if (!_queue.TryAdd(new PostedFrame(frame, captureQpc)))
@@ -107,10 +89,7 @@ public sealed unsafe class PacedVideoEncoder : IDisposable
         PInvoke.SetEvent(_wake);
     }
 
-    /// <summary>
-    /// Offers what is queued, then joins the thread; slots not yet due are not emitted, and a held
-    /// frame is released. Call before <see cref="VideoEncoder.Flush"/>.
-    /// </summary>
+    /// <summary>Offers what is queued, then joins the thread; call before <see cref="VideoEncoder.Flush"/>.</summary>
     public void Complete()
     {
         if (_completed)

@@ -9,27 +9,7 @@ using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>
-/// Writes one Recording (R2) from the packets a <see cref="RecordingTap"/> hands it, on a thread of
-/// its own in background I/O mode (AD-7), into a <see cref="FragmentedMp4Muxer"/> at the path the
-/// allocator reserved. It starts on the first video keyframe at or after the keyframe forced after
-/// the press, or, when none is served within <see cref="KeyWait"/>, the first one at or after the
-/// press. Each stream is rebased to that key K in its own time base, as <c>PacketRing.Cut</c> does,
-/// but keeps only the packets that start at or after K, not those centred there as a Clip does: a
-/// Clip's plain MP4 signals an earlier audio start in its edit list, while this fMP4 has none, and
-/// its muxer would stretch the first frame off the frame grid instead (an audio Track's first
-/// sample may now start up to one packet late). Until K is known its
-/// packets are held, at most <see cref="HoldUs"/> of them. A stop at E keeps the packets before E,
-/// judged the same way, and the file is finished once every stream has passed E,
-/// <see cref="StopWait"/> after the stop at the latest, or as soon as the session's output ends.
-/// It cuts the fragments itself (R3, FR-12): one at each video keyframe and at least every
-/// <see cref="FragmentUs"/>. A cut at video time V writes every packet before V (audio by its
-/// centre) once every audio stream has reached V, or once the video is <see cref="AudioWaitUs"/>
-/// past V, so no Track's fragment runs ahead of the video; then the fragment goes to the disk.
-/// Every packet it was handed is freed on every path. It owns its streams' parameters, so the
-/// session can free the tap, the ring and the encoders while it still finishes. On a full disk (R5)
-/// it writes no trailer and cuts the file back to its last complete fragment, or deletes it when none is.
-/// </summary>
+/// <summary>Writes one Recording from a tap's packets, on its own thread, as fragmented MP4. Rules: docs/code-notes.md.</summary>
 public sealed unsafe class RecordingWriter
 {
     /// <summary>How long a forced keyframe is waited for before the Recording starts on the next natural one.</summary>
@@ -44,7 +24,7 @@ public sealed unsafe class RecordingWriter
     /// <summary>The longest fragment, in µs of video time: a kill loses at most about this much.</summary>
     public const long FragmentUs = 500_000;
 
-    /// <summary>How far the video may run past a cut, in µs, before it is made without an audio stream that hasn't reached it.</summary>
+    /// <summary>How far the video may run past a cut, in µs, before the cut is made without a late audio stream.</summary>
     public const long AudioWaitUs = 250_000;
 
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(50);
@@ -82,12 +62,7 @@ public sealed unsafe class RecordingWriter
     private long? _cutUs;
     private long _written;
 
-    /// <param name="path">The reserved file, written in place.</param>
-    /// <param name="streams">The Recording's streams; the writer owns them from here.</param>
-    /// <param name="forcedKey">The forced keyframe's PTS in the video stream's time base once it is served, else null; called on the writer thread.</param>
-    /// <param name="pressUs">The press, in µs since the session's anchor.</param>
-    /// <param name="logger">The writer's log.</param>
-    /// <param name="done">Called once, on the writer thread, with null or the failure, after the file is finished or removed.</param>
+    /// <summary>The writer owns the streams; forcedKey and done are called on the writer thread; pressUs is µs since the anchor.</summary>
     public RecordingWriter(string path, RecordingStreams streams, Func<long?> forcedKey, long pressUs, ILogger logger, Action<Exception?> done)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -106,7 +81,7 @@ public sealed unsafe class RecordingWriter
     /// <summary>The tap it is attached to, set by <see cref="RecordingTap.Attach"/>.</summary>
     internal RecordingTap? Tap { get; set; }
 
-    /// <summary>Whether each fragment is flushed to the disk (R3); false only for tests, which write hours of fragments.</summary>
+    /// <summary>Whether each fragment is flushed to the disk; false only for tests, which write hours of fragments.</summary>
     internal bool FlushToDisk { get; init; } = true;
 
     /// <summary>A test seam: the file fails as a full disk past this many bytes; null for none.</summary>
@@ -137,7 +112,7 @@ public sealed unsafe class RecordingWriter
         }
     }
 
-    /// <summary>Frees a writer that never started: detaches it, frees what it was handed and its streams; never calls back.</summary>
+    /// <summary>Frees a writer that never started: detaches it and frees what it was handed; never calls back.</summary>
     public void Abandon()
     {
         if (Interlocked.Exchange(ref _started, 1) != 0)
@@ -151,7 +126,7 @@ public sealed unsafe class RecordingWriter
         _signal.Dispose();
     }
 
-    /// <summary>Ends the Recording at <paramref name="us"/> (µs since the anchor); a second stop is ignored. Never blocks.</summary>
+    /// <summary>Ends the Recording at a time in µs since the anchor; a second stop is ignored. Never blocks.</summary>
     public void Stop(long us)
     {
         Volatile.Write(ref _stopQpc, Stopwatch.GetTimestamp());
@@ -159,7 +134,7 @@ public sealed unsafe class RecordingWriter
         Signal();
     }
 
-    /// <summary>Takes a new reference to <paramref name="packet"/> for the writer thread; called on the encoders' threads.</summary>
+    /// <summary>Takes a new reference to the packet for the writer thread; called on the encoders' threads.</summary>
     internal void Offer(AVPacket* packet, int stream)
     {
         var clone = ffmpeg.av_packet_clone(packet);
@@ -422,7 +397,7 @@ public sealed unsafe class RecordingWriter
         }
     }
 
-    /// <summary>K is the held video keyframe at <paramref name="key"/>: rebase every stream to it, then write what is held from it.</summary>
+    /// <summary>K is the held video keyframe at this index: rebase every stream to it, then write what is held from it.</summary>
     private void StartAt(FragmentedMp4Muxer muxer, int key)
     {
         var keyPacket = _held[key];
@@ -436,8 +411,7 @@ public sealed unsafe class RecordingWriter
         }
 
         _log.LogInformation("The Recording starts on the keyframe {Seconds:0.000} s after the anchor ({Press:0.000} s after the press)", keyUs / 1e6, (keyUs - _pressUs) / 1e6);
-        // Each packet leaves the hold as it is emitted (Emit frees it even on a throw), so a failed
-        // write leaves only the rest held, for Release to free.
+        // Each packet leaves the hold as it is emitted, so a failed write leaves only the rest held, for Release to free.
         var emitted = 0;
         try
         {
@@ -453,16 +427,11 @@ public sealed unsafe class RecordingWriter
         }
     }
 
-    /// <summary>
-    /// Keeps a packet from K and before the stop for the next cut, and frees any other; takes the
-    /// packet either way. Then makes every cut that is ready.
-    /// </summary>
+    /// <summary>Keeps a packet from K and before the stop for the next cut, and frees any other; then makes every ready cut.</summary>
     private void Emit(FragmentedMp4Muxer muxer, nint packet, int stream, long timeUs, long atUs)
     {
         _reached[stream] = Math.Max(_reached[stream], atUs);
-        // From K by its start, not its centre: fMP4 has no edit list, so the muxer shifts every
-        // stream to the earliest packet and pins each one's first sample at 0; an audio packet
-        // that starts before K would stretch the first video frame off the frame grid.
+        // From K by its start, not its centre: with no edit list, an early audio packet would stretch the first frame.
         if (timeUs < _keyUs || atUs >= Interlocked.Read(ref _stopUs))
         {
             Free(packet);
@@ -479,7 +448,7 @@ public sealed unsafe class RecordingWriter
         Cut(muxer);
     }
 
-    /// <summary>A video packet at <paramref name="atUs"/> starts the next fragment: a keyframe, or <see cref="FragmentUs"/> into this one.</summary>
+    /// <summary>A video packet that starts the next fragment: a keyframe, or one <see cref="FragmentUs"/> into this one.</summary>
     private bool IsCut(nint packet, long atUs) =>
         atUs > _fragmentUs && (atUs >= _fragmentUs + FragmentUs || (((AVPacket*)packet)->flags & ffmpeg.AV_PKT_FLAG_KEY) != 0);
 
@@ -503,7 +472,7 @@ public sealed unsafe class RecordingWriter
         }
     }
 
-    /// <summary>Every audio stream has reached <paramref name="cut"/>, or the video is <see cref="AudioWaitUs"/> past it.</summary>
+    /// <summary>Every audio stream has reached the cut, or the video is <see cref="AudioWaitUs"/> past it.</summary>
     private bool Ready(long cut)
     {
         if (_reached[_videoStream] >= cut + AudioWaitUs)
@@ -522,10 +491,7 @@ public sealed unsafe class RecordingWriter
         return true;
     }
 
-    /// <summary>
-    /// Writes the pending packets before <paramref name="beforeUs"/> in time order across the streams,
-    /// as an interleaver would, rebased; the rest stay pending. Each one is freed on every path.
-    /// </summary>
+    /// <summary>Writes the pending packets before a time, in time order across the streams; each is freed on every path.</summary>
     private void WritePending(FragmentedMp4Muxer muxer, long beforeUs)
     {
         var kept = 0;
@@ -544,8 +510,7 @@ public sealed unsafe class RecordingWriter
 
         _pending.RemoveRange(kept, _pending.Count - kept);
 
-        // Each stream's times only grow, so the sort keeps every stream's own order; the earliest
-        // packet goes first, so the muxer's start shift is the same for every stream.
+        // Each stream's times only grow, so sorting by time keeps every stream's own order.
         _batch.Sort(ByTime);
         var next = 0;
         try
@@ -585,7 +550,7 @@ public sealed unsafe class RecordingWriter
         }
     }
 
-    /// <summary>Detaches from the tap, then frees whatever is queued or held; an Offer after this frees its own.</summary>
+    /// <summary>Detaches from the tap, then frees whatever is queued or held; a later Offer frees its own packet.</summary>
     private void Release()
     {
         Tap?.Detach(this);
@@ -616,7 +581,7 @@ public sealed unsafe class RecordingWriter
         }
     }
 
-    /// <summary>A full disk: the file is cut to <paramref name="bytes"/>, its header and whole fragments, or deleted when that is 0.</summary>
+    /// <summary>A full disk: the file is cut back to its header and whole fragments, or deleted when there are none.</summary>
     private void KeepWholeFragments(long bytes)
     {
         if (bytes == 0)

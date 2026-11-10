@@ -5,13 +5,7 @@ using FFmpeg.AutoGen.Abstractions;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>
-/// A custom AVIO over a <see cref="FileStream"/> it owns (R3, AD-16): FFmpeg writes into a 64 KB
-/// buffer, and <see cref="Flush"/> pushes that buffer through to the file and the file to the disk
-/// (<c>FlushFileBuffers</c>). A write or seek that fails returns <c>AVERROR(EIO)</c> to FFmpeg and
-/// keeps the first exception, which <see cref="ThrowIfFailed"/> rethrows as it was. Every call comes
-/// from one thread, the writer's.
-/// </summary>
+/// <summary>A custom AVIO over a file it owns; Flush pushes FFmpeg's buffer to the file and the file to the disk.</summary>
 internal sealed unsafe class DurableOutput : IDisposable
 {
     private const int BufferSize = 64 * 1024;
@@ -30,13 +24,7 @@ internal sealed unsafe class DurableOutput : IDisposable
     private MemoryStream? _header = new();
     private byte[] _sealedHeader = [];
 
-    /// <summary>Creates (or truncates) <paramref name="path"/>, shared for reading only.</summary>
-    /// <param name="path">The file.</param>
-    /// <param name="flushToDisk">Whether <see cref="Flush"/> also flushes the file to the disk; false only for tests.</param>
-    /// <param name="capacity">
-    /// A test seam: the file's room in bytes, past which a write fills it up to that and fails as a
-    /// full disk does (<c>ERROR_DISK_FULL</c>); null for none.
-    /// </param>
+    /// <summary>Creates or truncates the file, shared for reading only; capacity is a test seam that fails like a full disk.</summary>
     public DurableOutput(string path, bool flushToDisk = true, long? capacity = null)
     {
         _flushToDisk = flushToDisk;
@@ -79,10 +67,7 @@ internal sealed unsafe class DurableOutput : IDisposable
     /// <summary>The bytes that have reached the file so far.</summary>
     public long Length => _file.Length;
 
-    /// <summary>
-    /// A copy of the bytes written before the first <see cref="Flush"/> (the muxer's header: <c>ftyp</c>
-    /// and <c>moov</c>), from file offset 0; empty before that flush.
-    /// </summary>
+    /// <summary>A copy of the bytes written before the first <see cref="Flush"/> (the muxer's header); empty before that.</summary>
     public ReadOnlySpan<byte> Header => _header is null ? _sealedHeader : [];
 
     /// <summary>Rethrows the first write or seek failure, if any, as it was thrown.</summary>
@@ -108,12 +93,7 @@ internal sealed unsafe class DurableOutput : IDisposable
         }
     }
 
-    /// <summary>
-    /// Writes <paramref name="bytes"/> over the file at <paramref name="offset"/> in one write, flushes
-    /// the file to the disk, and goes back to the end. Only after a <see cref="Flush"/> that left
-    /// FFmpeg's buffer empty, as the trailer's does.
-    /// </summary>
-    /// <exception cref="IOException">The write or the flush failed.</exception>
+    /// <summary>Overwrites bytes at an offset, flushes to the disk and returns to the end; only while FFmpeg's buffer is empty.</summary>
     public void Overwrite(long offset, ReadOnlySpan<byte> bytes)
     {
         _file.Seek(offset, SeekOrigin.Begin);

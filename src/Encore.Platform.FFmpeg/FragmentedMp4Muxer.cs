@@ -4,14 +4,7 @@ using Encore.Core.Library;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>
-/// Fragmented MP4 (AD-9): an empty moov, then a fragment at every keyframe and at least
-/// every second. Encoders hand it packets in their own time base; it converts them to
-/// stream time and writes them under one lock. A durable muxer (a Recording's, R3) instead
-/// writes through a <see cref="DurableOutput"/>, cuts a fragment only at
-/// <see cref="CutFragment"/>, and flushes the header and every fragment to the disk; at
-/// <see cref="Finish"/> it gives the file its length in an <c>mehd</c> (R5, AD-27).
-/// </summary>
+/// <summary>Writes fragmented MP4 under one lock; a Recording's durable muxer flushes each fragment. docs/code-notes.md.</summary>
 public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 {
     // MKTAG('h', 'v', 'c', '1').
@@ -36,15 +29,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     {
     }
 
-    /// <param name="path">The file to write.</param>
-    /// <param name="logger">The muxer's log.</param>
-    /// <param name="durable">
-    /// Write through a <see cref="DurableOutput"/>: packets go straight in (<c>av_write_frame</c>),
-    /// a fragment ends only at <see cref="CutFragment"/>, and the header and each fragment are
-    /// flushed to the disk before the call returns. A write failure is rethrown as it was thrown.
-    /// </param>
-    /// <param name="flushToDisk">A durable muxer's flushes reach the disk, not just the OS; false only for tests.</param>
-    /// <param name="capacity">A durable muxer's file fails as a full disk past this many bytes; a test seam, null for none.</param>
+    /// <summary>A durable muxer cuts fragments only at <see cref="CutFragment"/> and flushes each to the disk before returning.</summary>
     internal FragmentedMp4Muxer(string path, ILogger logger, bool durable, bool flushToDisk = true, long? capacity = null)
     {
         Path = path;
@@ -59,7 +44,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 
     public string Path { get; }
 
-    /// <summary>A durable muxer's file length after its last successful flush: the header and every whole fragment; 0 before.</summary>
+    /// <summary>A durable muxer's file length after its last good flush: the header and every whole fragment.</summary>
     internal long DurableBytes { get; private set; }
 
     /// <summary>The fragments a durable muxer has cut and flushed, not counting a cut that wrote nothing.</summary>
@@ -76,10 +61,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
         return Describe(stream, encoder->time_base, title, isDefault);
     }
 
-    /// <summary>
-    /// Adds a stream from copied codec parameters (a Recording's, from a <see cref="RecordingTap"/>)
-    /// in <paramref name="timeBase"/>. Call before <see cref="Start"/>.
-    /// </summary>
+    /// <summary>Adds a stream from copied codec parameters, as a Recording does. Call before <see cref="Start"/>.</summary>
     internal int AddStream(AVCodecParameters* parameters, AVRational timeBase, string? title, bool isDefault)
     {
         var stream = NewStream();
@@ -175,8 +157,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     {
         lock (_lock)
         {
-            // fMP4 with an empty moov has no edit list, so a packet that ends at or before
-            // time 0 (AAC's 1024-sample priming) would be played and delay the stream.
+            // With no edit list, a packet ending at or before time 0 (AAC's priming) would be played and delay the stream.
             if (!_started || _finished || BeforeStart(packet))
             {
                 ffmpeg.av_packet_unref(packet);
@@ -214,10 +195,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
         }
     }
 
-    /// <summary>
-    /// A durable muxer's fragment ends here: every packet written since the last cut goes out as one
-    /// <c>moof</c> + <c>mdat</c>, flushed to the disk before this returns.
-    /// </summary>
+    /// <summary>Ends a durable muxer's fragment: every packet since the last cut goes out together, flushed to the disk.</summary>
     internal void CutFragment()
     {
         lock (_lock)
@@ -296,14 +274,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
         }
     }
 
-    /// <summary>
-    /// After the trailer: patches the moov in place with an <c>mehd</c> of the file's length (the
-    /// longest stream's, as movenc's <c>track_duration</c>), so Media Foundation plays it to its end
-    /// and not to its last <c>tfra</c> entry. Two ordered writes, each flushed to the disk, with a
-    /// valid file between them (<see cref="Mp4File.PlanFragmentDuration"/>). A layout it doesn't
-    /// expect, or a failed write, leaves the file as written (it plays to its last fragment) with a
-    /// warning; it never fails the Recording.
-    /// </summary>
+    /// <summary>After the trailer: writes the file's length into the moov so players reach the end. Never fails the Recording.</summary>
     private void WriteFragmentDuration()
     {
         long durationUs = 0;
@@ -355,10 +326,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
         _output = null;
     }
 
-    /// <summary>
-    /// <see cref="FFmpegLibrary.Check"/>, except that a durable muxer whose write failed rethrows that
-    /// failure as it was thrown (a full disk's <see cref="IOException"/>, for 6.7).
-    /// </summary>
+    /// <summary>Like <see cref="FFmpegLibrary.Check"/>, but a durable muxer's write failure is rethrown as it was thrown.</summary>
     private int Check(int result, string operation)
     {
         if (result < 0)
