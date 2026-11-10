@@ -350,7 +350,6 @@ internal readonly record struct DuplicatedFrame(long LastPresentTime, nint Textu
 /// <summary>One monitor's output duplication, faked in tests; TryAcquire never waits, as DXGI would hold the device lock.</summary>
 internal interface IOutputDuplication
 {
-    /// <summary>The output's mode size.</summary>
     VideoSize ModeSize { get; }
 
     /// <summary>Creates the duplication; <c>DXGI_ERROR_NOT_FOUND</c> when the monitor isn't an output of the adapter.</summary>
