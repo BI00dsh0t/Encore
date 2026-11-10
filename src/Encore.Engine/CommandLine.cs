@@ -1,94 +1,7 @@
 using System.Globalization;
 using Encore.Contracts.Messages;
-using Encore.Contracts.Settings;
 
 namespace Encore.Engine;
-
-/// <summary>A parsed engine command.</summary>
-public abstract record EngineCommand;
-
-/// <summary><c>debug-list</c>: windows and audio endpoints.</summary>
-public sealed record DebugListCommand : EngineCommand;
-
-/// <summary>The private media worker, isolated from live engine startup.</summary>
-public sealed record ClipMediaWorkerCommand : EngineCommand;
-
-/// <summary>How much of the video path a <c>debug-capture</c> runs, to split its cost.</summary>
-public enum CaptureStages
-{
-    /// <summary>WGC → copy → NVENC → file: the tracer.</summary>
-    Full,
-
-    /// <summary>WGC → copy into the encoder's pool; nothing is encoded.</summary>
-    Copy,
-
-    /// <summary>WGC frames are taken and released; no copy, no encode.</summary>
-    Wgc,
-}
-
-/// <summary>How captured BGRA reaches NVENC.</summary>
-public enum ColorPath
-{
-    /// <summary>BGRA straight into NVENC, which converts in hardware.</summary>
-    X1,
-
-    /// <summary>BGRA → NV12 on the D3D11 VideoProcessor, NV12 into NVENC.</summary>
-    X2,
-}
-
-/// <c>debug-capture</c>: a test capture of one window; a null Size is the window's size, made even. docs/code-notes.md.
-public sealed record DebugCaptureCommand(
-    string? Window,
-    nint? Hwnd,
-    int Seconds,
-    string? Output,
-    string? OutputDevice,
-    string? InputDevice,
-    string? Stats = null,
-    int? GpuPriority = null,
-    CaptureStages Stages = CaptureStages.Full,
-    string NvencPreset = DebugCaptureCommand.DefaultNvencPreset,
-    string? NvencTune = null,
-    ColorPath Color = ColorPath.X1,
-    bool EncodeThread = false,
-    VideoCodec Codec = VideoCodec.H264,
-    DebugCaptureSize? Size = null,
-    int Fps = DebugCaptureCommand.DefaultFps,
-    int BitrateKbps = DebugCaptureCommand.DefaultBitrateKbps,
-    string? Encoder = null,
-    bool TrackLayout = false,
-    string? Instance = null,
-    IReadOnlyList<string>? Monitors = null,
-    bool MonitorDuplication = false,
-    bool MatchSource = false) : EngineCommand
-{
-    public const int DefaultSeconds = 30;
-
-    /// <summary>The tracer's frame rate and bitrate, kept as <c>debug-capture</c>'s defaults.</summary>
-    public const int DefaultFps = 60;
-
-    public const int DefaultBitrateKbps = 20_000;
-
-    public const string DefaultNvencPreset = "p5";
-
-    /// <summary>The range <c>IDXGIDevice::SetGPUThreadPriority</c> accepts.</summary>
-    public const int MinGpuPriority = -7;
-
-    public const int MaxGpuPriority = 7;
-}
-
-/// <summary><c>debug-capture --size</c>: the output size, <c>WxH</c>.</summary>
-public sealed record DebugCaptureSize(int Width, int Height);
-
-/// <c>serve</c>: the engine proper, serving its pipe until <c>engine.shutdown</c> or Ctrl+C. Flags: docs/code-notes.md.
-public sealed record ServeCommand(string? Instance, bool DebugCapture = false, bool Rewind = false, EngineRestartReason? Restarted = null) : EngineCommand
-{
-    /// <summary>The only instance names <c>--instance</c> accepts, so tests never touch a real instance.</summary>
-    public const string TestInstancePrefix = Contracts.Instance.TestPrefix;
-}
-
-/// <summary>The outcome of parsing: a command, or the reason there isn't one.</summary>
-public sealed record ParseResult(EngineCommand? Command, string? Error);
 
 /// <summary>Parses the engine's debug command line.</summary>
 public static class CommandLine
@@ -120,7 +33,9 @@ public static class CommandLine
 
         return args[0] switch
         {
-            "clip-media-worker" => args.Count == 1 ? new ParseResult(new ClipMediaWorkerCommand(), null) : Fail("The clip worker takes no arguments."),
+            "clip-media-worker" => args.Count == 1
+                ? new ParseResult(new ClipMediaWorkerCommand(), null)
+                : Fail("The clip worker takes no arguments."),
             "debug-list" => args.Count == 1 ? new ParseResult(new DebugListCommand(), null) : Fail($"Unexpected argument '{args[1]}'."),
             "debug-capture" => ParseCapture(args),
             "serve" => ParseServe(args),
@@ -146,44 +61,12 @@ public static class CommandLine
 
     private static ParseResult ParseCapture(IReadOnlyList<string> args)
     {
-        string? window = null, output = null, outputDevice = null, inputDevice = null, stats = null;
-        nint? hwnd = null;
-        int? gpuPriority = null;
-        var stages = CaptureStages.Full;
-        var preset = DebugCaptureCommand.DefaultNvencPreset;
-        string? tune = null;
-        var color = ColorPath.X1;
-        var encodeThread = false;
-        var seconds = DebugCaptureCommand.DefaultSeconds;
-        var codec = VideoCodec.H264;
-        DebugCaptureSize? size = null;
-        var fps = DebugCaptureCommand.DefaultFps;
-        var bitrate = DebugCaptureCommand.DefaultBitrateKbps;
-        string? encoder = null;
-        var trackLayout = false;
-        string? instance = null;
-        IReadOnlyList<string>? monitors = null;
-        var monitorDuplication = false;
-        var matchSource = false;
-
+        var arguments = new CaptureArguments();
         for (var i = 1; i < args.Count; i++)
         {
             var option = args[i];
-            if (option == "--encode-thread")
+            if (CaptureOptionParser.TrySetFlag(arguments, option))
             {
-                encodeThread = true;
-                continue;
-            }
-
-            if (option == "--track-layout")
-            {
-                trackLayout = true;
-                continue;
-            }
-
-            if (option == "--match-source")
-            {
-                matchSource = true;
                 continue;
             }
 
@@ -192,218 +75,16 @@ public static class CommandLine
                 return Fail($"Option '{option}' needs a value.");
             }
 
-            var value = args[++i];
-            switch (option)
+            if (CaptureOptionParser.Apply(arguments, option, args[++i]) is { } refusal)
             {
-                case "--window":
-                    window = value;
-                    break;
-                case "--monitors":
-                    // "all" (every attached monitor) or GDI device names.
-                    monitors = value == "all" ? [] : [.. value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
-                    if (value != "all" && monitors.Count == 0)
-                    {
-                        return Fail("--monitors needs all or a comma-separated list of monitor device names.");
-                    }
-
-                    break;
-                case "--monitor-api":
-                    switch (value)
-                    {
-                        case "wgc":
-                            monitorDuplication = false;
-                            break;
-                        case "dd":
-                            monitorDuplication = true;
-                            break;
-                        default:
-                            return Fail("--monitor-api must be wgc or dd.");
-                    }
-
-                    break;
-                case "--hwnd":
-                    if (!TryParseHandle(value, out var handle))
-                    {
-                        return Fail($"'{value}' is not a window handle.");
-                    }
-
-                    hwnd = handle;
-                    break;
-                case "--seconds":
-                    if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out seconds) || seconds <= 0)
-                    {
-                        return Fail($"'{value}' is not a positive number of seconds.");
-                    }
-
-                    break;
-                case "--output":
-                    output = value;
-                    break;
-                case "--output-device":
-                    outputDevice = value;
-                    break;
-                case "--input-device":
-                    inputDevice = value;
-                    break;
-                case "--stats":
-                    if (value.Length == 0)
-                    {
-                        return Fail("--stats needs a file path.");
-                    }
-
-                    stats = value;
-                    break;
-                case "--gpu-priority":
-                    if (!int.TryParse(value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var priority)
-                        || priority < DebugCaptureCommand.MinGpuPriority
-                        || priority > DebugCaptureCommand.MaxGpuPriority)
-                    {
-                        return Fail($"'{value}' is not a GPU priority from {DebugCaptureCommand.MinGpuPriority} to {DebugCaptureCommand.MaxGpuPriority}.");
-                    }
-
-                    gpuPriority = priority;
-                    break;
-                case "--stages":
-                    switch (value)
-                    {
-                        case "full":
-                            stages = CaptureStages.Full;
-                            break;
-                        case "copy":
-                            stages = CaptureStages.Copy;
-                            break;
-                        case "wgc":
-                            stages = CaptureStages.Wgc;
-                            break;
-                        default:
-                            return Fail($"'{value}' is not one of full, copy or wgc.");
-                    }
-
-                    break;
-                case "--nvenc-preset":
-                    if (value is not ("p1" or "p2" or "p3" or "p4" or "p5" or "p6" or "p7"))
-                    {
-                        return Fail($"'{value}' is not an NVENC preset from p1 to p7.");
-                    }
-
-                    preset = value;
-                    break;
-                case "--nvenc-tune":
-                    if (value is not ("hq" or "ll" or "ull"))
-                    {
-                        return Fail($"'{value}' is not one of hq, ll or ull.");
-                    }
-
-                    tune = value;
-                    break;
-                case "--color":
-                    switch (value)
-                    {
-                        case "x1":
-                            color = ColorPath.X1;
-                            break;
-                        case "x2":
-                            color = ColorPath.X2;
-                            break;
-                        default:
-                            return Fail($"'{value}' is not one of x1 or x2.");
-                    }
-
-                    break;
-                case "--codec":
-                    switch (value)
-                    {
-                        case "h264":
-                            codec = VideoCodec.H264;
-                            break;
-                        case "hevc":
-                            codec = VideoCodec.Hevc;
-                            break;
-                        case "av1":
-                            codec = VideoCodec.Av1;
-                            break;
-                        default:
-                            return Fail($"'{value}' is not one of h264, hevc or av1.");
-                    }
-
-                    break;
-                case "--size":
-                    var parts = value.Split('x');
-                    if (parts.Length != 2
-                        || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var width)
-                        || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var height)
-                        || !IsVideoDimension(width) || !IsVideoDimension(height))
-                    {
-                        return Fail($"'{value}' is not a size WxH with even sides from 2 to {VideoSettings.MaxDimension}.");
-                    }
-
-                    size = new DebugCaptureSize(width, height);
-                    break;
-                case "--fps":
-                    if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out fps) || fps is < 1 or > VideoSettings.MaxFps)
-                    {
-                        return Fail($"'{value}' is not a frame rate from 1 to {VideoSettings.MaxFps}.");
-                    }
-
-                    break;
-                case "--bitrate":
-                    if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out bitrate) || bitrate < 1)
-                    {
-                        return Fail($"'{value}' is not a positive bitrate in kbps.");
-                    }
-
-                    break;
-                case "--encoder":
-                    if (value.Length == 0)
-                    {
-                        return Fail("--encoder needs an FFmpeg encoder name.");
-                    }
-
-                    encoder = value;
-                    break;
-                case "--instance":
-                    if (!Contracts.Instance.IsTestName(value))
-                    {
-                        return Fail($"--instance must be {ServeCommand.TestInstancePrefix}<letters, digits or dashes>.");
-                    }
-
-                    instance = value;
-                    break;
-                default:
-                    return Fail($"Unknown option '{option}'.");
+                return Fail(refusal);
             }
         }
 
-        if (monitors is not null ? window is not null || hwnd is not null : (window is null) == (hwnd is null))
-        {
-            return Fail("Give exactly one of --window, --hwnd or --monitors.");
-        }
-
-        if (window is { Length: 0 })
-        {
-            return Fail("--window needs a non-empty title.");
-        }
-
-        if (trackLayout && (outputDevice is not null || inputDevice is not null))
-        {
-            return Fail("--track-layout takes its devices from the Track Layout; drop --output-device and --input-device.");
-        }
-
-        // The video key's own check, so debug-capture refuses exactly what settings.update would.
-        var video = new VideoSettings(codec, size?.Width ?? 2, size?.Height ?? 2, fps, bitrate, RateControl.Cbr);
-        if (!Keys.Video.IsValid(Keys.Video.ToJson(video)))
-        {
-            return Fail("The --codec, --size, --fps and --bitrate values don't make a valid video setting.");
-        }
-
-        return new ParseResult(
-            new DebugCaptureCommand(
-                window, hwnd, seconds, output, outputDevice, inputDevice, stats, gpuPriority, stages, preset, tune, color, encodeThread,
-                codec, size, fps, bitrate, encoder, trackLayout, instance, monitors, monitorDuplication, matchSource),
-            null);
+        return CaptureOptionParser.Check(arguments) is { } problem
+            ? Fail(problem)
+            : new ParseResult(arguments.ToCommand(), null);
     }
-
-    private static bool IsVideoDimension(int value) => value is >= 2 and <= VideoSettings.MaxDimension && value % 2 == 0;
 
     private static ParseResult ParseServe(IReadOnlyList<string> args)
     {
@@ -416,12 +97,7 @@ public static class CommandLine
             switch (args[i])
             {
                 case "--restarted" when restarted is null && i + 1 < args.Count:
-                    restarted = args[++i] switch
-                    {
-                        "crashed" => EngineRestartReason.Crashed,
-                        "hung" => EngineRestartReason.Hung,
-                        _ => null,
-                    };
+                    restarted = RestartReason(args[++i]);
                     if (restarted is null)
                     {
                         return Fail($"'{args[i]}' is not one of crashed or hung.");
@@ -447,17 +123,28 @@ public static class CommandLine
             }
         }
 
+        return ServeRefusal(name, debugCapture, rewind) is { } refusal
+            ? Fail(refusal)
+            : new ParseResult(new ServeCommand(name, debugCapture, rewind, restarted), null);
+    }
+
+    private static EngineRestartReason? RestartReason(string value) => value switch
+    {
+        "crashed" => EngineRestartReason.Crashed,
+        "hung" => EngineRestartReason.Hung,
+        _ => null,
+    };
+
+    private static string? ServeRefusal(string? name, bool debugCapture, bool rewind)
+    {
         if (rewind && name is null)
         {
-            return Fail("--rewind is for test instances only; give --instance Encore-Test-<suffix>.");
+            return "--rewind is for test instances only; give --instance Encore-Test-<suffix>.";
         }
 
-        if (rewind && debugCapture)
-        {
-            return Fail("--rewind and --debug-capture can't be combined: a debug capture turns Rewind off.");
-        }
-
-        return new ParseResult(new ServeCommand(name, debugCapture, rewind, restarted), null);
+        return rewind && debugCapture
+            ? "--rewind and --debug-capture can't be combined: a debug capture turns Rewind off."
+            : null;
     }
 
     private static ParseResult Fail(string error) => new(null, error);
