@@ -333,5 +333,5 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
         return FolderProbe.CanWrite(path) ? null : FolderRules.CantWrite;
     }
 
-    private bool ConfirmWithPrompt(string message) => Prompts.YesNo(_view, message, Title, MessageBoxImage.Warning);
+    private bool ConfirmWithPrompt(string message) => Prompts.Warn(_view, message, Title);
 }

@@ -6,7 +6,7 @@ namespace Encore.App.Library;
 internal static class LibraryPrompts
 {
     public static bool ConfirmDelete(FrameworkElement? view, string question) =>
-        Prompts.YesNo(view, question, "Delete", MessageBoxImage.Question);
+        Prompts.Ask(view, question, "Delete");
 
     /// <summary>The folder the user picks to copy files into, or null when they cancel.</summary>
     public static string? PickFolder(FrameworkElement? view)

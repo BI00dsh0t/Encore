@@ -37,7 +37,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
         SaveCommand = new RelayCommand(() => _ = SaveAsync());
         DiscardCommand = new RelayCommand(Discard);
         ApplyPresetCommand = new ParameterCommand(p => ApplyPreset(p is TrackLayoutPreset preset ? preset : TrackLayoutPreset.Simple));
-        Confirm = (message, caption) => Prompts.YesNo(_view, message, caption, MessageBoxImage.Question);
+        Confirm = (message, caption) => Prompts.Ask(_view, message, caption);
         Load(_basis);
     }
 

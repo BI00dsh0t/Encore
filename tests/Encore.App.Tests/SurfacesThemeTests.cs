@@ -93,10 +93,10 @@ public sealed class SurfacesThemeTests
         PromptDialog.Showing += OnShowing;
         try
         {
-            Assert.True(Prompts.YesNo(view, "Move “clip.mp4” to the Recycle Bin?", "Delete", MessageBoxImage.Question));
-            Assert.False(Prompts.YesNo(view, "Delete it?", "Delete", MessageBoxImage.Warning));
-            Assert.False(Prompts.YesNo(view, "Delete it?", "Delete", MessageBoxImage.Question));
-            Assert.False(Prompts.YesNo(view, "Delete it?", "Delete", MessageBoxImage.Question));
+            Assert.True(Prompts.Ask(view, "Move “clip.mp4” to the Recycle Bin?", "Delete"));
+            Assert.False(Prompts.Warn(view, "Delete it?", "Delete"));
+            Assert.False(Prompts.Ask(view, "Delete it?", "Delete"));
+            Assert.False(Prompts.Ask(view, "Delete it?", "Delete"));
         }
         finally
         {

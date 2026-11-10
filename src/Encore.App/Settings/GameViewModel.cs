@@ -57,7 +57,7 @@ internal sealed class GameViewModel : SettingsViewModel
         ShowProgramCommand = new RelayCommand(() => _shell.ShowProgram(ProfileId));
         OpenFolderCommand = new RelayCommand(() => _shell.OpenFolder(FolderPath!), () => FolderPath is not null);
         StopDetectingCommand = new RelayCommand(StopDetecting);
-        Confirm = (message, caption) => Prompts.YesNo(_parent.View, message, caption, MessageBoxImage.Question);
+        Confirm = (message, caption) => Prompts.Ask(_parent.View, message, caption);
         shell.LoadIcon(profileId, icon => Icon = icon);
     }
 
