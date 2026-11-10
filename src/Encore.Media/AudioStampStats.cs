@@ -113,7 +113,7 @@ public sealed class AudioStampStats
         return false;
     }
 
-    /// <summary>Whether the stamp follows the last good one by its frames, within the break; records the jitter when it can tell.</summary>
+    /// <summary>Whether the stamp follows the last good one by its frames, within the break; records the jitter.</summary>
     private bool IsPredictable(long stampQpc, bool discontinuity)
     {
         if (!_previousWasGood || discontinuity)
