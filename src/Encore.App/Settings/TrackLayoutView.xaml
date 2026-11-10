@@ -69,7 +69,7 @@
                         <Button x:Name="PresetButton"
                                 Margin="12,0,0,0"
                                 VerticalAlignment="Top"
-                                Click="OnPresetButtonClick"
+                                Click="OnMenuButtonClick"
                                 Content="Use a preset ▾"
                                 DockPanel.Dock="Right">
                             <Button.ContextMenu>
