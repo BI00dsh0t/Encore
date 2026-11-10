@@ -4,7 +4,7 @@
     Publishes the engine with NativeAOT (win-x64, Release) into publish/engine/.
 
 .DESCRIPTION
-    Runs dotnet publish on ReplayBuffer.Engine. Warnings are errors, and ILC
+    Runs dotnet publish on Encore.Engine. Warnings are errors, and ILC
     inherits that, so any IL2xxx/IL3xxx trim or AOT warning fails the publish.
     The FFmpeg DLLs land beside the exe. The native linker step looks for
     vswhere.exe on PATH, so the Visual Studio Installer folder is added when it
@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..')
-$Project = Join-Path $Root 'src' 'ReplayBuffer.Engine' 'ReplayBuffer.Engine.csproj'
+$Project = Join-Path $Root 'src' 'Encore.Engine' 'Encore.Engine.csproj'
 
 if (-not (Test-Path (Join-Path $Root 'native' 'ffmpeg' 'avcodec-63.dll'))) {
     throw "native/ffmpeg/ is missing; run 'pwsh tools/fetch-ffmpeg.ps1' first."
@@ -41,5 +41,5 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE."
 }
 
-$exe = Get-Item (Join-Path $Output 'ReplayBuffer.Engine.exe')
+$exe = Get-Item (Join-Path $Output 'Encore.Engine.exe')
 Write-Host ("Published {0} ({1:N1} MB)" -f $exe.FullName, ($exe.Length / 1MB))

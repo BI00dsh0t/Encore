@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Encore.Platform.Capture\Encore.Platform.Capture.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Reduces "\GPU Engine(pid_<pid>_*)\Utilization Percentage" samples to per-type use. Dot-sourced
-    by measure-path-a.ps1, and by ReplayBuffer.Bench.Tests to check the reduction.
+    by measure-path-a.ps1, and by Encore.Bench.Tests to check the reduction.
 
 .DESCRIPTION
     A process gets one counter instance per (luid, phys, eng) engine. On the RTX 5090 a process

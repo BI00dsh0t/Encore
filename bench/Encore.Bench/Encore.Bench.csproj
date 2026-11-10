@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- The drift run's marker window. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- ffmpeg and ffprobe decode the captured file; the DLLs come along with them. -->
+    <CopyFFmpegNative>true</CopyFFmpegNative>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Encore.Bench.Tests" />
+    <!-- WinForms is only the marker window, which names its own usings. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Encore.Contracts\Encore.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Encore.Media\Encore.Media.csproj" />
+    <ProjectReference Include="..\..\src\Encore.Platform.Audio\Encore.Platform.Audio.csproj" />
+    <!-- Monitors.OverlayPlanes: whether the load's monitor has hardware overlay planes (story 5.12). Not the App (AD-2). -->
+    <ProjectReference Include="..\..\src\Encore.Platform.Desktop\Encore.Platform.Desktop.csproj" />
+    <!-- Built first, not referenced: bench fps starts its exe from its own output folder. -->
+    <ProjectReference Include="..\Encore.Bench.GpuLoad\Encore.Bench.GpuLoad.csproj" ReferenceOutputAssembly="false" />
+    <!-- Built first, not referenced: bench overlay starts its exe from its own output folder. -->
+    <ProjectReference Include="..\Encore.Bench.Overlay\Encore.Bench.Overlay.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

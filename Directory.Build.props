@@ -14,7 +14,7 @@
   </PropertyGroup>
 
   <!-- AD-14: the engine side builds with the trim and AOT analyzers, their warnings errors. -->
-  <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests')) and '$(MSBuildProjectName)' != 'ReplayBuffer.App' and '$(MSBuildProjectName)' != 'ReplayBuffer.Bench'">
+  <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests')) and '$(MSBuildProjectName)' != 'Encore.App' and '$(MSBuildProjectName)' != 'Encore.Bench'">
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 

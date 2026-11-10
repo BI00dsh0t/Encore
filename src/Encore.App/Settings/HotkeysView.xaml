@@ -1,0 +1,209 @@
+<UserControl x:Class="Encore.App.Settings.HotkeysView"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="clr-namespace:Encore.App.Theme"
+             IsKeyboardFocusWithinChanged="OnFocusWithinChanged"
+             PreviewKeyDown="OnPreviewKeyDown"
+             Unloaded="OnUnloaded">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
+        <!-- A row's status: text-secondary, danger when the Hotkey failed or is a duplicate. -->
+        <Style x:Key="HotkeyStatus" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <!-- The preview's screens sit at their layout position. -->
+        <Style x:Key="ScreenTileContainerStyle" TargetType="ContentPresenter">
+            <Setter Property="Canvas.Left" Value="{Binding Left}" />
+            <Setter Property="Canvas.Top" Value="{Binding Top}" />
+        </Style>
+        <!-- A screen in the preview: the accent fill when chosen, the card's fill otherwise; a tab stop toggled with Space. -->
+        <Style x:Key="ScreenTileStyle" TargetType="ToggleButton">
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlStrongStrokeColorDefaultBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource ControlCornerRadius}">
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource FocusStrokeColorOuterBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <!-- A chosen screen that isn't attached reads greyed. -->
+        <Style x:Key="ScreenRowTextStyle" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsConnected}" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <!-- One Hotkey row: its label, the binding, Set and Clear, and its status under it. -->
+        <DataTemplate x:Key="HotkeyRowTemplate">
+            <Grid Visibility="{Binding IsShown, Converter={StaticResource Visible}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="{Binding Label}" />
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding BindingText}" />
+                <Button Grid.Column="2" Margin="8,4,0,4" Command="{Binding SetCommand}" Content="Set" />
+                <Button Grid.Column="3" Margin="8,4,0,4" Command="{Binding ClearCommand}" Content="Clear" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,0,0,6"
+                           Style="{StaticResource HotkeyStatus}" Text="{Binding StatusText}" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
+            <HeaderedContentControl Header="Clips" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding ClipsHelp}" />
+                    <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding ClipRows}" />
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <HeaderedContentControl Header="Recordings" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding RecordingsHelp}" />
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Record mode" />
+                        <StackPanel Grid.Column="1">
+                            <RadioButton Content="One key starts and stops" GroupName="RecordMode" IsChecked="{Binding IsToggleMode}" />
+                            <RadioButton Margin="0,4,0,0" Content="Separate start and stop keys" GroupName="RecordMode" IsChecked="{Binding IsSeparateMode}" />
+                        </StackPanel>
+                    </Grid>
+                    <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding RecordRows}" />
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <HeaderedContentControl Header="Monitor Recording" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding MonitorHelp}" />
+                    <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding MonitorRows}" />
+                    <!-- Story 11.4: the screens a Monitor Recording composites (design-multi-monitor.md's picker). -->
+                    <Grid x:Name="ScreenPicker" Margin="0,4,0,0" DataContext="{Binding Monitor}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Top" Style="{DynamicResource RbSettingsLabelStyle}" Text="Screens to record" />
+                        <StackPanel Grid.Column="1">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Content="All screens" GroupName="MonitorScreens" IsChecked="{Binding IsAllScreens}" />
+                                <RadioButton Margin="16,0,0,0" Content="Chosen screens" GroupName="MonitorScreens" IsChecked="{Binding IsChosenScreens}" />
+                            </StackPanel>
+                            <!-- Windows' arrangement; each screen toggles its row's tick. Hidden without positions. -->
+                            <Border x:Name="ScreenPreview"
+                                    Margin="0,8,0,0"
+                                    Padding="8"
+                                    HorizontalAlignment="Left"
+                                    Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource ControlCornerRadius}"
+                                    Visibility="{Binding HasPreview, Converter={StaticResource Visible}}">
+                                <ItemsControl Width="{Binding PreviewWidth}"
+                                              Height="{Binding PreviewHeight}"
+                                              AutomationProperties.Name="Screen layout"
+                                              Focusable="False"
+                                              ItemContainerStyle="{StaticResource ScreenTileContainerStyle}"
+                                              ItemsSource="{Binding Tiles}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <Canvas />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <ToggleButton Width="{Binding Width}"
+                                                          Height="{Binding Height}"
+                                                          AutomationProperties.Name="{Binding Row.Label}"
+                                                          IsChecked="{Binding Row.IsChosen}"
+                                                          IsEnabled="{Binding Row.IsEnabled}"
+                                                          Style="{StaticResource ScreenTileStyle}"
+                                                          ToolTip="{Binding Row.ToolTip}">
+                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <TextBlock HorizontalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="{Binding Number}" />
+                                                    <TextBlock HorizontalAlignment="Center"
+                                                               FontSize="11"
+                                                               Text="primary"
+                                                               Visibility="{Binding Primary, Converter={StaticResource Visible}}" />
+                                                </StackPanel>
+                                            </ToggleButton>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+                            <ItemsControl Margin="0,8,0,0" Focusable="False" ItemsSource="{Binding Rows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Margin="0,2"
+                                                  AutomationProperties.Name="{Binding Label}"
+                                                  IsChecked="{Binding IsChosen}"
+                                                  IsEnabled="{Binding IsEnabled}"
+                                                  ToolTip="{Binding ToolTip}">
+                                            <TextBlock Style="{StaticResource ScreenRowTextStyle}" Text="{Binding Label}" />
+                                        </CheckBox>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding OutputText}" />
+                                <Button Grid.Column="1"
+                                        Margin="8,4,0,4"
+                                        Command="{Binding RefreshCommand}"
+                                        Content="Refresh" />
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <HeaderedContentControl Header="Microphone" Style="{DynamicResource RbSettingsSectionStyle}">
+                <StackPanel>
+                    <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding MicRows}" />
+                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding MicHelp, Mode=OneWay}" />
+                </StackPanel>
+            </HeaderedContentControl>
+        </theme:SettingsContent>
+    </ScrollViewer>
+</UserControl>

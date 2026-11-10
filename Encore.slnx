@@ -1,0 +1,32 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Encore.Contracts/Encore.Contracts.csproj" />
+    <Project Path="src/Encore.Core/Encore.Core.csproj" />
+    <Project Path="src/Encore.Media/Encore.Media.csproj" />
+    <Project Path="src/Encore.Platform.Capture/Encore.Platform.Capture.csproj" />
+    <Project Path="src/Encore.Platform.Audio/Encore.Platform.Audio.csproj" />
+    <Project Path="src/Encore.Platform.FFmpeg/Encore.Platform.FFmpeg.csproj" />
+    <Project Path="src/Encore.Platform.Windows/Encore.Platform.Windows.csproj" />
+    <Project Path="src/Encore.Platform.Desktop/Encore.Platform.Desktop.csproj" />
+    <Project Path="src/Encore.Engine/Encore.Engine.csproj" />
+    <Project Path="src/Encore.App/Encore.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Encore.Contracts.Tests/Encore.Contracts.Tests.csproj" />
+    <Project Path="tests/Encore.Core.Tests/Encore.Core.Tests.csproj" />
+    <Project Path="tests/Encore.Media.Tests/Encore.Media.Tests.csproj" />
+    <Project Path="tests/Encore.Platform.Capture.Tests/Encore.Platform.Capture.Tests.csproj" />
+    <Project Path="tests/Encore.Platform.Audio.Tests/Encore.Platform.Audio.Tests.csproj" />
+    <Project Path="tests/Encore.Platform.FFmpeg.Tests/Encore.Platform.FFmpeg.Tests.csproj" />
+    <Project Path="tests/Encore.Platform.Windows.Tests/Encore.Platform.Windows.Tests.csproj" />
+    <Project Path="tests/Encore.Platform.Desktop.Tests/Encore.Platform.Desktop.Tests.csproj" />
+    <Project Path="tests/Encore.Engine.Tests/Encore.Engine.Tests.csproj" />
+    <Project Path="tests/Encore.App.Tests/Encore.App.Tests.csproj" />
+    <Project Path="tests/Encore.Bench.Tests/Encore.Bench.Tests.csproj" />
+  </Folder>
+  <Folder Name="/bench/">
+    <Project Path="bench/Encore.Bench/Encore.Bench.csproj" />
+    <Project Path="bench/Encore.Bench.GpuLoad/Encore.Bench.GpuLoad.csproj" />
+    <Project Path="bench/Encore.Bench.Overlay/Encore.Bench.Overlay.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <CopyFFmpegNative>true</CopyFFmpegNative>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Encore.Platform.FFmpeg\Encore.Platform.FFmpeg.csproj" />
+    <ProjectReference Include="..\..\src\Encore.Platform.Capture\Encore.Platform.Capture.csproj" />
+  </ItemGroup>
+</Project>
