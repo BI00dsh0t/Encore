@@ -20,3 +20,14 @@ measurements/
 
 # NativeAOT engine output of tools/publish-engine.ps1
 publish/
+
+# Local tooling and planning files (BMad, Claude); kept on disk, never committed
+.claude/
+.agents/
+_bmad/
+_bmad-output/
+PLAN.md
+skills-lock.json
+CLAUDE.md
+scratch_build.log
+scratch-build.txt
