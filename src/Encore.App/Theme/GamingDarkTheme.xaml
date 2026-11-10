@@ -68,7 +68,11 @@
         <Setter Property="Control.Template">
             <Setter.Value>
                 <ControlTemplate>
-                    <Border Margin="-3" BorderBrush="{DynamicResource FocusStrokeColorOuterBrush}" BorderThickness="2" CornerRadius="6" SnapsToDevicePixels="True">
+                    <Border Margin="-3"
+                            BorderBrush="{DynamicResource FocusStrokeColorOuterBrush}"
+                            BorderThickness="2"
+                            CornerRadius="6"
+                            SnapsToDevicePixels="True">
                         <Border BorderBrush="{DynamicResource FocusStrokeColorInnerBrush}" BorderThickness="1" CornerRadius="4" />
                     </Border>
                 </ControlTemplate>
@@ -105,7 +109,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContentControl">
-                    <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EncoreUppercase}}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Content,
+                                              RelativeSource={RelativeSource TemplatedParent},
+                                              Converter={StaticResource EncoreUppercase}}"
+                               TextTrimming="CharacterEllipsis" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -143,7 +150,9 @@
                 Padding="{TemplateBinding Padding}">
             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                              Content="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EncoreUppercase}}"
+                              Content="{Binding Content,
+                                                RelativeSource={RelativeSource TemplatedParent},
+                                                Converter={StaticResource EncoreUppercase}}"
                               ContentTemplate="{TemplateBinding ContentTemplate}"
                               RecognizesAccessKey="True" />
         </Border>
@@ -356,7 +365,11 @@
                                 <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource EncoreScrollBarPageButton}" />
                             </Track.IncreaseRepeatButton>
                             <Track.Thumb>
-                                <Thumb x:Name="Thumb" Width="4" HorizontalAlignment="Center" Opacity="0.6" Style="{StaticResource EncoreScrollBarThumb}" />
+                                <Thumb x:Name="Thumb"
+                                       Width="4"
+                                       HorizontalAlignment="Center"
+                                       Opacity="0.6"
+                                       Style="{StaticResource EncoreScrollBarThumb}" />
                             </Track.Thumb>
                         </Track>
                     </Border>
@@ -382,19 +395,27 @@
                             <Border x:Name="Rail" Background="Transparent" CornerRadius="4">
                                 <Track x:Name="PART_Track">
                                     <Track.DecreaseRepeatButton>
-                                        <RepeatButton Command="ScrollBar.PageLeftCommand" Style="{StaticResource EncoreScrollBarPageButton}" />
+                                        <RepeatButton Command="ScrollBar.PageLeftCommand"
+                                                      Style="{StaticResource EncoreScrollBarPageButton}" />
                                     </Track.DecreaseRepeatButton>
                                     <Track.IncreaseRepeatButton>
-                                        <RepeatButton Command="ScrollBar.PageRightCommand" Style="{StaticResource EncoreScrollBarPageButton}" />
+                                        <RepeatButton Command="ScrollBar.PageRightCommand"
+                                                      Style="{StaticResource EncoreScrollBarPageButton}" />
                                     </Track.IncreaseRepeatButton>
                                     <Track.Thumb>
-                                        <Thumb x:Name="Thumb" Height="4" VerticalAlignment="Center" Opacity="0.6" Style="{StaticResource EncoreScrollBarThumb}" />
+                                        <Thumb x:Name="Thumb"
+                                               Height="4"
+                                               VerticalAlignment="Center"
+                                               Opacity="0.6"
+                                               Style="{StaticResource EncoreScrollBarThumb}" />
                                     </Track.Thumb>
                                 </Track>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Rail" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                    <Setter TargetName="Rail"
+                                            Property="Background"
+                                            Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
                                     <Setter TargetName="Thumb" Property="Height" Value="8" />
                                     <Setter TargetName="Thumb" Property="Opacity" Value="1" />
                                 </Trigger>
@@ -487,7 +508,8 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{DynamicResource ControlCornerRadius}" />
-                        <ToggleButton IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Style="{StaticResource EncoreComboBoxToggle}" />
+                        <ToggleButton IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                      Style="{StaticResource EncoreComboBoxToggle}" />
                         <DockPanel Margin="{TemplateBinding Padding}" IsHitTestVisible="False">
                             <Path x:Name="Chevron"
                                   Margin="8,0,0,0"
@@ -556,7 +578,9 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">
                     <Grid Margin="0,1">
-                        <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource ControlCornerRadius}" />
+                        <Border x:Name="Fill"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{DynamicResource ControlCornerRadius}" />
                         <Border x:Name="Pill"
                                 Width="3"
                                 Height="16"
@@ -564,7 +588,8 @@
                                 Background="{DynamicResource AccentFillColorDefaultBrush}"
                                 CornerRadius="1.5"
                                 Visibility="Collapsed" />
-                        <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsSelected" Value="True">
@@ -647,7 +672,9 @@
                             <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentFillColorTertiaryBrush}" />
                         </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource ControlStrongStrokeColorDisabledBrush}" />
+                            <Setter TargetName="Box"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource ControlStrongStrokeColorDisabledBrush}" />
                             <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
                         </Trigger>
                         <MultiTrigger>
@@ -681,8 +708,15 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid Width="18" Height="18" VerticalAlignment="Center">
-                            <Ellipse x:Name="Ring" Fill="Transparent" Stroke="{DynamicResource ControlStrongStrokeColorDefaultBrush}" StrokeThickness="1.5" />
-                            <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{DynamicResource AccentFillColorDefaultBrush}" Visibility="Collapsed" />
+                            <Ellipse x:Name="Ring"
+                                     Fill="Transparent"
+                                     Stroke="{DynamicResource ControlStrongStrokeColorDefaultBrush}"
+                                     StrokeThickness="1.5" />
+                            <Ellipse x:Name="Dot"
+                                     Width="8"
+                                     Height="8"
+                                     Fill="{DynamicResource AccentFillColorDefaultBrush}"
+                                     Visibility="Collapsed" />
                         </Grid>
                         <ContentPresenter Grid.Column="1"
                                           Margin="{TemplateBinding Padding}"
@@ -772,7 +806,10 @@
                             <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Style="{StaticResource EncoreSliderValueButton}" />
                         </Track.DecreaseRepeatButton>
                         <Track.IncreaseRepeatButton>
-                            <RepeatButton x:Name="Rest" Background="{TemplateBinding Background}" Command="{x:Static Slider.IncreaseLarge}" Style="{StaticResource EncoreSliderTrackButton}" />
+                            <RepeatButton x:Name="Rest"
+                                          Background="{TemplateBinding Background}"
+                                          Command="{x:Static Slider.IncreaseLarge}"
+                                          Style="{StaticResource EncoreSliderTrackButton}" />
                         </Track.IncreaseRepeatButton>
                         <Track.Thumb>
                             <Thumb Style="{StaticResource EncoreSliderThumb}" />
@@ -803,7 +840,9 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{DynamicResource ControlCornerRadius}">
-                        <ScrollViewer Padding="{TemplateBinding Padding}" CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}" Focusable="False">
+                        <ScrollViewer Padding="{TemplateBinding Padding}"
+                                      CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                      Focusable="False">
                             <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
                         </ScrollViewer>
                     </Border>
@@ -824,7 +863,9 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{DynamicResource ControlCornerRadius}">
-                        <ScrollViewer Padding="{TemplateBinding Padding}" CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}" Focusable="False">
+                        <ScrollViewer Padding="{TemplateBinding Padding}"
+                                      CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                      Focusable="False">
                             <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
                         </ScrollViewer>
                     </Border>
@@ -846,7 +887,9 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
                     <Grid>
-                        <Border x:Name="Selection" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource ControlCornerRadius}" />
+                        <Border x:Name="Selection"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{DynamicResource ControlCornerRadius}" />
                         <Border x:Name="Hover" Background="Transparent" CornerRadius="{DynamicResource ControlCornerRadius}" />
                         <Border x:Name="Pill"
                                 Width="3"
@@ -917,7 +960,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
-                    <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="{TemplateBinding Padding}">
+                    <Border x:Name="Fill"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{DynamicResource ControlCornerRadius}"
+                            Padding="{TemplateBinding Padding}">
                         <Grid VerticalAlignment="Center">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" SharedSizeGroup="EncoreMenuCheck" />
@@ -930,7 +976,10 @@
                                        Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
                                        Text="✓"
                                        Visibility="Hidden" />
-                            <ContentPresenter Grid.Column="1" VerticalAlignment="Center" ContentSource="Header" RecognizesAccessKey="True" />
+                            <ContentPresenter Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              ContentSource="Header"
+                                              RecognizesAccessKey="True" />
                             <TextBlock Grid.Column="2"
                                        Margin="24,0,0,0"
                                        VerticalAlignment="Center"
@@ -1062,7 +1111,9 @@
                         <ContentPresenter Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="Left"
                                           VerticalAlignment="Center"
-                                          Content="{Binding Header, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EncoreUppercase}}"
+                                          Content="{Binding Header,
+                                                            RelativeSource={RelativeSource TemplatedParent},
+                                                            Converter={StaticResource EncoreUppercase}}"
                                           ContentTemplate="{TemplateBinding HeaderTemplate}"
                                           RecognizesAccessKey="True" />
                         <Border x:Name="Marker"
@@ -1109,8 +1160,13 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ProgressBar">
                     <Grid>
-                        <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
-                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
+                        <Border x:Name="PART_Track"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
+                        <Border x:Name="PART_Indicator"
+                                HorizontalAlignment="Left"
+                                Background="{TemplateBinding Foreground}"
+                                CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
