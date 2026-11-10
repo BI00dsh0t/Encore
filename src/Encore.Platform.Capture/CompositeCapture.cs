@@ -157,8 +157,7 @@ public sealed partial class CompositeCapture : CaptureSource
             }
         }
 
-        var source = _sources.FirstOrDefault(
-            source => !source.Removed && string.Equals(source.Placement.Monitor.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase));
+        var source = _sources.FirstOrDefault(source => !source.Removed && source.Shows(deviceName));
         if (source is null)
         {
             return false;

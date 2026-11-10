@@ -154,8 +154,8 @@ public static unsafe class MonitorFinder
         var name = target.monitorFriendlyDeviceName.AsReadOnlySpan().SliceAtNull().ToString();
         var devicePath = target.monitorDevicePath.AsReadOnlySpan().SliceAtNull().ToString();
         var color = new DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO();
-        color.header = Header<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>(
-            DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO, path.targetInfo.adapterId, path.targetInfo.id);
+        const DISPLAYCONFIG_DEVICE_INFO_TYPE colorInfo = DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+        color.header = Header<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>(colorInfo, path.targetInfo.adapterId, path.targetInfo.id);
         var hdr = PInvoke.DisplayConfigGetDeviceInfo(&color.header) == 0 && color.advancedColorEnabled;
         if (device.Length == 0)
         {
@@ -165,7 +165,7 @@ public static unsafe class MonitorFinder
         return (device, new DisplayTarget(name.Length > 0 ? name : null, devicePath.Length > 0 ? devicePath : null, hdr));
     }
 
-    /// <summary>The header DisplayConfigGetDeviceInfo reads: what to fetch, the size of the struct it fills, and for which path end.</summary>
+    /// <summary>The header DisplayConfigGetDeviceInfo reads: what to fetch, the struct's size, and for which path end.</summary>
     private static DISPLAYCONFIG_DEVICE_INFO_HEADER Header<T>(DISPLAYCONFIG_DEVICE_INFO_TYPE type, LUID adapterId, uint id)
         where T : unmanaged =>
         new() { type = type, size = (uint)sizeof(T), adapterId = adapterId, id = id };

@@ -175,12 +175,11 @@ public sealed class DesktopDuplicationCapture : CaptureSource
         {
             if (Interlocked.Exchange(ref _simulateLost, 0) == 1)
             {
-                if (!RecreateAfterLoss(LossPoint.Simulated))
+                if (!Recover(LossPoint.Simulated, ref fresh))
                 {
                     return;
                 }
 
-                fresh = true;
                 continue;
             }
 
@@ -199,12 +198,11 @@ public sealed class DesktopDuplicationCapture : CaptureSource
 
             if (result == HRESULT.DXGI_ERROR_ACCESS_LOST)
             {
-                if (!RecreateAfterLoss(LossPoint.Acquire))
+                if (!Recover(LossPoint.Acquire, ref fresh))
                 {
                     return;
                 }
 
-                fresh = true;
                 continue;
             }
 
@@ -212,21 +210,28 @@ public sealed class DesktopDuplicationCapture : CaptureSource
             result.ThrowOnFailure();
             lastQpc = DeliverIfNew(frame, fresh, lastQpc);
             fresh = false;
-            result = _duplication.ReleaseFrame();
-            if (result == HRESULT.DXGI_ERROR_ACCESS_LOST && !_stopping)
+            if (!ReleaseFrame(ref fresh))
             {
-                if (!RecreateAfterLoss(LossPoint.Release))
-                {
-                    return;
-                }
-
-                fresh = true;
-            }
-            else if (!_stopping)
-            {
-                result.ThrowOnFailure();
+                return;
             }
         }
+    }
+
+    /// <summary>Releases the frame, recovering from a loss of access there; false when the duplication can't come back.</summary>
+    private bool ReleaseFrame(ref bool fresh)
+    {
+        var result = _duplication.ReleaseFrame();
+        if (result == HRESULT.DXGI_ERROR_ACCESS_LOST && !_stopping)
+        {
+            return Recover(LossPoint.Release, ref fresh);
+        }
+
+        if (!_stopping)
+        {
+            result.ThrowOnFailure();
+        }
+
+        return true;
     }
 
     /// <summary>Delivers a frame that carries a new image; returns the stamp of the last frame delivered.</summary>
@@ -243,7 +248,8 @@ public sealed class DesktopDuplicationCapture : CaptureSource
         return qpc;
     }
 
-    private bool RecreateAfterLoss(LossPoint point)
+    /// <summary>Recreates the duplication after a loss of access, so its next frame is fresh; false when it can't come back.</summary>
+    private bool Recover(LossPoint point, ref bool fresh)
     {
         switch (point)
         {
@@ -258,7 +264,13 @@ public sealed class DesktopDuplicationCapture : CaptureSource
                 break;
         }
 
-        return Recreate();
+        if (!Recreate())
+        {
+            return false;
+        }
+
+        fresh = true;
+        return true;
     }
 
     /// <summary>Recreates the duplication, retrying every 100 ms; false when stopping or when the monitor's output is gone.</summary>

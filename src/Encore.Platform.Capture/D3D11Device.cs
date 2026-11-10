@@ -149,7 +149,7 @@ public sealed unsafe class D3D11Device : IDisposable
         }
     }
 
-    /// <summary>Creates the device and its immediate context on the adapter, into the caller's locals; returns the feature level.</summary>
+    /// <summary>Creates the device and its context on the adapter, into the caller's locals; returns the feature level.</summary>
     private static D3D_FEATURE_LEVEL CreateDevice(IDXGIAdapter1* adapter, ID3D11Device** device, ID3D11DeviceContext** context)
     {
         ReadOnlySpan<D3D_FEATURE_LEVEL> levels = [D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0];

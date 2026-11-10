@@ -91,6 +91,10 @@ public sealed partial class CompositeCapture
 
         internal bool MarkRemoved() => Interlocked.Exchange(ref _removed, 1) == 0;
 
+        /// <summary>Whether this is the screen with the GDI device name, ignoring case.</summary>
+        internal bool Shows(string deviceName) =>
+            string.Equals(Placement.Monitor.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase);
+
         internal void Start()
         {
             if (_owner._sourceFactory is { } factory)
@@ -150,9 +154,9 @@ public sealed partial class CompositeCapture
             {
                 var gap = qpc - _last;
                 _maxGap = Math.Max(_maxGap, gap);
-                var ms = gap / _qpcPerMs;
-                _intervals[Math.Clamp((int)(ms / BucketMs), 0, Buckets)]++;
-                if (ms > 2000.0 / Volatile.Read(ref _owner._fps))
+                var milliseconds = gap / _qpcPerMs;
+                _intervals[Math.Clamp((int)(milliseconds / BucketMs), 0, Buckets)]++;
+                if (milliseconds > 2000.0 / Volatile.Read(ref _owner._fps))
                 {
                     _lateFrames++;
                 }
