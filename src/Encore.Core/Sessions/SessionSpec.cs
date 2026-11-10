@@ -4,38 +4,23 @@ using Encore.Core.Audio;
 
 namespace Encore.Core.Sessions;
 
-/// <summary>What a session captures: a game's window, or (Monitor Recording, epic 3) a monitor.</summary>
+/// <summary>What a session captures: a game's window, or a monitor for a Monitor Recording.</summary>
 public enum SessionKind
 {
     Game,
     Monitor,
 }
 
-/// <summary>
-/// The window a session captures, the process that owns it, and that process's Game Profile
-/// (null for Global). A retarget keeps <see cref="ProcessId"/> (AD-19).
-/// </summary>
+/// <summary>The window a session captures, its process and that process's Game Profile (null for Global).</summary>
 public sealed record CaptureTarget(int ProcessId, nint Window, string? ProfileId);
 
-/// <summary>
-/// One audio device a session captures: loopback for an Output Device, capture for an Input Device
-/// (AD-13). <paramref name="IsMic"/> marks a Mic Device, which mic mute silences in the Tracks it affects.
-/// <paramref name="ParentName"/> is the saved parent device's name: with <paramref name="FriendlyName"/>, it
-/// finds the endpoint again when a mixer restart gives it a new id (story 8.6).
-/// </summary>
+/// <summary>One audio device a session captures; IsMic marks a Mic Device, and the names find it after a mixer restart.</summary>
 public sealed record SessionAudioDevice(string EndpointId, AudioFlow Flow, string FriendlyName, bool IsMic = false, string ParentName = "");
 
-/// <summary>
-/// One Track of a session: its stream title, and the devices it mixes, as indexes into
-/// <see cref="SessionAudio.Devices"/>. In a <paramref name="MuteAffected"/> Track, mic mute silences
-/// its Mic Devices before the mix (AD-13).
-/// </summary>
+/// <summary>One Track of a session: its title and the devices it mixes, as indexes into the session's devices.</summary>
 public sealed record SessionTrack(string Name, IReadOnlyList<int> DeviceIndexes, bool MuteAffected = false);
 
-/// <summary>
-/// A session's audio: the distinct devices it subscribes to, once each (AD-20), and the Tracks
-/// written from them, in stream order; the first Track is the default stream.
-/// </summary>
+/// <summary>A session's audio: the distinct devices it subscribes to, once each, and the Tracks written from them.</summary>
 public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IReadOnlyList<SessionTrack> Tracks)
 {
     /// <summary>No audio at all.</summary>
@@ -48,17 +33,7 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
         return new SessionAudio(devices, [.. devices.Select((d, i) => new SessionTrack(d.FriendlyName, [i]))]);
     }
 
-    /// <summary>
-    /// The session audio of a Track Layout: its Tracks in layout order, and the distinct devices
-    /// some Track references, in first-reference order. A device is one endpoint and flow, however
-    /// many layout keys name it; a device the layout holds but no Track uses is left out. A Track
-    /// with no devices is a silent Track (no device indexes), written as silence. A device is a Mic
-    /// Device when any layout key naming it is one (the safe side for a privacy control), and each
-    /// Track keeps its <c>muteAffected</c>.
-    /// </summary>
-    /// <exception cref="ErrorCodeException">
-    /// <see cref="ErrorCodes.InvalidArguments"/>: a Track names a device key the layout doesn't hold.
-    /// </exception>
+    /// <summary>The session audio of a Track Layout; throws when a Track names a device key the layout lacks.</summary>
     public static SessionAudio FromLayout(TrackLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -118,28 +93,16 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
         return -1;
     }
 
-    /// <summary>The (<c>muteAffected</c> Track, Mic Device) pairs mic mute silences, in Track order, then each Track's device order.</summary>
+    /// <summary>The pairs of a <c>muteAffected</c> Track and a Mic Device that mic mute silences, in Track then device order.</summary>
     public IEnumerable<(SessionTrack Track, SessionAudioDevice Device)> GatedMicInputs() =>
         Tracks
             .Where(t => t.MuteAffected)
             .SelectMany(t => t.DeviceIndexes.Where(i => Devices[i].IsMic).Select(i => (t, Devices[i])));
 }
 
-/// <summary>
-/// A session's description (AD-22): its kind, its target, the settings snapshot resolved once at
-/// Start (AD-5), and its audio. <see cref="Target"/> changes on a retarget, and a game session's
-/// <see cref="Snapshot"/> and <see cref="Audio"/> at a save that switches its encoder chain
-/// (<see cref="ICaptureSession.PrepareChain"/>).
-/// <paramref name="MicMuted"/> is the mic mute at Start, in place before the first audio frame;
-/// later toggles reach the session through <see cref="ICaptureSession.SetMicMuted"/>, and the spec
-/// keeps the Start value.
-/// </summary>
+/// <summary>A session's description: kind, target, the settings snapshot resolved once at Start, and audio.</summary>
 public sealed record SessionSpec(SessionKind Kind, CaptureTarget Target, EffectiveSettings Snapshot, SessionAudio Audio, bool MicMuted = true)
 {
-    /// <summary>
-    /// A Monitor session's screens (story 11.3, AD-25), resolved from <c>monitorRecordingScreens</c> at
-    /// Start, the primary first: two or more are composited into one canvas, one is captured as today.
-    /// Null while the key is null, when the session reads <c>monitorRecordingMonitor</c> as before.
-    /// </summary>
+    /// <summary>A Monitor session's screens, the primary first: two or more are composited. Null reads the older key.</summary>
     public IReadOnlyList<Contracts.Messages.DisplayMonitor>? Screens { get; init; }
 }

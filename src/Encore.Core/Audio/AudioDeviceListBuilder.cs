@@ -4,15 +4,10 @@ using Encore.Core.Settings;
 
 namespace Encore.Core.Audio;
 
-/// <summary>Builds the device list the App offers (R1): present endpoints, plus the absent devices Track Layouts hold.</summary>
+/// <summary>Builds the device list the App offers: present endpoints, plus the absent devices Track Layouts hold.</summary>
 public static class AudioDeviceListBuilder
 {
-    /// <summary>
-    /// Every present device, plus each device of a Track Layout (Global's and every profile's) that
-    /// isn't present with its flow, unavailable and named as the layout names it, listed once.
-    /// Devices match by endpoint id (ordinal, ignoring case) and flow. Sorted by flow (Output first),
-    /// friendly name, parent name (ignoring case), then endpoint id. Pure.
-    /// </summary>
+    /// <summary>Every present device, plus each Track Layout device that isn't present, listed once and sorted. Pure.</summary>
     public static AudioDeviceList Build(IReadOnlyList<AudioDevice> present, SettingsDocument document)
     {
         ArgumentNullException.ThrowIfNull(present);

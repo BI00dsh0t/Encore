@@ -2,11 +2,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.Core.Feedback;
 
-/// <summary>
-/// The five built-in Feedback Sounds, rendered by deterministic code and cached on first use:
-/// 48 kHz interleaved stereo float, each under 600 ms with a short fade in and out, and a peak of
-/// exactly <see cref="PeakDbfs"/>. Nothing ships as a file and the samples are identical every run.
-/// </summary>
+/// <summary>The five built-in Feedback Sounds, made by code and cached: 48 kHz stereo float, each under 600 ms.</summary>
 public static class FeedbackSoundSynth
 {
     public const int SampleRate = 48_000;

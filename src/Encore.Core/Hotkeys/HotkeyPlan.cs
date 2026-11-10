@@ -4,30 +4,20 @@ using Encore.Core.Settings;
 
 namespace Encore.Core.Hotkeys;
 
-/// <summary>
-/// What to do with one <see cref="HotkeyAction"/>: register <see cref="Binding"/>, or skip it for
-/// <see cref="SkipCode"/>. <see cref="Binding"/> is the configured one, or null when unbound.
-/// </summary>
+/// <summary>What to do with one Hotkey action: register its binding, or skip it for SkipCode.</summary>
 public sealed record HotkeyPlanEntry(HotkeyAction Action, HotkeyBinding? Binding, string? SkipCode)
 {
     /// <summary>Whether this action is to be registered.</summary>
     public bool Registers => SkipCode is null;
 }
 
-/// <summary>
-/// Which Hotkeys to register (AD-11), from the settings alone. Pure: no Win32, no state. Every
-/// action appears once, in <see cref="HotkeyAction"/> order.
-/// </summary>
+/// <summary>Which Hotkeys to register, from the settings alone. Pure; every action appears once, in enum order.</summary>
 public static class HotkeyPlan
 {
     /// <summary>Every action, in registration order.</summary>
     public static IReadOnlyList<HotkeyAction> Actions { get; } = Enum.GetValues<HotkeyAction>();
 
-    /// <summary>
-    /// The plan for <paramref name="document"/>'s Global <c>hotkeys</c> and <c>recordHotkeyMode</c>.
-    /// With no valid <c>hotkeys</c> in the document, the catalog default applies only when
-    /// <paramref name="useCatalogDefault"/> (the installed instance); otherwise nothing is bound (AD-16).
-    /// </summary>
+    /// <summary>The plan for a document's Global Hotkeys; with none set, the catalog default applies only when asked for.</summary>
     public static IReadOnlyList<HotkeyPlanEntry> For(SettingsDocument document, bool useCatalogDefault)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -38,12 +28,7 @@ public static class HotkeyPlan
         return For(hotkeys, SettingsResolver.Resolve(document, null).RecordHotkeyMode);
     }
 
-    /// <summary>
-    /// The plan for <paramref name="hotkeys"/> (null: none bound) in <paramref name="mode"/>. An unbound
-    /// action is <see cref="ErrorCodes.HotkeyUnbound"/>, whatever the mode; a bound one the mode doesn't
-    /// use is <see cref="ErrorCodes.HotkeyInactive"/>; and one whose combination an earlier action
-    /// already takes is <see cref="ErrorCodes.HotkeyDuplicate"/>.
-    /// </summary>
+    /// <summary>The plan for these Hotkeys in a mode: an action is skipped when unbound, unused by the mode, or a duplicate.</summary>
     public static IReadOnlyList<HotkeyPlanEntry> For(HotkeySettings? hotkeys, RecordHotkeyMode mode)
     {
         var entries = new List<HotkeyPlanEntry>(Actions.Count);
@@ -76,10 +61,7 @@ public static class HotkeyPlan
         return entries;
     }
 
-    /// <summary>
-    /// Whether <paramref name="mode"/> uses <paramref name="action"/>: toggle uses recordToggle and
-    /// monitorRecordToggle, separate recordStart, recordStop, monitorRecordStart and monitorRecordStop.
-    /// </summary>
+    /// <summary>Whether a mode uses an action: toggle mode uses the toggles, separate mode the start and stop actions.</summary>
     public static bool IsActive(HotkeyAction action, RecordHotkeyMode mode) => action switch
     {
         HotkeyAction.RecordToggle or HotkeyAction.MonitorRecordToggle => mode == RecordHotkeyMode.Toggle,
@@ -95,10 +77,7 @@ public static class HotkeyPlan
         return a.Vk == b.Vk && (a.Modifiers & ~HotkeyModifiers.NoRepeat) == (b.Modifiers & ~HotkeyModifiers.NoRepeat);
     }
 
-    /// <summary>
-    /// The first pair of actions, in <see cref="HotkeyAction"/> order, bound to one combination,
-    /// whatever the mode; null when every binding is distinct.
-    /// </summary>
+    /// <summary>The first pair of actions bound to one combination, in enum order; null when every binding is distinct.</summary>
     public static (HotkeyAction First, HotkeyAction Second)? FindDuplicate(HotkeySettings hotkeys)
     {
         ArgumentNullException.ThrowIfNull(hotkeys);

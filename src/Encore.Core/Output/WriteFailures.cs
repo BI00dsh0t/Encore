@@ -2,21 +2,14 @@ using Encore.Contracts;
 
 namespace Encore.Core.Output;
 
-/// <summary>
-/// The short reason a failed save reports in <c>clip.failed</c> (R6), from what its writer threw.
-/// Clips use it now; Recordings reuse it later.
-/// </summary>
+/// <summary>The short reason a failed save reports in <c>clip.failed</c>, from what its writer threw.</summary>
 public static class WriteFailures
 {
     // ERROR_DISK_FULL and ERROR_HANDLE_DISK_FULL as HRESULTs.
     private const int DiskFullHResult = unchecked((int)0x80070070);
     private const int HandleDiskFullHResult = unchecked((int)0x80070027);
 
-    /// <summary>
-    /// <see cref="ErrorCodes.ClipTooShort"/>, <see cref="ErrorCodes.SaveBusy"/>,
-    /// <see cref="ErrorCodes.DiskFull"/> or <see cref="ErrorCodes.AccessDenied"/> when
-    /// <paramref name="e"/> carries or means one, else <see cref="ErrorCodes.SaveFailed"/>.
-    /// </summary>
+    /// <summary>The error code an exception carries or means: too short, busy, disk full or access denied, else save failed.</summary>
     public static string ReasonOf(Exception e)
     {
         ArgumentNullException.ThrowIfNull(e);

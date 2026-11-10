@@ -2,15 +2,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Encore.Core.Replay;
 
-/// <summary>
-/// The Disk-mode Rewind's file (R3, AD-8): <c>ring-&lt;n&gt;.bin</c>, preallocated to a whole
-/// number of fixed-size blocks, each one <see cref="PacketRing"/> slab. Bytes go in and out by
-/// positional <see cref="RandomAccess"/> calls on one handle, never a memory map, so writeback takes
-/// the handle's I/O priority hint (AD-7). The file is never grown past <see cref="Bytes"/>; the
-/// handle is opened <see cref="FileOptions.DeleteOnClose"/>, so the file goes when it closes, and
-/// even when the process dies with it open. <c>&lt;n&gt;</c> counts across the process, so two
-/// rings (two sessions, or two generations) never share a file.
-/// </summary>
+/// <summary>The Disk-mode ring's file, preallocated in fixed blocks and deleted when its handle closes. docs/code-notes.md.</summary>
 public sealed class RingFile
 {
     public const string Prefix = "ring-";
@@ -48,13 +40,7 @@ public sealed class RingFile
     /// <summary>One block's size, the slab size of the ring on it.</summary>
     public int BlockBytes { get; }
 
-    /// <summary>
-    /// Creates <paramref name="folder"/> if needed and a new, preallocated ring file in it, of the
-    /// whole blocks that fit in <paramref name="bytes"/> (at least 2), so it never exceeds the size
-    /// it was given; <paramref name="configure"/> then sees its handle (the I/O priority hint).
-    /// </summary>
-    /// <exception cref="IOException">The folder or file couldn't be created, or there is no room for it.</exception>
-    /// <exception cref="UnauthorizedAccessException">The folder can't be written.</exception>
+    /// <summary>Creates a new preallocated ring file of the whole blocks that fit in the given size; throws when it can't.</summary>
     public static RingFile Create(string folder, long bytes, int blockBytes = PacketRing.DefaultSlabBytes, Action<SafeFileHandle>? configure = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
@@ -77,11 +63,7 @@ public sealed class RingFile
         return new RingFile(path, handle, blocks, blockBytes);
     }
 
-    /// <summary>
-    /// Deletes every <c>ring-&lt;n&gt;.bin</c> in <paramref name="folder"/>, those a killed engine
-    /// left; any other file, one in use, or one not deletable is skipped. Returns how many went; 0
-    /// when there is no folder.
-    /// </summary>
+    /// <summary>Deletes the ring files a killed engine left in the folder; others are skipped. Returns how many went.</summary>
     public static int RemoveStale(string folder)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);

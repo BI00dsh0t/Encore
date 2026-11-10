@@ -1,8 +1,6 @@
 namespace Encore.Core.Replay;
 
 /// <summary>The machine's physical memory: what is available now, and what is installed.</summary>
-/// <param name="AvailableBytes">Physical memory available now.</param>
-/// <param name="TotalBytes">Physical memory installed.</param>
 public readonly record struct MemoryStatus(long AvailableBytes, long TotalBytes);
 
 /// <summary>Reads the machine's physical memory status.</summary>
@@ -21,14 +19,7 @@ public enum MemoryMarginEvent
     ShortRing,
 }
 
-/// <summary>
-/// The RAM margin (R3): a ring asks <see cref="Allows"/> before each new native-memory slab, and
-/// is refused when the slab would leave less than <see cref="MarginBytes"/> available. Once inside,
-/// it leaves only when the slab would still leave the margin plus <see cref="LeaveSlackBytes"/>.
-/// One per engine, shared by every ring under its own lock. <see cref="Raised"/> is invoked
-/// outside that lock: <see cref="MemoryMarginEvent.Entered"/> once per entry, and
-/// <see cref="MemoryMarginEvent.ShortRing"/> at most once per entry.
-/// </summary>
+/// <summary>The RAM margin: a ring asks before each new native-memory slab and is refused when too little would be left.</summary>
 public sealed class MemoryMargin(IMemoryStatus status)
 {
     /// <summary>The least the margin is, whatever is installed.</summary>
@@ -63,11 +54,7 @@ public sealed class MemoryMargin(IMemoryStatus status)
     /// <summary>The margin for <paramref name="totalBytes"/> installed: <c>max(4 GiB, 15% of installed)</c>.</summary>
     public static long MarginBytes(long totalBytes) => Math.Max(FloorBytes, (long)(totalBytes * InstalledShare));
 
-    /// <summary>
-    /// Whether a new slab of <paramref name="bytes"/> leaves the margin available. A refusal from
-    /// outside enters the margin and raises <see cref="MemoryMarginEvent.Entered"/>; an allowance
-    /// from inside leaves it.
-    /// </summary>
+    /// <summary>Whether a new slab leaves the margin available; a refusal enters the margin and an allowance leaves it.</summary>
     public bool Allows(long bytes)
     {
         var current = _status.Read();
@@ -97,7 +84,7 @@ public sealed class MemoryMargin(IMemoryStatus status)
         return allowed;
     }
 
-    /// <summary>A ring's margin trim left it under 1 s: raises <see cref="MemoryMarginEvent.ShortRing"/> once per entry, and only while inside.</summary>
+    /// <summary>A ring's margin trim left it under 1 s: raises the short-ring event once per entry, and only while inside.</summary>
     public void ReportShortRing()
     {
         lock (_lock)

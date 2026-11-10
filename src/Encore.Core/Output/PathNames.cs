@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Encore.Core.Output;
 
-/// <summary>The one file- and folder-name sanitizer for output paths (AD-21).</summary>
+/// <summary>The one file- and folder-name sanitizer for output paths.</summary>
 public static class PathNames
 {
     /// <summary>The name of a game folder or file whose name sanitizes to nothing.</summary>
@@ -17,11 +17,7 @@ public static class PathNames
         "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³",
     };
 
-    /// <summary>
-    /// <paramref name="name"/> made safe as one Windows path segment: invalid and control characters
-    /// become <c>_</c>, surrounding spaces and trailing dots go, it is cut to 100 characters, and a
-    /// name whose part before the first <c>.</c> is a reserved device name is prefixed <c>_</c>. A name with nothing left is <paramref name="fallback"/>.
-    /// </summary>
+    /// <summary>A name made safe as one Windows path segment: bad characters become <c>_</c>, and it is cut to 100 characters.</summary>
     public static string Sanitize(string name, string fallback)
     {
         ArgumentNullException.ThrowIfNull(name);

@@ -1,30 +1,12 @@
 namespace Encore.Core.Replay;
 
-/// <summary>
-/// Rewind as numbered generations (R5, AD-8), oldest first, each a <see cref="PacketRing"/>
-/// with its own streams; packets go into the newest, the current one.
-/// <list type="bullet">
-/// <item>A <see cref="Restart"/> (a forced encoder restart) opens an empty generation whose first
-/// video keyframe is its start, a boundary that counts as a Reset. A Clip holds one generation: a
-/// cut ending less than <see cref="MinClipUs"/> past a boundary comes from the previous generation,
-/// ending at the boundary, if that holds at least <see cref="MinClipUs"/>.</item>
-/// <item>A <see cref="Resize"/> (a Buffer Window change at a Reset) opens a generation with the same
-/// streams, seeded with the old ring's packets from the Reset keyframe on, and retires the old one
-/// at once, so the timeline stays continuous.</item>
-/// </list>
-/// A retired ring is disposed once no cut is reading it; slabs a cut pins outlive it. Routing a
-/// packet is a field read under one short lock, so <see cref="Append"/> allocates nothing managed;
-/// a cut's filter and sort run outside that lock.
-/// </summary>
+/// <summary>Rewind as numbered generations, each a ring with its own streams; packets go into the newest. docs/code-notes.md.</summary>
 public sealed class RingGenerations : IDisposable
 {
-    /// <summary>The shortest Clip (R4), and how far past a boundary a cut must end to come from the new generation.</summary>
+    /// <summary>The shortest Clip, and how far past a boundary a cut must end to come from the new generation.</summary>
     public const long MinClipUs = 1_000_000;
 
-    /// <summary>
-    /// How long a restart's predecessor is kept past <see cref="MinClipUs"/> after the boundary:
-    /// twice a waiting writer's save wait, so a press just after the boundary can still cut it.
-    /// </summary>
+    /// <summary>How long a restart's predecessor is kept after the boundary, so a press just after it can still cut it.</summary>
     public const long RetireSlackUs = 5_000_000;
 
     private readonly Lock _lock = new();
@@ -115,18 +97,7 @@ public sealed class RingGenerations : IDisposable
         }
     }
 
-    /// <summary>
-    /// Opens an empty generation on <paramref name="next"/> (an encoder restart); its streams are
-    /// added next, and its first video keyframe is its start. The current one becomes its
-    /// predecessor, and any older is retired. Returns the new generation's number.
-    /// Precondition: no save is waiting for its keyframe or its streams (the caller drains or waits
-    /// for in-flight saves first), since <see cref="ToMicros"/> and <see cref="AllStreamsPast"/>
-    /// read the new generation from here on, which has no streams until the new chain adds them.
-    /// A restart while the current generation is itself a restart's with no keyframe yet (a
-    /// failed recovery attempt after a GPU reset, say) replaces that empty generation instead:
-    /// it is retired, and its predecessor stays the new one's, so the content before the first
-    /// restart stays cuttable.
-    /// </summary>
+    /// <summary>Opens an empty generation for an encoder restart; no save may be waiting. Returns its number.</summary>
     public int Restart(PacketRing next)
     {
         ArgumentNullException.ThrowIfNull(next);
@@ -148,14 +119,7 @@ public sealed class RingGenerations : IDisposable
         }
     }
 
-    /// <summary>
-    /// Opens a generation on <paramref name="next"/> (a Buffer Window resize at a Reset), seeded
-    /// with the current ring's packets from the keyframe at or after <paramref name="fromUs"/> on,
-    /// and retires the old one at once. Returns the new generation's number. Most of the tail is
-    /// copied in batches without this lock (<see cref="PacketRing.CopyTailTo"/>), so the encoders
-    /// keep appending; only the remainder appended meanwhile is copied under it, then the switch.
-    /// Called from one thread, never alongside <see cref="Restart"/> or another resize.
-    /// </summary>
+    /// <summary>Opens a generation for a Buffer Window resize, seeded from the keyframe at fromUs; the old one is retired.</summary>
     public int Resize(PacketRing next, long fromUs)
     {
         ArgumentNullException.ThrowIfNull(next);
@@ -183,12 +147,7 @@ public sealed class RingGenerations : IDisposable
         }
     }
 
-    /// <summary>
-    /// Pins <c>[fromUs, toUs)</c> from one generation: the newest that starts before
-    /// <paramref name="toUs"/>. Less than <see cref="MinClipUs"/> past its boundary, the previous
-    /// generation up to the boundary instead, when that holds at least <see cref="MinClipUs"/>;
-    /// otherwise nothing. Null when there is nothing to cut. The cut itself runs outside the lock.
-    /// </summary>
+    /// <summary>Pins a time range from one generation: the newest that starts before its end. Null when there is nothing.</summary>
     public (RingCut Cut, int Generation)? Cut(long fromUs, long toUs)
     {
         Generation chosen;
@@ -315,10 +274,7 @@ public sealed class RingGenerations : IDisposable
 
         public PacketRing Ring { get; } = ring;
 
-        /// <summary>
-        /// Its boundary in µs since the anchor: <see cref="long.MinValue"/> for generation 1, else
-        /// its ring's first keyframe, <see cref="long.MaxValue"/> until there is one. The lock guards it.
-        /// </summary>
+        /// <summary>Its boundary in µs since the anchor: MinValue for generation 1, else its first keyframe (MaxValue before).</summary>
         public long StartUs { get; set; } = startUs;
 
         /// <summary>Cuts reading its ring outside the lock. The lock guards it.</summary>

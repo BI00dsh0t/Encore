@@ -21,11 +21,7 @@ public interface IFeedbackSoundOutput
     /// <summary>The id of the default communications render endpoint, or <c>null</c> when there is none.</summary>
     string? DefaultEndpointId();
 
-    /// <summary>
-    /// Plays <paramref name="pcm"/> (<see cref="FeedbackSoundSynth"/>'s format) on <paramref name="endpointId"/>
-    /// and returns once it has played.
-    /// </summary>
-    /// <exception cref="Exception">The endpoint can't be opened or failed while playing.</exception>
+    /// <summary>Plays the samples on an endpoint and returns once played; throws when the endpoint can't be opened or fails.</summary>
     void Play(string endpointId, ReadOnlyMemory<float> pcm);
 }
 
@@ -41,13 +37,7 @@ public sealed class SilentFeedbackSoundOutput : IFeedbackSoundOutput
     }
 }
 
-/// <summary>
-/// Plays Feedback Sounds (FR-6) in order on one worker thread, so callers never block on audio.
-/// The <c>feedbackSounds</c> flag is read at each enqueue from the current settings, and the
-/// endpoint is resolved at each play: <c>feedbackSoundDevice</c>, else the default communications
-/// endpoint, so it follows a change of the default. A failing play is reported to
-/// <c>failed</c> and skipped; nothing throws to the caller.
-/// </summary>
+/// <summary>Plays Feedback Sounds in order on one worker thread, so callers never block on audio and nothing throws.</summary>
 public sealed class FeedbackSoundPlayer : IDisposable
 {
     private readonly IFeedbackSoundOutput _output;
@@ -78,17 +68,10 @@ public sealed class FeedbackSoundPlayer : IDisposable
         _ => null,
     };
 
-    /// <summary>
-    /// The endpoint sounds play on now: <c>feedbackSoundDevice</c>, else the default communications
-    /// endpoint, else <c>null</c>.
-    /// </summary>
-    /// <exception cref="Exception">The output couldn't read the default endpoint.</exception>
+    /// <summary>The endpoint sounds play on now: <c>feedbackSoundDevice</c>, else the default communications one, else null.</summary>
     public string? Endpoint() => SettingsResolver.Resolve(_settings(), null).FeedbackSoundDevice ?? _output.DefaultEndpointId();
 
-    /// <summary>
-    /// Queues the sound named <paramref name="name"/> if it is switched on. Returns whether it was
-    /// queued: <c>false</c> when it is off, the name is unknown or the player is disposed. Never blocks.
-    /// </summary>
+    /// <summary>Queues a named sound when it is switched on and returns whether it was queued. Never blocks.</summary>
     public bool Play(string? name)
     {
         if (Parse(name) is not { } sound || !SettingsResolver.Resolve(_settings(), null).FeedbackSounds.IsOn(sound))
