@@ -8,26 +8,6 @@ using Windows.Win32.UI.Shell.PropertiesSystem;
 
 namespace Encore.Platform.Audio;
 
-/// <summary>Output Devices are captured by loopback, Input Devices by capture.</summary>
-public enum AudioFlow
-{
-    Output,
-    Input,
-}
-
-/// <summary>An active MMDevice endpoint; ParentName is the audio device that exposes it, or empty.</summary>
-public sealed record AudioEndpoint(string Id, string FriendlyName, AudioFlow Flow, string ParentName = "");
-
-public enum EndpointMatchOutcome
-{
-    Found,
-    NotFound,
-    Ambiguous,
-}
-
-/// <summary>The result of matching a device name: the endpoint when exactly one matched, otherwise the candidates to list.</summary>
-public sealed record EndpointMatch(EndpointMatchOutcome Outcome, AudioEndpoint? Endpoint, IReadOnlyList<AudioEndpoint> Candidates);
-
 /// <summary>Lists and resolves audio endpoints.</summary>
 public static unsafe class AudioEndpoints
 {
@@ -99,16 +79,7 @@ public static unsafe class AudioEndpoints
 
         try
         {
-            PWSTR id = default;
-            device->GetId(&id);
-            try
-            {
-                return id.ToString();
-            }
-            finally
-            {
-                PInvoke.CoTaskMemFree(id.Value);
-            }
+            return ReadId(device);
         }
         finally
         {
@@ -144,15 +115,15 @@ public static unsafe class AudioEndpoints
     public static EndpointMatch Match(IReadOnlyList<AudioEndpoint> endpoints, string query)
     {
         var exact = endpoints
-            .Where(e => string.Equals(e.Id, query, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(e.FriendlyName, query, StringComparison.OrdinalIgnoreCase))
+            .Where(endpoint => string.Equals(endpoint.Id, query, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(endpoint.FriendlyName, query, StringComparison.OrdinalIgnoreCase))
             .ToList();
         if (exact.Count == 1)
         {
             return new EndpointMatch(EndpointMatchOutcome.Found, exact[0], exact);
         }
 
-        var matches = endpoints.Where(e => e.FriendlyName.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        var matches = endpoints.Where(endpoint => endpoint.FriendlyName.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
         return matches.Count switch
         {
             0 => new EndpointMatch(EndpointMatchOutcome.NotFound, null, endpoints),
@@ -173,10 +144,10 @@ public static unsafe class AudioEndpoints
     /// <summary>Joins the MTA if the thread has no apartment yet; an STA thread is left alone.</summary>
     internal static void EnsureCom()
     {
-        var hr = PInvoke.CoInitializeEx(COINIT.COINIT_MULTITHREADED);
-        if (hr.Failed && hr != HRESULT.RPC_E_CHANGED_MODE)
+        var result = PInvoke.CoInitializeEx(COINIT.COINIT_MULTITHREADED);
+        if (result.Failed && result != HRESULT.RPC_E_CHANGED_MODE)
         {
-            hr.ThrowOnFailure();
+            result.ThrowOnFailure();
         }
     }
 
@@ -195,18 +166,7 @@ public static unsafe class AudioEndpoints
 
     internal static AudioEndpoint Describe(IMMDevice* device, AudioFlow flow)
     {
-        PWSTR id = default;
-        device->GetId(&id);
-        string idText;
-        try
-        {
-            idText = id.ToString();
-        }
-        finally
-        {
-            PInvoke.CoTaskMemFree(id.Value);
-        }
-
+        var idText = ReadId(device);
         IPropertyStore* store = null;
         device->OpenPropertyStore(STGM.STGM_READ, &store);
         try
@@ -218,6 +178,21 @@ public static unsafe class AudioEndpoints
         finally
         {
             store->Release();
+        }
+    }
+
+    /// <summary>The device's endpoint id; the string COM allocated for it is freed here.</summary>
+    private static string ReadId(IMMDevice* device)
+    {
+        PWSTR id = default;
+        device->GetId(&id);
+        try
+        {
+            return id.ToString();
+        }
+        finally
+        {
+            PInvoke.CoTaskMemFree(id.Value);
         }
     }
 

@@ -5,7 +5,6 @@ using Encore.Media;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Media.Audio;
-using Windows.Win32.System.Com;
 
 namespace Encore.Platform.Audio;
 
@@ -35,11 +34,11 @@ public sealed unsafe class TonePlayer : IDisposable
     private Thread? _thread;
     private volatile bool _stopping;
 
-    /// <summary>The dbfs argument is the bursts' peak level; the tone plays 10 dB below it. Capacity is the most stamps kept.</summary>
-    public TonePlayer(string endpointId, double dbfs = -30, int capacity = 8192)
+    /// <summary>burstDbfs is the bursts' peak level in dBFS; the tone plays 10 dB below it. Capacity is the most stamps kept.</summary>
+    public TonePlayer(string endpointId, double burstDbfs = -30, int capacity = 8192)
     {
-        _burstAmplitude = (float)Math.Pow(10, dbfs / 20);
-        _toneAmplitude = (float)Math.Pow(10, (dbfs - 10) / 20);
+        _burstAmplitude = (float)Math.Pow(10, burstDbfs / 20);
+        _toneAmplitude = (float)Math.Pow(10, (burstDbfs - 10) / 20);
         _burstQpcs = new long[capacity];
         IMMDevice* device = null;
         try
@@ -47,47 +46,15 @@ public sealed unsafe class TonePlayer : IDisposable
             AudioEndpoints.EnsureCom();
             device = AudioEndpoints.OpenDevice(endpointId);
             Endpoint = AudioEndpoints.Describe(device, AudioFlow.Output);
-
-            var clientIid = IAudioClient.IID_Guid;
-            IAudioClient* client = null;
-            device->Activate(&clientIid, CLSCTX.CLSCTX_ALL, null, (void**)&client);
-            _client = client;
-
-            var format = new WAVEFORMATEX
-            {
-                wFormatTag = (ushort)PInvoke.WAVE_FORMAT_IEEE_FLOAT,
-                nChannels = AudioFormat.Channels,
-                nSamplesPerSec = AudioFormat.SampleRate,
-                wBitsPerSample = 32,
-                nBlockAlign = AudioFormat.Channels * sizeof(float),
-                nAvgBytesPerSec = AudioFormat.SampleRate * AudioFormat.Channels * sizeof(float),
-                cbSize = 0,
-            };
-            var flags = PInvoke.AUDCLNT_STREAMFLAGS_EVENTCALLBACK
-                | PInvoke.AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
-                | PInvoke.AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
-            _client->Initialize(AUDCLNT_SHAREMODE.AUDCLNT_SHAREMODE_SHARED, flags, BufferDuration100ns, 0, &format, null);
-
-            _event = PInvoke.CreateEvent(null, false, false, default(PCWSTR));
-            if (_event.IsNull)
-            {
-                throw new InvalidOperationException("CreateEvent failed.");
-            }
-
-            _client->SetEventHandle(_event);
+            _client = SharedAudioClient.Activate(device);
+            SharedAudioClient.InitializeShared(
+                _client, SharedAudioClient.EventDrivenFlags, BufferDuration100ns, AudioFormat.Channels, AudioFormat.SampleRate);
+            SharedAudioClient.AttachEvent(_client, ref _event);
             uint bufferFrames;
             _client->GetBufferSize(&bufferFrames);
             _bufferFrames = bufferFrames;
-
-            var renderIid = IAudioRenderClient.IID_Guid;
-            IAudioRenderClient* render = null;
-            _client->GetService(&renderIid, (void**)&render);
-            _render = render;
-
-            var clockIid = IAudioClock.IID_Guid;
-            IAudioClock* clock = null;
-            _client->GetService(&clockIid, (void**)&clock);
-            _clock = clock;
+            _render = (IAudioRenderClient*)SharedAudioClient.GetService(_client, IAudioRenderClient.IID_Guid);
+            _clock = (IAudioClock*)SharedAudioClient.GetService(_client, IAudioClock.IID_Guid);
             ulong frequency;
             _clock->GetFrequency(&frequency);
             _clockFrequency = frequency;
@@ -149,36 +116,16 @@ public sealed unsafe class TonePlayer : IDisposable
             }
         }
 
-        if (_clock is not null)
-        {
-            _clock->Release();
-            _clock = null;
-        }
-
-        if (_render is not null)
-        {
-            _render->Release();
-            _render = null;
-        }
-
-        if (_client is not null)
-        {
-            _client->Release();
-            _client = null;
-        }
-
-        if (!_event.IsNull)
-        {
-            PInvoke.CloseHandle(_event);
-            _event = default;
-        }
+        SharedAudioClient.Release(ref _clock);
+        SharedAudioClient.Release(ref _render);
+        SharedAudioClient.Release(ref _client);
+        SharedAudioClient.CloseEvent(ref _event);
     }
 
     private void Run()
     {
         AudioEndpoints.EnsureCom();
-        uint taskIndex = 0;
-        using var mmcss = PInvoke.AvSetMmThreadCharacteristics("Pro Audio", ref taskIndex);
+        using var proAudio = SharedAudioClient.JoinProAudio();
         try
         {
             while (!_stopping)
@@ -208,11 +155,11 @@ public sealed unsafe class TonePlayer : IDisposable
         var samples = new Span<float>(data, (int)frames * AudioFormat.Channels);
         for (var i = 0; i < frames; i++)
         {
-            var n = _written + i;
-            var inBurst = n >= BurstIntervalFrames && n % BurstIntervalFrames < BurstFrames;
+            var frame = _written + i;
+            var inBurst = frame >= BurstIntervalFrames && frame % BurstIntervalFrames < BurstFrames;
             var value = inBurst
-                ? _burstAmplitude * Math.Sin(2 * Math.PI * BurstHz * n / AudioFormat.SampleRate)
-                : _toneAmplitude * Math.Sin(2 * Math.PI * ToneHz * n / AudioFormat.SampleRate);
+                ? _burstAmplitude * Math.Sin(2 * Math.PI * BurstHz * frame / AudioFormat.SampleRate)
+                : _toneAmplitude * Math.Sin(2 * Math.PI * ToneHz * frame / AudioFormat.SampleRate);
             samples[2 * i] = samples[(2 * i) + 1] = (float)value;
         }
 

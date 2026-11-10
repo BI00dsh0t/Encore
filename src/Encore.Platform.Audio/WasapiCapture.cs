@@ -6,7 +6,6 @@ using Encore.Media;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Media.Audio;
-using Windows.Win32.System.Com;
 
 namespace Encore.Platform.Audio;
 
@@ -43,44 +42,16 @@ internal sealed unsafe class WasapiCapture : IDeviceClient
             AudioEndpoints.EnsureCom();
             device = AudioEndpoints.OpenDevice(endpointId);
             Endpoint = AudioEndpoints.Describe(device, flow);
-
-            var clientIid = IAudioClient.IID_Guid;
-            IAudioClient* client = null;
-            device->Activate(&clientIid, CLSCTX.CLSCTX_ALL, null, (void**)&client);
-            _client = client;
-
-            var format = new WAVEFORMATEX
-            {
-                wFormatTag = (ushort)PInvoke.WAVE_FORMAT_IEEE_FLOAT,
-                nChannels = AudioFormat.Channels,
-                nSamplesPerSec = AudioFormat.SampleRate,
-                wBitsPerSample = 32,
-                nBlockAlign = AudioFormat.Channels * sizeof(float),
-                nAvgBytesPerSec = AudioFormat.SampleRate * AudioFormat.Channels * sizeof(float),
-                cbSize = 0,
-            };
-            var flags = PInvoke.AUDCLNT_STREAMFLAGS_EVENTCALLBACK
-                | PInvoke.AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
-                | PInvoke.AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+            _client = SharedAudioClient.Activate(device);
+            var flags = SharedAudioClient.EventDrivenFlags;
             if (IsLoopback)
             {
                 flags |= PInvoke.AUDCLNT_STREAMFLAGS_LOOPBACK;
             }
 
-            _client->Initialize(AUDCLNT_SHAREMODE.AUDCLNT_SHAREMODE_SHARED, flags, BufferDuration100ns, 0, &format, null);
-
-            _event = PInvoke.CreateEvent(null, false, false, default(PCWSTR));
-            if (_event.IsNull)
-            {
-                throw new InvalidOperationException("CreateEvent failed.");
-            }
-
-            _client->SetEventHandle(_event);
-
-            var captureIid = IAudioCaptureClient.IID_Guid;
-            IAudioCaptureClient* capture = null;
-            _client->GetService(&captureIid, (void**)&capture);
-            _capture = capture;
+            SharedAudioClient.InitializeShared(_client, flags, BufferDuration100ns, AudioFormat.Channels, AudioFormat.SampleRate);
+            SharedAudioClient.AttachEvent(_client, ref _event);
+            _capture = (IAudioCaptureClient*)SharedAudioClient.GetService(_client, IAudioCaptureClient.IID_Guid);
         }
         catch (Exception e) when (e is not ErrorCodeException)
         {
@@ -125,94 +96,40 @@ internal sealed unsafe class WasapiCapture : IDeviceClient
     public void Dispose()
     {
         Stop();
-        if (_capture is not null)
+        SharedAudioClient.Release(ref _capture);
+        SharedAudioClient.Release(ref _client);
+        SharedAudioClient.CloseEvent(ref _event);
+    }
+
+    /// <summary>Whether <paramref name="error"/>, or an exception it wraps, carries <c>AUDCLNT_E_DEVICE_INVALIDATED</c>.</summary>
+    internal static bool IsInvalidated(Exception error)
+    {
+        for (var current = error; current is not null; current = current.InnerException)
         {
-            _capture->Release();
-            _capture = null;
+            if (current.HResult == DeviceInvalidated)
+            {
+                return true;
+            }
         }
 
-        if (_client is not null)
-        {
-            _client->Release();
-            _client = null;
-        }
-
-        if (!_event.IsNull)
-        {
-            PInvoke.CloseHandle(_event);
-            _event = default;
-        }
+        return false;
     }
 
     private void Run()
     {
         AudioEndpoints.EnsureCom();
-        uint taskIndex = 0;
-        var mmcss = PInvoke.AvSetMmThreadCharacteristics("Pro Audio", ref taskIndex);
-        if (mmcss.IsInvalid)
+        var proAudio = SharedAudioClient.JoinProAudio();
+        if (proAudio.IsInvalid)
         {
             _logger.LogWarning("MMCSS 'Pro Audio' was refused for '{Name}'", Endpoint.FriendlyName);
         }
 
         var stream = _stream!;
         var stampStats = _stampStats!;
-        var failed = false;
+        var failed = !TryStartClient();
         try
         {
-            _client->Start();
-        }
-        catch (Exception e) when (IsInvalidated(e))
-        {
-            OnInvalidated(e);
-            failed = true;
-        }
-        catch (Exception e)
-        {
-            _logger.LogError(e, "Could not start '{Name}'; holding it silent", Endpoint.FriendlyName);
-            Fault = e;
-            failed = true;
-        }
-
-        try
-        {
-            var dead = false;
-            while (!_stopping)
-            {
-                var wait = PInvoke.WaitForSingleObject(_event, WaitTimeoutMs);
-                if (dead)
-                {
-                    continue;
-                }
-
-                try
-                {
-                    if (!failed && wait == WAIT_EVENT.WAIT_OBJECT_0)
-                    {
-                        Drain(stream, stampStats);
-                    }
-                    else if (IsLoopback || failed)
-                    {
-                        // An idle render endpoint and a failed device send no packets: fill with silence to keep the stream continuous.
-                        stream.FillTo(Stopwatch.GetTimestamp() - (IdleFillLagMs * _qpcFrequency / 1000));
-                    }
-                }
-                catch (Exception e) when (!failed && IsInvalidated(e))
-                {
-                    OnInvalidated(e);
-                    failed = true;
-                }
-                catch (Exception e) when (!failed)
-                {
-                    _logger.LogError(e, "Capture from '{Name}' failed; holding it silent", Endpoint.FriendlyName);
-                    Fault = e;
-                    failed = true;
-                }
-                catch (Exception e)
-                {
-                    _logger.LogError(e, "Silence fill for '{Name}' failed; its stream stops here", Endpoint.FriendlyName);
-                    dead = true;
-                }
-            }
+            Pump(stream, stampStats, failed);
         }
         finally
         {
@@ -225,28 +142,83 @@ internal sealed unsafe class WasapiCapture : IDeviceClient
                 _logger.LogDebug(e, "IAudioClient.Stop failed");
             }
 
-            mmcss.Dispose();
+            proAudio.Dispose();
         }
     }
 
-    /// <summary>Whether <paramref name="e"/>, or an exception it wraps, carries <c>AUDCLNT_E_DEVICE_INVALIDATED</c>.</summary>
-    internal static bool IsInvalidated(Exception e)
+    /// <summary>Starts the client; false when it couldn't start, and the stream is held silent from the start.</summary>
+    private bool TryStartClient()
     {
-        for (var current = e; current is not null; current = current.InnerException)
+        try
         {
-            if (current.HResult == DeviceInvalidated)
+            _client->Start();
+            return true;
+        }
+        catch (Exception e) when (IsInvalidated(e))
+        {
+            OnInvalidated(e);
+            return false;
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Could not start '{Name}'; holding it silent", Endpoint.FriendlyName);
+            Fault = e;
+            return false;
+        }
+    }
+
+    /// <summary>Wakes on each packet event or timeout until stopped: drains packets, or fills silence once failed.</summary>
+    private void Pump(DeviceStream stream, AudioStampStats stampStats, bool failed)
+    {
+        var dead = false;
+        while (!_stopping)
+        {
+            var wait = PInvoke.WaitForSingleObject(_event, WaitTimeoutMs);
+            if (dead)
             {
-                return true;
+                continue;
+            }
+
+            try
+            {
+                Serve(stream, stampStats, failed, wait == WAIT_EVENT.WAIT_OBJECT_0);
+            }
+            catch (Exception e) when (!failed && IsInvalidated(e))
+            {
+                OnInvalidated(e);
+                failed = true;
+            }
+            catch (Exception e) when (!failed)
+            {
+                _logger.LogError(e, "Capture from '{Name}' failed; holding it silent", Endpoint.FriendlyName);
+                Fault = e;
+                failed = true;
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Silence fill for '{Name}' failed; its stream stops here", Endpoint.FriendlyName);
+                dead = true;
             }
         }
+    }
 
-        return false;
+    private void Serve(DeviceStream stream, AudioStampStats stampStats, bool failed, bool signalled)
+    {
+        if (!failed && signalled)
+        {
+            Drain(stream, stampStats);
+        }
+        else if (IsLoopback || failed)
+        {
+            // An idle render endpoint and a failed device send no packets: fill with silence to keep the stream continuous.
+            stream.FillTo(Stopwatch.GetTimestamp() - (IdleFillLagMs * _qpcFrequency / 1000));
+        }
     }
 
     /// <summary>The device went away under the client: held silent, not a fault; the hub is told once.</summary>
-    private void OnInvalidated(Exception e)
+    private void OnInvalidated(Exception error)
     {
-        _logger.LogDebug(e, "'{Name}' was invalidated; holding it silent", Endpoint.FriendlyName);
+        _logger.LogDebug(error, "'{Name}' was invalidated; holding it silent", Endpoint.FriendlyName);
         try
         {
             _invalidated?.Invoke();
