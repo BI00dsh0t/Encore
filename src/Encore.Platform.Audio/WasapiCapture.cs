@@ -10,15 +10,7 @@ using Windows.Win32.System.Com;
 
 namespace Encore.Platform.Audio;
 
-/// <summary>
-/// The hub's client for one endpoint (AD-13, AD-20): WASAPI shared mode, event-driven, loopback for
-/// an Output Device and capture for an Input Device, converted by the audio engine to 48 kHz float
-/// stereo. On a dedicated MMCSS "Pro Audio" thread, each packet's stamp goes to an
-/// <see cref="AudioStampStats"/> and the packet to a <see cref="DeviceStream"/>. An idle render
-/// endpoint, or a failed device, is filled with silence 50 ms behind now. A device invalidated under
-/// the client (<c>AUDCLNT_E_DEVICE_INVALIDATED</c>) is held silent the same way, but is not a
-/// <see cref="Fault"/>: the client calls its <c>invalidated</c> callback once, and the hub drops it.
-/// </summary>
+/// <summary>The hub's WASAPI client for one endpoint: event-driven capture on its own thread. Details: docs/code-notes.md.</summary>
 internal sealed unsafe class WasapiCapture : IDeviceClient
 {
     /// <summary><c>AUDCLNT_E_DEVICE_INVALIDATED</c>: the endpoint was removed, disabled or reconfigured.</summary>
@@ -40,7 +32,6 @@ internal sealed unsafe class WasapiCapture : IDeviceClient
     private volatile bool _stopping;
 
     /// <summary>Opens and initializes the client; capture starts with <see cref="Start"/>.</summary>
-    /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.AudioDeviceFailed"/>: the endpoint can't be opened.</exception>
     public WasapiCapture(string endpointId, AudioFlow flow, ILogger logger, Action? invalidated = null)
     {
         _logger = logger;
@@ -114,7 +105,7 @@ internal sealed unsafe class WasapiCapture : IDeviceClient
 
     private bool IsLoopback => Endpoint.Flow == AudioFlow.Output;
 
-    /// <summary>Starts capture: every packet's stamp goes to <paramref name="stampStats"/>, then the packet to <paramref name="stream"/>.</summary>
+    /// <summary>Starts capture: each packet's stamp goes to stampStats, then the packet to stream.</summary>
     public void Start(DeviceStream stream, AudioStampStats stampStats)
     {
         _stream = stream;
@@ -201,8 +192,7 @@ internal sealed unsafe class WasapiCapture : IDeviceClient
                     }
                     else if (IsLoopback || failed)
                     {
-                        // An idle render endpoint sends no packets: keep its stream continuous.
-                        // A failed device is held silent the same way so subscribers stay aligned.
+                        // An idle render endpoint and a failed device send no packets: fill with silence to keep the stream continuous.
                         stream.FillTo(Stopwatch.GetTimestamp() - (IdleFillLagMs * _qpcFrequency / 1000));
                     }
                 }

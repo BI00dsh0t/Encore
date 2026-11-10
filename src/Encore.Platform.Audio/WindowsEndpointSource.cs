@@ -5,10 +5,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Platform.Audio;
 
-/// <summary>
-/// This PC's MMDevice endpoints (R1): lists the active ones of both flows, and the first
-/// <see cref="EndpointsChanged"/> handler starts an <see cref="EndpointWatcher"/>, which runs until disposal.
-/// </summary>
+/// <summary>This PC's audio endpoints: lists the active ones of both flows, and starts a watcher for the first change handler.</summary>
 internal sealed class WindowsEndpointSource(ILogger log) : IAudioEndpointSource, IDisposable
 {
     private readonly Lock _gate = new();
@@ -72,7 +69,7 @@ internal sealed class WindowsEndpointSource(ILogger log) : IAudioEndpointSource,
         watcher?.Dispose();
     }
 
-    /// <summary>One flow's active endpoints, its Windows default (console role) marked <see cref="AudioDevice.IsDefault"/> (story 10.4).</summary>
+    /// <summary>One flow's active endpoints, with its Windows default (console role) marked.</summary>
     private static IEnumerable<AudioDevice> List(AudioFlow flow, SettingsFlow settingsFlow)
     {
         var endpoints = AudioEndpoints.List(flow);

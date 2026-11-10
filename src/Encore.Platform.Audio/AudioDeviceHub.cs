@@ -7,29 +7,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Platform.Audio;
 
-/// <summary>
-/// The engine's audio devices (AD-20): at most one client per endpoint and flow, opened by the
-/// first subscriber and closed by the last. Each device's packets go through one
-/// <see cref="DeviceStream"/> (silence fill, stamping, the adaptive resampler, AD-13), whose blocks
-/// fan out to the subscribers on the device's thread, under the device's dispatch lock.
-/// <para>
-/// Dropout and rebind (R5): the hub reconciles its open devices against the present endpoints on
-/// every endpoint change, when a client reports its device invalidated, and every
-/// <see cref="RetryInterval"/> while a device is out. A device that is gone is dropped: its client
-/// is closed and a <see cref="SilenceHold"/> keeps its stream continuous. When a matching endpoint
-/// is present again (the same id and flow, else the one endpoint of that flow with the same friendly
-/// and parent name that no other open device holds), a new client is opened on the same stream, so
-/// every subscriber resumes on its old subscription. The rebinding lives only here, never in
-/// settings (AD-4).
-/// </para>
-/// <para>
-/// A session's device whose saved id is gone opens by name the same way (story 8.6): a mixer that
-/// restarted with new ids, while nothing had the device open, needs nothing re-selected.
-/// </para>
-/// It is also the engine's <see cref="IAudioEndpointSource"/>, over the PC's endpoints: the first
-/// <see cref="EndpointsChanged"/> handler, or the first subscription, starts an <see cref="EndpointWatcher"/>,
-/// which runs until the hub is disposed.
-/// </summary>
+/// <summary>The engine's audio devices: one client per endpoint, shared by its subscribers. Rules: docs/code-notes.md.</summary>
 public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAudioDropoutSource, IDisposable
 {
     /// <summary>How often a dropped device is retried while it stays out.</summary>
@@ -122,22 +100,16 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
     public IReadOnlyList<AudioDevice> ListPresent() => _source.ListPresent();
 
     /// <inheritdoc/>
-    /// <exception cref="Contracts.ErrorCodeException"><see cref="Contracts.ErrorCodes.AudioDeviceFailed"/>: the device can't be opened.</exception>
     public IAudioSubscription Subscribe(string endpointId, SettingsFlow flow, IAudioPcmSubscriber subscriber) => SubscribeDevice(endpointId, flow, subscriber);
 
     /// <inheritdoc/>
-    /// <exception cref="Contracts.ErrorCodeException"><see cref="Contracts.ErrorCodes.AudioDeviceFailed"/>: the device can't be opened.</exception>
     public IAudioSubscription Subscribe(Core.Sessions.SessionAudioDevice device, IAudioPcmSubscriber subscriber)
     {
         ArgumentNullException.ThrowIfNull(device);
         return SubscribeDevice(Resolve(device), device.Flow, subscriber);
     }
 
-    /// <summary>
-    /// The endpoint a session's device opens: its saved id when that is open or present, else the one
-    /// present endpoint of its flow with its friendly and parent name, else its saved id (which then
-    /// fails to open as before). Settings are never touched (AD-4).
-    /// </summary>
+    /// <summary>The endpoint a session's device opens: its saved id when present, else the one endpoint with the same names.</summary>
     internal string Resolve(Core.Sessions.SessionAudioDevice device)
     {
         var id = device.EndpointId;
@@ -185,7 +157,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
         return byName[0].EndpointId;
     }
 
-    /// <summary><see cref="Subscribe(string, SettingsFlow, IAudioPcmSubscriber)"/>, returning the concrete subscription with its device's diagnostics.</summary>
+    /// <summary>Subscribes and returns the concrete subscription, which carries its device's diagnostics.</summary>
     public AudioDeviceSubscription SubscribeDevice(string endpointId, SettingsFlow flow, IAudioPcmSubscriber subscriber)
     {
         ArgumentNullException.ThrowIfNull(endpointId);
@@ -340,11 +312,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
         }
     }
 
-    /// <summary>
-    /// On the timer: drops every open device whose endpoint is gone or invalidated, rebinds every
-    /// dropped one that has a match, then logs and raises the events outside the gate. Serialized;
-    /// runs again in <see cref="RetryInterval"/> while a device stays out.
-    /// </summary>
+    /// <summary>On the timer: drops devices whose endpoint is gone, rebinds dropped ones that have a match, then raises events.</summary>
     private void Reconcile()
     {
         lock (_reconcile)
@@ -394,8 +362,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
                 {
                     if (!device.Closed && !device.Dropped && (device.Invalidated || !IsListed(present, device.Endpoint)))
                     {
-                        // A re-drop soon after a resume (a device still restarting) is the same
-                        // dropout: no event, no Warning, and no rebind until the next retry.
+                        // A re-drop soon after a resume is the same dropout: no event, no warning, and no rebind until the next retry.
                         var sameEpisode = device.ResumedAt != 0 && now - device.ResumedAt < Stopwatch.Frequency * (long)SameDropoutWindow.TotalSeconds;
                         device.Drop();
                         device.QuietEpisode = sameEpisode;
@@ -483,7 +450,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
         }
     }
 
-    /// <summary>Opens a client on a dropped device's match and hands it the stream; false when the device stays dropped. Under the gate.</summary>
+    /// <summary>Opens a client on a dropped device's match; false when the device stays dropped. Under the gate.</summary>
     private bool TryRebind(HubDevice device, IReadOnlyList<AudioDevice> present)
     {
         var match = FindMatch(device, present);
@@ -515,7 +482,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
             return false;
         }
 
-        // A new id re-keys the device, so the next subscriber to that endpoint shares this client (AD-20).
+        // A new id re-keys the device, so the next subscriber to that endpoint shares this client.
         var key = KeyOf(device.Endpoint.Id, device.Endpoint.Flow);
         if (!string.Equals(key, device.Key, StringComparison.OrdinalIgnoreCase))
         {
@@ -527,10 +494,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
         return true;
     }
 
-    /// <summary>
-    /// The present endpoint a dropped device rebinds to: the same id and flow; else the one endpoint
-    /// of that flow with the same friendly and parent name, unless another open device holds it.
-    /// </summary>
+    /// <summary>The endpoint a dropped device rebinds to: the same id, else the only one of its flow with the same names.</summary>
     private AudioDevice? FindMatch(HubDevice device, IReadOnlyList<AudioDevice> present)
     {
         var endpoint = device.Endpoint;
@@ -551,7 +515,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
             return null;
         }
 
-        // Endpoints another open device holds are never candidates, so a present twin doesn't make a return ambiguous.
+        // Endpoints another open device holds are never candidates, so a present twin doesn't make a return unclear.
         var byName = present
             .Where(p => p.Flow == flow
                 && string.Equals(p.FriendlyName, endpoint.FriendlyName, StringComparison.Ordinal)
@@ -649,10 +613,7 @@ public sealed class AudioDeviceDiagnostics(AudioEndpoint endpoint, AudioStampSta
     public DeviceStream Stream { get; } = stream;
 }
 
-/// <summary>
-/// One open endpoint: its client (or, while it is dropped, a silence hold), its stream and its
-/// subscribers. The client, the hold and the flags change only under the hub's gate.
-/// </summary>
+/// <summary>One open endpoint: its client, or a silence hold while dropped; these change only under the hub's gate.</summary>
 internal sealed class HubDevice : IAudioPcmSubscriber
 {
     private readonly Lock _dispatch = new();
@@ -708,10 +669,7 @@ internal sealed class HubDevice : IAudioPcmSubscriber
     /// <summary>When the device was last dropped (QPC); under the hub's gate.</summary>
     public long DroppedAt { get; set; }
 
-    /// <summary>
-    /// Whether the current dropout continues one already reported, so its resume is quiet; it is
-    /// reported after all once it outlasts the same-dropout window. Under the hub's gate.
-    /// </summary>
+    /// <summary>Whether this dropout continues one already reported, so its resume is quiet. Under the hub's gate.</summary>
     public bool QuietEpisode { get; set; }
 
     public bool OnCaptureThread => _client?.OnCaptureThread == true || _hold?.OnCaptureThread == true;

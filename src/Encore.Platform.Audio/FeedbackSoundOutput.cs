@@ -7,12 +7,7 @@ using Windows.Win32.System.Com;
 
 namespace Encore.Platform.Audio;
 
-/// <summary>
-/// Feedback Sounds over WASAPI shared-mode render: each play opens the endpoint with a 1 s buffer
-/// and no event callback, writes the whole sound, starts, polls the padding every
-/// <see cref="PollInterval"/> until it has drained (at most the sound's length plus
-/// <see cref="DrainSlack"/>), then stops and releases the client.
-/// </summary>
+/// <summary>Plays a Feedback Sound over WASAPI shared mode: writes it all, waits for it to drain, then releases the client.</summary>
 public sealed unsafe class FeedbackSoundOutput : IFeedbackSoundOutput
 {
     internal static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(20);
@@ -24,7 +19,6 @@ public sealed unsafe class FeedbackSoundOutput : IFeedbackSoundOutput
     public string? DefaultEndpointId() => AudioEndpoints.DefaultCommunications()?.Id;
 
     /// <inheritdoc/>
-    /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.AudioDeviceFailed"/>: the endpoint can't be opened or failed while playing.</exception>
     public void Play(string endpointId, ReadOnlyMemory<float> pcm)
     {
         ArgumentNullException.ThrowIfNull(endpointId);

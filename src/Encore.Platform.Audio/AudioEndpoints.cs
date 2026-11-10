@@ -8,17 +8,14 @@ using Windows.Win32.UI.Shell.PropertiesSystem;
 
 namespace Encore.Platform.Audio;
 
-/// <summary>Output Devices are captured by loopback, Input Devices by capture (AD-13).</summary>
+/// <summary>Output Devices are captured by loopback, Input Devices by capture.</summary>
 public enum AudioFlow
 {
     Output,
     Input,
 }
 
-/// <summary>
-/// An active MMDevice endpoint. <see cref="ParentName"/> is the name of the audio device that
-/// exposes it (<c>PKEY_DeviceInterface_FriendlyName</c>), or empty when it has none.
-/// </summary>
+/// <summary>An active MMDevice endpoint; ParentName is the audio device that exposes it, or empty.</summary>
 public sealed record AudioEndpoint(string Id, string FriendlyName, AudioFlow Flow, string ParentName = "");
 
 public enum EndpointMatchOutcome
@@ -28,10 +25,7 @@ public enum EndpointMatchOutcome
     Ambiguous,
 }
 
-/// <summary>
-/// The result of matching a device name: the endpoint when exactly one matched, and
-/// otherwise the candidates to list (every endpoint when none matched, the matches when several did).
-/// </summary>
+/// <summary>The result of matching a device name: the endpoint when exactly one matched, otherwise the candidates to list.</summary>
 public sealed record EndpointMatch(EndpointMatchOutcome Outcome, AudioEndpoint? Endpoint, IReadOnlyList<AudioEndpoint> Candidates);
 
 /// <summary>Lists and resolves audio endpoints.</summary>
@@ -146,10 +140,7 @@ public static unsafe class AudioEndpoints
         }
     }
 
-    /// <summary>
-    /// Matches <paramref name="query"/> against endpoints: an exact endpoint ID or a single
-    /// exact friendly name (ignoring case) wins, otherwise the name must contain the query exactly once.
-    /// </summary>
+    /// <summary>Matches a query against endpoints: an exact ID or one exact name wins, otherwise one name must contain it.</summary>
     public static EndpointMatch Match(IReadOnlyList<AudioEndpoint> endpoints, string query)
     {
         var exact = endpoints

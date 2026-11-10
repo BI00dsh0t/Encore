@@ -9,12 +9,7 @@ using Windows.Win32.System.Com;
 
 namespace Encore.Platform.Audio;
 
-/// <summary>
-/// A test signal for sync measurements (stories 1.12 and 1.14): WASAPI shared-mode render on one
-/// endpoint of a quiet 440 Hz tone, replaced once a second by a 3 kHz burst. Each burst's QPC — when
-/// its first frame plays, from <c>IAudioClock::GetPosition</c> — is recorded, allocation-free.
-/// The first burst is at stream frame <see cref="BurstIntervalFrames"/>, then one every interval.
-/// </summary>
+/// <summary>A test signal for sync measurements: a quiet 440 Hz tone with a 3 kHz burst each second, each burst timed by QPC.</summary>
 public sealed unsafe class TonePlayer : IDisposable
 {
     public const int ToneHz = 440;
@@ -40,10 +35,7 @@ public sealed unsafe class TonePlayer : IDisposable
     private Thread? _thread;
     private volatile bool _stopping;
 
-    /// <param name="endpointId">An Output Device.</param>
-    /// <param name="dbfs">The bursts' peak level; the tone plays 10 dB below it.</param>
-    /// <param name="capacity">The most burst stamps kept.</param>
-    /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.AudioDeviceFailed"/>: the endpoint can't be opened.</exception>
+    /// <summary>The dbfs argument is the bursts' peak level; the tone plays 10 dB below it. Capacity is the most stamps kept.</summary>
     public TonePlayer(string endpointId, double dbfs = -30, int capacity = 8192)
     {
         _burstAmplitude = (float)Math.Pow(10, dbfs / 20);
