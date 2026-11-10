@@ -9,9 +9,6 @@ using Windows.Win32.UI.HiDpi;
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>A monitor's full area (<c>rcMonitor</c>) in physical pixels, and its effective DPI.</summary>
-public readonly record struct MonitorArea(int Left, int Top, int Right, int Bottom, int Dpi);
-
 /// <summary>Which monitor a game is on, and where an Overlay sits on it.</summary>
 public static unsafe class Monitors
 {
@@ -50,40 +47,17 @@ public static unsafe class Monitors
                 return null;
             }
 
-            for (uint a = 0; ; a++)
+            for (uint adapterIndex = 0; ; adapterIndex++)
             {
                 IDXGIAdapter1* adapter = null;
-                if (factory->EnumAdapters1(a, &adapter).Failed)
+                if (factory->EnumAdapters1(adapterIndex, &adapter).Failed)
                 {
                     return null;
                 }
 
-                try
+                if (FindSupport(adapter, monitor, out var supports))
                 {
-                    for (uint o = 0; ; o++)
-                    {
-                        IDXGIOutput* output = null;
-                        if (adapter->EnumOutputs(o, &output).Failed)
-                        {
-                            break;
-                        }
-
-                        try
-                        {
-                            if (output->GetDesc().Monitor == monitor)
-                            {
-                                return Supports(output);
-                            }
-                        }
-                        finally
-                        {
-                            output->Release();
-                        }
-                    }
-                }
-                finally
-                {
-                    adapter->Release();
+                    return supports;
                 }
             }
         }
@@ -97,6 +71,47 @@ public static unsafe class Monitors
             {
                 factory->Release();
             }
+        }
+    }
+
+    /// <summary>Looks for the monitor among the adapter's outputs, then releases the adapter; true when found.</summary>
+    private static bool FindSupport(IDXGIAdapter1* adapter, HMONITOR monitor, out bool? supports)
+    {
+        try
+        {
+            for (uint outputIndex = 0; ; outputIndex++)
+            {
+                IDXGIOutput* output = null;
+                if (adapter->EnumOutputs(outputIndex, &output).Failed)
+                {
+                    supports = null;
+                    return false;
+                }
+
+                if (OutputSupport(output, monitor, out supports))
+                {
+                    return true;
+                }
+            }
+        }
+        finally
+        {
+            adapter->Release();
+        }
+    }
+
+    /// <summary>Whether the output shows the monitor, with its overlay support; the output is released either way.</summary>
+    private static bool OutputSupport(IDXGIOutput* output, HMONITOR monitor, out bool? supports)
+    {
+        try
+        {
+            var shows = output->GetDesc().Monitor == monitor;
+            supports = shows ? Supports(output) : null;
+            return shows;
+        }
+        finally
+        {
+            output->Release();
         }
     }
 
@@ -121,7 +136,7 @@ public static unsafe class Monitors
 
     // The monitor nearest the process's largest visible window, else the primary monitor.
     private static HMONITOR MonitorOf(int? processId) =>
-        processId is { } pid && LargestWindow(pid) is { } window
+        processId is { } id && LargestWindow(id) is { } window
             ? PInvoke.MonitorFromWindow(window, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST)
             : PrimaryMonitor();
 
@@ -168,8 +183,8 @@ public static unsafe class Monitors
             dpiX = DefaultDpi;
         }
 
-        var r = info.rcMonitor;
-        area = new MonitorArea(r.left, r.top, r.right, r.bottom, (int)dpiX);
+        var bounds = info.rcMonitor;
+        area = new MonitorArea(bounds.left, bounds.top, bounds.right, bounds.bottom, (int)dpiX);
         return true;
     }
 }

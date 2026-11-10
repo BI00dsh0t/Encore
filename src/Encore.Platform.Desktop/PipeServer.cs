@@ -11,11 +11,11 @@ public static class PipeServer
     public static int ProcessId(SafePipeHandle pipe)
     {
         ArgumentNullException.ThrowIfNull(pipe);
-        if (!PInvoke.GetNamedPipeServerProcessId(pipe, out var pid))
+        if (!PInvoke.GetNamedPipeServerProcessId(pipe, out var processId))
         {
             throw new Win32Exception();
         }
 
-        return checked((int)pid);
+        return checked((int)processId);
     }
 }

@@ -12,19 +12,19 @@ namespace Encore.Platform.Desktop;
 public static unsafe class CaptureExclusion
 {
     /// <summary>Excludes one top-level window of this process from capture; throws Win32Exception for any other window.</summary>
-    public static void Apply(nint hwnd)
+    public static void Apply(nint window)
     {
-        if (!PInvoke.SetWindowDisplayAffinity(new HWND(hwnd), WINDOW_DISPLAY_AFFINITY.WDA_EXCLUDEFROMCAPTURE))
+        if (!PInvoke.SetWindowDisplayAffinity(new HWND(window), WINDOW_DISPLAY_AFFINITY.WDA_EXCLUDEFROMCAPTURE))
         {
             throw new Win32Exception();
         }
     }
 
     /// <summary>Whether the window is excluded from capture; throws Win32Exception when the window doesn't exist.</summary>
-    public static bool IsApplied(nint hwnd)
+    public static bool IsApplied(nint window)
     {
         uint affinity;
-        if (!PInvoke.GetWindowDisplayAffinity(new HWND(hwnd), &affinity))
+        if (!PInvoke.GetWindowDisplayAffinity(new HWND(window), &affinity))
         {
             throw new Win32Exception();
         }
@@ -70,23 +70,23 @@ public static unsafe class CaptureExclusion
     }
 
     /// <summary>Whether a WinEvent names a top-level window, not a child or an accessible object inside a window.</summary>
-    internal static bool NamesATopLevelWindow(uint @event, nint hwnd, int idObject, int idChild) =>
+    internal static bool NamesATopLevelWindow(uint @event, nint window, int idObject, int idChild) =>
         @event is PInvoke.EVENT_OBJECT_CREATE or PInvoke.EVENT_OBJECT_SHOW
         && idObject == 0 // OBJID_WINDOW
         && idChild == 0 // CHILDID_SELF
-        && hwnd != 0
-        && PInvoke.GetAncestor(new HWND(hwnd), GET_ANCESTOR_FLAGS.GA_ROOT) == new HWND(hwnd);
+        && window != 0
+        && PInvoke.GetAncestor(new HWND(window), GET_ANCESTOR_FLAGS.GA_ROOT) == new HWND(window);
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static void OnWinEvent(
-        HWINEVENTHOOK hook, uint @event, HWND hwnd, int idObject, int idChild, uint thread, uint time)
+        HWINEVENTHOOK hook, uint @event, HWND window, int idObject, int idChild, uint thread, uint time)
     {
         try
         {
-            if (NamesATopLevelWindow(@event, hwnd, idObject, idChild))
+            if (NamesATopLevelWindow(@event, window, idObject, idChild))
             {
                 // A message-only window, or one already gone, refuses; skip it.
-                PInvoke.SetWindowDisplayAffinity(hwnd, WINDOW_DISPLAY_AFFINITY.WDA_EXCLUDEFROMCAPTURE);
+                PInvoke.SetWindowDisplayAffinity(window, WINDOW_DISPLAY_AFFINITY.WDA_EXCLUDEFROMCAPTURE);
             }
         }
         catch
@@ -96,16 +96,16 @@ public static unsafe class CaptureExclusion
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static BOOL OnEnumWindow(HWND hwnd, LPARAM lParam)
+    private static BOOL OnEnumWindow(HWND window, LPARAM lParam)
     {
         try
         {
             uint owner;
-            if (PInvoke.GetWindowThreadProcessId(hwnd, &owner) != 0
+            if (PInvoke.GetWindowThreadProcessId(window, &owner) != 0
                 && owner == (uint)Environment.ProcessId
-                && PInvoke.IsWindowVisible(hwnd))
+                && PInvoke.IsWindowVisible(window))
             {
-                ((List<nint>)GCHandle.FromIntPtr(lParam).Target!).Add(hwnd);
+                ((List<nint>)GCHandle.FromIntPtr(lParam).Target!).Add(window);
             }
 
             return true;

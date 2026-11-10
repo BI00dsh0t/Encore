@@ -16,11 +16,11 @@ public static class OverlayWindowStyle
     private static readonly HWND Topmost = new(-1);
 
     /// <summary>ORs <see cref="Styles"/> into the window's extended style; throws Win32Exception when the window doesn't exist.</summary>
-    public static void Apply(nint hwnd)
+    public static void Apply(nint window)
     {
-        var style = ExtendedStyle(hwnd);
+        var style = ExtendedStyle(window);
         Marshal.SetLastPInvokeError(0);
-        if (PInvoke.SetWindowLongPtr(new HWND(hwnd), WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (nint)(style | Styles)) == 0
+        if (PInvoke.SetWindowLongPtr(new HWND(window), WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (nint)(style | Styles)) == 0
             && Marshal.GetLastPInvokeError() != 0)
         {
             throw new Win32Exception();
@@ -28,10 +28,10 @@ public static class OverlayWindowStyle
     }
 
     /// <summary>The window's extended style; throws Win32Exception when the window doesn't exist.</summary>
-    public static uint ExtendedStyle(nint hwnd)
+    public static uint ExtendedStyle(nint window)
     {
         Marshal.SetLastPInvokeError(0);
-        var style = PInvoke.GetWindowLongPtr(new HWND(hwnd), WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+        var style = PInvoke.GetWindowLongPtr(new HWND(window), WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
         if (style == 0 && Marshal.GetLastPInvokeError() != 0)
         {
             throw new Win32Exception();
@@ -41,9 +41,9 @@ public static class OverlayWindowStyle
     }
 
     /// <summary>Moves, sizes and shows the window on top without activating it; the position is in physical pixels.</summary>
-    public static void ShowWithoutActivation(nint hwnd, int x, int y, int width, int height)
+    public static void ShowWithoutActivation(nint window, int x, int y, int width, int height)
     {
-        if (!PInvoke.SetWindowPos(new HWND(hwnd), Topmost, x, y, width, height,
+        if (!PInvoke.SetWindowPos(new HWND(window), Topmost, x, y, width, height,
             SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW))
         {
             throw new Win32Exception();
@@ -51,8 +51,8 @@ public static class OverlayWindowStyle
     }
 
     /// <summary>The window's bounds: left, top, right and bottom; throws Win32Exception when the window doesn't exist.</summary>
-    public static (int Left, int Top, int Right, int Bottom) Bounds(nint hwnd) =>
-        PInvoke.GetWindowRect(new HWND(hwnd), out var rect)
+    public static (int Left, int Top, int Right, int Bottom) Bounds(nint window) =>
+        PInvoke.GetWindowRect(new HWND(window), out var rect)
             ? (rect.left, rect.top, rect.right, rect.bottom)
             : throw new Win32Exception();
 

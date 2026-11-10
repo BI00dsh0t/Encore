@@ -15,29 +15,31 @@ public static class WindowFrame
     public static bool SupportsMica { get; } = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621);
 
     /// <summary>Turns Mica on or off; with it on, WPF content must leave its background transparent where Mica should show.</summary>
-    public static unsafe void SetMica(nint hwnd, bool on)
+    public static unsafe void SetMica(nint window, bool on)
     {
         var margins = on ? new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 } : default;
-        _ = PInvoke.DwmExtendFrameIntoClientArea(new HWND(hwnd), &margins);
+        _ = PInvoke.DwmExtendFrameIntoClientArea(new HWND(window), &margins);
         var type = on ? DWM_SYSTEMBACKDROP_TYPE.DWMSBT_MAINWINDOW : DWM_SYSTEMBACKDROP_TYPE.DWMSBT_NONE;
-        _ = PInvoke.DwmSetWindowAttribute(new HWND(hwnd), DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(DWM_SYSTEMBACKDROP_TYPE));
+        _ = PInvoke.DwmSetWindowAttribute(
+            new HWND(window), DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(DWM_SYSTEMBACKDROP_TYPE));
     }
 
     /// <summary>Whether the window has the Mica backdrop.</summary>
-    public static unsafe bool HasMica(nint hwnd)
+    public static unsafe bool HasMica(nint window)
     {
         DWM_SYSTEMBACKDROP_TYPE type = default;
-        return PInvoke.DwmGetWindowAttribute(new HWND(hwnd), DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(DWM_SYSTEMBACKDROP_TYPE)).Succeeded
+        return PInvoke.DwmGetWindowAttribute(
+                new HWND(window), DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(DWM_SYSTEMBACKDROP_TYPE)).Succeeded
             && type == DWM_SYSTEMBACKDROP_TYPE.DWMSBT_MAINWINDOW;
     }
 
     /// <summary>Colours the system title bar and its text, each as 0xRRGGBB; null puts both back to the system's own.</summary>
-    public static unsafe void SetCaptionColors(nint hwnd, (uint Caption, uint Text)? colors)
+    public static unsafe void SetCaptionColors(nint window, (uint Caption, uint Text)? colors)
     {
-        var caption = colors is { } c ? ColorRef(c.Caption) : DefaultColor;
-        var text = colors is { } t ? ColorRef(t.Text) : DefaultColor;
-        _ = PInvoke.DwmSetWindowAttribute(new HWND(hwnd), DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, &caption, sizeof(uint));
-        _ = PInvoke.DwmSetWindowAttribute(new HWND(hwnd), DWMWINDOWATTRIBUTE.DWMWA_TEXT_COLOR, &text, sizeof(uint));
+        var caption = colors is { } chosen ? ColorRef(chosen.Caption) : DefaultColor;
+        var text = colors is { } chosenText ? ColorRef(chosenText.Text) : DefaultColor;
+        _ = PInvoke.DwmSetWindowAttribute(new HWND(window), DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, &caption, sizeof(uint));
+        _ = PInvoke.DwmSetWindowAttribute(new HWND(window), DWMWINDOWATTRIBUTE.DWMWA_TEXT_COLOR, &text, sizeof(uint));
     }
 
     // COLORREF is 0x00BBGGRR; swapping red and blue goes both ways.
