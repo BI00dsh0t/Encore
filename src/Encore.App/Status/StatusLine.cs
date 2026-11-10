@@ -1,9 +1,7 @@
 using System.Windows;
 using Encore.App.Engine;
 using Encore.Contracts;
-using Encore.App.Settings;
 using Encore.Contracts.Messages;
-using Encore.Contracts.Settings;
 
 namespace Encore.App.Status;
 
@@ -45,23 +43,32 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
         get => _warnings;
         private set
         {
-            if (!Set(ref _warnings, value)) { return; }
-            OnPropertyChanged(nameof(Errors));
-            OnPropertyChanged(nameof(HasErrors));
+            if (Set(ref _warnings, value))
+            {
+                OnPropertyChanged(nameof(Errors));
+                OnPropertyChanged(nameof(HasErrors));
+            }
         }
     }
 
-    public IEnumerable<StatusWarning> Errors => Warnings.Where(w => w.Severity == nameof(WarningSeverity.Error));
+    /// <summary>The warnings the top card shows: the errors.</summary>
+    public IEnumerable<StatusWarning> Errors => Warnings.Where(warning => warning.Severity == nameof(WarningSeverity.Error));
+
     public bool HasErrors => HasConnectionError || Errors.Any();
+
     public bool HasConnectionError => ConnectionError.Length > 0;
+
+    /// <summary>Why the engine can't be reached, while it can't; empty while connected or still connecting.</summary>
     public string ConnectionError
     {
         get => _connectionError;
         private set
         {
-            if (!Set(ref _connectionError, value)) { return; }
-            OnPropertyChanged(nameof(HasConnectionError));
-            OnPropertyChanged(nameof(HasErrors));
+            if (Set(ref _connectionError, value))
+            {
+                OnPropertyChanged(nameof(HasConnectionError));
+                OnPropertyChanged(nameof(HasErrors));
+            }
         }
     }
 
@@ -71,13 +78,11 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
     public void Render(EngineStatus status, string? problem, StateSnapshot? state)
     {
         var connected = EngineSessions.ConnectedState(status, state);
-        State = connected is not null
-            ? CaptureText(connected)
-            : ConnectionText(status, problem);
-        Dot = connected is null ? StatusDot.Idle : DotFor(connected.Capture);
-        Hint = connected is null ? "" : HintText(connected);
-        ConnectionError = connected is null && status is (EngineStatus.Restarting or EngineStatus.NotRunning or EngineStatus.CrashLoop or EngineStatus.Disconnected)
-            ? ConnectionText(status, problem) : "";
+        State = connected is not null ? StatusText.Capture(connected) : StatusText.Connection(status, problem);
+        Dot = connected is null ? StatusDot.Idle : StatusText.Dot(connected.Capture);
+        Hint = connected is null ? "" : StatusText.Hint(connected);
+        var unreachable = status is EngineStatus.Restarting or EngineStatus.NotRunning or EngineStatus.CrashLoop or EngineStatus.Disconnected;
+        ConnectionError = connected is null && unreachable ? StatusText.Connection(status, problem) : "";
 
         // Like the Overlay: a session that isn't connected has no warnings to show or dismiss.
         var warnings = connected?.Warnings ?? [];
@@ -87,67 +92,7 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
         }
 
         _rendered = warnings;
-        Warnings = [.. warnings.OrderByDescending(w => w.At).Select(w => new StatusWarning(w, Dismiss))];
-    }
-
-    private static string ConnectionText(EngineStatus status, string? problem) => status switch
-    {
-        EngineStatus.Connecting => "Connecting to Encore's background service…",
-        EngineStatus.Connected => "Connected to Encore's background service.",
-        EngineStatus.Restarting => "Restarting Encore's background service…" + (problem is { } why ? " " + why : ""),
-        EngineStatus.NotRunning => "Encore's background service isn't running." + (problem is { } reason ? " " + reason : ""),
-        EngineStatus.CrashLoop => problem ?? "Encore's background service keeps crashing, so it isn't being restarted. Restart it from the tray menu.",
-        _ => "Encore's background service disconnected. Reconnecting…",
-    };
-
-    private static string HintText(StateSnapshot state)
-    {
-        var capture = state.Capture;
-        if (capture.Replay != ReplayState.Buffering
-            || capture.Recording == RecordingState.Running
-            || capture.MonitorRecording == RecordingState.Running
-            || SettingsValues.Global(state.Settings, Keys.Hotkeys).Save is not { } save
-            || state.Hotkeys.Bindings.FirstOrDefault(b => b.Action == HotkeyAction.Save) is { Registered: false, Code: not (ErrorCodes.HotkeyUnbound or ErrorCodes.HotkeyInactive) })
-        {
-            return "";
-        }
-
-        return $"· {HotkeyText.Describe(save)} saves the last {HotkeyText.ClipLength(SettingsValues.Global(state.Settings, Keys.BufferWindow))}";
-    }
-
-    private static StatusDot DotFor(CaptureState capture) =>
-        capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running ? StatusDot.Recording
-        : capture.Replay == ReplayState.Buffering ? StatusDot.Buffering
-        : StatusDot.Idle;
-
-    private static string CaptureText(StateSnapshot state)
-    {
-        var capture = state.Capture;
-        List<string> parts =
-        [
-            capture.Replay switch
-            {
-                ReplayState.Buffering => state.TargetGame is { } game ? $"Ready to save Clips in {game.Name}" : "Ready to save Clips",
-                ReplayState.Draining => "Finishing the save…",
-                _ => "Waiting for a game",
-            },
-        ];
-        if (capture.Recording == RecordingState.Running)
-        {
-            parts.Add("Recording");
-        }
-
-        if (capture.MonitorRecording == RecordingState.Running)
-        {
-            parts.Add("Monitor Recording");
-        }
-
-        if (capture.MicMuted)
-        {
-            parts.Add("Mic muted");
-        }
-
-        return string.Join(" · ", parts);
+        Warnings = [.. warnings.OrderByDescending(warning => warning.At).Select(warning => new StatusWarning(warning, Dismiss))];
     }
 
     private async Task Dismiss(string id)
