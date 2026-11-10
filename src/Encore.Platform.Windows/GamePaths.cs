@@ -7,6 +7,7 @@ using Windows.Win32.Storage.FileSystem;
 
 namespace Encore.Platform.Windows;
 
+/// <summary>A game executable's paths: its canonical Game Profile id and its display name.</summary>
 public static unsafe class GamePaths
 {
     private const string VerbatimPrefix = @"\\?\";
@@ -17,52 +18,10 @@ public static unsafe class GamePaths
     public static string Canonicalize(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
-
-        // Only the file's attributes are opened, never its contents.
-        HANDLE file;
-        fixed (char* name = path)
-        {
-            file = PInvoke.CreateFile(
-                name,
-                FileReadAttributes,
-                FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE | FILE_SHARE_MODE.FILE_SHARE_DELETE,
-                null,
-                FILE_CREATION_DISPOSITION.OPEN_EXISTING,
-                FILE_FLAGS_AND_ATTRIBUTES.FILE_FLAG_BACKUP_SEMANTICS,
-                HANDLE.Null);
-        }
-
-        if (file.Value == (void*)-1)
-        {
-            throw new Win32Exception(Marshal.GetLastPInvokeError(), $"'{path}' couldn't be opened.");
-        }
-
+        var file = OpenAttributes(path);
         try
         {
-            var capacity = 512u;
-            while (true)
-            {
-                var buffer = new char[capacity];
-                uint length;
-                fixed (char* chars = buffer)
-                {
-                    // FILE_NAME_NORMALIZED | VOLUME_NAME_DOS are both 0.
-                    length = PInvoke.GetFinalPathNameByHandle(file, chars, capacity, 0);
-                }
-
-                if (length == 0)
-                {
-                    throw new Win32Exception(Marshal.GetLastPInvokeError(), $"The final path of '{path}' couldn't be read.");
-                }
-
-                if (length < capacity)
-                {
-                    return StripVerbatim(new string(buffer, 0, (int)length)).ToLowerInvariant();
-                }
-
-                // Too small: length is the size needed, terminator included.
-                capacity = length;
-            }
+            return StripVerbatim(FinalPath(file, path)).ToLowerInvariant();
         }
         finally
         {
@@ -109,6 +68,59 @@ public static unsafe class GamePaths
 
         // A file named only ".exe" keeps its extension: a profile name is never empty.
         return string.IsNullOrWhiteSpace(stem) ? Path.GetFileName(file) : stem;
+    }
+
+    // Only the file's attributes are opened, never its contents; the caller closes the handle.
+    private static HANDLE OpenAttributes(string path)
+    {
+        HANDLE file;
+        fixed (char* name = path)
+        {
+            file = PInvoke.CreateFile(
+                name,
+                FileReadAttributes,
+                FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE | FILE_SHARE_MODE.FILE_SHARE_DELETE,
+                null,
+                FILE_CREATION_DISPOSITION.OPEN_EXISTING,
+                FILE_FLAGS_AND_ATTRIBUTES.FILE_FLAG_BACKUP_SEMANTICS,
+                HANDLE.Null);
+        }
+
+        if (file.Value == (void*)-1)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), $"'{path}' couldn't be opened.");
+        }
+
+        return file;
+    }
+
+    // The open file's final path, read again into a bigger buffer while it doesn't fit.
+    private static string FinalPath(HANDLE file, string path)
+    {
+        var capacity = 512u;
+        while (true)
+        {
+            var buffer = new char[capacity];
+            uint length;
+            fixed (char* characters = buffer)
+            {
+                // FILE_NAME_NORMALIZED | VOLUME_NAME_DOS are both 0.
+                length = PInvoke.GetFinalPathNameByHandle(file, characters, capacity, 0);
+            }
+
+            if (length == 0)
+            {
+                throw new Win32Exception(Marshal.GetLastPInvokeError(), $"The final path of '{path}' couldn't be read.");
+            }
+
+            if (length < capacity)
+            {
+                return new string(buffer, 0, (int)length);
+            }
+
+            // Too small: length is the size needed, terminator included.
+            capacity = length;
+        }
     }
 
     private static string StripVerbatim(string path)

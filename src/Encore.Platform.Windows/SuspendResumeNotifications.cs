@@ -103,7 +103,8 @@ public sealed unsafe partial class SuspendResumeNotifications(ILogger logger) : 
                 }
             }
 
-            logger.LogInformation("Power: {Change}", change == PowerChange.Suspending ? "the PC is going to sleep" : "the PC woke from sleep");
+            var what = change == PowerChange.Suspending ? "the PC is going to sleep" : "the PC woke from sleep";
+            logger.LogInformation("Power: {Change}", what);
             changed(change);
         }
 

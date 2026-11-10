@@ -9,20 +9,6 @@ using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace Encore.Platform.Windows;
 
-/// <summary>How registering one Hotkey went.</summary>
-public enum HotkeyRegistrationOutcome
-{
-    Registered,
-
-    /// <summary>Another process or thread holds the combination: <c>ERROR_HOTKEY_ALREADY_REGISTERED</c>.</summary>
-    Taken,
-
-    Failed,
-}
-
-/// <summary>The result for one binding; Error is the Win32 error, or 0 when registered.</summary>
-public sealed record HotkeyRegistrationResult(HotkeyAction Action, HotkeyRegistrationOutcome Outcome, int Error);
-
 /// <summary>The engine's Hotkey thread: registers Hotkeys with RegisterHotKey, never a hook, and timestamps each press at once.</summary>
 public sealed unsafe class HotkeyThread : IDisposable
 {
@@ -98,6 +84,29 @@ public sealed unsafe class HotkeyThread : IDisposable
 
     private void Run()
     {
+        var created = TryCreateWindow();
+        _ready.Set();
+        if (!created)
+        {
+            return;
+        }
+
+        MSG message;
+        while (PInvoke.GetMessage(&message, HWND.Null, 0, 0) > 0 && Handle(&message))
+        {
+        }
+
+        UnregisterAll();
+        PInvoke.DestroyWindow(_window);
+        while (_requests.TryDequeue(out var request))
+        {
+            request.Done.Set();
+        }
+    }
+
+    // A message-only window, so Hotkeys and the thread's own messages have somewhere to go.
+    private bool TryCreateWindow()
+    {
         try
         {
             fixed (char* className = "Message")
@@ -109,49 +118,44 @@ public sealed unsafe class HotkeyThread : IDisposable
             {
                 throw new Win32Exception(Marshal.GetLastPInvokeError());
             }
+
+            return true;
         }
         catch (Exception e)
         {
             _startFailure = e;
-            _ready.Set();
-            return;
+            return false;
+        }
+    }
+
+    /// <summary>Handles one message; false for the stop message, which ends the thread.</summary>
+    private bool Handle(MSG* message)
+    {
+        if (message->message == PInvoke.WM_HOTKEY)
+        {
+            // The press's timestamp is read before anything else runs.
+            long qpc;
+            PInvoke.QueryPerformanceCounter(&qpc);
+            _pressed((HotkeyAction)((int)message->wParam.Value - 1), qpc);
+        }
+        else if (message->message == WmApply)
+        {
+            while (_requests.TryDequeue(out var request))
+            {
+                request.Results = Register(request.Bindings);
+                request.Done.Set();
+            }
+        }
+        else if (message->message == WmStop)
+        {
+            return false;
+        }
+        else
+        {
+            PInvoke.DispatchMessage(message);
         }
 
-        _ready.Set();
-        MSG msg;
-        while (PInvoke.GetMessage(&msg, HWND.Null, 0, 0) > 0)
-        {
-            if (msg.message == PInvoke.WM_HOTKEY)
-            {
-                // The press's timestamp is read before anything else runs.
-                long qpc;
-                PInvoke.QueryPerformanceCounter(&qpc);
-                _pressed((HotkeyAction)((int)msg.wParam.Value - 1), qpc);
-            }
-            else if (msg.message == WmApply)
-            {
-                while (_requests.TryDequeue(out var request))
-                {
-                    request.Results = Register(request.Bindings);
-                    request.Done.Set();
-                }
-            }
-            else if (msg.message == WmStop)
-            {
-                break;
-            }
-            else
-            {
-                PInvoke.DispatchMessage(&msg);
-            }
-        }
-
-        UnregisterAll();
-        PInvoke.DestroyWindow(_window);
-        while (_requests.TryDequeue(out var request))
-        {
-            request.Done.Set();
-        }
+        return true;
     }
 
     private List<HotkeyRegistrationResult> Register(IReadOnlyList<(HotkeyAction Action, HotkeyBinding Binding)> bindings)
@@ -169,7 +173,9 @@ public sealed unsafe class HotkeyThread : IDisposable
             }
 
             var error = Marshal.GetLastPInvokeError();
-            var outcome = error == (int)WIN32_ERROR.ERROR_HOTKEY_ALREADY_REGISTERED ? HotkeyRegistrationOutcome.Taken : HotkeyRegistrationOutcome.Failed;
+            var outcome = error == (int)WIN32_ERROR.ERROR_HOTKEY_ALREADY_REGISTERED
+                ? HotkeyRegistrationOutcome.Taken
+                : HotkeyRegistrationOutcome.Failed;
             results.Add(new HotkeyRegistrationResult(action, outcome, error));
         }
 
