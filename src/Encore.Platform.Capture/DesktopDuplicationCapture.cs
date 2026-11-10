@@ -10,21 +10,7 @@ using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.Capture;
 
-/// <summary>
-/// DXGI Desktop Duplication of one monitor (AD-12's monitor-only fallback, 6.10), for a Monitor
-/// Recording whose WGC item can't be created or started; never for game capture. Frames come only
-/// when the desktop changes, stamped with DXGI's <c>LastPresentTime</c> (a QPC, AD-6), on a thread
-/// of its own, one at a time, at most twice a slot of the fps: the thread polls the duplication
-/// every half slot, so DXGI accumulates the updates meanwhile and the latest image is never lost.
-/// It never waits inside <c>AcquireNextFrame</c>: that wait holds the multithread-protected
-/// device's lock, which the encoder thread needs for every slot, so on a quiet monitor it stalled
-/// the encoder past the pacer's catch-up and left PTS gaps in the Recording.
-/// <c>DXGI_ERROR_ACCESS_LOST</c> (a desktop switch, a mode change) recreates the duplication,
-/// retrying every 100 ms; the monitor's output leaving the adapter raises <see cref="Closed"/>, and
-/// any other failure (a removed device) raises <see cref="Failed"/> and ends the thread. Windows
-/// marked <c>WDA_EXCLUDEFROMCAPTURE</c> don't appear in it. The pointer is not drawn, and a rotated
-/// output's frames are its unrotated surface.
-/// </summary>
+/// <summary>Desktop Duplication of one monitor: the fallback when WGC can't capture it, never for games. docs/code-notes.md.</summary>
 public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
 {
     private const uint RetryMs = 100;
@@ -49,9 +35,7 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
     private bool _exited;
     private bool _disposed;
 
-    /// <param name="fps">The output frame rate; frames are delivered at most <c>2 × fps</c> a second.</param>
-    /// <exception cref="InvalidOperationException">The monitor isn't an output of the device's adapter.</exception>
-    /// <exception cref="Exception">The duplication couldn't be created (its HRESULT).</exception>
+    /// <summary>Frames are delivered at most 2 × fps a second; throws when the monitor isn't an output of the device's adapter.</summary>
     public DesktopDuplicationCapture(D3D11Device device, nint hmonitor, int fps, CapturedFrameHandler onFrame, ILogger logger)
         : this(new DxgiOutputDuplication(device ?? throw new ArgumentNullException(nameof(device)), ValidMonitor(hmonitor)), fps, onFrame, logger)
     {
@@ -97,10 +81,7 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
     /// <summary>The monitor's output left the adapter; no more frames will arrive.</summary>
     public event Action? Closed;
 
-    /// <summary>
-    /// The frame handler threw (capture continues), or the duplication itself failed (its thread
-    /// ends); the caller decides.
-    /// </summary>
+    /// <summary>The frame handler threw (capture continues), or the duplication itself failed (its thread ends).</summary>
     public event Action<Exception>? Failed;
 
     public void Start()
@@ -217,9 +198,7 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
                 // Any other failure (a removed device, say) can't be recreated: it fails the source.
                 hr.ThrowOnFailure();
 
-                // A pointer-only update (no LastPresentTime) carries no new desktop image; nor does
-                // one no newer than the last. A duplication's first image may have been presented
-                // long before it was created: it is stamped no earlier than the creation.
+                // A pointer-only or stale update carries no new image; a first image is stamped no earlier than the creation.
                 var qpc = fresh ? Math.Max(frame.LastPresentTime, _createdQpc) : frame.LastPresentTime;
                 if (frame.Texture != 0 && (fresh || frame.LastPresentTime != 0) && qpc > lastQpc)
                 {
@@ -278,10 +257,7 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
         }
     }
 
-    /// <summary>
-    /// Releases the duplication and creates it again, retrying every 100 ms while that fails; false
-    /// when stopping, or when the monitor's output is gone (after raising <see cref="Closed"/>).
-    /// </summary>
+    /// <summary>Recreates the duplication, retrying every 100 ms; false when stopping or when the monitor's output is gone.</summary>
     private bool Recreate()
     {
         _duplication.Release();
@@ -368,33 +344,22 @@ public sealed unsafe class DesktopDuplicationCapture : ICaptureSource
     }
 }
 
-/// <summary>A frame acquired from a duplication, valid until its <see cref="IOutputDuplication.ReleaseFrame"/>.</summary>
-/// <param name="LastPresentTime">DXGI's QPC of the image's last present; 0 for a pointer-only update.</param>
-/// <param name="Texture">The desktop image, an <c>ID3D11Texture2D*</c>; 0 when the update carries none.</param>
-/// <param name="Size">The image's size.</param>
+/// <summary>A frame acquired from a duplication, valid until released; a pointer-only update has time 0 and no texture.</summary>
 internal readonly record struct DuplicatedFrame(long LastPresentTime, nint Texture, VideoSize Size);
 
-/// <summary>
-/// One monitor's output duplication, the seam <see cref="DesktopDuplicationCapture"/>'s thread
-/// drives (a fake in tests). <see cref="TryAcquire"/> never waits: DXGI holds the device lock while
-/// <c>AcquireNextFrame</c> does.
-/// </summary>
+/// <summary>One monitor's output duplication, faked in tests; TryAcquire never waits, as DXGI would hold the device lock.</summary>
 internal interface IOutputDuplication
 {
     /// <summary>The output's mode size.</summary>
     VideoSize ModeSize { get; }
 
-    /// <summary>Creates the duplication: S_OK, <c>DXGI_ERROR_NOT_FOUND</c> when the monitor isn't an output of the adapter, else the failure.</summary>
+    /// <summary>Creates the duplication; <c>DXGI_ERROR_NOT_FOUND</c> when the monitor isn't an output of the adapter.</summary>
     HRESULT Duplicate();
 
     /// <summary>Releases the duplication, if any.</summary>
     void Release();
 
-    /// <summary>
-    /// Acquires the next frame without waiting: S_OK with a frame to release,
-    /// <c>DXGI_ERROR_WAIT_TIMEOUT</c> when the desktop hasn't changed, <c>DXGI_ERROR_ACCESS_LOST</c>,
-    /// or another failure.
-    /// </summary>
+    /// <summary>Acquires the next frame without waiting; <c>DXGI_ERROR_WAIT_TIMEOUT</c> means the desktop hasn't changed.</summary>
     HRESULT TryAcquire(out DuplicatedFrame frame);
 
     /// <summary>Releases the frame <see cref="TryAcquire"/> acquired.</summary>

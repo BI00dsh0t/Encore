@@ -16,17 +16,10 @@ using WinRT;
 
 namespace Encore.Platform.Capture;
 
-/// <summary>
-/// Receives one captured frame. <paramref name="texture"/> is an <c>ID3D11Texture2D*</c>
-/// valid only for the duration of the call; <paramref name="qpc"/> is its capture QPC.
-/// </summary>
+/// <summary>Receives one captured frame; the texture is an <c>ID3D11Texture2D*</c> valid only during the call.</summary>
 public delegate void CapturedFrameHandler(long qpc, nint texture, VideoSize contentSize);
 
-/// <summary>
-/// Windows.Graphics.Capture of one window (AD-12): a window item only, no hooks, no
-/// process access; or, for a Monitor Recording (6.9, <see cref="ForMonitor"/>), of one monitor.
-/// Frames arrive on a free-threaded pool's worker thread, one at a time.
-/// </summary>
+/// <summary>Windows.Graphics.Capture of one window or monitor, with no hooks; frames arrive one at a time on a pool thread.</summary>
 public sealed unsafe class WindowCapture : ICaptureSource
 {
     private const string GraphicsCaptureItemClass = "Windows.Graphics.Capture.GraphicsCaptureItem";
@@ -38,8 +31,7 @@ public sealed unsafe class WindowCapture : ICaptureSource
     private static readonly Guid GraphicsCaptureItemInteropIid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
     private static readonly Guid DxgiInterfaceAccessIid = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
 
-    // The per-frame ABI: IDirect3D11CaptureFramePool, IDirect3D11CaptureFrame and IClosable, and
-    // their vtable slots (after IInspectable's six).
+    // The per-frame ABI interfaces and their vtable slots, which come after IInspectable's six.
     private static readonly Guid FramePoolIid = new("24EB6D22-1975-422E-82E7-780DBD8DDF24");
     private static readonly Guid ClosableIid = new("30D5A829-7FA4-4026-83BB-D75BAE4EA99E");
     private const int TryGetNextFrameSlot = 7; // IDirect3D11CaptureFramePool: Recreate, TryGetNextFrame, ...
@@ -48,8 +40,7 @@ public sealed unsafe class WindowCapture : ICaptureSource
     private const int ContentSizeSlot = 8;
     private const int CloseSlot = 6;           // IClosable: Close
 
-    // The item's Closed event needs a message loop on the creating thread, which the headless
-    // engine doesn't have; a watchdog on IsWindow raises Closed when the window is destroyed.
+    // The item's Closed event needs a message loop the engine doesn't have, so a watchdog polls IsWindow instead.
     private static readonly TimeSpan WatchdogInterval = TimeSpan.FromMilliseconds(250);
 
     private readonly D3D11Device _device;
@@ -67,10 +58,7 @@ public sealed unsafe class WindowCapture : ICaptureSource
     private void* _poolAbi;
     private bool _disposed;
 
-    /// <param name="fps">
-    /// The output frame rate. WGC's <c>MinUpdateInterval</c> is half a slot, so a window repainting
-    /// faster than <paramref name="fps"/> can fill every slot with a new frame.
-    /// </param>
+    /// <summary>WGC's MinUpdateInterval is half a slot of fps, so a fast-repainting window can fill every slot with a new frame.</summary>
     public WindowCapture(D3D11Device device, nint hwnd, int fps, CapturedFrameHandler onFrame, ILogger logger)
         : this(device, CreateItem(hwnd), hwnd, fps, onFrame, logger)
     {
@@ -101,11 +89,7 @@ public sealed unsafe class WindowCapture : ICaptureSource
             hwnd == 0 ? "monitor" : "window", _item.DisplayName, _poolSize.Width, _poolSize.Height, 2 * fps);
     }
 
-    /// <summary>
-    /// Captures the monitor <paramref name="hmonitor"/> (6.9), at its full size. With no window to
-    /// watch, only the item's own <c>Closed</c> (the monitor detached) raises <see cref="Closed"/>.
-    /// Windows marked <c>WDA_EXCLUDEFROMCAPTURE</c> don't appear in it.
-    /// </summary>
+    /// <summary>Captures a whole monitor; only the item's own Closed (the monitor detached) raises <see cref="Closed"/>.</summary>
     public static WindowCapture ForMonitor(D3D11Device device, nint hmonitor, int fps, CapturedFrameHandler onFrame, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -132,10 +116,7 @@ public sealed unsafe class WindowCapture : ICaptureSource
 
     public VideoSize ItemSize => new(_item.Size.Width, _item.Size.Height);
 
-    /// <summary>
-    /// Sets the output frame rate as the constructor does: <c>MinUpdateInterval</c> half a slot of
-    /// <paramref name="fps"/>. A failure is logged and the old interval kept.
-    /// </summary>
+    /// <summary>Sets the output frame rate as the constructor does; a failure is logged and the old interval kept.</summary>
     public void SetFps(int fps)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(fps, 1);
@@ -198,8 +179,7 @@ public sealed unsafe class WindowCapture : ICaptureSource
                 return;
             }
 
-            // The per-frame calls go through the ABI (AD-14 hand-offs): projected frames and
-            // surfaces would allocate managed wrappers for every frame (AD-7).
+            // Per-frame calls use the raw ABI, because projected frames would allocate managed wrappers for every frame.
             void* frame = null;
             var pool = _poolAbi;
             if (((delegate* unmanaged[Stdcall]<void*, void**, HRESULT>)(*(void***)pool)[TryGetNextFrameSlot])(pool, &frame).Failed || frame is null)

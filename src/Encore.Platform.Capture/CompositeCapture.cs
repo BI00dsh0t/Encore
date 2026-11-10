@@ -7,18 +7,7 @@ using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.Capture;
 
-/// <summary>
-/// A multi-monitor Monitor Recording's source (AD-25, story 11.3; spike 11.1's base). Each screen has
-/// its own capture (a WGC monitor item, else, or with <c>duplication</c>, Desktop Duplication) on the
-/// one device. A <see cref="MonitorCompositor"/> draws each frame into that screen's place in one BGRA
-/// canvas laid out by virtual-desktop position, and its slot clock, a high-resolution timer thread at
-/// the output frame rate, hands the canvas on as one frame per slot. So the session's pacer, scaler and
-/// one encoder chain see a single source with increasing stamps; a frame that opens a new slot hands
-/// the canvas on at once, from its source's thread. The canvas never changes size: a
-/// screen whose mode changes is scaled into its place, and a removed screen's place turns black.
-/// <see cref="Closed"/> is raised once no screen is left. Per-source arrival statistics are logged at
-/// <see cref="Dispose"/> and kept in <see cref="Sources"/>.
-/// </summary>
+/// <summary>A multi-monitor recording's source: every screen is drawn into one canvas. Details: docs/code-notes.md.</summary>
 public sealed unsafe class CompositeCapture : ICaptureSource
 {
     private const uint Infinite = 0xFFFFFFFF;
@@ -44,13 +33,13 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     private bool _clockStarted;
     private bool _disposed;
 
-    /// <param name="duplication">Whether a screen is captured through Desktop Duplication instead of WGC (for tests and <c>--monitor-api dd</c>); null for none.</param>
+    /// <summary>The duplication argument says which screens use Desktop Duplication instead of WGC; null means none.</summary>
     public CompositeCapture(D3D11Device device, IReadOnlyList<MonitorPlacement> placements, int fps, Func<MonitorPlacement, bool>? duplication, CapturedFrameHandler onFrame, ILogger logger)
         : this(device ?? throw new ArgumentNullException(nameof(device)), placements, fps, duplication, null, (owner, size) => new CanvasSurface(owner, size), onFrame, logger)
     {
     }
 
-    /// <summary>For tests: each screen's capture comes from <paramref name="sources"/> and the canvas from <paramref name="canvas"/>; no GPU device.</summary>
+    /// <summary>For tests: the screens' captures and the canvas are passed in, so no GPU device is needed.</summary>
     internal CompositeCapture(
         IReadOnlyList<MonitorPlacement> placements,
         int fps,
@@ -118,11 +107,7 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     /// <summary>The GDI device names of the screens still captured.</summary>
     public IReadOnlyList<string> LiveDevices => [.. _sources.Where(s => !s.Removed).Select(s => s.Placement.Monitor.DeviceName)];
 
-    /// <summary>
-    /// Starts every screen's capture, then the slot clock. A screen whose capture can't start at all
-    /// fails the start with its own error; the caller then disposes this, which stops the screens
-    /// already started.
-    /// </summary>
+    /// <summary>Starts every screen's capture, then the slot clock; when one fails, the caller disposes this to stop the rest.</summary>
     public void Start()
     {
         lock (_gate)
@@ -163,10 +148,7 @@ public sealed unsafe class CompositeCapture : ICaptureSource
         }
     }
 
-    /// <summary>
-    /// Stops capturing the screen <paramref name="deviceName"/> (it was removed, T-03): its place
-    /// turns black and the rest go on. True when it was captured; <see cref="Closed"/> follows once none is left.
-    /// </summary>
+    /// <summary>Stops capturing a removed screen: its place turns black and the rest go on. True when it was captured.</summary>
     public bool Drop(string deviceName)
     {
         lock (_gate)
@@ -187,7 +169,7 @@ public sealed unsafe class CompositeCapture : ICaptureSource
         return true;
     }
 
-    /// <summary>Stops the clock and every source, waiting for frames in flight, logs each source's arrivals and releases the canvas.</summary>
+    /// <summary>Stops the clock and every source, waits for frames in flight, logs arrivals and releases the canvas.</summary>
     public void Dispose()
     {
         bool clockStarted;
@@ -305,10 +287,7 @@ public sealed unsafe class CompositeCapture : ICaptureSource
     /// <summary>The canvas a <see cref="CompositeCapture"/> draws into: the GPU texture, or a test's fake.</summary>
     internal interface ICanvasTarget : ICanvasSurface, IDisposable;
 
-    /// <summary>
-    /// The canvas texture: a frame of the screen's size is copied into its place; one of another size
-    /// (a mode change) is first scaled to the place's size, letterboxed, through that place's own scaler.
-    /// </summary>
+    /// <summary>The canvas texture: a frame is copied into its screen's place, and scaled first when its size has changed.</summary>
     private sealed class CanvasSurface : ICanvasTarget
     {
         private readonly CompositeCapture _owner;

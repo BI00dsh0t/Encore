@@ -11,12 +11,7 @@ namespace Encore.Platform.Capture;
 /// <summary>A display monitor: its <c>HMONITOR</c> and its GDI device name, such as <c>\\.\DISPLAY1</c>.</summary>
 public sealed record MonitorInfo(nint Handle, string DeviceName, bool IsPrimary);
 
-/// <summary>
-/// A display monitor as the Main App lists it (6.11): its GDI device name, its friendly name, and its
-/// current resolution in physical pixels; since story 11.2 also DisplayConfig's monitor device path,
-/// its physical position on the virtual desktop, its refresh rate and whether HDR is on. A value that
-/// can't be read is null (false for HDR).
-/// </summary>
+/// <summary>A display monitor as the Main App lists it; a value that can't be read is null (false for HDR).</summary>
 public sealed record MonitorDescription(
     string DeviceName,
     string FriendlyName,
@@ -29,19 +24,12 @@ public sealed record MonitorDescription(
     int? RefreshHz = null,
     bool Hdr = false);
 
-/// <summary>
-/// Finds the monitor a Monitor Recording captures (6.9) by its device name, and describes the
-/// attached monitors for <c>monitors.list</c> (6.11).
-/// </summary>
+/// <summary>Finds the monitor a Monitor Recording captures, and describes the attached monitors for the App's list.</summary>
 public static unsafe class MonitorFinder
 {
     private const uint MonitorInfoPrimary = 1; // MONITORINFOF_PRIMARY
 
-    /// <summary>
-    /// The monitor whose device name is <paramref name="deviceName"/> (ignoring case); the primary
-    /// monitor when it is null or no monitor has it, the latter logged at Warning.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">No monitor is attached at all.</exception>
+    /// <summary>The monitor with this device name, or the primary when the name is null or unknown; throws when none exists.</summary>
     public static MonitorInfo Find(string? deviceName, ILogger? logger = null)
     {
         var monitors = All();
@@ -83,13 +71,7 @@ public static unsafe class MonitorFinder
         return monitors;
     }
 
-    /// <summary>
-    /// Every attached display monitor, the primary first, then <c>EnumDisplayMonitors</c> order. A friendly
-    /// name comes from DisplayConfig, else the monitor's <c>EnumDisplayDevices</c> description, else the
-    /// device name. The size, position and refresh rate are the current display mode's, whatever the
-    /// caller's DPI awareness (AD-25: never GDI's DPI-virtualized <c>rcMonitor</c>); the monitor id and
-    /// HDR come from DisplayConfig.
-    /// </summary>
+    /// <summary>Every attached monitor, the primary first; sizes come from the display mode, never GDI's DPI-scaled rectangle.</summary>
     public static IReadOnlyList<MonitorDescription> Describe()
     {
         var targets = Targets();
@@ -112,10 +94,7 @@ public static unsafe class MonitorFinder
     /// <summary>One active source's monitor as DisplayConfig names it.</summary>
     private sealed record DisplayTarget(string? FriendlyName, string? MonitorId, bool Hdr);
 
-    /// <summary>
-    /// The DisplayConfig friendly name, monitor device path and HDR state of each active source's
-    /// monitor, by GDI device name; empty on any failure.
-    /// </summary>
+    /// <summary>Each active monitor's DisplayConfig name, device path and HDR state, by GDI device name; empty on any failure.</summary>
     private static Dictionary<string, DisplayTarget> Targets()
     {
         var names = new Dictionary<string, DisplayTarget>(StringComparer.OrdinalIgnoreCase);
@@ -184,7 +163,7 @@ public static unsafe class MonitorFinder
         return names;
     }
 
-    /// <summary>The first monitor's <c>EnumDisplayDevices</c> description under <paramref name="deviceName"/>, or null.</summary>
+    /// <summary>The first monitor's <c>EnumDisplayDevices</c> description under a device name, or null.</summary>
     private static string? DeviceString(string deviceName)
     {
         var device = new DISPLAY_DEVICEW { cb = (uint)sizeof(DISPLAY_DEVICEW) };
@@ -194,7 +173,7 @@ public static unsafe class MonitorFinder
             : null;
     }
 
-    /// <summary>The current display mode: physical size, virtual-desktop position and refresh rate; null when it can't be read.</summary>
+    /// <summary>The current display mode: physical size, virtual-desktop position and refresh rate; null when unreadable.</summary>
     private static (int Width, int Height, int X, int Y, int RefreshHz)? CurrentMode(string deviceName)
     {
         var mode = new DEVMODEW { dmSize = (ushort)sizeof(DEVMODEW) };
