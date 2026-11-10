@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace ReplayBuffer.Waveforms;
+namespace Encore.Waveforms;
 
 // Pure, linked source: the App and worker agree on disk layout without an assembly edge.
 internal static class ClipPeakFile

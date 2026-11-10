@@ -1,0 +1,38 @@
+<UserControl x:Class="Encore.App.Settings.FolderPickerView"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             IsEnabled="{Binding IsEnabled}">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
+    </UserControl.Resources>
+    <!-- Story 10.9's folder picker: the path read-only and selectable, its buttons on a row under it. -->
+    <StackPanel Margin="0,4">
+        <TextBox AutomationProperties.Name="Folder"
+                 Background="{DynamicResource ControlFillColorDisabledBrush}"
+                 Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                 IsReadOnly="True"
+                 IsReadOnlyCaretVisible="True"
+                 Text="{Binding PathText, Mode=OneWay}"
+                 ToolTip="{Binding PathText, Mode=OneWay}" />
+        <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
+            <Button Margin="0,0,4,0" Command="{Binding BrowseCommand}" Content="Browse…" />
+            <Button Margin="0,0,4,0"
+                    Command="{Binding OpenCommand}"
+                    Content="Open in Explorer"
+                    ToolTip="{Binding OpenTip}"
+                    ToolTipService.ShowOnDisabled="True"
+                    Visibility="{Binding IsFolder, Converter={StaticResource Visible}}" />
+            <Button Command="{Binding UseDefaultCommand}"
+                    Content="Use default"
+                    Visibility="{Binding CanUseDefault, Converter={StaticResource Visible}}" />
+        </StackPanel>
+        <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding Caption}" />
+        <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding FreeSpaceText}" />
+        <TextBlock Margin="0,4,0,0"
+                   FontSize="{DynamicResource CaptionTextBlockFontSize}"
+                   Style="{DynamicResource RbSettingsErrorTextStyle}"
+                   Text="{Binding Problem}"
+                   Visibility="{Binding HasProblem, Converter={StaticResource Visible}}" />
+    </StackPanel>
+</UserControl>

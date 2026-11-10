@@ -1,4 +1,4 @@
-# ReplayBuffer
+# Encore
 
 ## Git workflow: git flow (AVH)
 
@@ -19,9 +19,9 @@
 - **Heavy tests are opt-in.** Slow, hardware-bound or flaky tests (GPU capture and encode matrices, real-time latency, drift and allocation bounds, long captures, supervision timeouts, external players and the GPU load) are marked `[Fact(Explicit = true)]` (or `[Theory(Explicit = true)]`) with `[Trait("Category", "Heavy")]`. xUnit skips explicit tests unless asked.
 - **Default suite** (build first; it must have 0 warnings):
 
-  `dotnet build ReplayBuffer.slnx -c Release`
+  `dotnet build Encore.slnx -c Release`
 
-  `dotnet test --solution ReplayBuffer.slnx -c Release --no-build`, or one project: `dotnet test --project tests/ReplayBuffer.Engine.Tests -c Release --no-build`
+  `dotnet test --solution Encore.slnx -c Release --no-build`, or one project: `dotnet test --project tests/Encore.Engine.Tests -c Release --no-build`
 
 - **Heavy category**, when a change touches the capture, encode, mux or audio path, or an AC needs the measurement: add `--explicit only` to either command (`--explicit on` runs both). Run one project at a time, and not while another session's tests are running.
 

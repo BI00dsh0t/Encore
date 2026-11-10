@@ -1,0 +1,295 @@
+<UserControl x:Class="Encore.App.Settings.TrackLayoutView"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="clr-namespace:Encore.App.Theme"
+             AutomationProperties.Name="Audio Tracks">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
+    </UserControl.Resources>
+    <UserControl.InputBindings>
+        <KeyBinding Command="{Binding SaveCommand}" Gesture="Ctrl+S" />
+    </UserControl.InputBindings>
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- The sticky save bar: only while the draft differs from the saved tracks. -->
+        <ContentControl x:Name="SaveBar"
+                        Width="{Binding ActualWidth, ElementName=Column}"
+                        Style="{DynamicResource RbAudioSaveBarStyle}"
+                        Visibility="{Binding IsDirty, Converter={StaticResource Visible}}">
+            <DockPanel>
+                <StackPanel Margin="12,0,0,0"
+                            VerticalAlignment="Center"
+                            DockPanel.Dock="Right"
+                            Orientation="Horizontal">
+                    <Button MinWidth="96"
+                            Margin="0,0,8,0"
+                            Command="{Binding SaveCommand}"
+                            Content="Save changes"
+                            Style="{DynamicResource AccentButtonStyle}" />
+                    <Button MinWidth="80" Command="{Binding DiscardCommand}" Content="Discard" />
+                </StackPanel>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock FontWeight="SemiBold" Text="Unsaved changes" />
+                    <TextBlock FontSize="{DynamicResource CaptionTextBlockFontSize}"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="Changes apply from your next game, or right after your next saved Clip."
+                               TextWrapping="Wrap" />
+                    <TextBlock Margin="0,4,0,0"
+                               Style="{DynamicResource RbSettingsErrorTextStyle}"
+                               Text="{Binding SaveProblem}"
+                               Visibility="{Binding HasSaveProblem, Converter={StaticResource Visible}}" />
+                </StackPanel>
+            </DockPanel>
+        </ContentControl>
+
+        <ScrollViewer x:Name="Scroller"
+                      Grid.Row="1"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <theme:SettingsContent x:Name="Column" Style="{DynamicResource RbSettingsContentStyle}">
+
+
+                <!-- The read-only summary, for a game that uses the main tracks. -->
+                <ItemsControl Margin="0,0,0,12"
+                              Focusable="False"
+                              ItemsSource="{Binding Summary}"
+                              Visibility="{Binding ShowsSummary, Converter={StaticResource Visible}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Margin="0,2" Text="{Binding}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Visibility="{Binding CanEdit, Converter={StaticResource Visible}}">
+                    <DockPanel Margin="0,0,0,12">
+                        <Button x:Name="PresetButton"
+                                Margin="12,0,0,0"
+                                VerticalAlignment="Top"
+                                Click="OnPresetButtonClick"
+                                Content="Use a preset ▾"
+                                DockPanel.Dock="Right">
+                            <Button.ContextMenu>
+                                <ContextMenu x:Name="PresetMenu"
+                                             DisplayMemberPath="Label"
+                                             ItemsSource="{Binding Presets}"
+                                             MenuItem.Click="OnPresetClick" />
+                            </Button.ContextMenu>
+                        </Button>
+                        <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Every Clip and Recording gets these tracks, in this order. Discord and browsers play track 1 only; editors like DaVinci Resolve show each one."
+                                   TextWrapping="Wrap" />
+                    </DockPanel>
+
+                    <ItemsControl x:Name="Cards" Focusable="False" ItemsSource="{Binding Tracks}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border AutomationProperties.Name="{Binding Name}" Style="{DynamicResource RbAudioTrackCardStyle}">
+                                    <Border.InputBindings>
+                                        <KeyBinding Command="{Binding RenameCommand}" Key="F2" />
+                                        <KeyBinding Command="{Binding MoveUpCommand}" Gesture="Alt+Up" />
+                                        <KeyBinding Command="{Binding MoveDownCommand}" Gesture="Alt+Down" />
+                                    </Border.InputBindings>
+                                    <StackPanel>
+                                        <!-- Header: number, name and summary, the Track's meter, its menu. -->
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Left" Style="{DynamicResource RbAudioTrackNumberStyle}" Text="{Binding Number}" />
+                                            <Button Margin="8,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.Name="Track options"
+                                                    Click="OnMenuButtonClick"
+                                                    Content="⋯"
+                                                    DockPanel.Dock="Right"
+                                                    ToolTip="Track options">
+                                                <Button.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Command="{Binding RenameCommand}" Header="Rename" InputGestureText="F2" />
+                                                        <MenuItem Command="{Binding MoveUpCommand}" Header="Move up" InputGestureText="Alt+Up" />
+                                                        <MenuItem Command="{Binding MoveDownCommand}" Header="Move down" InputGestureText="Alt+Down" />
+                                                        <Separator />
+                                                        <MenuItem Command="{Binding RemoveCommand}" Header="Remove track" />
+                                                    </ContextMenu>
+                                                </Button.ContextMenu>
+                                            </Button>
+                                            <ProgressBar Width="160"
+                                                         Margin="12,0,0,0"
+                                                         VerticalAlignment="Center"
+                                                         AutomationProperties.Name="Track level"
+                                                         DockPanel.Dock="Right"
+                                                         Maximum="1"
+                                                         Style="{DynamicResource RbLevelMeterStyle}"
+                                                         Value="{Binding Level, Mode=OneWay}" />
+                                            <StackPanel VerticalAlignment="Center">
+                                                <Border HorizontalAlignment="Left" Style="{DynamicResource RbAudioNameOutlineStyle}">
+                                                    <TextBox MinWidth="200"
+                                                             AutomationProperties.Name="Track name"
+                                                             FontWeight="SemiBold"
+                                                             Loaded="OnNameBoxLoaded"
+                                                             Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                             Unloaded="OnNameBoxUnloaded" />
+                                                </Border>
+                                                <TextBlock Style="{DynamicResource RbAudioSummaryStyle}" Text="{Binding Summary}" />
+                                            </StackPanel>
+                                        </DockPanel>
+
+                                        <!-- The sounds this Track records. -->
+                                        <ItemsControl Margin="28,8,0,0" Focusable="False" ItemsSource="{Binding Sources}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border AutomationProperties.Name="{Binding Label}" Style="{DynamicResource RbAudioSourceRowStyle}">
+                                                        <Border.InputBindings>
+                                                            <KeyBinding Command="{Binding RemoveCommand}" Key="Delete" />
+                                                        </Border.InputBindings>
+                                                        <DockPanel>
+                                                            <TextBlock DockPanel.Dock="Left" Style="{DynamicResource RbAudioGlyphStyle}" />
+                                                            <Button Margin="8,0,0,0"
+                                                                    AutomationProperties.Name="Sound options"
+                                                                    Click="OnMenuButtonClick"
+                                                                    Content="⋯"
+                                                                    DockPanel.Dock="Right"
+                                                                    ToolTip="Sound options">
+                                                                <Button.ContextMenu>
+                                                                    <ContextMenu>
+                                                                        <MenuItem Command="{Binding RemoveCommand}" Header="Remove from this track" InputGestureText="Delete" />
+                                                                        <MenuItem Header="Treat as a microphone"
+                                                                                  IsCheckable="True"
+                                                                                  IsChecked="{Binding IsMic}"
+                                                                                  ToolTip="Applies on every track with this sound."
+                                                                                  Visibility="{Binding CanBeMic, Converter={StaticResource Visible}}" />
+                                                                    </ContextMenu>
+                                                                </Button.ContextMenu>
+                                                            </Button>
+                                                            <ProgressBar Width="80"
+                                                                         Height="4"
+                                                                         Margin="12,0,0,0"
+                                                                         VerticalAlignment="Center"
+                                                                         AutomationProperties.Name="Sound level"
+                                                                         DockPanel.Dock="Right"
+                                                                         Maximum="1"
+                                                                         Style="{DynamicResource RbLevelMeterStyle}"
+                                                                         Value="{Binding Level, Mode=OneWay}" />
+                                                            <WrapPanel VerticalAlignment="Center">
+                                                                <TextBlock VerticalAlignment="Center" Text="{Binding Label}" />
+                                                                <TextBlock Style="{DynamicResource RbAudioCaptionStyle}" Text="{Binding Kind}" />
+                                                                <TextBlock Margin="8,0,0,0"
+                                                                           VerticalAlignment="Center"
+                                                                           Style="{DynamicResource RbSettingsErrorTextStyle}"
+                                                                           Text="{Binding Note}"
+                                                                           Visibility="{Binding HasNote, Converter={StaticResource Visible}}" />
+                                                            </WrapPanel>
+                                                        </DockPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <Button Margin="28,8,0,0"
+                                                HorizontalAlignment="Left"
+                                                Click="OnAddSoundClick"
+                                                Content="+ Add sound" />
+                                        <CheckBox Margin="28,10,0,0"
+                                                  Content="Mic mute key silences the microphone on this track"
+                                                  FontSize="{DynamicResource BodyTextBlockFontSize}"
+                                                  IsChecked="{Binding MuteAffected}"
+                                                  Visibility="{Binding HasMicrophone, Converter={StaticResource Visible}}" />
+                                        <TextBlock Margin="28,8,0,0"
+                                                   Style="{DynamicResource RbSettingsCautionTextStyle}"
+                                                   Visibility="{Binding HasWarning, Converter={StaticResource Visible}}">
+                                            <Run FontFamily="{DynamicResource RbAudioGlyphFont}" Text="&#xE7BA;" />
+                                            <Run Text="{Binding Warning, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Margin="0,0,0,8"
+                               Style="{DynamicResource RbSettingsCautionTextStyle}"
+                               Text="No tracks — Clips will have video only"
+                               Visibility="{Binding HasNoTracks, Converter={StaticResource Visible}}" />
+                    <Button Margin="0,4,0,8"
+                            HorizontalAlignment="Left"
+                            Command="{Binding AddTrackCommand}"
+                            Content="+ Add a track" />
+                </StackPanel>
+            </theme:SettingsContent>
+        </ScrollViewer>
+
+        <!-- The sound picker: a flyout anchored to the card's + Add sound. -->
+        <Popup x:Name="Picker"
+               AllowsTransparency="True"
+               Closed="OnPickerClosed"
+               IsOpen="{Binding IsPickerOpen, Mode=OneWay}"
+               Placement="Bottom"
+               StaysOpen="False">
+            <Border Style="{DynamicResource RbAudioPickerStyle}">
+                <DockPanel>
+                    <TextBox x:Name="PickerSearchBox"
+                             Margin="0,0,0,8"
+                             AutomationProperties.Name="Search sounds"
+                             DockPanel.Dock="Top"
+                             PreviewKeyDown="OnPickerSearchKeyDown"
+                             Text="{Binding PickerSearch, UpdateSourceTrigger=PropertyChanged}" />
+                    <ListBox x:Name="PickerList"
+                             AutomationProperties.Name="Sounds"
+                             Background="{DynamicResource SubtleFillColorTransparentBrush}"
+                             BorderThickness="0"
+                             ItemContainerStyle="{DynamicResource RbAudioPickerItemStyle}"
+                             ItemsSource="{Binding PickerRows}"
+                             PreviewKeyDown="OnPickerListKeyDown"
+                             PreviewMouseLeftButtonUp="OnPickerListClick"
+                             PreviewTextInput="OnPickerListTextInput"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             SelectedItem="{Binding PickerSelection}">
+                        <ListBox.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate>
+                                        <ContentControl Margin="8,8,0,4" Content="{Binding Name}" Style="{DynamicResource RbSectionHeaderStyle}" />
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </ListBox.GroupStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Left" Style="{DynamicResource RbAudioGlyphStyle}" />
+                                    <ProgressBar Width="80"
+                                                 Height="4"
+                                                 Margin="12,0,0,0"
+                                                 VerticalAlignment="Center"
+                                                 DockPanel.Dock="Right"
+                                                 Maximum="1"
+                                                 Style="{DynamicResource RbLevelMeterStyle}"
+                                                 Value="{Binding Level, Mode=OneWay}" />
+                                    <TextBlock Margin="8,0,0,0"
+                                               VerticalAlignment="Center"
+                                               DockPanel.Dock="Right"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="✓"
+                                               Visibility="{Binding IsAdded, Converter={StaticResource Visible}}" />
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{DynamicResource RbAudioPickerCaptionStyle}" Text="{Binding Caption}" />
+                                            <TextBlock Margin="8,0,0,0"
+                                                       FontSize="{DynamicResource CaptionTextBlockFontSize}"
+                                                       Style="{DynamicResource RbSettingsErrorTextStyle}"
+                                                       Text="{Binding Note}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

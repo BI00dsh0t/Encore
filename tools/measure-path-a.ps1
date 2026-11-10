@@ -43,8 +43,8 @@
     as a member of "Performance Log Users" so PresentMon can trace without elevation. The
     script never starts the game and never downloads anything.
 
-    PresentMon traces in an ETW session named ReplayBuffer-PathA-<pid of this script>. Before
-    its setup checks the script stops any leftover ReplayBuffer-PathA-<pid> session whose pid
+    PresentMon traces in an ETW session named Encore-PathA-<pid of this script>. Before
+    its setup checks the script stops any leftover Encore-PathA-<pid> session whose pid
     has no running process (a killed earlier run's, which would otherwise make PresentMon lose
     events and write no CSV), and leaves a live run's session alone with a warning. It stops
     its own session after a killed PresentMon, a failed run, and at the end.
@@ -100,7 +100,7 @@ param(
     # The PresentMon CLI. Default: the newest native/presentmon/PresentMon-*.exe under the repo root.
     [string] $PresentMon = '',
 
-    # The engine executable. Default: the newest built ReplayBuffer.Engine.exe under src/ReplayBuffer.Engine/bin.
+    # The engine executable. Default: the newest built Encore.Engine.exe under src/Encore.Engine/bin.
     [string] $Engine = '',
 
     # Where the run files and the summary go. Default: measurements/path-a-<timestamp> under the repo root.
@@ -147,8 +147,8 @@ function Resolve-MonitorOptions([string] $Mode, [string] $Name) {
 # Spike 11.1: the primary monitor's device name and the physical bounding box of every monitor
 # (even sides), from each display's current mode, whatever this process's DPI awareness.
 function Get-MonitorCanvas {
-    if (-not ('ReplayBuffer.Displays' -as [type])) {
-        Add-Type -Namespace ReplayBuffer -Name Displays -MemberDefinition @'
+    if (-not ('Encore.Displays' -as [type])) {
+        Add-Type -Namespace Encore -Name Displays -MemberDefinition @'
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
 public struct DEVMODE {
     [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
@@ -168,9 +168,9 @@ public static extern bool EnumDisplaySettings(string device, int mode, ref DEVMO
     $left = [int]::MaxValue; $top = [int]::MaxValue; $right = [int]::MinValue; $bottom = [int]::MinValue
     $primary = $null
     foreach ($screen in [System.Windows.Forms.Screen]::AllScreens) {
-        $mode = New-Object ReplayBuffer.Displays+DEVMODE
+        $mode = New-Object Encore.Displays+DEVMODE
         $mode.dmSize = [Runtime.InteropServices.Marshal]::SizeOf($mode)
-        if (-not [ReplayBuffer.Displays]::EnumDisplaySettings($screen.DeviceName, -1, [ref] $mode)) { continue }
+        if (-not [Encore.Displays]::EnumDisplaySettings($screen.DeviceName, -1, [ref] $mode)) { continue }
         if ($screen.Primary) { $primary = $screen.DeviceName }
         $left = [math]::Min($left, $mode.dmPositionX); $top = [math]::Min($top, $mode.dmPositionY)
         $right = [math]::Max($right, $mode.dmPositionX + $mode.dmPelsWidth); $bottom = [math]::Max($bottom, $mode.dmPositionY + $mode.dmPelsHeight)
@@ -226,10 +226,10 @@ function Get-Percentile([double[]] $Sorted, [double] $P) {
 
 # --- ETW sessions --------------------------------------------------------------------------
 
-$SessionPrefix = 'ReplayBuffer-PathA-'
+$SessionPrefix = 'Encore-PathA-'
 $OwnSession = "$SessionPrefix$PID"
 
-# The running ReplayBuffer-PathA-<pid> sessions, from logman query -ets.
+# The running Encore-PathA-<pid> sessions, from logman query -ets.
 function Get-PathASessions {
     $lines = try { @(& logman query -ets 2>&1) } catch { @("$_") }
     if ($LASTEXITCODE -ne 0) {
@@ -328,10 +328,10 @@ $needsEngine = @($plan | Where-Object { $_.Condition.Capture }).Count -gt 0
 if ($needsEngine) {
     if (-not $Engine) {
         # Only a Release build: Debug code skews the engine's CPU and allocation figures.
-        $built = Get-ChildItem -Path (Join-Path $RepoRoot 'src/ReplayBuffer.Engine/bin/Release') -Filter 'ReplayBuffer.Engine.exe' -File -Recurse -ErrorAction SilentlyContinue |
+        $built = Get-ChildItem -Path (Join-Path $RepoRoot 'src/Encore.Engine/bin/Release') -Filter 'Encore.Engine.exe' -File -Recurse -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime | Select-Object -Last 1
         if (-not $built) {
-            Fail 'No Release engine build. Run dotnet build ReplayBuffer.slnx -c Release, or pass -Engine <path>.'
+            Fail 'No Release engine build. Run dotnet build Encore.slnx -c Release, or pass -Engine <path>.'
         }
 
         $Engine = $built.FullName
@@ -364,11 +364,11 @@ if ($needsEngine) {
         Path = $Engine
         SizeBytes = (Get-Item $Engine).Length
         # A NativeAOT publish is one native exe; a normal build has the managed dll beside it.
-        NativeAot = -not (Test-Path (Join-Path $engineDir 'ReplayBuffer.Engine.dll'))
+        NativeAot = -not (Test-Path (Join-Path $engineDir 'Encore.Engine.dll'))
     }
 }
 
-$interopLines = (Get-ChildItem -Path (Join-Path $RepoRoot 'src') -Directory -Filter 'ReplayBuffer.Platform.*' |
+$interopLines = (Get-ChildItem -Path (Join-Path $RepoRoot 'src') -Directory -Filter 'Encore.Platform.*' |
     Get-ChildItem -Filter '*.cs' -File -Recurse | Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' } |
     Get-Content | Measure-Object -Line).Lines
 
@@ -500,7 +500,7 @@ function Invoke-Run($Run, [int] $Index) {
 
         Write-Host "[$tag] PresentMon $($Run.Seconds) s on $($process.ProcessName).exe ..."
         $pmArgs = @('--process_name', "$($process.ProcessName).exe", '--output_file', $csv, '--timed', [string] $Run.Seconds,
-            '--terminate_after_timed', '--no_console_stats', '--stop_existing_session', '--session_name', "ReplayBuffer-PathA-$PID")
+            '--terminate_after_timed', '--no_console_stats', '--stop_existing_session', '--session_name', "Encore-PathA-$PID")
         $pm = Start-Process -FilePath $PresentMon -ArgumentList (Format-Arguments $pmArgs) -NoNewWindow -PassThru `
             -RedirectStandardOutput (Join-Path $OutDir "$tag-presentmon.out.log") -RedirectStandardError (Join-Path $OutDir "$tag-presentmon.err.log")
         $null = $pm.Handle
@@ -558,14 +558,14 @@ function Invoke-Run($Run, [int] $Index) {
 
 # Keep the PC awake and the display on for the whole session: an idle timeout that sleeps,
 # blanks or locks the PC stops the game presenting. ES_CONTINUOUS holds until it is reset.
-Add-Type -Namespace ReplayBuffer -Name Power -MemberDefinition @'
+Add-Type -Namespace Encore -Name Power -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("kernel32.dll")]
 public static extern uint SetThreadExecutionState(uint esFlags);
 '@
 $EsContinuous = [uint32] 2147483648 # 0x80000000; a bare hex literal is a negative Int32
 $EsSystemRequired = [uint32] 1
 $EsDisplayRequired = [uint32] 2
-if ([ReplayBuffer.Power]::SetThreadExecutionState($EsContinuous -bor $EsSystemRequired -bor $EsDisplayRequired) -eq 0) {
+if ([Encore.Power]::SetThreadExecutionState($EsContinuous -bor $EsSystemRequired -bor $EsDisplayRequired) -eq 0) {
     Write-Warning 'Could not keep the PC awake; set sleep and screen lock to Never for this session.'
 }
 
@@ -599,7 +599,7 @@ try {
     }
 }
 finally {
-    [void] [ReplayBuffer.Power]::SetThreadExecutionState($EsContinuous)
+    [void] [Encore.Power]::SetThreadExecutionState($EsContinuous)
     Stop-OwnSession
 }
 

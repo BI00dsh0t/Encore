@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The fullscreen classification test creates real windows through the library's CsWin32 calls. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Encore.Platform.Windows\Encore.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>

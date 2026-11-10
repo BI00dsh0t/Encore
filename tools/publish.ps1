@@ -1,12 +1,12 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    Composes the installable folder, publish/ReplayBuffer/: the App, the NativeAOT engine and the
+    Composes the installable folder, publish/Encore/: the App, the NativeAOT engine and the
     FFmpeg DLLs side by side.
 
 .DESCRIPTION
     Runs tools/publish-engine.ps1 into publish/engine/, then publishes the WPF App
-    framework-dependent (Release, win-x64) into the output folder, copies ReplayBuffer.Engine.exe
+    framework-dependent (Release, win-x64) into the output folder, copies Encore.Engine.exe
     and the DLLs beside it from the engine output, and deletes every .pdb. ffmpeg.exe and ffprobe.exe
     support clip creation; ffplay.exe is excluded. The layout is
     checked and listed at the end. Install the result with tools/install.ps1.
@@ -14,14 +14,14 @@
 [CmdletBinding()]
 param(
     # Where the composed folder goes. It is emptied first.
-    [string] $Output = (Join-Path $PSScriptRoot '..' 'publish' 'ReplayBuffer')
+    [string] $Output = (Join-Path $PSScriptRoot '..' 'publish' 'Encore')
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..')
-$AppProject = Join-Path $Root 'src' 'ReplayBuffer.App' 'ReplayBuffer.App.csproj'
+$AppProject = Join-Path $Root 'src' 'Encore.App' 'Encore.App.csproj'
 $EngineOutput = Join-Path $Root 'publish' 'engine'
 $Output = [IO.Path]::GetFullPath($Output)
 
@@ -35,7 +35,7 @@ $FFmpegDlls = @(
     'swresample-7.dll',
     'swscale-10.dll'
 )
-$Exes = @('ReplayBuffer.App.exe', 'ReplayBuffer.Engine.exe', 'ffmpeg.exe', 'ffprobe.exe')
+$Exes = @('Encore.App.exe', 'Encore.Engine.exe', 'ffmpeg.exe', 'ffprobe.exe')
 
 & (Join-Path $PSScriptRoot 'publish-engine.ps1') -Output $EngineOutput
 
@@ -51,14 +51,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE."
 }
 
-Copy-Item -LiteralPath (Join-Path $EngineOutput 'ReplayBuffer.Engine.exe') -Destination $Output
+Copy-Item -LiteralPath (Join-Path $EngineOutput 'Encore.Engine.exe') -Destination $Output
 Copy-Item -Path (Join-Path $EngineOutput '*.dll') -Destination $Output
 foreach ($tool in @('ffmpeg.exe', 'ffprobe.exe')) {
     Copy-Item -LiteralPath (Join-Path $EngineOutput $tool) -Destination $Output
 }
 # The JIT engine's content flows into the App's publish through the build-order reference: the
 # Unused FFplay and JIT runtime files, which the AOT exe doesn't use.
-foreach ($name in @('ffplay.exe', 'ReplayBuffer.Engine.runtimeconfig.json', 'ReplayBuffer.Engine.deps.json', 'ReplayBuffer.Engine.dll')) {
+foreach ($name in @('ffplay.exe', 'Encore.Engine.runtimeconfig.json', 'Encore.Engine.deps.json', 'Encore.Engine.dll')) {
     Remove-Item -LiteralPath (Join-Path $Output $name) -Force -ErrorAction SilentlyContinue
 }
 Get-ChildItem -LiteralPath $Output -Filter '*.pdb' -File -Recurse | Remove-Item -Force

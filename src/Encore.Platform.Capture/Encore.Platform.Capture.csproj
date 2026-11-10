@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CsWin32RunAsBuildTask>true</CsWin32RunAsBuildTask>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Encore.Platform.FFmpeg.Tests" />
+    <!-- DisplayMonitors.SimulateDisplayChange, the display-change test hook (8.5), and
+         DesktopDuplicationCapture's IOutputDuplication seam, faked to stall (dd-frame-gaps). -->
+    <InternalsVisibleTo Include="Encore.Platform.Capture.Tests" />
+    <!-- DesktopDuplicationCapture.SimulateAccessLost, the session's ACCESS_LOST test hook (6.10). -->
+    <InternalsVisibleTo Include="Encore.Engine" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Encore.Core\Encore.Core.csproj" />
+    <ProjectReference Include="..\Encore.Media\Encore.Media.csproj" />
+  </ItemGroup>
+</Project>

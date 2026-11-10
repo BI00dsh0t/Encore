@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <!-- A WPF window gives the tests a real top-level window to exclude. -->
-    <UseWPF>true</UseWPF>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\ReplayBuffer.Platform.Desktop\ReplayBuffer.Platform.Desktop.csproj" />
-  </ItemGroup>
-</Project>
