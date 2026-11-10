@@ -16,7 +16,11 @@ public sealed class TextLoggerProvider : ILoggerProvider
     private StreamWriter? _file;
     private DateOnly _fileDate;
 
-    public TextLoggerProvider(string folder, string prefix, LogLevel fileLevel = LogLevel.Debug, LogLevel consoleLevel = LogLevel.Information)
+    public TextLoggerProvider(
+        string folder,
+        string prefix,
+        LogLevel fileLevel = LogLevel.Debug,
+        LogLevel consoleLevel = LogLevel.Information)
     {
         _folder = folder;
         _prefix = prefix;
@@ -105,7 +109,12 @@ public sealed class TextLoggerProvider : ILoggerProvider
 
         public bool IsEnabled(LogLevel logLevel) => provider.IsEnabled(logLevel);
 
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
         {
             if (IsEnabled(logLevel))
             {

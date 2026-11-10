@@ -52,7 +52,7 @@ internal sealed class AppSupervisor(
         ArgumentNullException.ThrowIfNull(warnings);
         lock (RestartedLock)
         {
-            if (hub.State.Warnings.Any(w => w.Code == ErrorCodes.EngineRestarted))
+            if (hub.State.Warnings.Any(warning => warning.Code == ErrorCodes.EngineRestarted))
             {
                 return;
             }

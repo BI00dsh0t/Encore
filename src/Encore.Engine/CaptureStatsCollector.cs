@@ -51,9 +51,9 @@ public sealed class CaptureStatsCollector
     {
         var processors = Environment.ProcessorCount;
         SteadyReport? steady = null;
-        if (AtWarmUpEnd is { } warm && AtStop is { } stop && stop.Qpc > warm.Qpc)
+        if (AtWarmUpEnd is { } warm && AtStop is { } stop && stop.Timestamp > warm.Timestamp)
         {
-            var seconds = (double)(stop.Qpc - warm.Qpc) / QpcFrequency;
+            var seconds = (double)(stop.Timestamp - warm.Timestamp) / QpcFrequency;
             var cpu = (stop.Cpu - warm.Cpu).TotalSeconds;
             var allocated = stop.AllocatedBytes - warm.AllocatedBytes;
             steady = new SteadyReport(

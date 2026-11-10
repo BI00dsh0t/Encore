@@ -102,7 +102,7 @@ internal static class ClipExport
 
     private static string TrackFileName(ClipAudioTrack track)
     {
-        var name = string.Concat(track.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        var name = string.Concat(track.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
         if (name.Length > 80)
         {
             name = name[..80];
@@ -176,7 +176,7 @@ internal static class ClipExport
 
         if (request.Mix && tracks.Length > 0)
         {
-            filters.Add(string.Concat(Enumerable.Range(0, tracks.Length).Select(i => $"[a{i}]"))
+            filters.Add(string.Concat(Enumerable.Range(0, tracks.Length).Select(index => $"[a{index}]"))
                 + $"amix=inputs={tracks.Length}:normalize=1:duration=longest,alimiter=limit=0.95:level=0:latency=1[mix]");
         }
 

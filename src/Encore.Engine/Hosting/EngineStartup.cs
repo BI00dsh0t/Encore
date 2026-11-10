@@ -503,5 +503,7 @@ internal sealed class EngineStartup
 
     // A top-level folder's Game Profile, for files found on disk.
     private string? ProfileForFolder(string folder) =>
-        Store.Current.Profiles.FirstOrDefault(p => string.Equals(p.Value.Folder, folder, StringComparison.OrdinalIgnoreCase)).Key;
+        Store.Current.Profiles
+            .FirstOrDefault(profile => string.Equals(profile.Value.Folder, folder, StringComparison.OrdinalIgnoreCase))
+            .Key;
 }
