@@ -4,18 +4,11 @@ using System.Text.Json;
 
 namespace Encore.Bench.Tests;
 
-/// <summary>
-/// The unattended pieces against real processes: the GPU load (skipped without a hardware GPU), an injected
-/// Hotkey on the built engine, and the scripted players on a clip ffmpeg makes (skipped without ffmpeg, or
-/// without Chrome for its own check).
-/// </summary>
+/// <summary>The unattended pieces against real processes: the GPU load, an injected Hotkey and the scripted players.</summary>
 [Collection(nameof(BenchProcessCollection))]
 public sealed class UnattendedProcessTests : IDisposable
 {
-    /// <summary>
-    /// The smoke tests calibrate to the load's highest rate, so its shader stays tiny: a load calibrated to a
-    /// game's 80 fps would hold the GPU busy beside the other assemblies' real-time encode tests.
-    /// </summary>
+    /// <summary>Calibrated to the load's highest rate, so its shader stays tiny and doesn't slow other GPU tests.</summary>
     private const int LightTargetFps = 1000;
 
     private readonly BenchRun _run = new();

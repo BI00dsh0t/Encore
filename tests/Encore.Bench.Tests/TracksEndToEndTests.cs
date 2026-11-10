@@ -4,12 +4,7 @@ using System.Text.Json;
 
 namespace Encore.Bench.Tests;
 
-/// <summary>
-/// <c>bench tracks --reanalyze</c> on a file ffmpeg makes from lavfi: 20 s of H.264 and four AAC streams titled
-/// Everything, Game, Chat and Mic (only the first default) that mimic the layout. Game has a 3 kHz burst at
-/// −6 dBFS each second from 0.25 s over a 440 Hz tone 10 dB down, Chat the same from 0.75 s, Everything their
-/// sum (limited to full scale) and Mic silence. Skipped without ffmpeg.
-/// </summary>
+/// <summary>The Tracks analysis on a file ffmpeg makes with four AAC streams that mimic the layout. Skipped without ffmpeg.</summary>
 public sealed class TracksEndToEndTests : IDisposable
 {
     private const int Seconds = 20;
@@ -165,7 +160,7 @@ public sealed class TracksEndToEndTests : IDisposable
         return tools!;
     }
 
-    /// <summary>A source's signal: a 3 kHz burst at −6 dBFS for 50 ms from <paramref name="first"/> s each second, else 440 Hz 10 dB down.</summary>
+    /// <summary>A source's signal: a 3 kHz burst at −6 dBFS for 50 ms each second from a given time, else 440 Hz 10 dB down.</summary>
     private static string Source(double first, double delay)
     {
         var t = delay == 0 ? "t" : $"(t-{delay.ToString("R", CultureInfo.InvariantCulture)})";

@@ -3,18 +3,13 @@ using System.Globalization;
 
 namespace Encore.Bench.Tests;
 
-/// <summary>
-/// <c>tools/measure-gpu.ps1</c>'s <c>Measure-GpuSamples</c>, fed a recorded-shape sample: on the RTX 5090
-/// a process gets three identical <c>engtype_VideoEncode</c> instances, which the sampler used to sum
-/// (NVENC use 3x too high; found by spike 11.1).
-/// </summary>
+/// <summary>A bug that bit: a process reports three identical VideoEncode instances, which the sampler used to sum.</summary>
 public sealed class MeasureGpuSamplesTests
 {
     [Fact]
     public async Task VideoEncodeIsCountedOncePerProcessAndSummedOverProcesses()
     {
-        // Two 1 s samples, two engine processes (the game chain's and a Monitor engine's), each with
-        // eng_6..eng_8 VideoEncode reporting the same value, as the real counter does, plus one 3D engine.
+        // Two 1 s samples of two engine processes, each with three VideoEncode engines reporting the same value.
         const string script = """
             $ErrorActionPreference = 'Stop'
             . (Join-Path $env:RB_TOOLS 'measure-gpu.ps1')

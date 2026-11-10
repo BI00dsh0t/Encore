@@ -1,6 +1,6 @@
 namespace Encore.Bench.Tests;
 
-/// <summary>Story 8.7: the final conformance run's options and its pure analysis.</summary>
+/// <summary>The final conformance run's options and its pure analysis.</summary>
 public sealed class ConformanceTests
 {
     [Fact]

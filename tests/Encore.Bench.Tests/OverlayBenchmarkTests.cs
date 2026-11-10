@@ -2,11 +2,7 @@ using Encore.Bench.GpuLoad;
 
 namespace Encore.Bench.Tests;
 
-/// <summary>
-/// Story 5.2's <c>bench overlay</c> without a GPU: the load's fullscreen modes on its command line and ready line,
-/// the Overlay host's ready line, a PresentMon CSV, and the summary and report built from the phases. Story 5.8's
-/// <c>--host app</c> run over the exclusive load is the one Heavy test.
-/// </summary>
+/// <c>bench overlay</c> without a GPU: command lines, ready lines, a PresentMon CSV and the report. One test is Heavy.
 public sealed class OverlayBenchmarkTests : IDisposable
 {
     private readonly BenchRun _run = new();
@@ -92,7 +88,7 @@ public sealed class OverlayBenchmarkTests : IDisposable
         Assert.Throws<BenchUsageException>(() => OverlayBenchmark.Run(context));
     }
 
-    /// <summary>The real App's Overlay over the legacy exclusive load (story 5.8): needs the GPU, PresentMon and the console.</summary>
+    /// <summary>The real App's Overlay over the legacy exclusive load: needs the GPU, PresentMon and the console.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public void TheRealAppsOverlayKeepsTheExclusiveLoadInFullscreen()
@@ -110,7 +106,7 @@ public sealed class OverlayBenchmarkTests : IDisposable
         Assert.Equal([false, true, false], phases.Select(p => p.GetProperty("overlayWindowVisible").GetBoolean()));
     }
 
-    /// <summary>Story 5.12: <c>bench fps --overlay</c> over the synthetic load with the real App; needs the GPU, PresentMon and the console.</summary>
+    /// <c>bench fps --overlay</c> over the synthetic load with the real App; needs the GPU, PresentMon and the console.
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public void FpsWithTheOverlayOnRunsTheLoadWithTheAppsOverlay()
