@@ -3,31 +3,20 @@ using Microsoft.Extensions.Logging;
 using Encore.Contracts;
 using Encore.Contracts.Settings;
 using Encore.Core.Sessions;
-using Encore.Core.Settings;
 using Encore.Engine.Sessions;
 using Encore.Engine.Settings;
 using Encore.Platform.Audio;
 using Encore.Platform.Capture;
 using Encore.Platform.FFmpeg;
 using Encore.Platform.Windows;
-using AudioFlow = Encore.Platform.Audio.AudioFlow;
-using SettingsAudioFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine;
 
-/// <summary>A failure to report with its code, and the candidates the user can pick from.</summary>
-public sealed class EngineFailure(string code, string message, IReadOnlyList<string>? candidates = null) : Exception(message)
-{
-    public string Code { get; } = code;
-
-    public IReadOnlyList<string> Candidates { get; } = candidates ?? [];
-}
-
-/// <summary>The <c>debug-capture</c> driver: resolves the window and devices, then drives one session by messages.</summary>
+/// <summary>The <c>debug-capture</c> driver: sets one session up from the command line, then runs it to its end.</summary>
 public sealed class TracerCapture(DebugCaptureCommand command, Instance instance, ILoggerFactory loggers)
 {
     private readonly ILogger _log = loggers.CreateLogger<TracerCapture>();
-    private readonly long _qpcFrequency = Stopwatch.Frequency;
+    private readonly long _ticksPerSecond = Stopwatch.Frequency;
 
     /// <summary>Runs the capture and returns the path of the finished file.</summary>
     public string Run(CancellationToken cancellation)
@@ -36,24 +25,12 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
 
         // With --track-layout the stored settings come first: a bad layout fails before any capture.
         var stored = command.TrackLayout ? SettingsStore.ReadDocument(instance.RoamingDataFolder) : SettingsDocument.Empty;
-        var audio = command.TrackLayout ? LayoutAudio(stored) : null;
+        var audio = command.TrackLayout ? DebugCaptureSources.LayoutAudio(stored) : null;
 
         // The monitors option captures the composited monitors, with no window.
-        var window = command.Monitors is null ? ResolveWindow() : null;
-        if (audio is null)
-        {
-            var output = ResolveEndpoint(AudioFlow.Output, command.OutputDevice);
-            var input = ResolveEndpoint(AudioFlow.Input, command.InputDevice);
-            audio = SessionAudio.OnePerDevice(
-            [
-                new SessionAudioDevice(output.Id, SettingsAudioFlow.Output, output.FriendlyName),
-                new SessionAudioDevice(input.Id, SettingsAudioFlow.Input, input.FriendlyName),
-            ]);
-        }
-
-        _log.LogInformation("Window '{Title}' (0x{Handle:X}, {Process}); Tracks {Tracks}",
-            window?.Title ?? "(monitors)", window?.Handle ?? 0, window?.ProcessName,
-            string.Join(", ", audio.Tracks.Select(t => $"'{t.Name}' = {string.Join(" + ", t.DeviceIndexes.Select(i => $"'{audio.Devices[i].FriendlyName}'"))}")));
+        var window = command.Monitors is null ? DebugCaptureSources.ResolveWindow(command) : null;
+        audio ??= DebugCaptureSources.DeviceAudio(command);
+        LogSources(window, audio);
 
         var debugFolder = Path.Combine(instance.LocalDataFolder, "debug");
         var path = command.Output is { } explicitPath
@@ -61,24 +38,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             : OutputNaming.Allocate(debugFolder, window?.Title ?? "Monitors", DateTime.Now, File.Exists);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-        string? statsPath = null;
-        CaptureStatsCollector? stats = null;
-        if (command.Stats is not null)
-        {
-            // Fail now, not after a long run, when the stats file can't be written.
-            statsPath = Path.GetFullPath(command.Stats);
-            try
-            {
-                CaptureStatsCollector.EnsureWritable(statsPath);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
-            {
-                throw new EngineFailure(ErrorCodes.StatsWriteFailed, $"Can't write the stats file '{statsPath}': {e.Message}");
-            }
-
-            stats = new CaptureStatsCollector(_qpcFrequency);
-        }
-
+        var (stats, statsPath) = PrepareStats();
         var anchored = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
         var options = new CaptureSessionOptions
         {
@@ -95,12 +55,24 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             Encoder = command.Encoder,
             CompositeMonitors = command.Monitors,
             CompositeDuplication = command.MonitorDuplication,
-            Anchored = qpc => anchored.TrySetResult(qpc),
+            Anchored = timestamp => anchored.TrySetResult(timestamp),
         };
 
         // The settings store isn't opened here: the snapshot is the stored document with the command line's video value.
         var document = stored with { Global = stored.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(VideoFor(window))) };
+        return Capture(options, document, window, audio, anchored.Task, stats, cancellation);
+    }
 
+    /// <summary>Runs one session to its end and returns its file; a failed session throws its code.</summary>
+    private string Capture(
+        CaptureSessionOptions options,
+        SettingsDocument document,
+        WindowInfo? window,
+        SessionAudio audio,
+        Task<long> anchored,
+        CaptureStatsCollector? stats,
+        CancellationToken cancellation)
+    {
         // One hub for the run, disposed after the orchestrator has ended the session.
         using var hub = new AudioDeviceHub(loggers);
         using var orchestrator = new SessionOrchestrator(
@@ -113,7 +85,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             : new CaptureTarget((int)window.ProcessId, window.Handle, ProfileId: null);
         var session = orchestrator.StartAsync(SessionKind.Game, target, audio).GetAwaiter().GetResult();
         LogMicMute(session.Spec);
-        var outcome = Wait(orchestrator, session, anchored.Task, stats, cancellation);
+        var outcome = Wait(orchestrator, session, anchored, stats, cancellation);
         if (outcome.Failure is { } failure)
         {
             throw failure as EngineFailure ?? new EngineFailure(CaptureSession.CodeOf(failure), failure.Message);
@@ -122,53 +94,45 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         return outcome.Path!;
     }
 
-    /// <summary>The session audio of the stored Global <c>trackLayout</c>; refused when it is invalid or a device is missing.</summary>
-    private SessionAudio LayoutAudio(SettingsDocument document)
+    /// <summary>The stats collector and its full path when <c>--stats</c> is given; fails now when the file can't be written.</summary>
+    private (CaptureStatsCollector? Stats, string? Path) PrepareStats()
     {
-        if (document.Global.TryGetValue(Keys.TrackLayout.Name, out var raw) && !Keys.TrackLayout.IsValid(raw))
+        if (command.Stats is null)
         {
-            throw new EngineFailure(ErrorCodes.SettingInvalidValue,
-                $"The stored '{Keys.TrackLayout.Name}' is not a valid Track Layout; fix or remove it in {SettingsStore.FileName}.");
+            return (null, null);
         }
 
-        var layout = SettingsResolver.Resolve(document, null).TrackLayout;
-        var audio = SessionAudio.FromLayout(layout);
-
-        var present = new Dictionary<SettingsAudioFlow, IReadOnlyList<AudioEndpoint>>();
-        foreach (var device in audio.Devices)
+        // Fail now, not after a long run, when the stats file can't be written.
+        var statsPath = Path.GetFullPath(command.Stats);
+        try
         {
-            var flow = device.Flow == SettingsAudioFlow.Output ? AudioFlow.Output : AudioFlow.Input;
-            if (!present.TryGetValue(device.Flow, out var endpoints))
-            {
-                try
-                {
-                    endpoints = AudioEndpoints.List(flow);
-                }
-                catch (Exception e)
-                {
-                    throw new EngineFailure(ErrorCodes.AudioDeviceFailed, $"Could not list {flow} devices: {e.Message}");
-                }
-
-                present[device.Flow] = endpoints;
-            }
-
-            if (!endpoints.Any(e => string.Equals(e.Id, device.EndpointId, StringComparison.OrdinalIgnoreCase)))
-            {
-                var kind = flow == AudioFlow.Output ? "output" : "input";
-                throw new EngineFailure(ErrorCodes.AudioDeviceNotFound,
-                    $"The Track Layout's {kind} device '{device.FriendlyName}' [{device.EndpointId}] is not present.",
-                    endpoints.Select(Describe).ToList());
-            }
+            CaptureStatsCollector.EnsureWritable(statsPath);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            throw new EngineFailure(ErrorCodes.StatsWriteFailed, $"Can't write the stats file '{statsPath}': {e.Message}");
         }
 
-        return audio;
+        return (new CaptureStatsCollector(_ticksPerSecond), statsPath);
+    }
+
+    private void LogSources(WindowInfo? window, SessionAudio audio)
+    {
+        var tracks = audio.Tracks.Select(track =>
+            $"'{track.Name}' = {string.Join(" + ", track.DeviceIndexes.Select(index => $"'{audio.Devices[index].FriendlyName}'"))}");
+        _log.LogInformation(
+            "Window '{Title}' (0x{Handle:X}, {Process}); Tracks {Tracks}",
+            window?.Title ?? "(monitors)",
+            window?.Handle ?? 0,
+            window?.ProcessName,
+            string.Join(", ", tracks));
     }
 
     /// <summary>Says which Mic Device inputs the session's starting mic mute silences, if any.</summary>
     private void LogMicMute(SessionSpec spec)
     {
         var silenced = spec.Audio.GatedMicInputs()
-            .Select(p => $"'{p.Device.FriendlyName}' in '{p.Track.Name}'")
+            .Select(input => $"'{input.Device.FriendlyName}' in '{input.Track.Name}'")
             .ToList();
         if (!spec.MicMuted)
         {
@@ -187,42 +151,54 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     /// <summary>The session's <c>video</c> value from the command line, sized to the window (made even) when no size is given.</summary>
     private VideoSettings VideoFor(WindowInfo? window)
     {
-        int width, height;
-        if (command.Size is { } size)
-        {
-            (width, height) = (size.Width, size.Height);
-        }
-        else if (window is null)
-        {
-            // The canvas rule, fitted to the codec's largest side only (no pixel budget).
-            var placements = MonitorCanvas.Place(command.Monitors!);
-            if (placements.Count == 0)
-            {
-                throw new EngineFailure(ErrorCodes.CaptureFailed, $"None of the monitors '{string.Join(", ", command.Monitors!)}' is attached.");
-            }
-
-            var native = MonitorCanvas.Bounds(placements).Size;
-            var maxSide = Core.Monitors.MonitorCanvasRule.MaxSide(command.Codec);
-            var fitted = MonitorCanvas.Fit(native, maxSide);
-            (width, height) = (fitted.Width, fitted.Height);
-            _log.LogInformation("Monitors {Monitors}: canvas {Native}, encoded at {Fitted}", string.Join("; ", placements), native, fitted);
-        }
-        else
-        {
-            var item = WindowCapture.SizeOf(window.Handle);
-            var even = VideoSize.EvenFloor(Math.Min(item.Width, VideoSettings.MaxDimension), Math.Min(item.Height, VideoSettings.MaxDimension));
-            (width, height) = (even.Width, even.Height);
-        }
+        var (width, height) = command.Size is { } size
+            ? (size.Width, size.Height)
+            : window is null ? MonitorCanvasSize() : WindowSize(window);
 
         // --match-source: the chain takes the window's own size at its first frame; width and height are the fallback.
         var video = new VideoSettings(command.Codec, width, height, command.Fps, command.BitrateKbps, RateControl.Cbr, command.MatchSource);
-        _log.LogInformation("Video: {Codec} {Width}x{Height} at {Fps} fps, CBR {Kbps} kbps{Forced}",
-            video.Codec, width, height, video.Fps, video.BitrateKbps, command.Encoder is { } forced ? $", encoder forced to {forced}" : "");
+        _log.LogInformation(
+            "Video: {Codec} {Width}x{Height} at {Fps} fps, CBR {Kbps} kbps{Forced}",
+            video.Codec,
+            width,
+            height,
+            video.Fps,
+            video.BitrateKbps,
+            command.Encoder is { } forced ? $", encoder forced to {forced}" : "");
         return video;
     }
 
+    /// <summary>The canvas rule, fitted to the codec's largest side only (no pixel budget).</summary>
+    private (int Width, int Height) MonitorCanvasSize()
+    {
+        var placements = MonitorCanvas.Place(command.Monitors!);
+        if (placements.Count == 0)
+        {
+            var names = string.Join(", ", command.Monitors!);
+            throw new EngineFailure(ErrorCodes.CaptureFailed, $"None of the monitors '{names}' is attached.");
+        }
+
+        var native = MonitorCanvas.Bounds(placements).Size;
+        var maxSide = Core.Monitors.MonitorCanvasRule.MaxSide(command.Codec);
+        var fitted = MonitorCanvas.Fit(native, maxSide);
+        _log.LogInformation("Monitors {Monitors}: canvas {Native}, encoded at {Fitted}", string.Join("; ", placements), native, fitted);
+        return (fitted.Width, fitted.Height);
+    }
+
+    private static (int Width, int Height) WindowSize(WindowInfo window)
+    {
+        var size = WindowCapture.SizeOf(window.Handle);
+        var even = VideoSize.EvenFloor(Math.Min(size.Width, VideoSettings.MaxDimension), Math.Min(size.Height, VideoSettings.MaxDimension));
+        return (even.Width, even.Height);
+    }
+
     /// <summary>Waits for the session to run its course, then ends it, unless it ended itself first.</summary>
-    private SessionOutcome Wait(SessionOrchestrator orchestrator, RunningSession session, Task<long> anchored, CaptureStatsCollector? stats, CancellationToken cancellation)
+    private SessionOutcome Wait(
+        SessionOrchestrator orchestrator,
+        RunningSession session,
+        Task<long> anchored,
+        CaptureStatsCollector? stats,
+        CancellationToken cancellation)
     {
         var ended = ((IAsyncResult)session.Ended).AsyncWaitHandle;
         var cancelled = cancellation.WaitHandle;
@@ -235,14 +211,15 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         }
 
         // --seconds counts from the anchor, not from when the encoders finished opening.
-        var anchorQpc = anchored.GetAwaiter().GetResult();
-        if (stats is not null && command.Seconds > CaptureStatsCollector.WarmUp.TotalSeconds
-            && WaitHandle.WaitAny([ended, cancelled], Remaining(anchorQpc, CaptureStatsCollector.WarmUp.TotalSeconds)) == WaitHandle.WaitTimeout)
+        var anchor = anchored.GetAwaiter().GetResult();
+        var warmUp = CaptureStatsCollector.WarmUp.TotalSeconds;
+        if (stats is not null && command.Seconds > warmUp
+            && WaitHandle.WaitAny([ended, cancelled], Remaining(anchor, warmUp)) == WaitHandle.WaitTimeout)
         {
             stats.SnapshotWarmUpEnd();
         }
 
-        return WaitHandle.WaitAny([ended, cancelled], Remaining(anchorQpc, command.Seconds)) switch
+        return WaitHandle.WaitAny([ended, cancelled], Remaining(anchor, command.Seconds)) switch
         {
             0 => session.Ended.GetAwaiter().GetResult(),
             1 => End(orchestrator, session, "Ctrl+C"),
@@ -263,66 +240,10 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         }
     }
 
-    private TimeSpan Remaining(long anchorQpc, double secondsFromAnchor)
+    /// <summary>The time left until secondsFromAnchor seconds after the anchor's timestamp.</summary>
+    private TimeSpan Remaining(long anchor, double secondsFromAnchor)
     {
-        var elapsed = (double)(Stopwatch.GetTimestamp() - anchorQpc) / _qpcFrequency;
+        var elapsed = (double)(Stopwatch.GetTimestamp() - anchor) / _ticksPerSecond;
         return TimeSpan.FromSeconds(Math.Max(0, secondsFromAnchor - elapsed));
     }
-
-    private WindowInfo ResolveWindow()
-    {
-        if (command.Hwnd is { } handle)
-        {
-            return WindowFinder.FromHandle(handle)
-                ?? throw new EngineFailure(ErrorCodes.WindowNotFound, $"0x{handle:X} is not a visible, titled top-level window.",
-                    WindowFinder.List().Select(Describe).ToList());
-        }
-
-        var match = WindowFinder.Match(WindowFinder.List(), command.Window!);
-        return match.Outcome switch
-        {
-            WindowMatchOutcome.Found => match.Window!,
-            WindowMatchOutcome.NotFound => throw new EngineFailure(ErrorCodes.WindowNotFound,
-                $"No window title contains '{command.Window}'.", match.Candidates.Select(Describe).ToList()),
-            _ => throw new EngineFailure(ErrorCodes.WindowAmbiguous,
-                $"{match.Candidates.Count} window titles contain '{command.Window}'; use a longer title or --hwnd.",
-                match.Candidates.Select(Describe).ToList()),
-        };
-    }
-
-    private static AudioEndpoint ResolveEndpoint(AudioFlow flow, string? query)
-    {
-        try
-        {
-            if (query is null)
-            {
-                return AudioEndpoints.Default(flow);
-            }
-
-            var endpoints = AudioEndpoints.List(flow);
-            var match = AudioEndpoints.Match(endpoints, query);
-            var kind = flow == AudioFlow.Output ? "output" : "input";
-            return match.Outcome switch
-            {
-                EndpointMatchOutcome.Found => match.Endpoint!,
-                EndpointMatchOutcome.NotFound => throw new EngineFailure(ErrorCodes.AudioDeviceNotFound,
-                    $"No {kind} device name contains '{query}'.", match.Candidates.Select(Describe).ToList()),
-                _ => throw new EngineFailure(ErrorCodes.AudioDeviceAmbiguous,
-                    $"{match.Candidates.Count} {kind} device names contain '{query}'; use the full name.",
-                    match.Candidates.Select(Describe).ToList()),
-            };
-        }
-        catch (Exception e) when (e is not EngineFailure)
-        {
-            throw new EngineFailure(ErrorCodes.AudioDeviceFailed, $"Could not list {flow} devices: {e.Message}");
-        }
-    }
-
-    internal static string Describe(WindowInfo w) => $"0x{w.Handle:X8}  {w.ProcessName ?? "?",-24} {w.Title}";
-
-    internal static string Describe(AudioEndpoint e) => $"{e.FriendlyName}  [{e.Id}]";
-
-    /// <summary><c>debug-list</c>'s line: flow, friendly name, parent name and endpoint id.</summary>
-    internal static string DescribeFully(AudioEndpoint e) =>
-        $"{(e.Flow == AudioFlow.Output ? "output" : "input"),-6}  {e.FriendlyName}  parent: {(e.ParentName.Length > 0 ? e.ParentName : "-")}  [{e.Id}]";
 }

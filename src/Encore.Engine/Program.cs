@@ -143,7 +143,7 @@ static void DebugList()
     Console.WriteLine("Windows:");
     foreach (var window in WindowFinder.List())
     {
-        Console.WriteLine("  " + TracerCapture.Describe(window));
+        Console.WriteLine("  " + DebugCaptureSources.Describe(window));
     }
 
     foreach (var flow in new[] { AudioFlow.Output, AudioFlow.Input })
@@ -163,7 +163,7 @@ static void DebugList()
         foreach (var endpoint in AudioEndpoints.List(flow))
         {
             var marker = endpoint.Id == fallback?.Id ? "* " : "  ";
-            Console.WriteLine(marker + TracerCapture.DescribeFully(endpoint));
+            Console.WriteLine(marker + DebugCaptureSources.DescribeFully(endpoint));
         }
     }
 
