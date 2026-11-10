@@ -1,10 +1,6 @@
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// The folder holding the engine executable (and ffprobe) that the process tests run: the build
-/// output beside this assembly, or <c>REPLAYBUFFER_ENGINE_DIR</c> when set, so the same tests run
-/// against the NativeAOT publish of <c>tools/publish-engine.ps1</c>.
-/// </summary>
+/// <summary>The folder holding the engine executable the process tests run: the build output, or the one the variable names.</summary>
 internal static class EngineBinaries
 {
     public const string FolderVariable = "REPLAYBUFFER_ENGINE_DIR";

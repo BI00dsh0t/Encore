@@ -104,7 +104,7 @@ public sealed class DeviceListServeTests : IAsyncLifetime
     [Fact]
     public async Task TheWindowsDefaultsAreMarkedAndFollowADefaultChange()
     {
-        // Story 10.4: each flow's default is isDefault, and a default change re-lists.
+        // Each flow's default is isDefault, and a default change re-lists.
         var source = new FakeEndpointSource(Realtek with { IsDefault = true }, Dac, Mic with { IsDefault = true });
         StartHost(source);
         var (client, events) = await ConnectAsync();

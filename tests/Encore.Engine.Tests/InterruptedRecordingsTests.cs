@@ -6,11 +6,7 @@ using Encore.Engine.Sessions;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// The Recordings a dead engine left open, at the next start (FR-12): one torn mid-fragment is
-/// trimmed to its last whole fragment, one that never got a fragment is deleted, and a missing one
-/// is still reported. Every one gets a message naming its path.
-/// </summary>
+/// <summary>The Recordings a dead engine left open: one is trimmed, one with no fragment is deleted, each is reported.</summary>
 public sealed class InterruptedRecordingsTests : IDisposable
 {
     private readonly string _folder = Directory.CreateTempSubdirectory("rb-interrupted-").FullName;

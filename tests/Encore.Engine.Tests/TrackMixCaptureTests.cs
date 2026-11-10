@@ -10,13 +10,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// The session's Track wiring, in process: a fake hub plays a known tone on each of two devices,
-/// and each Track's decoded stream carries exactly its devices' tones. Track <c>Out</c> holds the
-/// output device, <c>Both</c> the output and the input (the output shared), <c>In</c> the input,
-/// and <c>Silent</c> none; a second case sums two full-scale tones in one Track, which the limiter
-/// holds within full scale.
-/// </summary>
+/// <summary>The session's Track wiring, in process: each Track's decoded stream carries exactly its devices' tones.</summary>
 public sealed class TrackMixCaptureTests : IDisposable
 {
     private const string WindowScript =
@@ -121,7 +115,7 @@ public sealed class TrackMixCaptureTests : IDisposable
         AssertDurationsMatchTheVideo(output, 1);
     }
 
-    /// <summary>Runs a 2 s session of the test window with <paramref name="audio"/> from <paramref name="hub"/>; returns the file.</summary>
+    /// <summary>Runs a 2 s session of the test window with the given audio from the hub; returns the file.</summary>
     private async Task<string> CaptureAsync(SessionAudio audio, ToneHub hub)
     {
         SessionTestKit.RequireFFmpeg();
@@ -149,12 +143,7 @@ public sealed class TrackMixCaptureTests : IDisposable
     private static void AssertRms(double actual, double expected) =>
         Assert.InRange(actual, expected * 0.9, expected * 1.1);
 
-    /// <summary>
-    /// The file holds video plus <paramref name="audioStreams"/> AAC streams. The video lasts about as
-    /// long as the capture ran (a loaded machine stretches the 2 s wait, so it is measured), and every
-    /// Track is padded to one common end, no earlier than the video's. A starved encoder thread can end
-    /// the video short of the audio at the stop, so the audio isn't held to the video's end from above.
-    /// </summary>
+    /// <summary>The file holds the video and the AAC streams; every Track is padded to one common end, not before the video's.</summary>
     private void AssertDurationsMatchTheVideo(string file, int audioStreams)
     {
         var streams = SessionTestKit.Probe(file, "-show_streams").GetProperty("streams").EnumerateArray()
@@ -204,12 +193,7 @@ public sealed class TrackMixCaptureTests : IDisposable
         return left;
     }
 
-    /// <summary>
-    /// The steady level: the median of the RMS over 50 ms windows. A device whose first or last
-    /// blocks land late on a loaded machine leaves a stretch of padding silence at an edge; over the
-    /// whole stream that pulled the Both Track to 0.126 against 0.158 once. The median reads the
-    /// level the Track holds most of the time, so wrong wiring still fails it.
-    /// </summary>
+    /// <summary>The steady level: the median RMS over 50 ms windows, so late blocks at an edge don't pull the level down.</summary>
     private static double Rms(float[] samples)
     {
         const int Window = AudioFormat.SampleRate / 20;

@@ -7,10 +7,7 @@ using Encore.Engine.Sessions;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// <c>dev.simulate</c> over a real pipe of a throwaway test instance: each injected outcome reaches
-/// the snapshot as capture state or a feedback notice; the installed instance refuses it.
-/// </summary>
+/// <c>dev.simulate</c> over a real pipe: each faked outcome reaches the snapshot; the installed instance refuses it.
 public sealed class DevSimulateServeTests : IAsyncLifetime
 {
     private static readonly TimeSpan Within = TimeSpan.FromSeconds(5);

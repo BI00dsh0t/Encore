@@ -13,17 +13,10 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Bugfix tiny-startup-window-capture, on a real window: a game proposed while its window is a
-/// 156×27 startup placeholder (as Rocket League's is) isn't captured until the window grows, and
-/// then is, so a save works. When that window is then replaced by another of the same process, the
-/// session follows it and keeps its ring.
-/// </summary>
+/// <summary>A bug that bit: a game proposed while its window is a tiny startup placeholder isn't captured until it grows.</summary>
 public sealed class TinyStartupWindowCaptureTests : IDisposable
 {
-    // A placeholder window that starts at 156x27; once the signal file appears it closes, and 1.5 s
-    // later the process shows its real window (a new handle). The message loop isn't tied to a form,
-    // so the process outlives its first window.
+    // A placeholder window of 156x27; on a signal it closes, and 1.5 s later the process shows its real window.
     private const string WindowScript =
         """
         param([string] $Title, [string] $Signal)
@@ -164,8 +157,7 @@ public sealed class TinyStartupWindowCaptureTests : IDisposable
         var before = await NextAsync(saved);
         Assert.True(new FileInfo(before.Path).Length > 0, before.Path);
 
-        // The window is replaced by a second one of the same process: the session waits for it and
-        // moves to it, keeping its ring, so a save then covers the time before the swap too.
+        // The window is replaced by another of the same process: the session moves to it, keeping its ring.
         File.WriteAllText(signal, "");
         await NextAsync(waiting);
         Assert.True(await NextAsync(ended));

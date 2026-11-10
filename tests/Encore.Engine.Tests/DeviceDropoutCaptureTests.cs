@@ -13,12 +13,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// The device dropout AC (R5), in process: a capture of the animated test window over a real
-/// <see cref="AudioDeviceHub"/> built with fake tone clients A (440 Hz) and B (1 kHz) and a fake
-/// endpoint list, with Tracks <c>A</c>={A}, <c>B</c>={B} and <c>AB</c>={A, B}. A leaves the list (and
-/// its client goes quiet) for 10 s mid-capture, then returns under its id.
-/// </summary>
+/// <summary>A device dropout, in process: device A leaves for 10 s mid-capture, then returns under its id.</summary>
 public sealed class DeviceDropoutCaptureTests : IDisposable
 {
     private const string WindowScript =
@@ -187,7 +182,7 @@ public sealed class DeviceDropoutCaptureTests : IDisposable
     private static void AssertRms(double actual, double expected, string what) =>
         Assert.True(actual >= expected * 0.9 && actual <= expected * 1.1, $"{what}: RMS {actual}, expected {expected}");
 
-    /// <summary>The file holds video plus <paramref name="audioStreams"/> AAC streams, each within 0.1 s of the video's duration; returns that duration.</summary>
+    /// <summary>The file holds the video and the AAC streams, each within 0.1 s of the video's duration, which is returned.</summary>
     private static double AssertDurationsMatchTheVideo(string file, int audioStreams)
     {
         var streams = SessionTestKit.Probe(file, "-show_streams").GetProperty("streams").EnumerateArray()

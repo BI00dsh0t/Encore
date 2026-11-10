@@ -35,7 +35,7 @@ public sealed class MemoryMarginReporterTests
             Assert.False(w.Overlay);
             Assert.True(w.Dismissable);
 
-            // Story 10.11: the glossary's words, the code unchanged.
+            // The glossary's words, the code unchanged.
             Assert.StartsWith("Memory is", w.Message, StringComparison.Ordinal);
             Assert.DoesNotContain("Rewind", w.Message, StringComparison.Ordinal);
         });

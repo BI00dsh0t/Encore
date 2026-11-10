@@ -7,12 +7,7 @@ using AudioDeviceHub = Encore.Platform.Audio.AudioDeviceHub;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Story 10.4's meter-cost measurement (Heavy): every listed device of this PC probed at once, as
-/// the sound picker does, on the real <see cref="AudioDeviceHub"/>. It only reads the devices
-/// (loopback and capture, shared mode) and changes no Windows setting. Reports the process CPU and
-/// the <c>meters.levels</c> rate, against an idle baseline of the same length.
-/// </summary>
+/// <summary>The meter-cost measurement (Heavy): every listed device probed at once; it only reads the devices.</summary>
 public sealed class MeterProbeCostTests
 {
     private static readonly TimeSpan Span = TimeSpan.FromSeconds(10);

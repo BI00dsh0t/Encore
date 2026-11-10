@@ -258,7 +258,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         _probe.Add(GamePid, GamePath);
         _probe.Foreground = new GameWindow(0x10, GamePid);
 
-        // Story 13.1: the profile is created Ignored, the notice goes out, and the game is forgotten in the same poll.
+        // The profile is created Ignored, the notice goes out, and the game is forgotten in the same poll.
         var found = await NextOfAsync("settings.changed", "warning.raised", "game.detected", "game.exited");
         var notice = FeedbackMessages.Raised.Read(found["warning.raised"].Payload);
         Assert.Equal((ErrorCodes.NewGameNotCaptured, true), (notice.Code, notice.Overlay));

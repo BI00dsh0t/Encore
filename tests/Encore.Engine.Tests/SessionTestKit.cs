@@ -12,10 +12,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// What the session verify tests share (stories 1.10 and 1.11): throwaway pwsh windows, an
-/// in-process session through the orchestrator, ffprobe/ffmpeg readouts and headless VLC.
-/// </summary>
+/// <summary>What the session tests share: throwaway pwsh windows, an in-process session, ffprobe readouts and headless VLC.</summary>
 internal static class SessionTestKit
 {
     public const string VlcPath = @"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe";
@@ -28,7 +25,7 @@ internal static class SessionTestKit
         File.Exists(Path.Combine(EngineBinaries.Folder, "ffprobe.exe")) && File.Exists(Path.Combine(EngineBinaries.Folder, "ffmpeg.exe")),
         "native/ffmpeg is not fetched");
 
-    /// <summary>Runs a pwsh <paramref name="script"/> with <c>-Title &lt;unique&gt;</c> and <paramref name="args"/>, and waits for its window.</summary>
+    /// <summary>Runs a pwsh script with a unique <c>-Title</c> and the given arguments, and waits for its window.</summary>
     public static WindowInfo OpenWindow(string directory, List<Process> processes, string script, params string[] args)
     {
         var title = "RB-Session-" + Guid.NewGuid().ToString("N");
@@ -55,10 +52,7 @@ internal static class SessionTestKit
         throw new InvalidOperationException("The test window never appeared.");
     }
 
-    /// <summary>
-    /// Runs one in-process session on <paramref name="window"/> for <paramref name="duration"/> from
-    /// the anchor, through the orchestrator; <paramref name="anchored"/> runs once the anchor is known.
-    /// </summary>
+    /// <summary>Runs one in-process session on a window for a duration from the anchor; anchored runs once the anchor is known.</summary>
     public static async Task<SessionOutcome> CaptureAsync(
         WindowInfo window,
         VideoSettings video,

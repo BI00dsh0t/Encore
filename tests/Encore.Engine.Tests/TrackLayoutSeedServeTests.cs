@@ -7,10 +7,7 @@ using Encore.Engine.Settings;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// The first-run seed (story 10.4, R6) on a throwaway test instance with fake endpoints: the Simple
-/// preset from the Windows defaults when settings.json has no Global <c>trackLayout</c>, and nothing otherwise.
-/// </summary>
+/// <summary>The first-run seed with fake endpoints: the Simple preset when there is no Global layout, and nothing otherwise.</summary>
 public sealed class TrackLayoutSeedServeTests : IAsyncLifetime
 {
     private static readonly AudioDevice Speakers = new("{0.0.0.00000000}.{speakers}", "Speakers", "Realtek", AudioFlow.Output, true, IsDefault: true);
@@ -68,7 +65,7 @@ public sealed class TrackLayoutSeedServeTests : IAsyncLifetime
     [Fact]
     public async Task NoDefaultDeviceWritesNothingSoALaterStartRetries()
     {
-        // A failed or empty listing would seed the catalog default; QA 10.4 finding 1.
+        // A failed or empty listing would seed the catalog default.
         var document = await StartAsync();
 
         Assert.Equal(0, document.Revision);

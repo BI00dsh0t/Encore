@@ -15,14 +15,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Crash-safe Recordings (story 6.2, FR-12, R3), in process: 6.1's three-Track Recording, with a
-/// <see cref="RuntimeStateStore"/> on a test instance keeping its path. A "kill" copies the
-/// Recording's bytes and <c>runtime.json</c> as they are on disk, which is what a killed engine leaves:
-/// what reached the OS, and nothing still in FFmpeg's buffer. The copy plays up to under 1 s before the
-/// kill, every fragment of the finished file is a whole cut point, and an engine started on the kill's
-/// files trims the Recording and raises one <c>recording-interrupted</c>.
-/// </summary>
+/// <summary>Crash-safe Recordings, in process: a "kill" copies the files as they are on disk, as a killed engine leaves them.</summary>
 public sealed class RecordingCrashTests : IDisposable
 {
     private const string WindowScript =
@@ -92,11 +85,7 @@ public sealed class RecordingCrashTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// The kill is taken as the first fragment 3 s in reaches the disk, not at a fixed 3.000 s: the
-    /// fragments are cut every 0.5 s, so a kill on the boundary left only 0.5 s for the last one's
-    /// encode and write, and a cold, loaded first run sometimes took longer.
-    /// </summary>
+    /// <summary>The kill is taken as a fragment reaches the disk, not at a fixed time, which a loaded run sometimes missed.</summary>
     [Fact]
     public Task ARecordingKilledThreeSecondsInPlaysToItsLastFragmentAndIsReportedAtTheNextStart() =>
         RecordAndKillAsync([TimeSpan.FromSeconds(3)], TimeSpan.FromSeconds(4), onFragment: true);
@@ -124,7 +113,7 @@ public sealed class RecordingCrashTests : IDisposable
         target.Write(buffer);
     }
 
-    /// <summary>Each top-level <c>moof</c>: where its fragment starts and ends (its <c>mdat</c>'s end), its <c>traf</c> count, and the video's <c>tfdt</c>.</summary>
+    /// <summary>Each top-level <c>moof</c>: where its fragment starts and ends, its track count, and the video's decode time.</summary>
     private static List<(long Start, long End, int Trafs, long VideoTime)> Fragments(string file)
     {
         var bytes = File.ReadAllBytes(file);
@@ -207,10 +196,7 @@ public sealed class RecordingCrashTests : IDisposable
         return Mp4File.PlayableLength(stream);
     }
 
-    /// <summary>
-    /// Records <paramref name="length"/> and kills at each of <paramref name="kills"/>; with
-    /// <paramref name="onFragment"/>, each kill waits from its time for the next fragment to land.
-    /// </summary>
+    /// <summary>Records for a length and kills at each given time; with onFragment each kill waits for the next fragment.</summary>
     private async Task RecordAndKillAsync(IReadOnlyList<TimeSpan> kills, TimeSpan length, bool onFragment = false)
     {
         SessionTestKit.RequireFFmpeg();
@@ -318,8 +304,7 @@ public sealed class RecordingCrashTests : IDisposable
         // The finished file: a moof with every stream's traf at least every 0.5 s of its length.
         var finished = started.Path;
         AssertPlays(finished);
-        // A fragment ends on the first frame 0.5 s or more into it, so each one's last frame starts
-        // under 0.5 s after its first (frames come late under load; that only moves the cut).
+        // A fragment ends on the first frame 0.5 s or more into it, so its last frame starts under 0.5 s after its first.
         var fragments = Fragments(finished);
         Assert.All(fragments, f => Assert.Equal(4, f.Trafs));
         var (pts, num, den) = SessionTestKit.VideoPtsTicks(finished);
@@ -351,8 +336,7 @@ public sealed class RecordingCrashTests : IDisposable
         Assert.True(Mp4File.IsComplete(torn));
         AssertPlays(torn);
 
-        // Each kill, trimmed as the next start trims it: it plays, its video ends under 1 s before the
-        // kill (from the press, an upper bound), and each Track ends with the video.
+        // Each kill, trimmed as the next start trims it: it plays, and its video ends under 1 s before the kill.
         var sampleRate = SessionTestKit.Probe(finished, "-select_streams", "a:0", "-show_streams").GetProperty("streams")[0].GetProperty("sample_rate").GetString()!;
         var step = (1024.0 / double.Parse(sampleRate, CultureInfo.InvariantCulture)) + (1.0 / Fps);
         for (var i = 0; i < kills.Count; i++)
@@ -364,8 +348,7 @@ public sealed class RecordingCrashTests : IDisposable
             var ends = StreamEnds(trimmed);
             Assert.True(ends[0] < killedAt[i], $"kill {i} at {killedAt[i]:0.000} s: the video ends at {ends[0]:0.000} s");
 
-            // The under-1 s bound is a latency measurement: on a loaded full run the encode ran nearly 2 s
-            // behind the wall clock, so only the Heavy run, on a quiet machine, holds the default run to it.
+            // The under-1 s bound is a latency measurement, so only the Heavy run, on a quiet machine, holds to it.
             if (!onFragment)
             {
                 Assert.True(killedAt[i] - ends[0] < 1.0, $"kill {i} at {killedAt[i]:0.000} s: the video ends at {ends[0]:0.000} s, a second or more before");

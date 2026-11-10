@@ -17,17 +17,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// The Recordings tracer (story 6.1), in process: a <see cref="ToneHub"/> plays three devices, the
-/// Game Profile "Test Game" has three Tracks and <c>recordingsEnabled</c> on, and its game is
-/// proposed as the Target on a pwsh window. Two <c>recordToggle</c> presses some seconds apart make
-/// one fragmented MP4 of the time between them beside Rewind, which keeps buffering.
-/// Killing the game, or disposing the orchestrator, mid-Recording still finishes it (story 6.4).
-/// A window resize keeps it one file, and a forced encoder restart splits it in two (story 6.6), as
-/// does a simulated GPU driver reset, which the session recovers from (story 8.3). A sleep ends
-/// the Recording and the resume rebuilds Rewind alone; a frame-starved source (the
-/// secure desktop) keeps its frame rate (story 8.4).
-/// </summary>
+/// <summary>Recordings, in process: Record presses make one fragmented MP4 beside Rewind, through exits, restarts and sleep.</summary>
 public sealed class RecordingCaptureTests : IDisposable
 {
     private const string WindowScript =
@@ -136,11 +126,7 @@ public sealed class RecordingCaptureTests : IDisposable
         AssertFinished(file, atLeast: 1.5);
     }
 
-    /// <summary>
-    /// Story 6.5: a 1280×720 profile video committed before the Record press waits for the
-    /// Recording's stop; ten saves at seeded random times during a 2-minute Recording leave it
-    /// unbroken, and the save after the switching one has the new size.
-    /// </summary>
+    /// <summary>A profile video change before the Record press waits for the stop; ten saves leave the Recording unbroken.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public async Task ClipsDuringARecordingLeaveItUnbrokenAndAChainChangeWaitsForItsStop()
@@ -187,7 +173,7 @@ public sealed class RecordingCaptureTests : IDisposable
                 await Task.Delay(time - clock.Elapsed, Token);
             }
 
-            // R6: never a third writer.
+            // Never a third writer.
             while (outstanding >= ReplayClips.MaxWriters)
             {
                 await NextClipAsync();
@@ -263,10 +249,7 @@ public sealed class RecordingCaptureTests : IDisposable
         SessionTestKit.AssertDecodesCleanly(file);
     }
 
-    /// <summary>
-    /// Story 14.3: a ~5 s Recording in each codec carries its length in an <c>mehd</c>, so Media
-    /// Foundation reads ffprobe's length and plays it to its last frame.
-    /// </summary>
+    /// <summary>A short Recording in each codec carries its length, so Media Foundation plays it to its last frame.</summary>
     [Theory(Explicit = true)]
     [Trait("Category", "Heavy")]
     [InlineData(VideoCodec.H264)]
@@ -300,11 +283,7 @@ public sealed class RecordingCaptureTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// Story 6.6: a Recording runs through a window resize (one file, still 640x480), then a forced
-    /// encoder restart ends it as <c>encoder-restart</c> and starts a second one at once; the two
-    /// play, and they meet with no gap longer than the restart took.
-    /// </summary>
+    /// <summary>A Recording runs through a window resize as one file; a forced encoder restart splits it in two with no gap.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public async Task AWindowResizeKeepsOneFileAndAnEncoderRestartStartsASecond()
@@ -371,12 +350,7 @@ public sealed class RecordingCaptureTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// Story 8.3: the fault seam resets the device under a running Recording. <c>gpu-reset</c> is
-    /// raised, a save during the outage cuts what was buffered before it, the first recovery attempt
-    /// fails and the next rebuilds the session, the Recording continues in a second file, and the
-    /// Rewind saves again.
-    /// </summary>
+    /// <summary>A simulated GPU reset under a Recording: the session recovers and the Recording continues in a second file.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public async Task AGpuResetRebuildsTheSessionAndTheRecordingContinuesInASecondFile()
@@ -434,11 +408,7 @@ public sealed class RecordingCaptureTests : IDisposable
         AssertFinished(b, atLeast: 1);
     }
 
-    /// <summary>
-    /// Story 8.4: a sleep, through the orchestrator's power port, ends the Recording as
-    /// <c>suspend</c>; a save while asleep cuts the old generation; the resume buffers again in a
-    /// new generation within 5 s, and a later save plays with monotonic, non-negative PTS.
-    /// </summary>
+    /// <summary>A sleep ends the Recording; a save while asleep cuts the old generation; the resume buffers again within 5 s.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public async Task ASuspendAndResumeOpenANewGenerationAndEndTheRecordingPlayable()
@@ -484,11 +454,7 @@ public sealed class RecordingCaptureTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// Story 8.4 (T-04): a source delivering no frames for 60 s, as the secure desktop does, still
-    /// gets every slot: the Clip saved after it has fps x its duration frames, its audio in step,
-    /// and no encoder restart was posted.
-    /// </summary>
+    /// <summary>A source delivering no frames for 60 s still gets every slot, its audio in step, with no encoder restart.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public async Task AFrameStarvedSourceKeepsTheFrameRateWithAudioInSync()
@@ -599,7 +565,7 @@ public sealed class RecordingCaptureTests : IDisposable
         SessionTestKit.AssertDecodesCleanly(file);
     }
 
-    /// <summary>A complete file: ffmpeg decodes it cleanly to its end, and its video runs at least <paramref name="atLeast"/> seconds.</summary>
+    /// <summary>A complete file: ffmpeg decodes it cleanly to its end, and its video runs at least the given seconds.</summary>
     private static void AssertFinished(string file, double atLeast)
     {
         var video = SessionTestKit.Probe(file, "-select_streams", "v:0", "-show_streams").GetProperty("streams")[0];
@@ -607,14 +573,7 @@ public sealed class RecordingCaptureTests : IDisposable
         SessionTestKit.AssertDecodesCleanly(file);
     }
 
-    /// <summary>
-    /// Proposes "Test Game" as the Target on a pwsh window, with a <see cref="ToneHub"/> playing
-    /// three devices into its three Tracks, and once the session anchors, presses
-    /// <c>recordToggle</c>: returns with the Recording running. With <paramref name="clips"/>, the
-    /// orchestrator has Replay Clips (Save Cooldown 0) whose saves and refusals land in the events;
-    /// with <paramref name="pending"/>, that document is committed and <see cref="SettingsUpdated"/>
-    /// posted before the press. The video is 640x480 at 30 fps in <paramref name="codec"/>.
-    /// </summary>
+    /// <summary>Proposes the test game on a pwsh window with tones on three devices, and returns with the Recording running.</summary>
     private async Task<Rig> StartRecordingAsync(
         bool clips = false,
         Func<SettingsDocument, SettingsDocument>? pending = null,

@@ -8,7 +8,7 @@ using Encore.Platform.Capture;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>Story 11.3: the Monitor session's canvas plan, with fake placements and a fake encoder probe (no displays, no GPU).</summary>
+/// <summary>The Monitor session's canvas plan, with fake placements and a fake encoder probe (no displays, no GPU).</summary>
 public sealed class CanvasPlanTests
 {
     private static readonly DisplayMonitor[] Screens =
@@ -26,7 +26,7 @@ public sealed class CanvasPlanTests
     [Fact]
     public void UnderMatchSourceOneScreenRecordsAtItsModeSizeSwitchingCodecOnlyOver4096()
     {
-        // Story 12.2: a fake 3840x2160 mode stays H.264 (it fits 4096); a fake 5120x1440 one takes HEVC at full size.
+        // A fake 3840x2160 mode stays H.264 (it fits 4096); a fake 5120x1440 one takes HEVC at full size.
         var uhd = new DisplayMonitor(@"\\.\DISPLAY2", "U32", 0, 0, false);
         var wide = new DisplayMonitor(@"\\.\DISPLAY3", "Wide", 0, 0, false);
         MonitorPlacement[] uhdPlaced = [new(new MonitorInfo(2, uhd.DeviceName, false), 2560, 0, 3840, 2160, 144)];

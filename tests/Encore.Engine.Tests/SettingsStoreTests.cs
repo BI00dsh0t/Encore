@@ -21,7 +21,7 @@ public sealed class SettingsStoreTests : IDisposable
     [Fact]
     public void AnUpdateThatNestsTheCacheAndClipsFoldersIsRefusedEitherWay()
     {
-        // Story 10.9 (AD-17): the engine, as the one settings writer, keeps the two folders apart.
+        // The engine, as the one settings writer, keeps the two folders apart.
         var store = Open();
         store.FolderDefaults = (@"C:\Users\sam\AppData\Local\Encore\ring", @"C:\Users\sam\Videos\Encore");
 

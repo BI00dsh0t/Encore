@@ -10,10 +10,7 @@ using Encore.Engine.Audio;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// The Track meters over a real pipe of a throwaway test instance (R6), on a <see cref="ToneHub"/>:
-/// device T and mic M each play a 0.5-amplitude tone; mic mute starts on (no <c>runtime.json</c>).
-/// </summary>
+/// <summary>The Track meters over a real pipe, on a tone hub: a device and a mic each play a tone; mic mute starts on.</summary>
 public sealed class MeterServeTests : IAsyncLifetime
 {
     private const double Amplitude = 0.5;
@@ -133,7 +130,7 @@ public sealed class MeterServeTests : IAsyncLifetime
     [Fact]
     public async Task ProbeTracksGiveALevelPerDeviceAndOpenEachDeviceOnce()
     {
-        // Story 10.4: the card's source T and the picker's M, each probed; M isn't on any Track.
+        // The card's source T and the picker's M, each probed; M isn't on any Track.
         var (client, events) = await ConnectAsync();
         var picker = new AudioDevice("M", "Microphone", "Realtek", AudioFlow.Input, Available: true, IsDefault: true);
         var watched = MeterProbes.WithProbes(new TrackLayout([Tone], [Game]), [picker]);
@@ -151,7 +148,7 @@ public sealed class MeterServeTests : IAsyncLifetime
     [Fact]
     public async Task TheWatchStopsWhenTheLastClientDisconnects()
     {
-        // Story 10.4: a crashed App leaves no probed device open.
+        // A crashed App leaves no probed device open.
         var (client, events) = await ConnectAsync();
         await client.SendAsync(AudioMessages.Watch, new MetersWatch(Draft), Token);
         await LevelsAsync(events, l => Near(l[0]));
@@ -171,7 +168,7 @@ public sealed class MeterServeTests : IAsyncLifetime
     [Fact]
     public void ALateDisconnectUnwatchKeepsANewerWatch()
     {
-        // QA 10.4: the disconnect's queued unwatch runs after a new client watched.
+        // The disconnect's queued unwatch runs after a new client watched.
         using var meters = new TrackMeters(_tones, _ => { }, NullLogger.Instance);
         meters.Watch(Draft);
         var departed = meters.Generation;
@@ -187,7 +184,7 @@ public sealed class MeterServeTests : IAsyncLifetime
 
     private static bool Near(float peak) => Math.Abs(peak - Amplitude) < 0.05;
 
-    /// <summary>The first <c>meters.levels</c> of <paramref name="tracks"/> Tracks within <see cref="Within"/> that <paramref name="match"/> accepts.</summary>
+    /// <summary>The first <c>meters.levels</c> with this many Tracks, within the time limit, that the match accepts.</summary>
     private static async Task<IReadOnlyList<TrackLevel>> LevelsAsync(Channel<IpcEvent> events, Func<IReadOnlyList<TrackLevel>, bool> match, int tracks = 4)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);

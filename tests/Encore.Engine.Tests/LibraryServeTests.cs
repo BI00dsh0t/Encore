@@ -9,7 +9,7 @@ using Encore.Engine.Supervision;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>The LibraryActor over a real pipe of a throwaway test instance (story 7.1).</summary>
+/// <summary>The LibraryActor over a real pipe of a throwaway test instance.</summary>
 public sealed class LibraryServeTests : IAsyncLifetime
 {
     private const string ProfileId = @"c:\games\a.exe";

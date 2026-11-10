@@ -15,17 +15,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Rewind tracer (story 4.1), in process: a <see cref="ToneHub"/> plays three devices,
-/// the Game Profile "Test Game" overrides the Track Layout with three Tracks, and its game is
-/// proposed as the Target on a pwsh window. A <c>save</c> press right after the anchor is refused
-/// as too short (story 4.2); about 4 s after the anchor one saves a Clip, read back with ffprobe and
-/// as MP4 boxes. About 1.5 s later a save whose write fails with the disk full reports
-/// <c>disk-full</c> and leaves no file (story 4.5), so the next, 1.5 s after that, retries: it saves
-/// the time between the two saved presses. Two presses with one QPC then save one Clip and refuse
-/// the other as too short. Killing the
-/// game drains the session (story 4.3): a save during the drain still cuts its last moments.
-/// </summary>
+/// <summary>Rewind, in process: saves are refused when too short, saved, retried after a full disk, and cut during a drain.</summary>
 public sealed partial class ReplayClipCaptureTests : IDisposable
 {
     private const string WindowScript =
@@ -292,9 +282,7 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
                 owner.WaitForExit(TimeSpan.FromSeconds(10));
             }
 
-            // The press goes in as soon as the drain is seen, so all of the 3 s drain is slack for a
-            // loaded machine; a fixed 1 s wait first left 2 s. A refused save fails with its reason
-            // (NotSaved) instead of a 30 s timeout.
+            // The press goes in as soon as the drain is seen, so all of the 3 s drain is slack for a loaded machine.
             await WaitForReplay(published, ReplayState.Draining);
             Assert.True(orchestrator.Post(new HotkeyPressed(HotkeyAction.Save, Stopwatch.GetTimestamp())));
             clip = await saved.Reader.ReadAsync(Token).AsTask().WaitAsync(Timeout, Token);

@@ -9,19 +9,11 @@ using Encore.Platform.Windows;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Story 1.11's verify: a window that is resized and changes mode mid-session yields one playable
-/// file at the fixed output size with no PTS break and the 4:3 phase letterboxed; a static window
-/// still gets the configured fps; and a 20 s stats run on a fast window meets the latency, GC and
-/// allocation bounds. Runs alone (<see cref="OutputSettingsCollection"/>): its timing and frame
-/// counts would suffer from encode tests running beside it. The files are deleted afterwards.
-/// </summary>
+/// <summary>A window that is resized mid-session yields one playable file at the fixed output size. Runs alone.</summary>
 [Collection(nameof(OutputSettingsCollection))]
 public sealed class OutputResolutionTests : IDisposable
 {
-    // A borderless 1280×720 window in one colour that, once the go file appears, becomes
-    // 1920×1080, then covers its whole monitor ("fullscreen" here: borderless, monitor-sized),
-    // then a bordered 1024×768 window; each phase lasts PhaseMs. It keeps invalidating.
+    // A borderless 1280×720 window that, on a signal, grows, covers its monitor, then becomes a bordered 1024×768.
     private const string ResizingWindowScript =
         """
         param([string] $Title, [string] $GoFile, [int] $PhaseMs)
@@ -161,8 +153,7 @@ public sealed class OutputResolutionTests : IDisposable
         SessionTestKit.AssertDecodesCleanly(output);
         AssertUniformPts(output, 60, seconds);
 
-        // The 4:3 phase (1024×768 with its border, last), past its first half second: black bars
-        // left and right, the window's colour (40, 200, 90 → Y ≈ 136, V ≈ 66) in the middle.
+        // The 4:3 phase, past its first half second: black bars left and right, the window's colour in the middle.
         var fourByThree = (4 * PhaseMs / 1000.0) - 1.5;
         Assert.All(Frames(output, "crop=200:1080:0:0", fourByThree), f => Assert.InRange(f.Y, 0, 25));
         Assert.All(Frames(output, "crop=200:1080:1720:0", fourByThree), f => Assert.InRange(f.Y, 0, 25));
@@ -266,10 +257,7 @@ public sealed class OutputResolutionTests : IDisposable
         RealTimeAttempts.Bound(fresh >= 0.95 * slots, $"{fresh} of {slots} slots fresh");
     }
 
-    /// <summary>
-    /// Every PTS step is exactly one slot, and the count matches the session: <paramref name="seconds"/>
-    /// of slots, ±2 %.
-    /// </summary>
+    /// <summary>Every PTS step is exactly one slot, and the count matches the session's length, ±2 %.</summary>
     private static void AssertUniformPts(string file, int fps, double seconds)
     {
         var (pts, num, den) = SessionTestKit.VideoPtsTicks(file);

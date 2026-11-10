@@ -4,11 +4,7 @@ using Encore.Platform.FFmpeg.Tests;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// The engine end to end against a throwaway window: closing the window, or Ctrl+C, must
-/// finalize a file ffprobe reads with all three streams. Uses the default (eConsole) audio
-/// devices for a few seconds; the file is deleted afterwards.
-/// </summary>
+/// <summary>The engine end to end on a throwaway window: closing it, or Ctrl+C, must leave a file with all three streams.</summary>
 public sealed class CaptureEndTests : IDisposable
 {
     private const string WindowScript =
@@ -50,8 +46,7 @@ public sealed class CaptureEndTests : IDisposable
         Start-Sleep -Milliseconds 500
         """;
 
-    // The test host ignores Ctrl+C, and children inherit that; the launcher turns it back on
-    // just for the engine it starts, then waits and passes the engine's exit code through.
+    // The test host ignores Ctrl+C and children inherit that, so the launcher turns it back on for the engine.
     private const string LauncherScript =
         """
         param([string] $Engine, [string] $EngineArgs)
@@ -104,8 +99,7 @@ public sealed class CaptureEndTests : IDisposable
     public void ClosingTheWindowEndsCaptureAndFinalizesTheFile()
     {
         RequireFFmpeg();
-        // The window closes once the engine is writing the file, not on a fixed timer: a cold engine
-        // start on a loaded machine sometimes outlasted 2.5 s and found the window already gone.
+        // The window closes once the engine is writing the file, not on a timer: a cold start sometimes took too long.
         var closeFlag = Path.Combine(_directory, "close-now");
         var title = OpenWindow(closeAfterMs: 0, closeFlag);
         var output = Path.Combine(_directory, "closed.mp4");
@@ -184,7 +178,7 @@ public sealed class CaptureEndTests : IDisposable
         AssertPacedCounts(root);
         Assert.Equal(0, video.GetProperty("nonIncreasingStamps").GetInt64());
 
-        // The defaults: the tracer's, with the encoder thread always on since story 1.11.
+        // The defaults, with the encoder thread always on.
         var encoder = root.GetProperty("encoder");
         Assert.Equal("full", encoder.GetProperty("stages").GetString());
         Assert.Equal("p5", encoder.GetProperty("preset").GetString());
@@ -207,13 +201,12 @@ public sealed class CaptureEndTests : IDisposable
         Assert.Equal(["output", "input"], audio.Select(a => a.GetProperty("role").GetString()));
         for (var i = 0; i < 2; i++)
         {
-            // Every Track is padded with silence to one common end (story 2.2), so a device's Track
-            // holds all it wrote, plus at most the gap to the longest device or the last video frame.
+            // Every Track is padded with silence to one common end, so a device's Track holds all it wrote plus the gap.
             var samples = audio[i].GetProperty("samplesEncoded").GetInt64();
             Assert.Equal(audio[0].GetProperty("samplesEncoded").GetInt64(), samples);
             Assert.InRange(samples - audio[i].GetProperty("timeline").GetProperty("writtenFrames").GetInt64(), 0, 48_000 / 10);
 
-            // The hub's steering of the device to QPC (story 1.12).
+            // The hub's steering of the device to QPC.
             var resampler = audio[i].GetProperty("resampler");
             Assert.Equal(JsonValueKind.Object, resampler.ValueKind);
             Assert.True(resampler.GetProperty("stepCorrections").GetInt64() >= 0);
@@ -281,10 +274,7 @@ public sealed class CaptureEndTests : IDisposable
         Assert.False(File.Exists(output));
     }
 
-    /// <summary>
-    /// The paced counts agree: one packet per slot, new or repeated; every new slot is a frame that
-    /// arrived; and latency is recorded for new frames only (with NVENC's delay 0, none waits for the flush).
-    /// </summary>
+    /// <summary>The paced counts agree: one packet per slot, new or repeated, and latency recorded for new frames only.</summary>
     private static void AssertPacedCounts(JsonElement root)
     {
         var video = root.GetProperty("video");

@@ -5,11 +5,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// A hub whose every endpoint plays one sine, identical on both channels, in real time: 10 ms
-/// blocks stamped contiguously from the subscription's start QPC, as the real hub's are. An
-/// endpoint with amplitude 0 plays silence; one it has no tone for fails to open, as an absent device does.
-/// </summary>
+/// <summary>A hub whose every endpoint plays one sine in real time; an endpoint with no tone fails to open, as if absent.</summary>
 internal sealed class ToneHub(IReadOnlyDictionary<string, (double Amplitude, double Hz)> tones) : IAudioDeviceHub, IDisposable
 {
     private readonly List<Tone> _running = [];
