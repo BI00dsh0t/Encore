@@ -2,7 +2,6 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Encore.Contracts.Messages;
 using Encore.Core.Audio;
-using Encore.Media;
 using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Platform.Audio;
@@ -15,6 +14,8 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
 
     /// <summary>A re-drop this soon after a resume counts as the same dropout.</summary>
     internal static readonly TimeSpan SameDropoutWindow = TimeSpan.FromSeconds(2);
+
+    private static readonly long SameDropoutTicks = Stopwatch.Frequency * (long)SameDropoutWindow.TotalSeconds;
 
     private readonly ILogger _log;
     private readonly DeviceClientFactory _factory;
@@ -88,7 +89,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
         {
             lock (_gate)
             {
-                return _devices.Values.Count(d => d.Dropped);
+                return _devices.Values.Count(device => device.Dropped);
             }
         }
     }
@@ -100,7 +101,8 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
     public IReadOnlyList<AudioDevice> ListPresent() => _source.ListPresent();
 
     /// <inheritdoc/>
-    public IAudioSubscription Subscribe(string endpointId, SettingsFlow flow, IAudioPcmSubscriber subscriber) => SubscribeDevice(endpointId, flow, subscriber);
+    public IAudioSubscription Subscribe(string endpointId, SettingsFlow flow, IAudioPcmSubscriber subscriber) =>
+        SubscribeDevice(endpointId, flow, subscriber);
 
     /// <inheritdoc/>
     public IAudioSubscription Subscribe(Core.Sessions.SessionAudioDevice device, IAudioPcmSubscriber subscriber)
@@ -116,7 +118,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_devices.ContainsKey(KeyOf(id, ToPlatform(device.Flow))))
+            if (_devices.ContainsKey(KeyOf(id, EndpointMatching.ToPlatform(device.Flow))))
             {
                 return id;
             }
@@ -133,15 +135,12 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
             return id;
         }
 
-        if (present.Any(p => p.Flow == device.Flow && string.Equals(p.EndpointId, id, StringComparison.OrdinalIgnoreCase)))
+        if (EndpointMatching.ById(present, device.Flow, id) is not null)
         {
             return id;
         }
 
-        var byName = present
-            .Where(p => p.Flow == device.Flow
-                && string.Equals(p.FriendlyName, device.FriendlyName, StringComparison.Ordinal)
-                && string.Equals(p.ParentName, device.ParentName, StringComparison.Ordinal))
+        var byName = present.Where(endpoint => EndpointMatching.HasNames(endpoint, device.Flow, device.FriendlyName, device.ParentName))
             .ToList();
         if (byName.Count != 1)
         {
@@ -162,7 +161,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
     {
         ArgumentNullException.ThrowIfNull(endpointId);
         ArgumentNullException.ThrowIfNull(subscriber);
-        var platformFlow = ToPlatform(flow);
+        var platformFlow = EndpointMatching.ToPlatform(flow);
         var key = KeyOf(endpointId, platformFlow);
         lock (_gate)
         {
@@ -210,11 +209,7 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
         // Outside the gate: a reconcile in flight takes it, and this waits for that to finish.
         if (timer is not null)
         {
-            using var done = new ManualResetEvent(false);
-            if (timer.Dispose(done))
-            {
-                done.WaitOne();
-            }
+            WaitForTimer(timer);
         }
 
         if (watching)
@@ -259,19 +254,18 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
     private static DeviceClientFactory WasapiFactory(ILoggerFactory loggers) =>
         (endpointId, flow, invalidated) => new WasapiCapture(endpointId, flow, loggers.CreateLogger<WasapiCapture>(), invalidated);
 
-    private static AudioFlow ToPlatform(SettingsFlow flow) => flow == SettingsFlow.Output ? AudioFlow.Output : AudioFlow.Input;
-
-    private static SettingsFlow ToSettings(AudioFlow flow) => flow == AudioFlow.Output ? SettingsFlow.Output : SettingsFlow.Input;
-
     private static string KeyOf(string endpointId, AudioFlow flow) => (flow == AudioFlow.Output ? "out|" : "in|") + endpointId;
 
     private static AudioDeviceDropout ToDropout(AudioEndpoint endpoint) =>
-        new(endpoint.Id, ToSettings(endpoint.Flow), endpoint.FriendlyName, endpoint.ParentName);
+        new(endpoint.Id, EndpointMatching.ToSettings(endpoint.Flow), endpoint.FriendlyName, endpoint.ParentName);
 
-    private static bool IsListed(IReadOnlyList<AudioDevice> present, AudioEndpoint endpoint)
+    private static void WaitForTimer(Timer timer)
     {
-        var flow = ToSettings(endpoint.Flow);
-        return present.Any(p => p.Flow == flow && string.Equals(p.EndpointId, endpoint.Id, StringComparison.OrdinalIgnoreCase));
+        using var done = new ManualResetEvent(false);
+        if (timer.Dispose(done))
+        {
+            done.WaitOne();
+        }
     }
 
     /// <summary>On the first subscription: reconciles on every endpoint change from then on. Under the gate.</summary>
@@ -317,33 +311,8 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
     {
         lock (_reconcile)
         {
-            IReadOnlyList<AudioDevice> present;
-            try
+            if (TryListPresent() is not { } present)
             {
-                present = _source.ListPresent();
-                _listingFailed = false;
-            }
-            catch (Exception e)
-            {
-                // Nothing is dropped or rebound on a failed listing; one Warning per run of failures.
-                if (!_listingFailed)
-                {
-                    _log.LogWarning(e, "Couldn't list the audio endpoints; open devices are checked again in {Retry}", RetryInterval);
-                }
-                else
-                {
-                    _log.LogDebug(e, "Couldn't list the audio endpoints");
-                }
-
-                _listingFailed = true;
-                lock (_gate)
-                {
-                    if (!_disposed && _devices.Count > 0)
-                    {
-                        Schedule(RetryInterval);
-                    }
-                }
-
                 return;
             }
 
@@ -357,96 +326,169 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
                 }
 
                 var now = Stopwatch.GetTimestamp();
-                var redropped = new List<HubDevice>();
-                foreach (var device in _devices.Values)
-                {
-                    if (!device.Closed && !device.Dropped && (device.Invalidated || !IsListed(present, device.Endpoint)))
-                    {
-                        // A re-drop soon after a resume is the same dropout: no event, no warning, and no rebind until the next retry.
-                        var sameEpisode = device.ResumedAt != 0 && now - device.ResumedAt < Stopwatch.Frequency * (long)SameDropoutWindow.TotalSeconds;
-                        device.Drop();
-                        device.QuietEpisode = sameEpisode;
-                        device.DroppedAt = now;
-                        if (sameEpisode)
-                        {
-                            redropped.Add(device);
-                            _log.LogDebug("'{Name}' dropped again just after resuming; the same dropout", device.Endpoint.FriendlyName);
-                        }
-                        else
-                        {
-                            dropped.Add(ToDropout(device.Endpoint));
-                        }
-                    }
-                }
-
-                var retry = false;
-                foreach (var device in _devices.Values.Where(d => d.Dropped && !d.Closed).ToList())
-                {
-                    var formerId = device.Endpoint.Id;
-                    if (redropped.Contains(device))
-                    {
-                        retry = true;
-                    }
-                    else if (TryRebind(device, present))
-                    {
-                        device.ResumedAt = Stopwatch.GetTimestamp();
-                        if (device.QuietEpisode)
-                        {
-                            device.QuietEpisode = false;
-                            _log.LogDebug("'{Name}' resumed again", device.Endpoint.FriendlyName);
-                            continue;
-                        }
-
-                        var changed = !string.Equals(formerId, device.Endpoint.Id, StringComparison.OrdinalIgnoreCase);
-                        resumed.Add((ToDropout(device.Endpoint), changed ? formerId : null));
-                    }
-                    else
-                    {
-                        // A quiet re-drop that outlasts the window is a new outage: report it now.
-                        if (device.QuietEpisode && now - device.DroppedAt >= Stopwatch.Frequency * (long)SameDropoutWindow.TotalSeconds)
-                        {
-                            device.QuietEpisode = false;
-                            dropped.Add(ToDropout(device.Endpoint));
-                        }
-
-                        retry = true;
-                    }
-                }
-
-                if (retry)
+                var redropped = DropMissing(present, now, dropped);
+                if (RebindDropped(present, now, redropped, dropped, resumed))
                 {
                     Schedule(RetryInterval);
                 }
             }
 
-            foreach (var dropout in dropped)
+            Announce(dropped, resumed);
+        }
+    }
+
+    /// <summary>The present endpoints; null when the listing failed, which drops and rebinds nothing and retries later.</summary>
+    private IReadOnlyList<AudioDevice>? TryListPresent()
+    {
+        try
+        {
+            var present = _source.ListPresent();
+            _listingFailed = false;
+            return present;
+        }
+        catch (Exception e)
+        {
+            // One Warning per run of failures.
+            if (!_listingFailed)
             {
-                _log.LogWarning(
-                    "{Code}: '{Name}' ({Parent}) dropped out; held silent until it returns",
-                    Contracts.ErrorCodes.DeviceDropout,
-                    dropout.FriendlyName,
-                    dropout.ParentName);
-                Raise(Dropped, dropout);
+                _log.LogWarning(e, "Couldn't list the audio endpoints; open devices are checked again in {Retry}", RetryInterval);
+            }
+            else
+            {
+                _log.LogDebug(e, "Couldn't list the audio endpoints");
             }
 
-            foreach (var (endpoint, formerId) in resumed)
+            _listingFailed = true;
+            lock (_gate)
             {
-                if (formerId is null)
+                if (!_disposed && _devices.Count > 0)
                 {
-                    _log.LogInformation("'{Name}' ({Parent}) returned; resumed", endpoint.FriendlyName, endpoint.ParentName);
+                    Schedule(RetryInterval);
                 }
-                else
-                {
-                    _log.LogInformation(
-                        "'{Name}' ({Parent}) returned as {Id} (was {FormerId}); resumed",
-                        endpoint.FriendlyName,
-                        endpoint.ParentName,
-                        endpoint.EndpointId,
-                        formerId);
-                }
-
-                Raise(Resumed, endpoint);
             }
+
+            return null;
+        }
+    }
+
+    /// <summary>Drops each device whose endpoint is gone or invalidated; returns those back in the same dropout. Under the gate.</summary>
+    private List<HubDevice> DropMissing(IReadOnlyList<AudioDevice> present, long now, List<AudioDeviceDropout> dropped)
+    {
+        var redropped = new List<HubDevice>();
+        foreach (var device in _devices.Values)
+        {
+            if (device.Closed || device.Dropped || (!device.Invalidated && EndpointMatching.IsListed(present, device.Endpoint)))
+            {
+                continue;
+            }
+
+            // A re-drop soon after a resume is the same dropout: no event, no warning, and no rebind until the next retry.
+            var sameEpisode = device.ResumedAt != 0 && now - device.ResumedAt < SameDropoutTicks;
+            device.Drop();
+            device.QuietEpisode = sameEpisode;
+            device.DroppedAt = now;
+            if (sameEpisode)
+            {
+                redropped.Add(device);
+                _log.LogDebug("'{Name}' dropped again just after resuming; the same dropout", device.Endpoint.FriendlyName);
+            }
+            else
+            {
+                dropped.Add(ToDropout(device.Endpoint));
+            }
+        }
+
+        return redropped;
+    }
+
+    /// <summary>Rebinds each dropped device that has a match; true when one stays dropped and is retried. Under the gate.</summary>
+    private bool RebindDropped(
+        IReadOnlyList<AudioDevice> present,
+        long now,
+        List<HubDevice> redropped,
+        List<AudioDeviceDropout> dropped,
+        List<(AudioDeviceDropout Endpoint, string? FormerId)> resumed)
+    {
+        var retry = false;
+        foreach (var device in _devices.Values.Where(device => device.Dropped && !device.Closed).ToList())
+        {
+            if (redropped.Contains(device))
+            {
+                retry = true;
+                continue;
+            }
+
+            if (TryResume(device, present, resumed))
+            {
+                continue;
+            }
+
+            // A quiet re-drop that outlasts the window is a new outage: report it now.
+            if (device.QuietEpisode && now - device.DroppedAt >= SameDropoutTicks)
+            {
+                device.QuietEpisode = false;
+                dropped.Add(ToDropout(device.Endpoint));
+            }
+
+            retry = true;
+        }
+
+        return retry;
+    }
+
+    /// <summary>Rebinds a dropped device; true when it resumed, its resume listed unless it ended a quiet re-drop.</summary>
+    private bool TryResume(
+        HubDevice device, IReadOnlyList<AudioDevice> present, List<(AudioDeviceDropout Endpoint, string? FormerId)> resumed)
+    {
+        var formerId = device.Endpoint.Id;
+        if (!TryRebind(device, present))
+        {
+            return false;
+        }
+
+        device.ResumedAt = Stopwatch.GetTimestamp();
+        if (device.QuietEpisode)
+        {
+            device.QuietEpisode = false;
+            _log.LogDebug("'{Name}' resumed again", device.Endpoint.FriendlyName);
+            return true;
+        }
+
+        var changed = !string.Equals(formerId, device.Endpoint.Id, StringComparison.OrdinalIgnoreCase);
+        resumed.Add((ToDropout(device.Endpoint), changed ? formerId : null));
+        return true;
+    }
+
+    /// <summary>Logs and raises the dropouts, then the resumes; outside the gate, so handlers may call back.</summary>
+    private void Announce(List<AudioDeviceDropout> dropped, List<(AudioDeviceDropout Endpoint, string? FormerId)> resumed)
+    {
+        foreach (var dropout in dropped)
+        {
+            _log.LogWarning(
+                "{Code}: '{Name}' ({Parent}) dropped out; held silent until it returns",
+                Contracts.ErrorCodes.DeviceDropout,
+                dropout.FriendlyName,
+                dropout.ParentName);
+            Raise(Dropped, dropout);
+        }
+
+        foreach (var (endpoint, formerId) in resumed)
+        {
+            if (formerId is null)
+            {
+                _log.LogInformation("'{Name}' ({Parent}) returned; resumed", endpoint.FriendlyName, endpoint.ParentName);
+            }
+            else
+            {
+                _log.LogInformation(
+                    "'{Name}' ({Parent}) returned as {Id} (was {FormerId}); resumed",
+                    endpoint.FriendlyName,
+                    endpoint.ParentName,
+                    endpoint.EndpointId,
+                    formerId);
+            }
+
+            Raise(Resumed, endpoint);
         }
     }
 
@@ -498,15 +540,17 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
     private AudioDevice? FindMatch(HubDevice device, IReadOnlyList<AudioDevice> present)
     {
         var endpoint = device.Endpoint;
-        var flow = ToSettings(endpoint.Flow);
-        var byId = present.FirstOrDefault(p => p.Flow == flow && string.Equals(p.EndpointId, endpoint.Id, StringComparison.OrdinalIgnoreCase));
-        if (byId is not null)
+        var flow = EndpointMatching.ToSettings(endpoint.Flow);
+        if (EndpointMatching.ById(present, flow, endpoint.Id) is { } byId)
         {
             return byId;
         }
 
         // Two dropped devices that share a name can't tell which return is whose: only ids rebind them.
-        if (_devices.Values.Any(other => !ReferenceEquals(other, device) && !other.Closed && other.Dropped && SameName(other.Endpoint, endpoint)))
+        if (_devices.Values.Any(other => !ReferenceEquals(other, device)
+            && !other.Closed
+            && other.Dropped
+            && EndpointMatching.SameName(other.Endpoint, endpoint)))
         {
             _log.LogDebug(
                 "'{Name}' ({Parent}) shares its name with another dropped device; it rebinds only by id",
@@ -517,13 +561,8 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
 
         // Endpoints another open device holds are never candidates, so a present twin doesn't make a return unclear.
         var byName = present
-            .Where(p => p.Flow == flow
-                && string.Equals(p.FriendlyName, endpoint.FriendlyName, StringComparison.Ordinal)
-                && string.Equals(p.ParentName, endpoint.ParentName, StringComparison.Ordinal)
-                && !_devices.Values.Any(other => !ReferenceEquals(other, device)
-                    && !other.Closed
-                    && other.Endpoint.Flow == endpoint.Flow
-                    && string.Equals(other.Endpoint.Id, p.EndpointId, StringComparison.OrdinalIgnoreCase)))
+            .Where(candidate => EndpointMatching.HasNames(candidate, flow, endpoint.FriendlyName, endpoint.ParentName)
+                && !HeldByAnother(device, candidate))
             .ToList();
         if (byName.Count > 1)
         {
@@ -538,10 +577,12 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
         return byName.Count == 1 ? byName[0] : null;
     }
 
-    private static bool SameName(AudioEndpoint a, AudioEndpoint b) =>
-        a.Flow == b.Flow
-        && string.Equals(a.FriendlyName, b.FriendlyName, StringComparison.Ordinal)
-        && string.Equals(a.ParentName, b.ParentName, StringComparison.Ordinal);
+    /// <summary>Whether another open device of the same flow is bound to the candidate's id.</summary>
+    private bool HeldByAnother(HubDevice device, AudioDevice candidate) =>
+        _devices.Values.Any(other => !ReferenceEquals(other, device)
+            && !other.Closed
+            && other.Endpoint.Flow == device.Endpoint.Flow
+            && string.Equals(other.Endpoint.Id, candidate.EndpointId, StringComparison.OrdinalIgnoreCase));
 
     private void Raise(Action<AudioDeviceDropout>? handlers, AudioDeviceDropout dropout)
     {
@@ -553,232 +594,5 @@ public sealed class AudioDeviceHub : IAudioDeviceHub, IAudioEndpointSource, IAud
         {
             _log.LogError(e, "An audio dropout handler failed");
         }
-    }
-}
-
-/// <summary>One subscriber's tap on a hub device; it also exposes the device's diagnostics.</summary>
-public sealed class AudioDeviceSubscription : IAudioSubscription
-{
-    private readonly AudioDeviceHub _hub;
-    private int _disposed;
-
-    internal AudioDeviceSubscription(AudioDeviceHub hub, HubDevice device, IAudioPcmSubscriber subscriber)
-    {
-        _hub = hub;
-        Device = device;
-        Subscriber = subscriber;
-    }
-
-    /// <summary>The current client's fault; null while the device is dropped and held silent.</summary>
-    public Exception? DeviceFault => Device.Fault;
-
-    public Exception? SubscriberFault { get; internal set; }
-
-    /// <summary>The device's stamp health and stream counters; they stay readable after the device closes.</summary>
-    public AudioDeviceDiagnostics Diagnostics => Device.Diagnostics;
-
-    internal HubDevice Device { get; }
-
-    internal IAudioPcmSubscriber Subscriber { get; }
-
-    public void Dispose()
-    {
-        // Before the flag, so a refused disposal can still be made later from another thread.
-        if (Device.OnCaptureThread)
-        {
-            throw new InvalidOperationException("A subscription can't be disposed from its own callback.");
-        }
-
-        if (Interlocked.Exchange(ref _disposed, 1) == 0)
-        {
-            _hub.Release(this);
-        }
-    }
-}
-
-/// <summary>A hub device's readouts: raw stamp health and drift, and what its stream did with them.</summary>
-public sealed class AudioDeviceDiagnostics(AudioEndpoint endpoint, AudioStampStats stamps, DeviceStream stream)
-{
-    private AudioEndpoint _endpoint = endpoint;
-
-    /// <summary>The endpoint the device is bound to now; a rebind to a new id changes it.</summary>
-    public AudioEndpoint Endpoint
-    {
-        get => Volatile.Read(ref _endpoint);
-        internal set => Volatile.Write(ref _endpoint, value);
-    }
-
-    public AudioStampStats Stamps { get; } = stamps;
-
-    public DeviceStream Stream { get; } = stream;
-}
-
-/// <summary>One open endpoint: its client, or a silence hold while dropped; these change only under the hub's gate.</summary>
-internal sealed class HubDevice : IAudioPcmSubscriber
-{
-    private readonly Lock _dispatch = new();
-    private readonly ILogger _log;
-    private AudioDeviceSubscription[] _subscribers = [];
-    private volatile IDeviceClient? _client;
-    private volatile SilenceHold? _hold;
-    private volatile bool _invalidated;
-    private volatile Exception? _closedFault;
-
-    public HubDevice(string key, IDeviceClient client, ILogger log)
-    {
-        Key = key;
-        _client = client;
-        Endpoint = client.Endpoint;
-        _log = log;
-        var qpf = Stopwatch.Frequency;
-        Diagnostics = new AudioDeviceDiagnostics(client.Endpoint, new AudioStampStats(qpf), new DeviceStream(qpf, this));
-    }
-
-    /// <summary>The hub's key: flow and current endpoint id.</summary>
-    public string Key { get; set; }
-
-    /// <summary>The client writing the stream now; null while dropped.</summary>
-    public IDeviceClient? Client => _client;
-
-    /// <summary>The endpoint the device is bound to now.</summary>
-    public AudioEndpoint Endpoint { get; private set; }
-
-    public AudioDeviceDiagnostics Diagnostics { get; }
-
-    /// <summary>Live subscriptions, cut-off ones included; changed only under the hub's gate.</summary>
-    public int Subscriptions { get; set; }
-
-    public bool Closed { get; private set; }
-
-    /// <summary>Whether the device is out: its client closed and its stream held silent.</summary>
-    public bool Dropped { get; private set; }
-
-    /// <summary>Set from the client's thread when its device was invalidated; the next reconcile drops it.</summary>
-    public bool Invalidated
-    {
-        get => _invalidated;
-        set => _invalidated = value;
-    }
-
-    /// <summary>The current client's fault, or the last client's once the device closed; null while dropped.</summary>
-    public Exception? Fault => _client?.Fault ?? _closedFault;
-
-    /// <summary>When the device last resumed from a dropout (QPC), or 0; under the hub's gate.</summary>
-    public long ResumedAt { get; set; }
-
-    /// <summary>When the device was last dropped (QPC); under the hub's gate.</summary>
-    public long DroppedAt { get; set; }
-
-    /// <summary>Whether this dropout continues one already reported, so its resume is quiet. Under the hub's gate.</summary>
-    public bool QuietEpisode { get; set; }
-
-    public bool OnCaptureThread => _client?.OnCaptureThread == true || _hold?.OnCaptureThread == true;
-
-    public void Start() => _client!.Start(Diagnostics.Stream, Diagnostics.Stamps);
-
-    /// <summary>Closes the client (joining its thread) and holds the stream silent in its place.</summary>
-    public void Drop()
-    {
-        var client = _client;
-        _client = null;
-        client?.Dispose();
-        Dropped = true;
-        _invalidated = false;
-        Hold();
-    }
-
-    /// <summary>Starts the silence hold, if none runs.</summary>
-    public void Hold() => _hold ??= new SilenceHold(Diagnostics.Stream, Endpoint.FriendlyName, _log);
-
-    /// <summary>Stops the hold (joining its thread) and starts <paramref name="client"/> on the same stream.</summary>
-    public void Rebind(IDeviceClient client)
-    {
-        var hold = _hold;
-        _hold = null;
-        hold?.Dispose();
-
-        // Cleared before the start, so an invalidation of the new client is kept.
-        _invalidated = false;
-
-        // Set before the start, so a subscriber's callback on the new thread is seen as on it.
-        _client = client;
-        try
-        {
-            client.Start(Diagnostics.Stream, Diagnostics.Stamps);
-        }
-        catch
-        {
-            _client = null;
-            throw;
-        }
-
-        Dropped = false;
-        Endpoint = client.Endpoint;
-        Diagnostics.Endpoint = client.Endpoint;
-    }
-
-    public void Add(AudioDeviceSubscription subscription)
-    {
-        lock (_dispatch)
-        {
-            _subscribers = [.. _subscribers, subscription];
-        }
-
-        Subscriptions++;
-    }
-
-    public void Remove(AudioDeviceSubscription subscription)
-    {
-        lock (_dispatch)
-        {
-            RemoveLocked(subscription);
-        }
-    }
-
-    /// <summary>Stops the thread and releases the client.</summary>
-    public void Close()
-    {
-        Closed = true;
-        var client = _client;
-        _closedFault = client?.Fault;
-        _client = null;
-        client?.Dispose();
-        _closedFault ??= client?.Fault;
-        var hold = _hold;
-        _hold = null;
-        hold?.Dispose();
-        _log.LogInformation("Closed {Flow} device '{Name}'", Endpoint.Flow, Endpoint.FriendlyName);
-    }
-
-    public void OnPcm(in AudioBlock block)
-    {
-        lock (_dispatch)
-        {
-            var subscribers = _subscribers;
-            foreach (var subscription in subscribers)
-            {
-                try
-                {
-                    subscription.Subscriber.OnPcm(in block);
-                }
-                catch (Exception e)
-                {
-                    subscription.SubscriberFault = e;
-                    RemoveLocked(subscription);
-                    _log.LogError(e, "A subscriber of '{Name}' failed and was cut off", Endpoint.FriendlyName);
-                }
-            }
-        }
-    }
-
-    private void RemoveLocked(AudioDeviceSubscription subscription)
-    {
-        var index = Array.IndexOf(_subscribers, subscription);
-        if (index < 0)
-        {
-            return;
-        }
-
-        _subscribers = [.. _subscribers.AsSpan(0, index), .. _subscribers.AsSpan(index + 1)];
     }
 }
