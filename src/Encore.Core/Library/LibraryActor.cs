@@ -1,7 +1,8 @@
-using System.Threading.Channels;
 using Encore.Contracts;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
+
+using Encore.Core.Threading;
 
 namespace Encore.Core.Library;
 
@@ -17,9 +18,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
     private static readonly CleanupSettings CleanupOff = new(null, null);
 
-    private readonly Channel<Message> _channel = Channel.CreateUnbounded<Message>(
-        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false, AllowSynchronousContinuations = false });
-
+    private readonly ActorMailbox<Message> _mailbox;
     private readonly Func<string> _outputFolder;
     private readonly string _libraryFile;
     private readonly Func<string, string?> _profileForFolder;
@@ -34,7 +33,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private readonly Func<CleanupSettings>? _cleanup;
     private readonly Action<string>? _limitUnreachable;
     private readonly Action<string>? _log;
-    private readonly Thread _thread;
 
     // Actor thread only: the items, and what is known of their writes and lengths.
     private readonly LibraryIndex _index;
@@ -94,6 +92,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         ArgumentNullException.ThrowIfNull(added);
         ArgumentNullException.ThrowIfNull(changed);
         ArgumentNullException.ThrowIfNull(removed);
+        _mailbox = new ActorMailbox<Message>("LibraryActor", HandleReportingFileFailures, Stopped, SaveWhenUnsaved);
         _reset = reset ?? throw new ArgumentNullException(nameof(reset));
         _cleanupBlockedChanged = cleanupBlockedChanged ?? throw new ArgumentNullException(nameof(cleanupBlockedChanged));
         _time = time ?? throw new ArgumentNullException(nameof(time));
@@ -107,20 +106,19 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         _finalPath = finalPath;
         _cleanupBlocked = cleanupBlocked;
         _index = new LibraryIndex(items, added, changed, removed, () => _dirty = true);
-        _ownOperations = new OwnFileOperations(time, (path, id) => _channel.Writer.TryWrite(new Expired(path, id)));
+        _ownOperations = new OwnFileOperations(time, (path, id) => _mailbox.Post(new Expired(path, id)));
         _watcher = new LibraryWatcher(
-            (kind, path, oldPath) => _channel.Writer.TryWrite(new Watched(kind, path, oldPath)),
+            (kind, path, oldPath) => _mailbox.Post(new Watched(kind, path, oldPath)),
             OnWatcherError,
             failed);
 
-        _channel.Writer.TryWrite(new Start());
-        _thread = new Thread(Run) { Name = "LibraryActor", IsBackground = true };
+        _mailbox.Post(new Start());
         if (readLength is not null)
         {
             _lengths = new LibraryLengthWorker(readLength, failed, () => Volatile.Read(ref _disposed) != 0, PostLengthRead);
         }
 
-        _thread.Start();
+        _mailbox.Start();
     }
 
     /// <summary>A test seam: whether the watcher raises events; setting it waits until the actor has applied it.</summary>
@@ -129,14 +127,14 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         get => _watcher.IsRaising;
         set
         {
-            if (Environment.CurrentManagedThreadId == _thread.ManagedThreadId)
+            if (_mailbox.IsOnThread)
             {
                 _watcher.SetRaising(value);
                 return;
             }
 
             var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (_channel.Writer.TryWrite(new Watch(value, done)))
+            if (_mailbox.Post(new Watch(value, done)))
             {
                 done.Task.Wait();
             }
@@ -151,7 +149,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     {
         if (path is not null)
         {
-            _channel.Writer.TryWrite(new Begin(path, profileId, kind));
+            _mailbox.Post(new Begin(path, profileId, kind));
         }
     }
 
@@ -160,7 +158,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     {
         if (path is not null)
         {
-            _channel.Writer.TryWrite(new End(path, outcome));
+            _mailbox.Post(new End(path, outcome));
         }
     }
 
@@ -186,13 +184,13 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     }
 
     /// <summary>The settings changed: when the Output Folder is a different folder, the index is rebuilt from it and published.</summary>
-    public void OutputFolderChanged() => _channel.Writer.TryWrite(new FolderChanged());
+    public void OutputFolderChanged() => _mailbox.Post(new FolderChanged());
 
     /// <summary>The <c>library-corrupt</c> warning was dismissed: Cleanup is no longer blocked.</summary>
-    public void AcknowledgeCorrupt() => _channel.Writer.TryWrite(new Acknowledge());
+    public void AcknowledgeCorrupt() => _mailbox.Post(new Acknowledge());
 
     /// <summary>The settings changed: when the <c>cleanup</c> limits differ from the last seen, a Cleanup pass may start.</summary>
-    public void CleanupChanged() => _channel.Writer.TryWrite(new CleanupTick(Changed: true));
+    public void CleanupChanged() => _mailbox.Post(new CleanupTick(Changed: true));
 
     /// <c>cleanup.preview</c>: what a pass with these limits would delete now, may it run or not; nothing is deleted.
     public Task<LibraryCleanupPlan> PreviewCleanup(LibraryCleanupPreview args)
@@ -202,7 +200,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     }
 
     /// <summary>The watcher's <see cref="FileSystemWatcher.Error"/> handler: a buffer overflow, or the folder went away.</summary>
-    internal void OnWatcherError(Exception error) => _channel.Writer.TryWrite(new WatchError(error));
+    internal void OnWatcherError(Exception error) => _mailbox.Post(new WatchError(error));
 
     /// <summary>Stops taking messages, handles those already posted and joins the thread; then stops the length worker.</summary>
     public void Dispose()
@@ -212,12 +210,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             return;
         }
 
-        _channel.Writer.TryComplete();
-        if (Environment.CurrentManagedThreadId != _thread.ManagedThreadId)
-        {
-            _thread.Join();
-        }
-
+        _mailbox.Close();
         _lengths?.Stop();
     }
 
@@ -225,7 +218,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private Task Post(Func<TaskCompletionSource, Message> request)
     {
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_channel.Writer.TryWrite(request(done)))
+        if (!_mailbox.Post(request(done)))
         {
             done.TrySetException(ShutDown());
         }
@@ -237,7 +230,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private Task<T> Post<T>(Func<TaskCompletionSource<T>, Message> request)
     {
         var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_channel.Writer.TryWrite(request(done)))
+        if (!_mailbox.Post(request(done)))
         {
             done.TrySetException(ShutDown());
         }
@@ -247,31 +240,32 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
     private static ErrorCodeException ShutDown() => new(ErrorCodes.EngineDisconnected, "The Library has shut down.");
 
-    private void Run()
+    // A file failure in one handler is reported; the actor goes on to the next message.
+    private void HandleReportingFileFailures(Message message)
     {
-        var reader = _channel.Reader;
-        while (reader.WaitToReadAsync().AsTask().GetAwaiter().GetResult())
+        try
         {
-            while (reader.TryRead(out var message))
-            {
-                try
-                {
-                    Handle(message);
-                }
-                catch (Exception e) when (LibraryPaths.IsFileFailure(e))
-                {
-                    _failed(e);
-                }
-            }
-
-            // One save for each batch of published changes.
-            if (_dirty)
-            {
-                _dirty = false;
-                Save();
-            }
+            Handle(message);
         }
+        catch (Exception e) when (LibraryPaths.IsFileFailure(e))
+        {
+            _failed(e);
+        }
+    }
 
+    // One save for each batch of published changes.
+    private void SaveWhenUnsaved()
+    {
+        if (_dirty)
+        {
+            _dirty = false;
+            Save();
+        }
+    }
+
+    // The mailbox is closed and empty: the watcher and the timers go.
+    private void Stopped()
+    {
         _watcher.Stop();
         _pending.Stop();
         _saveRetry?.Dispose();
@@ -282,7 +276,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
     // Runs on the length worker's thread: it only posts.
     private void PostLengthRead(LengthJob job, DateTime modified, double? length) =>
-        _channel.Writer.TryWrite(new LengthRead(job.Folder, job.Key, job.Size, modified, length));
+        _mailbox.Post(new LengthRead(job.Folder, job.Key, job.Size, modified, length));
 
     private void Handle(Message message)
     {
@@ -376,13 +370,13 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    // The next loop of Run saves again.
+    // The actor saves again once this message's batch is handled.
     private void OnRetrySave() => _dirty = true;
 
     // The gap between Load and the watcher is covered by one rescan; a corrupt load is saved at once.
     private void OnStart()
     {
-        _pending.Start(_time, () => _channel.Writer.TryWrite(new Settle()));
+        _pending.Start(_time, () => _mailbox.Post(new Settle()));
         _folder = LibraryPaths.FullFolder(_outputFolder());
 
         // A length loaded from library.json belongs to the file's current modified time (Load checked it).
@@ -503,7 +497,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
             _saveFailing = true;
             _saveRetry ??= _time.CreateTimer(
-                _ => _channel.Writer.TryWrite(new RetrySave()),
+                _ => _mailbox.Post(new RetrySave()),
                 null,
                 Timeout.InfiniteTimeSpan,
                 Timeout.InfiniteTimeSpan);

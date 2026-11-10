@@ -21,7 +21,7 @@ public sealed partial class LibraryActor
     }
 
     // Both Cleanup timers only post.
-    private void OnCleanupTimer(object? state) => _channel.Writer.TryWrite(new CleanupTick(Changed: false));
+    private void OnCleanupTimer(object? state) => _mailbox.Post(new CleanupTick(Changed: false));
 
     private void OnCleanupTick(CleanupTick tick)
     {
@@ -123,7 +123,7 @@ public sealed partial class LibraryActor
         // Logged before the first step is posted, so what is posted meanwhile is handled before it.
         var files = string.Join(", ", plan.Items.Select(item => $"{item.Path} ({item.Size} bytes)"));
         Log($"Cleanup plan: {plan.Items.Count} files, {plan.Bytes} bytes: {files}.");
-        _channel.Writer.TryWrite(new CleanupStep());
+        _mailbox.Post(new CleanupStep());
     }
 
     /// <summary>One step of a pass: plans again, then deletes the plan's first item once it is re-checked, or ends the pass.</summary>
@@ -162,7 +162,7 @@ public sealed partial class LibraryActor
             _pass.Skip(item.Path);
         }
 
-        _channel.Writer.TryWrite(new CleanupStep());
+        _mailbox.Post(new CleanupStep());
     }
 
     /// <summary>A pass ended with nothing left to delete: raises <c>cleanup-limit-unreachable</c> when it is due.</summary>

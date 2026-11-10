@@ -1,7 +1,8 @@
 using System.Diagnostics;
-using System.Threading.Channels;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
+
+using Encore.Core.Threading;
 
 namespace Encore.Core.Sessions;
 
@@ -14,9 +15,7 @@ public sealed partial class SessionOrchestrator : IDisposable
     /// <summary>The encoder budget: at most this many encoder chains run at once, across sessions.</summary>
     internal const int MaxChains = 2;
 
-    private readonly Channel<SessionMessage> _channel = Channel.CreateUnbounded<SessionMessage>(
-        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false, AllowSynchronousContinuations = false });
-
+    private readonly ActorMailbox<SessionMessage> _mailbox;
     private readonly ICaptureSessionFactory _factory;
     private readonly Func<SettingsDocument> _currentDocument;
     private readonly Action<CaptureState> _publish;
@@ -30,7 +29,6 @@ public sealed partial class SessionOrchestrator : IDisposable
     private readonly IDisposable? _power;
     private readonly IDisplayMonitors? _displays;
     private readonly IDisposable? _displaysChanged;
-    private readonly Thread _thread;
 
     // Orchestrator thread only.
     private Active? _active;
@@ -87,6 +85,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(currentDocument);
         ArgumentNullException.ThrowIfNull(publish);
+        _mailbox = new ActorMailbox<SessionMessage>("SessionOrchestrator", Handle, ShutDown);
         _factory = factory;
         _currentDocument = currentDocument;
         _publish = publish;
@@ -107,8 +106,7 @@ public sealed partial class SessionOrchestrator : IDisposable
             _publish(_state);
         }
 
-        _thread = new Thread(Run) { Name = "SessionOrchestrator", IsBackground = true };
-        _thread.Start();
+        _mailbox.Start();
         _power = power?.Subscribe(change => Post(change == PowerChange.Suspending
             ? new PowerSuspending(Stopwatch.GetTimestamp())
             : new PowerResumed()));
@@ -117,13 +115,13 @@ public sealed partial class SessionOrchestrator : IDisposable
     }
 
     /// <summary>The orchestrator thread's managed id.</summary>
-    internal int ThreadId => _thread.ManagedThreadId;
+    internal int ThreadId => _mailbox.ThreadId;
 
     /// <summary>Posts a message from any thread; false once the orchestrator is disposed.</summary>
     public bool Post(SessionMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
-        return _channel.Writer.TryWrite(message);
+        return _mailbox.Post(message);
     }
 
     /// <summary>Starts a session, its snapshot resolved now for the target's profile; throws when one is already running.</summary>
@@ -160,11 +158,7 @@ public sealed partial class SessionOrchestrator : IDisposable
 
         _power?.Dispose();
         _displaysChanged?.Dispose();
-        _channel.Writer.TryComplete();
-        if (Environment.CurrentManagedThreadId != _thread.ManagedThreadId)
-        {
-            _thread.Join();
-        }
+        _mailbox.Close();
     }
 
     private static TaskCompletionSource<T> NewReply<T>() => new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -177,21 +171,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         }
     }
 
-    private void Run()
-    {
-        var reader = _channel.Reader;
-        while (reader.WaitToReadAsync().AsTask().GetAwaiter().GetResult())
-        {
-            while (reader.TryRead(out var message))
-            {
-                Handle(message);
-            }
-        }
-
-        ShutDown();
-    }
-
-    // The channel is complete: the sessions end, the Recording writers get one bounded wait, and the timers go.
+    // The mailbox is closed and empty: the sessions end, the Recording writers get one bounded wait, and the timers go.
     private void ShutDown()
     {
         if (_active is not null)
