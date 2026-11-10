@@ -16,7 +16,16 @@
     <Thickness x:Key="RbNavPanePadding">0,0,0,8</Thickness>
     <Thickness x:Key="RbNavBrandMargin">16,16,16,24</Thickness>
 
-    <!-- No layer edge: the nav pane and the content share bg-base. -->
+    <!-- The nav pane sits a step above bg-base (bg-card-secondary) with a divider-stroke right edge, so it reads
+         as its own surface beside the content. -->
+    <Style x:Key="RbShellNavLayerStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,1,0" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <!-- The content stays on bg-base; the nav layer's edge marks the boundary. -->
     <Style x:Key="RbShellContentLayerStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
     </Style>
