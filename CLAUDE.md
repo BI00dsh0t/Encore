@@ -10,7 +10,7 @@
 - **Bug fixes against `develop`:** `git flow bugfix start <name>`.
 - **Hotfixes to a release:** `git flow hotfix start <version>`.
 - **Releases:** `git flow release start <version>`, then `git flow release finish <version>`, which tags `v<version>`. Cut a release when a usable milestone lands, e.g. the end of an epic.
-- Don't push unless asked; there is no remote yet.
+- The remote is `origin` (https://github.com/BI00dsh0t/Encore, public). Only `master`, `develop` and the `v*` release tags are pushed, and only when the builder asks. `feature/*`, `bugfix/*`, `hotfix/*`, `claude/*`, `backup/*` and `refs/scrub/*` stay local.
 - The git-flow settings live in `.git/config`. On a fresh clone, run `git flow init -d` and `git config gitflow.prefix.versiontag v`.
 
 ## Tests
