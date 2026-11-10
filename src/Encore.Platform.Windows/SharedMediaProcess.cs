@@ -6,7 +6,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Encore.Platform.Windows;
 
-/// <summary>AD-28: hidden tool, seekable delete-shared stdin, explicit inherited handles only.</summary>
+/// <summary>Starts a hidden media tool with a seekable, delete-shared stdin; it inherits only the handles named here.</summary>
 public static partial class SharedMediaProcess
 {
     public static async Task RunAsync(string executable, IReadOnlyList<string> arguments, string source,

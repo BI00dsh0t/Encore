@@ -18,16 +18,10 @@ public enum WindowMatchOutcome
     Ambiguous,
 }
 
-/// <summary>
-/// The result of matching a title: the window when exactly one matched, and otherwise the
-/// candidates to list (every window when none matched, the matches when several did).
-/// </summary>
+/// <summary>The result of matching a title: the window when exactly one matched, otherwise the candidates to list.</summary>
 public sealed record WindowMatch(WindowMatchOutcome Outcome, WindowInfo? Window, IReadOnlyList<WindowInfo> Candidates);
 
-/// <summary>
-/// Lists top-level windows without touching their processes beyond
-/// <c>PROCESS_QUERY_LIMITED_INFORMATION</c> (AD-12).
-/// </summary>
+/// <summary>Lists top-level windows, opening their processes with limited access only.</summary>
 public static unsafe class WindowFinder
 {
     /// <summary>Visible, titled, uncloaked top-level windows, in Z order.</summary>
@@ -63,12 +57,7 @@ public static unsafe class WindowFinder
         return PInvoke.IsWindow(hwnd) ? Describe(hwnd) : null;
     }
 
-    /// <summary>
-    /// Why the window can't be captured yet, or null when it can: it must exist, be visible, not be
-    /// minimized or cloaked, and have a client area of at least <paramref name="minWidth"/> ×
-    /// <paramref name="minHeight"/>. A game still starting can show a tiny placeholder window that
-    /// WGC never delivers a frame from.
-    /// </summary>
+    /// <summary>Why the window can't be captured yet, or null when it can; a game still starting may show a tiny placeholder.</summary>
     public static string? NotCapturable(nint handle, int minWidth, int minHeight)
     {
         var hwnd = new HWND((void*)handle);
@@ -104,12 +93,7 @@ public static unsafe class WindowFinder
             : null;
     }
 
-    /// <summary>
-    /// The window of process <paramref name="processId"/> to capture: <paramref name="preferred"/>
-    /// when it is the process's, titled and <see cref="NotCapturable"/> accepts it; else the
-    /// process's largest titled, non-tool top-level window that it accepts (a splash and a main
-    /// window: the main one). Null, with why, when none can be captured.
-    /// </summary>
+    /// <summary>The process's window to capture: the preferred one when usable, else its largest titled one; null with why.</summary>
     public static (nint Window, string? Why) CaptureWindowOf(int processId, nint preferred, int minWidth, int minHeight)
     {
         string? preferredWhy = null;
@@ -161,10 +145,7 @@ public static unsafe class WindowFinder
             : (0, preferredWhy ?? "no window of the process can be captured");
     }
 
-    /// <summary>
-    /// Matches <paramref name="query"/> against window titles: a single exact title
-    /// (ignoring case) wins, otherwise the title must contain the query exactly once.
-    /// </summary>
+    /// <summary>Matches a query against window titles: one exact title wins, otherwise exactly one title must contain it.</summary>
     public static WindowMatch Match(IReadOnlyList<WindowInfo> windows, string query)
     {
         var exact = windows.Where(w => string.Equals(w.Title, query, StringComparison.OrdinalIgnoreCase)).ToList();

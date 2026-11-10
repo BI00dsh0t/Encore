@@ -4,12 +4,7 @@ using Microsoft.Win32;
 
 namespace Encore.Platform.Windows;
 
-/// <summary>
-/// Windows' game list (spike 3.8): each <c>HKCU\System\GameConfigStore\Children\*</c> with
-/// <c>Type = 1</c> names a game by its <c>MatchedExeFullPath</c>. Read-only and best effort: a
-/// missing key or a failed read keeps the last good set (initially empty) and is logged once.
-/// Not thread-safe; Game Detection reads it from its own thread.
-/// </summary>
+/// <summary>Windows' own list of games, read from the registry; a failed read keeps the last good list. Not thread-safe.</summary>
 public sealed class GameConfigStore(ILogger log)
 {
     /// <summary>The least time between two reads of the registry.</summary>
@@ -19,17 +14,14 @@ public sealed class GameConfigStore(ILogger log)
 
     private readonly ILogger _log = log ?? throw new ArgumentNullException(nameof(log));
 
-    // Raw path -> its canonical form, or its lowercase raw form when it can't be canonicalized (AD-18).
+    // Raw path to its canonical form, or to its lowercase raw form when it can't be made canonical.
     private readonly Dictionary<string, string> _mapped = new(StringComparer.Ordinal);
 
     private IReadOnlySet<string> _paths = new HashSet<string>(StringComparer.Ordinal);
     private long? _readAt;
     private bool _logged;
 
-    /// <summary>
-    /// The listed games' paths, each canonical (or lowercase raw); the same instance until the list
-    /// changes. Re-reads the registry at most every <see cref="RereadInterval"/>.
-    /// </summary>
+    /// <summary>The listed games' paths; the same set instance until the list changes.</summary>
     public IReadOnlySet<string> Paths()
     {
         if (_readAt is { } readAt && Stopwatch.GetElapsedTime(readAt) < RereadInterval)

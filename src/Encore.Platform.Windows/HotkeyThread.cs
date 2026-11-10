@@ -20,15 +20,10 @@ public enum HotkeyRegistrationOutcome
     Failed,
 }
 
-/// <summary>The result for one binding passed to <see cref="HotkeyThread.Apply"/>; <see cref="Error"/> is the Win32 error, 0 when registered.</summary>
+/// <summary>The result for one binding; Error is the Win32 error, or 0 when registered.</summary>
 public sealed record HotkeyRegistrationResult(HotkeyAction Action, HotkeyRegistrationOutcome Outcome, int Error);
 
-/// <summary>
-/// The engine's Hotkey thread (AD-11, AD-12): one thread that owns a message-only window, registers
-/// Hotkeys with <c>RegisterHotKey</c> (never a hook), and reads QPC first thing when <c>WM_HOTKEY</c>
-/// arrives (AD-6). Every register and unregister runs on that thread, and every binding is
-/// registered with <c>MOD_NOREPEAT</c>.
-/// </summary>
+/// <summary>The engine's Hotkey thread: registers Hotkeys with RegisterHotKey, never a hook, and timestamps each press at once.</summary>
 public sealed unsafe class HotkeyThread : IDisposable
 {
     private const uint WmApply = PInvoke.WM_APP;
@@ -46,11 +41,7 @@ public sealed unsafe class HotkeyThread : IDisposable
     private HWND _window;
     private int _disposed;
 
-    /// <param name="pressed">
-    /// Called on the Hotkey thread for each press, with the action and the QPC read when
-    /// <c>WM_HOTKEY</c> arrived. It must return quickly: it holds up the next press.
-    /// </param>
-    /// <exception cref="InvalidOperationException">The message-only window couldn't be created.</exception>
+    /// <summary>The pressed callback runs on the Hotkey thread with the press's QPC time; it must return quickly.</summary>
     public HotkeyThread(Action<HotkeyAction, long> pressed)
     {
         ArgumentNullException.ThrowIfNull(pressed);
@@ -69,13 +60,7 @@ public sealed unsafe class HotkeyThread : IDisposable
     // HWND_MESSAGE: the parent that makes a message-only window.
     private static HWND MessageOnlyParent => new((void*)-3);
 
-    /// <summary>
-    /// Replaces every registered Hotkey with <paramref name="bindings"/>, on the Hotkey thread. The
-    /// old ones are unregistered first, so a combination moving between actions is free when it is
-    /// registered again. Blocks until done.
-    /// </summary>
-    /// <returns>One result per binding, in order.</returns>
-    /// <exception cref="ObjectDisposedException">The thread has stopped.</exception>
+    /// <summary>Replaces every registered Hotkey, on the Hotkey thread, and blocks until done; one result per binding, in order.</summary>
     public IReadOnlyList<HotkeyRegistrationResult> Apply(IReadOnlyList<(HotkeyAction Action, HotkeyBinding Binding)> bindings)
     {
         ArgumentNullException.ThrowIfNull(bindings);
@@ -138,7 +123,7 @@ public sealed unsafe class HotkeyThread : IDisposable
         {
             if (msg.message == PInvoke.WM_HOTKEY)
             {
-                // AD-6: the press's timestamp, before anything else runs.
+                // The press's timestamp is read before anything else runs.
                 long qpc;
                 PInvoke.QueryPerformanceCounter(&qpc);
                 _pressed((HotkeyAction)((int)msg.wParam.Value - 1), qpc);
