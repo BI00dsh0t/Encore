@@ -152,6 +152,41 @@ internal sealed class MainViewModel : Observable
         }
     }
 
+    /// <summary>Esc: leaves the player's full screen, else closes an open item page. False when it did neither.</summary>
+    public bool HandleEscape()
+    {
+        if (IsPlayerFullScreen)
+        {
+            LeavePlayerFullScreen();
+            return true;
+        }
+
+        return GoBack();
+    }
+
+    /// <summary>Alt+Left and the mouse's Back button: closes an open item page. False on a list page.</summary>
+    public bool GoBack()
+    {
+        if (CurrentDrillIn is not { IsOpen: true } drillIn)
+        {
+            return false;
+        }
+
+        drillIn.Close();
+        return true;
+    }
+
+    /// <summary>The Settings button: shows the settings pages; pressed again on them, an open item page goes back to its list.</summary>
+    public void OpenSettings()
+    {
+        if (IsSettingsTabSelected)
+        {
+            ReselectNavItem(SelectedNavItem);
+        }
+
+        IsSettingsTabSelected = true;
+    }
+
     /// <summary>Whether the player page fills the screen: the window drops its frame, nav and headers.</summary>
     public bool IsPlayerFullScreen => Library.Player?.IsFullScreen == true;
 
