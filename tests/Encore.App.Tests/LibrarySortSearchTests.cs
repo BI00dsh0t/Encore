@@ -33,10 +33,10 @@ public sealed class LibrarySortSearchTests
         var viewModel = new LibraryViewModel(_engine);
         viewModel.Render(_engine.State! with { Library = Items });
 
-        (viewModel.GroupBy, viewModel.Sort) = (LibraryGrouping.None, Enum.Parse<LibrarySort>(sort));
+        (viewModel.List.GroupBy, viewModel.List.Sort) = (LibraryGrouping.None, Enum.Parse<LibrarySort>(sort));
 
-        Assert.All(viewModel.Entries, e => Assert.IsType<LibraryRow>(e));
-        Assert.Equal(expected, string.Join('|', viewModel.Entries.Cast<LibraryRow>().Select(r => r.Name)));
+        Assert.All(viewModel.List.Entries, e => Assert.IsType<LibraryRow>(e));
+        Assert.Equal(expected, string.Join('|', viewModel.List.Entries.Cast<LibraryRow>().Select(r => r.Name)));
     }
 
     [Fact]
@@ -44,18 +44,18 @@ public sealed class LibrarySortSearchTests
     {
         var viewModel = new LibraryViewModel(_engine);
         viewModel.Render(_engine.State! with { Library = Items });
-        viewModel.SelectAll();
+        viewModel.Selection.SelectAll();
 
-        viewModel.SearchText = "CLIP";
+        viewModel.List.SearchText = "CLIP";
 
-        Assert.Equal(["Clip 10.mp4", "clip 2.mp4"], viewModel.Entries.OfType<LibraryRow>().Select(r => r.Name));
-        Assert.Equal(("4 selected", "(2 hidden by filters)"), (viewModel.SelectionText, viewModel.HiddenText));
-        Assert.Null(viewModel.NoResultsText);
+        Assert.Equal(["Clip 10.mp4", "clip 2.mp4"], viewModel.List.Entries.OfType<LibraryRow>().Select(r => r.Name));
+        Assert.Equal(("4 selected", "(2 hidden by filters)"), (viewModel.Actions.SelectionText, viewModel.Selection.HiddenText));
+        Assert.Null(viewModel.List.NoResultsText);
 
-        viewModel.SearchText = "zzz";
-        Assert.Equal("No items match “zzz”.", viewModel.NoResultsText);
-        viewModel.ClearSearchCommand.Execute(null);
-        Assert.Equal(4, viewModel.Entries.OfType<LibraryRow>().Count(r => r.IsSelected));
+        viewModel.List.SearchText = "zzz";
+        Assert.Equal("No items match “zzz”.", viewModel.List.NoResultsText);
+        viewModel.List.ClearSearchCommand.Execute(null);
+        Assert.Equal(4, viewModel.List.Entries.OfType<LibraryRow>().Count(r => r.IsSelected));
     }
 
     [Fact]
@@ -66,10 +66,10 @@ public sealed class LibrarySortSearchTests
         {
             var file = Path.Combine(folder, "library-view.json");
             var viewModel = new LibraryViewModel(_engine, viewStateFile: file);
-            (viewModel.GroupBy, viewModel.Sort, viewModel.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "kept?");
+            (viewModel.List.GroupBy, viewModel.List.Sort, viewModel.List.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "kept?");
 
             var reopened = new LibraryViewModel(_engine, viewStateFile: file);
-            Assert.Equal((LibraryGrouping.None, LibrarySort.LargestFirst, ""), (reopened.GroupBy, reopened.Sort, reopened.SearchText));
+            Assert.Equal((LibraryGrouping.None, LibrarySort.LargestFirst, ""), (reopened.List.GroupBy, reopened.List.Sort, reopened.List.SearchText));
 
             // A file written before the sort existed has no sort.
             File.WriteAllText(file, """{ "GroupBy": "Day", "Game": null, "Date": "All", "FavouritesOnly": true }""");

@@ -91,42 +91,42 @@ public sealed class LibraryEndToEndTests : IDisposable
         var engine = session.Engine;
         var viewModel = session.ViewModel;
         var shell = session.Shell;
-        Until(() => engine.State!.Library.Count == 5 && viewModel.Rows.Count == 5, "the rebuilt index");
+        Until(() => engine.State!.Library.Count == 5 && viewModel.List.Rows.Count == 5, "the rebuilt index");
         Assert.True(engine.State!.CleanupBlocked);
         Assert.Contains(engine.State.Warnings, w => w.Code == ErrorCodes.LibraryCorrupt);
-        Assert.True(viewModel.IsCleanupBlocked);
+        Assert.True(viewModel.Banner.IsCleanupBlocked);
         Assert.NotNull(session.Main.LibrarySettings.CleanupBlockedText);
 
         // Each row's length from the engine and its thumbnail from the shell.
-        Until(() => viewModel.Rows.All(r => r.Length != "" && r.HasThumbnail), "every row's length and thumbnail");
+        Until(() => viewModel.List.Rows.All(r => r.Length != "" && r.HasThumbnail), "every row's length and thumbnail");
         Assert.Equal("0:03", Row(viewModel, @"Alpha\a-fav.mp4").Length);
         Assert.Equal("0:02", Row(viewModel, @"Beta\b-new.mp4").Length);
-        Log?.WriteLine("rows: " + string.Join("; ", viewModel.Rows.Select(r => $"{r.Path} {r.Game} {r.Date} {r.Length} {r.Size}")));
+        Log?.WriteLine("rows: " + string.Join("; ", viewModel.List.Rows.Select(r => $"{r.Path} {r.Game} {r.Date} {r.Length} {r.Size}")));
 
         // Grouped by game and by day, and filtered by game, date and Favourite.
-        viewModel.GroupBy = LibraryGrouping.Game;
+        viewModel.List.GroupBy = LibraryGrouping.Game;
         Assert.Equal(["Alpha", "Beta"], Headers(viewModel));
-        viewModel.SelectedGame = viewModel.Games.Single(g => g.Name == "Alpha");
+        viewModel.List.SelectedGame = viewModel.List.Games.Single(g => g.Name == "Alpha");
         Assert.Equal([@"Alpha\a-fav.mp4", @"Alpha\a-old.mp4"], Shown(viewModel));
-        viewModel.SelectedGame = viewModel.Games[0];
-        viewModel.DateFilter = LibraryDateFilter.Today;
+        viewModel.List.SelectedGame = viewModel.List.Games[0];
+        viewModel.List.DateFilter = LibraryDateFilter.Today;
         Assert.Equal([@"Beta\b-new.mp4"], Shown(viewModel));
-        viewModel.DateFilter = LibraryDateFilter.Last7Days;
+        viewModel.List.DateFilter = LibraryDateFilter.Last7Days;
         Assert.Equal(3, Shown(viewModel).Count);
-        viewModel.DateFilter = LibraryDateFilter.Last30Days;
+        viewModel.List.DateFilter = LibraryDateFilter.Last30Days;
         Assert.Equal(4, Shown(viewModel).Count);
-        viewModel.DateFilter = LibraryDateFilter.All;
-        viewModel.GroupBy = LibraryGrouping.Day;
+        viewModel.List.DateFilter = LibraryDateFilter.All;
+        viewModel.List.GroupBy = LibraryGrouping.Day;
         Assert.Equal(4, Headers(viewModel).Count);
         Assert.Equal("Today", Headers(viewModel)[0]);
 
         // Favourite kept in the index; the Favourites filter shows only it.
         Row(viewModel, @"Alpha\a-fav.mp4").FavouriteCommand.Execute(null);
         Row(viewModel, @"Beta\b-rename.mp4").FavouriteCommand.Execute(null);
-        Until(() => engine.State!.Library.Count(i => i.Favourite) == 2 && viewModel.Rows.Count(r => r.IsFavourite) == 2, "two Favourites");
-        viewModel.FavouritesOnly = true;
+        Until(() => engine.State!.Library.Count(i => i.Favourite) == 2 && viewModel.List.Rows.Count(r => r.IsFavourite) == 2, "two Favourites");
+        viewModel.List.FavouritesOnly = true;
         Assert.Equal([@"Beta\b-rename.mp4", @"Alpha\a-fav.mp4"], Shown(viewModel));
-        viewModel.FavouritesOnly = false;
+        viewModel.List.FavouritesOnly = false;
 
         // A rename outside the app keeps the Favourite; a delete outside removes; a copy in adds.
         File.Move(Path.Combine(output, @"Beta\b-rename.mp4"), Path.Combine(output, @"Beta\b-moved.mp4"));
@@ -136,25 +136,25 @@ public sealed class LibraryEndToEndTests : IDisposable
             () => Paths(engine) is var p && p.Contains(@"Beta\b-moved.mp4") && p.Contains(@"Beta\b-copied.mp4") && !p.Contains(@"Beta\b-rename.mp4") && !p.Contains(@"Beta\b-gone.mp4"),
             "the outside rename, delete and copy reflected");
         Assert.True(Item(engine, @"Beta\b-moved.mp4").Favourite);
-        Until(() => viewModel.Rows.Count == 5, "the rows following");
+        Until(() => viewModel.List.Rows.Count == 5, "the rows following");
 
         // Open, Show in Explorer and Copy pass the absolute path to the shell; Copy's data is one file drop.
-        viewModel.Click(Row(viewModel, @"Alpha\a-old.mp4"), ctrl: false, shift: false);
+        viewModel.Selection.Click(Row(viewModel, @"Alpha\a-old.mp4"), ctrl: false, shift: false);
         var oldPath = Path.Combine(output, @"Alpha\a-old.mp4");
         viewModel.OpenCommand.Execute(null);
         viewModel.ShowInExplorerCommand.Execute(null);
         viewModel.CopyCommand.Execute(null);
         Assert.Equal([("open", oldPath), ("show", oldPath), ("copy", oldPath)], shell.Calls);
         Assert.Equal([oldPath], LibraryClipboard.Create([oldPath]).GetFileDropList().Cast<string>());
-        Assert.Null(viewModel.ActionError);
+        Assert.Null(viewModel.Actions.ActionError);
 
         // Rename in place (the selection follows it); delete asks, No keeps the file, Yes sends it to the Recycle Bin.
         var copied = Row(viewModel, @"Beta\b-copied.mp4");
-        viewModel.Click(copied, ctrl: false, shift: false);
+        viewModel.Selection.Click(copied, ctrl: false, shift: false);
         viewModel.RenameCommand.Execute(null);
         copied.RenameText = "b-best";
         copied.CommitRenameCommand.Execute(null);
-        Until(() => Paths(engine).Contains(@"Beta\b-best.mp4") && viewModel.Rows.Any(r => r.Path == @"Beta\b-best.mp4"), "the rename");
+        Until(() => Paths(engine).Contains(@"Beta\b-best.mp4") && viewModel.List.Rows.Any(r => r.Path == @"Beta\b-best.mp4"), "the rename");
         Assert.True(Row(viewModel, @"Beta\b-best.mp4").IsSelected);
         var best = Path.Combine(output, @"Beta\b-best.mp4");
         Assert.True(File.Exists(best));
@@ -167,7 +167,7 @@ public sealed class LibraryEndToEndTests : IDisposable
         viewModel.DeleteCommand.Execute(null);
         Until(() => !Paths(engine).Contains(@"Beta\b-best.mp4") && !File.Exists(best), "the delete to the Recycle Bin");
         Assert.Equal(["Move “b-best.mp4” to the Recycle Bin?", "Move “b-best.mp4” to the Recycle Bin?"], session.Asked);
-        Assert.Null(viewModel.ActionError);
+        Assert.Null(viewModel.Actions.ActionError);
 
         // A growing file being written is locked: no Copy, Rename or Delete, and the engine refuses a rename.
         var recording = Path.Combine(output, @"Beta\rec.mp4");
@@ -175,8 +175,8 @@ public sealed class LibraryEndToEndTests : IDisposable
         session.Host.Library.BeginWrite(recording, null);
         growing.Write(new byte[4096]);
         growing.Flush();
-        Until(() => viewModel.Rows.FirstOrDefault(r => r.Path == @"Beta\rec.mp4") is { IsLocked: true }, "the locked row");
-        viewModel.Click(Row(viewModel, @"Beta\rec.mp4"), ctrl: false, shift: false);
+        Until(() => viewModel.List.Rows.FirstOrDefault(r => r.Path == @"Beta\rec.mp4") is { IsLocked: true }, "the locked row");
+        viewModel.Selection.Click(Row(viewModel, @"Beta\rec.mp4"), ctrl: false, shift: false);
         Assert.False(viewModel.CopyCommand.CanExecute(null));
         Assert.False(viewModel.RenameCommand.CanExecute(null));
         Assert.False(viewModel.DeleteCommand.CanExecute(null));
@@ -205,8 +205,8 @@ public sealed class LibraryEndToEndTests : IDisposable
         Assert.True(File.Exists(oldPath), "Cleanup ran while library-corrupt was unacknowledged.");
 
         // Acknowledged: Cleanup deletes the oldest non-Favourite only, and logs its plan and each delete.
-        viewModel.AcknowledgeCommand.Execute(null);
-        Until(() => !engine.State!.CleanupBlocked && !viewModel.IsCleanupBlocked, "Cleanup unblocked");
+        viewModel.Banner.AcknowledgeCommand.Execute(null);
+        Until(() => !engine.State!.CleanupBlocked && !viewModel.Banner.IsCleanupBlocked, "Cleanup unblocked");
         Until(() => !File.Exists(oldPath) && !Paths(engine).Contains(@"Alpha\a-old.mp4"), "the oldest non-Favourite cleaned up");
         Assert.True(File.Exists(Path.Combine(output, @"Beta\b-new.mp4")));
         Assert.True(File.Exists(Path.Combine(output, @"Alpha\a-fav.mp4")));
@@ -229,16 +229,16 @@ public sealed class LibraryEndToEndTests : IDisposable
 
         // The folder size follows the snapshot.
         Assert.Contains("in 3 files", settingsViewModel.FolderSizeText, StringComparison.Ordinal);
-        Assert.Null(viewModel.ActionError);
+        Assert.Null(viewModel.Actions.ActionError);
     });
 
     private static string Gb(long bytes) => (bytes / 1e9).ToString("0.#########", System.Globalization.CultureInfo.InvariantCulture);
 
-    private static LibraryRow Row(LibraryViewModel viewModel, string path) => viewModel.Rows.Single(r => r.Path == path);
+    private static LibraryRow Row(LibraryViewModel viewModel, string path) => viewModel.List.Rows.Single(r => r.Path == path);
 
-    private static IReadOnlyList<string> Shown(LibraryViewModel viewModel) => [.. viewModel.Entries.OfType<LibraryRow>().Select(r => r.Path)];
+    private static IReadOnlyList<string> Shown(LibraryViewModel viewModel) => [.. viewModel.List.Entries.OfType<LibraryRow>().Select(r => r.Path)];
 
-    private static IReadOnlyList<string> Headers(LibraryViewModel viewModel) => [.. viewModel.Entries.OfType<LibraryGroupHeader>().Select(h => h.Name)];
+    private static IReadOnlyList<string> Headers(LibraryViewModel viewModel) => [.. viewModel.List.Entries.OfType<LibraryGroupHeader>().Select(h => h.Name)];
 
     private static HashSet<string> Paths(EngineConnection engine) => engine.State!.Library.Select(i => i.Path).ToHashSet(StringComparer.Ordinal);
 

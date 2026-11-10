@@ -38,8 +38,8 @@ public sealed class LibraryViewModelTests
                 ("mid.mp4", "Alpha", "1.5 MB", ""),
                 ("old.mp4", "Other", "0.0 MB", ""),
             ],
-            viewModel.Rows.Select(r => (r.Name, r.Game, r.Size, r.Lock)));
-        Assert.True(viewModel.Rows[0].IsLocked);
+            viewModel.List.Rows.Select(r => (r.Name, r.Game, r.Size, r.Lock)));
+        Assert.True(viewModel.List.Rows[0].IsLocked);
     }
 
     [Fact]
@@ -80,8 +80,8 @@ public sealed class LibraryViewModelTests
         _engine.Reply = (_, _) => Empty.Value;
         var viewModel = new MainViewModel(_engine, action => action()).Library;
 
-        Assert.True(viewModel.IsCleanupBlocked);
-        viewModel.AcknowledgeCommand.Execute(null);
+        Assert.True(viewModel.Banner.IsCleanupBlocked);
+        viewModel.Banner.AcknowledgeCommand.Execute(null);
 
         Assert.Equal(new WarningDismiss(CorruptWarning.Id), Assert.Single(_engine.Sent));
     }
@@ -97,15 +97,15 @@ public sealed class LibraryViewModelTests
 
         viewModel.Render(state);
         Assert.Empty(asked);
-        Assert.Equal("Saving…", viewModel.Rows[0].Lock);
+        Assert.Equal("Saving…", viewModel.List.Rows[0].Lock);
 
         var written = state with { Library = [writing with { Size = 1536 * 1024, BeingWritten = false, LengthSeconds = 30 }] };
         viewModel.Render(written);
         viewModel.Render(written);
 
         Assert.Equal([System.IO.Path.Combine(Folder, writing.Path)], asked);
-        Assert.False(viewModel.Rows[0].HasThumbnail);
-        Assert.Equal(("0:30", "1.5 MB"), (viewModel.Rows[0].Length, viewModel.Rows[0].Size));
+        Assert.False(viewModel.List.Rows[0].HasThumbnail);
+        Assert.Equal(("0:30", "1.5 MB"), (viewModel.List.Rows[0].Length, viewModel.List.Rows[0].Size));
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class LibraryViewModelTests
 
         viewModel.Render(_engine.State! with { Library = [new LibraryItem("long.mp4", null, 2L << 30, DateTimeOffset.UnixEpoch, false, 3723)] });
 
-        Assert.Equal(("1:02:03", "2.0 GB"), (viewModel.Rows[0].Length, viewModel.Rows[0].Size));
+        Assert.Equal(("1:02:03", "2.0 GB"), (viewModel.List.Rows[0].Length, viewModel.List.Rows[0].Size));
     }
 
     [Fact]
@@ -128,13 +128,13 @@ public sealed class LibraryViewModelTests
         var state = _engine.State! with { Library = [item] };
         viewModel.Render(state);
 
-        viewModel.Rows[0].FavouriteCommand.Execute(null);
+        viewModel.List.Rows[0].FavouriteCommand.Execute(null);
 
         Assert.Equal(new LibrarySetFavourite(item.Path, 48, modified, true), Assert.Single(_engine.Sent));
-        Assert.Equal((false, "☆"), (viewModel.Rows[0].IsFavourite, viewModel.Rows[0].Star));
+        Assert.Equal((false, "☆"), (viewModel.List.Rows[0].IsFavourite, viewModel.List.Rows[0].Star));
 
         viewModel.Render(state with { Library = [item with { Favourite = true }] });
-        Assert.Equal((true, "★"), (viewModel.Rows[0].IsFavourite, viewModel.Rows[0].Star));
+        Assert.Equal((true, "★"), (viewModel.List.Rows[0].IsFavourite, viewModel.List.Rows[0].Star));
     }
 
     [Fact]
@@ -148,13 +148,13 @@ public sealed class LibraryViewModelTests
             ["# Alpha", "a1.mp4", "s.mp4", "nofav.mp4", "old.mp4", "# Beta", "b.mp4", "# Gamma", "g.mp4",
              "# Monitor Recordings", "x.mp4", "# Other", "root.mp4"],
             Shown(viewModel));
-        Assert.Equal(["All games", "Alpha", "Beta", "Gamma", "Monitor Recordings", "Other"], viewModel.Games.Select(g => g.Name));
+        Assert.Equal(["All games", "Alpha", "Beta", "Gamma", "Monitor Recordings", "Other"], viewModel.List.Games.Select(g => g.Name));
     }
 
     [Fact]
     public void GroupedByDayTheHeadersAreTodayYesterdayThenEachDate()
     {
-        var viewModel = new LibraryViewModel(_engine, time: Clock) { GroupBy = LibraryGrouping.Day };
+        var viewModel = new LibraryViewModel(_engine, time: Clock) { List = { GroupBy = LibraryGrouping.Day } };
 
         viewModel.Render(ThreeGames());
 
@@ -170,9 +170,9 @@ public sealed class LibraryViewModelTests
         var viewModel = new LibraryViewModel(_engine, time: Clock);
         viewModel.Render(ThreeGames());
 
-        viewModel.GameFilter = viewModel.Games.Single(g => g.Name == "Alpha").Key;
-        viewModel.DateFilter = LibraryDateFilter.Last7Days;
-        viewModel.FavouritesOnly = true;
+        viewModel.List.GameFilter = viewModel.List.Games.Single(g => g.Name == "Alpha").Key;
+        viewModel.List.DateFilter = LibraryDateFilter.Last7Days;
+        viewModel.List.FavouritesOnly = true;
 
         Assert.Equal(["# Alpha", "a1.mp4", "s.mp4"], Shown(viewModel));
     }
@@ -188,14 +188,14 @@ public sealed class LibraryViewModelTests
         viewModel.Render(state);
         Assert.Equal(["# Beta", "b2.mp4", "b.mp4", "# Gamma"], Shown(viewModel).SkipWhile(e => e != "# Beta").Take(4));
 
-        var alpha = viewModel.Games.Single(g => g.Name == "Alpha").Key;
-        viewModel.GameFilter = alpha;
+        var alpha = viewModel.List.Games.Single(g => g.Name == "Alpha").Key;
+        viewModel.List.GameFilter = alpha;
         viewModel.Render(state with
         {
             Settings = state.Settings with { Profiles = state.Settings.Profiles.SetItem(AlphaId, AlphaProfile with { Name = "Alpha 2" }) },
         });
 
-        Assert.Equal(alpha, viewModel.GameFilter);
+        Assert.Equal(alpha, viewModel.List.GameFilter);
         Assert.Equal("# Alpha 2", Shown(viewModel)[0]);
     }
 
@@ -207,10 +207,13 @@ public sealed class LibraryViewModelTests
         {
             _ = new LibraryViewModel(_engine, viewStateFile: file)
             {
-                GroupBy = LibraryGrouping.Day,
-                GameFilter = "profile:x",
-                DateFilter = LibraryDateFilter.Last30Days,
-                FavouritesOnly = true,
+                List =
+                {
+                    GroupBy = LibraryGrouping.Day,
+                    GameFilter = "profile:x",
+                    DateFilter = LibraryDateFilter.Last30Days,
+                    FavouritesOnly = true,
+                },
             };
 
             // The first, empty render keeps a filter whose game isn't there yet.
@@ -218,13 +221,13 @@ public sealed class LibraryViewModelTests
             restored.Render(_engine.State! with { Library = [] });
             Assert.Equal(
                 (LibraryGrouping.Day, "profile:x", LibraryDateFilter.Last30Days, true),
-                (restored.GroupBy, restored.GameFilter, restored.DateFilter, restored.FavouritesOnly));
+                (restored.List.GroupBy, restored.List.GameFilter, restored.List.DateFilter, restored.List.FavouritesOnly));
 
             System.IO.File.WriteAllText(file, "{ not json");
             var garbage = new LibraryViewModel(_engine, viewStateFile: file);
             Assert.Equal(
                 (LibraryGrouping.Game, (string?)null, LibraryDateFilter.All, false),
-                (garbage.GroupBy, garbage.GameFilter, garbage.DateFilter, garbage.FavouritesOnly));
+                (garbage.List.GroupBy, garbage.List.GameFilter, garbage.List.DateFilter, garbage.List.FavouritesOnly));
         }
         finally
         {
@@ -247,14 +250,14 @@ public sealed class LibraryViewModelTests
 
         var watch = Stopwatch.StartNew();
         viewModel.Render(state with { Library = [.. state.Library, new LibraryItem(@"G0\newest.mp4", AlphaId, 1, Today, false)] });
-        viewModel.GameFilter = viewModel.Games[1].Key;
-        viewModel.DateFilter = LibraryDateFilter.Last7Days;
-        viewModel.GameFilter = null;
-        viewModel.GroupBy = LibraryGrouping.Day;
+        viewModel.List.GameFilter = viewModel.List.Games[1].Key;
+        viewModel.List.DateFilter = LibraryDateFilter.Last7Days;
+        viewModel.List.GameFilter = null;
+        viewModel.List.GroupBy = LibraryGrouping.Day;
         watch.Stop();
 
         Assert.True(watch.ElapsedMilliseconds < 200, $"{watch.ElapsedMilliseconds} ms");
-        Assert.Equal(5001, viewModel.Rows.Count);
+        Assert.Equal(5001, viewModel.List.Rows.Count);
     }
 
     private StateSnapshot ThreeGames()
@@ -284,7 +287,7 @@ public sealed class LibraryViewModelTests
     }
 
     private static List<string> Shown(LibraryViewModel viewModel) =>
-        [.. viewModel.Entries.Select(e => e is LibraryGroupHeader h ? "# " + h.Name : ((LibraryRow)e).Name)];
+        [.. viewModel.List.Entries.Select(e => e is LibraryGroupHeader h ? "# " + h.Name : ((LibraryRow)e).Name)];
 
     private void SetLibrary()
     {
@@ -340,15 +343,15 @@ public sealed class LibraryViewModelTests
         Assert.Equal(("Audio: Microphone", "Change"), (viewModel.Welcome.Audio, viewModel.Welcome.AudioLink));
         Assert.Equal(@"Clips are saved in D:\Clips", viewModel.Welcome.Folder);
 
-        viewModel.FavouritesOnly = true;
+        viewModel.List.FavouritesOnly = true;
         Assert.False(viewModel.ShowsWelcome);
-        viewModel.FavouritesOnly = false;
+        viewModel.List.FavouritesOnly = false;
         _engine.State = _engine.State with { Seq = 3, Library = [new LibraryItem("Game\\match.mp4", null, 10, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch, Kind: LibraryItemKinds.Recording), new LibraryItem("Game\\clip.mp4", null, 10, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch, Kind: LibraryItemKinds.Clip)] };
         _engine.RaiseChanged();
         Assert.False(viewModel.ShowsWelcome);
 
         // The kind badge: a Recording's only.
-        var rows = viewModel.Entries.OfType<LibraryRow>().ToDictionary(r => r.Name, r => r.Badge);
+        var rows = viewModel.List.Entries.OfType<LibraryRow>().ToDictionary(r => r.Name, r => r.Badge);
         Assert.Equal("Recording", rows["match.mp4"]);
         Assert.Equal("", rows["clip.mp4"]);
     }

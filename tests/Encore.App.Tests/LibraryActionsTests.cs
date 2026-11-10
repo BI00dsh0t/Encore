@@ -28,7 +28,7 @@ public sealed class LibraryActionsTests : IDisposable
         var state = _engine.State! with { LibraryFolder = _folder, Library = [writing] };
 
         viewModel.Render(state);
-        viewModel.Click(viewModel.Rows[0], ctrl: false, shift: false);
+        viewModel.Selection.Click(viewModel.List.Rows[0], ctrl: false, shift: false);
         var changed = 0;
         viewModel.CopyCommand.CanExecuteChanged += (_, _) => changed++;
         Assert.False(viewModel.CopyCommand.CanExecute(null));
@@ -43,7 +43,7 @@ public sealed class LibraryActionsTests : IDisposable
         viewModel.CopyCommand.Execute(null);
 
         Assert.Equal([("open", absolute), ("show " + Path.GetDirectoryName(absolute), absolute), ("copy", absolute)], _shell.Calls);
-        Assert.Null(viewModel.ActionError);
+        Assert.Null(viewModel.Actions.ActionError);
     }
 
     [Fact]
@@ -51,21 +51,21 @@ public sealed class LibraryActionsTests : IDisposable
     {
         var viewModel = new LibraryViewModel(_engine, shell: _shell);
         viewModel.Render(_engine.State! with { LibraryFolder = _folder, Library = [new LibraryItem("gone.mp4", null, 1, DateTimeOffset.UnixEpoch, false)] });
-        viewModel.Click(viewModel.Rows[0], ctrl: false, shift: false);
+        viewModel.Selection.Click(viewModel.List.Rows[0], ctrl: false, shift: false);
 
         viewModel.OpenCommand.Execute(null);
-        Assert.Equal("That file no longer exists.", viewModel.ActionError);
-        Assert.True(viewModel.HasActionError);
+        Assert.Equal("That file no longer exists.", viewModel.Actions.ActionError);
+        Assert.True(viewModel.Actions.HasActionError);
         Assert.Empty(_shell.Calls);
 
         File.WriteAllBytes(Path.Combine(_folder, "gone.mp4"), [0]);
         _shell.Fail = true;
         viewModel.CopyCommand.Execute(null);
-        Assert.Equal("Couldn't copy the file.", viewModel.ActionError);
+        Assert.Equal("Couldn't copy the file.", viewModel.Actions.ActionError);
 
         _shell.Fail = false;
         viewModel.OpenCommand.Execute(null);
-        Assert.Null(viewModel.ActionError);
+        Assert.Null(viewModel.Actions.ActionError);
     }
 
     [Fact]
@@ -74,8 +74,8 @@ public sealed class LibraryActionsTests : IDisposable
         var item = new LibraryItem(Clip, null, 48, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch.AddDays(1));
         var viewModel = new LibraryViewModel(_engine, shell: _shell);
         viewModel.Render(_engine.State! with { LibraryFolder = _folder, Library = [item] });
-        var row = viewModel.Rows[0];
-        viewModel.Click(row, ctrl: false, shift: false);
+        var row = viewModel.List.Rows[0];
+        viewModel.Selection.Click(row, ctrl: false, shift: false);
         _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.FileNameTaken, "taken");
 
         viewModel.RenameCommand.Execute(null);
@@ -85,7 +85,7 @@ public sealed class LibraryActionsTests : IDisposable
 
         Assert.Equal(new LibraryRename(Clip, 48, item.Modified, "best"), Assert.Single(_engine.Sent));
         Assert.False(row.IsRenaming);
-        Assert.Equal("A file with that name already exists.", viewModel.ActionError);
+        Assert.Equal("A file with that name already exists.", viewModel.Actions.ActionError);
 
         // Escape sends nothing; a success clears the error.
         viewModel.RenameCommand.Execute(null);
@@ -96,7 +96,7 @@ public sealed class LibraryActionsTests : IDisposable
         viewModel.RenameCommand.Execute(null);
         row.CommitRenameCommand.Execute(null);
         Assert.Equal(2, _engine.Sent.Count);
-        Assert.Null(viewModel.ActionError);
+        Assert.Null(viewModel.Actions.ActionError);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class LibraryActionsTests : IDisposable
         var writing = new LibraryItem(Clip, null, 0, DateTimeOffset.UnixEpoch, true);
         var state = _engine.State! with { LibraryFolder = _folder, Library = [writing] };
         viewModel.Render(state);
-        viewModel.Click(viewModel.Rows[0], ctrl: false, shift: false);
+        viewModel.Selection.Click(viewModel.List.Rows[0], ctrl: false, shift: false);
         Assert.False(viewModel.RenameCommand.CanExecute(null));
         Assert.False(viewModel.DeleteCommand.CanExecute(null));
 

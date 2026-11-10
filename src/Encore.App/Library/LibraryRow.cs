@@ -194,8 +194,8 @@ internal sealed class LibraryRow(
         IsFavourite = item.Favourite;
         Game = game;
         Date = item.Date.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-        Size = item.BeingWritten ? "" : LibraryViewModel.SizeText(item.Size);
-        Length = item.BeingWritten ? "" : LibraryViewModel.LengthText(item.LengthSeconds);
+        Size = item.BeingWritten ? "" : LibraryText.SizeText(item.Size);
+        Length = item.BeingWritten ? "" : LibraryText.LengthText(item.LengthSeconds);
         IsLocked = item.BeingWritten;
         Badge = item.Kind switch
         {

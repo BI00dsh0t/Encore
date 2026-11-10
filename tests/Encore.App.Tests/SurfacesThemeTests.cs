@@ -131,7 +131,7 @@ public sealed class SurfacesThemeTests
             var library = new LibraryViewModel(engine);
             var item = new LibraryItem(@"Game\clip.mp4", null, 48, DateTimeOffset.UnixEpoch, false);
             library.Render(engine.State! with { LibraryFolder = folder, Library = [item] });
-            library.Click(library.Rows[0], ctrl: false, shift: false);
+            library.Selection.Click(library.List.Rows[0], ctrl: false, shift: false);
             library.DeleteCommand.Execute(null);
             Sta.Pump(TimeSpan.FromMilliseconds(50));
             Assert.IsType<LibraryDelete>(Assert.Single(engine.Sent));

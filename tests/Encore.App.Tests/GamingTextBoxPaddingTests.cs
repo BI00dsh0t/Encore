@@ -30,7 +30,7 @@ public sealed class GamingTextBoxPaddingTests
         try
         {
             window.Show();
-            model.Library.SearchText = "clutch";
+            model.Library.List.SearchText = "clutch";
             Sta.Pump(TimeSpan.FromMilliseconds(150));
             var offsets = Insets(window);
             Save(window, "gaming-textbox-library.png");

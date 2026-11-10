@@ -48,12 +48,12 @@ internal sealed class MainViewModel : Observable
         }
 
         // The shell follows the player page's full screen; a page closing leaves it.
-        Library.PropertyChanged += (_, e) =>
+        Library.Playback.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(LibraryViewModel.Creator)) { OnPropertyChanged(nameof(IsCreatingClip)); }
-            if (e.PropertyName == nameof(LibraryViewModel.Player))
+            if (e.PropertyName == nameof(LibraryPlayback.Creator)) { OnPropertyChanged(nameof(IsCreatingClip)); }
+            if (e.PropertyName == nameof(LibraryPlayback.Player))
             {
-                WatchPlayer(Library.Player);
+                WatchPlayer(Library.Playback.Player);
             }
         };
 
@@ -139,7 +139,7 @@ internal sealed class MainViewModel : Observable
     public DrillIn? CurrentDrillIn => IsSettingsTabSelected ? SelectedSettingsViewModel.DrillIn : Library.DrillIn;
 
     /// <summary>Whether an item page is open, so the page header is a breadcrumb.</summary>
-    public bool IsCreatingClip => !IsSettingsTabSelected && Library.Creator is not null;
+    public bool IsCreatingClip => !IsSettingsTabSelected && Library.Playback.Creator is not null;
 
     public bool IsDrilledIn => CurrentDrillIn?.IsOpen == true;
 
@@ -188,12 +188,12 @@ internal sealed class MainViewModel : Observable
     }
 
     /// <summary>Whether the player page fills the screen: the window drops its frame, nav and headers.</summary>
-    public bool IsPlayerFullScreen => Library.Player?.IsFullScreen == true;
+    public bool IsPlayerFullScreen => Library.Playback.Player?.IsFullScreen == true;
 
     /// <summary>Esc in full screen: back to the window, the player page still open.</summary>
     public void LeavePlayerFullScreen()
     {
-        if (Library.Player is { } player)
+        if (Library.Playback.Player is { } player)
         {
             player.IsFullScreen = false;
         }
@@ -228,11 +228,11 @@ internal sealed class MainViewModel : Observable
             {
                 if (!value)
                 {
-                    Library.PausePlayer();
+                    Library.Playback.Pause();
                 }
                 else
                 {
-                    Library.ResumeCreator();
+                    Library.Playback.ResumeCreator();
                 }
 
                 UpdateOpenPage();

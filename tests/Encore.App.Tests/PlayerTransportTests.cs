@@ -181,9 +181,9 @@ public sealed class PlayerTransportTests : IDisposable
         };
         var library = new LibraryViewModel(_engine, viewStateFile: viewFile, shell: new FakeLibraryShell(), player: () => player);
         library.Render(_engine.State);
-        library.Click(library.Rows.Single(), ctrl: false, shift: false);
+        library.Selection.Click(library.List.Rows.Single(), ctrl: false, shift: false);
         library.OpenFocused();
         opened = library;
-        return library.Player!;
+        return library.Playback.Player!;
     }
 }

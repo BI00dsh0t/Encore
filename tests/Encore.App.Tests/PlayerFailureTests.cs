@@ -97,8 +97,8 @@ public sealed class PlayerFailureTests : IDisposable
         };
         var library = new LibraryViewModel(_engine, shell: _shell, player: () => player, log: _log.Add);
         library.Render(_engine.State);
-        library.Click(library.Rows.Single(), ctrl: false, shift: false);
+        library.Selection.Click(library.List.Rows.Single(), ctrl: false, shift: false);
         library.OpenFocused();
-        return (library, library.Player!);
+        return (library, library.Playback.Player!);
     }
 }

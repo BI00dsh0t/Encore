@@ -75,7 +75,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                 first.Main.LibrarySettings.ClipsFolder.Choose(output);
                 Until(() => first.Engine.State!.LibraryFolder == output, "the chosen Output Folder");
                 Until(() => first.Engine.State!.Library.Count == 1, "the Clip listed from the chosen folder");
-                Until(() => first.Main.Library.Rows.Count == 1, "the Clip's Library row");
+                Until(() => first.Main.Library.List.Rows.Count == 1, "the Clip's Library row");
                 Pump(TimeSpan.FromMilliseconds(300));
 
                 // The row's thumbnail brush traces a binding error while its container is prepared; that trace is filtered below.
@@ -131,7 +131,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                 PromptDialog.Showing += OnShowing;
                 try
                 {
-                    first.Main.Library.Click(first.Main.Library.Rows[0], ctrl: false, shift: false);
+                    first.Main.Library.Selection.Click(first.Main.Library.List.Rows[0], ctrl: false, shift: false);
                     first.Main.Library.DeleteCommand.Execute(null);
                 }
                 finally

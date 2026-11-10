@@ -114,7 +114,7 @@ internal partial class LibraryView
 
         if (ContainerOf(source) is not { } container)
         {
-            viewModel.ClearSelection();
+            viewModel.Selection.Clear();
             return;
         }
 
@@ -143,7 +143,7 @@ internal partial class LibraryView
             && ContainerOf(source) is { DataContext: LibraryRow row } container
             && !VisualTreeSearch.IsInside<TextBox>(source, container))
         {
-            viewModel.PrepareContextMenu(row);
+            viewModel.Selection.PrepareContextMenu(row);
             container.Focus();
         }
     }
@@ -165,7 +165,7 @@ internal partial class LibraryView
         // A pointer reports where it opened the menu; the keyboard reports -1, -1.
         var fromKeyboard = e.CursorLeft < 0 && e.CursorTop < 0;
         var onRow = e.OriginalSource is DependencyObject source && ContainerOf(source) is { DataContext: LibraryRow };
-        if (!viewModel.TryPrepareContextMenu(fromKeyboard, onRow))
+        if (!viewModel.Selection.TryPrepareContextMenu(fromKeyboard, onRow))
         {
             e.Handled = true;
         }
@@ -215,7 +215,7 @@ internal partial class LibraryView
             return;
         }
 
-        if (viewModel.FocusForEntry() is { } row && !ReferenceEquals((e.NewFocus as FrameworkElement)?.DataContext, row))
+        if (viewModel.Selection.FocusForEntry() is { } row && !ReferenceEquals((e.NewFocus as FrameworkElement)?.DataContext, row))
         {
             Dispatcher.BeginInvoke(DispatcherPriority.Input, () => FocusRow(row));
         }
@@ -225,7 +225,7 @@ internal partial class LibraryView
     private void OnPlayerOpened(string path) =>
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
-            if (ViewModel?.Creator is not null)
+            if (ViewModel?.Playback.Creator is not null)
             {
                 CreatorContent.FocusFirstControl();
             }
@@ -239,7 +239,7 @@ internal partial class LibraryView
     private void OnPlayerClosed(string path) =>
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
-            if (ViewModel?.FocusedRow is { } row)
+            if (ViewModel?.Selection.FocusedRow is { } row)
             {
                 FocusRow(row);
             }
@@ -250,8 +250,8 @@ internal partial class LibraryView
 
     private void Move(LibraryViewModel viewModel, LibraryMove move, bool ctrl, bool shift)
     {
-        viewModel.MoveFocus(move, RowsPerPage(), ctrl, shift);
-        if (viewModel.FocusedRow is { } row)
+        viewModel.Selection.MoveFocus(move, RowsPerPage(), ctrl, shift);
+        if (viewModel.Selection.FocusedRow is { } row)
         {
             FocusRow(row);
         }
@@ -268,7 +268,7 @@ internal partial class LibraryView
     private int RowsPerPage()
     {
         var viewer = VisualTreeSearch.Descendant<ScrollViewer>(List);
-        var row = ViewModel?.FocusedRow is { } focused ? List.ItemContainerGenerator.ContainerFromItem(focused) as FrameworkElement : null;
+        var row = ViewModel?.Selection.FocusedRow is { } focused ? List.ItemContainerGenerator.ContainerFromItem(focused) as FrameworkElement : null;
         return viewer is null || row is not { ActualHeight: > 0 } ? 1 : Math.Max(1, (int)(viewer.ViewportHeight / row.ActualHeight));
     }
 

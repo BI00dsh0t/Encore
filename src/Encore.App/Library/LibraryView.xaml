@@ -104,10 +104,10 @@
     <!-- The list, or the drill-in's player page in its place; the list is hidden, not unloaded, so its scroll and focus survive. -->
     <Grid>
         <local:PlayerView x:Name="PlayerContent"
-                          DataContext="{Binding Player}"
+                          DataContext="{Binding Playback.Player}"
                           Visibility="{Binding Converter={StaticResource NotEmpty}}" />
         <local:ClipCreatorView x:Name="CreatorContent"
-                               DataContext="{Binding Creator}"
+                               DataContext="{Binding Playback.Creator}"
                                Visibility="{Binding Converter={StaticResource NotEmpty}}" />
         <DockPanel x:Name="ListContent" Visibility="{Binding DrillIn.IsOpen, Converter={StaticResource Hidden}}">
             <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
@@ -121,7 +121,7 @@
                              VerticalContentAlignment="Center"
                              AutomationProperties.Name="Search by name"
                              PreviewKeyDown="OnSearchPreviewKeyDown"
-                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+                             Text="{Binding List.SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
                     <TextBlock Style="{DynamicResource EncoreLibrarySearchGlyphStyle}" Text="&#xE721;" />
                     <!-- The hint shows only while the box itself is empty, not waiting for the delayed search. -->
                     <ContentControl Focusable="False" IsHitTestVisible="False">
@@ -160,8 +160,8 @@
                     <ComboBox MinWidth="80"
                               Margin="0,0,12,4"
                               DisplayMemberPath="Name"
-                              ItemsSource="{Binding GroupOptions}"
-                              SelectedValue="{Binding GroupBy}"
+                              ItemsSource="{Binding List.GroupOptions}"
+                              SelectedValue="{Binding List.GroupBy}"
                               SelectedValuePath="Value" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
@@ -169,8 +169,8 @@
                     <ComboBox MinWidth="130"
                               Margin="0,0,12,4"
                               DisplayMemberPath="Name"
-                              ItemsSource="{Binding SortOptions}"
-                              SelectedValue="{Binding Sort}"
+                              ItemsSource="{Binding List.SortOptions}"
+                              SelectedValue="{Binding List.Sort}"
                               SelectedValuePath="Value" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
@@ -178,33 +178,33 @@
                     <ComboBox MinWidth="140"
                               Margin="0,0,12,4"
                               DisplayMemberPath="Name"
-                              ItemsSource="{Binding Games}"
-                              SelectedItem="{Binding SelectedGame}" />
+                              ItemsSource="{Binding List.Games}"
+                              SelectedItem="{Binding List.SelectedGame}" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{DynamicResource EncoreLibraryFilterCaptionStyle}" Text="Date" />
                     <ComboBox MinWidth="110"
                               Margin="0,0,12,4"
                               DisplayMemberPath="Name"
-                              ItemsSource="{Binding DateOptions}"
-                              SelectedValue="{Binding DateFilter}"
+                              ItemsSource="{Binding List.DateOptions}"
+                              SelectedValue="{Binding List.DateFilter}"
                               SelectedValuePath="Value" />
                 </StackPanel>
                 <ToggleButton Margin="0,0,0,4"
                               VerticalAlignment="Center"
                               AutomationProperties.Name="Favourites only"
                               Content="★ Favourites only"
-                              IsChecked="{Binding FavouritesOnly, Mode=TwoWay}" />
+                              IsChecked="{Binding List.FavouritesOnly, Mode=TwoWay}" />
             </WrapPanel>
             <ContentControl x:Name="Banner"
                             DockPanel.Dock="Top"
                             Margin="0,0,0,8"
                             Style="{DynamicResource EncoreInfoBarCautionStyle}"
-                            Visibility="{Binding IsCleanupBlocked, Converter={StaticResource Visible}}">
+                            Visibility="{Binding Banner.IsCleanupBlocked, Converter={StaticResource Visible}}">
                 <DockPanel>
                     <Button Margin="12,0,0,0"
                             VerticalAlignment="Center"
-                            Command="{Binding AcknowledgeCommand}"
+                            Command="{Binding Banner.AcknowledgeCommand}"
                             Content="Acknowledge"
                             DockPanel.Dock="Right" />
                     <TextBlock VerticalAlignment="Center"
@@ -214,8 +214,8 @@
             </ContentControl>
             <TextBlock DockPanel.Dock="Top"
                        Style="{DynamicResource EncoreLibraryActionErrorStyle}"
-                       Text="{Binding ActionError}"
-                       Visibility="{Binding HasActionError, Converter={StaticResource Visible}}" />
+                       Text="{Binding Actions.ActionError}"
+                       Visibility="{Binding Actions.HasActionError, Converter={StaticResource Visible}}" />
             <!-- The command bar: the summary with nothing selected, else the count and the actions. Always 40 px. -->
             <Border x:Name="CommandBar" DockPanel.Dock="Top" Style="{DynamicResource EncoreLibraryCommandBarStyle}">
                 <Grid>
@@ -223,18 +223,18 @@
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                    <DataTrigger Binding="{Binding Selection.HasSelection}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </StackPanel.Style>
-                        <TextBlock Style="{DynamicResource EncoreLibraryBarTextStyle}" Text="{Binding SummaryText}" />
+                        <TextBlock Style="{DynamicResource EncoreLibraryBarTextStyle}" Text="{Binding List.SummaryText}" />
                         <TextBlock Margin="12,0,0,0"
                                    Style="{DynamicResource EncoreLibraryBarCaptionStyle}"
                                    Text="Click to select. Ctrl or Shift selects more." />
                     </StackPanel>
-                    <DockPanel Visibility="{Binding HasSelection, Converter={StaticResource Visible}}">
+                    <DockPanel Visibility="{Binding Selection.HasSelection, Converter={StaticResource Visible}}">
                         <Button AutomationProperties.Name="Clear selection"
                                 Command="{Binding ClearSelectionCommand}"
                                 Content="✕"
@@ -245,20 +245,20 @@
                             <TextBlock x:Name="SelectionCount"
                                        AutomationProperties.LiveSetting="Polite"
                                        Style="{DynamicResource EncoreLibraryBarCountStyle}"
-                                       Text="{Binding SelectionText}" />
-                            <TextBlock Style="{DynamicResource EncoreLibraryBarCaptionStyle}" Text="{Binding HiddenText}" />
+                                       Text="{Binding Actions.SelectionText}" />
+                            <TextBlock Style="{DynamicResource EncoreLibraryBarCaptionStyle}" Text="{Binding Selection.HiddenText}" />
                         </StackPanel>
                         <local:LibraryOverflowPanel x:Name="Actions" HorizontalAlignment="Left" VerticalAlignment="Center">
                             <Button Command="{Binding CreateClipCommand}"
                                     Content="Create clip"
-                                    Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                                    Visibility="{Binding Selection.IsSingle, Converter={StaticResource Visible}}" />
                             <Button VerticalAlignment="Center"
                                     Command="{Binding PlayCommand}"
                                     Content="Play"
-                                    Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                                    Visibility="{Binding Selection.IsSingle, Converter={StaticResource Visible}}" />
                             <Button VerticalAlignment="Center"
                                     Command="{Binding FavouriteSelectionCommand}"
-                                    Content="{Binding FavouriteLabel}" />
+                                    Content="{Binding Actions.FavouriteLabel}" />
                             <Button VerticalAlignment="Center" Command="{Binding CopyCommand}" Content="Copy" />
                             <Button local:LibraryOverflowPanel.Overflows="True"
                                     VerticalAlignment="Center"
@@ -268,7 +268,7 @@
                                     VerticalAlignment="Center"
                                     Command="{Binding OpenCommand}"
                                     Content="Open in default player"
-                                    Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                                    Visibility="{Binding Selection.IsSingle, Converter={StaticResource Visible}}" />
                             <Button local:LibraryOverflowPanel.Overflows="True"
                                     VerticalAlignment="Center"
                                     Command="{Binding ShowInExplorerCommand}"
@@ -276,11 +276,11 @@
                             <Button VerticalAlignment="Center"
                                     Command="{Binding RenameCommand}"
                                     Content="Rename"
-                                    Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                                    Visibility="{Binding Selection.IsSingle, Converter={StaticResource Visible}}" />
                             <Button VerticalAlignment="Center"
                                     Command="{Binding DeleteCommand}"
                                     Content="Delete"
-                                    ToolTip="{Binding DeleteToolTip}"
+                                    ToolTip="{Binding Actions.DeleteToolTip}"
                                     ToolTipService.ShowOnDisabled="True" />
                             <Button local:LibraryOverflowPanel.IsMore="True"
                                     VerticalAlignment="Center"
@@ -304,7 +304,7 @@
                          ContextMenuOpening="OnListContextMenuOpening"
                          GotKeyboardFocus="OnListGotKeyboardFocus"
                          ItemContainerStyle="{DynamicResource EncoreLibraryItemContainerStyle}"
-                         ItemsSource="{Binding Entries}"
+                         ItemsSource="{Binding List.Entries}"
                          PreviewKeyDown="OnListPreviewKeyDown"
                          PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
                          PreviewMouseRightButtonDown="OnListPreviewMouseRightButtonDown"
@@ -313,15 +313,15 @@
                         <ContextMenu>
                             <MenuItem Command="{Binding CreateClipCommand}"
                                       Header="Create clip"
-                                      Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                                      Visibility="{Binding Selection.IsSingle, Converter={StaticResource Visible}}" />
                             <MenuItem Command="{Binding PlayCommand}"
                                       Header="Play"
                                       InputGestureText="Enter"
-                                      Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                                      Visibility="{Binding Selection.IsSingle, Converter={StaticResource Visible}}" />
                             <MenuItem Command="{Binding OpenCommand}"
                                       Header="Open in default player"
-                                      Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
-                            <MenuItem Command="{Binding FavouriteSelectionCommand}" Header="{Binding FavouriteLabel}" />
+                                      Visibility="{Binding Selection.IsSingle, Converter={StaticResource Visible}}" />
+                            <MenuItem Command="{Binding FavouriteSelectionCommand}" Header="{Binding Actions.FavouriteLabel}" />
                             <MenuItem Command="{Binding CopyCommand}" Header="Copy" InputGestureText="Ctrl+C" />
                             <MenuItem Command="{Binding CopyToFolderCommand}" Header="Copy to folder…" />
                             <MenuItem Command="{Binding ShowInExplorerCommand}" Header="Show in Explorer" />
@@ -329,11 +329,11 @@
                             <MenuItem Command="{Binding RenameCommand}"
                                       Header="Rename"
                                       InputGestureText="F2"
-                                      Visibility="{Binding IsSingle, Converter={StaticResource Visible}}" />
+                                      Visibility="{Binding Selection.IsSingle, Converter={StaticResource Visible}}" />
                             <MenuItem Command="{Binding DeleteCommand}"
                                       Header="Delete"
                                       InputGestureText="Del"
-                                      ToolTip="{Binding DeleteToolTip}"
+                                      ToolTip="{Binding Actions.DeleteToolTip}"
                                       ToolTipService.ShowOnDisabled="True" />
                         </ContextMenu>
                     </ListBox.ContextMenu>
@@ -344,13 +344,13 @@
                            VerticalAlignment="Center"
                            FontSize="14"
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Text="{Binding NoResultsText}"
+                           Text="{Binding List.NoResultsText}"
                            TextAlignment="Center"
                            TextWrapping="Wrap">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding NoResultsText}" Value="{x:Null}">
+                                <DataTrigger Binding="{Binding List.NoResultsText}" Value="{x:Null}">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
                             </Style.Triggers>

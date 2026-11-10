@@ -59,7 +59,7 @@ public sealed class LibraryThemeTests
             foreach (var which in new[] { AppTheme.Fluent, AppTheme.GamingDark })
             {
                 var name = which == AppTheme.Fluent ? "fluent" : "gaming-dark";
-                viewModel.ClearSelection();
+                viewModel.Selection.Clear();
                 theme.Apply(which);
                 window.Show();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
@@ -74,7 +74,7 @@ public sealed class LibraryThemeTests
                 Assert.True(VirtualizingPanel.GetIsVirtualizing(list));
                 Assert.Single(Descendants<VirtualizingStackPanel>(list));
 
-                var rows = viewModel.Rows.ToDictionary(r => r.Name);
+                var rows = viewModel.List.Rows.ToDictionary(r => r.Name);
                 var ace = RowCard(list, rows["ace.mp4"]);
                 Assert.Same(window.FindResource("EncoreLibraryRowStyle"), ace.Style);
                 Assert.True(Descendants<ToggleButton>(ace).Single().IsChecked);
@@ -84,8 +84,8 @@ public sealed class LibraryThemeTests
                 Save(window, $"library-{name}.png");
 
                 // Two rows selected, the second focused, with keyboard focus in the list.
-                viewModel.Click(rows["ace.mp4"], ctrl: false, shift: false);
-                viewModel.Click(rows["no-thumbnail.mp4"], ctrl: true, shift: false);
+                viewModel.Selection.Click(rows["ace.mp4"], ctrl: false, shift: false);
+                viewModel.Selection.Click(rows["no-thumbnail.mp4"], ctrl: true, shift: false);
                 window.Activate();
                 Container(list, rows["no-thumbnail.mp4"]).Focus();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
@@ -101,15 +101,15 @@ public sealed class LibraryThemeTests
                 Save(window, $"library-selected-{name}.png");
 
                 // A search with Largest first and Group by None, nothing selected.
-                viewModel.ClearSelection();
-                (viewModel.GroupBy, viewModel.Sort, viewModel.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "a");
+                viewModel.Selection.Clear();
+                (viewModel.List.GroupBy, viewModel.List.Sort, viewModel.List.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "a");
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 Assert.Equal("a", ((TextBox)view.FindName("SearchBox")).Text);
-                Assert.Equal(["ace.mp4", "no-thumbnail.mp4", "saving.mp4"], viewModel.Entries.Cast<LibraryRow>().Select(r => r.Name));
+                Assert.Equal(["ace.mp4", "no-thumbnail.mp4", "saving.mp4"], viewModel.List.Entries.Cast<LibraryRow>().Select(r => r.Name));
                 Assert.Equal(Visibility.Collapsed, ((FrameworkElement)view.FindName("NoResultsMessage")).Visibility);
                 Save(window, $"library-search-{name}.png");
-                (viewModel.GroupBy, viewModel.Sort, viewModel.SearchText) = (LibraryGrouping.Game, LibrarySort.NewestFirst, "");
-                list.ScrollIntoView(viewModel.Entries[0]);
+                (viewModel.List.GroupBy, viewModel.List.Sort, viewModel.List.SearchText) = (LibraryGrouping.Game, LibrarySort.NewestFirst, "");
+                list.ScrollIntoView(viewModel.List.Entries[0]);
             }
         }
         finally
@@ -132,9 +132,9 @@ public sealed class LibraryThemeTests
         var empty = (FrameworkElement)view.FindName("EmptyMessage");
 
         Assert.Equal(Visibility.Visible, empty.Visibility);
-        viewModel.FavouritesOnly = true;
+        viewModel.List.FavouritesOnly = true;
         Assert.Equal(Visibility.Collapsed, empty.Visibility);
-        viewModel.FavouritesOnly = false;
+        viewModel.List.FavouritesOnly = false;
 
         viewModel.Render(engine.State! with { Library = [new LibraryItem("clip.mp4", null, 1024, Day, false, 10, Modified: Day)] });
         Layout(view);
@@ -143,10 +143,10 @@ public sealed class LibraryThemeTests
         // A search that matches nothing says so, apart from the empty Library's message.
         var noResults = (TextBlock)view.FindName("NoResultsMessage");
         Assert.Equal(Visibility.Collapsed, noResults.Visibility);
-        viewModel.SearchText = "zzz";
+        viewModel.List.SearchText = "zzz";
         Layout(view);
         Assert.Equal((Visibility.Visible, "No items match \u201czzz\u201d.", Visibility.Collapsed), (noResults.Visibility, noResults.Text, empty.Visibility));
-        viewModel.SearchText = "";
+        viewModel.List.SearchText = "";
         Layout(view);
 
         var star = Descendants<ToggleButton>((ItemsControl)view.FindName("List")).Single();

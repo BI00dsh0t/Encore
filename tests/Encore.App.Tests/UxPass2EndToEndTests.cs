@@ -94,25 +94,25 @@ public sealed class UxPass2EndToEndTests : IDisposable
         Assert.False(library.ShowsWelcome);
 
         // Sort and search.
-        (library.GroupBy, library.Sort) = (LibraryGrouping.None, LibrarySort.NewestFirst);
+        (library.List.GroupBy, library.List.Sort) = (LibraryGrouping.None, LibrarySort.NewestFirst);
         // The engine dated each item by the creation time set above, an hour apart.
         Assert.Equal(names, engine.State!.Library.OrderBy(i => i.Date).Select(i => i.Path));
         Until(() => Shown(library).SequenceEqual(["charlie.mp4", "bravo.mp4", "alpha.mp4"]), "Newest first");
-        library.Sort = LibrarySort.Name;
+        library.List.Sort = LibrarySort.Name;
         Assert.Equal(names, Shown(library));
-        library.SearchText = "RAV";
+        library.List.SearchText = "RAV";
         Assert.Equal(["bravo.mp4"], Shown(library));
-        library.ClearSearchCommand.Execute(null);
+        library.List.ClearSearchCommand.Execute(null);
 
         // A mouse selection of two, then a bulk Favourite.
-        library.Click(Row(library, "alpha.mp4"), ctrl: false, shift: false);
-        library.Click(Row(library, "bravo.mp4"), ctrl: true, shift: false);
+        library.Selection.Click(Row(library, "alpha.mp4"), ctrl: false, shift: false);
+        library.Selection.Click(Row(library, "bravo.mp4"), ctrl: true, shift: false);
         library.FavouriteSelectionCommand.Execute(null);
         Until(() => engine.State!.Library.Count(i => i.Favourite) == 2, "the bulk Favourite");
         Until(() => Row(library, "alpha.mp4").IsFavourite && Row(library, "bravo.mp4").IsFavourite, "the stars");
 
         // Copy and delete act on the whole shown selection; the Favourites are kept.
-        library.SelectAll();
+        library.Selection.SelectAll();
         library.CopyCommand.Execute(null);
         Assert.Equal(names.Select(n => Path.Combine(output, n)), Assert.Single(shell.Copied).Order(StringComparer.Ordinal));
         library.DeleteCommand.Execute(null);
@@ -150,9 +150,9 @@ public sealed class UxPass2EndToEndTests : IDisposable
     private static string? Override(EngineConnection engine, string key) =>
         engine.State!.Settings.Profiles.TryGetValue(GameId, out var profile) && profile.Overrides.TryGetValue(key, out var value) ? value.GetRawText() : null;
 
-    private static List<string> Shown(LibraryViewModel viewModel) => [.. viewModel.Entries.OfType<LibraryRow>().Select(r => r.Name)];
+    private static List<string> Shown(LibraryViewModel viewModel) => [.. viewModel.List.Entries.OfType<LibraryRow>().Select(r => r.Name)];
 
-    private static LibraryRow Row(LibraryViewModel viewModel, string name) => viewModel.Rows.Single(r => r.Name == name);
+    private static LibraryRow Row(LibraryViewModel viewModel, string name) => viewModel.List.Rows.Single(r => r.Name == name);
 
     /// <summary>Pumps the dispatcher until <paramref name="condition"/> holds.</summary>
     private static void Until(Func<bool> condition, string what)

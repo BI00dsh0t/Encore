@@ -148,9 +148,9 @@ public sealed class RecordingsEndToEndTests : IDisposable
             File.Copy(fragmented, game, overwrite: true);
             File.Copy(fragmented, screen, overwrite: true);
             var library = main.Library;
-            Until(() => library.Rows.Count == 2 && library.Rows.All(r => r.Length != ""), "both Recordings listed with a length");
-            library.GroupBy = Library.LibraryGrouping.Game;
-            Assert.Equal(["Alpha", "Monitor Recordings"], library.Entries.OfType<Library.LibraryGroupHeader>().Select(h => h.Name));
+            Until(() => library.List.Rows.Count == 2 && library.List.Rows.All(r => r.Length != ""), "both Recordings listed with a length");
+            library.List.GroupBy = Library.LibraryGrouping.Game;
+            Assert.Equal(["Alpha", "Monitor Recordings"], library.List.Entries.OfType<Library.LibraryGroupHeader>().Select(h => h.Name));
             Assert.Contains(engine.State!.Library, i => i.Path == Path.GetRelativePath(output, game));
         }
 
@@ -187,7 +187,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             Log?.WriteLine($"trimmed: {new FileInfo(torn).Length} bytes, {seconds:0.###} s");
             Assert.InRange(seconds, 2.0, 3.5);
             Assert.Equal("", Decode(torn));
-            Until(() => third.Main.Library.Rows.Any(r => r.Path == @"Alpha\Alpha_torn.mp4" && r.Length != ""), "the trimmed Recording listed with a length");
+            Until(() => third.Main.Library.List.Rows.Any(r => r.Path == @"Alpha\Alpha_torn.mp4" && r.Length != ""), "the trimmed Recording listed with a length");
         }
 
         Log?.WriteLine("engine log:\n" + string.Join("\n", logs.Messages));

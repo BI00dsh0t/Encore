@@ -36,7 +36,7 @@ public sealed class PlayerPlaybackTests : IDisposable
         var absolute = MakeFixture("-f lavfi -i testsrc2=size=1280x720:rate=60:duration=2", "-c:v libx264 -preset ultrafast -g 60 -pix_fmt yuv420p", "-movflags +faststart");
         Run(absolute, (model, view) =>
         {
-            var viewModel = model.Library.Player!;
+            var viewModel = model.Library.Playback.Player!;
             Assert.Equal(["Game", "Mic", "Discord", "Desktop"], viewModel.Media!.TrackNames);
             Assert.Equal(0, viewModel.Player.SelectedTrack);
 
@@ -77,7 +77,7 @@ public sealed class PlayerPlaybackTests : IDisposable
             {
                 model.Library.DrillIn.Close();
                 model.Library.OpenFocused();
-                Sta.PumpUntil(() => model.Library.Player?.State == PlayerState.Paused, "the player to open");
+                Sta.PumpUntil(() => model.Library.Playback.Player?.State == PlayerState.Paused, "the player to open");
                 Sta.PumpUntil(() => view.SurfaceSize is not null, "a frame");
                 if (i == 10)
                 {
@@ -100,7 +100,7 @@ public sealed class PlayerPlaybackTests : IDisposable
         var absolute = MakeFixture("-f lavfi -i testsrc2=size=1280x720:rate=60:duration=12", "-c:v libx264 -preset ultrafast -g 60 -pix_fmt yuv420p", "-movflags +faststart", seconds: 12);
         Run(absolute, (model, view) =>
         {
-            var viewModel = model.Library.Player!;
+            var viewModel = model.Library.Playback.Player!;
             viewModel.Volume = 0.001;
             viewModel.IsMuted = false;
             using var loopback = ProcessLoopback.Start();
@@ -138,7 +138,7 @@ public sealed class PlayerPlaybackTests : IDisposable
         var absolute = MakeFixture("-f lavfi -i testsrc2=size=1280x720:rate=60:duration=10", "-c:v libx264 -preset ultrafast -g 60 -pix_fmt yuv420p", "-movflags frag_keyframe+empty_moov+default_base_moof -frag_duration 1000000", seconds: 10);
         Run(absolute, (model, view) =>
         {
-            var viewModel = model.Library.Player!;
+            var viewModel = model.Library.Playback.Player!;
             viewModel.SeekTo(TimeSpan.FromSeconds(5));
             viewModel.SelectedTrack = viewModel.Tracks[2];
             viewModel.PlayPauseCommand.Execute(null);
@@ -175,12 +175,12 @@ public sealed class PlayerPlaybackTests : IDisposable
             window.Show();
             var view = (LibraryView)model.Library.View;
             Sta.PumpUntil(() => view.IsLoaded, "the Library to load");
-            model.Library.Click(model.Library.Rows.Single(), ctrl: false, shift: false);
+            model.Library.Selection.Click(model.Library.List.Rows.Single(), ctrl: false, shift: false);
             model.Library.OpenFocused();
-            Sta.PumpUntil(() => model.Library.Player?.State == PlayerState.Paused, "the player to open");
+            Sta.PumpUntil(() => model.Library.Playback.Player?.State == PlayerState.Paused, "the player to open");
 
             // Muted through the page: it applies its own volume and mute to the player as it opens.
-            model.Library.Player!.IsMuted = true;
+            model.Library.Playback.Player!.IsMuted = true;
             var player = (PlayerView)view.FindName("PlayerContent");
             Sta.PumpUntil(() => player.SurfaceSize is not null, "the first frame");
 
@@ -188,7 +188,7 @@ public sealed class PlayerPlaybackTests : IDisposable
 
             model.CurrentDrillIn!.Close();
             Sta.Pump(TimeSpan.FromMilliseconds(200));
-            Assert.Null(model.Library.Player);
+            Assert.Null(model.Library.Playback.Player);
         }
         finally
         {

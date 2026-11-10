@@ -39,17 +39,17 @@ public sealed class LibraryPlayerTests : IDisposable
         var viewModel = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         viewModel.Render(State());
 
-        viewModel.Click(Row(viewModel, Saving), ctrl: false, shift: false);
+        viewModel.Selection.Click(Row(viewModel, Saving), ctrl: false, shift: false);
         Assert.False(viewModel.PlayCommand.CanExecute(null));
         viewModel.OpenFocused();
         Assert.False(viewModel.DrillIn.IsOpen);
-        Assert.Null(viewModel.Player);
+        Assert.Null(viewModel.Playback.Player);
 
-        viewModel.Click(Row(viewModel, Clip), ctrl: false, shift: false);
+        viewModel.Selection.Click(Row(viewModel, Clip), ctrl: false, shift: false);
         viewModel.OpenFocused();
         Assert.True(viewModel.DrillIn.IsOpen);
         Assert.Equal("clip.mp4", viewModel.DrillIn.ItemTitle);
-        Assert.Equal(PlayerState.Paused, viewModel.Player!.State);
+        Assert.Equal(PlayerState.Paused, viewModel.Playback.Player!.State);
         Assert.Equal(0, _player.SelectedTrack);
         Assert.Equal(1, _player.FirstFrames);
         Assert.Empty(_shell.Calls);
@@ -66,16 +66,16 @@ public sealed class LibraryPlayerTests : IDisposable
         viewModel.Render(State());
 
         // The menu stays shut off a row and with nothing selected; from the keyboard it takes the focused row.
-        Assert.False(viewModel.TryPrepareContextMenu(fromKeyboard: false, onRow: false));
-        Assert.False(viewModel.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
-        var entry = viewModel.FocusForEntry();
+        Assert.False(viewModel.Selection.TryPrepareContextMenu(fromKeyboard: false, onRow: false));
+        Assert.False(viewModel.Selection.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
+        var entry = viewModel.Selection.FocusForEntry();
         Assert.NotNull(entry);
-        Assert.Same(entry, viewModel.FocusedRow);
-        Assert.True(viewModel.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
+        Assert.Same(entry, viewModel.Selection.FocusedRow);
+        Assert.True(viewModel.Selection.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
 
         // Escape is the list's key and clears the selection; a key the list doesn't know is left alone.
         Assert.True(viewModel.HandleKey(Key.Escape, ctrl: false));
-        Assert.False(viewModel.HasShownSelection);
+        Assert.False(viewModel.Selection.HasShownSelection);
         Assert.False(viewModel.HandleKey(Key.B, ctrl: false));
 
         // A double click with Ctrl only selects; a plain one opens the player page.
@@ -90,7 +90,7 @@ public sealed class LibraryPlayerTests : IDisposable
     {
         var viewModel = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         viewModel.Render(State());
-        viewModel.Click(Row(viewModel, Clip), ctrl: false, shift: false);
+        viewModel.Selection.Click(Row(viewModel, Clip), ctrl: false, shift: false);
         viewModel.OpenFocused();
         var absolute = Path.Combine(_folder, Clip);
 
@@ -100,7 +100,7 @@ public sealed class LibraryPlayerTests : IDisposable
         File.Delete(absolute + ".renamed");
 
         viewModel.DrillIn.Close();
-        Assert.Null(viewModel.Player);
+        Assert.Null(viewModel.Playback.Player);
         Assert.True(_player.Disposed);
         Assert.False(_player.File.CanRead);
     }
@@ -110,7 +110,7 @@ public sealed class LibraryPlayerTests : IDisposable
     {
         var viewModel = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         viewModel.Render(State());
-        viewModel.Click(Row(viewModel, Clip), ctrl: false, shift: false);
+        viewModel.Selection.Click(Row(viewModel, Clip), ctrl: false, shift: false);
         viewModel.OpenFocused();
 
         viewModel.Render(State() with { Library = [Item(Saving, writing: true)] });
@@ -125,12 +125,12 @@ public sealed class LibraryPlayerTests : IDisposable
         _player.Fail = true;
         var viewModel = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         viewModel.Render(State());
-        viewModel.Click(Row(viewModel, Clip), ctrl: false, shift: false);
+        viewModel.Selection.Click(Row(viewModel, Clip), ctrl: false, shift: false);
         viewModel.OpenFocused();
 
-        Assert.True(viewModel.Player!.IsFailed);
-        Assert.Equal(PlayerViewModel.FailedText, viewModel.Player.Message);
-        viewModel.Player.OpenInDefaultPlayerCommand.Execute(null);
+        Assert.True(viewModel.Playback.Player!.IsFailed);
+        Assert.Equal(PlayerViewModel.FailedText, viewModel.Playback.Player.Message);
+        viewModel.Playback.Player.OpenInDefaultPlayerCommand.Execute(null);
         Assert.Equal([("open", Path.Combine(_folder, Clip))], _shell.Calls);
     }
 
@@ -191,11 +191,11 @@ public sealed class LibraryPlayerTests : IDisposable
     {
         var library = new LibraryViewModel(_engine, shell: _shell, player: () => _player);
         library.Render(State());
-        library.Click(Row(library, Clip), ctrl: false, shift: false);
+        library.Selection.Click(Row(library, Clip), ctrl: false, shift: false);
         library.OpenFocused();
-        library.Player!.PlayPauseCommand.Execute(null);
+        library.Playback.Player!.PlayPauseCommand.Execute(null);
         Assert.True(_player.IsPlaying);
-        return library.Player;
+        return library.Playback.Player;
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public sealed class LibraryPlayerTests : IDisposable
     {
         _engine.State = State();
         var model = new MainViewModel(_engine, action => action(), player: () => _player);
-        model.Library.Click(Row(model.Library, Clip), ctrl: false, shift: false);
+        model.Library.Selection.Click(Row(model.Library, Clip), ctrl: false, shift: false);
         model.Library.OpenFocused();
 
         Assert.Same(model.Library.DrillIn, model.CurrentDrillIn);
@@ -232,5 +232,5 @@ public sealed class LibraryPlayerTests : IDisposable
     private static LibraryItem Item(string path, bool writing) =>
         new(path, null, 1, path == Clip ? DateTimeOffset.UnixEpoch : DateTimeOffset.UnixEpoch.AddDays(1), writing);
 
-    private static LibraryRow Row(LibraryViewModel viewModel, string path) => viewModel.Rows.Single(r => r.Path == path);
+    private static LibraryRow Row(LibraryViewModel viewModel, string path) => viewModel.List.Rows.Single(r => r.Path == path);
 }

@@ -91,8 +91,8 @@ public sealed class PlayerTrackTests : IDisposable
 
     private static PlayerViewModel Open(LibraryViewModel library)
     {
-        library.Click(library.Rows.Single(), ctrl: false, shift: false);
+        library.Selection.Click(library.List.Rows.Single(), ctrl: false, shift: false);
         library.OpenFocused();
-        return library.Player!;
+        return library.Playback.Player!;
     }
 }
