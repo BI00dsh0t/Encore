@@ -1,20 +1,9 @@
 namespace Encore.Media;
 
-/// <summary>
-/// Sums a Track's devices into one stream. Each input is one device's <see cref="AudioTimeline"/>
-/// output, whose frame k is k frames after the session anchor (derived from QPC), so summing by
-/// position sums by QPC. Frame k of the output is the sum of every input's frame k; it is written
-/// once every input has reached it, or once the leading input is more than
-/// <see cref="MaxLagFrames"/> ahead, in which case the laggard counts as silence there and its late
-/// frames are dropped when they arrive. With one input there is nothing to sum and its frames pass
-/// straight on; with none the Track is silent, and only <see cref="PadTo"/> advances it. Every
-/// emission goes through a <see cref="PeakLimiter"/>, the Track's last stage, which leaves audio
-/// within full scale bit-identical and keeps the rest within it (story 2.2). Thread-safe: each input
-/// is written from its device's thread, under one short lock; nothing is allocated once constructed.
-/// </summary>
+/// <summary>Sums a Track's devices into one stream by frame position, then limits it. Thread-safe; see docs/code-notes.md.</summary>
 public sealed class TrackMixer
 {
-    /// <summary>2 s: how far the leading input may run ahead of the slowest before the slowest is filled with silence.</summary>
+    /// <summary>2 s: how far the leading input may run ahead before the slowest is filled with silence.</summary>
     public const int MaxLagFrames = 2 * AudioTimeline.SampleRate;
 
     /// <summary>The most frames one input appends before the mix is advanced.</summary>
@@ -34,8 +23,7 @@ public sealed class TrackMixer
     private long _emitted;
     private long _dropped;
 
-    /// <param name="inputs">The number of devices the Track mixes; zero for a silent Track.</param>
-    /// <param name="output">Receives the mix, typically the Track's encoder.</param>
+    /// <summary>The inputs count is the devices the Track mixes, zero for a silent Track; output is usually its encoder.</summary>
     public TrackMixer(int inputs, IAudioSampleSink output)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(inputs);
@@ -126,11 +114,7 @@ public sealed class TrackMixer
     /// <summary>The sink for input <paramref name="index"/>; frame 0 is the session anchor.</summary>
     public IAudioSampleSink Input(int index) => _inputs[index];
 
-    /// <summary>
-    /// Writes the mix up to <paramref name="frame"/>, any input that hasn't reached it counted as
-    /// silence there; that input's frames below it are dropped when they arrive. Does nothing when
-    /// the mix is already there.
-    /// </summary>
+    /// <summary>Writes the mix up to a frame, counting any input that hasn't reached it as silence there.</summary>
     public void PadTo(long frame)
     {
         lock (_lock)
@@ -153,10 +137,7 @@ public sealed class TrackMixer
         }
     }
 
-    /// <summary>
-    /// Writes the mix up to the longest input, the shorter ones padded with silence. Call once the
-    /// inputs have stopped; later input past that point is mixed as usual.
-    /// </summary>
+    /// <summary>Writes the mix up to the longest input, padding shorter ones with silence; call once the inputs have stopped.</summary>
     public void Flush() => PadTo(LongestInputFrames);
 
     /// <summary>A single input: drops what the mix has passed, then writes the rest straight to the limiter.</summary>
@@ -196,8 +177,7 @@ public sealed class TrackMixer
         var ring = _rings[input];
         var offset = 0L;
 
-        // The lock is taken per chunk, so a long silence fill never holds the other inputs' threads
-        // through more than one chunk's encode.
+        // The lock is taken per chunk, so a long silence fill never holds the other inputs for more than one chunk.
         while (offset < frames)
         {
             lock (_lock)

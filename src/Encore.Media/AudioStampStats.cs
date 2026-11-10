@@ -1,11 +1,6 @@
 namespace Encore.Media;
 
-/// <summary>
-/// The health of one device's packet stamps (PLAN.md §7.4): bad-stamp counts, jitter of each
-/// stamp against the previous stamp plus its frames, stamp age when the packet was read,
-/// and the long-run drift of stamps against the frame count. Allocation-free; the device
-/// thread records, and the readout happens after it has stopped.
-/// </summary>
+/// <summary>The health of one device's packet stamps: bad stamps, jitter, stamp age and drift. Read after the thread stops.</summary>
 public sealed class AudioStampStats
 {
     /// <summary>A stamp this far off its prediction starts a new drift segment (a gap, not jitter).</summary>
@@ -61,10 +56,7 @@ public sealed class AudioStampStats
     /// <summary>The longest unbroken run of good, predictable stamps, in seconds.</summary>
     public double DriftSegmentSeconds => _bestSegmentSeconds;
 
-    /// <summary>
-    /// Over <see cref="DriftSegmentSeconds"/>: (stamp time − frame time) / frame time × 10⁶.
-    /// Positive means the device delivers fewer frames per QPC second than 48 kHz.
-    /// </summary>
+    /// <summary>Drift over the best segment, in parts per million; positive means the device delivers fewer frames than 48 kHz.</summary>
     public double DriftPpm => _bestSegmentPpm;
 
     /// <summary>Records one packet as <c>GetBuffer</c> returned it, read at <paramref name="readQpc"/>.</summary>

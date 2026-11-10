@@ -1,9 +1,6 @@
 namespace Encore.Media;
 
-/// <summary>
-/// Counts missed frame slots from consecutive capture stamps: a step longer than 1.5 slots
-/// counts as <c>round(Δ × fps) − 1</c> missed slots. Allocation-free; one thread records.
-/// </summary>
+/// <summary>Counts missed frame slots from capture stamps: a step over 1.5 slots counts its missing slots.</summary>
 public sealed class FrameCadence
 {
     private readonly long _qpcFrequency;

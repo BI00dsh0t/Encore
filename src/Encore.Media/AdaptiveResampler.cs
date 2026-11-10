@@ -2,16 +2,7 @@ using Encore.Core.Audio;
 
 namespace Encore.Media;
 
-/// <summary>
-/// A polyphase windowed-sinc resampler for 48 kHz stereo float with a fractional, adjustable
-/// <see cref="Step"/>: the input frames consumed per output frame (AD-13). Output frame j is the
-/// input signal evaluated at input position <c>p_j</c>, where <c>p_0 = 0</c> and
-/// <c>p_{j+1} = p_j + Step</c>. The kernel is centred on that position, so input frame I comes out
-/// at the output index whose position is I (<see cref="OutputIndexOf"/>); the only delay is in time,
-/// since an output frame needs the <see cref="HalfTaps"/> input frames after its position.
-/// At a step of exactly 1 the output is the input, sample for sample.
-/// Every buffer is allocated up front; pushing and producing never allocate. Not thread-safe.
-/// </summary>
+/// <summary>A windowed-sinc resampler for 48 kHz stereo with an adjustable step. Not thread-safe; see docs/code-notes.md.</summary>
 public sealed class AdaptiveResampler
 {
     /// <summary>Input frames each side of the position that the kernel reads.</summary>
@@ -37,7 +28,7 @@ public sealed class AdaptiveResampler
     private long _lastSound;
     private long _outputFrames;
 
-    /// <param name="inputCapacity">The most input frames that can wait unconsumed, beyond the kernel's own window.</param>
+    /// <summary>The inputCapacity is the most input frames that can wait unconsumed, beyond the kernel's own window.</summary>
     public AdaptiveResampler(int inputCapacity)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(inputCapacity);
@@ -63,7 +54,7 @@ public sealed class AdaptiveResampler
 
     private long OldestNeeded => _positionWhole - HalfTaps + 1;
 
-    /// <summary>The output index (fractional) at which input position <paramref name="inputPosition"/> comes out at the current step.</summary>
+    /// <summary>The fractional output index at which an input position comes out, at the current step.</summary>
     public double OutputIndexOf(double inputPosition) => _outputFrames + ((inputPosition - Position) / Step);
 
     /// <summary>Back to the start: the history before input frame 0 is silence, and the step is 1.</summary>
@@ -107,12 +98,7 @@ public sealed class AdaptiveResampler
         _inputFrames += frames;
     }
 
-    /// <summary>
-    /// Produces output frames into <paramref name="destination"/> while the input allows, all of one
-    /// kind: either frames that depend on some pushed sound, written as samples, or frames whose whole
-    /// kernel window is silence, which <paramref name="silent"/> reports and which are not written.
-    /// Returns the frames produced; 0 when the next one needs more input.
-    /// </summary>
+    /// <summary>Produces output frames while the input allows; silent frames are reported but not written. Returns the count.</summary>
     public int Produce(Span<float> destination, out bool silent)
     {
         var max = destination.Length / Channels;
@@ -178,7 +164,7 @@ public sealed class AdaptiveResampler
         frame[1] = right;
     }
 
-    /// <summary>Makes room for <paramref name="frames"/> at the end, moving the kept frames to the front when needed; returns the buffer offset of the first.</summary>
+    /// <summary>Makes room for frames at the end, moving kept frames to the front when needed; returns the first's offset.</summary>
     private int Reserve(int frames)
     {
         if (frames > FreeInput)
@@ -197,11 +183,7 @@ public sealed class AdaptiveResampler
         return (int)(_inputFrames - _bufferStart);
     }
 
-    /// <summary>
-    /// Row r holds the taps for the fractional position r / <see cref="Phases"/>; tap k reads input
-    /// frame <c>whole − HalfTaps + 1 + k</c>. Each row is a Kaiser-windowed sinc normalized to unit
-    /// DC gain; row 0 is a unit impulse, so a step of 1 copies the input.
-    /// </summary>
+    /// <summary>Row r holds the taps for fractional position r / Phases; row 0 is a unit impulse, so step 1 copies the input.</summary>
     private static float[] BuildTable()
     {
         var table = new float[(Phases + 1) * Taps];
