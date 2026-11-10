@@ -8,7 +8,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Core.Tests;
 
-/// <summary>The game session follows the Target's process across its windows (bugfix tiny-startup-window-capture).</summary>
+/// <summary>The game session follows the Target's process across its windows.</summary>
 public sealed partial class SessionOrchestratorTests
 {
     private const string Tiny = "the window is 156x27, under 320x180";
