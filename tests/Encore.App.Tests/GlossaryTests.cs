@@ -52,6 +52,7 @@ public sealed partial class GlossaryTests
         @"src\Encore.Engine\Supervision\AppSupervisor.cs",
         @"src\Encore.Engine\Supervision\EngineRestartedWarning.cs",
         @"src\Encore.Core\Feedback\FeedbackRouter.cs",
+        @"src\Encore.Core\Feedback\FeedbackText.cs",
     ];
 
     [Fact]

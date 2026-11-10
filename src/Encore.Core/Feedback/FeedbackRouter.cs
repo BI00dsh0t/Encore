@@ -30,7 +30,12 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         UnlessDisposed(() =>
         {
             WithdrawAll(_clipFailures);
-            RaiseInfo(new FeedbackNotice(ErrorCodes.ClipSaved, WarningSeverity.Info, Clips, "Clip saved", FeedbackSoundNames.ClipSaved));
+            RaiseInfo(new FeedbackNotice(
+                ErrorCodes.ClipSaved,
+                WarningSeverity.Info,
+                Clips,
+                "Clip saved",
+                FeedbackSoundNames.ClipSaved));
         });
     }
 
@@ -41,7 +46,11 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         UnlessDisposed(() =>
         {
             _clipFailures.Add(Raise(new FeedbackNotice(
-                ErrorCodes.ClipFailed, WarningSeverity.Error, Clips, $"Clip not saved: {ShortReason(failed.Reason)}", FeedbackSoundNames.SaveFailed)));
+                ErrorCodes.ClipFailed,
+                WarningSeverity.Error,
+                Clips,
+                $"Clip not saved: {FeedbackText.ShortReason(failed.Reason)}",
+                FeedbackSoundNames.SaveFailed)));
         });
     }
 
@@ -72,7 +81,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
             }
 
             WithdrawAll(_diskFulls);
-            RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Recording started", FeedbackSoundNames.RecordingStarted));
+            RaiseStarted("Recording started");
         });
     }
 
@@ -85,12 +94,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
             // The orchestrator turns the state Off before a stop, unless an encoder restart's replacement follows.
             var silent = stopped.Reason is RecordingStopReasons.DiskFull or RecordingStopReasons.EncoderRestart;
             _replacing = _recording == RecordingState.Running;
-            RaiseInfo(new FeedbackNotice(
-                ErrorCodes.RecordingStopped,
-                IsKnownReason(stopped.Reason) ? WarningSeverity.Info : WarningSeverity.Warning,
-                Recordings,
-                StopMessage(stopped.Reason),
-                silent ? null : FeedbackSoundNames.RecordingStopped));
+            RaiseStopped(stopped.Reason, FeedbackText.StopMessage(stopped.Reason), silent);
         });
     }
 
@@ -101,7 +105,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         UnlessDisposed(() =>
         {
             WithdrawAll(_diskFulls);
-            RaiseInfo(new FeedbackNotice(ErrorCodes.RecordingStarted, WarningSeverity.Info, Recordings, "Monitor Recording started", FeedbackSoundNames.RecordingStarted));
+            RaiseStarted("Monitor Recording started");
         });
     }
 
@@ -111,51 +115,10 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         ArgumentNullException.ThrowIfNull(stopped);
         UnlessDisposed(() =>
         {
-            RaiseInfo(new FeedbackNotice(
-                ErrorCodes.RecordingStopped,
-                IsKnownReason(stopped.Reason) ? WarningSeverity.Info : WarningSeverity.Warning,
-                Recordings,
-                MonitorStopMessage(stopped.Reason),
-                stopped.Reason == RecordingStopReasons.DiskFull ? null : FeedbackSoundNames.RecordingStopped));
+            var silent = stopped.Reason == RecordingStopReasons.DiskFull;
+            RaiseStopped(stopped.Reason, FeedbackText.MonitorStopMessage(stopped.Reason), silent);
         });
     }
-
-    /// <summary>The message a Monitor Recording's <c>recording-stopped</c> notice uses for <paramref name="reason"/>.</summary>
-    public static string MonitorStopMessage(string reason) => reason switch
-    {
-        RecordingStopReasons.Stopped => "Monitor Recording stopped",
-        RecordingStopReasons.SessionEnded => "Monitor Recording stopped: the monitor capture ended",
-        RecordingStopReasons.Shutdown => "Monitor Recording stopped: Encore shut down",
-        RecordingStopReasons.DiskFull => "Monitor Recording stopped: the disk is full",
-        RecordingStopReasons.Suspend => "Monitor Recording stopped: the PC went to sleep",
-        RecordingStopReasons.MonitorRemoved => "Monitor Recording stopped: the monitor was removed",
-        _ when IsKnownReason(reason) => "Monitor Recording stopped",
-        _ => $"Monitor Recording stopped: the write failed ({reason})",
-    };
-
-    /// <summary>The message a <c>recording-stopped</c> notice uses for <paramref name="reason"/>.</summary>
-    public static string StopMessage(string reason) => reason switch
-    {
-        RecordingStopReasons.Stopped => "Recording stopped",
-        RecordingStopReasons.GameExit => "Recording stopped: the game exited",
-        RecordingStopReasons.Ignored => "Recording stopped: capture was switched off for the game",
-        RecordingStopReasons.SessionEnded => "Recording stopped: the game stopped being captured",
-        RecordingStopReasons.Shutdown => "Recording stopped: Encore shut down",
-        RecordingStopReasons.EncoderRestart => "Recording stopped: its video restarted",
-        RecordingStopReasons.DiskFull => "Recording stopped: the disk is full",
-        RecordingStopReasons.Suspend => "Recording stopped: the PC went to sleep",
-        _ => $"Recording stopped: the write failed ({reason})",
-    };
-
-    private static bool IsKnownReason(string reason) => reason is RecordingStopReasons.Stopped
-        or RecordingStopReasons.GameExit
-        or RecordingStopReasons.Ignored
-        or RecordingStopReasons.SessionEnded
-        or RecordingStopReasons.Shutdown
-        or RecordingStopReasons.EncoderRestart
-        or RecordingStopReasons.DiskFull
-        or RecordingStopReasons.Suspend
-        or RecordingStopReasons.MonitorRemoved;
 
     /// <summary>A forced encoder restart ended a Recording and started another: one warning names both files.</summary>
     public void RecordingRestarted(RecordingRestart restart)
@@ -167,7 +130,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
                 ErrorCodes.RecordingRestarted,
                 WarningSeverity.Warning,
                 Recordings,
-                $"The Recording continues in a new file after its video restarted: {Path.GetFileName(restart.StoppedPath)} → {Path.GetFileName(restart.StartedPath)}",
+                FeedbackText.RestartMessage(restart.StoppedPath, restart.StartedPath),
                 FeedbackSoundNames.RecordingStarted));
         });
     }
@@ -206,16 +169,6 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         });
     }
 
-    /// <summary>The words a notice uses for a <c>clip.failed</c> reason.</summary>
-    public static string ShortReason(string reason) => reason switch
-    {
-        ErrorCodes.DiskFull => "disk full",
-        ErrorCodes.ClipTooShort => "nothing to save yet",
-        ErrorCodes.SaveBusy => "still saving the last one",
-        ErrorCodes.AccessDenied => "access denied",
-        _ => "save failed",
-    };
-
     /// <summary>Stops every pending dismissal; later outcomes raise nothing.</summary>
     public void Dispose()
     {
@@ -253,6 +206,23 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
 
         return notices.Raise(notice);
     }
+
+    private void RaiseStarted(string message) =>
+        RaiseInfo(new FeedbackNotice(
+            ErrorCodes.RecordingStarted,
+            WarningSeverity.Info,
+            Recordings,
+            message,
+            FeedbackSoundNames.RecordingStarted));
+
+    // A stop the engine made on purpose is information; any other reason is a writer's failure. A silent one plays no sound.
+    private void RaiseStopped(string reason, string message, bool silent) =>
+        RaiseInfo(new FeedbackNotice(
+            ErrorCodes.RecordingStopped,
+            FeedbackText.IsKnownReason(reason) ? WarningSeverity.Info : WarningSeverity.Warning,
+            Recordings,
+            message,
+            silent ? null : FeedbackSoundNames.RecordingStopped));
 
     private void RaiseInfo(FeedbackNotice notice)
     {
