@@ -41,12 +41,12 @@ public sealed class TrackLayoutViewModelTests
         viewModel.AddTrackCommand.Execute(null);
         var chat = viewModel.Tracks[1];
 
-        viewModel.OpenPicker(chat);
-        Assert.Equal(["Sounds from your PC (playback)", "Sounds from your PC (playback)", "Microphones and other inputs"], viewModel.PickerRows.Select(r => r.Section));
-        Assert.Equal(["Windows default", "Arctis", "Windows default"], viewModel.PickerRows.Select(r => r.Caption));
-        viewModel.Pick(viewModel.PickerRows.Single(r => r.Device == Mic));
+        viewModel.Picker.Open(chat);
+        Assert.Equal(["Sounds from your PC (playback)", "Sounds from your PC (playback)", "Microphones and other inputs"], viewModel.Picker.Rows.Select(r => r.Section));
+        Assert.Equal(["Windows default", "Arctis", "Windows default"], viewModel.Picker.Rows.Select(r => r.Caption));
+        viewModel.Picker.Pick(viewModel.Picker.Rows.Single(r => r.Device == Mic));
 
-        Assert.False(viewModel.IsPickerOpen);
+        Assert.False(viewModel.Picker.IsOpen);
         var layout = viewModel.ToLayout();
         var mic = Assert.Single(layout.Devices);
         Assert.True(mic.IsMic);
@@ -57,11 +57,11 @@ public sealed class TrackLayoutViewModelTests
         Assert.True(viewModel.IsDirty);
 
         // Ctrl+click keeps the picker open; a sound already on the Track is listed but can't be added.
-        viewModel.OpenPicker(chat);
-        Assert.False(viewModel.PickerRows.Single(r => r.Device == Mic).CanAdd);
-        viewModel.Pick(viewModel.PickerRows.Single(r => r.Device == Speakers), keepOpen: true);
-        Assert.True(viewModel.IsPickerOpen);
-        Assert.True(viewModel.PickerRows.Single(r => r.Device == Speakers).IsAdded);
+        viewModel.Picker.Open(chat);
+        Assert.False(viewModel.Picker.Rows.Single(r => r.Device == Mic).CanAdd);
+        viewModel.Picker.Pick(viewModel.Picker.Rows.Single(r => r.Device == Speakers), keepOpen: true);
+        Assert.True(viewModel.Picker.IsOpen);
+        Assert.True(viewModel.Picker.Rows.Single(r => r.Device == Speakers).IsAdded);
         Assert.Equal(2, chat.Sources.Count);
     }
 
@@ -234,10 +234,10 @@ public sealed class TrackLayoutViewModelTests
         SetState(revision: 1, layout: null, a, b, Mic);
         var viewModel = Create().TrackLayout;
 
-        viewModel.OpenPicker(viewModel.Tracks[0]);
-        Assert.Equal(["Speakers (Realtek)", "speakers (USB DAC)", "Microphone"], viewModel.PickerRows.Select(r => r.Label));
+        viewModel.Picker.Open(viewModel.Tracks[0]);
+        Assert.Equal(["Speakers (Realtek)", "speakers (USB DAC)", "Microphone"], viewModel.Picker.Rows.Select(r => r.Label));
 
-        viewModel.Pick(viewModel.PickerRows[0]);
+        viewModel.Picker.Pick(viewModel.Picker.Rows[0]);
         Assert.Equal("Speakers (Realtek)", viewModel.Tracks[0].Sources[0].Label);
     }
 
@@ -397,14 +397,14 @@ public sealed class TrackLayoutViewModelTests
         // A settings.changed on a clean page rebuilds the cards.
         SetState(revision: 1, layout: null, Speakers);
         var viewModel = Create().TrackLayout;
-        viewModel.OpenPicker(viewModel.Tracks[0]);
+        viewModel.Picker.Open(viewModel.Tracks[0]);
 
         _engine.State = _engine.State! with { Seq = 2, Settings = Document(2, null) with { Global = SettingsMaps.EmptyValues.Add(Keys.StartWithWindows.Name, Keys.StartWithWindows.ToJson(true)) } };
         _engine.RaiseChanged();
 
-        Assert.False(viewModel.IsPickerOpen);
-        viewModel.OpenPicker(viewModel.Tracks[0]);
-        viewModel.Pick(viewModel.PickerRows.Single());
+        Assert.False(viewModel.Picker.IsOpen);
+        viewModel.Picker.Open(viewModel.Tracks[0]);
+        viewModel.Picker.Pick(viewModel.Picker.Rows.Single());
         Assert.Single(viewModel.ToLayout().Tracks[0].DeviceKeys);
     }
 
@@ -509,7 +509,7 @@ public sealed class TrackLayoutViewModelTests
 
         // A probe per source; the picker adds one per listed device, and the saved layout has none.
         Assert.Single(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout.Tracks, t => t.Name == MeterProbes.ProbeName);
-        viewModel.OpenPicker(viewModel.Tracks[1]);
+        viewModel.Picker.Open(viewModel.Tracks[1]);
         var watched = Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout;
         Assert.Equal(3, watched.Tracks.Count(t => t.Name == MeterProbes.ProbeName));
         Assert.DoesNotContain(viewModel.ToLayout().Tracks, t => t.Name == MeterProbes.ProbeName);
@@ -522,10 +522,10 @@ public sealed class TrackLayoutViewModelTests
         _engine.RaiseChanged();
 
         Assert.True(viewModel.Tracks[0].Sources[0].Level > 0);
-        Assert.Equal(1, viewModel.PickerRows.Single(r => r.Device == Mic).Level);
-        Assert.Equal(0, viewModel.PickerRows.Single(r => r.Device == Headset).Level);
+        Assert.Equal(1, viewModel.Picker.Rows.Single(r => r.Device == Mic).Level);
+        Assert.Equal(0, viewModel.Picker.Rows.Single(r => r.Device == Headset).Level);
 
-        viewModel.ClosePicker();
+        viewModel.Picker.Close();
         Assert.Single(Assert.IsType<MetersWatch>(_engine.Sent[^1]).Layout.Tracks, t => t.Name == MeterProbes.ProbeName);
     }
 

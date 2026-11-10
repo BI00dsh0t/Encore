@@ -24,7 +24,7 @@ internal partial class TrackLayoutView
     {
         if (ViewModel is { } viewModel)
         {
-            var rows = CollectionViewSource.GetDefaultView(viewModel.PickerRows);
+            var rows = CollectionViewSource.GetDefaultView(viewModel.Picker.Rows);
             rows.GroupDescriptions.Clear();
             rows.GroupDescriptions.Add(new PropertyGroupDescription(nameof(AudioPickerRow.Section)));
         }
@@ -58,12 +58,12 @@ internal partial class TrackLayoutView
         if (sender is Button { DataContext: AudioTrackCard card } button && ViewModel is { } viewModel)
         {
             Picker.PlacementTarget = button;
-            viewModel.OpenPicker(card);
+            viewModel.Picker.Open(card);
             Dispatcher.BeginInvoke(() => PickerSearchBox.Focus(), DispatcherPriority.Input);
         }
     }
 
-    private void OnPickerClosed(object? sender, EventArgs e) => ViewModel?.ClosePicker();
+    private void OnPickerClosed(object? sender, EventArgs e) => ViewModel?.Picker.Close();
 
     // Down moves from the search box into the list; Enter and Escape work as they do in the list.
     private void OnPickerSearchKeyDown(object sender, KeyEventArgs e)
@@ -90,15 +90,15 @@ internal partial class TrackLayoutView
     // Enter adds the selected row (with Ctrl the picker stays open); Escape closes the picker.
     private bool HandlePickerKey(Key key)
     {
-        if (key == Key.Enter && ViewModel?.PickerSelection is { } row)
+        if (key == Key.Enter && ViewModel?.Picker.Selection is { } row)
         {
-            ViewModel.Pick(row, IsControlDown);
+            ViewModel.Picker.Pick(row, IsControlDown);
             return true;
         }
 
         if (key == Key.Escape)
         {
-            ViewModel?.ClosePicker();
+            ViewModel?.Picker.Close();
             return true;
         }
 
@@ -121,7 +121,7 @@ internal partial class TrackLayoutView
             && ItemsControl.ContainerFromElement(PickerList, hit) is ListBoxItem { DataContext: AudioPickerRow row, IsEnabled: true }
             && ViewModel is { } viewModel)
         {
-            viewModel.Pick(row, IsControlDown);
+            viewModel.Picker.Pick(row, IsControlDown);
             e.Handled = true;
         }
     }

@@ -24,7 +24,7 @@ internal sealed class AudioTrackCard : Observable
         MoveUpCommand = new RelayCommand(() => viewModel.MoveTrack(this, -1));
         MoveDownCommand = new RelayCommand(() => viewModel.MoveTrack(this, 1));
         RemoveCommand = new RelayCommand(() => viewModel.RemoveTrack(this));
-        AddSoundCommand = new RelayCommand(() => viewModel.OpenPicker(this));
+        AddSoundCommand = new RelayCommand(() => viewModel.Picker.Open(this));
     }
 
     /// <summary>Raised when the card's name box should take focus (Rename, F2, a new Track).</summary>

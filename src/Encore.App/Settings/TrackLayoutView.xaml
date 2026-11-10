@@ -238,7 +238,7 @@
         <Popup x:Name="Picker"
                AllowsTransparency="True"
                Closed="OnPickerClosed"
-               IsOpen="{Binding IsPickerOpen, Mode=OneWay}"
+               IsOpen="{Binding Picker.IsOpen, Mode=OneWay}"
                Placement="Bottom"
                StaysOpen="False">
             <Border Style="{DynamicResource EncoreAudioPickerStyle}">
@@ -248,18 +248,18 @@
                              AutomationProperties.Name="Search sounds"
                              DockPanel.Dock="Top"
                              PreviewKeyDown="OnPickerSearchKeyDown"
-                             Text="{Binding PickerSearch, UpdateSourceTrigger=PropertyChanged}" />
+                             Text="{Binding Picker.Search, UpdateSourceTrigger=PropertyChanged}" />
                     <ListBox x:Name="PickerList"
                              AutomationProperties.Name="Sounds"
                              Background="{DynamicResource SubtleFillColorTransparentBrush}"
                              BorderThickness="0"
                              ItemContainerStyle="{DynamicResource EncoreAudioPickerItemStyle}"
-                             ItemsSource="{Binding PickerRows}"
+                             ItemsSource="{Binding Picker.Rows}"
                              PreviewKeyDown="OnPickerListKeyDown"
                              PreviewMouseLeftButtonUp="OnPickerListClick"
                              PreviewTextInput="OnPickerListTextInput"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             SelectedItem="{Binding PickerSelection}">
+                             SelectedItem="{Binding Picker.Selection}">
                         <ListBox.GroupStyle>
                             <GroupStyle>
                                 <GroupStyle.HeaderTemplate>

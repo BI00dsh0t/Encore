@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
 using Encore.App.Engine;
-using Encore.Contracts;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 
@@ -16,36 +15,28 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     public const string NameNeeded = "Give every track a name to save.";
     public const string ChangedElsewhere = "Audio tracks were changed somewhere else, so this page shows the new ones.";
 
-    private readonly IEngineSession _engine;
+    private readonly MeterWatch _meters;
     private AudioDeviceList _devices = AudioDeviceList.Empty;
     private TrackLayout _basis = Keys.TrackLayout.Default;
     private AudioTracksDraft _draft = AudioTracksDraft.From(Keys.TrackLayout.Default);
     private bool _isDirty;
     private bool _saving;
     private bool _isOpen;
-    private MeterLevels _levels = MeterLevels.Empty;
-    private string? _engineInstanceId;
-    private string? _watchedJson;
-    private string? _watchedInstanceId;
-    private bool _unwatchPending;
     private bool _usesGlobal;
     private string? _saveProblem;
-    private AudioTrackCard? _pickerTrack;
-    private string _pickerSearch = "";
-    private AudioPickerRow? _pickerSelection;
     private FrameworkElement? _view;
 
     public TrackLayoutViewModel(SettingsSender sender, IEngineSession engine, string? profileId = null)
         : base(sender)
     {
-        _engine = engine;
         ProfileId = profileId;
+        Picker = new SoundPicker(this);
+        _meters = new MeterWatch(engine, () => IsOpen, Watched);
         _usesGlobal = profileId is not null;
         AddTrackCommand = new RelayCommand(AddTrack);
         SaveCommand = new RelayCommand(() => _ = SaveAsync());
         DiscardCommand = new RelayCommand(Discard);
         ApplyPresetCommand = new ParameterCommand(p => ApplyPreset(p is TrackLayoutPreset preset ? preset : TrackLayoutPreset.Simple));
-        ClosePickerCommand = new RelayCommand(ClosePicker);
         Confirm = (message, caption) => Prompts.YesNo(_view, message, caption, MessageBoxImage.Question);
         Load(_basis);
     }
@@ -75,12 +66,9 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
                 Message = null;
                 _basis = global;
                 Load(global);
-                _ = SendAsync([SettingsOp.RemoveProfile(ProfileId!, Keys.TrackLayout.Name)]);
             }
-            else
-            {
-                _ = SendAsync([SettingsValues.Set(Keys.TrackLayout, global, ProfileId)]);
-            }
+
+            _ = SendAsync([SettingsValues.UseGlobal(Keys.TrackLayout, ProfileId!, value, global)]);
         }
     }
 
@@ -142,15 +130,12 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
 
             if (value)
             {
-                _unwatchPending = false;
-                Watch();
+                _meters.PageOpened();
             }
             else
             {
-                ClosePicker();
-                _watchedJson = null;
-                _watchedInstanceId = null;
-                _ = UnwatchAsync();
+                Picker.Close();
+                _meters.PageClosed();
             }
 
             ShowLevels();
@@ -169,7 +154,11 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     /// <summary>Takes a <see cref="TrackLayoutPreset"/>; replaces the draft after its confirmation.</summary>
     public ICommand ApplyPresetCommand { get; }
 
-    public ICommand ClosePickerCommand { get; }
+    /// <summary>The sound picker a Track's Add a sound opens.</summary>
+    public SoundPicker Picker { get; }
+
+    /// <summary>The device list of the last snapshot.</summary>
+    internal AudioDeviceList Devices => _devices;
 
     /// <summary>The presets, with their menu labels.</summary>
     public IReadOnlyList<AudioPresetChoice> Presets { get; } =
@@ -177,44 +166,6 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
         new(TrackLayoutPreset.Simple, "Simple", "Simple — one track with your PC's sound and your microphone"),
         new(TrackLayoutPreset.ForEditing, "For editing", "For editing — everything, game and chat, and your microphone on their own tracks"),
     ];
-
-    /// <summary>The Track the sound picker adds to, while it's open; null when it's closed.</summary>
-    public AudioTrackCard? PickerTrack
-    {
-        get => _pickerTrack;
-        private set
-        {
-            if (Set(ref _pickerTrack, value))
-            {
-                OnPropertyChanged(nameof(IsPickerOpen));
-            }
-        }
-    }
-
-    public bool IsPickerOpen => PickerTrack is not null;
-
-    /// <summary>The picker's search text: rows whose name or parent contain it.</summary>
-    public string PickerSearch
-    {
-        get => _pickerSearch;
-        set
-        {
-            if (Set(ref _pickerSearch, value ?? ""))
-            {
-                RefreshPicker();
-            }
-        }
-    }
-
-    /// <summary>The picker's rows, playback first, then microphones and other inputs; the view groups them by section.</summary>
-    public ObservableCollection<AudioPickerRow> PickerRows { get; } = [];
-
-    /// <summary>The picker's highlighted row, kept across live device updates.</summary>
-    public AudioPickerRow? PickerSelection
-    {
-        get => _pickerSelection;
-        set => Set(ref _pickerSelection, value);
-    }
 
     /// <summary>Takes the snapshot's device list: refreshes availability, labels and the picker.</summary>
     public void ShowDevices(AudioDeviceList devices)
@@ -227,7 +178,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
 
         _devices = devices;
         RefreshSources();
-        RefreshPicker();
+        Picker.Refresh();
         MetersMayChange();
     }
 
@@ -235,82 +186,12 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     public void ShowMeters(MeterLevels levels, string engineInstanceId)
     {
         ArgumentNullException.ThrowIfNull(levels);
-        _levels = levels;
-        _engineInstanceId = engineInstanceId;
-
-        // The engine stops a watch when its last client leaves, so a reconnect watches again.
-        if (_engine.Status != EngineStatus.Connected)
-        {
-            _watchedInstanceId = null;
-            _watchedJson = null;
-        }
-        else if (IsOpen && _watchedInstanceId != engineInstanceId)
-        {
-            Watch();
-        }
-        else if (!IsOpen && _unwatchPending)
-        {
-            // A reconnect to the same engine run: its watch outlived the link, so stop it now.
-            _unwatchPending = false;
-            _ = UnwatchAsync();
-        }
-
+        _meters.Show(levels, engineInstanceId);
         ShowLevels();
     }
 
     /// <summary>The draft as Contracts' <see cref="TrackLayout"/>, as Save changes sends it.</summary>
     public TrackLayout ToLayout() => _draft.ToLayout();
-
-    /// <summary>Opens the sound picker for <paramref name="track"/>; its rows meter every listed device.</summary>
-    public void OpenPicker(AudioTrackCard track)
-    {
-        ArgumentNullException.ThrowIfNull(track);
-        if (!CanEdit)
-        {
-            return;
-        }
-
-        _pickerSearch = "";
-        OnPropertyChanged(nameof(PickerSearch));
-        PickerTrack = track;
-        RefreshPicker();
-        PickerSelection = PickerRows.FirstOrDefault(r => r.CanAdd);
-        MetersMayChange();
-    }
-
-    public void ClosePicker()
-    {
-        if (PickerTrack is null)
-        {
-            return;
-        }
-
-        PickerTrack = null;
-        PickerRows.Clear();
-        PickerSelection = null;
-        MetersMayChange();
-    }
-
-    /// <summary>Adds a picker row's device to the picker's Track, then closes the picker unless keepOpen (Ctrl+click).</summary>
-    public void Pick(AudioPickerRow row, bool keepOpen = false)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-        if (PickerTrack is not { } track || !row.CanAdd)
-        {
-            return;
-        }
-
-        AddSound(track, row.Device);
-        if (keepOpen)
-        {
-            RefreshPicker();
-            PickerSelection = PickerRows.FirstOrDefault(r => SameEndpoint(r.Device, row.Device));
-        }
-        else
-        {
-            ClosePicker();
-        }
-    }
 
     /// <summary>Adds <paramref name="device"/> to <paramref name="track"/>, reusing the draft's record of it.</summary>
     public void AddSound(AudioTrackCard track, AudioDevice device)
@@ -365,9 +246,9 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
             return;
         }
 
-        if (PickerTrack == track)
+        if (Picker.Track == track)
         {
-            ClosePicker();
+            Picker.Close();
         }
 
         _draft.Tracks.Remove(track.Model);
@@ -421,13 +302,10 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     private static bool Same(TrackLayout a, TrackLayout b) =>
         JsonElement.DeepEquals(Keys.TrackLayout.ToJson(AudioTracksDraft.From(a).ToLayout()), Keys.TrackLayout.ToJson(AudioTracksDraft.From(b).ToLayout()));
 
-    private static bool SameEndpoint(AudioDevice a, AudioDevice b) =>
-        a.Flow == b.Flow && string.Equals(a.EndpointId, b.EndpointId, StringComparison.OrdinalIgnoreCase);
-
     private void Load(TrackLayout layout)
     {
         // The picker's Track belongs to the draft being replaced.
-        ClosePicker();
+        Picker.Close();
         _draft = AudioTracksDraft.From(layout);
         SaveProblem = null;
         Tracks.Clear();
@@ -474,7 +352,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
 
         OnPropertyChanged(nameof(HasNoTracks));
         RefreshSources();
-        RefreshPicker();
+        Picker.Refresh();
         ShowLevels();
         DraftChanged();
     }
@@ -510,73 +388,12 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
         items.Count == 1 ? items[0] : string.Join(", ", items.Take(items.Count - 1)) + " and " + items[^1];
 
     /// <summary>Re-watches when the metered layout (names aside) or the picker's probes changed.</summary>
-    private void MetersMayChange()
-    {
-        if (IsOpen && MeteredJson() != _watchedJson)
-        {
-            Watch();
-        }
-    }
-
-    /// <summary>The layout the meters watch: the draft, plus a probe per source and per listed device while the picker is open.</summary>
-    private TrackLayout Watched() =>
-        MeterProbes.WithProbes(ToLayout(), IsPickerOpen ? _devices.Devices : null);
-
-    // Names don't change what the engine meters, and the name box updates per keystroke.
-    private string MeteredJson()
-    {
-        var layout = Watched();
-        return Keys.TrackLayout.ToJson(layout with { Tracks = [.. layout.Tracks.Select(t => t with { Name = "" })] }).GetRawText();
-    }
-
-    private void Watch()
-    {
-        _watchedJson = MeteredJson();
-        _watchedInstanceId = _engineInstanceId;
-        _ = WatchAsync(_watchedJson, new MetersWatch(Watched()));
-    }
-
-    private async Task WatchAsync(string json, MetersWatch watch)
-    {
-        try
-        {
-            await _engine.SendAsync(AudioMessages.Watch, watch);
-        }
-        catch (ErrorCodeException e)
-        {
-            // Refused: the next draft change tries again. Disconnected: so does the next snapshot.
-            if (_watchedJson == json)
-            {
-                _watchedJson = null;
-                if (e.Code == ErrorCodes.EngineDisconnected)
-                {
-                    _watchedInstanceId = null;
-                }
-            }
-        }
-    }
-
-    private async Task UnwatchAsync()
-    {
-        try
-        {
-            await _engine.SendAsync(AudioMessages.Unwatch, Empty.Value);
-        }
-        catch (ErrorCodeException e) when (e.Code == ErrorCodes.EngineDisconnected)
-        {
-            // The engine may still be metering; the next snapshot sends this again while the page stays closed.
-            _unwatchPending = !IsOpen;
-        }
-        catch (ErrorCodeException)
-        {
-            // Refused: there is nothing to stop.
-        }
-    }
+    internal void MetersMayChange() => _meters.LayoutMayHaveChanged();
 
     /// <summary>Each Track's, source's and picker row's level from the last levels; 0 when closed or not listed.</summary>
-    private void ShowLevels()
+    internal void ShowLevels()
     {
-        var levels = IsOpen ? _levels : MeterLevels.Empty;
+        var levels = _meters.Levels;
         foreach (var card in Tracks)
         {
             card.ShowPeak(levels.Tracks.FirstOrDefault(l => l.TrackId == card.Id)?.Peak ?? 0);
@@ -586,14 +403,18 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
             }
         }
 
-        foreach (var row in PickerRows)
+        foreach (var row in Picker.Rows)
         {
             row.ShowPeak(MeterProbes.LevelOf(levels, row.Device.EndpointId, row.Device.Flow));
         }
     }
 
+    /// <summary>The layout the meters watch: the draft, plus a probe per source and per listed device while the picker is open.</summary>
+    private TrackLayout Watched() =>
+        MeterProbes.WithProbes(ToLayout(), Picker.IsOpen ? _devices.Devices : null);
+
     /// <summary>Every distinct device the page knows, so a name two devices share shows its parent.</summary>
-    private Func<string, bool> SharedNames()
+    internal Func<string, bool> SharedNames()
     {
         var known = _devices.Devices.Select(d => (d.EndpointId, d.Flow, d.FriendlyName))
             .Concat(Tracks.SelectMany(t => t.Sources).Select(s => (s.Device.EndpointId, s.Device.Flow, s.Device.FriendlyName)))
@@ -619,36 +440,6 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
         OnPropertyChanged(nameof(Summary));
     }
 
-    /// <summary>Rebuilds the picker's rows from the device list, keeping the highlighted row.</summary>
-    private void RefreshPicker()
-    {
-        if (PickerTrack is not { } track)
-        {
-            return;
-        }
-
-        var selected = PickerSelection?.Device;
-        var shared = SharedNames();
-        var held = track.Sources.Select(s => s.Device).ToList();
-        PickerRows.Clear();
-        foreach (var device in _devices.Devices.OrderBy(d => d.Flow))
-        {
-            var label = Label(device.FriendlyName, device.ParentName, shared(device.FriendlyName));
-            if (PickerSearch.Length > 0
-                && !label.Contains(PickerSearch, StringComparison.OrdinalIgnoreCase)
-                && !device.ParentName.Contains(PickerSearch, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var added = held.Any(h => h.Flow == device.Flow && string.Equals(h.EndpointId, device.EndpointId, StringComparison.OrdinalIgnoreCase));
-            PickerRows.Add(new AudioPickerRow(device, label, added));
-        }
-
-        PickerSelection = selected is null ? null : PickerRows.FirstOrDefault(r => SameEndpoint(r.Device, selected));
-        ShowLevels();
-    }
-
     private void AddTrack()
     {
         var model = _draft.AddTrack($"Track {_draft.Tracks.Count + 1}");
@@ -669,7 +460,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
             return;
         }
 
-        ClosePicker();
+        Picker.Close();
         _draft.ApplyPreset(preset, _devices.Devices);
         Tracks.Clear();
         StructureChanged();

@@ -130,14 +130,14 @@ public sealed partial class SettingsLayoutTests
 
                         var picker = (System.Windows.Controls.Primitives.Popup)viewModel.View.FindName("Picker");
                         picker.PlacementTarget = viewModel.View;
-                        model.TrackLayout.OpenPicker(tracks[1]);
+                        model.TrackLayout.Picker.Open(tracks[1]);
                         Sta.Pump(TimeSpan.FromMilliseconds(100));
                         Assert.True(picker.IsOpen);
                         var flyout = (FrameworkElement)picker.Child;
                         Assert.Equal(2, Descendants<ListBoxItem>(flyout).Count());
                         Assert.All(Descendants<ProgressBar>(flyout), m => Assert.Same(meter, m.Style));
                         SaveElement(flyout, $"settings-audio-tracks-picker-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png", window);
-                        model.TrackLayout.ClosePicker();
+                        model.TrackLayout.Picker.Close();
                         tracks[0].ShowPeak(1f);
                         tracks[1].ShowPeak(0.0316f);
                         tracks[0].Sources[0].ShowPeak(0.3f);
