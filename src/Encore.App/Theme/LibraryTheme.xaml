@@ -7,89 +7,324 @@
 
     <!-- Creator-only chrome deliberately replaces theme button and field templates. -->
     <Style x:Key="EncoreClipButtonStyle" TargetType="Button">
-        <Setter Property="FontFamily" Value="Segoe UI" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" />
-        <Setter Property="Padding" Value="10,7" /><Setter Property="Background" Value="Transparent" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-        <Setter Property="BorderBrush" Value="Transparent" /><Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
-        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-            <Border x:Name="Chrome" CornerRadius="6" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
-                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
-            </Border>
-            <ControlTemplate.Triggers>
-                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger>
-                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" /></Trigger>
-                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
-            </ControlTemplate.Triggers>
-        </ControlTemplate></Setter.Value></Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome"
+                            CornerRadius="6"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome"
+                                    Property="Background"
+                                    Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Chrome"
+                                    Property="Background"
+                                    Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style x:Key="EncoreClipToolButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipButtonStyle}">
-        <Setter Property="Padding" Value="7,5" /><Setter Property="Width" Value="32" /><Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="7,5" />
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
     </Style>
-    <Style x:Key="EncoreClipSkipButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipToolButtonStyle}"><Setter Property="Width" Value="34" /><Setter Property="Height" Value="34" /></Style>
+    <Style x:Key="EncoreClipSkipButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipToolButtonStyle}">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+    </Style>
     <Style x:Key="EncoreClipTransportPlayStyle" TargetType="Button">
-        <Setter Property="Width" Value="36" /><Setter Property="Height" Value="36" /><Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" /><Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
-        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" CornerRadius="18" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"><Path x:Name="Icon" Width="16" Height="16" Stretch="Uniform" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5" Data="M 4,1 L 14,8 L 4,15 Z" /></Border><ControlTemplate.Triggers>
-         <Trigger Property="Content" Value="&#xE769;"><Setter TargetName="Icon" Property="Data" Value="M 5,1 L 5,15 M 11,1 L 11,15" /></Trigger>
-         <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ControlFillColorTertiaryBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
-        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome"
+                            CornerRadius="18"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                        <Path x:Name="Icon"
+                              Width="16"
+                              Height="16"
+                              Stretch="Uniform"
+                              Stroke="{TemplateBinding Foreground}"
+                              StrokeThickness="1.5"
+                              Data="M 4,1 L 14,8 L 4,15 Z" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Content" Value="&#xE769;">
+                            <Setter TargetName="Icon" Property="Data" Value="M 5,1 L 5,15 M 11,1 L 11,15" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome"
+                                    Property="Background"
+                                    Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Chrome"
+                                    Property="Background"
+                                    Value="{DynamicResource ControlFillColorTertiaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style x:Key="EncoreClipIconStyle" TargetType="Path">
-        <Setter Property="Width" Value="16" /><Setter Property="Height" Value="16" /><Setter Property="Stretch" Value="Uniform" />
-        <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" /><Setter Property="StrokeThickness" Value="1.5" />
-        <Setter Property="StrokeStartLineCap" Value="Round" /><Setter Property="StrokeEndLineCap" Value="Round" /><Setter Property="StrokeLineJoin" Value="Round" />
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+        <Setter Property="StrokeThickness" Value="1.5" />
+        <Setter Property="StrokeStartLineCap" Value="Round" />
+        <Setter Property="StrokeEndLineCap" Value="Round" />
+        <Setter Property="StrokeLineJoin" Value="Round" />
     </Style>
     <Style x:Key="EncoreClipPreviewButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipButtonStyle}">
-        <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
     </Style>
     <Style x:Key="EncoreClipPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipButtonStyle}">
-        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" /><Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" /><Setter Property="FontWeight" Value="Medium" /><Setter Property="Padding" Value="14,9" />
-        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-            <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
-            <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.94" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers>
-        </ControlTemplate></Setter.Value></Setter>
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Padding" Value="14,9" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Opacity" Value="0.94" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter Property="Opacity" Value="0.8" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style x:Key="EncoreClipJoinedButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipPrimaryButtonStyle}">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" CornerRadius="6,0,0,6" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
-        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome"
+                            CornerRadius="6,0,0,6"
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome"
+                                    Property="Background"
+                                    Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter Property="Opacity" Value="0.8" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style x:Key="EncoreClipJoinedArrowButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipPrimaryButtonStyle}">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" CornerRadius="0,6,6,0" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
-        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome"
+                            CornerRadius="0,6,6,0"
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome"
+                                    Property="Background"
+                                    Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter Property="Opacity" Value="0.8" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style x:Key="EncoreClipInputStyle" TargetType="TextBox">
-        <Setter Property="FontFamily" Value="Segoe UI" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" /><Setter Property="Typography.NumeralAlignment" Value="Tabular" />
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" /><Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Padding" Value="10,8" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,8" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
-        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="Chrome" CornerRadius="6" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ScrollViewer x:Name="PART_ContentHost" Padding="0" Margin="0" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers>
-            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
-        </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Chrome"
+                            CornerRadius="6"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer x:Name="PART_ContentHost"
+                                      Padding="0"
+                                      Margin="0"
+                                      VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Chrome"
+                                    Property="BorderBrush"
+                                    Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
-    <Style x:Key="EncoreClipTimeInputStyle" TargetType="TextBox" BasedOn="{StaticResource EncoreClipInputStyle}"><Setter Property="Width" Value="115" /><Setter Property="Height" Value="34" /><Setter Property="MinHeight" Value="0" /><Setter Property="Padding" Value="8,7" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" /></Style>
-    <Style x:Key="EncoreClipTimeGroupStyle" TargetType="Border"><Setter Property="CornerRadius" Value="6" /><Setter Property="BorderThickness" Value="1" /><Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" /><Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" /><Style.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></Style.Triggers></Style>
-    <Style x:Key="EncoreClipMenuStyle" TargetType="ContextMenu"><Setter Property="OverridesDefaultStyle" Value="True" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu"><Border Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="9" Padding="5"><Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.2" /></Border.Effect><StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" /></Border></ControlTemplate></Setter.Value></Setter></Style>
-
+    <Style x:Key="EncoreClipTimeInputStyle" TargetType="TextBox" BasedOn="{StaticResource EncoreClipInputStyle}">
+        <Setter Property="Width" Value="115" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="8,7" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style x:Key="EncoreClipTimeGroupStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        <Style.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="EncoreClipMenuStyle" TargetType="ContextMenu">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="9"
+                            Padding="5">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.2" />
+                        </Border.Effect>
+                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
     <!-- Scoped by the creator's embedded PlayerView resources; ordinary players keep their templates. -->
     <ControlTemplate x:Key="EncoreClipPlaybackTemplate" TargetType="ButtonBase">
         <Border x:Name="Chrome" CornerRadius="6" Background="{TemplateBinding Background}">
-            <Path x:Name="Icon" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
-                  Stroke="{TemplateBinding Foreground}" StrokeThickness="1.4" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+            <Path x:Name="Icon"
+                  Width="16"
+                  Height="16"
+                  Stretch="Uniform"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Stroke="{TemplateBinding Foreground}"
+                  StrokeThickness="1.4"
+                  StrokeLineJoin="Round"
+                  StrokeStartLineCap="Round"
+                  StrokeEndLineCap="Round"
                   Data="M 3,1 L 14,8 L 3,15 Z" />
         </Border>
         <ControlTemplate.Triggers>
-            <Trigger Property="Content" Value="&#xE769;"><Setter TargetName="Icon" Property="Data" Value="M 5,1 L 5,15 M 11,1 L 11,15" /></Trigger>
-            <Trigger Property="Content" Value="&#xE767;"><Setter TargetName="Icon" Property="Data" Value="M 1,6 L 4,6 L 8,2 L 8,14 L 4,10 L 1,10 Z M 11,5 C 14,6 14,10 11,11 M 13,2 C 18,5 18,11 13,14" /></Trigger>
-            <Trigger Property="Content" Value="&#xE74F;"><Setter TargetName="Icon" Property="Data" Value="M 1,6 L 4,6 L 8,2 L 8,14 L 4,10 L 1,10 Z M 11,5 L 16,11 M 16,5 L 11,11" /></Trigger>
-            <Trigger Property="Content" Value="&#xE713;"><Setter TargetName="Icon" Property="Data" Value="M 6,1 L 10,1 L 10.5,3 L 12,4 L 14,3.5 L 16,7 L 14.5,8 L 14.5,10 L 16,11 L 14,14.5 L 12,14 L 10.5,15 L 10,17 L 6,17 L 5.5,15 L 4,14 L 2,14.5 L 0,11 L 1.5,10 L 1.5,8 L 0,7 L 2,3.5 L 4,4 L 5.5,3 Z M 11,9 A 3,3 0 1 0 5,9 A 3,3 0 1 0 11,9" /></Trigger>
-            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" /></Trigger>
-            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" /></Trigger>
-            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+            <Trigger Property="Content" Value="&#xE769;">
+                <Setter TargetName="Icon" Property="Data" Value="M 5,1 L 5,15 M 11,1 L 11,15" />
+            </Trigger>
+            <Trigger Property="Content" Value="&#xE767;">
+                <Setter TargetName="Icon"
+                        Property="Data"
+                        Value="M 1,6 L 4,6 L 8,2 L 8,14 L 4,10 L 1,10 Z M 11,5 C 14,6 14,10 11,11 M 13,2 C 18,5 18,11 13,14" />
+            </Trigger>
+            <Trigger Property="Content" Value="&#xE74F;">
+                <Setter TargetName="Icon"
+                        Property="Data"
+                        Value="M 1,6 L 4,6 L 8,2 L 8,14 L 4,10 L 1,10 Z M 11,5 L 16,11 M 16,5 L 11,11" />
+            </Trigger>
+            <Trigger Property="Content" Value="&#xE713;">
+                <Setter TargetName="Icon"
+                        Property="Data"
+                        Value="M 6,1 L 10,1 L 10.5,3 L 12,4 L 14,3.5 L 16,7 L 14.5,8 L 14.5,10 L 16,11 L 14,14.5 L 12,14 L 10.5,15
+                               L 10,17 L 6,17 L 5.5,15 L 4,14 L 2,14.5 L 0,11 L 1.5,10 L 1.5,8 L 0,7 L 2,3.5 L 4,4 L 5.5,3 Z M 11,9
+                               A 3,3 0 1 0 5,9 A 3,3 0 1 0 11,9" />
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Chrome"
+                        Property="Background"
+                        Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Chrome"
+                        Property="Background"
+                        Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
     <!-- The clip creator uses the same semantic tokens in both looks. -->
@@ -150,7 +385,8 @@
             <MultiDataTrigger>
                 <MultiDataTrigger.Conditions>
                     <Condition Binding="{Binding IsFocused}" Value="True" />
-                    <Condition Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
+                    <Condition Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                               Value="True" />
                 </MultiDataTrigger.Conditions>
                 <Setter Property="Visibility" Value="Visible" />
             </MultiDataTrigger>
@@ -397,7 +633,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Chrome" Background="{DynamicResource SubtleFillColorTransparentBrush}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}">
+                    <Border x:Name="Chrome"
+                            Background="{DynamicResource SubtleFillColorTransparentBrush}"
+                            CornerRadius="{DynamicResource EncoreSmallCornerRadius}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -437,8 +675,12 @@
         <Setter Property="Padding" Value="16,10,16,6" />
         <Style.Triggers>
             <DataTrigger Binding="{Binding IsClipEditor, RelativeSource={RelativeSource AncestorType=local:PlayerView}}" Value="True">
-                <Setter Property="Grid.Row" Value="0" /><Setter Property="VerticalAlignment" Value="Bottom" /><Setter Property="HorizontalAlignment" Value="Right" />
-                <Setter Property="Margin" Value="10" /><Setter Property="Padding" Value="4" /><Setter Property="CornerRadius" Value="6" />
+                <Setter Property="Grid.Row" Value="0" />
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="Margin" Value="10" />
+                <Setter Property="Padding" Value="4" />
+                <Setter Property="CornerRadius" Value="6" />
             </DataTrigger>
             <!-- Full screen: the bar over the video's bottom edge. -->
             <DataTrigger Binding="{Binding IsFullScreen}" Value="True">
@@ -545,10 +787,14 @@
         <Grid Background="Transparent">
             <Track x:Name="PART_Track">
                 <Track.DecreaseRepeatButton>
-                    <RepeatButton Background="{TemplateBinding Foreground}" Command="Slider.DecreaseLarge" Style="{StaticResource EncorePlayerLineStyle}" />
+                    <RepeatButton Background="{TemplateBinding Foreground}"
+                                  Command="Slider.DecreaseLarge"
+                                  Style="{StaticResource EncorePlayerLineStyle}" />
                 </Track.DecreaseRepeatButton>
                 <Track.IncreaseRepeatButton>
-                    <RepeatButton Background="{TemplateBinding BorderBrush}" Command="Slider.IncreaseLarge" Style="{StaticResource EncorePlayerLineStyle}" />
+                    <RepeatButton Background="{TemplateBinding BorderBrush}"
+                                  Command="Slider.IncreaseLarge"
+                                  Style="{StaticResource EncorePlayerLineStyle}" />
                 </Track.IncreaseRepeatButton>
                 <Track.Thumb>
                     <Thumb Style="{StaticResource EncorePlayerThumbStyle}" />
@@ -592,18 +838,28 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
-                    <Border x:Name="Fill" Background="{TemplateBinding Background}"
-                            CornerRadius="{DynamicResource ControlCornerRadius}" Padding="{TemplateBinding Padding}">
+                    <Border x:Name="Fill"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{DynamicResource ControlCornerRadius}"
+                            Padding="{TemplateBinding Padding}">
                         <Grid VerticalAlignment="Center">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"
+                            <ContentPresenter ContentSource="Header"
+                                              RecognizesAccessKey="True"
                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
-                            <Path x:Name="Check" Grid.Column="1" Width="12" Height="10" Margin="16,0,0,0"
-                                  VerticalAlignment="Center" Stretch="Uniform" Data="M 0,5 L 4,9 L 12,0"
-                                  Stroke="{DynamicResource AccentTextFillColorPrimaryBrush}" StrokeThickness="2"
+                            <Path x:Name="Check"
+                                  Grid.Column="1"
+                                  Width="12"
+                                  Height="10"
+                                  Margin="16,0,0,0"
+                                  VerticalAlignment="Center"
+                                  Stretch="Uniform"
+                                  Data="M 0,5 L 4,9 L 12,0"
+                                  Stroke="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                  StrokeThickness="2"
                                   Visibility="Hidden" />
                         </Grid>
                     </Border>
@@ -626,5 +882,9 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="EncoreClipMenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource EncorePlayerMenuItemStyle}"><Setter Property="Padding" Value="11" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="Normal" /></Style>
+    <Style x:Key="EncoreClipMenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource EncorePlayerMenuItemStyle}">
+        <Setter Property="Padding" Value="11" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
 </ResourceDictionary>
