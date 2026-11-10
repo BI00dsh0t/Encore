@@ -54,7 +54,6 @@ public sealed class TrackMixer
         _mix = new float[ChunkFrames * Channels];
     }
 
-    /// <summary>The number of inputs.</summary>
     public int Inputs => _inputs.Length;
 
     /// <summary>Frames written to the output so far.</summary>
