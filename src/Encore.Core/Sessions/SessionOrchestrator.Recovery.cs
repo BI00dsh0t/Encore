@@ -116,7 +116,11 @@ public sealed partial class SessionOrchestrator
     {
         session.Retry?.Dispose();
         var id = session.Id;
-        session.Retry = new Timer(_ => Post(new RetryDeviceRecovery(id)), null, _deviceRecovery.RetryEvery ?? DeviceRecovery.DefaultRetryEvery, System.Threading.Timeout.InfiniteTimeSpan);
+        session.Retry = new Timer(
+            _ => Post(new RetryDeviceRecovery(id)),
+            null,
+            _deviceRecovery.RetryEvery ?? DeviceRecovery.DefaultRetryEvery,
+            System.Threading.Timeout.InfiniteTimeSpan);
     }
 
     /// <summary>Recovery took too long: the game session ends and stays off until the Target's process changes.</summary>
@@ -131,9 +135,10 @@ public sealed partial class SessionOrchestrator
         }
         else
         {
-            message = session.Resuming
-                ? $"Encore couldn't restart capture within {after:0} s of the PC waking; Clips are off until your next game ({failure.Message})"
-                : $"Encore couldn't recover from a graphics driver reset within {after:0} s; Clips are off until your next game ({failure.Message})";
+            var what = session.Resuming
+                ? $"restart capture within {after:0} s of the PC waking"
+                : $"recover from a graphics driver reset within {after:0} s";
+            message = $"Encore couldn't {what}; Clips are off until your next game ({failure.Message})";
             _gpuStoppedPid = session.Spec.Target.ProcessId;
             EndActive("gpu reset failed", new ErrorCodeException(ErrorCodes.GpuResetFailed, message, failure));
         }
@@ -203,7 +208,9 @@ public sealed partial class SessionOrchestrator
 
         if (ran)
         {
-            _recordings?.Warn?.Invoke(ErrorCodes.RecordingSuspended, "The PC went to sleep; the Recording ended at its last fragment and isn't restarted");
+            _recordings?.Warn?.Invoke(
+                ErrorCodes.RecordingSuspended,
+                "The PC went to sleep; the Recording ended at its last fragment and isn't restarted");
         }
 
         if (_active is not { Suspended: false } active)

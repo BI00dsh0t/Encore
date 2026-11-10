@@ -32,7 +32,13 @@ public sealed partial class LibraryActor
     }
 
     /// <summary>Whether a command's identity matches the item and the file on disk; a stale one is refused and refreshed.</summary>
-    private bool TryMatch(string? path, long size, DateTimeOffset? modified, TaskCompletionSource done, out string key, out LibraryItem item)
+    private bool TryMatch(
+        string? path,
+        long size,
+        DateTimeOffset? modified,
+        TaskCompletionSource done,
+        out string key,
+        out LibraryItem item)
     {
         if (!TryItem(path, out key, out var found)
             || found.Size != size
@@ -46,41 +52,45 @@ public sealed partial class LibraryActor
         item = found;
 
         // Being written: the writer owns the file, so only the index is compared.
-        if (item.BeingWritten)
+        if (item.BeingWritten || MatchesDisk(key, item))
         {
             return true;
         }
 
+        Refuse(done, path);
+        return false;
+    }
+
+    // Whether the file on disk is still the item's; a missing file is checked later, and a changed one refreshes the item.
+    private bool MatchesDisk(string key, LibraryItem item)
+    {
         var full = Path.Combine(_folder, key);
         var file = new FileInfo(full);
         if (!file.Exists)
         {
             _pending.Add(full);
-            Refuse(done, path);
             return false;
         }
 
         var onDisk = LibraryFiles.Utc(file.LastWriteTimeUtc);
-        if (file.Length != item.Size || onDisk != item.Modified)
+        if (file.Length == item.Size && onDisk == item.Modified)
         {
-            var resized = file.Length != item.Size;
-            item = item with { Size = file.Length, Modified = onDisk, LengthSeconds = resized ? null : item.LengthSeconds };
-            if (resized)
-            {
-                _index.ForgetLength(key);
-            }
-
-            _index.Change(item);
-            if (resized)
-            {
-                QueueLength(key);
-            }
-
-            Refuse(done, path);
-            return false;
+            return true;
         }
 
-        return true;
+        var resized = file.Length != item.Size;
+        if (resized)
+        {
+            _index.ForgetLength(key);
+        }
+
+        _index.Change(item with { Size = file.Length, Modified = onDisk, LengthSeconds = resized ? null : item.LengthSeconds });
+        if (resized)
+        {
+            QueueLength(key);
+        }
+
+        return false;
     }
 
     /// <summary>The indexed item a command's relative path names.</summary>

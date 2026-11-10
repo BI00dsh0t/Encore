@@ -7,7 +7,13 @@ namespace Encore.Core.Library;
 internal static class CleanupPlanner
 {
     /// <summary>The oldest items to delete so the Library is within its limits. Rules: docs/code-notes.md.</summary>
-    public static CleanupPlan Plan(DateTimeOffset now, CleanupSettings limits, IEnumerable<LibraryItem> items, string folder, IReadOnlySet<string> skip, Func<string, bool> inside)
+    public static CleanupPlan Plan(
+        DateTimeOffset now,
+        CleanupSettings limits,
+        IEnumerable<LibraryItem> items,
+        string folder,
+        IReadOnlySet<string> skip,
+        Func<string, bool> inside)
     {
         ArgumentNullException.ThrowIfNull(inside);
         ArgumentNullException.ThrowIfNull(limits);
@@ -19,24 +25,13 @@ internal static class CleanupPlanner
         }
 
         var all = items.ToList();
-        var total = all.Sum(i => i.Size);
-        var skipped = false;
-        var candidates = new List<LibraryItem>();
-        foreach (var item in all.Where(i => !i.BeingWritten && !i.Favourite && Inside(folder, i.Path)))
-        {
-            if (skip.Contains(item.Path))
-            {
-                skipped = true;
-            }
-            else
-            {
-                candidates.Add(item);
-            }
-        }
+        var total = all.Sum(item => item.Size);
+        var candidates = all.Where(item => !item.BeingWritten && !item.Favourite && Inside(folder, item.Path)).ToList();
+        var skipped = candidates.RemoveAll(item => skip.Contains(item.Path)) > 0;
 
         var delete = new List<LibraryItem>();
         var bytes = 0L;
-        foreach (var item in candidates.OrderBy(i => i.Date).ThenBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
+        foreach (var item in candidates.OrderBy(item => item.Date).ThenBy(item => item.Path, StringComparer.OrdinalIgnoreCase))
         {
             var overSize = limits.MaxBytes is { } maxBytes && total > maxBytes;
             var overAge = limits.MaxAgeSeconds is { } maxAge && (now - item.Date).TotalSeconds > maxAge;

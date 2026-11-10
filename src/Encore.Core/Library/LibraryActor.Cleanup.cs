@@ -232,7 +232,9 @@ public sealed partial class LibraryActor
 
         if (!Inside(full))
         {
-            Log($"Cleanup skipped {key}: it is reached through a junction or symbolic link, or its final path isn't in the Output Folder.");
+            Log(
+                $"Cleanup skipped {key}: it is reached through a junction or symbolic link, "
+                + "or its final path isn't in the Output Folder.");
             return false;
         }
 

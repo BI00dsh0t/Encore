@@ -113,18 +113,38 @@ public static class Mp4File
     public static FragmentDurationPatch? PlanFragmentDuration(ReadOnlySpan<byte> header, long durationUs)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(durationUs);
-        if (FindChild(header, 0, header.Length, Moov) is not { } moov)
+        if (FindChild(header, 0, header.Length, Moov) is not { } moov
+            || MovieBoxes(header, moov.Start + moov.HeaderSize, moov.End) is not var (mvhd, mvex, udta)
+            || Timescale(header, mvhd) is not { } timescale)
         {
             return null;
         }
 
+        var udtaSize = udta.End - udta.Start;
+        if (udtaSize < MehdSize || udtaSize is > MehdSize and < MehdSize + 8)
+        {
+            return null;
+        }
+
+        var duration = (ulong)(((UInt128)(ulong)durationUs * timescale + 999_999) / 1_000_000);
+        var mvexSize = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(mvexSize, (uint)(mvex.End - mvex.Start + MehdSize));
+        return new FragmentDurationPatch(udta.Start, MehdAndFree(udtaSize, duration), mvex.Start, mvexSize, duration, timescale);
+    }
+
+    /// <summary>The movie box's mvhd, its mvex and the udta right after that; null unless all are there, laid out as expected.</summary>
+    private static ((int Start, int End) Mvhd, (int Start, int End) Mvex, (int Start, int End) Udta)? MovieBoxes(
+        ReadOnlySpan<byte> header,
+        int start,
+        int end)
+    {
         (int Start, int End)? mvhd = null;
         (int Start, int End)? mvex = null;
         (int Start, int End)? afterMvex = null;
-        var position = moov.Start + moov.HeaderSize;
-        while (position < moov.End)
+        var position = start;
+        while (position < end)
         {
-            if (Box(header, position, moov.End) is not { } child)
+            if (Box(header, position, end) is not { } child)
             {
                 return null;
             }
@@ -161,26 +181,25 @@ public static class Mp4File
             position = child.End;
         }
 
-        if (mvhd is not { } m || mvex is not { } x || afterMvex is not { } udta)
+        return mvhd is { } foundMvhd && mvex is { } foundMvex && afterMvex is { } udta ? (foundMvhd, foundMvex, udta) : null;
+    }
+
+    // mvhd: version and flags, then creation and modification times (32 or 64 bits), then the timescale. Null when it has none.
+    private static uint? Timescale(ReadOnlySpan<byte> header, (int Start, int End) mvhd)
+    {
+        var at = mvhd.End - mvhd.Start > 8 ? mvhd.Start + (header[mvhd.Start + 8] == 1 ? 28 : 20) : mvhd.End;
+        if (at + 4 > mvhd.End)
         {
             return null;
         }
 
-        // mvhd: version and flags, then creation and modification times (32 or 64 bits), then the timescale.
-        var timescaleAt = m.End - m.Start > 8 ? m.Start + (header[m.Start + 8] == 1 ? 28 : 20) : m.End;
-        if (timescaleAt + 4 > m.End)
-        {
-            return null;
-        }
+        var timescale = BinaryPrimitives.ReadUInt32BigEndian(header[at..]);
+        return timescale == 0 ? null : timescale;
+    }
 
-        var timescale = BinaryPrimitives.ReadUInt32BigEndian(header[timescaleAt..]);
-        var udtaSize = udta.End - udta.Start;
-        if (timescale == 0 || udtaSize < MehdSize || udtaSize is > MehdSize and < MehdSize + 8)
-        {
-            return null;
-        }
-
-        var duration = (ulong)(((UInt128)(ulong)durationUs * timescale + 999_999) / 1_000_000);
+    // The mehd box that takes the udta's place, and a free box for the bytes left over.
+    private static byte[] MehdAndFree(int udtaSize, ulong duration)
+    {
         var mehdAndFree = new byte[udtaSize == MehdSize ? MehdSize : MehdSize + 8];
         BinaryPrimitives.WriteUInt32BigEndian(mehdAndFree, MehdSize);
         BinaryPrimitives.WriteUInt32BigEndian(mehdAndFree.AsSpan(4), Mehd);
@@ -192,9 +211,7 @@ public static class Mp4File
             BinaryPrimitives.WriteUInt32BigEndian(mehdAndFree.AsSpan(MehdSize + 4), Free);
         }
 
-        var mvexSize = new byte[4];
-        BinaryPrimitives.WriteUInt32BigEndian(mvexSize, (uint)(x.End - x.Start + MehdSize));
-        return new FragmentDurationPatch(udta.Start, mehdAndFree, x.Start, mvexSize, duration, timescale);
+        return mehdAndFree;
     }
 
     /// <summary>The first box of a type among those that tile the given byte range, or null.</summary>

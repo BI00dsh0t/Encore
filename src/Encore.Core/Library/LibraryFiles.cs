@@ -21,7 +21,14 @@ internal static class LibraryFiles
     {
         var separator = key.IndexOf(Path.DirectorySeparatorChar, StringComparison.Ordinal);
         var profileId = separator > 0 ? profileForFolder(key[..separator]) : null;
-        return new LibraryItem(key, profileId, file.Length, new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero), false, Modified: Utc(file.LastWriteTimeUtc), Kind: ScannedKind(key));
+        return new LibraryItem(
+            key,
+            profileId,
+            file.Length,
+            new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero),
+            false,
+            Modified: Utc(file.LastWriteTimeUtc),
+            Kind: ScannedKind(key));
     }
 
     /// <summary>A scanned file's kind: a Monitor Recording when it is in that folder; otherwise unknown.</summary>
@@ -52,15 +59,17 @@ internal static class LibraryFiles
         var files = new List<string>();
         try
         {
-            if (Directory.Exists(folder))
+            if (!Directory.Exists(folder))
             {
-                foreach (var path in Directory.EnumerateFiles(folder, "*" + extension, Recursive))
+                return files;
+            }
+
+            foreach (var path in Directory.EnumerateFiles(folder, "*" + extension, Recursive))
+            {
+                // The pattern alone would also match a longer extension on some file systems.
+                if (string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase))
                 {
-                    // The pattern alone would also match a longer extension on some file systems.
-                    if (string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase))
-                    {
-                        files.Add(path);
-                    }
+                    files.Add(path);
                 }
             }
         }

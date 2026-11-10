@@ -14,7 +14,7 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
     public static SessionAudio OnePerDevice(IReadOnlyList<SessionAudioDevice> devices)
     {
         ArgumentNullException.ThrowIfNull(devices);
-        return new SessionAudio(devices, [.. devices.Select((d, i) => new SessionTrack(d.FriendlyName, [i]))]);
+        return new SessionAudio(devices, [.. devices.Select((device, index) => new SessionTrack(device.FriendlyName, [index]))]);
     }
 
     /// <summary>The session audio of a Track Layout; throws when a Track names a device key the layout lacks.</summary>
@@ -28,8 +28,8 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
         }
 
         // Any key naming an endpoint and flow as a mic makes that device a mic.
-        bool IsMic(LayoutDevice device) => layout.Devices.Any(d =>
-            d.IsMic && AudioEndpointMatch.Same(d.EndpointId, d.Flow, device.EndpointId, device.Flow));
+        bool IsMic(LayoutDevice device) => layout.Devices.Any(other =>
+            other.IsMic && AudioEndpointMatch.Same(other.EndpointId, other.Flow, device.EndpointId, device.Flow));
 
         var devices = new List<SessionAudioDevice>();
         var tracks = new List<SessionTrack>();
@@ -40,10 +40,12 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
             {
                 if (!byKey.TryGetValue(key, out var device))
                 {
-                    throw new ErrorCodeException(ErrorCodes.InvalidArguments, $"Track '{track.Name}' names device {key}, which the layout doesn't hold.");
+                    throw new ErrorCodeException(
+                        ErrorCodes.InvalidArguments,
+                        $"Track '{track.Name}' names device {key}, which the layout doesn't hold.");
                 }
 
-                var index = devices.FindIndex(d => AudioEndpointMatch.Same(d.EndpointId, d.Flow, device.EndpointId, device.Flow));
+                var index = devices.FindIndex(held => AudioEndpointMatch.Same(held.EndpointId, held.Flow, device.EndpointId, device.Flow));
                 if (index < 0)
                 {
                     index = devices.Count;
@@ -66,11 +68,11 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
     /// <summary>The first Track that mixes device <paramref name="device"/>, or -1.</summary>
     public int FirstTrackOf(int device)
     {
-        for (var t = 0; t < Tracks.Count; t++)
+        for (var track = 0; track < Tracks.Count; track++)
         {
-            if (Tracks[t].DeviceIndexes.Contains(device))
+            if (Tracks[track].DeviceIndexes.Contains(device))
             {
-                return t;
+                return track;
             }
         }
 
@@ -80,6 +82,6 @@ public sealed record SessionAudio(IReadOnlyList<SessionAudioDevice> Devices, IRe
     /// <summary>The pairs of a <c>muteAffected</c> Track and a Mic Device that mic mute silences, in Track then device order.</summary>
     public IEnumerable<(SessionTrack Track, SessionAudioDevice Device)> GatedMicInputs() =>
         Tracks
-            .Where(t => t.MuteAffected)
-            .SelectMany(t => t.DeviceIndexes.Where(i => Devices[i].IsMic).Select(i => (t, Devices[i])));
+            .Where(track => track.MuteAffected)
+            .SelectMany(track => track.DeviceIndexes.Where(index => Devices[index].IsMic).Select(index => (track, Devices[index])));
 }

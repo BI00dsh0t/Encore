@@ -17,7 +17,10 @@ internal static class LibraryIndexFile
     }
 
     /// <summary>The saved entries from <c>library.json</c>, else its backup; corrupt when neither parses and one exists.</summary>
-    public static (Dictionary<string, LibraryFileEntry> Entries, bool Corrupt) Read(string libraryFile, string folder, Action<Exception> failed)
+    public static (Dictionary<string, LibraryFileEntry> Entries, bool Corrupt) Read(
+        string libraryFile,
+        string folder,
+        Action<Exception> failed)
     {
         var entries = new Dictionary<string, LibraryFileEntry>(StringComparer.OrdinalIgnoreCase);
         var main = TryRead(libraryFile, failed, out var document);
@@ -48,7 +51,7 @@ internal static class LibraryIndexFile
         }
 
         // The deserializer doesn't check list elements, so a hand-edited null is skipped.
-        foreach (var entry in document.Items.Where(e => e is not null))
+        foreach (var entry in document.Items.Where(saved => saved is not null))
         {
             entries[entry.Path] = entry;
         }

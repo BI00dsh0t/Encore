@@ -1,6 +1,6 @@
 namespace Encore.Core.Sessions;
 
-/// <summary>One kind of Recording, a game's or the Monitor's: the one running and the one a restart ended. Orchestrator thread only.</summary>
+/// <summary>A game's or the Monitor's Recordings: the one running, and the one a restart ended. Orchestrator thread only.</summary>
 internal sealed class RecordingSlot
 {
     /// <summary>The Recording started and not yet posted back; null when none runs.</summary>
@@ -14,7 +14,7 @@ internal sealed class RecordingSlot
 
     public void Start(RecordingRun recording) => Running = recording;
 
-    /// <summary>An encoder restart ended the running Recording: it finishes as the ending one. False while the last restart's still is.</summary>
+    /// <summary>An encoder restart ended the running Recording, which becomes the ending one; false while one is still ending.</summary>
     public bool TryMoveRunningToEnding()
     {
         if (Ending is not null || Running is null)

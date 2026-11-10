@@ -7,12 +7,15 @@ namespace Encore.Core.Monitors;
 public static class MonitorScreens
 {
     /// <summary>The attached screens to record, the primary first; ids and names match ignoring case. docs/code-notes.md.</summary>
-    public static ResolvedScreens Resolve(MonitorRecordingScreens? screens, string? legacyDeviceName, IReadOnlyList<DisplayMonitor> attached)
+    public static ResolvedScreens Resolve(
+        MonitorRecordingScreens? screens,
+        string? legacyDeviceName,
+        IReadOnlyList<DisplayMonitor> attached)
     {
         if (screens is null)
         {
-            var legacy = (legacyDeviceName is null ? null : attached.FirstOrDefault(m => Same(m.DeviceName, legacyDeviceName)))
-                ?? attached.FirstOrDefault(m => m.Primary)
+            var legacy = (legacyDeviceName is null ? null : attached.FirstOrDefault(monitor => Same(monitor.DeviceName, legacyDeviceName)))
+                ?? attached.FirstOrDefault(monitor => monitor.Primary)
                 ?? attached.FirstOrDefault();
             return new ResolvedScreens(legacy is null ? [] : [legacy], []);
         }
@@ -26,8 +29,8 @@ public static class MonitorScreens
         var missing = new List<string>();
         foreach (var id in screens.Monitors ?? [])
         {
-            var match = attached.FirstOrDefault(m => m.MonitorId is { } monitorId && Same(monitorId, id))
-                ?? attached.FirstOrDefault(m => Same(m.DeviceName, id));
+            var match = attached.FirstOrDefault(monitor => monitor.MonitorId is { } monitorId && Same(monitorId, id))
+                ?? attached.FirstOrDefault(monitor => Same(monitor.DeviceName, id));
             if (match is null)
             {
                 missing.Add(id);

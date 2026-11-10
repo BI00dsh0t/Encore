@@ -115,7 +115,8 @@ public sealed partial class SessionOrchestrator
             var snapshot = SettingsResolver.Resolve(document, profileId);
             if (ChainKey.Of(SessionKind.Game, active.Spec.Target, snapshot) != ChainKey.Of(active.Spec))
             {
-                recordings.Info?.Invoke("The profile's video or Tracks differ from the game session's; the Recording shares the session's");
+                recordings.Info?.Invoke(
+                    "The profile's video or Tracks differ from the game session's; the Recording shares the session's");
             }
 
             var folder = snapshot.OutputFolder ?? recordings.DefaultOutputFolder();
@@ -364,7 +365,8 @@ public sealed partial class SessionOrchestrator
         var every = recordings.RingRecheck ?? Recordings.DefaultRingRecheck;
         _ringTimer = new Timer(_ => Post(new RingRecheck()), null, every, every);
         recordings.ReplayDiskFull?.Invoke(true);
-        recordings.Info?.Invoke($"The disk filled during the Recording at {recording.Path}; Clips stopped and start again once the cache folder fits");
+        recordings.Info?.Invoke(
+            $"The disk filled during the Recording at {recording.Path}; Clips stopped and start again once the cache folder fits");
     }
 
     /// <summary>A recheck after a full disk: Rewind restarts on the Target once its ring fits, or the wait ends with the Target.</summary>

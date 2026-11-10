@@ -200,7 +200,7 @@ public sealed partial class RingGenerations : IDisposable
         }
     }
 
-    /// <summary>The generation a time range is cut from, and the range cut there; null when none starts before its end. Under the lock.</summary>
+    /// <summary>Which generation a time range is cut from, and where; null when none starts before its end. Under the lock.</summary>
     private CutRange? RangeFor(long fromUs, long toUs)
     {
         for (var i = _generations.Count - 1; i >= 0; i--)

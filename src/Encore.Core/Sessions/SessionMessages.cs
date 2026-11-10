@@ -8,7 +8,11 @@ namespace Encore.Core.Sessions;
 public abstract record SessionMessage;
 
 /// <summary>Starts a session; replies with it, or fails with <see cref="ErrorCodes.SessionRunning"/> or the factory's failure.</summary>
-public sealed record StartSession(SessionKind Kind, CaptureTarget Target, SessionAudio Audio, TaskCompletionSource<RunningSession> Reply) : SessionMessage;
+public sealed record StartSession(
+    SessionKind Kind,
+    CaptureTarget Target,
+    SessionAudio Audio,
+    TaskCompletionSource<RunningSession> Reply) : SessionMessage;
 
 /// <summary>Moves the running session to another window of its process; replies with the updated spec, or fails.</summary>
 public sealed record RetargetSession(CaptureTarget Target, TaskCompletionSource<SessionSpec> Reply) : SessionMessage;

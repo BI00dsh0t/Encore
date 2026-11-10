@@ -36,7 +36,7 @@ public static class PathNames
             safe = safe[..MaxLength].TrimEnd('.', ' ');
         }
 
-        if (safe.Length == 0 || safe.All(c => c == '_'))
+        if (safe.Length == 0 || safe.All(character => character == '_'))
         {
             return fallback;
         }

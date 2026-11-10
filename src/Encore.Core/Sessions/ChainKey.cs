@@ -66,5 +66,8 @@ public sealed record ChainKey(SessionKind Kind, int ProcessId, VideoSettings Vid
         kind,
         target.ProcessId,
         video,
-        [.. audio.Tracks.Select(t => new ChainTrack(t.Name, [.. t.DeviceIndexes.Select(i => new ChainDevice(audio.Devices[i].EndpointId, audio.Devices[i].Flow))]))]);
+        [.. audio.Tracks.Select(track => new ChainTrack(track.Name, [.. track.DeviceIndexes.Select(index => Device(audio, index))]))]);
+
+    private static ChainDevice Device(SessionAudio audio, int index) =>
+        new(audio.Devices[index].EndpointId, audio.Devices[index].Flow);
 }

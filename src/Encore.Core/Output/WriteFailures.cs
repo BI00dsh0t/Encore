@@ -15,7 +15,10 @@ public static class WriteFailures
         ArgumentNullException.ThrowIfNull(e);
         return e switch
         {
-            ErrorCodeException { Code: ErrorCodes.ClipTooShort or ErrorCodes.SaveBusy or ErrorCodes.DiskFull or ErrorCodes.AccessDenied } coded => coded.Code,
+            ErrorCodeException
+            {
+                Code: ErrorCodes.ClipTooShort or ErrorCodes.SaveBusy or ErrorCodes.DiskFull or ErrorCodes.AccessDenied,
+            } coded => coded.Code,
             ErrorCodeException => ErrorCodes.SaveFailed,
             IOException { HResult: DiskFullHResult or HandleDiskFullHResult } => ErrorCodes.DiskFull,
             UnauthorizedAccessException => ErrorCodes.AccessDenied,

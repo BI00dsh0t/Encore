@@ -34,7 +34,7 @@ public sealed partial class SessionOrchestrator
         }
     }
 
-    /// <summary>The Target becomes another game, or none: waits tied to the old one end, its session ends, and the new one starts.</summary>
+    /// <summary>The Target becomes another game, or none: the old one's waits and its session end, and the new one starts.</summary>
     private void SwitchTarget(TargetCandidate? current, TargetCandidate? to, TargetChangeReason reason)
     {
         _target = to;
@@ -252,24 +252,8 @@ public sealed partial class SessionOrchestrator
             return;
         }
 
-        try
+        if (!TryRetarget(active, wait, target, found.Window))
         {
-            active.Session.Retarget(new CaptureTarget(target.ProcessId, found.Window, target.ProfileId));
-        }
-        catch (ErrorCodeException e) when (e.Code == ErrorCodes.SessionNotRunning)
-        {
-            // It had already stopped itself (its post-back is still queued): start again.
-            EndActive("retarget after stop", failure: null);
-            WaitForCapture(target, e.Message, failed: true);
-            return;
-        }
-        catch (Exception e)
-        {
-            // No capture runs now, but the session and its Rewind go on: try again later.
-            active.FollowFailures++;
-            active.FollowAfter = Stopwatch.GetTimestamp() + (long)(wait.Backoff(active.FollowFailures).TotalSeconds * Stopwatch.Frequency);
-            active.WindowClosed = true;
-            _captureWait.Begin(target, e.Message);
             return;
         }
 
@@ -281,6 +265,32 @@ public sealed partial class SessionOrchestrator
         if (_captureWait.Target is { } waiting && waiting.ProcessId == target.ProcessId)
         {
             _captureWait.End(captured: true);
+        }
+    }
+
+    // Moves the session to a window; false when it had stopped (it starts again) or the move failed (it is tried later).
+    private bool TryRetarget(Active active, CaptureWait wait, TargetCandidate target, nint window)
+    {
+        try
+        {
+            active.Session.Retarget(new CaptureTarget(target.ProcessId, window, target.ProfileId));
+            return true;
+        }
+        catch (ErrorCodeException e) when (e.Code == ErrorCodes.SessionNotRunning)
+        {
+            // It had already stopped itself (its post-back is still queued): start again.
+            EndActive("retarget after stop", failure: null);
+            WaitForCapture(target, e.Message, failed: true);
+            return false;
+        }
+        catch (Exception e)
+        {
+            // No capture runs now, but the session and its Rewind go on: try again later.
+            active.FollowFailures++;
+            active.FollowAfter = Stopwatch.GetTimestamp() + (long)(wait.Backoff(active.FollowFailures).TotalSeconds * Stopwatch.Frequency);
+            active.WindowClosed = true;
+            _captureWait.Begin(target, e.Message);
+            return false;
         }
     }
 

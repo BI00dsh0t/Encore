@@ -53,11 +53,16 @@ public static class FeedbackSoundSynth
             FeedbackSound.RecordingStopped => [new(0, 0.26, 329.63, Timbre.Chime)],
 
             // Three short 196 Hz pulses.
-            FeedbackSound.DiskFull => [new(0, 0.09, 196, Timbre.Buzz), new(0.15, 0.09, 196, Timbre.Buzz), new(0.30, 0.09, 196, Timbre.Buzz)],
+            FeedbackSound.DiskFull =>
+            [
+                new(0, 0.09, 196, Timbre.Buzz),
+                new(0.15, 0.09, 196, Timbre.Buzz),
+                new(0.30, 0.09, 196, Timbre.Buzz),
+            ],
             _ => throw new ArgumentOutOfRangeException(nameof(sound), sound, null),
         };
 
-        var seconds = notes.Max(n => n.Start + n.Length);
+        var seconds = notes.Max(note => note.Start + note.Length);
         var frames = (int)Math.Ceiling(seconds * SampleRate);
         var mono = new double[frames];
         foreach (var note in notes)

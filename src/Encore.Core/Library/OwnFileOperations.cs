@@ -1,6 +1,6 @@
 namespace Encore.Core.Library;
 
-/// <summary>The paths of the actor's own renames and deletes: the watcher's echo of each is ignored for a few seconds. Actor thread.</summary>
+/// <summary>The paths the actor itself renames or deletes: the watcher's echo of each is ignored for 5 s. Actor thread only.</summary>
 internal sealed class OwnFileOperations(TimeProvider time, Action<string, long> postExpired)
 {
     // How long the watcher's echo of the actor's own file operation is ignored.

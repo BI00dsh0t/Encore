@@ -11,7 +11,11 @@ public sealed partial class SessionOrchestrator
     private RunningSession Start(StartSession start) => Start(start.Kind, start.Target, _ => start.Audio);
 
     /// <summary>The audio comes from the snapshot resolved here; gameName is kept for the session's Clips.</summary>
-    private RunningSession Start(SessionKind kind, CaptureTarget target, Func<EffectiveSettings, SessionAudio> audio, string? gameName = null)
+    private RunningSession Start(
+        SessionKind kind,
+        CaptureTarget target,
+        Func<EffectiveSettings, SessionAudio> audio,
+        string? gameName = null)
     {
         if (_active is not null)
         {
@@ -47,7 +51,8 @@ public sealed partial class SessionOrchestrator
         {
             throw new ErrorCodeException(
                 ErrorCodes.RetargetOtherProcess,
-                $"The window belongs to process {target.ProcessId}, not the session's process {active.Spec.Target.ProcessId}; that is a new session.");
+                $"The window belongs to process {target.ProcessId}, not the session's process {active.Spec.Target.ProcessId}; "
+                + "that is a new session.");
         }
 
         try
@@ -155,7 +160,11 @@ public sealed partial class SessionOrchestrator
         SetState(_state with { Replay = ReplayState.Draining });
         active.Ended.TrySetResult(outcome);
         var id = active.Id;
-        _drainTimer = new Timer(_ => Post(new DrainExpired(id)), null, _clips!.ExitDrain ?? ReplayClips.DefaultExitDrain, System.Threading.Timeout.InfiniteTimeSpan);
+        _drainTimer = new Timer(
+            _ => Post(new DrainExpired(id)),
+            null,
+            _clips!.ExitDrain ?? ReplayClips.DefaultExitDrain,
+            System.Threading.Timeout.InfiniteTimeSpan);
     }
 
     /// <summary>Frees the drained session's Rewind, if any; <see cref="ReplayState.Off"/> unless a session is active.</summary>

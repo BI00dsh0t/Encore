@@ -38,7 +38,7 @@ public static class HotkeyPlan
             {
                 skip = ErrorCodes.HotkeyInactive;
             }
-            else if (taken.Any(t => SameCombination(t, binding)))
+            else if (taken.Any(other => SameCombination(other, binding)))
             {
                 skip = ErrorCodes.HotkeyDuplicate;
             }
@@ -58,7 +58,8 @@ public static class HotkeyPlan
     public static bool IsActive(HotkeyAction action, RecordHotkeyMode mode) => action switch
     {
         HotkeyAction.RecordToggle or HotkeyAction.MonitorRecordToggle => mode == RecordHotkeyMode.Toggle,
-        HotkeyAction.RecordStart or HotkeyAction.RecordStop or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop => mode == RecordHotkeyMode.Separate,
+        HotkeyAction.RecordStart or HotkeyAction.RecordStop or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop =>
+            mode == RecordHotkeyMode.Separate,
         _ => true,
     };
 

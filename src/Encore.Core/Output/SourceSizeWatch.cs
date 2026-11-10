@@ -13,7 +13,14 @@ public sealed class SourceSizeWatch(long qpcFrequency)
     private long _since;
 
     /// <summary>Observes one frame's size against the chain's; returns the size to move to, once, or null.</summary>
-    public (int Width, int Height)? Observe(long qpc, int contentWidth, int contentHeight, int chainWidth, int chainHeight, VideoCodec codec, bool recording)
+    public (int Width, int Height)? Observe(
+        long qpc,
+        int contentWidth,
+        int contentHeight,
+        int chainWidth,
+        int chainHeight,
+        VideoCodec codec,
+        bool recording)
     {
         if (SourceOutputSize.For(contentWidth, contentHeight, codec) is not { } target)
         {

@@ -2,7 +2,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Core.Library;
 
-/// <summary>When <c>cleanup-limit-unreachable</c> is due: once, until the folder is back within its size limit. Actor thread only.</summary>
+/// <summary>When <c>cleanup-limit-unreachable</c> is due: once, until the folder is back within its size limit. Actor thread.</summary>
 internal sealed class CleanupLimitWarning
 {
     private bool _raised;

@@ -155,7 +155,8 @@ public sealed partial class SessionOrchestrator
         // Whatever the session: the write is no longer in flight.
         _writing--;
         SetState(_state with { ClipsWriting = _writing });
-        (_clips?.Library ?? NoLibraryWrites.Instance).EndWrite(written.Path, written.Error is null ? WriteOutcome.Written : WriteOutcome.Failed);
+        var outcome = written.Error is null ? WriteOutcome.Written : WriteOutcome.Failed;
+        (_clips?.Library ?? NoLibraryWrites.Instance).EndWrite(written.Path, outcome);
         if (written.Error is not null)
         {
             ReportSaveFailure(written.Error);
@@ -215,36 +216,42 @@ public sealed partial class SessionOrchestrator
 
         try
         {
-            var recordingOnSession = _gameRecording.Running?.SessionId == active.Id;
-            switch (ChainChange.Decide(ChainKey.SameChain(next, active.Spec), recordingOnSession, monitorRuns: _monitor is not null))
-            {
-                case ChainDecision.Keep:
-                    DropPreparedChain(active);
-                    break;
-
-                case ChainDecision.HeldByRecording:
-                    DropPreparedChain(active);
-                    DeferChainChange(active);
-                    break;
-
-                case ChainDecision.SwitchAtReset:
-                    DropPreparedChain(active);
-                    if (atReset && active.Session.SwitchChain(next))
-                    {
-                        active.Spec = active.Spec with { Snapshot = next.Snapshot, Audio = next.Audio };
-                    }
-
-                    break;
-
-                default:
-                    active.Pending = true;
-                    active.Session.PrepareChain(next);
-                    break;
-            }
+            ApplyChainChange(active, next, atReset);
         }
         catch (Exception)
         {
             // The session's own failure path ends it if it is broken.
+        }
+    }
+
+    // What the settings resolved now mean for the session's encoder chain: keep it, wait, switch at a Reset, or prepare ahead.
+    private void ApplyChainChange(Active active, SessionSpec next, bool atReset)
+    {
+        var recordingOnSession = _gameRecording.Running?.SessionId == active.Id;
+        switch (ChainChange.Decide(ChainKey.SameChain(next, active.Spec), recordingOnSession, monitorRuns: _monitor is not null))
+        {
+            case ChainDecision.Keep:
+                DropPreparedChain(active);
+                break;
+
+            case ChainDecision.HeldByRecording:
+                DropPreparedChain(active);
+                DeferChainChange(active);
+                break;
+
+            case ChainDecision.SwitchAtReset:
+                DropPreparedChain(active);
+                if (atReset && active.Session.SwitchChain(next))
+                {
+                    active.Spec = active.Spec with { Snapshot = next.Snapshot, Audio = next.Audio };
+                }
+
+                break;
+
+            default:
+                active.Pending = true;
+                active.Session.PrepareChain(next);
+                break;
         }
     }
 
