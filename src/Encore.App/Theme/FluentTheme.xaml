@@ -6,7 +6,9 @@
 
     <SolidColorBrush x:Key="EncoreAccentSubtleBrush" Color="{DynamicResource SubtleFillColorSecondary}" />
     <!-- The selected Library row: the accent's light tint at a quarter, so even a grey accent reads stronger. -->
-    <SolidColorBrush x:Key="EncoreLibraryRowSelectedBrush" Opacity="0.25" Color="{DynamicResource {x:Static SystemColors.AccentColorLight2Key}}" />
+    <SolidColorBrush x:Key="EncoreLibraryRowSelectedBrush"
+                     Opacity="0.25"
+                     Color="{DynamicResource {x:Static SystemColors.AccentColorLight2Key}}" />
     <SolidColorBrush x:Key="EncoreRecordBrush" Color="{DynamicResource SystemFillColorCritical}" />
     <SolidColorBrush x:Key="EncoreOverlayCardBrush" Opacity="0.9" Color="{DynamicResource SolidBackgroundFillColorQuarternary}" />
 

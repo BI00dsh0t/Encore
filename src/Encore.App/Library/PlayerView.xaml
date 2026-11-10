@@ -5,7 +5,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:theme="clr-namespace:Encore.App.Theme"
              xmlns:local="clr-namespace:Encore.App.Library"
-             KeyDown="OnKeyDown" x:Name="PlayerRoot">
+             KeyDown="OnKeyDown"
+             x:Name="PlayerRoot">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
         <theme:TrueToCollapsedConverter x:Key="HideEditor" />
@@ -37,18 +38,32 @@
                             Minimum="0"
                             SmallChange="5"
                             Style="{DynamicResource EncorePlayerSeekStyle}"
-                            Value="{Binding PositionSeconds, Mode=TwoWay}"
-                            >
-                        <Slider.Visibility><MultiBinding Converter="{StaticResource ClipPlayerVisible}"><Binding Path="CanSeek" /><Binding Path="IsClipEditor" ElementName="PlayerRoot" /></MultiBinding></Slider.Visibility>
+                            Value="{Binding PositionSeconds, Mode=TwoWay}">
+                        <Slider.Visibility>
+                            <MultiBinding Converter="{StaticResource ClipPlayerVisible}">
+                                <Binding Path="CanSeek" />
+                                <Binding Path="IsClipEditor" ElementName="PlayerRoot" />
+                            </MultiBinding>
+                        </Slider.Visibility>
                     </Slider>
                     <DockPanel LastChildFill="False">
-                        <DockPanel.Style><Style TargetType="DockPanel"><Setter Property="Height" Value="48" /><Style.Triggers><DataTrigger Binding="{Binding IsClipEditor, ElementName=PlayerRoot}" Value="True"><Setter Property="Height" Value="32" /></DataTrigger></Style.Triggers></Style></DockPanel.Style>
+                        <DockPanel.Style>
+                            <Style TargetType="DockPanel">
+                                <Setter Property="Height" Value="48" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsClipEditor, ElementName=PlayerRoot}" Value="True">
+                                        <Setter Property="Height" Value="32" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DockPanel.Style>
                         <StackPanel VerticalAlignment="Center" DockPanel.Dock="Left" Orientation="Horizontal">
                             <Button x:Name="PlayPause"
                                     AutomationProperties.Name="{Binding PlayPauseLabel}"
                                     Command="{Binding PlayPauseCommand}"
                                     Content="{Binding PlayPauseGlyph}"
-                                    ToolTip="{Binding PlayPauseLabel}" Style="{DynamicResource EncorePlayerIconButtonStyle}"
+                                    ToolTip="{Binding PlayPauseLabel}"
+                                    Style="{DynamicResource EncorePlayerIconButtonStyle}"
                                     Visibility="{Binding IsClipEditor, ElementName=PlayerRoot, Converter={StaticResource HideEditor}}" />
                             <!-- The speaker; its slider slides out while the pointer or keyboard focus is in this group. -->
                             <StackPanel x:Name="VolumeGroup"
@@ -78,7 +93,14 @@
                             <TextBlock x:Name="Time"
                                        Margin="8,0,0,0"
                                        Text="{Binding TimeText}"
-                                       Style="{DynamicResource EncorePlayerTimeStyle}"><TextBlock.Visibility><MultiBinding Converter="{StaticResource ClipPlayerVisible}"><Binding Path="HasControls" /><Binding Path="IsClipEditor" ElementName="PlayerRoot" /></MultiBinding></TextBlock.Visibility></TextBlock>
+                                       Style="{DynamicResource EncorePlayerTimeStyle}">
+                                <TextBlock.Visibility>
+                                    <MultiBinding Converter="{StaticResource ClipPlayerVisible}">
+                                        <Binding Path="HasControls" />
+                                        <Binding Path="IsClipEditor" ElementName="PlayerRoot" />
+                                    </MultiBinding>
+                                </TextBlock.Visibility>
+                            </TextBlock>
                             <!-- The missing extension's Store page, then the default player, when it can't play. -->
                             <Button Margin="8,0,0,0"
                                     VerticalAlignment="Center"
@@ -92,7 +114,10 @@
                                     Visibility="{Binding ShowsDefaultPlayerAction, Converter={StaticResource Visible}}" />
                         </StackPanel>
                         <StackPanel VerticalAlignment="Center" DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Button Content="Create clip" Command="{Binding CreateClipCommand}" Margin="6,0" Visibility="{Binding HasCreateClip, Converter={StaticResource Visible}}" />
+                            <Button Content="Create clip"
+                                    Command="{Binding CreateClipCommand}"
+                                    Margin="6,0"
+                                    Visibility="{Binding HasCreateClip, Converter={StaticResource Visible}}" />
                             <ToggleButton x:Name="Gear"
                                           AutomationProperties.Name="Player settings"
                                           Click="OnGearClick"

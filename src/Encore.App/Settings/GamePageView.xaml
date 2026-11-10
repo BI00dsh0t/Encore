@@ -14,7 +14,9 @@
                     <Border DockPanel.Dock="Right" Style="{DynamicResource EncoreInheritChipStyle}">
                         <TextBlock Text="{Binding Chip}" />
                     </Border>
-                    <ContentControl VerticalAlignment="Center" Content="{Binding Title}" Style="{DynamicResource EncoreSectionHeaderStyle}" />
+                    <ContentControl VerticalAlignment="Center"
+                                    Content="{Binding Title}"
+                                    Style="{DynamicResource EncoreSectionHeaderStyle}" />
                 </DockPanel>
                 <Border Style="{DynamicResource EncoreCardStyle}">
                     <Grid>
@@ -22,7 +24,8 @@
                             <StackPanel VerticalAlignment="Center" DockPanel.Dock="Right" Orientation="Horizontal">
                                 <Button Margin="12,0,12,0" Command="{Binding ChangeCommand}" Content="Change for this game" />
                                 <TextBlock VerticalAlignment="Center">
-                                    <Hyperlink Command="{Binding EditMainCommand}" Style="{DynamicResource EncoreGamesLinkStyle}">Edit the main setting</Hyperlink>
+                                    <Hyperlink Command="{Binding EditMainCommand}"
+                                               Style="{DynamicResource EncoreGamesLinkStyle}">Edit the main setting</Hyperlink>
                                 </TextBlock>
                             </StackPanel>
                             <TextBlock VerticalAlignment="Center"
@@ -56,7 +59,9 @@
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
                                    Text="{Binding Initial}" />
-                        <Image Source="{Binding Icon}" Stretch="Uniform" Visibility="{Binding HasIcon, Converter={StaticResource Visible}}" />
+                        <Image Source="{Binding Icon}"
+                               Stretch="Uniform"
+                               Visibility="{Binding HasIcon, Converter={StaticResource Visible}}" />
                     </Grid>
                 </Border>
                 <StackPanel>
@@ -71,7 +76,8 @@
                              ToolTip="Rename (F2)" />
                     <WrapPanel Margin="0,6,0,0">
                         <TextBlock VerticalAlignment="Center" Style="{DynamicResource EncoreGameCaptionStyle}">
-                            <Run Text="{Binding Source, Mode=OneWay}" /><Run Text=" · Program: " /><Run Text="{Binding ProgramPath, Mode=OneTime}" />
+                            <Run Text="{Binding Source, Mode=OneWay}" /><Run Text=" · Program: " /><Run
+                                Text="{Binding ProgramPath, Mode=OneTime}" />
                         </TextBlock>
                         <Button Margin="12,0,0,0" Command="{Binding ShowProgramCommand}" Content="Show in Explorer" />
                     </WrapPanel>
@@ -80,8 +86,11 @@
 
             <HeaderedContentControl Header="Capture" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
-                    <CheckBox Content="Capture this game" FontSize="{DynamicResource BodyTextBlockFontSize}" IsChecked="{Binding Capture}" />
-                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="When off, Encore won't capture it or save Clips while it runs." />
+                    <CheckBox Content="Capture this game"
+                              FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              IsChecked="{Binding Capture}" />
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                               Text="When off, Encore won't capture it or save Clips while it runs." />
                 </StackPanel>
             </HeaderedContentControl>
 
@@ -89,13 +98,17 @@
 
             <HeaderedContentControl Header="Recordings" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
-                    <CheckBox Content="Allow Recordings in this game" FontSize="{DynamicResource BodyTextBlockFontSize}" IsChecked="{Binding RecordingsEnabled}" />
+                    <CheckBox Content="Allow Recordings in this game"
+                              FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              IsChecked="{Binding RecordingsEnabled}" />
                     <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding RecordingsHelp}" />
                 </StackPanel>
             </HeaderedContentControl>
 
             <ContentControl Content="{Binding Video}" ContentTemplate="{StaticResource InheritedSectionTemplate}" Focusable="False" />
-            <ContentControl Content="{Binding AudioTracks}" ContentTemplate="{StaticResource InheritedSectionTemplate}" Focusable="False" />
+            <ContentControl Content="{Binding AudioTracks}"
+                            ContentTemplate="{StaticResource InheritedSectionTemplate}"
+                            Focusable="False" />
 
             <HeaderedContentControl Header="Files" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <Grid>
@@ -119,8 +132,15 @@
                              ToolTip="{Binding FolderText, Mode=OneWay}" />
                     <Button Grid.Column="2" Margin="8,4,0,4" Command="{Binding OpenFolderCommand}" Content="Open in Explorer" />
                     <TextBlock Grid.Row="1" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="File names look like" />
-                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,4" VerticalAlignment="Center" Text="{Binding FileNameExample}" />
-                    <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                    <TextBlock Grid.Row="1"
+                               Grid.Column="1"
+                               Grid.ColumnSpan="2"
+                               Margin="0,4"
+                               VerticalAlignment="Center"
+                               Text="{Binding FileNameExample}" />
+                    <TextBlock Grid.Row="2"
+                               Grid.Column="1"
+                               Grid.ColumnSpan="2"
                                Style="{DynamicResource EncoreSettingsHelpTextStyle}"
                                Text="Renaming the game changes new file names only; the folder stays." />
                 </Grid>

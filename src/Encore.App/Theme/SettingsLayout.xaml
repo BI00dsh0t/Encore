@@ -20,7 +20,9 @@
             <Setter.Value>
                 <ControlTemplate TargetType="HeaderedContentControl">
                     <StackPanel>
-                        <ContentControl Margin="0,0,0,8" Content="{TemplateBinding Header}" Style="{DynamicResource EncoreSectionHeaderStyle}" />
+                        <ContentControl Margin="0,0,0,8"
+                                        Content="{TemplateBinding Header}"
+                                        Style="{DynamicResource EncoreSectionHeaderStyle}" />
                         <Border Style="{DynamicResource EncoreCardStyle}">
                             <ContentPresenter />
                         </Border>

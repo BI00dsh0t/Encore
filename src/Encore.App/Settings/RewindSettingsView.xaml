@@ -41,7 +41,9 @@
                         <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Time between saves" />
                         <TextBox Grid.Column="1" MinWidth="80" Margin="0,4" Text="{Binding SaveCooldownText}" />
                         <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" Text="seconds" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                        <TextBlock Grid.Row="1"
+                                   Grid.Column="1"
+                                   Grid.ColumnSpan="2"
                                    Style="{DynamicResource EncoreSettingsHelpTextStyle}"
                                    Text="A press this soon after a save is ignored." />
                     </Grid>
@@ -64,11 +66,31 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Keep it in" />
-                        <RadioButton Grid.Column="1" Margin="0,4,16,4" Content="Memory" GroupName="Storage" IsChecked="{Binding IsMemory}" />
-                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Style="{DynamicResource EncoreSettingsStatusTextStyle}" Text="{Binding MemoryLine}" />
-                        <RadioButton Grid.Row="1" Grid.Column="1" Margin="0,4,16,4" Content="Disk" GroupName="Storage" IsChecked="{Binding IsDisk}" />
-                        <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Style="{DynamicResource EncoreSettingsStatusTextStyle}" Text="{Binding DiskLine}" />
-                        <TextBlock Grid.Row="2" Margin="0,12,12,0" VerticalAlignment="Top" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Cache folder" />
+                        <RadioButton Grid.Column="1"
+                                     Margin="0,4,16,4"
+                                     Content="Memory"
+                                     GroupName="Storage"
+                                     IsChecked="{Binding IsMemory}" />
+                        <TextBlock Grid.Column="2"
+                                   VerticalAlignment="Center"
+                                   Style="{DynamicResource EncoreSettingsStatusTextStyle}"
+                                   Text="{Binding MemoryLine}" />
+                        <RadioButton Grid.Row="1"
+                                     Grid.Column="1"
+                                     Margin="0,4,16,4"
+                                     Content="Disk"
+                                     GroupName="Storage"
+                                     IsChecked="{Binding IsDisk}" />
+                        <TextBlock Grid.Row="1"
+                                   Grid.Column="2"
+                                   VerticalAlignment="Center"
+                                   Style="{DynamicResource EncoreSettingsStatusTextStyle}"
+                                   Text="{Binding DiskLine}" />
+                        <TextBlock Grid.Row="2"
+                                   Margin="0,12,12,0"
+                                   VerticalAlignment="Top"
+                                   Style="{DynamicResource EncoreSettingsLabelStyle}"
+                                   Text="Cache folder" />
                         <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
                             <settings:FolderPickerView x:Name="CacheFolderPicker" DataContext="{Binding CacheFolder}" />
                             <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding CacheHelp}" />
@@ -104,13 +126,19 @@
                                   DisplayMemberPath="Label"
                                   ItemsSource="{Binding Codecs}"
                                   SelectedItem="{Binding SelectedCodec}" />
-                        <TextBlock Grid.Row="1" Margin="0,10,12,0" VerticalAlignment="Top" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Resolution" />
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,10,12,0"
+                                   VerticalAlignment="Top"
+                                   Style="{DynamicResource EncoreSettingsLabelStyle}"
+                                   Text="Resolution" />
                         <StackPanel Grid.Row="1" Grid.Column="1">
                             <ComboBox Margin="0,4"
                                       DisplayMemberPath="Label"
                                       ItemsSource="{Binding Resolutions}"
                                       SelectedItem="{Binding SelectedResolution}" />
-                            <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding SourceHelp}" Visibility="{Binding SourceHelp, Converter={StaticResource Collapsed}}" />
+                            <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                                       Text="{Binding SourceHelp}"
+                                       Visibility="{Binding SourceHelp, Converter={StaticResource Collapsed}}" />
                         </StackPanel>
                         <TextBlock Grid.Row="2" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Frame rate" />
                         <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
@@ -123,12 +151,17 @@
                         <TextBlock Grid.Row="3" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Bitrate" />
                         <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
                             <TextBox MinWidth="100" Margin="0,4" Text="{Binding BitrateText}" />
-                            <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Style="{DynamicResource EncoreSettingsStatusTextStyle}" Text="kbps" />
+                            <TextBlock Margin="8,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Style="{DynamicResource EncoreSettingsStatusTextStyle}"
+                                       Text="kbps" />
                         </StackPanel>
-                        <TextBlock Grid.Row="4" Grid.Column="1"
+                        <TextBlock Grid.Row="4"
+                                   Grid.Column="1"
                                    Style="{DynamicResource EncoreSettingsHelpTextStyle}"
                                    Text="Higher looks better and makes bigger files." />
-                        <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Grid.Row="5"
+                        <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}"
+                                  Grid.Row="5"
                                   Grid.Column="1"
                                   Margin="0,8,0,4"
                                   Content="Variable bitrate (smaller files in quiet scenes)"

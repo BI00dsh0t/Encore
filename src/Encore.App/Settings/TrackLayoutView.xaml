@@ -52,8 +52,6 @@
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
             <theme:SettingsContent x:Name="Column" Style="{DynamicResource EncoreSettingsContentStyle}">
-
-
                 <!-- The read-only summary, for a game that uses the main tracks. -->
                 <ItemsControl Margin="0,0,0,12"
                               Focusable="False"
@@ -98,7 +96,9 @@
                                     <StackPanel>
                                         <!-- Header: number, name and summary, the Track's meter, its menu. -->
                                         <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left" Style="{DynamicResource EncoreAudioTrackNumberStyle}" Text="{Binding Number}" />
+                                            <TextBlock DockPanel.Dock="Left"
+                                                       Style="{DynamicResource EncoreAudioTrackNumberStyle}"
+                                                       Text="{Binding Number}" />
                                             <Button Margin="8,0,0,0"
                                                     VerticalAlignment="Center"
                                                     AutomationProperties.Name="Track options"
@@ -108,9 +108,15 @@
                                                     ToolTip="Track options">
                                                 <Button.ContextMenu>
                                                     <ContextMenu>
-                                                        <MenuItem Command="{Binding RenameCommand}" Header="Rename" InputGestureText="F2" />
-                                                        <MenuItem Command="{Binding MoveUpCommand}" Header="Move up" InputGestureText="Alt+Up" />
-                                                        <MenuItem Command="{Binding MoveDownCommand}" Header="Move down" InputGestureText="Alt+Down" />
+                                                        <MenuItem Command="{Binding RenameCommand}"
+                                                                  Header="Rename"
+                                                                  InputGestureText="F2" />
+                                                        <MenuItem Command="{Binding MoveUpCommand}"
+                                                                  Header="Move up"
+                                                                  InputGestureText="Alt+Up" />
+                                                        <MenuItem Command="{Binding MoveDownCommand}"
+                                                                  Header="Move down"
+                                                                  InputGestureText="Alt+Down" />
                                                         <Separator />
                                                         <MenuItem Command="{Binding RemoveCommand}" Header="Remove track" />
                                                     </ContextMenu>
@@ -141,12 +147,14 @@
                                         <ItemsControl Margin="28,8,0,0" Focusable="False" ItemsSource="{Binding Sources}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border AutomationProperties.Name="{Binding Label}" Style="{DynamicResource EncoreAudioSourceRowStyle}">
+                                                    <Border AutomationProperties.Name="{Binding Label}"
+                                                            Style="{DynamicResource EncoreAudioSourceRowStyle}">
                                                         <Border.InputBindings>
                                                             <KeyBinding Command="{Binding RemoveCommand}" Key="Delete" />
                                                         </Border.InputBindings>
                                                         <DockPanel>
-                                                            <TextBlock DockPanel.Dock="Left" Style="{DynamicResource EncoreAudioGlyphStyle}" />
+                                                            <TextBlock DockPanel.Dock="Left"
+                                                                       Style="{DynamicResource EncoreAudioGlyphStyle}" />
                                                             <Button Margin="8,0,0,0"
                                                                     AutomationProperties.Name="Sound options"
                                                                     Click="OnMenuButtonClick"
@@ -155,12 +163,15 @@
                                                                     ToolTip="Sound options">
                                                                 <Button.ContextMenu>
                                                                     <ContextMenu>
-                                                                        <MenuItem Command="{Binding RemoveCommand}" Header="Remove from this track" InputGestureText="Delete" />
+                                                                        <MenuItem Command="{Binding RemoveCommand}"
+                                                                                  Header="Remove from this track"
+                                                                                  InputGestureText="Delete" />
                                                                         <MenuItem Header="Treat as a microphone"
                                                                                   IsCheckable="True"
                                                                                   IsChecked="{Binding IsMic}"
                                                                                   ToolTip="Applies on every track with this sound."
-                                                                                  Visibility="{Binding CanBeMic, Converter={StaticResource Visible}}" />
+                                                                                  Visibility="{Binding CanBeMic,
+                                                                                                       Converter={StaticResource Visible}}" />
                                                                     </ContextMenu>
                                                                 </Button.ContextMenu>
                                                             </Button>
@@ -175,12 +186,14 @@
                                                                          Value="{Binding Level, Mode=OneWay}" />
                                                             <WrapPanel VerticalAlignment="Center">
                                                                 <TextBlock VerticalAlignment="Center" Text="{Binding Label}" />
-                                                                <TextBlock Style="{DynamicResource EncoreAudioCaptionStyle}" Text="{Binding Kind}" />
+                                                                <TextBlock Style="{DynamicResource EncoreAudioCaptionStyle}"
+                                                                           Text="{Binding Kind}" />
                                                                 <TextBlock Margin="8,0,0,0"
                                                                            VerticalAlignment="Center"
                                                                            Style="{DynamicResource EncoreSettingsErrorTextStyle}"
                                                                            Text="{Binding Note}"
-                                                                           Visibility="{Binding HasNote, Converter={StaticResource Visible}}" />
+                                                                           Visibility="{Binding HasNote,
+                                                                                                Converter={StaticResource Visible}}" />
                                                             </WrapPanel>
                                                         </DockPanel>
                                                     </Border>
@@ -251,7 +264,9 @@
                             <GroupStyle>
                                 <GroupStyle.HeaderTemplate>
                                     <DataTemplate>
-                                        <ContentControl Margin="8,8,0,4" Content="{Binding Name}" Style="{DynamicResource EncoreSectionHeaderStyle}" />
+                                        <ContentControl Margin="8,8,0,4"
+                                                        Content="{Binding Name}"
+                                                        Style="{DynamicResource EncoreSectionHeaderStyle}" />
                                     </DataTemplate>
                                 </GroupStyle.HeaderTemplate>
                             </GroupStyle>

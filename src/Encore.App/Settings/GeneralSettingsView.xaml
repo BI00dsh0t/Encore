@@ -13,24 +13,37 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Margin="0,6,12,0" VerticalAlignment="Top" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Theme" />
                     <StackPanel Grid.Column="1">
-                        <ComboBox ItemsSource="{Binding AppThemeChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Theme"
-                                  SelectedValue="{Binding AppTheme}" HorizontalAlignment="Left" MinWidth="320" />
+                        <ComboBox ItemsSource="{Binding AppThemeChoices, Mode=OneTime}"
+                                  DisplayMemberPath="Label"
+                                  SelectedValuePath="Theme"
+                                  SelectedValue="{Binding AppTheme}"
+                                  HorizontalAlignment="Left"
+                                  MinWidth="320" />
                         <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="Applies at once to every window." />
                     </StackPanel>
                 </Grid>
             </HeaderedContentControl>
             <HeaderedContentControl Header="Startup and Overlay" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
-                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Content="Start with Windows, in the tray" IsChecked="{Binding StartWithWindows}" />
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              Content="Start with Windows, in the tray"
+                              IsChecked="{Binding StartWithWindows}" />
                     <TextBlock Margin="0,12,0,4" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Show the Overlay's dot" />
-                    <ComboBox ItemsSource="{Binding OverlayDotChoices, Mode=OneTime}" DisplayMemberPath="Label" SelectedValuePath="Mode"
-                              SelectedValue="{Binding OverlayDot}" HorizontalAlignment="Left" MinWidth="320" />
-                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="The small on-screen indicator that shows Encore is capturing." />
+                    <ComboBox ItemsSource="{Binding OverlayDotChoices, Mode=OneTime}"
+                              DisplayMemberPath="Label"
+                              SelectedValuePath="Mode"
+                              SelectedValue="{Binding OverlayDot}"
+                              HorizontalAlignment="Left"
+                              MinWidth="320" />
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                               Text="The small on-screen indicator that shows Encore is capturing." />
                 </StackPanel>
             </HeaderedContentControl>
             <HeaderedContentControl Header="Games" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
-                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}" Content="Capture new games" IsChecked="{Binding CaptureNewGames}" />
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              Content="Capture new games"
+                              IsChecked="{Binding CaptureNewGames}" />
                     <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
                                Text="When off, a game Encore finds for the first time is added to Games as Not captured. Games you add by hand are always captured." />
                 </StackPanel>

@@ -67,7 +67,9 @@
                                                    FontWeight="SemiBold"
                                                    Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
                                                    Text="{Binding Initial}" />
-                                        <Image Source="{Binding Icon}" Stretch="Uniform" Visibility="{Binding HasIcon, Converter={StaticResource Visible}}" />
+                                        <Image Source="{Binding Icon}"
+                                               Stretch="Uniform"
+                                               Visibility="{Binding HasIcon, Converter={StaticResource Visible}}" />
                                     </Grid>
                                 </Border>
                                 <TextBlock DockPanel.Dock="Right" Style="{DynamicResource EncoreGamesChevronStyle}" />
@@ -79,10 +81,12 @@
                                     <TextBlock Style="{DynamicResource EncoreGameNameStyle}" Text="{Binding Name}" />
                                     <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
                                         <TextBlock Style="{DynamicResource EncoreGameCaptionStyle}" Text="{Binding Caption}" />
-                                        <Border Style="{DynamicResource EncorePillAccentStyle}" Visibility="{Binding IsCapturing, Converter={StaticResource Visible}}">
+                                        <Border Style="{DynamicResource EncorePillAccentStyle}"
+                                                Visibility="{Binding IsCapturing, Converter={StaticResource Visible}}">
                                             <TextBlock Text="Capturing now" />
                                         </Border>
-                                        <Border Style="{DynamicResource EncorePillNeutralStyle}" Visibility="{Binding Ignored, Converter={StaticResource Visible}}">
+                                        <Border Style="{DynamicResource EncorePillNeutralStyle}"
+                                                Visibility="{Binding Ignored, Converter={StaticResource Visible}}">
                                             <TextBlock Text="Not captured" />
                                         </Border>
                                     </StackPanel>

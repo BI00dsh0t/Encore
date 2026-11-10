@@ -11,7 +11,9 @@
     <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto">
         <StackPanel x:Name="Root" Margin="{DynamicResource EncorePagePadding}">
             <ContentControl Content="Control gallery" Style="{DynamicResource EncorePageTitleStyle}" />
-            <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Style="{DynamicResource CaptionTextBlockStyle}"
+            <TextBlock Margin="0,4,0,0"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Style="{DynamicResource CaptionTextBlockStyle}"
                        Text="Hover, press and Tab through the controls to see their live states. Switch the theme on the General page." />
 
             <ContentControl Margin="0,24,0,0" Content="Buttons" Style="{DynamicResource EncoreSectionHeaderStyle}" />
@@ -94,7 +96,9 @@
 
             <ContentControl Margin="0,16,0,0" Content="Menus, tool tips and tabs" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <WrapPanel Margin="0,8,0,0">
-                <Button Content="Right-click for a menu" Margin="0,0,12,8" ToolTip="A tool tip. Long tips wrap at 320 pixels, so this one runs over two lines to show it.">
+                <Button Content="Right-click for a menu"
+                        Margin="0,0,12,8"
+                        ToolTip="A tool tip. Long tips wrap at 320 pixels, so this one runs over two lines to show it.">
                     <Button.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="Open" InputGestureText="Enter" />
@@ -105,7 +109,10 @@
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
-                <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="Hover the button for its tool tip." Margin="0,0,12,8" />
+                <TextBlock VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="Hover the button for its tool tip."
+                           Margin="0,0,12,8" />
             </WrapPanel>
             <TabControl Height="90" Margin="0,8,0,0">
                 <TabItem Header="Selected">
@@ -128,14 +135,20 @@
             <Border Margin="0,8,0,0" Style="{DynamicResource EncoreCardStyle}">
                 <StackPanel>
                     <TextBlock Style="{DynamicResource BodyStrongTextBlockStyle}" Text="A card" />
-                    <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Style="{DynamicResource CaptionTextBlockStyle}" Text="Settings sections and the status header are cards." />
+                    <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Style="{DynamicResource CaptionTextBlockStyle}"
+                               Text="Settings sections and the status header are cards." />
                 </StackPanel>
             </Border>
-            <ContentControl Margin="0,8,0,0" Content="Saving failed: the Clips folder is full." Style="{DynamicResource EncoreInfoBarDangerStyle}" />
+            <ContentControl Margin="0,8,0,0"
+                            Content="Saving failed: the Clips folder is full."
+                            Style="{DynamicResource EncoreInfoBarDangerStyle}" />
             <ContentControl Margin="0,8,0,0" Style="{DynamicResource EncoreInfoBarCautionStyle}">
                 <DockPanel>
                     <Button Margin="12,0,0,0" Content="Acknowledge" DockPanel.Dock="Right" />
-                    <TextBlock VerticalAlignment="Center" Text="The Library index was rebuilt. Cleanup waits until you acknowledge it." TextWrapping="Wrap" />
+                    <TextBlock VerticalAlignment="Center"
+                               Text="The Library index was rebuilt. Cleanup waits until you acknowledge it."
+                               TextWrapping="Wrap" />
                 </DockPanel>
             </ContentControl>
 
@@ -156,9 +169,17 @@
                     <Ellipse Width="10" Height="10" Margin="0,0,6,0" Fill="{DynamicResource EncoreRecordBrush}" />
                     <TextBlock Text="Record" />
                 </WrapPanel>
-                <Border Width="260" Margin="0,8,0,0" Padding="8,3" HorizontalAlignment="Left" Background="{DynamicResource EncoreOverlayCardBrush}"
-                        BorderBrush="{DynamicResource SurfaceStrokeColorFlyoutBrush}" BorderThickness="1" CornerRadius="{DynamicResource ControlCornerRadius}">
-                    <TextBlock Foreground="{DynamicResource SystemFillColorSuccessBrush}" Style="{DynamicResource CaptionTextBlockStyle}" Text="Overlay card: Clip saved" />
+                <Border Width="260"
+                        Margin="0,8,0,0"
+                        Padding="8,3"
+                        HorizontalAlignment="Left"
+                        Background="{DynamicResource EncoreOverlayCardBrush}"
+                        BorderBrush="{DynamicResource SurfaceStrokeColorFlyoutBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{DynamicResource ControlCornerRadius}">
+                    <TextBlock Foreground="{DynamicResource SystemFillColorSuccessBrush}"
+                               Style="{DynamicResource CaptionTextBlockStyle}"
+                               Text="Overlay card: Clip saved" />
                 </Border>
             </StackPanel>
         </StackPanel>

@@ -105,8 +105,13 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ProgressBar">
                     <Grid>
-                        <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
-                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
+                        <Border x:Name="PART_Track"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
+                        <Border x:Name="PART_Indicator"
+                                HorizontalAlignment="Left"
+                                Background="{TemplateBinding Foreground}"
+                                CornerRadius="{DynamicResource EncoreSmallCornerRadius}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
