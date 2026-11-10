@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Text.Json;
 using Encore.App.Engine;
 using Encore.App.Overlay;
 using Encore.App.Settings;

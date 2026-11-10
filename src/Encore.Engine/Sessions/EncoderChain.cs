@@ -365,7 +365,7 @@ internal sealed class EncoderChain : IDisposable
     }
 
     /// <summary>
-    /// Takes the Recording tap out of the chain, so <see cref="Dispose"/> leaves it to the caller: a
+    /// Takes the Recording tap out of the chain, so <see cref="Dispose()"/> leaves it to the caller: a
     /// forced restart closes it, ending the Recording, only once the orchestrator has been told.
     /// </summary>
     public RecordingTap? TakeTap()

@@ -38,7 +38,7 @@ public static class WindowFrame
     }
 
     /// <summary>
-    /// Colours the system title bar: <paramref name="caption"/> behind it and <paramref name="text"/> for
+    /// Colours the system title bar: the caption colour behind it and the text colour for
     /// the title, each as 0xRRGGBB. Null puts both back to the system's own.
     /// </summary>
     public static unsafe void SetCaptionColors(nint hwnd, (uint Caption, uint Text)? colors)

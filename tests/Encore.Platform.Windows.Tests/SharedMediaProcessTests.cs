@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Encore.Platform.Windows;
 
 namespace Encore.Platform.Windows.Tests;
 

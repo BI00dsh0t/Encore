@@ -12,7 +12,6 @@ internal sealed record StreamSpan(int Index, string CodecType, string? Title, do
 }
 
 /// <summary>What the drift analysis reads out of a captured file.</summary>
-/// <param name="FrameTimes">Each video frame's presentation time, s, in order.</param>
 /// <param name="FlashTimes">The frame time of each flash's first frame, s.</param>
 /// <param name="OnsetTimes">Each burst onset's time in the burst track, s.</param>
 internal sealed record MediaScan(

@@ -6,7 +6,7 @@ using Encore.Media;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>A pool texture to draw one frame into, then hand to <see cref="VideoEncoder.Submit"/>.</summary>
+/// <summary>A pool texture to draw one frame into, then hand to <c>VideoEncoder.Submit</c>.</summary>
 public sealed unsafe class VideoSurface : IDisposable
 {
     private AVFrame* _frame;

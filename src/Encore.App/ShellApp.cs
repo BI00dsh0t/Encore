@@ -4,7 +4,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Media;
 using H.NotifyIcon;
 using Encore.App.Engine;
 using Encore.App.Library;

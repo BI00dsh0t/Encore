@@ -12,7 +12,6 @@ using Encore.App.Library;
 using Encore.App.Overlay;
 using Encore.App.Settings;
 using Encore.App.Theme;
-using Encore.Contracts;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 using Encore.Platform.Desktop;

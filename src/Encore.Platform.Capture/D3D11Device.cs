@@ -10,7 +10,6 @@ using Windows.Win32.Graphics.Dxgi;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.Graphics.Gdi;
 using Windows.Win32.System.Com;
-using Windows.Win32.System.WinRT;
 using IInspectable = Windows.Win32.System.WinRT.IInspectable;
 using WinRT;
 

@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Windows.Input;
 using Encore.App.Engine;
 using Encore.Contracts;
-using Encore.Contracts.Ipc;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 using Encore.Core.Monitors;

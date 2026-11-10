@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Encore.Contracts;
 using Encore.Contracts.Settings;
 using Encore.Core.Settings;
 using Encore.Platform.Windows;

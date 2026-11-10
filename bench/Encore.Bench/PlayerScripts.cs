@@ -39,8 +39,6 @@ internal static class PlayerScripts
     public const string Scripted = "scripted";
     public const string Person = "person";
 
-    /// <summary>A failure of the check itself (not-checked), as against the player refusing the file.</summary>
-    private const string SetupFailure = "setup";
     private const string MediaFailure = "media";
 
     public static bool IsScripted(string player) =>

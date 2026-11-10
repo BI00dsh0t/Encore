@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 using Encore.Core.Audio;

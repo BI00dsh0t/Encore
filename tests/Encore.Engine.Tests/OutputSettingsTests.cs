@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Encore.Contracts;
@@ -10,12 +9,9 @@ using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 using Encore.Core.Sessions;
 using Encore.Engine.Sessions;
-using Encore.Platform.Audio;
 using Encore.Platform.FFmpeg;
 using Encore.Platform.FFmpeg.Tests;
 using Encore.Platform.Windows;
-using PlatformFlow = Encore.Platform.Audio.AudioFlow;
-using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
@@ -62,7 +58,6 @@ public sealed class OutputSettingsTests : IDisposable
         }
         """;
 
-    private const string VlcPath = @"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe";
 
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
