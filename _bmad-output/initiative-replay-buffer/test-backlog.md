@@ -164,3 +164,7 @@ Scoped QA ran only the three non-Explicit clip-creator classes. Final result: **
 ## Rebrand to Encore (2026-11-10)
 
 The whole solution was renamed (`6f41cea`). Every default suite under its new name is the first thing to run, now with `dotnet test --solution Encore.slnx -c Release --no-build`. New: `Encore.Contracts.Tests.LegacyDataTests` (2 tests). By hand: start the renamed installed app once on a PC with an old ReplayBuffer install, and check that settings, Library and view state carried over, the old Run value is gone, and the old folders are untouched.
+
+## Sidebar contrast (2026-11-10)
+
+Merge `d0fa73e`. `Encore.App.Tests.ThemeTests` (every key resolves in both themes, gallery loads) covers the new `RbShellNavLayerStyle`. By hand: in both looks, the nav pane reads as its own surface with a visible edge, rail and narrow widths included, and the player still hides it.
