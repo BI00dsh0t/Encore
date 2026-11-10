@@ -5,25 +5,16 @@ using Windows.Win32.UI.Shell;
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>A thumbnail's pixels: 32-bpp premultiplied BGRA, as the shell returns them, top-down, <c>Width * 4</c> bytes a row.</summary>
+/// <summary>A thumbnail's pixels: 32-bpp premultiplied BGRA, top-down, <c>Width * 4</c> bytes a row.</summary>
 public sealed record ShellImage(int Width, int Height, byte[] Bgra);
 
-/// <summary>
-/// A file's thumbnail from the Windows shell (story 7.3): the App passes only the path, and the shell
-/// reads the file (AD-1). Call it on an STA thread, and never on the UI thread: extraction can be slow.
-/// </summary>
+/// <summary>A file's thumbnail from the Windows shell. Call it on an STA thread, never the UI thread: it can be slow.</summary>
 public static unsafe class ShellThumbnail
 {
-    /// <summary>
-    /// The shell's thumbnail of <paramref name="path"/>, at most <paramref name="size"/> pixels square
-    /// (<c>SIIGBF_THUMBNAILONLY</c>, so never the file type's icon); null when the shell has none.
-    /// </summary>
+    /// <summary>The shell's thumbnail of a file, at most size pixels square and never the file type's icon; null if none.</summary>
     public static ShellImage? TryGet(string path, int size) => Get(path, size, SIIGBF.SIIGBF_THUMBNAILONLY);
 
-    /// <summary>
-    /// The icon the shell shows for <paramref name="path"/>, such as a program's (story 10.10's game rows),
-    /// at most <paramref name="size"/> pixels square (<c>SIIGBF_ICONONLY</c>); null when it has none.
-    /// </summary>
+    /// <summary>The icon the shell shows for a file, such as a program's, at most size pixels square; null when it has none.</summary>
     public static ShellImage? TryGetIcon(string path, int size) => Get(path, size, SIIGBF.SIIGBF_ICONONLY);
 
     private static ShellImage? Get(string path, int size, SIIGBF flags)

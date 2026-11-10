@@ -8,13 +8,10 @@ using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>
-/// Opt-in native capture-affinity helper for explicit callers/tests. The App does not enable it
-/// (AD-15 amendment). Apply sets <c>WDA_EXCLUDEFROMCAPTURE</c> on a top-level window of this process.
-/// </summary>
+/// <summary>Keeps this process's windows out of screen captures; opt-in, and the App does not turn it on.</summary>
 public static unsafe class CaptureExclusion
 {
-    /// <exception cref="Win32Exception">The window isn't a top-level window of this process.</exception>
+    /// <summary>Excludes one top-level window of this process from capture; throws Win32Exception for any other window.</summary>
     public static void Apply(nint hwnd)
     {
         if (!PInvoke.SetWindowDisplayAffinity(new HWND(hwnd), WINDOW_DISPLAY_AFFINITY.WDA_EXCLUDEFROMCAPTURE))
@@ -23,8 +20,7 @@ public static unsafe class CaptureExclusion
         }
     }
 
-    /// <summary>Whether the window is excluded from capture.</summary>
-    /// <exception cref="Win32Exception">The window doesn't exist.</exception>
+    /// <summary>Whether the window is excluded from capture; throws Win32Exception when the window doesn't exist.</summary>
     public static bool IsApplied(nint hwnd)
     {
         uint affinity;
@@ -36,13 +32,7 @@ public static unsafe class CaptureExclusion
         return affinity == (uint)WINDOW_DISPLAY_AFFINITY.WDA_EXCLUDEFROMCAPTURE;
     }
 
-    /// <summary>
-    /// Excludes every top-level window of this process from capture as it is created or shown: WPF
-    /// windows, popups and native dialogs alike. The hook is out of context, so its events arrive while
-    /// the calling thread pumps messages, as the WPF UI thread does; a window may show for a moment
-    /// before it is excluded. Dispose the result on the same thread to unhook.
-    /// </summary>
-    /// <exception cref="Win32Exception">The hook couldn't be installed.</exception>
+    /// <summary>Excludes each new top-level window of this process from capture; dispose the result on the same thread.</summary>
     public static IDisposable ExcludeNewWindows()
     {
         // The callback is a static [UnmanagedCallersOnly] method, so there is no delegate to keep alive.
@@ -79,10 +69,7 @@ public static unsafe class CaptureExclusion
         return windows;
     }
 
-    /// <summary>
-    /// Whether a WinEvent names a top-level window being created or shown: not a child, and not an
-    /// accessible object inside a window.
-    /// </summary>
+    /// <summary>Whether a WinEvent names a top-level window, not a child or an accessible object inside a window.</summary>
     internal static bool NamesATopLevelWindow(uint @event, nint hwnd, int idObject, int idChild) =>
         @event is PInvoke.EVENT_OBJECT_CREATE or PInvoke.EVENT_OBJECT_SHOW
         && idObject == 0 // OBJID_WINDOW

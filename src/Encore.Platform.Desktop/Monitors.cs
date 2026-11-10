@@ -17,21 +17,13 @@ public static unsafe class Monitors
 {
     private const int DefaultDpi = 96;
 
-    /// <summary>
-    /// The monitor holding the process's largest visible top-level window, or the primary monitor
-    /// when <paramref name="processId"/> is <c>null</c> or has no visible window.
-    /// </summary>
-    /// <exception cref="Win32Exception">Not even the primary monitor could be read.</exception>
+    /// <summary>The monitor holding the process's largest visible window, or the primary monitor when there is none.</summary>
     public static MonitorArea ForProcess(int? processId) =>
         TryRead(MonitorOf(processId), out var area) || TryRead(PrimaryMonitor(), out area)
             ? area
             : throw new Win32Exception();
 
-    /// <summary>
-    /// A square of <paramref name="sizeDip"/> in the top-right corner of <paramref name="monitor"/>,
-    /// <paramref name="insetDip"/> in from the top and the right, both scaled by the monitor's DPI.
-    /// </summary>
-    /// <returns>The square's top-left corner and side, in physical pixels.</returns>
+    /// <summary>A square in the monitor's top-right corner, in physical pixels; the size and inset are DIPs scaled by its DPI.</summary>
     public static (int X, int Y, int Size) TopRight(MonitorArea monitor, double sizeDip, double insetDip)
     {
         var scale = (double)monitor.Dpi / DefaultDpi;
@@ -40,13 +32,7 @@ public static unsafe class Monitors
         return (monitor.Right - inset - size, monitor.Top + inset, size);
     }
 
-    /// <summary>
-    /// Whether the monitor holding the process's largest visible window (else the primary monitor) has
-    /// hardware overlay planes (<c>IDXGIOutput2::SupportsOverlays</c>), or <c>null</c> when DXGI can't say.
-    /// 5.8 measured that a topmost window over a borderless flip-model game kept the game in independent
-    /// flip only with a free plane, and that without one DWM composed the game for about 7.5 % FPS lost;
-    /// 5.12 then measured the <c>always</c> dot without planes with the game still in independent flip.
-    /// </summary>
+    /// <summary>Whether the game's monitor has hardware overlay planes, or null when DXGI can't say. See docs/code-notes.md.</summary>
     public static bool? OverlayPlanes(int? processId)
     {
         var monitor = MonitorOf(processId);
