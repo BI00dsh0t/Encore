@@ -5,13 +5,6 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Library;
 
-/// <summary>Where a welcome card link goes: the settings page it names.</summary>
-internal enum WelcomeLink
-{
-    AudioTracks,
-    Storage,
-}
-
 /// <summary>The empty Library's welcome card: what to press, what is recorded and where Clips go, from the live settings.</summary>
 internal sealed class LibraryWelcome : Observable
 {

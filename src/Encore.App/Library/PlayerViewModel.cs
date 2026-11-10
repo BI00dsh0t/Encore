@@ -6,15 +6,6 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Library;
 
-/// <summary>Where the player page is: opening the file, paused, playing, or unable to play it.</summary>
-internal enum PlayerState
-{
-    Opening,
-    Paused,
-    Playing,
-    Failed,
-}
-
 /// <summary>One Library item's player page: opens the file shared, plays one Track at a time. UI thread; docs/code-notes.md.</summary>
 internal sealed class PlayerViewModel : Observable, IDisposable
 {

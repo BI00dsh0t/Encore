@@ -5,11 +5,6 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Library;
 
-internal interface IClipMediaService
-{
-    Task<ClipMediaResponse> ExecuteAsync(ClipMediaRequest request, IProgress<double>? progress, CancellationToken token);
-}
-
 /// <summary>Private worker pipe, independent of the capture service and its supervision.</summary>
 internal sealed class ClipMediaService : IClipMediaService
 {

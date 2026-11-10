@@ -5,8 +5,6 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Library;
 
-internal sealed record ClipThumbnailImage(double Time, BitmapSource Image);
-
 /// <summary>Loads a bounded, source-bound filmstrip once. Frozen images need no live file handles or UI-thread decoding.</summary>
 internal static class ClipThumbnailCache
 {
