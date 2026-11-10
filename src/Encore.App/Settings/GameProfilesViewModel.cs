@@ -155,6 +155,25 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
 
     protected override void OnRender(SettingsDocument document)
     {
+        ShowRows(document);
+        OnPropertyChanged(nameof(IsEmpty));
+        ForgetRemovedGames(document);
+        foreach (var viewModel in _games.Values)
+        {
+            viewModel.Render(document);
+        }
+
+        if (_openGame is { } open)
+        {
+            DrillIn.ItemTitle = open.Title;
+        }
+
+        OnPropertyChanged(nameof(HasUnsavedChanges));
+    }
+
+    // One row per game, in list order: captured games before ignored ones, each by name.
+    private void ShowRows(SettingsDocument document)
+    {
         var manual = SettingsValues.Global(document, Keys.ManualGames);
         var existing = Profiles.ToDictionary(p => p.ProfileId, StringComparer.Ordinal);
         var ordered = document.Profiles
@@ -189,10 +208,11 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
             item.IsCapturing = string.Equals(id, _state?.TargetGame?.ProfileId, StringComparison.OrdinalIgnoreCase);
             item.HasUnsavedChanges = _games.TryGetValue(id, out var cached) && cached.HasUnsavedChanges;
         }
+    }
 
-        OnPropertyChanged(nameof(IsEmpty));
-
-        // A game that went away takes its page with it; an open one returns to the list.
+    // A game that went away takes its page with it; an open one returns to the list.
+    private void ForgetRemovedGames(SettingsDocument document)
+    {
         foreach (var gone in _games.Keys.Where(id => !document.Profiles.ContainsKey(id)).ToList())
         {
             var viewModel = _games[gone];
@@ -204,18 +224,6 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
                 Message = $"{viewModel.Title} is no longer in the list.";
             }
         }
-
-        foreach (var viewModel in _games.Values)
-        {
-            viewModel.Render(document);
-        }
-
-        if (_openGame is { } open)
-        {
-            DrillIn.ItemTitle = open.Title;
-        }
-
-        OnPropertyChanged(nameof(HasUnsavedChanges));
     }
 
     private void CloseGame() => OpenGame = null;

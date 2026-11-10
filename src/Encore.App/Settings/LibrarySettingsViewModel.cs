@@ -252,32 +252,18 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
             return;
         }
 
+        await ConfirmAndSendAsync(next);
+    }
+
+    // A limit turned on or lowered could delete files: preview what would go, ask, then send.
+    private async Task ConfirmAndSendAsync(CleanupSettings next)
+    {
         var basis = _cleanup;
         _busy = true;
         ShowLimits(next);
         try
         {
-            LibraryCleanupPlan plan;
-            try
-            {
-                plan = await _engine.SendAsync(LibraryMessages.CleanupPreview, new LibraryCleanupPreview(next.MaxBytes, next.MaxAgeSeconds));
-            }
-            catch (ErrorCodeException e)
-            {
-                Message = $"Couldn't check what Cleanup would delete ({e.Code}): {e.Message}";
-                ShowLimits(_cleanup);
-                return;
-            }
-#pragma warning disable CA1031 // Any failure of the preview leaves the limits as they were.
-            catch (Exception e)
-#pragma warning restore CA1031
-            {
-                Message = $"Couldn't check what Cleanup would delete: {e.Message}";
-                ShowLimits(_cleanup);
-                return;
-            }
-
-            if (!Confirm(PlanText(plan)))
+            if (await PreviewAsync(next) is not { } plan || !Confirm(PlanText(plan)))
             {
                 return;
             }
@@ -298,6 +284,28 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
             _busy = false;
             ShowLimits(_cleanup);
         }
+    }
+
+    // What Cleanup would delete under the limits; null, with the reason shown, when the engine can't say.
+    private async Task<LibraryCleanupPlan?> PreviewAsync(CleanupSettings next)
+    {
+        try
+        {
+            return await _engine.SendAsync(LibraryMessages.CleanupPreview, new LibraryCleanupPreview(next.MaxBytes, next.MaxAgeSeconds));
+        }
+        catch (ErrorCodeException e)
+        {
+            Message = $"Couldn't check what Cleanup would delete ({e.Code}): {e.Message}";
+        }
+#pragma warning disable CA1031 // Any failure of the preview leaves the limits as they were.
+        catch (Exception e)
+#pragma warning restore CA1031
+        {
+            Message = $"Couldn't check what Cleanup would delete: {e.Message}";
+        }
+
+        ShowLimits(_cleanup);
+        return null;
     }
 
     // Shows the limits as the checkboxes and text boxes; a set limit also becomes its draft.
