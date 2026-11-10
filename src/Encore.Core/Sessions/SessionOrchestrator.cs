@@ -64,20 +64,14 @@ public sealed partial class SessionOrchestrator : IDisposable
     // Clip writes started and not yet posted back, across sessions.
     private int _writing;
 
-    // The Recording started and not yet posted back; null when none runs.
-    private RecordingRun? _recording;
-
-    // The Recording a forced encoder restart ended, until its writer posts back; null for none.
-    private RecordingRun? _ending;
+    // The game session's Recording: the one running, and one an encoder restart ended that is still finishing.
+    private readonly RecordingSlot _gameRecording = new();
 
     // The Monitor session, from its press until its Monitor Recording's writer posts back; null for none.
     private Active? _monitor;
 
-    // The Monitor Recording started at the Monitor session's anchor and not yet posted back; null for none.
-    private RecordingRun? _monitorRecording;
-
-    // The Monitor Recording a forced encoder restart ended, until its writer posts back; null for none.
-    private RecordingRun? _monitorEnding;
+    // The Monitor session's Monitor Recording, started at its anchor; as the game session's.
+    private readonly RecordingSlot _monitorRecording = new();
 
     // The process of the Target whose session gave up on a GPU reset; a new window of it doesn't restart Rewind.
     private int? _gpuStoppedPid;
@@ -221,7 +215,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         WaitForRecordingWriters();
 
         // The published state no longer claims a Recording runs.
-        if (_recording is null && _ending is null)
+        if (_gameRecording.IsOff)
         {
             SetState(_state with { Recording = RecordingState.Off });
         }
@@ -240,7 +234,9 @@ public sealed partial class SessionOrchestrator : IDisposable
     private void WaitForRecordingWriters()
     {
         var waited = Stopwatch.StartNew();
-        foreach (var recording in new[] { _ending, _recording, _monitorEnding, _monitorRecording })
+        RecordingRun?[] unfinished =
+            [_gameRecording.Ending, _gameRecording.Running, _monitorRecording.Ending, _monitorRecording.Running];
+        foreach (var recording in unfinished)
         {
             if (recording is null)
             {
@@ -255,32 +251,13 @@ public sealed partial class SessionOrchestrator : IDisposable
             }
 
             // Left open: the next start reports it interrupted.
-            Forget(recording);
+            SlotOf(recording).Remove(recording);
             _recordings?.Info?.Invoke(
                 $"The Recording at {recording.Path} didn't finish within {ShutdownWait.TotalSeconds:0} s of shutdown; it was left open");
         }
     }
 
-    // Clears whichever of the four Recording fields holds this Recording.
-    private void Forget(RecordingRun recording)
-    {
-        if (ReferenceEquals(_ending, recording))
-        {
-            _ending = null;
-        }
-        else if (ReferenceEquals(_monitorEnding, recording))
-        {
-            _monitorEnding = null;
-        }
-        else if (ReferenceEquals(_monitorRecording, recording))
-        {
-            _monitorRecording = null;
-        }
-        else
-        {
-            _recording = null;
-        }
-    }
+    private RecordingSlot SlotOf(RecordingRun recording) => recording.Monitor ? _monitorRecording : _gameRecording;
 
     // One case per message type, in the order the types are documented; a handler ignores a message that is out of date.
     private void Handle(SessionMessage message)
@@ -406,7 +383,7 @@ public sealed partial class SessionOrchestrator : IDisposable
     /// <summary>dev.simulate's display state only: a real Recording's state wins, and it never holds the Target.</summary>
     private void OnSimulatedRecording(RecordingRunning recording)
     {
-        if (_recording is null && _ending is null)
+        if (_gameRecording.IsOff)
         {
             SetState(_state with { Recording = recording.Running ? RecordingState.Running : RecordingState.Off });
         }
@@ -830,7 +807,7 @@ public sealed partial class SessionOrchestrator : IDisposable
             return;
         }
 
-        if ((_recording is not null || _ending is not null) && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
+        if (!_gameRecording.IsOff && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
         {
             _pendingTarget = propose;
             return;
@@ -1352,7 +1329,7 @@ public sealed partial class SessionOrchestrator : IDisposable
                     active.Session.PrepareChain(null);
                 }
             }
-            else if (_recording?.SessionId == active.Id)
+            else if (_gameRecording.Running?.SessionId == active.Id)
             {
                 // A Recording keeps the session on one chain until its writer posts back.
                 if (active.Pending)
@@ -1409,7 +1386,7 @@ public sealed partial class SessionOrchestrator : IDisposable
             return;
         }
 
-        if (_recording is not { } running)
+        if (_gameRecording.Running is not { } running)
         {
             if (action == HotkeyAction.RecordStop)
             {
@@ -1513,7 +1490,7 @@ public sealed partial class SessionOrchestrator : IDisposable
             return null;
         }
 
-        _recording = recording;
+        _gameRecording.Start(recording);
 
         // A chain prepared before the press is dropped; the change waits for the Recording's end.
         if (active.Pending)
@@ -1537,26 +1514,36 @@ public sealed partial class SessionOrchestrator : IDisposable
     /// <summary>The chain was forcibly rebuilt: the running Recording ends, and a new one starts at once in a new file.</summary>
     private void OnChainRestarted(Active active, long qpc)
     {
-        if (_recordings is not { } recordings || _recording is not { } running || running.SessionId != active.Id || running.Reason is not null)
+        var profileId = active.Spec.Target.ProfileId;
+        RestartRecording(
+            _gameRecording,
+            active,
+            "Recording",
+            () => profileId is null ? null : BeginRecording(active, profileId, qpc, _currentDocument()));
+    }
+
+    /// <summary>A session's Recording ends at an encoder restart and its replacement begins; what names it in the log.</summary>
+    private void RestartRecording(RecordingSlot slot, Active session, string what, Func<RecordingRun?> begin)
+    {
+        if (_recordings is not { } recordings
+            || slot.Running is not { } running
+            || running.SessionId != session.Id
+            || running.Reason is not null)
         {
             return;
         }
 
         running.Reason = RecordingStopReasons.EncoderRestart;
-        if (_ending is not null)
+        if (!slot.TryMoveRunningToEnding())
         {
             // The last restart's Recording is still finishing: this one stops without a replacement.
-            recordings.Info?.Invoke("A second encoder restart came while the last one's Recording was still finishing; the Recording stops");
+            recordings.Info?.Invoke($"A second encoder restart came while the last one's {what} was still finishing; the {what} stops");
             return;
         }
 
-        _ending = running;
-        _recording = null;
-        var profileId = active.Spec.Target.ProfileId;
-        var next = profileId is null ? null : BeginRecording(active, profileId, qpc, _currentDocument());
-        if (next is null)
+        if (begin() is not { } next)
         {
-            recordings.Info?.Invoke($"The encoder restart ended the Recording at {running.Path}, and no new one could start");
+            recordings.Info?.Invoke($"The encoder restart ended the {what} at {running.Path}, and no new one could start");
             return;
         }
 
@@ -1581,54 +1568,41 @@ public sealed partial class SessionOrchestrator : IDisposable
     /// <summary>A session ending under its running Recording stops it with the given reason.</summary>
     private void MarkSessionEnded(Active active, string reason)
     {
-        if (_recording is { Reason: null } running && running.SessionId == active.Id)
+        if (_gameRecording.Running is { Reason: null } running && running.SessionId == active.Id)
         {
             running.Reason = reason;
         }
     }
 
-    /// <summary>A Recording writer's result: tells the Library, publishes the stop, then commits a held Target switch.</summary>
+    /// <summary>A Recording writer's result: tells the Library and publishes the stop; then what follows a Recording's end.</summary>
     private void OnRecordingWritten(RecordingWritten written, bool commitPending)
     {
         var recording = written.Recording;
-        if (recording.Monitor)
-        {
-            OnMonitorRecordingWritten(written);
-            return;
-        }
-
-        var restarted = ReferenceEquals(_ending, recording);
-        if (!restarted && !ReferenceEquals(_recording, recording))
+        var slot = SlotOf(recording);
+        var place = slot.Remove(recording);
+        if (place == RecordingPlace.None)
         {
             return;
         }
 
-        if (restarted)
-        {
-            _ending = null;
-        }
-        else
+        if (place == RecordingPlace.Running)
         {
             // A restart's replacement that ends before the one it replaced: started before it stopped.
             Announce(recording);
-            _recording = null;
         }
 
         var recordings = _recordings!;
         var reason = CloseWrite(recordings, written);
-        var off = _recording is null && _ending is null;
+        var off = slot.IsOff;
         if (off)
         {
-            SetState(_state with { Recording = RecordingState.Off });
+            SetState(recording.Monitor
+                ? _state with { MonitorRecording = RecordingState.Off }
+                : _state with { Recording = RecordingState.Off });
         }
 
-        recordings.Stopped(new RecordingStopped(recording.Path, reason));
-        if (reason == ErrorCodes.DiskFull)
-        {
-            OnDiskFull(recordings, recording);
-        }
-
-        if (restarted && _recording is { } next && ReferenceEquals(next.Follows, recording))
+        PublishStopped(recordings, recording, reason);
+        if (place == RecordingPlace.Ending && slot.ReplacementOf(recording) is { } next)
         {
             Announce(next);
         }
@@ -1638,6 +1612,42 @@ public sealed partial class SessionOrchestrator : IDisposable
             return;
         }
 
+        if (recording.Monitor)
+        {
+            if (_monitor?.Id == recording.SessionId)
+            {
+                EndMonitor("monitor recording stopped", RecordingStopReasons.SessionEnded);
+            }
+        }
+        else
+        {
+            AfterGameRecording(recording, commitPending);
+        }
+    }
+
+    // The stop goes to the Recording's own listener; a full disk is reported, and may stop a Rewind on that disk.
+    private void PublishStopped(Recordings recordings, RecordingRun recording, string reason)
+    {
+        var stopped = recording.Monitor ? recordings.MonitorStopped ?? recordings.Stopped : recordings.Stopped;
+        stopped(new RecordingStopped(recording.Path, reason));
+        if (reason != ErrorCodes.DiskFull)
+        {
+            return;
+        }
+
+        if (recording.Monitor)
+        {
+            recordings.DiskFull?.Invoke();
+        }
+        else
+        {
+            OnDiskFull(recordings, recording);
+        }
+    }
+
+    // No game Recording runs any more: a change deferred during it is prepared, or a held Target switch commits.
+    private void AfterGameRecording(RecordingRun recording, bool commitPending)
+    {
         // The session still runs and no switch is held: a change deferred during the Recording is prepared now.
         if (commitPending && _pendingTarget is null && _active is { } active && active.Id == recording.SessionId)
         {
@@ -1675,7 +1685,7 @@ public sealed partial class SessionOrchestrator : IDisposable
                 return;
             }
 
-            if (_monitorRecording is not null || _monitorEnding is not null)
+            if (!_monitorRecording.IsOff)
             {
                 // Its session ended (closed or failed) and its writer hasn't posted back yet.
                 recordings.Info?.Invoke("The Monitor Record press came while the last Monitor Recording was still finishing; it was ignored");
@@ -1692,7 +1702,7 @@ public sealed partial class SessionOrchestrator : IDisposable
             return;
         }
 
-        if (_monitorRecording is not { } running)
+        if (_monitorRecording.Running is not { } running)
         {
             // Not anchored yet: nothing was written, and nothing is left.
             EndMonitor("monitor recording stopped", RecordingStopReasons.Stopped);
@@ -1816,7 +1826,7 @@ public sealed partial class SessionOrchestrator : IDisposable
     /// <summary>The Monitor session's first frame: its Recording starts there; one that can't start ends the session.</summary>
     private void OnMonitorAnchored(Active monitor, long qpc)
     {
-        if (_monitorRecording is not null)
+        if (_monitorRecording.Running is not null)
         {
             return;
         }
@@ -1860,35 +1870,13 @@ public sealed partial class SessionOrchestrator : IDisposable
             return null;
         }
 
-        _monitorRecording = recording;
+        _monitorRecording.Start(recording);
         return recording;
     }
 
     /// <summary>The Monitor session's chain was rebuilt: its Recording ends and a new one starts at once in a new file.</summary>
-    private void OnMonitorChainRestarted(Active monitor, long qpc)
-    {
-        if (_recordings is not { } recordings || _monitorRecording is not { } running || running.SessionId != monitor.Id || running.Reason is not null)
-        {
-            return;
-        }
-
-        running.Reason = RecordingStopReasons.EncoderRestart;
-        if (_monitorEnding is not null)
-        {
-            recordings.Info?.Invoke("A second encoder restart came while the last one's Monitor Recording was still finishing; the Monitor Recording stops");
-            return;
-        }
-
-        _monitorEnding = running;
-        _monitorRecording = null;
-        if (BeginMonitorRecording(monitor, qpc) is not { } next)
-        {
-            recordings.Info?.Invoke($"The encoder restart ended the Monitor Recording at {running.Path}, and no new one could start");
-            return;
-        }
-
-        next.Follows = running;
-    }
+    private void OnMonitorChainRestarted(Active monitor, long qpc) =>
+        RestartRecording(_monitorRecording, monitor, "Monitor Recording", () => BeginMonitorRecording(monitor, qpc));
 
     /// <summary>A session's GPU device was lost, or a recovery attempt failed: retry on a timer, and give up after a limit.</summary>
     private void OnDeviceLost(Active session, Exception failure, bool monitor)
@@ -2017,7 +2005,7 @@ public sealed partial class SessionOrchestrator : IDisposable
     private void OnSuspend(long qpc)
     {
         var ran = false;
-        if (_recording is { Reason: null } running)
+        if (_gameRecording.Running is { Reason: null } running)
         {
             ran = true;
             running.Reason = RecordingStopReasons.Suspend;
@@ -2034,7 +2022,7 @@ public sealed partial class SessionOrchestrator : IDisposable
 
         if (_monitor is { } monitor)
         {
-            ran |= _monitorRecording is { Reason: null } monitorRunning && monitorRunning.SessionId == monitor.Id;
+            ran |= _monitorRecording.Running is { Reason: null } monitorRunning && monitorRunning.SessionId == monitor.Id;
             EndMonitor("suspend", RecordingStopReasons.Suspend);
         }
 
@@ -2166,7 +2154,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         _monitor = null;
         _active?.Session.SetBuildAhead(true);
         StopRecovery(monitor);
-        if (_monitorRecording is { Reason: null } running && running.SessionId == monitor.Id)
+        if (_monitorRecording.Running is { Reason: null } running && running.SessionId == monitor.Id)
         {
             running.Reason = recordingReason;
         }
@@ -2181,7 +2169,7 @@ public sealed partial class SessionOrchestrator : IDisposable
             outcome = new SessionOutcome(null, reason, e);
         }
 
-        if (_monitorRecording is null && _monitorEnding is null)
+        if (_monitorRecording.IsOff)
         {
             SetState(_state with { MonitorRecording = RecordingState.Off });
         }
@@ -2190,52 +2178,6 @@ public sealed partial class SessionOrchestrator : IDisposable
         if (Volatile.Read(ref _disposed) == 0 && _active is { } game)
         {
             ApplySettings(game);
-        }
-    }
-
-    /// <summary>A Monitor Recording writer's result: published as stopped, then the Monitor session ends.</summary>
-    private void OnMonitorRecordingWritten(RecordingWritten written)
-    {
-        var recording = written.Recording;
-        var restarted = ReferenceEquals(_monitorEnding, recording);
-        if (!restarted && !ReferenceEquals(_monitorRecording, recording))
-        {
-            return;
-        }
-
-        if (restarted)
-        {
-            _monitorEnding = null;
-        }
-        else
-        {
-            // A restart's replacement that ends before the one it replaced: started before it stopped.
-            Announce(recording);
-            _monitorRecording = null;
-        }
-
-        var recordings = _recordings!;
-        var reason = CloseWrite(recordings, written);
-        var off = _monitorRecording is null && _monitorEnding is null;
-        if (off)
-        {
-            SetState(_state with { MonitorRecording = RecordingState.Off });
-        }
-
-        (recordings.MonitorStopped ?? recordings.Stopped)(new RecordingStopped(recording.Path, reason));
-        if (reason == ErrorCodes.DiskFull)
-        {
-            recordings.DiskFull?.Invoke();
-        }
-
-        if (restarted && _monitorRecording is { } next && ReferenceEquals(next.Follows, recording))
-        {
-            Announce(next);
-        }
-
-        if (off && _monitor?.Id == recording.SessionId)
-        {
-            EndMonitor("monitor recording stopped", RecordingStopReasons.SessionEnded);
         }
     }
 
