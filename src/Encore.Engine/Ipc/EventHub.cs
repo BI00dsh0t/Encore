@@ -4,13 +4,6 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Engine.Ipc;
 
-/// <summary>Where the hub delivers frames: one per connection.</summary>
-internal interface IFrameSink
-{
-    /// <summary>Queues a frame without blocking; a sink that can't take it drops itself.</summary>
-    void Enqueue(byte[] frame, string? coalesceKey);
-}
-
 /// <summary>The engine's published state: one lock assigns <c>seq</c>, applies the event and hands it to every connection.</summary>
 internal sealed class EventHub
 {

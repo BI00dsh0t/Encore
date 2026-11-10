@@ -7,9 +7,6 @@ using Encore.Contracts.Messages;
 
 namespace Encore.Engine.Ipc;
 
-/// <summary>A command's reply frame, and what to run once it is queued.</summary>
-internal readonly record struct CommandReply(byte[] Frame, Action? AfterReply);
-
 /// <summary>Dispatches commands to their handlers; every command gets exactly one reply, a result or an error with a code.</summary>
 internal sealed class CommandRouter(ILogger log)
 {
