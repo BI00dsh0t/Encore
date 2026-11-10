@@ -1,9 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 using System.Threading.Channels;
 using Encore.Contracts;
 using Encore.Contracts.Messages;
-using Encore.Core.Output;
 using Encore.Contracts.Settings;
 
 namespace Encore.Core.Library;
@@ -11,12 +9,6 @@ namespace Encore.Core.Library;
 /// <summary>The single-threaded Library index: every change, disk check and save runs on its own thread. docs/code-notes.md.</summary>
 public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 {
-    /// <summary>What a Clip is written to before its rename (the writer's <c>ClipWriter.PartExtension</c>).</summary>
-    internal const string PartExtension = ".rbpart";
-
-    private const string Extension = ".mp4";
-    private const string BakExtension = ".bak";
-    private const string CorruptExtension = ".corrupt";
     private const int WatcherBufferSize = 64 * 1024;
     private const int SharingRetries = 10;
     private const int ErrorSharingViolation = unchecked((int)0x80070020);
@@ -43,32 +35,12 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
     private static readonly CleanupSettings CleanupOff = new(null, null);
 
-    // Device names Windows reserves, whatever the extension.
-    private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "CON", "PRN", "AUX", "NUL",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-    };
-
-    private static readonly EnumerationOptions Recursive = new()
-    {
-        RecurseSubdirectories = true,
-        IgnoreInaccessible = true,
-        MatchType = MatchType.Simple,
-        // Hidden and system files are listed; a junction or symbolic link is neither followed nor listed.
-        AttributesToSkip = FileAttributes.ReparsePoint,
-    };
-
     private readonly Channel<Message> _channel = Channel.CreateUnbounded<Message>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false, AllowSynchronousContinuations = false });
 
     private readonly Func<string> _outputFolder;
     private readonly string _libraryFile;
     private readonly Func<string, string?> _profileForFolder;
-    private readonly Action<LibraryItem> _added;
-    private readonly Action<LibraryItem> _changed;
-    private readonly Action<LibraryItemRemoved> _removed;
     private readonly Action<LibraryReset> _reset;
     private readonly Action<LibraryCleanupBlocked> _cleanupBlockedChanged;
     private readonly TimeProvider _time;
@@ -83,29 +55,20 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private readonly Action<string>? _log;
     private readonly Thread _thread;
 
+    // Actor thread only: the items, and what is known of their writes and lengths.
+    private readonly LibraryIndex _index;
+
     // The length worker's jobs; written by the actor thread only.
     private readonly Channel<LengthJob> _lengthJobs = Channel.CreateUnbounded<LengthJob>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = true, AllowSynchronousContinuations = false });
 
     private readonly Thread? _lengthThread;
 
-    // Actor thread only.
-    private readonly Dictionary<string, LibraryItem> _items = new(StringComparer.OrdinalIgnoreCase);
-
-    // Actor thread only: each write under way, by absolute path, to its item's key.
-    private readonly Dictionary<string, string> _beingWritten = new(StringComparer.OrdinalIgnoreCase);
-
     // Actor thread only: the paths of the actor's own file operations, by absolute path, to their expiry.
     private readonly Dictionary<string, Registration> _registered = new(StringComparer.OrdinalIgnoreCase);
 
     // Actor thread only: the absolute paths watcher events named, reconciled once they settle.
     private readonly HashSet<string> _pending = new(StringComparer.OrdinalIgnoreCase);
-
-    // Actor thread only: the modified time (LastWriteTimeUtc) each item's length was read at, by key.
-    private readonly Dictionary<string, DateTime> _modified = new(StringComparer.OrdinalIgnoreCase);
-
-    // Actor thread only: the size each queued length job was queued at, by key, so a job isn't queued twice.
-    private readonly Dictionary<string, long> _queued = new(StringComparer.OrdinalIgnoreCase);
 
     // Actor thread only: the keys the running Cleanup pass couldn't delete; cleared when a pass starts.
     private readonly HashSet<string> _cleanupSkip = new(StringComparer.OrdinalIgnoreCase);
@@ -164,9 +127,9 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         _outputFolder = outputFolder ?? throw new ArgumentNullException(nameof(outputFolder));
         _libraryFile = libraryFile;
         _profileForFolder = profileForFolder ?? throw new ArgumentNullException(nameof(profileForFolder));
-        _added = added ?? throw new ArgumentNullException(nameof(added));
-        _changed = changed ?? throw new ArgumentNullException(nameof(changed));
-        _removed = removed ?? throw new ArgumentNullException(nameof(removed));
+        ArgumentNullException.ThrowIfNull(added);
+        ArgumentNullException.ThrowIfNull(changed);
+        ArgumentNullException.ThrowIfNull(removed);
         _reset = reset ?? throw new ArgumentNullException(nameof(reset));
         _cleanupBlockedChanged = cleanupBlockedChanged ?? throw new ArgumentNullException(nameof(cleanupBlockedChanged));
         _time = time ?? throw new ArgumentNullException(nameof(time));
@@ -180,10 +143,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         _log = log;
         _finalPath = finalPath;
         _cleanupBlocked = cleanupBlocked;
-        foreach (var item in items)
-        {
-            _items[item.Path] = item;
-        }
+        _index = new LibraryIndex(items, added, changed, removed, () => _dirty = true);
 
         _channel.Writer.TryWrite(new Start());
         _thread = new Thread(Run) { Name = "LibraryActor", IsBackground = true };
@@ -214,66 +174,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
                 done.Task.Wait();
             }
         }
-    }
-
-    /// <summary>The Library at start: clears a crash's leftovers, reads the index or its backup, then lists the files on disk.</summary>
-    public static LibraryLoad Load(string outputFolder, string libraryFile, Func<string, string?> profileForFolder, Action<Exception> failed)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(outputFolder);
-        ArgumentException.ThrowIfNullOrEmpty(libraryFile);
-        ArgumentNullException.ThrowIfNull(profileForFolder);
-        ArgumentNullException.ThrowIfNull(failed);
-
-        var folder = FullFolder(outputFolder);
-        var (saved, corrupt) = ReadIndex(libraryFile, folder, failed);
-        var items = new List<LibraryItem>();
-        if (!Directory.Exists(folder))
-        {
-            return new LibraryLoad(items, corrupt);
-        }
-
-        DeleteLeftovers(folder, failed);
-        foreach (var path in Files(folder, Extension, failed))
-        {
-            if (!TryKey(folder, path, out var key))
-            {
-                continue;
-            }
-
-            try
-            {
-                var file = new FileInfo(path);
-
-                // An empty file is a reservation a write never filled (it ended with the engine).
-                if (file.Length == 0)
-                {
-                    continue;
-                }
-
-                // A file the index doesn't know at this size must be a complete MP4; an old entry has no size.
-                saved.TryGetValue(key, out var entry);
-                var known = entry is not null && (entry.Size is null || entry.Size == file.Length);
-                if (!known && !CompleteNow(path))
-                {
-                    continue;
-                }
-
-                // A cached length holds only while the file has the size and modified time it was read at.
-                var length = entry is { LengthSeconds: { } seconds, Size: { } size, Modified: { } modified }
-                    && size == file.Length && modified == file.LastWriteTimeUtc
-                        ? seconds
-                        : (double?)null;
-                items.Add(entry is not null
-                    ? new LibraryItem(key, entry.ProfileId, file.Length, entry.Date, false, length, entry.Favourite, Utc(file.LastWriteTimeUtc), entry.Kind ?? ScannedKind(key))
-                    : Scanned(file, key, profileForFolder));
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                // Gone or unreadable since the enumeration; the actor's start rescan checks it again.
-            }
-        }
-
-        return new LibraryLoad(items, corrupt);
     }
 
     /// <inheritdoc/>
@@ -355,217 +255,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         if (_lengthThread is not null && Environment.CurrentManagedThreadId != _lengthThread.ManagedThreadId)
         {
             _lengthThread.Join();
-        }
-    }
-
-    /// <summary>Whether a name can be a file's base name: not empty, no forbidden character, no trailing dot, not reserved.</summary>
-    private static bool ValidName(string? name)
-    {
-        if (string.IsNullOrEmpty(name)
-            || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
-            || name.EndsWith('.')
-            || name.EndsWith(' '))
-        {
-            return false;
-        }
-
-        var dot = name.IndexOf('.', StringComparison.Ordinal);
-        return !ReservedNames.Contains(dot < 0 ? name : name[..dot]);
-    }
-
-    private static string FullFolder(string folder) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
-
-    internal static bool IsMp4(string path) => string.Equals(Path.GetExtension(path), Extension, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Whether the path, or a folder above it up to the given folder, is a junction or link; true when unreadable.</summary>
-    internal static bool ThroughReparsePoint(string folder, string path)
-    {
-        try
-        {
-            // The Output Folder itself may be a junction; the file and each folder below it may not.
-            for (var at = path; at is not null && at.Length > folder.Length; at = Path.GetDirectoryName(at))
-            {
-                if (File.GetAttributes(at).HasFlag(FileAttributes.ReparsePoint))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
-            // Can't tell, so Cleanup doesn't touch it.
-            return true;
-        }
-    }
-
-    /// <summary>The key of a path under a folder; false for a path outside it, or the folder itself.</summary>
-    internal static bool TryKey(string folder, string path, out string key)
-    {
-        key = Path.GetRelativePath(folder, path);
-        return key != "."
-            && key != ".."
-            && !Path.IsPathRooted(key)
-            && !key.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
-    }
-
-    /// <summary>A file found on disk: the profile of its top-level folder, and its creation time.</summary>
-    private static LibraryItem Scanned(FileInfo file, string key, Func<string, string?> profileForFolder)
-    {
-        var separator = key.IndexOf(Path.DirectorySeparatorChar, StringComparison.Ordinal);
-        var profileId = separator > 0 ? profileForFolder(key[..separator]) : null;
-        return new LibraryItem(key, profileId, file.Length, new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero), false, Modified: Utc(file.LastWriteTimeUtc), Kind: ScannedKind(key));
-    }
-
-    /// <summary>A scanned file's kind: a Monitor Recording when it is in that folder; otherwise unknown.</summary>
-    private static string? ScannedKind(string key) =>
-        key.StartsWith(ProfileFolders.MonitorRecordings + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            ? LibraryItemKinds.MonitorRecording
-            : null;
-
-    /// <summary>A file's <see cref="FileSystemInfo.LastWriteTimeUtc"/> as an item's <see cref="LibraryItem.Modified"/>.</summary>
-    private static DateTimeOffset Utc(DateTime lastWriteUtc) => new(lastWriteUtc, TimeSpan.Zero);
-
-    /// <summary>Whether the file is a complete MP4 now; a busy or unreadable file isn't.</summary>
-    private static bool CompleteNow(string path)
-    {
-        try
-        {
-            return Mp4File.IsComplete(path);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
-    /// <summary>The files under a folder with an extension; a failed enumeration is reported, keeping what it found.</summary>
-    private static List<string> Files(string folder, string extension, Action<Exception> failed)
-    {
-        var files = new List<string>();
-        try
-        {
-            if (Directory.Exists(folder))
-            {
-                foreach (var path in Directory.EnumerateFiles(folder, "*" + extension, Recursive))
-                {
-                    // The pattern alone would also match a longer extension on some file systems.
-                    if (string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase))
-                    {
-                        files.Add(path);
-                    }
-                }
-            }
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            failed(e);
-        }
-
-        return files;
-    }
-
-    /// <summary>A crash's leftovers: each <c>*.rbpart</c>, and the empty reservation beside one. Never a user's <c>.mp4</c>.</summary>
-    private static void DeleteLeftovers(string folder, Action<Exception> failed)
-    {
-        foreach (var part in Files(folder, PartExtension, failed))
-        {
-            try
-            {
-                File.Delete(part);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                failed(e);
-            }
-
-            try
-            {
-                var reservation = new FileInfo(part[..^PartExtension.Length]);
-                if (IsMp4(reservation.FullName) && reservation.Exists && reservation.Length == 0)
-                {
-                    reservation.Delete();
-                }
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                failed(e);
-            }
-        }
-    }
-
-    /// <summary>The saved entries from <c>library.json</c>, else its backup; corrupt when neither parses and one exists.</summary>
-    private static (Dictionary<string, LibraryFileEntry> Entries, bool Corrupt) ReadIndex(string libraryFile, string folder, Action<Exception> failed)
-    {
-        var entries = new Dictionary<string, LibraryFileEntry>(StringComparer.OrdinalIgnoreCase);
-        var main = TryRead(libraryFile, failed, out var document);
-        var corrupt = false;
-        if (main == ReadResult.Bad)
-        {
-            try
-            {
-                File.Move(libraryFile, libraryFile + CorruptExtension, overwrite: true);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                failed(e);
-            }
-        }
-
-        if (main != ReadResult.Read)
-        {
-            var bak = TryRead(libraryFile + BakExtension, failed, out document);
-            corrupt = bak != ReadResult.Read && (main == ReadResult.Bad || bak == ReadResult.Bad);
-        }
-
-        // A rebuild not yet acknowledged keeps Cleanup blocked across a restart.
-        corrupt |= document?.CleanupBlocked == true;
-        if (document is null || (document.OutputFolder is { } saved && !SameFolder(saved, folder)))
-        {
-            return (entries, corrupt);
-        }
-
-        // The deserializer doesn't check list elements, so a hand-edited null is skipped.
-        foreach (var entry in document.Items.Where(e => e is not null))
-        {
-            entries[entry.Path] = entry;
-        }
-
-        return (entries, corrupt);
-    }
-
-    private static bool SameFolder(string saved, string folder)
-    {
-        try
-        {
-            return string.Equals(FullFolder(saved), folder, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            return false;
-        }
-    }
-
-    private static ReadResult TryRead(string path, Action<Exception> failed, out LibraryFile? document)
-    {
-        document = null;
-        try
-        {
-            if (!File.Exists(path))
-            {
-                return ReadResult.Missing;
-            }
-
-            document = JsonSerializer.Deserialize(File.ReadAllBytes(path), LibraryFileJsonContext.Default.LibraryFile)
-                ?? throw new JsonException($"{Path.GetFileName(path)} is null.");
-            return ReadResult.Read;
-        }
-        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
-        {
-            failed(e);
-            document = null;
-            return ReadResult.Bad;
         }
     }
 
@@ -793,14 +482,14 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private void OnStart()
     {
         _settle = _time.CreateTimer(_ => _channel.Writer.TryWrite(new Settle()), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        _folder = FullFolder(_outputFolder());
+        _folder = LibraryPaths.FullFolder(_outputFolder());
 
         // A length loaded from library.json belongs to the file's current modified time (Load checked it).
-        foreach (var item in _items.Values.Where(i => i.LengthSeconds is not null))
+        foreach (var item in _index.Items.Where(i => i.LengthSeconds is not null))
         {
             try
             {
-                _modified[item.Path] = File.GetLastWriteTimeUtc(Path.Combine(_folder, item.Path));
+                _index.RememberLengthReadAt(item.Path, File.GetLastWriteTimeUtc(Path.Combine(_folder, item.Path)));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
             {
@@ -811,7 +500,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         CreateMissingFolder();
         StartWatcher();
         Rescan();
-        foreach (var item in _items.Values.Where(i => !i.BeingWritten && i.LengthSeconds is null).ToList())
+        foreach (var item in _index.Items.Where(i => !i.BeingWritten && i.LengthSeconds is null).ToList())
         {
             QueueLength(item.Path);
         }
@@ -834,33 +523,26 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         var path = Path.GetFullPath(begin.Path);
 
         // A path outside the Output Folder isn't the Library's.
-        if (!TryKey(_folder, path, out var key))
+        if (!LibraryPaths.TryKey(_folder, path, out var key))
         {
             return;
         }
 
-        _beingWritten[path] = key;
-
-        // A write over an indexed file: a length read still queued for the old file is the old file's.
-        _modified.Remove(key);
-        _queued.Remove(key);
-        var item = new LibraryItem(key, begin.ProfileId, 0, _time.GetUtcNow(), true, Kind: begin.Kind);
-        _items[key] = item;
-        _added(item);
+        _index.BeginWrite(path, new LibraryItem(key, begin.ProfileId, 0, _time.GetUtcNow(), true, Kind: begin.Kind));
     }
 
     private void OnEnd(End end)
     {
         var path = Path.GetFullPath(end.Path);
-        if (!_beingWritten.Remove(path, out var key) || !_items.TryGetValue(key, out var item))
+        if (!_index.TryEndWrite(path, out var item))
         {
             return;
         }
 
+        var key = item.Path;
         if (end.Outcome == WriteOutcome.Failed)
         {
-            _items.Remove(key);
-            _removed(new LibraryItemRemoved(key));
+            _index.DropFailedWrite(key);
             return;
         }
 
@@ -868,12 +550,10 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         item = item with
         {
             Size = file.Exists ? file.Length : 0,
-            Modified = file.Exists ? Utc(file.LastWriteTimeUtc) : null,
+            Modified = file.Exists ? LibraryFiles.Utc(file.LastWriteTimeUtc) : null,
             BeingWritten = false,
         };
-        _items[key] = item;
-        _changed(item);
-        _dirty = true;
+        _index.Change(item);
         QueueLength(key);
         StartCleanup();
     }
@@ -887,14 +567,14 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         }
 
         var path = watched.Path;
-        if (!TryKey(_folder, path, out var key) || Ignored(path))
+        if (!LibraryPaths.TryKey(_folder, path, out var key) || Ignored(path))
         {
             return;
         }
 
         // A folder moved or copied in reports only itself; a folder deleted reports only itself.
         if ((watched.Kind == WatcherChangeTypes.Created && Directory.Exists(path))
-            || (watched.Kind == WatcherChangeTypes.Deleted && !IsMp4(path) && HasKeysUnder(key)))
+            || (watched.Kind == WatcherChangeTypes.Deleted && !LibraryPaths.IsMp4(path) && _index.HasKeysUnder(key)))
         {
             PendRescan();
             return;
@@ -911,8 +591,8 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             return;
         }
 
-        var oldIn = TryKey(_folder, oldPath, out var oldKey);
-        var newIn = TryKey(_folder, newPath, out var newKey);
+        var oldIn = LibraryPaths.TryKey(_folder, oldPath, out var oldKey);
+        var newIn = LibraryPaths.TryKey(_folder, newPath, out var newKey);
         if (newIn && Directory.Exists(newPath))
         {
             if (oldIn)
@@ -926,11 +606,11 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
         if (oldIn)
         {
-            if (newIn && IsMp4(newPath) && _items.TryGetValue(oldKey, out var item) && !item.BeingWritten)
+            if (newIn && LibraryPaths.IsMp4(newPath) && _index.TryGet(oldKey, out var item) && !item.BeingWritten)
             {
                 MoveItem(item, newKey);
             }
-            else if (!IsMp4(oldPath) && HasKeysUnder(oldKey))
+            else if (!LibraryPaths.IsMp4(oldPath) && _index.HasKeysUnder(oldKey))
             {
                 PendRescan();
             }
@@ -992,18 +672,15 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
     private void OnFolderChanged()
     {
-        var folder = FullFolder(_outputFolder());
+        var folder = LibraryPaths.FullFolder(_outputFolder());
         if (string.Equals(folder, _folder, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
         _folder = folder;
-        _items.Clear();
-        _beingWritten.Clear();
+        _index.Clear();
         _pending.Clear();
-        _modified.Clear();
-        _queued.Clear();
         _cleanupSkip.Clear();
         _rescanPending = false;
         DisposeRegistrations();
@@ -1012,18 +689,18 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
         // Watched before the scan, so a file created meanwhile is reconciled once it settles.
         StartWatcher();
-        foreach (var path in Files(folder, Extension, _failed))
+        foreach (var path in LibraryFiles.Files(folder, LibraryPaths.Extension, _failed))
         {
-            if (TryKey(folder, path, out var key) && Check(path) is { } file)
+            if (LibraryPaths.TryKey(folder, path, out var key) && Check(path) is { } file)
             {
-                _items[key] = Scanned(file, key, _profileForFolder);
+                _index.Restore(LibraryFiles.Scanned(file, key, _profileForFolder));
             }
         }
 
         _folderChanged?.Invoke(new LibraryFolderChanged(folder));
-        _reset(new LibraryReset([.. _items.Values]));
+        _reset(new LibraryReset([.. _index.Items]));
         _dirty = true;
-        foreach (var key in _items.Keys.ToList())
+        foreach (var key in _index.Keys.ToList())
         {
             QueueLength(key);
         }
@@ -1060,19 +737,19 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>Checks one path against disk: removes, keeps or lists it; a busy or incomplete file is checked again later.</summary>
     private void Reconcile(string path)
     {
-        if (!TryKey(_folder, path, out var key) || Ignored(path))
+        if (!LibraryPaths.TryKey(_folder, path, out var key) || Ignored(path))
         {
             return;
         }
 
         var file = new FileInfo(path);
-        if (!file.Exists || !IsMp4(path) || file.Length == 0 || ThroughReparsePoint(_folder, path))
+        if (!file.Exists || !LibraryPaths.IsMp4(path) || file.Length == 0 || LibraryPaths.ThroughReparsePoint(_folder, path))
         {
-            Remove(key);
+            _index.Remove(key);
             return;
         }
 
-        if (_items.TryGetValue(key, out var item) && item.Size == file.Length)
+        if (_index.TryGet(key, out var item) && item.Size == file.Length)
         {
             return;
         }
@@ -1082,7 +759,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             // A path Check pended for another look keeps its item, and its profile and date, until then.
             if (!_pending.Contains(path))
             {
-                Remove(key);
+                _index.Remove(key);
             }
 
             return;
@@ -1090,20 +767,15 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
         if (item is null)
         {
-            item = Scanned(file, key, _profileForFolder);
-            _items[key] = item;
-            _added(item);
+            _index.Add(LibraryFiles.Scanned(file, key, _profileForFolder));
         }
         else
         {
             // A file rewritten outside the app has a new length.
-            item = item with { Size = file.Length, Modified = Utc(file.LastWriteTimeUtc), LengthSeconds = null };
-            _modified.Remove(key);
-            _items[key] = item;
-            _changed(item);
+            _index.ForgetLength(key);
+            _index.Change(item with { Size = file.Length, Modified = LibraryFiles.Utc(file.LastWriteTimeUtc), LengthSeconds = null });
         }
 
-        _dirty = true;
         QueueLength(key);
     }
 
@@ -1118,10 +790,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
         if (item.Favourite != args.Favourite)
         {
-            item = item with { Favourite = args.Favourite };
-            _items[key] = item;
-            _changed(item);
-            _dirty = true;
+            _index.Change(item with { Favourite = args.Favourite });
         }
 
         request.Done.TrySetResult();
@@ -1156,19 +825,17 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             return false;
         }
 
-        var onDisk = Utc(file.LastWriteTimeUtc);
+        var onDisk = LibraryFiles.Utc(file.LastWriteTimeUtc);
         if (file.Length != item.Size || onDisk != item.Modified)
         {
             var resized = file.Length != item.Size;
             item = item with { Size = file.Length, Modified = onDisk, LengthSeconds = resized ? null : item.LengthSeconds };
             if (resized)
             {
-                _modified.Remove(key);
+                _index.ForgetLength(key);
             }
 
-            _items[key] = item;
-            _changed(item);
-            _dirty = true;
+            _index.Change(item);
             if (resized)
             {
                 QueueLength(key);
@@ -1187,8 +854,8 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         item = null;
         key = "";
         return !string.IsNullOrEmpty(path)
-            && TryKey(_folder, Path.GetFullPath(Path.Combine(_folder, path)), out key)
-            && _items.TryGetValue(key, out item);
+            && LibraryPaths.TryKey(_folder, Path.GetFullPath(Path.Combine(_folder, path)), out key)
+            && _index.TryGet(key, out item);
     }
 
     /// <summary>Refuses a rename or delete of an item a writer is still writing; checked before the identity.</summary>
@@ -1215,7 +882,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             return;
         }
 
-        if (!ValidName(args.NewName))
+        if (!LibraryPaths.ValidName(args.NewName))
         {
             request.Done.TrySetException(new ErrorCodeException(
                 ErrorCodes.InvalidFileName,
@@ -1236,7 +903,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
         // A case-only rename of the same file is allowed; any other file, item or write there isn't.
         var sameFile = string.Equals(newKey, key, StringComparison.OrdinalIgnoreCase);
-        if (!sameFile && (_items.ContainsKey(newKey) || _beingWritten.ContainsKey(to) || File.Exists(to) || Directory.Exists(to)))
+        if (!sameFile && (_index.Contains(newKey) || _index.IsBeingWritten(to) || File.Exists(to) || Directory.Exists(to)))
         {
             request.Done.TrySetException(new ErrorCodeException(
                 ErrorCodes.FileNameTaken,
@@ -1296,7 +963,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             return;
         }
 
-        Remove(key);
+        _index.Remove(key);
         request.Done.TrySetResult();
     }
 
@@ -1342,7 +1009,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         && _time.GetUtcNow() - _startedAt >= CleanupStartDelay;
 
     private CleanupPlan PlanCleanup(CleanupSettings limits, IReadOnlySet<string> skip, Dictionary<string, bool>? cache) =>
-        CleanupPlanner.Plan(_time.GetUtcNow(), limits, _items.Values, _folder, skip, key =>
+        CleanupPlanner.Plan(_time.GetUtcNow(), limits, _index.Items, _folder, skip, key =>
         {
             if (cache is null || !cache.TryGetValue(key, out var inside))
             {
@@ -1480,14 +1147,14 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>Deletes an item's file for good once it is re-checked against the index and the disk; false when it wasn't.</summary>
     private bool CleanupDelete(string key)
     {
-        if (!_items.TryGetValue(key, out var item) || item.BeingWritten || item.Favourite)
+        if (!_index.TryGet(key, out var item) || item.BeingWritten || item.Favourite)
         {
             Log($"Cleanup skipped {key}: it is gone, being written or a Favourite.");
             return false;
         }
 
         var full = Path.GetFullPath(Path.Combine(_folder, key));
-        if (_beingWritten.ContainsKey(full) || !TryKey(_folder, full, out _) || !IsMp4(full))
+        if (_index.IsBeingWritten(full) || !LibraryPaths.TryKey(_folder, full, out _) || !LibraryPaths.IsMp4(full))
         {
             Log($"Cleanup skipped {key}: it is being written, outside the Output Folder or not an .mp4.");
             return false;
@@ -1508,12 +1175,10 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         }
 
         // Touched at the same size (reconcile compares sizes only): refreshed like a command's, for the next pass.
-        var onDisk = Utc(file.LastWriteTimeUtc);
+        var onDisk = LibraryFiles.Utc(file.LastWriteTimeUtc);
         if (onDisk != item.Modified)
         {
-            _items[key] = item with { Modified = onDisk };
-            _changed(_items[key]);
-            _dirty = true;
+            _index.Change(item with { Modified = onDisk });
             LogChangedOnDisk(key);
             return false;
         }
@@ -1529,7 +1194,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             return false;
         }
 
-        Remove(key, LibraryRemovalReasons.Cleanup);
+        _index.Remove(key, LibraryRemovalReasons.Cleanup);
         Log($"Cleanup deleted {key} ({item.Size} bytes).");
         return true;
     }
@@ -1541,7 +1206,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>Whether the actor may change the file: no junction or link on its path, and it is under the Output Folder.</summary>
     private bool Inside(string full)
     {
-        if (!TryKey(_folder, full, out _) || ThroughReparsePoint(_folder, full))
+        if (!LibraryPaths.TryKey(_folder, full, out _) || LibraryPaths.ThroughReparsePoint(_folder, full))
         {
             return false;
         }
@@ -1579,17 +1244,14 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>Queues a read of the item's length at its current size, unless one is already queued at that size.</summary>
     private void QueueLength(string key)
     {
-        if (_readLength is null
-            || !_items.TryGetValue(key, out var item)
-            || item.BeingWritten
-            || (_queued.TryGetValue(key, out var size) && size == item.Size))
+        if (_readLength is null || !_index.NeedsLength(key, out var item))
         {
             return;
         }
 
         if (_lengthJobs.Writer.TryWrite(new LengthJob(_folder, key, Path.Combine(_folder, key), item.Size)))
         {
-            _queued[key] = item.Size;
+            _index.LengthQueued(key, item.Size);
         }
     }
 
@@ -1601,24 +1263,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             return;
         }
 
-        if (_queued.TryGetValue(read.Key, out var queued) && queued == read.Size)
-        {
-            _queued.Remove(read.Key);
-        }
-
-        if (read.Length is not { } length
-            || !_items.TryGetValue(read.Key, out var item)
-            || item.BeingWritten
-            || item.Size != read.Size)
-        {
-            return;
-        }
-
-        item = item with { LengthSeconds = length };
-        _items[read.Key] = item;
-        _modified[read.Key] = read.Modified;
-        _changed(item);
-        _dirty = true;
+        _index.ApplyLength(read.Key, read.Size, read.Modified, read.Length);
     }
 
     /// <summary>The file when it is a non-empty, complete MP4; else null, with a busy or fresh file queued for another check.</summary>
@@ -1659,12 +1304,12 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private void Rescan()
     {
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var key in _items.Keys)
+        foreach (var key in _index.Keys)
         {
             paths.Add(Path.Combine(_folder, key));
         }
 
-        paths.UnionWith(Files(_folder, Extension, _failed));
+        paths.UnionWith(LibraryFiles.Files(_folder, LibraryPaths.Extension, _failed));
         foreach (var path in paths)
         {
             Reconcile(path);
@@ -1673,56 +1318,25 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
     /// <summary>A write under way, its <c>.rbpart</c>, or a path of the actor's own operation not yet expired.</summary>
     private bool Ignored(string path) =>
-        _beingWritten.ContainsKey(path)
-        || (path.EndsWith(PartExtension, StringComparison.OrdinalIgnoreCase) && _beingWritten.ContainsKey(path[..^PartExtension.Length]))
+        _index.IsBeingWritten(path)
+        || (path.EndsWith(LibraryPaths.PartExtension, StringComparison.OrdinalIgnoreCase) && _index.IsBeingWritten(path[..^LibraryPaths.PartExtension.Length]))
         || _registered.ContainsKey(path);
-
-    private bool HasKeysUnder(string prefix)
-    {
-        var folder = prefix + Path.DirectorySeparatorChar;
-        return _items.Keys.Any(k => k.StartsWith(folder, StringComparison.OrdinalIgnoreCase));
-    }
 
     // A folder renamed: each item under it moves, keeping its profile and date.
     private void MoveKeysUnder(string oldPrefix, string newPrefix)
     {
-        var folder = oldPrefix + Path.DirectorySeparatorChar;
-        foreach (var item in _items.Values.Where(i => !i.BeingWritten && i.Path.StartsWith(folder, StringComparison.OrdinalIgnoreCase)).ToList())
+        foreach (var item in _index.WrittenUnder(oldPrefix))
         {
             MoveItem(item, newPrefix + item.Path[oldPrefix.Length..]);
         }
     }
 
+    // A move keeps the length; one not yet read is read under the new key.
     private void MoveItem(LibraryItem item, string newKey)
     {
-        _items.Remove(item.Path);
-        _removed(new LibraryItemRemoved(item.Path));
-        var moved = item with { Path = newKey };
-        _items[newKey] = moved;
-        _added(moved);
-        _dirty = true;
-
-        // A move keeps the length; one not yet read is read under the new key.
-        _queued.Remove(item.Path);
-        if (_modified.Remove(item.Path, out var modified))
-        {
-            _modified[newKey] = modified;
-        }
-
-        if (moved.LengthSeconds is null)
+        if (_index.Move(item, newKey).LengthSeconds is null)
         {
             QueueLength(newKey);
-        }
-    }
-
-    private void Remove(string key, string? reason = null)
-    {
-        _modified.Remove(key);
-        _queued.Remove(key);
-        if (_items.Remove(key))
-        {
-            _removed(new LibraryItemRemoved(key, reason));
-            _dirty = true;
         }
     }
 
@@ -1837,37 +1451,12 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
     private void OnError(object sender, ErrorEventArgs e) => OnWatcherError(e.GetException());
 
-    // Atomic: a temp file is flushed, then swapped in, keeping a backup; a failed save is retried until it lands.
+    // A failed save is retried until it lands, with one warning for each run of failures.
     private void Save()
     {
-        var temp = _libraryFile + ".tmp";
         try
         {
-            var document = new LibraryFile(
-                1,
-                [.. _items.Values.Where(i => !i.BeingWritten).Select(Entry)],
-                _folder,
-                _cleanupBlocked);
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_libraryFile))!);
-            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
-                {
-                    JsonSerializer.Serialize(writer, document, LibraryFileJsonContext.Default.LibraryFile);
-                }
-
-                stream.Flush(flushToDisk: true);
-            }
-
-            if (File.Exists(_libraryFile))
-            {
-                File.Replace(temp, _libraryFile, _libraryFile + BakExtension, ignoreMetadataErrors: true);
-            }
-            else
-            {
-                File.Move(temp, _libraryFile);
-            }
-
+            LibraryIndexFile.Write(_libraryFile, new LibraryFile(1, _index.Entries(), _folder, _cleanupBlocked));
             if (_saveFailing)
             {
                 _saveFailing = false;
@@ -1876,16 +1465,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            try
-            {
-                File.Delete(temp);
-            }
-            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
-            {
-                // The next save overwrites it.
-            }
-
-            // One warning per run of failures; the retry keeps going quietly.
+            // The retry keeps going quietly.
             if (!_saveFailing)
             {
                 _failed(e);
@@ -1895,19 +1475,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             _saveRetry ??= _time.CreateTimer(_ => _channel.Writer.TryWrite(new RetrySave()), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             _saveRetry.Change(SaveRetryDelay, Timeout.InfiniteTimeSpan);
         }
-    }
-
-    // A length is saved with the modified time it was read at, so a restart can tell it still holds.
-    private LibraryFileEntry Entry(LibraryItem item) =>
-        item.LengthSeconds is { } length && _modified.TryGetValue(item.Path, out var modified)
-            ? new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, length, modified, item.Favourite, item.Kind)
-            : new LibraryFileEntry(item.Path, item.ProfileId, item.Date, item.Size, Favourite: item.Favourite, Kind: item.Kind);
-
-    private enum ReadResult
-    {
-        Missing,
-        Read,
-        Bad,
     }
 
     private sealed record Registration(long Id, ITimer Timer);

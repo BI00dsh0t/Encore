@@ -167,7 +167,7 @@ internal sealed class EngineStartup
     private void LoadLibraryIndex()
     {
         _libraryFile = Path.Combine(_instance.RoamingDataFolder, "library.json");
-        _libraryLoad = LibraryActor.Load(
+        _libraryLoad = LibraryLoader.Load(
             OutputFolder(),
             _libraryFile,
             ProfileForFolder,

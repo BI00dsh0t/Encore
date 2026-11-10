@@ -62,5 +62,5 @@ internal static class CleanupPlanner
     }
 
     private static bool Inside(string folder, string key) =>
-        LibraryActor.IsMp4(key) && LibraryActor.TryKey(folder, Path.GetFullPath(Path.Combine(folder, key)), out _);
+        LibraryPaths.IsMp4(key) && LibraryPaths.TryKey(folder, Path.GetFullPath(Path.Combine(folder, key)), out _);
 }
