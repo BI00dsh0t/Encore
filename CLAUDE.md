@@ -25,6 +25,19 @@
 
 - **Heavy category**, when a change touches the capture, encode, mux or audio path, or an AC needs the measurement: add `--explicit only` to either command (`--explicit on` runs both). Run one project at a time, and not while another session's tests are running.
 
+## Code style
+
+These are the rules of the final refactor review (`_bmad-output/initiative-replay-buffer/feature-requests/refactor-review/refactor-review.md`). New code follows them too.
+
+- **Methods are short:** about 50 lines at most, and no more than 3 levels of nesting. Split long logic into named helper functions.
+- **One job per class.** If a class's summary needs "and", split it. One public type per file, except small records of one message group.
+- **No logic in controls.** A control or code-behind only wires events to its view model.
+- **Comments are one line.** A comment says why, in plain words. No ticket ids (`Story 10.5`, `AD-23`) in comments; the commit carries them.
+- **Names are whole words.** No abbreviation a new reader has to look up.
+- **No dead code:** no unused members, parameters or `using`s. The build fails on them (`.editorconfig`).
+- **Lines wrap before 140 characters,** and XAML puts one element on a line.
+- **A refactor changes no behaviour** and keeps Contracts wire-compatible.
+
 ## Commit messages: Conventional Commits 1.0.0
 
 - **Format:** `<type>(<scope>): <summary>`. The summary is imperative, lowercase, has no trailing period, and is 72 characters or fewer. A body (optional) explains why, wrapped at 72 characters.
