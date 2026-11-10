@@ -48,7 +48,8 @@ internal sealed class WindowsEndpointSource(ILogger log) : IAudioEndpointSource,
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<AudioDevice> ListPresent() => [.. List(AudioFlow.Output, SettingsFlow.Output), .. List(AudioFlow.Input, SettingsFlow.Input)];
+    public IReadOnlyList<AudioDevice> ListPresent() =>
+        [.. List(AudioFlow.Output, SettingsFlow.Output), .. List(AudioFlow.Input, SettingsFlow.Input)];
 
     public void Dispose()
     {
@@ -74,13 +75,13 @@ internal sealed class WindowsEndpointSource(ILogger log) : IAudioEndpointSource,
     {
         var endpoints = AudioEndpoints.List(flow);
         var defaultId = endpoints.Count > 0 ? AudioEndpoints.DefaultId(flow) : null;
-        return endpoints.Select(e => new AudioDevice(
-            e.Id,
-            e.FriendlyName,
-            e.ParentName,
+        return endpoints.Select(endpoint => new AudioDevice(
+            endpoint.Id,
+            endpoint.FriendlyName,
+            endpoint.ParentName,
             settingsFlow,
             Available: true,
-            IsDefault: string.Equals(e.Id, defaultId, StringComparison.OrdinalIgnoreCase)));
+            IsDefault: string.Equals(endpoint.Id, defaultId, StringComparison.OrdinalIgnoreCase)));
     }
 
     // On the watcher's thread; reads the handlers without the gate, so disposal can join it.

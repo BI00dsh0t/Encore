@@ -39,7 +39,7 @@ internal static unsafe class SharedAudioClient
         client->Initialize(AUDCLNT_SHAREMODE.AUDCLNT_SHAREMODE_SHARED, flags, bufferDuration, 0, &format, null);
     }
 
-    /// <summary>Creates an auto-reset event in the owner's field, then sets it on the client; the owner closes it on any failure.</summary>
+    /// <summary>Creates an auto-reset event in the owner's field, then sets it on the client; the owner closes it.</summary>
     public static void AttachEvent(IAudioClient* client, ref HANDLE wake)
     {
         wake = PInvoke.CreateEvent(null, false, false, default(PCWSTR));
