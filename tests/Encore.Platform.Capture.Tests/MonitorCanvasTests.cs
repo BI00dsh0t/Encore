@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Encore.Platform.Capture.Tests;
 
-/// <summary>Spike 11.1: the canvas bounding box from placements (the rule itself is Core's <c>MonitorCanvasRule</c>) and the GPU cost of a monitor's blit into the canvas.</summary>
+/// <summary>The canvas bounding box from placements, and the GPU cost of one monitor's blit into the canvas.</summary>
 public sealed class MonitorCanvasTests
 {
     [Fact]

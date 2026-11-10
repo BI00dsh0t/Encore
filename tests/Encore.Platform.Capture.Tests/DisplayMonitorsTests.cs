@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Encore.Platform.Capture.Tests;
 
-/// <summary>The engine's display port (8.5, T-03), on the real displays, which it only reads.</summary>
+/// <summary>The engine's display port, on the real displays, which it only reads.</summary>
 public sealed class DisplayMonitorsTests
 {
     [Fact]
