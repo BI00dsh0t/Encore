@@ -11,7 +11,7 @@ risk: high
 
 # Final refactor review
 
-Status: plan written 2026-11-10; waits for the builder's go. Nothing has been changed yet.
+Status: plan written 2026-11-10. The builder answered the decisions the same day (see Decisions), and phase 0 started.
 
 ## Goal
 
@@ -80,14 +80,14 @@ Three things would confuse a junior at first sight:
 
 The order runs from low risk to high risk, so the riskiest files are changed last and with the most care.
 
-### Phase 0: baseline and housekeeping (small)
+### Phase 0: baseline and housekeeping (small, low risk)
 
 - Delete the leftover `ReplayBuffer.*` folders under `src`, `tests` and `bench`, after listing what is in them.
 - Turn on the compiler's own checks for unused code (IDE0051, IDE0052, IDE0060, CS8019) as warnings, and fix what they find. This covers most of priority 1 mechanically.
 - Add an `.editorconfig` line-length guide of 140 and record the "done" rules above in `CLAUDE.md`.
-- Run the default test suite once to get a baseline (see Decisions).
+- Run the default test suite once to get a baseline, so a later failure can be told apart from one that was already there.
 
-### Phase 1: comments, whole solution (medium, mechanical)
+### Phase 1: comments, whole solution (medium size, low risk)
 
 - Cut every comment and `<summary>` to one plain line.
 - Remove the 680 ticket ids.
@@ -95,7 +95,7 @@ The order runs from low risk to high risk, so the riskiest files are changed las
 - Where a long comment explains a hard rule (thread ownership, ordering, a Windows quirk), keep one line and move the rest into a well-named helper or a short section of `docs/`.
 - No code moves in this phase, so the diff is comments only.
 
-### Phase 2: App views and controls (medium)
+### Phase 2: App views and controls (medium size, medium risk)
 
 Scope: `Encore.App` XAML, code-behind and custom controls.
 
@@ -104,7 +104,7 @@ Scope: `Encore.App` XAML, code-behind and custom controls.
 - Merge the copied nav styles of `ShellFluent.xaml` and `ShellGamingDark.xaml` into one shared template; each theme keeps only the values that differ.
 - Reformat the XAML that puts several elements on one line.
 
-### Phase 3: App view models (large)
+### Phase 3: App view models (large, medium risk)
 
 Scope: `LibraryPage`, `TrackLayoutPage`, `ClipCreatorPage`, `PlayerPage`, the settings pages, `MainViewModel`, `EngineConnection`, `ShellApp`.
 
@@ -113,14 +113,14 @@ Scope: `LibraryPage`, `TrackLayoutPage`, `ClipCreatorPage`, `PlayerPage`, the se
 - Take `System.Windows` types out of the view models where a plain type does the job.
 - Split `EngineConnection` into connecting, sending and dispatching replies.
 
-### Phase 4: engine start-up and command line (medium)
+### Phase 4: engine start-up and command line (medium size, medium risk)
 
 Scope: `EngineHost`, `CommandLine`, `Program`, `AppSupervisor`, `ClipMediaWorker`.
 
 - Break `EngineHost.Start` (558 lines, 12 nullable locals) into one builder method per service, with a single place that disposes what was built if a later step fails.
 - Break `CommandLine.ParseCapture` (258 lines) into one small parser per option group.
 
-### Phase 5: Core sessions and Library (large, higher risk)
+### Phase 5: Core sessions and Library (large, high risk)
 
 Scope: `SessionOrchestrator`, `LibraryActor`, `TargetGames`, `PacketRing`, `FeedbackRouter`.
 
@@ -128,7 +128,7 @@ Scope: `SessionOrchestrator`, `LibraryActor`, `TargetGames`, `PacketRing`, `Feed
 - Replace the long `Handle` switches with one handler method per message.
 - Split each actor's state from its message handling, so the state rules can be read on their own.
 
-### Phase 6: platform projects (medium)
+### Phase 6: platform projects (medium size, medium risk)
 
 Scope: `Platform.Audio`, `Platform.Capture`, `Platform.FFmpeg`, `Platform.Windows`, `Media`.
 
@@ -136,7 +136,7 @@ Scope: `Platform.Audio`, `Platform.Capture`, `Platform.FFmpeg`, `Platform.Window
 - Do the same for `TonePlayer` and `WasapiCapture`, and for `DurableOutput` and `SharedInput`.
 - Wrap each raw native call sequence in a named helper, so the calling code reads as steps.
 
-### Phase 7: `CaptureSession` (large, highest risk)
+### Phase 7: `CaptureSession` (large, high risk)
 
 Scope: `CaptureSession.cs` (3,349 lines), `EncoderChain`, `ReplayRings`.
 
@@ -144,7 +144,7 @@ Scope: `CaptureSession.cs` (3,349 lines), `EncoderChain`, `ReplayRings`.
 - Move the 13 test-only hooks behind one `ICaptureFaults` seam, so the shipping options no longer list them.
 - This is the hot path. It changes only after phases 0 to 6 have landed, and it needs a Heavy test run at night before it merges.
 
-### Phase 8: the junior read-through (small)
+### Phase 8: the junior read-through (small, low risk)
 
 - Read every project top to bottom as a new starter, using a fresh session with no project memory.
 - Fix or list anything still unclear.
@@ -154,15 +154,14 @@ Scope: `CaptureSession.cs` (3,349 lines), `EncoderChain`, `ReplayRings`.
 
 - One session per phase, working through the usual pool, one phase at a time so no two sessions edit the same files.
 - Each phase ends with a code review of its diff against the "done" rules, as QA does today.
-- Each phase's unrun tests go to `test-backlog.md`, unless the builder lifts the no-tests rule (below).
+- **Tests run after every phase of medium risk or above** (phases 2 to 7): the default suite of each project the phase touched, one project at a time, by day. Phases 6 and 7 touch the capture, encode and audio path, so they also get a Heavy run at night before they merge. A failure that the baseline didn't have blocks the merge.
+- Low-risk phases (0, 1 and 8) build with 0 warnings and run no tests.
 - Rough size: phases 0, 1 and 8 are a session each; phases 2, 4 and 6 are one or two; phases 3, 5 and 7 are two or three.
 
-## Decisions for the builder
+## Decisions (builder, 2026-11-10)
 
-Each has a recommended default. The plan uses the defaults unless told otherwise.
-
-1. **Tests during the refactor.** The standing rule is build only, no tests. A refactor is where tests earn their keep, because the whole point is that behaviour doesn't change. **Recommended:** lift the rule for this epic only. Run the default suite of each touched project after each phase, by day, and one Heavy run at night before phase 7 merges.
-2. **Ticket ids in comments.** **Recommended:** remove all 680. They mean nothing to a new reader, and `git blame` leads to the story.
-3. **The `Rb` prefix on 137 resource keys.** **Recommended:** rename to `Encore…` in phase 2, with `DESIGN.md` updated to match. It is a mechanical rename, and it removes the last trace of the old name that a reader meets daily.
-4. **The `…Page` view models.** **Recommended:** rename them to `…ViewModel` in phase 3 (12 classes), since "Page" beside a "View" reads as two views.
-5. **How far SOLID goes.** **Recommended:** split classes by responsibility and depend on the existing interfaces, but add no new interface that has only one implementation and no test double.
+1. **Tests:** "run tests after anything medium risk or above". Each phase heading carries its risk, and "How it runs" says which tests run when. The no-tests rule still holds for low-risk phases.
+2. **Ticket ids in comments:** not answered, so the recommended default stands: remove all 680 in phase 1.
+3. **The `Rb` prefix:** rename the 137 resource keys to `Encore…` in phase 2, and update `DESIGN.md` to match.
+4. **The `…Page` view models:** rename the 12 classes to `…ViewModel` in phase 3.
+5. **SOLID:** "follow solid". Classes are split by responsibility, are open to extension through the existing seams, and depend on abstractions where they cross a layer. An interface is added where a class depends on a concrete type from another layer.
