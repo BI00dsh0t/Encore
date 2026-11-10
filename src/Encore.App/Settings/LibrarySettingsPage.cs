@@ -322,7 +322,7 @@ internal sealed class LibrarySettingsPage : SettingsPage
             return RewindSettingsPage.ClipsContainsCache;
         }
 
-        return FolderPicker.CanWrite(path) ? null : RewindSettingsPage.CantWrite;
+        return FolderProbe.CanWrite(path) ? null : RewindSettingsPage.CantWrite;
     }
 
     // Shows the rendered value again, with why the entry wasn't sent.

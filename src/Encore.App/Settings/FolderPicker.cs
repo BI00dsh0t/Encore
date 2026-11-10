@@ -1,8 +1,4 @@
-using System.Diagnostics;
-using System.Globalization;
 using System.IO;
-using System.Windows;
-using Microsoft.Win32;
 using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
@@ -25,7 +21,7 @@ internal sealed class FolderPicker : Observable
         BrowseCommand = new RelayCommand(Browse, () => IsEnabled);
         OpenCommand = new RelayCommand(Open, () => IsEnabled && FolderExists);
         UseDefaultCommand = new RelayCommand(UseDefault, () => IsEnabled && CanUseDefault);
-        Dialog = ShowFolderDialog;
+        Dialog = ShowDialog;
     }
 
     /// <summary>The help line under the buttons.</summary>
@@ -37,7 +33,7 @@ internal sealed class FolderPicker : Observable
     /// <summary>The Windows dialog's title.</summary>
     public string DialogTitle { get; init; } = "Choose a folder";
 
-    /// <summary>The file variant: Browse… opens a file dialog with <see cref="FileFilter"/>, and there's no Open or Use default.</summary>
+    /// <summary>The file variant: Browse… opens a file dialog with <see cref="FileFilter"/>; no Open or Use default.</summary>
     public bool IsFile { get; init; }
 
     /// <summary>Whether Open in Explorer shows: not for the file variant.</summary>
@@ -61,16 +57,13 @@ internal sealed class FolderPicker : Observable
     public Func<string, string?> Dialog { get; set; }
 
     /// <summary>Opens a folder in Explorer. Tests replace it.</summary>
-    public Action<string> OpenFolder { get; set; } = folder =>
-    {
-        using var _ = Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true, Verb = "open" });
-    };
+    public Action<string> OpenFolder { get; set; } = FolderProbe.OpenInExplorer;
 
     /// <summary>Whether a folder exists; Open in Explorer is off while it doesn't. Tests replace it.</summary>
     public Func<string, bool> Exists { get; set; } = Directory.Exists;
 
     /// <summary>The free bytes of the drive holding a path, or null when unknown. Tests replace it.</summary>
-    public Func<string, long?> FreeBytes { get; set; } = DriveFree;
+    public Func<string, long?> FreeBytes { get; set; } = FolderProbe.FreeBytes;
 
     /// <summary>The key's value; null is the default.</summary>
     public string? Value => _value;
@@ -99,7 +92,7 @@ internal sealed class FolderPicker : Observable
             }
 
             var root = Path.GetPathRoot(ShownPath)?.TrimEnd('\\') ?? "";
-            return FreeBytes(ShownPath) is { } free ? $"{FormatSize(free)} free on {root}" : "";
+            return FreeBytes(ShownPath) is { } free ? $"{FolderProbe.FormatSize(free)} free on {root}" : "";
         }
     }
 
@@ -152,7 +145,12 @@ internal sealed class FolderPicker : Observable
     /// <summary>Re-reads whether the folder exists and its drive's free space, as when the page opens.</summary>
     public void Refresh()
     {
-        foreach (var name in (string[])[nameof(Value), nameof(ShownPath), nameof(PathText), nameof(CanUseDefault), nameof(FolderExists), nameof(OpenTip), nameof(FreeSpaceText)])
+        string[] shown =
+        [
+            nameof(Value), nameof(ShownPath), nameof(PathText), nameof(CanUseDefault),
+            nameof(FolderExists), nameof(OpenTip), nameof(FreeSpaceText),
+        ];
+        foreach (var name in shown)
         {
             OnPropertyChanged(name);
         }
@@ -189,27 +187,6 @@ internal sealed class FolderPicker : Observable
         }
 
         _ = SendAsync([SettingsValues.SetGlobal(_key, path)]);
-    }
-
-    /// <summary>"212 GB", "1.8 TB": decimal units, one decimal under 10 and from TB.</summary>
-    internal static string FormatSize(long bytes) => bytes switch
-    {
-        >= 1_000_000_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e12:0.0} TB"),
-        >= 10_000_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e9:0} GB"),
-        >= 1_000_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e9:0.0} GB"),
-        _ => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e6:0} MB"),
-    };
-
-    private static long? DriveFree(string path)
-    {
-        try
-        {
-            return Path.GetPathRoot(path) is { Length: > 0 } root ? new DriveInfo(root).AvailableFreeSpace : null;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return null;
-        }
     }
 
     private void Browse()
@@ -259,49 +236,6 @@ internal sealed class FolderPicker : Observable
         UseDefaultCommand.RaiseCanExecuteChanged();
     }
 
-    private string? ShowFolderDialog(string initial)
-    {
-        var owner = Application.Current?.MainWindow;
-        if (IsFile)
-        {
-            var file = new OpenFileDialog { Title = DialogTitle, Filter = FileFilter, CheckFileExists = true };
-            return file.ShowDialog(owner) == true ? file.FileName : null;
-        }
-
-        var dialog = new OpenFolderDialog { Title = DialogTitle };
-        if (initial.Length > 0 && Directory.Exists(initial))
-        {
-            dialog.InitialDirectory = initial;
-        }
-
-        return dialog.ShowDialog(owner) == true ? dialog.FolderName : null;
-    }
-
-    /// <summary>Whether Encore can write to a folder; a missing one counts when its nearest existing parent is writable.</summary>
-    internal static bool CanWrite(string folder)
-    {
-        try
-        {
-            var probe = folder;
-            while (!Directory.Exists(probe))
-            {
-                probe = Path.GetDirectoryName(probe);
-                if (probe is null)
-                {
-                    return false;
-                }
-            }
-
-            var file = Path.Combine(probe, ".encore-write-check-" + Guid.NewGuid().ToString("N"));
-            using (File.Create(file, 1, FileOptions.DeleteOnClose))
-            {
-            }
-
-            return true;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
+    private string? ShowDialog(string initial) =>
+        IsFile ? FolderDialogs.ChooseFile(DialogTitle, FileFilter) : FolderDialogs.ChooseFolder(DialogTitle, initial);
 }

@@ -363,7 +363,7 @@ internal sealed class RewindSettingsPage(SettingsSender sender, string? profileI
             return CacheInsideClips;
         }
 
-        return FolderPicker.CanWrite(path) ? null : CantWrite;
+        return FolderProbe.CanWrite(path) ? null : CantWrite;
     }
 
     /// <summary>Whether <paramref name="path"/> is <paramref name="folder"/> or inside it, ignoring case.</summary>
