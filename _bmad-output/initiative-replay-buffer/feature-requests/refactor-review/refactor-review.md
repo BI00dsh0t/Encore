@@ -11,7 +11,13 @@ risk: high
 
 # Final refactor review
 
-Status: plan written 2026-11-10. The builder answered the decisions the same day (see Decisions), and phase 0 started.
+Status: plan written 2026-11-10. The builder answered the decisions the same day (see Decisions). **Phase 0 is done** (merge `948448a`); phase 1 is next.
+
+**Phase 0 as built:**
+- The 24 leftover `ReplayBuffer.*` folders are deleted. They held only `bin` and `obj`.
+- **Baseline** (default suite at `60d293e`, one project at a time): 1,258 tests, 1,152 passed, 104 skipped, 2 failed. Ten of the eleven projects pass. The two failures are in `Encore.App.Tests` and are stale tests, not product bugs: `MainWindowTests.CurrentSettingsSectionReselectionClosesDrillInWhileEscapeOnlyDismissesTheMenu` and `ShellTests.TheShellLoadsInBothThemesAndTheNavOpensEveryPage` still expect the nav layout from before Settings became its own button. **Phase 2 fixes both first**, so the App suite is a clean safety net.
+- The build now fails on unused usings, unused private members and unused parameters (`.editorconfig`, `Directory.Build.props`). It found little: 38 usings, 2 constants, 1 test parameter and 6 broken doc references. These checks don't see unused `internal` or `public` members, so each later phase still looks for those by hand.
+- `.editorconfig` carries the 140-character guide, and `CLAUDE.md` has a Code style section with the "done" rules.
 
 ## Goal
 

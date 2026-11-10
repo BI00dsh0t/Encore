@@ -168,3 +168,7 @@ The whole solution was renamed (`6f41cea`). Every default suite under its new na
 ## Sidebar contrast (2026-11-10)
 
 Merge `d0fa73e`. `Encore.App.Tests.ThemeTests` (every key resolves in both themes, gallery loads) covers the new `RbShellNavLayerStyle`. By hand: in both looks, the nav pane reads as its own surface with a visible edge, rail and narrow widths included, and the player still hides it.
+
+## Refactor review baseline (2026-11-10)
+
+The default suite ran once at `60d293e` as the refactor's baseline, so the default-suite items above have now run: 1,258 tests, 2 failures. Both are stale `Encore.App.Tests` (`MainWindowTests.CurrentSettingsSectionReselection…` and `ShellTests.TheShellLoadsInBothThemesAndTheNavOpensEveryPage`); refactor phase 2 fixes them. Heavy, bench, soak and by-hand items are still not run.
