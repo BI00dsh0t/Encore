@@ -12,14 +12,12 @@ public sealed class SettingsStore
 
     private readonly Lock _lock = new();
     private readonly string _path;
-    private readonly string _tempPath;
     private SettingsDocument _current;
 
     private SettingsStore(string folder, SettingsDocument document)
     {
         Folder = folder;
         _path = Path.Combine(folder, FileName);
-        _tempPath = _path + ".tmp";
         _current = document;
     }
 
@@ -46,7 +44,7 @@ public sealed class SettingsStore
         folder = Path.GetFullPath(folder);
         var path = Path.Combine(folder, FileName);
 
-        TryDelete(path + ".tmp");
+        AtomicFile.DeleteLeftover(path);
 
         if (!File.Exists(path))
         {
@@ -121,25 +119,18 @@ public sealed class SettingsStore
     {
         try
         {
-            Directory.CreateDirectory(Folder);
-            using (var stream = new FileStream(_tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
-                {
-                    JsonSerializer.Serialize(writer, document, SettingsJsonContext.Default.SettingsDocument);
-                }
-
-                stream.Flush(flushToDisk: true);
-            }
-
-            BeforeReplace?.Invoke();
-            File.Move(_tempPath, _path, overwrite: true);
+            AtomicFile.Replace(_path, stream => WriteJson(stream, document), BeforeReplace);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            TryDelete(_tempPath);
             throw new ErrorCodeException(ErrorCodes.SettingsWriteFailed, $"Settings could not be written to '{_path}': {e.Message}", e);
         }
+    }
+
+    private static void WriteJson(Stream stream, SettingsDocument document)
+    {
+        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
+        JsonSerializer.Serialize(writer, document, SettingsJsonContext.Default.SettingsDocument);
     }
 
     private static SettingsDocument? TryParse(byte[] json)
@@ -173,15 +164,4 @@ public sealed class SettingsStore
         File.Move(path, target);
     }
 
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            File.Delete(path);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // A temp file that can't be deleted is overwritten by the next write.
-        }
-    }
 }

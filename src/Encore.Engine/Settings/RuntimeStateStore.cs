@@ -10,9 +10,7 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     public const string FileName = "runtime.json";
 
     private readonly ILogger _log;
-    private readonly string _folder;
     private readonly string _path;
-    private readonly string _tempPath;
     private readonly Lock _lock = new();
     private readonly List<string> _open = [];
     private bool? _muted;
@@ -22,9 +20,7 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
         ArgumentNullException.ThrowIfNull(log);
-        _folder = Path.GetFullPath(folder);
-        _path = Path.Combine(_folder, FileName);
-        _tempPath = _path + ".tmp";
+        _path = Path.Combine(Path.GetFullPath(folder), FileName);
         _log = log;
     }
 
@@ -149,17 +145,6 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
         }
     }
 
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            File.Delete(path);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // A temp file that can't be deleted is overwritten by the next save.
-        }
-    }
 
     private bool Loaded(bool muted)
     {
@@ -175,20 +160,14 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     {
         try
         {
-            Directory.CreateDirectory(_folder);
-            using (var stream = new FileStream(_tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                JsonSerializer.Serialize(stream, new RuntimeState(_muted, _open.Count > 0 ? [.. _open] : null), RuntimeJsonContext.Default.RuntimeState);
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(_tempPath, _path, overwrite: true);
+            AtomicFile.Replace(_path, stream => JsonSerializer.Serialize(stream, Snapshot(), RuntimeJsonContext.Default.RuntimeState));
             return null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            TryDelete(_tempPath);
             return e.Message;
         }
     }
+
+    private RuntimeState Snapshot() => new(_muted, _open.Count > 0 ? [.. _open] : null);
 }
