@@ -74,13 +74,13 @@ internal sealed class ThemeService
 
     /// <summary>The App's: the theme goes in <see cref="Application.Resources"/>, so every window and menu follows it.</summary>
     public static ThemeService ForApplication(Application app) =>
-#pragma warning disable WPF0001 // ThemeMode is experimental in .NET 10 WPF; AD-23 builds both themes on it.
+#pragma warning disable WPF0001 // ThemeMode is experimental in .NET 10 WPF; both themes are built on it.
         new(app.Resources, theme => app.ThemeMode = ModeFor(theme), () => app.Windows.OfType<Window>());
 #pragma warning restore WPF0001
 
     /// <summary>One window's own: the same switch, scoped to the window's resources, for tests and previews.</summary>
     public static ThemeService ForWindow(Window window) =>
-#pragma warning disable WPF0001 // ThemeMode is experimental in .NET 10 WPF; AD-23 builds both themes on it.
+#pragma warning disable WPF0001 // ThemeMode is experimental in .NET 10 WPF; both themes are built on it.
         new(window.Resources, theme => window.ThemeMode = ModeFor(theme), () => [window]);
 #pragma warning restore WPF0001
 
@@ -233,7 +233,7 @@ internal sealed class ThemeService
         }
     }
 
-#pragma warning disable WPF0001 // ThemeMode is experimental in .NET 10 WPF; AD-23 builds both themes on it.
+#pragma warning disable WPF0001 // ThemeMode is experimental in .NET 10 WPF; both themes are built on it.
     private static ThemeMode ModeFor(AppTheme theme) => theme == AppTheme.GamingDark ? ThemeMode.Dark : ThemeMode.System;
 #pragma warning restore WPF0001
 

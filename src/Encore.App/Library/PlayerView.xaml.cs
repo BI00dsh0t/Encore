@@ -180,7 +180,7 @@ internal partial class PlayerView
         {
             surface = ensureSurface();
         }
-#pragma warning disable CA1031 // Every GPU failure here is the page's failure (QA 14.2 round 2): narrowing missed OutOfMemoryException and ArgumentException.
+#pragma warning disable CA1031 // Every GPU failure here is the page's failure: narrowing missed OutOfMemoryException and ArgumentException.
         catch (Exception)
 #pragma warning restore CA1031
         {
