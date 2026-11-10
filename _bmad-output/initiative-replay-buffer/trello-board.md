@@ -172,3 +172,18 @@ Label ids take the form `ari:cloud:trello::label/workspace/6ae9f97af5eb2665e5252
 | 14.8 The in-app player end to end on the builder's PC | `6aece03654e11803b0391c36` |
 
 The legend card at the top of Backlog is `6ae9fa9bd7f70d53c9518fbf`.
+
+## Cards outside the ticket tree (added 2026-11-10)
+
+| Card | ID |
+|---|---|
+| Rebrand to Encore (feature: Replay Buffer → Rewind) | `6af336c5cb051e4a96dca2cf` |
+| Clip creator: drag the selected range left and right | `6af336c628df5970bd2f9580` |
+| App windows can be screenshotted and recorded | `6af336c76dd9612640548255` |
+| Clip creator: thumbnails cached, playback loops in the range | `6af336c8f4c9328e943855c9` |
+| Clip editor refresh: timeline, video thumbnails, double-click range select | `6af336c942dd7aee68124ae5` |
+| Clip creator waveforms: seeking, scaling, taller lanes, drag lag fix | `6af336ca9a27e31d736630c9` |
+| Clip creator: precise waveform trimming, audio export, UX pass | `6af336cbb09da729409fef4e` |
+| Bugfix: player controls drew as blank rectangles | `6af336cc20144ecbfcbd5a82` |
+| Run the deferred test backlog (Ready) | `6af336d95c49219d9732d0c3` |
+| Bring old branches up to the Encore names (Backlog) | `6af336da32b9585e04c79880` |
