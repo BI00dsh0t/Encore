@@ -139,13 +139,15 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- The Export button and its arrow make one pill: each rounds only its outer corners. -->
     <Style x:Key="EncoreClipJoinedButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipPrimaryButtonStyle}">
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Border.CornerRadius" Value="6,0,0,6" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Chrome"
-                            CornerRadius="6,0,0,6"
+                            CornerRadius="{TemplateBinding Border.CornerRadius}"
                             Padding="{TemplateBinding Padding}"
                             Background="{TemplateBinding Background}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -167,33 +169,8 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="EncoreClipJoinedArrowButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipPrimaryButtonStyle}">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="Chrome"
-                            CornerRadius="0,6,6,0"
-                            Padding="{TemplateBinding Padding}"
-                            Background="{TemplateBinding Background}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Chrome"
-                                    Property="Background"
-                                    Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter Property="Opacity" Value="0.8" />
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.45" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <Style x:Key="EncoreClipJoinedArrowButtonStyle" TargetType="Button" BasedOn="{StaticResource EncoreClipJoinedButtonStyle}">
+        <Setter Property="Border.CornerRadius" Value="0,6,6,0" />
     </Style>
     <Style x:Key="EncoreClipInputStyle" TargetType="TextBox">
         <Setter Property="FontFamily" Value="Segoe UI" />
