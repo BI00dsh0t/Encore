@@ -17,6 +17,7 @@ internal sealed class GameViewModel : SettingsViewModel
     private readonly GameProfilesViewModel _parent;
     private readonly IGameShell _shell;
     private string _name = "";
+    private string _nameDraft = "";
     private bool _ignored;
     private bool _recordingsEnabled;
     private bool _isManual;
@@ -118,6 +119,16 @@ internal sealed class GameViewModel : SettingsViewModel
         }
     }
 
+    /// <summary>The name box's text; it becomes the name on <see cref="CommitName"/>.</summary>
+    public string NameDraft
+    {
+        get => _nameDraft;
+        set => Set(ref _nameDraft, value ?? "");
+    }
+
+    /// <summary>Whether the name box has the keyboard: a rename from elsewhere then leaves the typed text alone.</summary>
+    public bool IsEditingName { get; set; }
+
     /// <summary>The letter of the generic tile.</summary>
     public string Initial => _name.Length > 0 ? char.ToUpperInvariant(_name[0]).ToString() : "?";
 
@@ -199,6 +210,25 @@ internal sealed class GameViewModel : SettingsViewModel
             _clipsFolder = state.LibraryFolder;
             FolderChanged();
         }
+    }
+
+    /// <summary>Enter, or leaving the name box: sends the draft as the name; a blank draft shows the old name again.</summary>
+    public void CommitName()
+    {
+        Name = NameDraft;
+        NameDraft = Name;
+    }
+
+    /// <summary>Esc: puts the name back in the box. False when the box already shows it, so Esc can close the page.</summary>
+    public bool RevertName()
+    {
+        if (NameDraft == Name)
+        {
+            return false;
+        }
+
+        NameDraft = Name;
+        return true;
     }
 
     /// <summary>The engine's file-name sanitizer, repeated here for the example only.</summary>
@@ -285,6 +315,11 @@ internal sealed class GameViewModel : SettingsViewModel
 
     private void NameChanged()
     {
+        if (!IsEditingName)
+        {
+            NameDraft = _name;
+        }
+
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Initial));
         OnPropertyChanged(nameof(Title));

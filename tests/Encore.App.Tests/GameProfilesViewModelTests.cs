@@ -148,6 +148,27 @@ public sealed class GameProfilesViewModelTests
     }
 
     [Fact]
+    public void TheNameDraftIsSentOnCommitAndEscPutsTheNameBack()
+    {
+        SetProfiles(revision: 3);
+        var updates = Capture();
+        var chad = Create().GameProfiles.GameFor(ChadId);
+        Assert.Equal("Chad", chad.NameDraft);
+
+        chad.NameDraft = "Typed";
+        Assert.True(chad.RevertName());
+        Assert.Equal("Chad", chad.NameDraft);
+        Assert.False(chad.RevertName());
+
+        chad.NameDraft = "  Chad II ";
+        chad.CommitName();
+
+        var op = Assert.Single(Assert.Single(updates).Ops);
+        Assert.Equal((ChadId, ProfileAttributes.Name, "\"Chad II\""), (op.ProfileId, op.Key, op.Value.GetRawText()));
+        Assert.Equal("Chad II", chad.NameDraft);
+    }
+
+    [Fact]
     public void CaptureOffSetsIgnoredAndStopDetectingRemovesTheProgramFromManualGames()
     {
         SetProfiles(revision: 3);

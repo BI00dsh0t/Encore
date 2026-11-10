@@ -1,38 +1,13 @@
-using System.ComponentModel;
 using System.Windows.Input;
 
 namespace Encore.App.Settings;
 
-/// <summary>A game's page, view-only code: F2 focuses the name, Enter or leaving commits, and Esc cancels the rename.</summary>
+/// <summary>A game's page, view-only code: F2 focuses the name, and the name box's keys go to the view model's draft.</summary>
 internal partial class GamePageView
 {
-    public GamePageView()
-    {
-        InitializeComponent();
-        DataContextChanged += (_, e) =>
-        {
-            if (e.OldValue is GameViewModel old)
-            {
-                old.PropertyChanged -= OnViewModelChanged;
-            }
-
-            if (e.NewValue is GameViewModel viewModel)
-            {
-                viewModel.PropertyChanged += OnViewModelChanged;
-                NameBox.Text = viewModel.Name;
-            }
-        };
-    }
+    public GamePageView() => InitializeComponent();
 
     private GameViewModel? ViewModel => DataContext as GameViewModel;
-
-    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(GameViewModel.Name) && !NameBox.IsKeyboardFocusWithin && ViewModel is { } viewModel)
-        {
-            NameBox.Text = viewModel.Name;
-        }
-    }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -44,6 +19,15 @@ internal partial class GamePageView
         }
     }
 
+    private void OnNameGotFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (ViewModel is { } viewModel)
+        {
+            viewModel.IsEditingName = true;
+        }
+    }
+
+    // Enter commits the name and Esc puts it back; an Esc with nothing to put back is left for the page to close.
     private void OnNameKeyDown(object sender, KeyEventArgs e)
     {
         if (ViewModel is not { } viewModel)
@@ -53,25 +37,23 @@ internal partial class GamePageView
 
         if (e.Key == Key.Enter)
         {
-            viewModel.Name = NameBox.Text;
-            NameBox.Text = viewModel.Name;
-            NameBox.SelectAll();
-            e.Handled = true;
+            viewModel.CommitName();
         }
-        else if (e.Key == Key.Escape && NameBox.Text != viewModel.Name)
+        else if (e.Key != Key.Escape || !viewModel.RevertName())
         {
-            NameBox.Text = viewModel.Name;
-            NameBox.SelectAll();
-            e.Handled = true;
+            return;
         }
+
+        NameBox.SelectAll();
+        e.Handled = true;
     }
 
     private void OnNameLostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         if (ViewModel is { } viewModel)
         {
-            viewModel.Name = NameBox.Text;
-            NameBox.Text = viewModel.Name;
+            viewModel.IsEditingName = false;
+            viewModel.CommitName();
         }
     }
 }
