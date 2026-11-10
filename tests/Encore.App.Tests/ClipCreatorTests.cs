@@ -31,6 +31,21 @@ public sealed class ClipCreatorTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, true);
 
     [Fact]
+    public void TheTimelineMapsTimeToPixelsAndTabStepsThroughItsHandles()
+    {
+        var scale = new TimelineScale(PlotLeft: 100, ControlWidth: 500, ViewportStart: 10, ViewportEnd: 20);
+        Assert.Equal(300, scale.XOf(15));
+        Assert.Equal(15, scale.TimeAt(300));
+        Assert.Equal(20, scale.TimeAt(900));
+        Assert.Equal(0.025, scale.SecondsPerPixel);
+
+        Assert.Equal(TimelineHandle.In, WaveformView.NextHandle(TimelineHandle.Playhead, backwards: false));
+        Assert.Equal(TimelineHandle.Out, WaveformView.NextHandle(TimelineHandle.In, backwards: false));
+        Assert.Null(WaveformView.NextHandle(TimelineHandle.Out, backwards: false));
+        Assert.Equal(TimelineHandle.Playhead, WaveformView.NextHandle(TimelineHandle.In, backwards: true));
+    }
+
+    [Fact]
     public async Task MovingSelectionPreservesDurationAndCachesWhileClampingToTheSource()
     {
         using var page = new ClipCreatorPage(Source, "source", _media, () => new FakePlayer());
