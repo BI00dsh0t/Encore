@@ -6,71 +6,49 @@ using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Win32;
 using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Direct3D11;
 using Windows.Win32.Graphics.Gdi;
 using Windows.Win32.System.Com;
 using Windows.Win32.System.WinRT;
-using Windows.Win32.System.WinRT.Direct3D11;
 using Windows.Win32.System.WinRT.Graphics.Capture;
-using WinRT;
 
 namespace Encore.Platform.Capture;
 
-/// <summary>Receives one captured frame; the texture is an <c>ID3D11Texture2D*</c> valid only during the call.</summary>
-public delegate void CapturedFrameHandler(long qpc, nint texture, VideoSize contentSize);
-
 /// <summary>Windows.Graphics.Capture of one window or monitor, with no hooks; frames arrive one at a time on a pool thread.</summary>
-public sealed unsafe class WindowCapture : ICaptureSource
+public sealed unsafe class WindowCapture : CaptureSource
 {
     private const string GraphicsCaptureItemClass = "Windows.Graphics.Capture.GraphicsCaptureItem";
 
-    // IGraphicsCaptureItem, the WinRT interface CreateForWindow returns.
+    // IGraphicsCaptureItem, the WinRT interface CreateForWindow returns, and IGraphicsCaptureItemInterop.
     private static readonly Guid GraphicsCaptureItemIid = new("79C3F95B-31F7-4EC2-A464-632EF5D30760");
-
-    // IGraphicsCaptureItemInterop and IDirect3DDxgiInterfaceAccess.
     private static readonly Guid GraphicsCaptureItemInteropIid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
-    private static readonly Guid DxgiInterfaceAccessIid = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
-
-    // The per-frame ABI interfaces and their vtable slots, which come after IInspectable's six.
-    private static readonly Guid FramePoolIid = new("24EB6D22-1975-422E-82E7-780DBD8DDF24");
-    private static readonly Guid ClosableIid = new("30D5A829-7FA4-4026-83BB-D75BAE4EA99E");
-    private const int TryGetNextFrameSlot = 7; // IDirect3D11CaptureFramePool: Recreate, TryGetNextFrame, ...
-    private const int SurfaceSlot = 6;         // IDirect3D11CaptureFrame: get_Surface, get_SystemRelativeTime, get_ContentSize
-    private const int SystemRelativeTimeSlot = 7;
-    private const int ContentSizeSlot = 8;
-    private const int CloseSlot = 6;           // IClosable: Close
 
     // The item's Closed event needs a message loop the engine doesn't have, so a watchdog polls IsWindow instead.
     private static readonly TimeSpan WatchdogInterval = TimeSpan.FromMilliseconds(250);
 
     private readonly D3D11Device _device;
-    private readonly CapturedFrameHandler _onFrame;
-    private readonly ILogger _logger;
     private readonly GraphicsCaptureItem _item;
     private readonly Direct3D11CaptureFramePool _pool;
     private readonly GraphicsCaptureSession _session;
     private readonly Lock _gate = new();
     private readonly long _qpcFrequency = Stopwatch.Frequency;
-    private readonly HWND _hwnd;
+    private readonly HWND _window;
     private readonly Timer _watchdog;
-    private int _closedRaised;
     private SizeInt32 _poolSize;
     private void* _poolAbi;
     private bool _disposed;
 
     /// <summary>WGC's MinUpdateInterval is half a slot of fps, so a fast-repainting window can fill every slot with a new frame.</summary>
-    public WindowCapture(D3D11Device device, nint hwnd, int fps, CapturedFrameHandler onFrame, ILogger logger)
-        : this(device, CreateItem(hwnd), hwnd, fps, onFrame, logger)
+    public WindowCapture(D3D11Device device, nint window, int fps, CapturedFrameHandler onFrame, ILogger logger)
+        : this(device, CreateItem(window, monitor: false), window, fps, onFrame, logger)
     {
     }
 
-    private WindowCapture(D3D11Device device, GraphicsCaptureItem item, nint hwnd, int fps, CapturedFrameHandler onFrame, ILogger logger)
+    private WindowCapture(D3D11Device device, GraphicsCaptureItem item, nint window, int fps, CapturedFrameHandler onFrame, ILogger logger)
+        : base(onFrame, logger)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(fps, 1);
         _device = device;
-        _onFrame = onFrame;
-        _logger = logger;
-        _hwnd = new HWND((void*)hwnd);
+        _window = new HWND((void*)window);
 
         _item = item;
         _item.Closed += OnItemClosed;
@@ -78,70 +56,64 @@ public sealed unsafe class WindowCapture : ICaptureSource
 
         _pool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             device.WinRTDevice, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, _poolSize);
-        _poolAbi = PoolAbi(_pool);
+        _poolAbi = FrameAbi.QueryPool(_pool);
         _pool.FrameArrived += OnFrameArrived;
 
         _session = _pool.CreateCaptureSession(_item);
-        _session.MinUpdateInterval = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / (2L * fps));
+        _session.MinUpdateInterval = UpdateInterval(fps);
         TryDisableBorder();
         _watchdog = new Timer(_ => CheckWindow(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         logger.LogInformation("Capturing {Kind} '{Title}' at {Width}x{Height}, at most {Fps} fps",
-            hwnd == 0 ? "monitor" : "window", _item.DisplayName, _poolSize.Width, _poolSize.Height, 2 * fps);
+            window == 0 ? "monitor" : "window", _item.DisplayName, _poolSize.Width, _poolSize.Height, 2 * fps);
     }
-
-    /// <summary>Captures a whole monitor; only the item's own Closed (the monitor detached) raises <see cref="Closed"/>.</summary>
-    public static WindowCapture ForMonitor(D3D11Device device, nint hmonitor, int fps, CapturedFrameHandler onFrame, ILogger logger)
-    {
-        ArgumentNullException.ThrowIfNull(device);
-        if (hmonitor == 0)
-        {
-            throw new ArgumentException("No monitor was given.", nameof(hmonitor));
-        }
-
-        return new WindowCapture(device, CreateMonitorItem(hmonitor), 0, fps, onFrame, logger);
-    }
-
-    /// <summary>The size WGC captures <paramref name="hwnd"/> at now.</summary>
-    public static VideoSize SizeOf(nint hwnd)
-    {
-        var size = CreateItem(hwnd).Size;
-        return new VideoSize(size.Width, size.Height);
-    }
-
-    /// <summary>The window was closed; no more frames will arrive.</summary>
-    public event Action? Closed;
-
-    /// <summary>The frame handler threw; capture continues, the caller decides.</summary>
-    public event Action<Exception>? Failed;
 
     public VideoSize ItemSize => new(_item.Size.Width, _item.Size.Height);
 
+    /// <summary>Captures a whole monitor; only the item's own Closed (the monitor detached) raises <see cref="CaptureSource.Closed"/>.</summary>
+    public static WindowCapture ForMonitor(D3D11Device device, nint monitor, int fps, CapturedFrameHandler onFrame, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        if (monitor == 0)
+        {
+            throw new ArgumentException("No monitor was given.", nameof(monitor));
+        }
+
+        return new WindowCapture(device, CreateItem(monitor, monitor: true), 0, fps, onFrame, logger);
+    }
+
+    /// <summary>The size WGC captures <paramref name="window"/> at now.</summary>
+    public static VideoSize SizeOf(nint window)
+    {
+        var size = CreateItem(window, monitor: false).Size;
+        return new VideoSize(size.Width, size.Height);
+    }
+
     /// <summary>Sets the output frame rate as the constructor does; a failure is logged and the old interval kept.</summary>
-    public void SetFps(int fps)
+    public override void SetFps(int fps)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(fps, 1);
         try
         {
-            _session.MinUpdateInterval = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / (2L * fps));
-            _logger.LogInformation("Capturing at most {Fps} fps", 2 * fps);
+            _session.MinUpdateInterval = UpdateInterval(fps);
+            LogRate(fps);
         }
         catch (Exception e)
         {
-            _logger.LogWarning("The capture rate could not be set to {Fps} fps: {Message}", 2 * fps, e.Message);
+            Logger.LogWarning("The capture rate could not be set to {Fps} fps: {Message}", 2 * fps, e.Message);
         }
     }
 
-    public void Start()
+    public override void Start()
     {
         _session.StartCapture();
-        if (!_hwnd.IsNull)
+        if (!_window.IsNull)
         {
             _watchdog.Change(WatchdogInterval, WatchdogInterval);
         }
     }
 
     /// <summary>Stops capture and waits for a frame in flight to finish.</summary>
-    public void Dispose()
+    public override void Dispose()
     {
         lock (_gate)
         {
@@ -170,6 +142,40 @@ public sealed unsafe class WindowCapture : ICaptureSource
         _pool.Dispose();
     }
 
+    private static TimeSpan UpdateInterval(int fps) => TimeSpan.FromTicks(HalfSlot(TimeSpan.TicksPerSecond, fps));
+
+    /// <summary>The capture item of a window, or of a monitor when <paramref name="monitor"/> is set.</summary>
+    private static GraphicsCaptureItem CreateItem(nint handle, bool monitor)
+    {
+        void* factory = null;
+        void* item = null;
+        PInvoke.WindowsCreateString(GraphicsCaptureItemClass, (uint)GraphicsCaptureItemClass.Length, out var className).ThrowOnFailure();
+        try
+        {
+            var interopIid = GraphicsCaptureItemInteropIid;
+            PInvoke.RoGetActivationFactory(new HSTRING((void*)className.DangerousGetHandle()), &interopIid, &factory).ThrowOnFailure();
+
+            var itemIid = GraphicsCaptureItemIid;
+            var interop = (IGraphicsCaptureItemInterop*)factory;
+            if (monitor)
+            {
+                interop->CreateForMonitor(new HMONITOR((void*)handle), &itemIid, &item);
+            }
+            else
+            {
+                interop->CreateForWindow(new HWND((void*)handle), &itemIid, &item);
+            }
+
+            return GraphicsCaptureItem.FromAbi((nint)item);
+        }
+        finally
+        {
+            if (item is not null) ((IUnknown*)item)->Release();
+            if (factory is not null) ((IUnknown*)factory)->Release();
+            className.Dispose();
+        }
+    }
+
     private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
     {
         lock (_gate)
@@ -180,100 +186,73 @@ public sealed unsafe class WindowCapture : ICaptureSource
             }
 
             // Per-frame calls use the raw ABI, because projected frames would allocate managed wrappers for every frame.
-            void* frame = null;
-            var pool = _poolAbi;
-            if (((delegate* unmanaged[Stdcall]<void*, void**, HRESULT>)(*(void***)pool)[TryGetNextFrameSlot])(pool, &frame).Failed || frame is null)
+            var frame = FrameAbi.TryGetNextFrame(_poolAbi);
+            if (frame is null)
             {
                 return;
             }
 
-            AbiSize content;
+            VideoSize content;
             try
             {
-                long relativeTime;
-                void* surface = null;
-                var vtable = *(void***)frame;
-                ((delegate* unmanaged[Stdcall]<void*, AbiSize*, HRESULT>)vtable[ContentSizeSlot])(frame, &content).ThrowOnFailure();
-                ((delegate* unmanaged[Stdcall]<void*, long*, HRESULT>)vtable[SystemRelativeTimeSlot])(frame, &relativeTime).ThrowOnFailure();
-                ((delegate* unmanaged[Stdcall]<void*, void**, HRESULT>)vtable[SurfaceSlot])(frame, &surface).ThrowOnFailure();
-
-                var qpc = QpcClock.From100ns(relativeTime, _qpcFrequency);
-                var texture = GetTexture(surface);
-                try
-                {
-                    _onFrame(qpc, (nint)texture, new VideoSize(content.Width, content.Height));
-                }
-                catch (Exception e)
-                {
-                    _logger.LogError(e, "Frame handler failed");
-                    Failed?.Invoke(e);
-                }
-                finally
-                {
-                    texture->Release();
-                }
+                content = DeliverFrame(frame);
             }
             finally
             {
-                Close(frame);
+                FrameAbi.Close(frame);
             }
 
-            if (content.Width != _poolSize.Width || content.Height != _poolSize.Height)
-            {
-                _logger.LogInformation("Window resized to {Width}x{Height}; recreating the frame pool", content.Width, content.Height);
-                _poolSize = new SizeInt32(content.Width, content.Height);
-                _pool.Recreate(_device.WinRTDevice, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, _poolSize);
-            }
+            FollowResize(content);
         }
     }
 
-    /// <summary>The pool's <c>IDirect3D11CaptureFramePool</c> ABI pointer, owned by the caller.</summary>
-    private static void* PoolAbi(Direct3D11CaptureFramePool pool)
+    /// <summary>Hands one frame's texture to the handler and returns its content size.</summary>
+    private VideoSize DeliverFrame(void* frame)
     {
-        var unknown = (void*)MarshalInspectable<object>.FromManaged(pool);
+        FrameAbi.Read(frame, out var content, out var relativeTime, out var surface);
+        var qpc = QpcClock.From100ns(relativeTime, _qpcFrequency);
+        var texture = FrameAbi.TextureOf(surface);
         try
         {
-            void* abi = null;
-            var iid = FramePoolIid;
-            ((IUnknown*)unknown)->QueryInterface(&iid, &abi).ThrowOnFailure();
-            return abi;
+            Deliver(qpc, (nint)texture, content);
         }
         finally
         {
-            ((IUnknown*)unknown)->Release();
+            texture->Release();
         }
+
+        return content;
     }
 
-    /// <summary>Closes a frame (handing its buffer back to the pool) and releases it.</summary>
-    private static void Close(void* frame)
+    /// <summary>Recreates the frame pool at a window's new size, so later frames aren't cropped.</summary>
+    private void FollowResize(VideoSize content)
     {
-        void* closable = null;
-        var closableIid = ClosableIid;
-        if (((IUnknown*)frame)->QueryInterface(&closableIid, &closable).Succeeded)
+        if (content.Width == _poolSize.Width && content.Height == _poolSize.Height)
         {
-            _ = ((delegate* unmanaged[Stdcall]<void*, HRESULT>)(*(void***)closable)[CloseSlot])(closable);
-            ((IUnknown*)closable)->Release();
+            return;
         }
 
-        ((IUnknown*)frame)->Release();
+        Logger.LogInformation("Window resized to {Width}x{Height}; recreating the frame pool", content.Width, content.Height);
+        _poolSize = new SizeInt32(content.Width, content.Height);
+        _pool.Recreate(_device.WinRTDevice, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, _poolSize);
     }
 
-    private void OnItemClosed(GraphicsCaptureItem sender, object args) => RaiseClosed("item Closed");
+    private void OnItemClosed(GraphicsCaptureItem sender, object args) => ReportClosed("item Closed");
 
     private void CheckWindow()
     {
-        if (!PInvoke.IsWindow(_hwnd))
+        if (!PInvoke.IsWindow(_window))
         {
-            RaiseClosed("window destroyed");
+            ReportClosed("window destroyed");
         }
     }
 
-    private void RaiseClosed(string how)
+    private void ReportClosed(string how)
     {
-        if (Interlocked.Exchange(ref _closedRaised, 1) == 0)
+        if (TryClaimClose())
         {
-            _logger.LogInformation("Captured window closed ({How})", how);
-            Closed?.Invoke();
+            Logger.LogInformation("Captured window closed ({How})", how);
+            RaiseClosed();
         }
     }
 
@@ -283,83 +262,11 @@ public sealed unsafe class WindowCapture : ICaptureSource
         {
             var access = GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless).AsTask().GetAwaiter().GetResult();
             _session.IsBorderRequired = false;
-            _logger.LogInformation("Capture border disabled (borderless access {Access})", access);
+            Logger.LogInformation("Capture border disabled (borderless access {Access})", access);
         }
         catch (Exception e)
         {
-            _logger.LogWarning("Capture border could not be disabled: {Message}", e.Message);
+            Logger.LogWarning("Capture border could not be disabled: {Message}", e.Message);
         }
-    }
-
-    private static GraphicsCaptureItem CreateItem(nint hwnd)
-    {
-        void* factory = null;
-        void* item = null;
-        PInvoke.WindowsCreateString(GraphicsCaptureItemClass, (uint)GraphicsCaptureItemClass.Length, out var className).ThrowOnFailure();
-        try
-        {
-            var interopIid = GraphicsCaptureItemInteropIid;
-            PInvoke.RoGetActivationFactory(new HSTRING((void*)className.DangerousGetHandle()), &interopIid, &factory).ThrowOnFailure();
-
-            var itemIid = GraphicsCaptureItemIid;
-            ((IGraphicsCaptureItemInterop*)factory)->CreateForWindow(new HWND((void*)hwnd), &itemIid, &item);
-            return GraphicsCaptureItem.FromAbi((nint)item);
-        }
-        finally
-        {
-            if (item is not null) ((IUnknown*)item)->Release();
-            if (factory is not null) ((IUnknown*)factory)->Release();
-            className.Dispose();
-        }
-    }
-
-    private static GraphicsCaptureItem CreateMonitorItem(nint hmonitor)
-    {
-        void* factory = null;
-        void* item = null;
-        PInvoke.WindowsCreateString(GraphicsCaptureItemClass, (uint)GraphicsCaptureItemClass.Length, out var className).ThrowOnFailure();
-        try
-        {
-            var interopIid = GraphicsCaptureItemInteropIid;
-            PInvoke.RoGetActivationFactory(new HSTRING((void*)className.DangerousGetHandle()), &interopIid, &factory).ThrowOnFailure();
-
-            var itemIid = GraphicsCaptureItemIid;
-            ((IGraphicsCaptureItemInterop*)factory)->CreateForMonitor(new HMONITOR((void*)hmonitor), &itemIid, &item);
-            return GraphicsCaptureItem.FromAbi((nint)item);
-        }
-        finally
-        {
-            if (item is not null) ((IUnknown*)item)->Release();
-            if (factory is not null) ((IUnknown*)factory)->Release();
-            className.Dispose();
-        }
-    }
-
-    /// <summary>The surface's <c>ID3D11Texture2D</c>; releases <paramref name="surface"/>, the caller releases the texture.</summary>
-    private static ID3D11Texture2D* GetTexture(void* surface)
-    {
-        void* access = null;
-        try
-        {
-            var accessIid = DxgiInterfaceAccessIid;
-            ((IUnknown*)surface)->QueryInterface(&accessIid, &access).ThrowOnFailure();
-
-            void* texture = null;
-            var textureIid = ID3D11Texture2D.IID_Guid;
-            ((IDirect3DDxgiInterfaceAccess*)access)->GetInterface(&textureIid, &texture);
-            return (ID3D11Texture2D*)texture;
-        }
-        finally
-        {
-            if (access is not null) ((IUnknown*)access)->Release();
-            ((IUnknown*)surface)->Release();
-        }
-    }
-
-    /// <summary>The ABI <c>SizeInt32</c>.</summary>
-    private struct AbiSize
-    {
-        public int Width;
-        public int Height;
     }
 }

@@ -97,6 +97,9 @@ public sealed unsafe class D3D11Device : IDisposable
 
     internal ID3D11DeviceContext* Context => _context;
 
+    /// <summary>Queries the device's <c>IDXGIDevice</c>, which the caller releases, and returns the query's result.</summary>
+    internal HRESULT QueryDxgiDevice(IDXGIDevice** dxgiDevice) => QueryDxgiDevice(_device, dxgiDevice);
+
     /// <summary>The WinRT wrapper WGC frame pools are created on.</summary>
     public IDirect3DDevice WinRTDevice { get; }
 
@@ -300,11 +303,10 @@ public sealed unsafe class D3D11Device : IDisposable
         IDXGIDevice* dxgiDevice = null;
         try
         {
-            var dxgiIid = IDXGIDevice.IID_Guid;
-            var hr = ((IUnknown*)_device)->QueryInterface(&dxgiIid, (void**)&dxgiDevice);
-            if (hr.Failed)
+            var result = QueryDxgiDevice(&dxgiDevice);
+            if (result.Failed)
             {
-                return hr.Value;
+                return result.Value;
             }
 
             // CsWin32 turns a failed HRESULT into an exception carrying it.
@@ -314,7 +316,7 @@ public sealed unsafe class D3D11Device : IDisposable
             }
             catch (Exception e)
             {
-                hr = new HRESULT(e.HResult);
+                result = new HRESULT(e.HResult);
             }
 
             try
@@ -328,7 +330,7 @@ public sealed unsafe class D3D11Device : IDisposable
                 // The read-back is informational only.
             }
 
-            return hr.Value;
+            return result.Value;
         }
         finally
         {
@@ -431,14 +433,19 @@ public sealed unsafe class D3D11Device : IDisposable
         }
     }
 
+    private static HRESULT QueryDxgiDevice(ID3D11Device* device, IDXGIDevice** dxgiDevice)
+    {
+        var dxgiIid = IDXGIDevice.IID_Guid;
+        return ((IUnknown*)device)->QueryInterface(&dxgiIid, (void**)dxgiDevice);
+    }
+
     private static IDirect3DDevice CreateWinRTDevice(ID3D11Device* device)
     {
         IDXGIDevice* dxgiDevice = null;
         IInspectable* inspectable = null;
         try
         {
-            var dxgiIid = IDXGIDevice.IID_Guid;
-            ((IUnknown*)device)->QueryInterface(&dxgiIid, (void**)&dxgiDevice).ThrowOnFailure();
+            QueryDxgiDevice(device, &dxgiDevice).ThrowOnFailure();
             PInvoke.CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice, &inspectable).ThrowOnFailure();
             return MarshalInterface<IDirect3DDevice>.FromAbi((nint)inspectable);
         }
