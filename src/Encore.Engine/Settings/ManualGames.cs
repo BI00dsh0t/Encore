@@ -34,7 +34,9 @@ internal static class ManualGames
                 : Keys.ManualGames.Default;
             return list.Contains(path, StringComparer.OrdinalIgnoreCase)
                 ? null
-                : new SettingsUpdate(current.Revision, [SettingsOp.SetGlobal(Keys.ManualGames.Name, Keys.ManualGames.ToJson([.. list, path]))]);
+                : new SettingsUpdate(
+                    current.Revision,
+                    [SettingsOp.SetGlobal(Keys.ManualGames.Name, Keys.ManualGames.ToJson([.. list, path]))]);
         });
         return new GameAdded(path);
     }

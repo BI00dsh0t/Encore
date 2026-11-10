@@ -16,17 +16,12 @@ public sealed class SettingsStore
 
     private SettingsStore(string folder, SettingsDocument document)
     {
-        Folder = folder;
         _path = Path.Combine(folder, FileName);
         _current = document;
     }
 
     /// <summary>Raised after each commit, under the store's lock; a handler's exception propagates, but the commit stands.</summary>
     public event Action<SettingsDocument>? Changed;
-
-    public string Folder { get; }
-
-    public string FilePath => _path;
 
     /// <summary>The last committed document.</summary>
     public SettingsDocument Current => Volatile.Read(ref _current);
@@ -101,9 +96,7 @@ public sealed class SettingsStore
             }
 
             var next = SettingsOps.Apply(current, update.Ops) with { Revision = current.Revision + 1 };
-            if (FolderDefaults is { } defaults
-                && update.Ops.Any(op => op.Scope == SettingsScope.Global && (op.Key == Keys.RingPath.Name || op.Key == Keys.OutputFolder.Name))
-                && RingPathRule.Nests(next, defaults.Cache, defaults.Clips))
+            if (FolderDefaults is { } defaults && ChangesAFolder(update) && RingPathRule.Nests(next, defaults.Cache, defaults.Clips))
             {
                 throw new ErrorCodeException(ErrorCodes.RingPathInvalid, RingPathRule.Refusal);
             }
@@ -114,6 +107,10 @@ public sealed class SettingsStore
             return next;
         }
     }
+
+    /// <summary>Whether the update sets or removes the Global cache or Clips folder.</summary>
+    private static bool ChangesAFolder(SettingsUpdate update) =>
+        update.Ops.Any(op => op.Scope == SettingsScope.Global && (op.Key == Keys.RingPath.Name || op.Key == Keys.OutputFolder.Name));
 
     private void Write(SettingsDocument document)
     {
@@ -139,7 +136,7 @@ public sealed class SettingsStore
         {
             var document = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.SettingsDocument);
             if (document is null || document.SchemaVersion != SettingsDocument.CurrentSchemaVersion || document.Revision < 0
-                || document.Profiles.Values.Any(p => p is null))
+                || document.Profiles.Values.Any(profile => profile is null))
             {
                 return null;
             }

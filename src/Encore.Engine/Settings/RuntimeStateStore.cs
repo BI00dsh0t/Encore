@@ -59,7 +59,11 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
             _muted = muted;
             if (Write() is { } error)
             {
-                _log.LogWarning("Mic mute ({State}) could not be saved to {Path}: {Message}; it holds until the engine stops", muted ? "muted" : "unmuted", _path, error);
+                _log.LogWarning(
+                    "Mic mute ({State}) could not be saved to {Path}: {Message}; it holds until the engine stops",
+                    muted ? "muted" : "unmuted",
+                    _path,
+                    error);
             }
         }
     }
@@ -71,7 +75,11 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
             _open.Add(path);
             if (Write() is { } error)
             {
-                _log.LogWarning("The open Recording {Recording} could not be saved to {Path}: {Message}; if the engine dies, it won't be reported", path, _path, error);
+                _log.LogWarning(
+                    "The open Recording {Recording} could not be saved to {Path}: {Message}; if the engine dies, it won't be reported",
+                    path,
+                    _path,
+                    error);
             }
         }
     }
@@ -82,7 +90,12 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
         {
             if (_open.Remove(path) && Write() is { } error)
             {
-                _log.LogWarning("The closed Recording {Recording} could not be removed from {Path}: {Message}; the next start reports it as interrupted", path, _path, error);
+                _log.LogWarning(
+                    "The closed Recording {Recording} could not be removed from {Path}: {Message}; "
+                        + "the next start reports it as interrupted",
+                    path,
+                    _path,
+                    error);
             }
         }
     }
@@ -128,7 +141,11 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
             _interrupted = false;
             if (Write() is { } error)
             {
-                _log.LogWarning("The interrupted Recordings could not be cleared from {Path}: {Message}; they stay in it until the next successful write", _path, error);
+                _log.LogWarning(
+                    "The interrupted Recordings could not be cleared from {Path}: {Message}; "
+                        + "they stay in it until the next successful write",
+                    _path,
+                    error);
             }
         }
     }

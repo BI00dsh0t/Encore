@@ -29,7 +29,8 @@ internal static class TrackLayoutSeed
 
         try
         {
-            store.Update(new SettingsUpdate(current.Revision, [SettingsOp.SetGlobal(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(layout))]));
+            var op = SettingsOp.SetGlobal(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(layout));
+            store.Update(new SettingsUpdate(current.Revision, [op]));
         }
         catch (ErrorCodeException e)
         {
@@ -39,7 +40,9 @@ internal static class TrackLayoutSeed
 
         log.LogInformation(
             "First run: seeded the Track Layout with {Devices}",
-            layout.Devices.Count == 0 ? "no devices" : string.Join(", ", layout.Devices.Select(d => $"{d.FriendlyName} ({d.Flow})")));
+            layout.Devices.Count == 0
+                ? "no devices"
+                : string.Join(", ", layout.Devices.Select(device => $"{device.FriendlyName} ({device.Flow})")));
         return layout;
     }
 }
