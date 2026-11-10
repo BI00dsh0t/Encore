@@ -28,7 +28,6 @@ public static unsafe class FFmpegLibrary
     private static readonly Lock Gate = new();
     private static bool _initialized;
 
-    /// <summary>The libraries missing from <paramref name="directory"/>.</summary>
     public static IReadOnlyList<string> MissingLibraries(string directory) =>
         RequiredLibraries.Where(name => !File.Exists(Path.Combine(directory, name))).ToList();
 

@@ -45,7 +45,7 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
     /// <summary>Whether <see cref="Dispose"/> has run: it takes no more packets and can't open a generation.</summary>
     public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
-    /// <summary>The first video keyframe written, in µs since the anchor (MaxValue until then); a mid-session chain starts there.</summary>
+    /// <summary>The first video keyframe written, in µs since the anchor (MaxValue until then); a mid-session chain starts here.</summary>
     public long FirstKeyUs => Volatile.Read(ref _firstKeyUs);
 
     internal override int AddStream(AVCodecContext* encoder, string? title, bool isDefault)
