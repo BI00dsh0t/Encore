@@ -11,7 +11,7 @@ risk: high
 
 # Final refactor review
 
-Status: plan written 2026-11-10. The builder answered the decisions the same day (see Decisions). **Phases 0 and 1 are done** (merges `948448a` and `188f3d4`); phase 2 is next.
+Status: plan written 2026-11-10. The builder answered the decisions the same day (see Decisions). **Phases 0, 1 and 2 are done** (merges `948448a`, `188f3d4` and `d41c521`); phase 3 is next.
 
 **Phase 0 as built:**
 - The 24 leftover `ReplayBuffer.*` folders are deleted. They held only `bin` and `obj`.
@@ -24,6 +24,15 @@ Status: plan written 2026-11-10. The builder answered the decisions the same day
 - The rules that need more room moved to `docs/code-notes.md`, with one heading per class.
 - No code changed: the session and the coordinator each compared every file with its comments stripped, before and after, and all 430 changed files match. Release build 0 warnings; no tests (low risk).
 - Left over: six ticket ids in `.csproj` comments, which were outside the phase's file types. Phase 8 clears them.
+
+**Phase 2 as built** (28 commits, merge `d41c521`; detail in `findings-2.md`):
+- The two stale App tests were fixed first, so the suite was green before any refactor.
+- The 137 `Rb…` keys are `Encore…` (560 uses), with `DESIGN.md` and `EXPERIENCE.md`.
+- The shell's nav styles exist once, in `ShellShared.xaml`; each theme keeps only what differs. XAML has one element per line.
+- Key, click and layout decisions moved out of `MainWindow`, `LibraryView`, `PlayerView` and the pickers into the view models and small helpers (`NavPaneLayout`, `NoPictureWatch`, `PictureFit`, `TimelineScale`, `FolderDialogs`, `FolderProbe`, `VisualTreeSearch`).
+- **Tests:** `Encore.App.Tests` 289 tests, 264 passed, 25 skipped, 0 failed, run by the session and again by the coordinator after the merge. The session also compared the 72 test screenshots pixel by pixel before and after.
+- **Known:** the App test run still exits with code 1, because a test leaves a foreground thread running. The baseline had this too. Phase 3 finds and fixes it first.
+- **For the builder:** `DESIGN.md` says Gaming dark's nav items are uppercase, 13 px, SemiBold, but the shell has drawn them in sentence case at 14 px since `68899fb`. One of the two needs to change; that is a product choice, so the refactor left both alone.
 
 ## Goal
 
