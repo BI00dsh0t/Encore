@@ -4,8 +4,6 @@ using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using Encore.Contracts;
 using Encore.Core.Output;
-using Windows.Win32;
-using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.FFmpeg;
 
@@ -197,7 +195,7 @@ public sealed unsafe class RecordingWriter
 
     private void Run()
     {
-        var background = ClipWriter.EnterBackgroundMode(_log);
+        var background = BackgroundMode.Enter(_log);
         Exception? error = null;
         FragmentedMp4Muxer? muxer = null;
         long? keepBytes = null;
@@ -243,7 +241,7 @@ public sealed unsafe class RecordingWriter
             _streams.Dispose();
             if (background)
             {
-                PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_END);
+                BackgroundMode.Leave();
             }
         }
 
@@ -253,7 +251,7 @@ public sealed unsafe class RecordingWriter
         }
         else if (error is not null && _written == 0)
         {
-            TryDelete();
+            OutputFiles.TryDelete(_path, _log);
         }
 
         _signal.Dispose();
@@ -587,7 +585,7 @@ public sealed unsafe class RecordingWriter
         if (bytes == 0)
         {
             _log.LogWarning("The disk filled before the Recording {Path} had a whole fragment; it is deleted", _path);
-            TryDelete();
+            OutputFiles.TryDelete(_path, _log);
             return;
         }
 
@@ -604,18 +602,6 @@ public sealed unsafe class RecordingWriter
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             _log.LogWarning("Could not cut the Recording {Path} back to its whole fragments: {Message}", _path, e.Message);
-        }
-    }
-
-    private void TryDelete()
-    {
-        try
-        {
-            File.Delete(_path);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            _log.LogWarning("Could not delete {Path}: {Message}", _path, e.Message);
         }
     }
 

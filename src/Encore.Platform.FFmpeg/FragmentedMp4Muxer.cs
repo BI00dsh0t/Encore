@@ -7,9 +7,6 @@ namespace Encore.Platform.FFmpeg;
 /// <summary>Writes fragmented MP4 under one lock; a Recording's durable muxer flushes each fragment. docs/code-notes.md.</summary>
 public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 {
-    // MKTAG('h', 'v', 'c', '1').
-    private const uint HevcTag = 'h' | ('v' << 8) | ('c' << 16) | ((uint)'1' << 24);
-
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
     private readonly bool _durable;
@@ -58,7 +55,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     {
         var stream = NewStream();
         FFmpegLibrary.Check(ffmpeg.avcodec_parameters_from_context(stream->codecpar, encoder), "avcodec_parameters_from_context");
-        return Describe(stream, encoder->time_base, title, isDefault);
+        return Mp4Streams.Describe(stream, encoder->time_base, title, isDefault);
     }
 
     /// <summary>Adds a stream from copied codec parameters, as a Recording does. Call before <see cref="Start"/>.</summary>
@@ -66,7 +63,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     {
         var stream = NewStream();
         FFmpegLibrary.Check(ffmpeg.avcodec_parameters_copy(stream->codecpar, parameters), "avcodec_parameters_copy");
-        return Describe(stream, timeBase, title, isDefault);
+        return Mp4Streams.Describe(stream, timeBase, title, isDefault);
     }
 
     private AVStream* NewStream()
@@ -76,33 +73,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             throw new InvalidOperationException("Streams must be added before the header is written.");
         }
 
-        var stream = ffmpeg.avformat_new_stream(_context, null);
-        if (stream is null)
-        {
-            throw new InvalidOperationException("avformat_new_stream failed.");
-        }
-
-        return stream;
-    }
-
-    // The tag, time base, disposition and title every stream gets, whatever its parameters came from.
-    private static int Describe(AVStream* stream, AVRational timeBase, string? title, bool isDefault)
-    {
-        if (stream->codecpar->codec_id == AVCodecID.AV_CODEC_ID_HEVC)
-        {
-            // hvc1 (parameter sets in the sample entry) rather than mp4's default hev1: Apple players need it.
-            stream->codecpar->codec_tag = HevcTag;
-        }
-
-        stream->time_base = timeBase;
-        stream->disposition = isDefault ? ffmpeg.AV_DISPOSITION_DEFAULT : 0;
-        if (title is not null)
-        {
-            ffmpeg.av_dict_set(&stream->metadata, "title", title, 0);
-            ffmpeg.av_dict_set(&stream->metadata, "handler_name", title, 0);
-        }
-
-        return stream->index;
+        return Mp4Streams.New(_context);
     }
 
     /// <summary>Opens the file and writes the header.</summary>

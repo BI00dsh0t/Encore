@@ -1,8 +1,6 @@
 using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using Encore.Contracts;
-using Windows.Win32;
-using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.FFmpeg;
 
@@ -28,7 +26,7 @@ public static unsafe class MediaLength
             return null;
         }
 
-        var background = PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_BEGIN);
+        var background = BackgroundMode.TryEnter();
         AVFormatContext* context = null;
         SharedInput? input = null;
         try
@@ -83,7 +81,7 @@ public static unsafe class MediaLength
 
             if (background)
             {
-                PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_END);
+                BackgroundMode.Leave();
             }
         }
     }

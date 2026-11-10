@@ -1,7 +1,5 @@
 using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
-using Windows.Win32;
-using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.FFmpeg;
 
@@ -11,9 +9,6 @@ public static unsafe class ClipWriter
     /// <summary>What a Clip is written to before its rename.</summary>
     public const string PartExtension = ".rbpart";
 
-    // MKTAG('h', 'v', 'c', '1'), as the fMP4 muxer tags HEVC.
-    private const uint HevcTag = 'h' | ('v' << 8) | ('c' << 16) | ((uint)'1' << 24);
-
     /// <summary>Writes the source to the final path; on failure both files are deleted and the failure is rethrown.</summary>
     public static void Write(ClipSource source, string finalPath, ILogger logger)
     {
@@ -22,7 +17,7 @@ public static unsafe class ClipWriter
         ArgumentNullException.ThrowIfNull(logger);
 
         var part = finalPath + PartExtension;
-        var background = EnterBackgroundMode(logger);
+        var background = BackgroundMode.Enter(logger);
         try
         {
             WritePart(source, part);
@@ -30,15 +25,15 @@ public static unsafe class ClipWriter
         }
         catch
         {
-            TryDelete(part, logger);
-            TryDelete(finalPath, logger);
+            OutputFiles.TryDelete(part, logger);
+            OutputFiles.TryDelete(finalPath, logger);
             throw;
         }
         finally
         {
             if (background)
             {
-                PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_END);
+                BackgroundMode.Leave();
             }
         }
     }
@@ -50,48 +45,20 @@ public static unsafe class ClipWriter
         try
         {
             FFmpegLibrary.Check(ffmpeg.avformat_alloc_output_context2(&context, null, "mp4", part), "avformat_alloc_output_context2");
-            var streams = source.Streams;
-            for (var i = 0; i < streams.Count; i++)
+            foreach (var stream in source.Streams)
             {
-                AddStream(context, streams[i]);
+                AddStream(context, stream);
             }
 
             FFmpegLibrary.Check(ffmpeg.avio_open(&context->pb, part, ffmpeg.AVIO_FLAG_WRITE), $"avio_open({part})");
-            AVDictionary* options = null;
-            ffmpeg.av_dict_set(&options, "movflags", "+faststart", 0);
-            try
-            {
-                FFmpegLibrary.Check(ffmpeg.avformat_write_header(context, &options), "avformat_write_header");
-            }
-            finally
-            {
-                ffmpeg.av_dict_free(&options);
-            }
-
+            WriteHeader(context);
             packet = ffmpeg.av_packet_alloc();
             if (packet is null)
             {
                 throw new InvalidOperationException("av_packet_alloc failed.");
             }
 
-            var cut = source.Cut;
-            foreach (var ring in cut.Packets)
-            {
-                FFmpegLibrary.Check(ffmpeg.av_new_packet(packet, ring.Length), "av_new_packet");
-                ring.CopyTo(new Span<byte>(packet->data, ring.Length));
-
-                var origin = cut.Origin(ring.Stream);
-                packet->stream_index = ring.Stream;
-                packet->pts = ring.Pts - origin;
-                packet->dts = ring.Dts - origin;
-                packet->duration = ring.Duration;
-                packet->flags = ring.IsKey ? ffmpeg.AV_PKT_FLAG_KEY : 0;
-                ffmpeg.av_packet_rescale_ts(packet, streams[ring.Stream].TimeBase, context->streams[ring.Stream]->time_base);
-
-                // Takes the packet's reference whether it succeeds or not.
-                FFmpegLibrary.Check(ffmpeg.av_interleaved_write_frame(context, packet), "av_interleaved_write_frame");
-            }
-
+            WritePackets(context, packet, source);
             FFmpegLibrary.Check(ffmpeg.av_interleaved_write_frame(context, null), "av_interleaved_write_frame(flush)");
             FFmpegLibrary.Check(ffmpeg.av_write_trailer(context), "av_write_trailer");
             FFmpegLibrary.Check(ffmpeg.avio_closep(&context->pb), "avio_closep");
@@ -105,56 +72,65 @@ public static unsafe class ClipWriter
 
             if (context is not null)
             {
-                if (context->pb is not null)
-                {
-                    ffmpeg.avio_closep(&context->pb);
-                }
-
-                ffmpeg.avformat_free_context(context);
+                CloseOutput(context);
             }
         }
     }
 
     private static void AddStream(AVFormatContext* context, ClipStream source)
     {
-        var stream = ffmpeg.avformat_new_stream(context, null);
-        if (stream is null)
-        {
-            throw new InvalidOperationException("avformat_new_stream failed.");
-        }
-
+        var stream = Mp4Streams.New(context);
         FFmpegLibrary.Check(ffmpeg.avcodec_parameters_copy(stream->codecpar, source.Parameters), "avcodec_parameters_copy");
-        stream->codecpar->codec_tag = source.Parameters->codec_id == AVCodecID.AV_CODEC_ID_HEVC ? HevcTag : 0;
-        stream->time_base = source.TimeBase;
-        stream->disposition = source.IsDefault ? ffmpeg.AV_DISPOSITION_DEFAULT : 0;
-        if (source.Title is not null)
-        {
-            ffmpeg.av_dict_set(&stream->metadata, "title", source.Title, 0);
-            ffmpeg.av_dict_set(&stream->metadata, "handler_name", source.Title, 0);
-        }
+
+        // Only HEVC is tagged; any other codec takes the muxer's own tag.
+        stream->codecpar->codec_tag = 0;
+        Mp4Streams.Describe(stream, source.TimeBase, source.Title, source.IsDefault);
     }
 
-    /// <summary>Background I/O and memory priority for the calling thread; false when Windows refused it.</summary>
-    internal static bool EnterBackgroundMode(ILogger logger)
+    private static void WriteHeader(AVFormatContext* context)
     {
-        if (PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_BEGIN))
-        {
-            return true;
-        }
-
-        logger.LogDebug("The Clip writer could not enter background mode; writing at normal priority");
-        return false;
-    }
-
-    private static void TryDelete(string path, ILogger logger)
-    {
+        AVDictionary* options = null;
+        ffmpeg.av_dict_set(&options, "movflags", "+faststart", 0);
         try
         {
-            File.Delete(path);
+            FFmpegLibrary.Check(ffmpeg.avformat_write_header(context, &options), "avformat_write_header");
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        finally
         {
-            logger.LogWarning("Could not delete {Path}: {Message}", path, e.Message);
+            ffmpeg.av_dict_free(&options);
         }
+    }
+
+    /// <summary>Copies each of the cut's packets into the one reused packet, rebased to the cut, and writes it.</summary>
+    private static void WritePackets(AVFormatContext* context, AVPacket* packet, ClipSource source)
+    {
+        var streams = source.Streams;
+        var cut = source.Cut;
+        foreach (var ring in cut.Packets)
+        {
+            FFmpegLibrary.Check(ffmpeg.av_new_packet(packet, ring.Length), "av_new_packet");
+            ring.CopyTo(new Span<byte>(packet->data, ring.Length));
+
+            var origin = cut.Origin(ring.Stream);
+            packet->stream_index = ring.Stream;
+            packet->pts = ring.Pts - origin;
+            packet->dts = ring.Dts - origin;
+            packet->duration = ring.Duration;
+            packet->flags = ring.IsKey ? ffmpeg.AV_PKT_FLAG_KEY : 0;
+            ffmpeg.av_packet_rescale_ts(packet, streams[ring.Stream].TimeBase, context->streams[ring.Stream]->time_base);
+
+            // Takes the packet's reference whether it succeeds or not.
+            FFmpegLibrary.Check(ffmpeg.av_interleaved_write_frame(context, packet), "av_interleaved_write_frame");
+        }
+    }
+
+    private static void CloseOutput(AVFormatContext* context)
+    {
+        if (context->pb is not null)
+        {
+            ffmpeg.avio_closep(&context->pb);
+        }
+
+        ffmpeg.avformat_free_context(context);
     }
 }
