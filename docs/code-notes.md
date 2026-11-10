@@ -1887,8 +1887,7 @@ Volume:
 - An engine crash loop puts the tray in its error state, with a Restart item, and is written to `logs\app.log` in the
   instance's local data folder.
 - The tray menu's status item and Restart item have fixed automation names (`TrayMenu.StatusItemName`,
-  `TrayMenu.RestartItemName`). Dev
-  and test instances also get a Control gallery item.
+  `TrayMenu.RestartItemName`). Dev and test instances also get a Control gallery item.
 
 ### StartupRegistration
 
