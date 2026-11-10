@@ -1,12 +1,6 @@
 namespace Encore.Bench;
 
-/// <summary>
-/// <c>bench soak</c>'s timetable: a sample at the start and every <c>sampleEvery</c>, a press every
-/// <c>pressEvery</c> from the start, until <c>duration</c> has passed, then a last sample. A sample or press
-/// that runs late moves its next one to the following slot rather than bunching up. Each one-shot event in
-/// <paramref name="events"/> runs once, when its time from the start is due. The clock and the wait are
-/// injected, so a test can run an hour's schedule in no time.
-/// </summary>
+/// <c>bench soak</c>'s timetable of samples, presses and one-shot events; the clock and the wait are injected for tests.
 internal sealed class SoakSchedule(
     TimeSpan duration,
     TimeSpan sampleEvery,
@@ -21,7 +15,7 @@ internal sealed class SoakSchedule(
 
     public int Presses { get; private set; }
 
-    /// <summary>Runs the schedule; returns why it stopped early (<paramref name="stop"/>'s reason), or null when it ran to the end.</summary>
+    /// <summary>Runs the schedule; returns why it stopped early, or null when it ran to the end.</summary>
     public string? Run(Action sample, Action press, Func<string?> stop, CancellationToken cancellation)
     {
         var start = time.GetUtcNow();

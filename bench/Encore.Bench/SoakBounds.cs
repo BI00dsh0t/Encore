@@ -2,20 +2,10 @@ using System.Globalization;
 
 namespace Encore.Bench;
 
-/// <summary>One bound of one process's counter: the figure, its limit, and whether it is met.</summary>
-/// <param name="Value">The growth since warm-up (MB or objects), or the slope (MB/h).</param>
-/// <param name="Judged">False for a figure reported as information only (a slope over too short a span); it then passes.</param>
+/// <summary>One bound of one process's counter: the figure, its limit, and whether it is met; an unjudged figure passes.</summary>
 internal sealed record SoakBound(string Process, string Counter, double Value, double Limit, bool Pass, string Detail, bool Judged = true);
 
-/// <summary>
-/// Epic 8's resource bounds, per process. The warm-up value is the first sample at or after the warm-up
-/// (from the process's first sample). Private bytes end within max(5 %, 20 MB) of it, and their
-/// least-squares slope over the samples from the warm-up on is under 2 MB/h; handles, GDI and USER
-/// objects end within 50 of it. "Within" is growth: a counter that falls after warm-up meets its bound.
-/// The slope is judged only over at least <see cref="MinSlopeSpan"/> of samples after the warm-up: over a
-/// shorter span the ±3 MB noise of a flat process outweighs 2 MB/h (story 8.1's 20-minute run measured a
-/// flat engine at 4 MB/h), so a short run reports it as information and is held to the end growth alone.
-/// </summary>
+/// <summary>The resource bounds per process: memory growth and slope, and handle, GDI and USER growth. docs/code-notes.md.</summary>
 internal static class SoakBounds
 {
     public const double MaxSlopeMbPerHour = 2;

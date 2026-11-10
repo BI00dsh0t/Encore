@@ -1,12 +1,6 @@
 namespace Encore.Bench;
 
-/// <summary>
-/// Finds the marker window's flashes in the decoded video: each frame is reduced to its mean
-/// luma (0–255, from a 64×36 gray decode), and a flash starts at a frame above the threshold whose
-/// previous frame was not. The threshold is halfway between the median frame (dark: the marker is
-/// black 95 % of the time) and the brightest, so it adapts to letterboxing, the capture border and
-/// the encoder's range. With too little contrast there are no flashes at all.
-/// </summary>
+/// <summary>Finds the marker's flashes in the decoded video: a frame's mean luma crossing a threshold that adapts to the file.</summary>
 internal static class FlashDetector
 {
     /// <summary>The least brightest-minus-median that counts as a flash, in luma levels.</summary>

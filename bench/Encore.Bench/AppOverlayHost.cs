@@ -21,12 +21,7 @@ internal interface IOverlayHost : IDisposable
     bool WindowVisible();
 }
 
-/// <summary>
-/// <c>bench overlay --host app</c> (story 5.8): the real <c>Encore.App.exe --tray</c> on a throwaway test
-/// instance, which starts its own engine. Bench drives the App's Overlay through the engine with
-/// <c>dev.simulate</c>: on is the stub Recording (the solid dot), then a saved and a failed notice; off stops the
-/// Recording. The load's Game Profile is set Ignored first, so Game Detection starts no capture.
-/// </summary>
+/// <c>bench overlay --host app</c>: the real App on a throwaway test instance, its Overlay driven by <c>dev.simulate</c>.
 internal sealed class AppOverlayHost : IOverlayHost
 {
     public const string ExeName = "Encore.App.exe";
@@ -55,8 +50,7 @@ internal sealed class AppOverlayHost : IOverlayHost
         _enginePid = enginePid;
     }
 
-    /// <exception cref="BenchFailure">The App or its engine never answered: both are stopped and the instance's folders deleted.</exception>
-    /// <param name="overlayDot">Global <c>overlayDot</c> for the instance (story 5.12), set with the Ignored profile; null leaves the default.</param>
+    /// <summary>Starts the App and its engine; throws when they never answer, after stopping both and deleting their folders.</summary>
     public static AppOverlayHost Start(string exe, string ignoredExe, bool messages, OverlayDotMode? overlayDot = null)
     {
         var instance = Instance.ForTest(Instance.TestPrefix + "bench-overlay-" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(4)).ToLowerInvariant());
@@ -145,8 +139,7 @@ internal sealed class AppOverlayHost : IOverlayHost
 
     public static string DotName(OverlayDotMode mode) => DotModes.First(m => m.Value == mode).Key;
 
-    /// <summary><c>--overlay-dot</c>, or <see cref="OverlayDotMode.Auto"/>.</summary>
-    /// <exception cref="BenchUsageException">Not one of <see cref="DotModes"/>.</exception>
+    /// <summary>The <c>--overlay-dot</c> option, or <see cref="OverlayDotMode.Auto"/>; throws for an unknown mode.</summary>
     public static OverlayDotMode ParseDot(BenchOptions options) =>
         options.Text("overlay-dot") is not { } text ? OverlayDotMode.Auto
         : DotModes.TryGetValue(text, out var mode) ? mode
@@ -194,7 +187,7 @@ internal sealed class AppOverlayHost : IOverlayHost
         }
     }
 
-    /// <summary>Connects once the App has started the engine; returns the client and the engine's process id (the pipe's server).</summary>
+    /// <summary>Connects once the App has started the engine; returns the client and the engine's process id.</summary>
     private static (EngineClient Client, int EnginePid) Connect(Instance instance, Process app)
     {
         var pipe = PipeName.ForCurrentUser(instance.Name);
@@ -218,7 +211,7 @@ internal sealed class AppOverlayHost : IOverlayHost
         }
     }
 
-    /// <summary>Shuts the engine down (the App quits when it ends cleanly), stops what is left, and deletes the instance's folders.</summary>
+    /// <summary>Shuts the engine down (the App quits with it), stops what is left, and deletes the instance's folders.</summary>
     internal static void Cleanup(Process app, Instance instance, EngineClient? client, int enginePid)
     {
         if (client is not null)
@@ -301,11 +294,7 @@ internal sealed class AppOverlayHost : IOverlayHost
     /// <summary>Waits for <paramref name="task"/>, rethrowing its own exception (not an <see cref="AggregateException"/>).</summary>
     private static T Wait<T>(Task<T> task) => task.WaitAsync(ReplyTimeout).GetAwaiter().GetResult();
 
-    /// <summary>
-    /// AD-18's Game Profile id, as <c>GamePaths.Canonicalize</c> makes it: the file's final path
-    /// (<c>FILE_NAME_NORMALIZED | VOLUME_NAME_DOS</c>), <c>\\?\</c> stripped (<c>\\?\UNC\</c> becomes <c>\\</c>), lowercased.
-    /// Bench doesn't reference <c>Platform.Windows</c>, so the call is repeated here.
-    /// </summary>
+    /// <summary>The Game Profile id as the engine makes it, repeated here because Bench doesn't reference Platform.Windows.</summary>
     internal static string Canonicalize(string path)
     {
         using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);

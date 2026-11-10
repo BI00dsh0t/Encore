@@ -6,10 +6,7 @@ using System.Text.Json;
 
 namespace Encore.Bench;
 
-/// <summary>
-/// What <c>bench fps</c> measured: the synthetic load (<see cref="Kind"/> <c>synthetic</c>, with its window,
-/// target and calibrated rates, iterations and adapter) or a real game (<c>game</c>, its process name only).
-/// </summary>
+/// <summary>What <c>bench fps</c> measured: the synthetic load with its calibration, or a real game by process name.</summary>
 internal sealed record GpuLoadInfo(
     string Kind,
     string Process,
@@ -29,11 +26,7 @@ internal sealed record GpuLoadInfo(
     public static GpuLoadInfo RealGame(string process) => new(Game, process);
 }
 
-/// <summary>
-/// <c>Encore.Bench.GpuLoad.exe</c>, started for one <c>bench fps</c> run: Bench waits for its one
-/// <c>ready</c> line, and stops it on every path (WM_CLOSE, then a kill). The load also exits by itself
-/// when Bench does (<c>--parent</c>).
-/// </summary>
+/// <summary>The load process, started for one run: Bench waits for its ready line and stops it on every path.</summary>
 internal sealed class GpuLoadProcess : IDisposable
 {
     /// <summary>The load's process name, which the FPS script finds as <c>-Game</c> and PresentMon traces.</summary>
@@ -41,10 +34,7 @@ internal sealed class GpuLoadProcess : IDisposable
     public const string ExeName = ProcessName + ".exe";
     public const double DefaultTargetFps = 80;
 
-    /// <summary>
-    /// Fullscreen optimizations off for the process (the "Disable fullscreen optimizations" compatibility
-    /// setting), so <c>--mode exclusive</c> gets legacy exclusive fullscreen rather than a promoted flip.
-    /// </summary>
+    /// <summary>The compatibility layer that turns fullscreen optimizations off, so exclusive mode is truly exclusive.</summary>
     public const string NoFullscreenOptimizationsLayer = "DisableDXMaximizedWindowedMode";
 
     private const string ReadyPrefix = "ready ";
@@ -99,10 +89,7 @@ internal sealed class GpuLoadProcess : IDisposable
         }
     }
 
-    /// <summary>
-    /// For a load that exited by itself before <see cref="Dispose"/>: its exit code and stderr, once its output has
-    /// drained.
-    /// </summary>
+    /// <summary>For a load that exited by itself: its exit code and stderr, once its output has drained.</summary>
     public string ExitDescription()
     {
         _process.WaitForExit();
@@ -127,11 +114,7 @@ internal sealed class GpuLoadProcess : IDisposable
         }
     }
 
-    /// <summary>
-    /// Starts the load and waits up to <paramref name="timeout"/> for its <c>ready</c> line.
-    /// </summary>
-    /// <exception cref="BenchFailure">It exited early or never said ready: its stderr, and it is stopped.</exception>
-    /// <param name="mode">The load's <c>--mode</c>; null leaves it borderless. <c>exclusive</c> starts it with <see cref="NoFullscreenOptimizationsLayer"/>.</param>
+    /// <summary>Starts the load and waits for its ready line; throws with its stderr when it exits early or never says ready.</summary>
     public static GpuLoadProcess Start(string exe, double targetFps, string? size, double? warmupSeconds, TimeSpan timeout, string? mode = null)
     {
         var start = new ProcessStartInfo(exe)
@@ -276,8 +259,7 @@ internal sealed class GpuLoadProcess : IDisposable
         }
     }
 
-    /// <summary>Parses the load's <c>ready {json}</c> line.</summary>
-    /// <exception cref="FormatException">Not a ready line, or one missing a field.</exception>
+    /// <summary>Parses the load's ready line; throws FormatException when it isn't one or lacks a field.</summary>
     internal static GpuLoadReady ParseReady(string line)
     {
         if (!line.StartsWith(ReadyPrefix, StringComparison.Ordinal))
@@ -315,9 +297,7 @@ internal sealed class GpuLoadProcess : IDisposable
         }
     }
 
-    /// <summary>
-    /// <c>--load-exe</c>; else the load built beside Bench's own configuration; else the newest Release build.
-    /// </summary>
+    /// <summary>The load's path: the option, else the build beside Bench's own configuration, else the newest Release build.</summary>
     public static string Resolve(BenchContext context)
     {
         if (context.Options.Text("load-exe") is { } given)

@@ -5,21 +5,13 @@ namespace Encore.Bench;
 /// <summary>One audio stream as ffprobe reports it: its title, default flag and the span of its packets.</summary>
 internal sealed record TrackProbe(string? Title, bool Default, double StartSeconds, double DurationSeconds);
 
-/// <summary>
-/// One decoded audio stream: its burst onsets (file time, s), each burst's level (dBFS), its peak |sample| and the
-/// 99.9th percentile of |sample| over both channels.
-/// </summary>
+/// <summary>One decoded audio stream: its burst onsets, each burst's level, its peak and its 99.9th percentile.</summary>
 internal sealed record TrackSignal(IReadOnlyList<double> OnsetSeconds, IReadOnlyList<double> BurstLevelsDbfs, double Peak, double P999);
 
-/// <summary>What VLC's HTTP interface listed. <see cref="Found"/> is false when no vlc.exe was found: the check is then <c>not-checked</c>.</summary>
+/// <summary>What VLC's HTTP interface listed; Found is false when no vlc.exe was found, and the check is then not-checked.</summary>
 internal sealed record VlcListing(bool Found, IReadOnlyList<string>? Labels, string? Error);
 
-/// <summary>One audio stream's figures in <c>tracks.json</c>.</summary>
-/// <param name="Onsets">Burst onsets found; null for a stream not decoded (Mic).</param>
-/// <param name="ExpectedOnsets">At least this many whole bursts fit in the stream: its whole seconds less one; for Everything, which carries both devices' bursts, Game's and Chat's summed.</param>
-/// <param name="BurstLevelDbfs">The median burst level, dBFS (RMS of 5 to 45 ms after each onset, × √2).</param>
-/// <param name="Peak">The largest |sample|: information only (AAC rings past full scale at the bursts' edges).</param>
-/// <param name="P999">The 99.9th percentile of |sample|, both channels: what the fullScale check judges.</param>
+/// <summary>One audio stream's figures in <c>tracks.json</c>; each field is explained in docs/code-notes.md.</summary>
 internal sealed record TrackFigures(
     int Index,
     string? Title,
@@ -48,11 +40,7 @@ internal sealed record NamedTrackCheck(string Check, string Figure, string Targe
 /// <summary>The checks' outcome.</summary>
 internal sealed record TracksAnalysis(IReadOnlyList<TrackFigures> Tracks, SyncFigures? Sync, IReadOnlyList<NamedTrackCheck> Checks, string Verdict);
 
-/// <summary>
-/// The pure part of <c>bench tracks</c>: the Track names and order, Track 1 as the only default, each Track's
-/// length against the video's, Game and Chat in sync with Everything, each single-device Track at its source's
-/// level, Everything never over full scale, and VLC's listing of the same names.
-/// </summary>
+/// <summary>The pure part of <c>bench tracks</c>: the checks on Track names, lengths, sync, levels and full scale.</summary>
 internal static class TrackAnalysis
 {
     public const string PassVerdict = "pass";
@@ -73,7 +61,7 @@ internal static class TrackAnalysis
     public const double MinMatchedFraction = 0.95;
     public const double LevelToleranceDb = 0.5;
 
-    /// <summary>AAC coding tolerance over full scale, as story 2.2's test; judged on the 99.9th percentile of |sample|.</summary>
+    /// <summary>AAC coding tolerance over full scale, judged on the 99.9th percentile of the samples.</summary>
     public const double MaxPeak = 1.05;
 
     public static TracksAnalysis Evaluate(double videoDurationSeconds, IReadOnlyList<TrackProbe> audio, IReadOnlyList<TrackSignal?> signals, double toneDbfs, VlcListing? vlc)
@@ -130,10 +118,7 @@ internal static class TrackAnalysis
     /// <summary>Bursts come once a second, so a stream of D seconds holds at least ⌊D⌋ − 1 whole bursts.</summary>
     public static int ExpectedOnsets(double durationSeconds) => Math.Max(0, (int)Math.Floor(durationSeconds) - 1);
 
-    /// <summary>
-    /// Each Game and Chat onset matched to the nearest Everything onset within ±<see cref="MatchWindowMs"/>; the
-    /// matched fraction and the max and median |Δ| of the matched ones.
-    /// </summary>
+    /// <summary>Matches each Game and Chat onset to the nearest Everything onset; returns the matched fraction and the gaps.</summary>
     public static SyncFigures Sync(IReadOnlyList<double> everything, IReadOnlyList<double> game, IReadOnlyList<double> chat, int gameExpected, int chatExpected)
     {
         var sorted = everything.Order().ToArray();
@@ -262,12 +247,7 @@ internal static class TrackAnalysis
     private static string Ms(double? value) => value is { } v ? v.ToString("0.###", CultureInfo.InvariantCulture) + " ms" : "n/a";
 }
 
-/// <summary>
-/// Streams one decoded audio stream (48 kHz stereo f32, in any chunk sizes) through the onset detector, and
-/// measures each burst's level (the RMS of the mono samples 5 to 45 ms after its onset, × √2, so a sine reads
-/// its peak), the stream's peak |sample|, and the 99.9th percentile of |sample| over both channels from a fixed
-/// histogram (<see cref="BinWidth"/> bins up to <see cref="HistogramTop"/>), so the stream is never held whole.
-/// </summary>
+/// <summary>Streams one decoded audio stream through the onset detector and measures levels without holding it whole.</summary>
 internal sealed class TrackSignalScanner
 {
     public const int LevelFromSamples = OnsetDetector.SampleRate * 5 / 1000;
@@ -357,7 +337,7 @@ internal sealed class TrackSignalScanner
             PercentileOfAbs());
     }
 
-    /// <summary>The nearest-rank <see cref="Percentile"/> of |sample|, as its bin's upper edge; the peak when it falls past the top bin.</summary>
+    /// <summary>The nearest-rank percentile of the samples, as its bin's upper edge; the peak when it falls past the top bin.</summary>
     private double PercentileOfAbs()
     {
         if (_counted == 0)

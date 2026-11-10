@@ -10,7 +10,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Bench;
 
-/// <summary><c>tracks-markers.json</c>: what a <c>bench tracks</c> capture played and how, kept so <c>--reanalyze</c> needs no devices.</summary>
+/// <summary>What a <c>bench tracks</c> capture played and how, kept so a re-analysis needs no devices.</summary>
 internal sealed record TracksMarkerLog(
     long QpcFrequency,
     long EngineStartQpc,
@@ -28,9 +28,7 @@ internal sealed record TracksMarkerLog(
     IReadOnlyList<long> BurstQpcsA,
     IReadOnlyList<long> BurstQpcsB);
 
-/// <summary><c>tracks.json</c>.</summary>
-/// <param name="BurstPhaseSeconds">How long after A's bursts B's come, from the log (about 0.5 s).</param>
-/// <param name="VlcLabels">The audio stream names VLC listed; null when it was not found or listed none.</param>
+/// <summary>The <c>tracks.json</c> report; VlcLabels is null when VLC was not found or listed none.</summary>
 internal sealed record TracksReport(
     DateTimeOffset Created,
     double Minutes,
@@ -52,12 +50,7 @@ internal sealed record TracksReport(
     string Verdict,
     IReadOnlyList<string> Warnings);
 
-/// <summary>
-/// <c>bench tracks</c> (story 2.9): two Output Devices play known signals while the engine's <c>debug-capture
-/// --track-layout</c> captures the marker window with a four-Track layout (Everything = A + B + Mic, Game = A,
-/// Chat = B, Mic = Mic) in a throwaway test instance; the file is then checked as a player sees it (ffprobe,
-/// the decoded audio, and VLC's HTTP interface). DaVinci Resolve stays a person's check.
-/// </summary>
+/// <c>bench tracks</c>: two devices play known signals into a four-Track capture, then the file is checked.
 internal static class TracksCheck
 {
     public const string FileName = "tracks.json";
@@ -159,8 +152,7 @@ internal static class TracksCheck
         new(DateTimeOffset.Now, log.Minutes, engine, log.Capture, log.ToneDbfs, log.DeviceA, log.DeviceB, log.InputDevice, mp4, exit, error,
             null, null, [], null, [], null, TrackAnalysis.FailedVerdict, warnings);
 
-    /// <summary><c>--device-a</c> and <c>--device-b</c>: both required, and not the same.</summary>
-    /// <exception cref="BenchUsageException">One is missing, or they are equal.</exception>
+    /// <summary>The two device options: both required, and not the same; throws otherwise.</summary>
     internal static (string A, string B) Devices(BenchOptions options)
     {
         var a = options.Text("device-a") ?? throw new BenchUsageException("tracks needs --device-a <Output Device>.");
@@ -284,10 +276,7 @@ internal static class TracksCheck
         }
     }
 
-    /// <summary>
-    /// Starts a tone player on <paramref name="a"/>, then one on <paramref name="b"/> whose bursts come about half a
-    /// second after A's (three tries at aiming for it, a warning when the last misses by more than 0.15 s).
-    /// </summary>
+    /// <summary>Starts a tone player on each device, the second's bursts about half a second after the first's.</summary>
     internal static (TonePlayer A, TonePlayer B) StartStaggered(AudioEndpoint a, AudioEndpoint b, double toneDbfs, List<string> warnings)
     {
         TonePlayer? toneB = null;
@@ -417,12 +406,7 @@ internal static class TracksCheck
             video is { } v ? Math.Round(v, 4) : null, phase, analysis.Tracks, analysis.Sync, analysis.Checks, listing?.Labels, verdict, warnings);
     }
 
-    /// <summary>
-    /// The video's duration and each audio stream's title, default flag and span, from its packets' timestamps.
-    /// The mp4 muxer stores a stream's title in the track's udta <c>name</c> box, which FFmpeg reads back as
-    /// the <c>name</c> tag; <c>title</c> is the fallback. Never <c>handler_name</c>: the engine writes the name there
-    /// too, and a file whose title tag is missing must fail the titles check.
-    /// </summary>
+    /// <summary>The video's duration and each audio stream's title, default flag and span; never the title from handler_name.</summary>
     internal static (double? VideoSeconds, List<TrackProbe> Audio) Probe(FfmpegTools tools, string file)
     {
         var json = MediaAnalysis.Run(tools.Ffprobe,
@@ -483,7 +467,7 @@ internal static class TracksCheck
         stream.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
 
-    /// <summary>Audio stream <paramref name="track"/> decoded to 48 kHz stereo f32 and streamed through a <see cref="TrackSignalScanner"/>.</summary>
+    /// <summary>One audio stream decoded to 48 kHz stereo f32 and streamed through a <see cref="TrackSignalScanner"/>.</summary>
     private static TrackSignal Decode(FfmpegTools tools, string file, int track, double startSeconds, double toneDbfs)
     {
         var scanner = new TrackSignalScanner(toneDbfs);

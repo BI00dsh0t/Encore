@@ -10,8 +10,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Bench;
 
-/// <summary><c>conformance-drift-markers.json</c>: what a <c>bench drift --app</c> run played and pressed, kept so <c>--reanalyze</c> needs no App or devices.</summary>
-/// <param name="AnchorQpc">The QPC at the Recording's file time 0: the Record press plus the engine's logged key offset (or <see cref="KeyAfterPressSeconds"/> null and a 50 ms guess).</param>
+/// <summary>What a <c>bench drift --app</c> run played and pressed, kept so a re-analysis needs no App or devices.</summary>
 internal sealed record ConformanceLog(
     long QpcFrequency,
     long PressQpc,
@@ -40,7 +39,7 @@ internal sealed record ConformanceSave(double AtSeconds, string? Path, string? F
 /// <summary>One Track's bursts from one toned Output Device against the marker's flashes.</summary>
 internal sealed record ConformanceSeries(int Track, string? Title, string Device, AvResult Av);
 
-/// <summary>Track-to-Track drift between two series: the largest change of their bucket medians' difference from the first bucket's.</summary>
+/// <summary>Track-to-Track drift between two series: the largest change of their median difference from the first bucket's.</summary>
 internal sealed record ConformancePair(string A, string B, int Buckets, double? DriftMs, double TargetMs, string Verdict);
 
 /// <summary><c>conformance-drift.json</c>.</summary>
@@ -68,20 +67,7 @@ internal sealed record ConformanceDriftReport(
     string Verdict,
     IReadOnlyList<string> Warnings);
 
-/// <summary>
-/// <c>bench drift --app</c> (story 8.7, R7): the final conformance drift run. The real App and engine (the local
-/// publish, <see cref="LiveApp"/>) run on a throwaway test instance with everything on: Bench's marker window is
-/// the Target Game (listed with <c>game.add</c>, Recordings on), so Rewind buffers it and its Overlay
-/// shows; the Library and Cleanup run on the instance's Output Folder; Save is pressed every
-/// <c>--save-seconds</c>; and a real Recording runs for <c>--minutes</c> (30 by default, halved by the builder,
-/// 2026-11-04) from a Record Hotkey press. The Track Layout is the builder's devices (<c>--layout</c> reads one
-/// from a settings file, read-only; by default 2.9's four Tracks over <c>--device-a</c>, <c>--device-b</c> and
-/// <c>--input-device</c>). Two tone players burst into A and B half a second apart, on the marker's flash grid.
-/// The Recording is then analysed: per Track and toned device, A/V drift as <c>bench drift</c> measures it; between
-/// every two series, Track-to-Track drift; and every Track's length against the video's (which also bounds an
-/// Input-only Track, such as the Mic, that hears no burst). Each against one frame. Holds the <c>.bench-running</c>
-/// lock for the whole capture.
-/// </summary>
+/// <c>bench drift --app</c>: the final drift run, on the real App and engine with everything on. docs/code-notes.md.
 internal static class ConformanceDrift
 {
     public const string FileName = "conformance-drift.json";
@@ -89,7 +75,7 @@ internal static class ConformanceDrift
     public const string MarkersName = "conformance-drift-markers.json";
     public const double DefaultMinutes = 30;
 
-    /// <summary>A Track's onset counts as device X's when it is within this of X's burst grid (A and B are 0.5 s apart).</summary>
+    /// <summary>A Track's onset counts as a device's when it is within this of that device's burst grid.</summary>
     private const double PhaseTolerance = 0.25;
 
     private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
@@ -282,12 +268,7 @@ internal static class ConformanceDrift
         }
     }
 
-    /// <summary>
-    /// The Track Layout and the two toned Output Devices: <c>--layout</c> reads the <c>trackLayout</c> of a settings
-    /// file (read only), with A and B its first two Output Devices unless <c>--device-a</c> and <c>--device-b</c> name
-    /// two of them; otherwise 2.9's layout over <c>--device-a</c>, <c>--device-b</c> (default the BEACN Game and Chat
-    /// outputs) and <c>--input-device</c> (default the BEACN Mic).
-    /// </summary>
+    /// <summary>The Track Layout and the two toned Output Devices, from a settings file or from the device options.</summary>
     internal static (TrackLayout Layout, AudioEndpoint A, AudioEndpoint B) ResolveLayout(BenchOptions options, CaptureSettings settings)
     {
         var outputs = AudioEndpoints.List(PlatformFlow.Output);
@@ -434,14 +415,11 @@ internal static class ConformanceDrift
             log.Saves.Count, saved, Math.Round(frameMs, 3), verdict, warnings);
     }
 
-    /// <summary>The onsets within <see cref="PhaseTolerance"/> of the grid through <paramref name="origin"/> (one burst a second).</summary>
+    /// <summary>The onsets within <see cref="PhaseTolerance"/> of the one-a-second grid through the origin.</summary>
     internal static List<double> OnGrid(IReadOnlyList<double> onsets, double origin) =>
         [.. onsets.Where(t => Math.Abs(Wrap(t - origin)) < PhaseTolerance)];
 
-    /// <summary>
-    /// Track-to-Track drift: per bucket both series have, the difference of their medians; the drift is the largest
-    /// change of that difference from the first common bucket's.
-    /// </summary>
+    /// <summary>Track-to-Track drift: the largest change of the two series' median difference from the first common bucket's.</summary>
     internal static ConformancePair Pair(ConformanceSeries a, ConformanceSeries b, double frameMs)
     {
         var name = (ConformanceSeries s) => $"{s.Title} ({s.Device})";

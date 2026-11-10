@@ -1,12 +1,6 @@
 namespace Encore.Bench;
 
-/// <summary>
-/// Finds the onsets of <c>TonePlayer</c>'s 3 kHz bursts in decoded PCM: the 3 kHz quadrature detector of
-/// story 1.12's verify test (a 2 ms window; one cycle is 16 samples at 48 kHz), indexed by sample
-/// instead of QPC. An onset is the first sample where the envelope crosses <c>On</c>; the detector
-/// re-arms after 200 ms below <c>Off</c>. The thresholds scale with the bursts' peak level, so the
-/// test's −30 dBFS gives its 0.004 and 0.0015. Feed it mono samples in order, in any chunk sizes.
-/// </summary>
+/// <summary>Finds the onsets of the tone player's 3 kHz bursts in decoded PCM. Feed it mono samples in order.</summary>
 internal sealed class OnsetDetector
 {
     public const int SampleRate = 48_000;

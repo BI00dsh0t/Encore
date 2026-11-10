@@ -6,10 +6,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Encore.Bench;
 
-/// <summary>One sample of a process's resource counters: what <c>bench soak</c> holds to its bounds.</summary>
-/// <param name="PrivateBytes">The commit charge, <c>PROCESS_MEMORY_COUNTERS_EX.PrivateUsage</c>.</param>
-/// <param name="Gdi">GDI objects (<c>GR_GDIOBJECTS</c>).</param>
-/// <param name="User">USER objects (<c>GR_USEROBJECTS</c>).</param>
+/// <summary>One sample of a process's resource counters: private bytes, handles, GDI objects and USER objects.</summary>
 internal sealed record ProcessCounters(
     DateTimeOffset Time,
     int Pid,
@@ -41,8 +38,7 @@ internal static class SoakSampler
     private const uint GrGdiObjects = 0;
     private const uint GrUserObjects = 1;
 
-    /// <param name="name">The name the sample carries; the process's own name when null.</param>
-    /// <exception cref="Win32Exception">The counters couldn't be read (the process has exited).</exception>
+    /// <summary>Samples a process's counters; throws Win32Exception when the process has exited.</summary>
     public static ProcessCounters Sample(Process process, string? name = null, TimeProvider? time = null)
     {
         var handle = process.SafeHandle;

@@ -9,10 +9,7 @@ internal sealed class BenchUsageException(string message) : Exception(message);
 /// <summary>A run that can't go on (nothing to measure, a tool missing): printed, exit code 1.</summary>
 internal sealed class BenchFailure(string message) : Exception(message);
 
-/// <summary>
-/// Bench's command line: a subcommand, then <c>--name value</c> options and a few bare flags.
-/// Every value Bench uses has an option with a default, so a later epic can rerun the same benchmark.
-/// </summary>
+/// <summary>Bench's command line: a subcommand, then <c>--name value</c> options and a few bare flags, each with a default.</summary>
 internal sealed class BenchOptions
 {
     public const string Usage =
@@ -246,8 +243,7 @@ internal sealed class BenchOptions
         return items.Length == 0 ? throw new BenchUsageException($"--{name} lists nothing.") : items;
     }
 
-    /// <summary>Parses <c>WxH</c>, each side even and from 2 to 8192.</summary>
-    /// <exception cref="BenchUsageException">Not such a size.</exception>
+    /// <summary>Parses <c>WxH</c>, each side even and from 2 to 8192; throws for anything else.</summary>
     public static (int Width, int Height) ParseSize(string size, string option)
     {
         var parts = size.Split('x');
@@ -311,10 +307,7 @@ internal sealed class BenchContext
         return new BenchContext(repo, run, options);
     }
 
-    /// <summary>
-    /// <paramref name="given"/>, or the first folder holding <see cref="SolutionFile"/> above
-    /// Bench's own folder, then above the current folder.
-    /// </summary>
+    /// <summary>The given repo root, or the first folder holding the solution file above Bench's own folder or the current one.</summary>
     public static string FindRepoRoot(string? given)
     {
         if (given is not null)
@@ -339,10 +332,7 @@ internal sealed class BenchContext
         throw new BenchFailure($"No {SolutionFile} above {AppContext.BaseDirectory} or {Environment.CurrentDirectory}; pass --repo.");
     }
 
-    /// <summary>
-    /// <paramref name="given"/>, or a new <c>measurements/bench-&lt;time&gt;</c>; for <c>report</c>,
-    /// the newest existing <c>bench-*</c> folder.
-    /// </summary>
+    /// <summary>The given run folder, or a new one under measurements; for <c>report</c>, the newest existing one.</summary>
     public static string ResolveRunFolder(string repo, string? given, bool forReport, DateTime now)
     {
         if (given is not null)
@@ -375,11 +365,7 @@ internal sealed class BenchContext
             ?? throw new BenchFailure("No Release engine build. Run dotnet build Encore.slnx -c Release, or pass --engine <path>.");
     }
 
-    /// <summary>
-    /// The newer of the published engine (<c>publish/engine</c>) and the Release build's own folder
-    /// (<c>bin/Release/&lt;tfm&gt;</c>; Debug skews its CPU and allocation figures). Never a folder under
-    /// it, such as the NativeAOT compiler's <c>&lt;rid&gt;/native</c> output, which has no FFmpeg beside it.
-    /// </summary>
+    /// <summary>The newer of the published engine and the Release build's folder; never the NativeAOT output folder.</summary>
     internal static string? FindEngine(string repo)
     {
         const string Exe = "Encore.Engine.exe";

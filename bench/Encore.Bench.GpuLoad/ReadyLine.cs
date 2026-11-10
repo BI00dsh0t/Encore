@@ -21,11 +21,7 @@ internal static class LoadExit
 /// <summary>Only a software adapter is present.</summary>
 internal sealed class NoHardwareGpuException(string message) : Exception(message);
 
-/// <summary>
-/// The one line the load prints once calibrated: <c>ready</c>, a space, and a JSON object with the
-/// window, its size, the target and calibrated present rates, the frozen iteration count and the adapter.
-/// Bench's <c>GpuLoadProcess</c> parses it.
-/// </summary>
+/// <summary>The one line the load prints once calibrated: <c>ready</c>, a space and a JSON object, which Bench parses.</summary>
 internal static class ReadyLine
 {
     public const string Prefix = "ready ";

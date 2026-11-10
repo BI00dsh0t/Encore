@@ -1,11 +1,6 @@
 namespace Encore.Bench.GpuLoad;
 
-/// <summary>
-/// Steers the shader's iteration count N toward the target present rate during warm-up. Each window's
-/// measured rate scales N by (measured / target), held to ×0.25–×4 a step so a frame never grows long
-/// enough to trip the driver's timeout, and damped once within ×1.5 of the target so it settles; then
-/// N is frozen for the run.
-/// </summary>
+/// <summary>Steers the shader's iteration count toward the target present rate during warm-up, then freezes it for the run.</summary>
 internal sealed class Calibrator
 {
     public const uint InitialIterations = 256;
@@ -37,8 +32,7 @@ internal sealed class Calibrator
             return Iterations;
         }
 
-        // Frame time is roughly a fixed cost plus N times a per-iteration cost: scaling N by the rate
-        // ratio overshoots a little at low N, so near the target the step is damped.
+        // Frame time is a fixed cost plus N times a per-iteration cost, so near the target the step is damped.
         var ratio = measuredFps / _target;
         var step = Math.Abs(Math.Log(ratio)) < Math.Log(1.5) ? Math.Pow(ratio, 0.7) : Math.Clamp(ratio, 0.25, 4.0);
         var next = Math.Round(Iterations * step);
