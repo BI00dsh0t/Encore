@@ -38,8 +38,7 @@ public sealed class RecycleBinTests : IDisposable
         Assert.Equal([1, 2, 3], File.ReadAllBytes(path));
     }
 
-    // The $I file (v2) names the original path; its $R twin holds the bytes. Moves each one recycled from
-    // path back there and deletes its $I.
+    // The $I file names the original path and its $R twin holds the bytes; moves each one back and deletes its $I.
     private static int Restore(string path)
     {
         var sid = WindowsIdentity.GetCurrent().User!.Value;
