@@ -5,16 +5,10 @@ using Encore.Platform.Windows;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>Makes a session's Rewind rings: on disk (R3) when asked and the file can be made, else in memory.</summary>
+/// <summary>Makes a session's Rewind rings: on disk when asked and the file can be made, else in memory.</summary>
 internal static class ReplayRings
 {
-    /// <summary>
-    /// An empty ring of a <paramref name="windowUs"/> Buffer Window. With a
-    /// <paramref name="diskFolder"/>, a Disk-mode ring on a new <see cref="RingFile"/> there of
-    /// <paramref name="diskBytes"/> at most, at low I/O priority; when that file can't be made, a
-    /// warning and a Memory-mode ring. Null <paramref name="diskFolder"/> is Memory mode. Either way
-    /// its native-memory slabs are checked against <paramref name="margin"/>, if set.
-    /// </summary>
+    /// <summary>An empty ring for a Buffer Window: on disk when a folder is given, falling back to memory when the file fails.</summary>
     public static PacketRing Create(long windowUs, int capacity, string? diskFolder, long diskBytes, MemoryMargin? margin, ILogger log)
     {
         if (diskFolder is null)
@@ -33,12 +27,7 @@ internal static class ReplayRings
         }
     }
 
-    /// <summary>
-    /// Whether a Disk-mode ring of <paramref name="snapshot"/> fits its drive now (R5): its
-    /// <see cref="ReplayStorageEstimate"/> against the free bytes of its folder's drive
-    /// (<see cref="EffectiveSettings.RingPath"/>, else <paramref name="defaultFolder"/>). Unknown free
-    /// space counts as fits.
-    /// </summary>
+    /// <summary>Whether a Disk-mode ring fits its drive now; unknown free space counts as fits.</summary>
     public static bool Fits(EffectiveSettings snapshot, string defaultFolder, Func<string, long?> freeDisk)
     {
         ArgumentNullException.ThrowIfNull(snapshot);

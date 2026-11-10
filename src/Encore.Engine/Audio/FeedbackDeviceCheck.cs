@@ -10,13 +10,7 @@ using Encore.Engine.Settings;
 
 namespace Encore.Engine.Audio;
 
-/// <summary>
-/// Warns when a Track would record the Feedback Sounds (AD-15): a <c>feedback-device-captured</c>
-/// warning (severity warning, source <c>feedback</c>, no overlay, dismissable) while a Track of the
-/// active Track Layout, resolved for the Target Game's profile, else Global, mixes the Output Device
-/// the sounds play on. <see cref="Check"/> runs on each settings, endpoint and target change. Each
-/// distinct condition raises once; the warning is withdrawn when the condition clears or changes.
-/// </summary>
+/// <summary>Warns while a Track of the active Track Layout records the Output Device that Feedback Sounds play on.</summary>
 internal sealed class FeedbackDeviceCheck : IDisposable
 {
     private const string Source = "feedback";
@@ -32,8 +26,7 @@ internal sealed class FeedbackDeviceCheck : IDisposable
     private string? _warningId;
     private bool _disposed;
 
-    /// <summary>Subscribes to the store's and the endpoints' changes; the owner calls <see cref="Check"/> on a target change and once at start.</summary>
-    /// <param name="profileId">The Target Game's profile id, or <c>null</c> with no Target.</param>
+    /// <summary>Subscribes to settings and endpoint changes; the owner calls Check on a target change and at start.</summary>
     public FeedbackDeviceCheck(FeedbackSoundPlayer sounds, SettingsStore store, IAudioEndpointSource endpoints, Func<string?> profileId, Warnings warnings, ILogger log)
     {
         _sounds = sounds;

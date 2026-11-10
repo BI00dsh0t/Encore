@@ -10,11 +10,7 @@ using Encore.Platform.Windows;
 
 namespace Encore.Engine.Hotkeys;
 
-/// <summary>
-/// Glues the Hotkey thread to the engine (AD-11): plans the registrations from the settings when it
-/// starts and after each commit, re-registers only when the set to register changes, publishes
-/// <c>hotkey.status</c>, and posts each press to the SessionOrchestrator (AD-19), which publishes it.
-/// </summary>
+/// <summary>Glues the Hotkey thread to the engine: registers from settings, publishes status, posts presses on.</summary>
 internal sealed class HotkeyService : IDisposable
 {
     private readonly Lock _lock = new();
@@ -30,8 +26,7 @@ internal sealed class HotkeyService : IDisposable
     private HotkeyStatus _status;
     private int _disposed;
 
-    /// <summary>Registers the Hotkeys of the store's current document and publishes the first status, before it returns.</summary>
-    /// <param name="useCatalogDefault">Whether a document with no <c>hotkeys</c> takes the catalog default: the installed instance only (AD-16).</param>
+    /// <summary>Registers the document's Hotkeys and publishes the first status; only the installed instance gets defaults.</summary>
     public HotkeyService(SettingsStore store, EventHub hub, SessionOrchestrator sessions, bool useCatalogDefault, ILogger log)
     {
         ArgumentNullException.ThrowIfNull(sessions);
@@ -73,7 +68,7 @@ internal sealed class HotkeyService : IDisposable
         }
     }
 
-    /// <summary>Logs a press: <c>Hotkey &lt;action&gt; pressed</c>. The orchestrator thread calls it once it has published the press.</summary>
+    /// <summary>Logs a press; the orchestrator thread calls it once it has published the press.</summary>
     public static void LogPress(ILogger log, HotkeyPress press) =>
         log.LogInformation("Hotkey {Action} pressed at qpc {Qpc}", ActionName(press.Action), press.Qpc);
 

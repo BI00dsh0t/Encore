@@ -18,27 +18,18 @@ using VideoCodec = Encore.Contracts.Settings.VideoCodec;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>
-/// The engine's own session options: where the file goes (or that there is none, only a Replay
-/// Buffer), and <c>debug-capture</c>'s measurement and encoder experiments. None of it is part of
-/// <see cref="SessionSpec"/>.
-/// </summary>
+/// <summary>The engine's own session options: where the file goes, test seams and experiments; none is part of the spec.</summary>
 internal sealed record CaptureSessionOptions
 {
     public static readonly TimeSpan DefaultFirstFrameTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>
-    /// Rewind (R1, AD-8): the encoders write into a ring sized from the snapshot instead
-    /// of a file, in memory or on disk as its <c>replayStorage</c> says, and each
-    /// <see cref="CaptureSession.Save"/> writes a Clip from it. No path is allocated, and the outcome
-    /// has none.
-    /// </summary>
+    /// <summary>Rewind: the encoders write into a ring instead of a file, and each save writes a Clip from it.</summary>
     public bool Replay { get; init; }
 
     /// <summary>Where a Disk-mode ring's file goes when the snapshot's <c>ringPath</c> is not set; null for none.</summary>
     public string? RingFolder { get; init; }
 
-    /// <summary>The engine's RAM margin (R3), shared by every ring of every session; null for none.</summary>
+    /// <summary>The engine's RAM margin, shared by every ring of every session; null for none.</summary>
     public MemoryMargin? Margin { get; init; }
 
     /// <summary>The folder a file is allocated in when neither <see cref="OutputPath"/> nor the snapshot's Output Folder is set.</summary>
@@ -65,103 +56,59 @@ internal sealed record CaptureSessionOptions
 
     public ColorPath Color { get; init; } = ColorPath.X1;
 
-    /// <summary>
-    /// An FFmpeg encoder name that every session uses whatever the snapshot's codec, bypassing the
-    /// probe (<c>debug-capture --encoder</c>, for tests); null for the probe's encoder for the snapshot's codec.
-    /// </summary>
+    /// <summary>An FFmpeg encoder that every session uses whatever the codec, bypassing the probe; for tests.</summary>
     public string? Encoder { get; init; }
 
     /// <summary>Called once, on the capture thread, with the anchor QPC once the first frame has opened the output.</summary>
     public Action<long>? Anchored { get; init; }
 
-    /// <summary>
-    /// For tests: called on the writer thread with a Clip's final path just before it is written; a
-    /// non-null result is thrown as that write's failure.
-    /// </summary>
+    /// <summary>For tests: called on the writer thread just before a Clip is written; a non-null result is thrown.</summary>
     public Func<string, Exception?>? ClipWriteFault { get; init; }
 
-    /// <summary>
-    /// For tests: called on a forced restart's thread (<see cref="CaptureSession.RestartChain"/>)
-    /// just before the new chain is built; a non-null result is thrown there, as a failed build.
-    /// </summary>
+    /// <summary>For tests: called just before a forced restart builds the new chain; a non-null result is thrown there.</summary>
     public Func<Exception?>? RestartFault { get; init; }
 
-    /// <summary>
-    /// For tests: called at the start of each GPU-reset recovery attempt
-    /// (<see cref="CaptureSession.RecoverDevice"/>), once the lost device and chains are torn down; a
-    /// non-null result is thrown there, as a failed attempt.
-    /// </summary>
+    /// <summary>For tests: called at the start of each GPU-reset recovery attempt; a non-null result is thrown there.</summary>
     public Func<Exception?>? RecoveryFault { get; init; }
 
-    /// <summary>
-    /// For tests: called on the capture thread for each frame after the anchor; while it returns
-    /// true the frame is dropped, as on the secure desktop (lock, UAC, Ctrl+Alt+Del, T-04), where
-    /// WGC delivers none and the pacer repeats the last frame.
-    /// </summary>
+    /// <summary>For tests: while it returns true each frame is dropped, as on the secure desktop, where WGC delivers none.</summary>
     public Func<bool>? StarveFrames { get; init; }
 
-    /// <summary>How often a session holding a Rewind, or the Monitor session, checks from its anchor on whether its GPU device was removed or reset.</summary>
+    /// <summary>How often a session that can recover checks whether its GPU device was removed or reset.</summary>
     public TimeSpan DeviceWatchInterval { get; init; } = TimeSpan.FromMilliseconds(500);
 
-    /// <summary>
-    /// For tests: called before any WGC capture is created; a non-null result is thrown there, as
-    /// WGC failing. A Monitor session then falls back to Desktop Duplication (6.10); a game session fails.
-    /// </summary>
+    /// <summary>For tests: called before any WGC capture is created; a non-null result is thrown, as WGC failing.</summary>
     public Func<Exception?>? WgcFault { get; init; }
 
-    /// <summary>
-    /// Called once, on the opening thread, with the message when a Monitor session's WGC capture
-    /// failed and it captures through Desktop Duplication instead (<see cref="ErrorCodes.MonitorCaptureFallback"/>);
-    /// null ignores it.
-    /// </summary>
+    /// <summary>Called once, on the opening thread, when a Monitor session falls back to Desktop Duplication.</summary>
     public Action<string>? CaptureFallback { get; init; }
 
-    /// <summary>
-    /// When set, a game session whose window closes keeps running with no capture, the pacer
-    /// repeating its last frame, and posts <c>Closed</c>: the orchestrator retargets it to the
-    /// process's next window (keeping its Rewind) or ends it. When not set, it stops.
-    /// </summary>
+    /// <summary>When set, a game session whose window closes keeps running and posts Closed, so it can be retargeted.</summary>
     public bool FollowWindow { get; init; }
 
     /// <summary>With no first frame by then, the session posts a <see cref="ErrorCodes.CaptureFailed"/> failure.</summary>
     public TimeSpan FirstFrameTimeout { get; init; } = DefaultFirstFrameTimeout;
 
-    /// <summary>
-    /// Called on a background thread with the message when a switch to a profile's new encoder
-    /// chain left a gap of more than one frame before the next Clip (<see cref="ErrorCodes.ResetGap"/>);
-    /// null ignores it.
-    /// </summary>
+    /// <summary>Called on a background thread when a chain switch left a gap of more than one frame before the next Clip.</summary>
     public Action<string>? ResetGap { get; init; }
 
-    /// <summary>
-    /// Dev only (<c>debug-capture --monitors</c>, spike 11.1; kept for the NFR-1 cost measurements of
-    /// <c>measure-path-a.ps1 -mon&lt;mode&gt;</c>): a file session captures these monitors (GDI device
-    /// names; empty for every attached monitor) composited into one canvas (<see cref="CompositeCapture"/>)
-    /// instead of a window. A Monitor session composites its resolved screens instead (story 11.3).
-    /// </summary>
+    /// <summary>Dev only: a file session captures these monitors composited into one canvas instead of a window.</summary>
     public IReadOnlyList<string>? CompositeMonitors { get; init; }
 
-    /// <summary>Spike 11.1, dev only: <see cref="CompositeMonitors"/> captures every monitor through Desktop Duplication.</summary>
+    /// <summary>Dev only: <see cref="CompositeMonitors"/> captures every monitor through Desktop Duplication.</summary>
     public bool CompositeDuplication { get; init; }
 
-    /// <summary>For tests (story 12.4): how long a size move's built chain waits before it arms, so a test can press Record while it is pending. Zero in production.</summary>
+    /// <summary>For tests: how long a size move's built chain waits before it arms. Zero in production.</summary>
     public TimeSpan MoveArmDelay { get; init; }
 
-    /// <summary>For tests (story 11.3): the composited screens, by GDI device name, captured through Desktop Duplication instead of WGC.</summary>
+    /// <summary>For tests: the composited screens, by GDI device name, captured through Desktop Duplication instead of WGC.</summary>
     public IReadOnlyCollection<string>? DuplicationScreens { get; init; }
 
-    /// <summary>
-    /// Called once, on the opening thread, with a warning code and message for the Monitor session
-    /// (story 11.3): <see cref="ErrorCodes.MonitorRecordingScaled"/> when a composited canvas over 4096 px
-    /// has to stay H.264; null ignores it.
-    /// </summary>
+    /// <summary>Called once, on the opening thread, with a warning code and message for the Monitor session.</summary>
     public Action<string, string>? Warn { get; init; }
 }
 
-/// <summary>
-/// Starts <see cref="CaptureSession"/>s with one set of options, the engine's audio hub and one
-/// encoder catalog; with no catalog given, the factory probes on its own, once per codec.
-/// </summary>
+/// <summary>Starts capture sessions with one set of options, the engine's audio hub and one encoder catalog.</summary>
 internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILoggerFactory loggers, IAudioDeviceHub audio, IVideoEncoderCatalog? encoders = null)
     : ICaptureSessionFactory
 {
@@ -185,68 +132,7 @@ internal sealed class CaptureSessionFactory(CaptureSessionOptions options, ILogg
     }
 }
 
-/// <summary>
-/// One capture session: WGC window → scaler → paced video encoder, and the session's Tracks, each
-/// an AAC stream summed from its devices' hub streams (AD-20), all into one fragmented MP4. Each
-/// device is subscribed once and cut at the anchor by one <see cref="AudioTimeline"/>, which feeds
-/// every Track holding it (<see cref="AudioFanOut"/>); each Track's <see cref="TrackMixer"/> sums its
-/// devices by frame position, through a limiter that acts only above full scale. A Track with no
-/// devices is silence, advanced from QPC by a timer, off the capture thread; at the end every Track
-/// is padded with silence to one common end frame, the longest device's or the last video frame's,
-/// whichever is later. The first frame is the anchor, every stream's PTS 0. The snapshot's
-/// <c>video</c> sets the encoder (the probe's for its codec, else H.264), the output size, the fps,
-/// the bitrate and the rate control; with <c>matchSource</c> on, a game's output size is instead the
-/// game's own at the first frame, and a size that holds 3 s moves Rewind to a new chain
-/// (AD-26, stories 12.1 and 12.2). The capture thread only scales each frame into the chain's output,
-/// letterboxed (<see cref="FrameScaler"/>), and posts it; the encoder thread emits exactly one frame
-/// per slot of the fps, repeating the last one when nothing new arrived (story 1.11,
-/// <see cref="PacedVideoEncoder"/>). A retarget swaps only the WGC capture, so the file keeps one
-/// unbroken set of streams. Mic mute (AD-13) is one <see cref="MicMuteSchedule"/>, set from the spec
-/// before anything opens and then by <see cref="SetMicMuted"/>; each Mic Device's input to each
-/// <c>muteAffected</c> Track passes through a <see cref="MicMuteGate"/>, so it is silenced there,
-/// before the mix, from the press's frame, and stays audible in every other Track. All of that per
-/// spec is one <see cref="EncoderChain"/>. In Replay mode (<see cref="CaptureSessionOptions.Replay"/>)
-/// the streams go into the chain's <see cref="ReplayRingSink"/> instead of a file, and
-/// <see cref="Save"/> writes a Clip from it on a thread of its own. The ring is sized from the
-/// snapshot's Buffer Window at the anchor; a new window from <see cref="SetBufferWindow"/> resizes
-/// it at the next Reset (AD-8), into a new ring generation seeded from the Reset keyframe, so Clips
-/// stay gapless. The encoders write into the ring through a <see cref="RecordingTap"/>, and
-/// <see cref="Record"/> attaches a <see cref="RecordingWriter"/> to it: a Recording from the same
-/// encoder chain. A profile's new Tracks or video (<see cref="PrepareChain"/>, R7, R8) get a chain
-/// of their own, built in advance on a background thread and idle; the next save press whose write
-/// starts arms it: its audio starts at the press, and the first frame captured after the press
-/// makes it the current chain, which later saves cut from. The old chain is fed until every save
-/// bound to it has cut, then torn down off the capture and orchestrator threads, so at most two
-/// chains live at once (AD-7). A new chain whose first keyframe comes more than a frame after the
-/// old Clip's end raises <see cref="CaptureSessionOptions.ResetGap"/>. A forced restart
-/// (<see cref="RestartChain"/>, R4) tears the current chain down on a thread of its own and rebuilds
-/// the same spec into a new generation of the same ring, dropping the frames captured meanwhile;
-/// the Recording on the old chain ends at its last packet once the orchestrator has been told
-/// (<see cref="ISessionEvents.ChainRestarted"/>), and a failed rebuild fails the session. A switch
-/// at a Reset (<see cref="SwitchChain"/>, while a Monitor Recording holds the third chain) reuses
-/// that machinery with the new spec, into a fresh ring, and raises the gap as
-/// <see cref="CaptureSessionOptions.ResetGap"/>. A <see cref="SessionKind.Monitor"/> session (6.9)
-/// captures the monitor its snapshot's <c>monitorRecordingMonitor</c> names (else the primary one,
-/// <see cref="MonitorFinder"/>) on a device of that monitor's adapter, holds no Rewind and
-/// writes no file of its own: its chain feeds only the Recording <see cref="Record"/> attaches. Its
-/// anchor is posted (<see cref="ISessionEvents.Anchored"/>) so the orchestrator can start it. When its
-/// WGC monitor item can't be created or started, it captures the same monitor through DXGI Desktop
-/// Duplication instead (AD-12, 6.10), into the same chain, and raises
-/// <see cref="CaptureSessionOptions.CaptureFallback"/> once; a game session never falls back.
-/// A GPU driver reset (R3): a failure carrying <see cref="D3D11Device.DeviceRemoved"/> or
-/// <see cref="D3D11Device.DeviceReset"/>, or a device that reports itself lost (checked every
-/// <see cref="CaptureSessionOptions.DeviceWatchInterval"/> from the anchor on), stops feeding the
-/// chains and posts <see cref="ISessionEvents.DeviceLost"/> once, swallowing later failures. Nothing
-/// is built, armed, switched, resized or recorded while the device is lost, and a save cuts the ring
-/// as it is, with no keyframe asked for. Each <see cref="RecoverDevice"/> is one attempt, on a thread
-/// of its own: the first tears WGC, every chain (keeping the ring) and the device down; then a new
-/// device on the Target's adapter, the chain rebuilt into a new generation of the same ring, and new
-/// capture; it posts <see cref="ISessionEvents.ChainRestarted"/>, then ends the old chain's Recording,
-/// or <see cref="ISessionEvents.DeviceLost"/> again when it failed. Only sessions with a Rewind,
-/// and the Monitor session, recover; a file-mode session fails as before. A sleep
-/// (<see cref="Suspend"/>, T-02) takes the same lost state without a loss: the same teardown, the
-/// Recording ended at its last fragment, and the resume's <see cref="RecoverDevice"/> rebuilds.
-/// </summary>
+/// <summary>One capture session: capture, scaler, encoders and Tracks, into a file or Rewind's ring. docs/code-notes.md.</summary>
 internal sealed class CaptureSession : ICaptureSession
 {
     /// <summary>One AAC frame (1024 samples at 48 kHz) in µs, rounded up.</summary>
@@ -274,21 +160,17 @@ internal sealed class CaptureSession : ICaptureSession
     private MonitorInfo? _monitor;
     private IReadOnlyList<MonitorPlacement>? _composite;
 
-    // Story 12.1: the game's captured size at the anchor, for chains under matchSource; written before the anchor is published.
-    // Story 12.2: then the size Rewind last moved to.
+    // The game's captured size at the anchor, then the size Rewind last moved to; for chains that match the source.
     private VideoSize? _sourceSize;
 
-    // Story 12.2 (AD-26): the held size change. The watch runs on the capture thread, under the gate;
-    // a move's state is under the chain lock: the size it moves to, whether its build-ahead chain arms
-    // without a save, and whether that arm is already queued.
+    // The held size change: the watch runs on the capture thread under the gate; a move's state is under the chain lock.
     private readonly SourceSizeWatch _sizeWatch = new(Stopwatch.Frequency);
     private VideoSize? _movingTo;
     private bool _armMove;
     private bool _armPending;
     private volatile bool _buildAhead = true;
 
-    // Story 12.2 (QA): a Record press reserves the current chain until its writer attaches (at most
-    // RecordReserve), so no size move starts or arms in between. QPC; under the chain lock.
+    // A Record press reserves the current chain until its writer attaches, so no size move starts in between.
     private long _recordReservedUntil;
     private static readonly TimeSpan RecordReserve = TimeSpan.FromSeconds(10);
     private string? _path;
@@ -296,27 +178,20 @@ internal sealed class CaptureSession : ICaptureSession
     private ICaptureSource? _capture;
     private volatile bool _outputFinished;
 
-    // R1's exit drain, orchestrator thread only: the teardown keeps the ring for saves until Release.
+    // The exit drain, orchestrator thread only: the teardown keeps the ring for saves until Release.
     private bool _keepRing;
     private bool _released;
 
-    // Rewind's last Reset in µs since the anchor (R5): the end of the last Clip the
-    // orchestrator Reset at. It only moves forward.
+    // Rewind's last Reset in µs since the anchor: the end of the last Clip. It only moves forward.
     private long _resetUs = long.MinValue;
 
-    // How far this session's Clips have claimed the ring (R6): a write cuts from no earlier than the
-    // end of the newest write before it, so two concurrent Clips never overlap.
+    // How far this session's Clips have claimed the ring, so two concurrent Clips never overlap.
     private readonly ClipClaim _claim = new();
 
     // The window SetBufferWindow asked for, applied at the next Reset; 0 for none.
     private volatile int _pendingWindow;
 
-    // The encoder chains (4.9). _chainLock guards them all, and is only ever taken after _gate,
-    // never before it. The chain the capture thread draws into and saves cut from, the one armed
-    // at a press (with the press) and the replaced one still fed are written under both locks, so
-    // the capture thread reads them under _gate. The rest is under _chainLock only: the chain built
-    // and idle, the spec asked for, a build running, the background threads, and whether End has
-    // closed them.
+    // The encoder chains. _chainLock guards them and is only ever taken after _gate. See docs/code-notes.md.
     private readonly Lock _chainLock = new();
     private readonly List<Thread> _workers = [];
     private EncoderChain? _current;
@@ -327,23 +202,19 @@ internal sealed class CaptureSession : ICaptureSession
     private SessionSpec? _wanted;
     private bool _building;
 
-    // Chains being torn down after a newer spec replaced them: a build waits for them (AD-7's two chains).
+    // Chains being torn down after a newer spec replaced them; a build waits for them, to stay within two chains.
     private int _tearingDown;
     private volatile bool _chainsClosed;
 
-    // A forced restart (R4), under the chain lock: whether one runs, and its thread, which End joins.
+    // A forced restart, under the chain lock: whether one runs, and its thread, which End joins.
     private bool _restarting;
     private Thread? _restartThread;
 
-    // A GPU device loss (R3), under the chain lock; _deviceLost is written under the gate too, so the
-    // capture thread reads it there. Whether the device is lost, whether a recovery attempt runs,
-    // whether the lost device and chains are torn down yet, the lost chain's Recording tap (open
-    // until the recovery is posted), the spec rebuilt, and the attempt's thread, which End joins.
+    // A GPU device loss, under the chain lock; _deviceLost is also written under the gate for the capture thread.
     private bool _deviceLost;
     private bool _recovering;
 
-    // A sleep (T-02), under the chain lock: from Suspend until the resume's RecoverDevice. An attempt
-    // still running then installs nothing, so no capture or chain built before the sleep runs across it.
+    // A sleep, from Suspend until the resume's RecoverDevice; an attempt still running then installs nothing.
     private bool _suspended;
     private bool _tornDown;
     private RecordingTap? _lostTap;
@@ -378,8 +249,7 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>Opens the device, subscribes to the audio devices and starts capture; the output opens on the first frame.</summary>
     public void Open()
     {
-        // Story 11.3: several screens composited; the plan sets the codec and size before the encoder resolves.
-        // Story 12.2: so does one screen under matchSource (its physical mode, HEVC or AV1 over 4096 px).
+        // Several screens, or one screen matching its source: the plan sets codec and size before the encoder resolves.
         if (IsMonitor && _options.CompositeMonitors is null)
         {
             if (_spec.Screens is { Count: > 1 } screens)
@@ -414,15 +284,13 @@ internal sealed class CaptureSession : ICaptureSession
         }
         else if (IsMonitor)
         {
-            // One screen, the pass-through: the resolved one (monitorRecordingScreens), else the old
-            // monitorRecordingMonitor's (null for the primary), captured as before 11.3.
+            // One screen, captured directly: the resolved one, else the older single-monitor setting's (null is the primary).
             _monitor = MonitorFinder.Find(_spec.Screens is [var only] ? only.DeviceName : _spec.Snapshot.MonitorRecordingMonitor, _log);
             _log.LogInformation("Monitor capture of {Device}", _monitor.DeviceName);
         }
         else if (_options.CompositeMonitors is { } names)
         {
-            // debug-capture --monitors (spike 11.1, kept for cost measurements): a file session of the
-            // composited monitors, its device on the primary composited monitor's adapter.
+            // The dev-only composite: a file session of the monitors, on the primary composited monitor's adapter.
             _composite = MonitorCanvas.Place(names);
             if (_composite.Count == 0)
             {
@@ -502,23 +370,13 @@ internal sealed class CaptureSession : ICaptureSession
         duplication.SimulateAccessLost();
     }
 
-    /// <summary>
-    /// Story 11.3 (AD-25): the canvas of <paramref name="screens"/>, placed by their display modes now.
-    /// Its codec and size replace the snapshot's video (HEVC, else AV1, over H.264's 4096 px, at full
-    /// size), so the one encoder chain encodes the whole canvas. A canvas over 4096 px that has to stay
-    /// H.264 is fitted to 4096 with <see cref="ErrorCodes.MonitorRecordingScaled"/>. Fewer than two
-    /// screens still attached: the one left is captured as today; none, the start fails with
-    /// <see cref="ErrorCodes.MonitorRecordingNoScreens"/>.
-    /// </summary>
+    /// <summary>Plans the canvas of the screens; its codec and size replace the snapshot's video. Rules: docs/code-notes.md.</summary>
     private void PlanCanvas(IReadOnlyList<DisplayMonitor> screens)
     {
         (_spec, _composite) = PlanCanvas(_spec, screens, MonitorCanvas.Place(screens), CanEncode, _options.Warn, _log);
     }
 
-    /// <summary>
-    /// <see cref="PlanCanvas(IReadOnlyList{DisplayMonitor})"/> on screens already placed: the spec to
-    /// encode with, and the placements to composite (null when one screen is left, captured as today).
-    /// </summary>
+    /// <summary>The same plan on screens already placed: the spec to encode with, and the placements (null for one screen).</summary>
     internal static (SessionSpec Spec, IReadOnlyList<MonitorPlacement>? Composite) PlanCanvas(
         SessionSpec spec,
         IReadOnlyList<DisplayMonitor> screens,
@@ -540,8 +398,7 @@ internal sealed class CaptureSession : ICaptureSession
                 return (spec with { Screens = [only] }, null);
             }
 
-            // Story 12.2 (AD-26): one screen under matchSource records at its physical mode size,
-            // through AD-25's rule: HEVC, else AV1, over H.264's 4096 px. Captured as one screen.
+            // One screen matching its source records at its physical size, with HEVC or AV1 when over H.264's 4096 px.
             var single = MonitorCanvasRule.Plan(
                 [new DisplayMonitor(only.DeviceName, only.DeviceName, placements[0].Width, placements[0].Height, only.Primary, null, placements[0].X, placements[0].Y, placements[0].RefreshHz)],
                 spec.Snapshot.Video.Codec,
@@ -574,7 +431,7 @@ internal sealed class CaptureSession : ICaptureSession
         return (spec with { Snapshot = spec.Snapshot with { Video = video with { Codec = plan.Codec, Width = plan.Width, Height = plan.Height } } }, placements);
     }
 
-    /// <summary>Whether this PC has a working encoder for <paramref name="codec"/> (the probe's answer); false when the probe fails.</summary>
+    /// <summary>Whether this PC has a working encoder for the codec, by the probe; false when the probe fails.</summary>
     private bool CanEncode(VideoCodec codec)
     {
         try
@@ -588,24 +445,14 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// Every chain of the session, made here (story 12.4): <paramref name="spec"/>'s on
-    /// <paramref name="device"/>, at the snapshot's fixed size, or, for a game under <c>matchSource</c>
-    /// once its source size is known, at that size or a move's (<see cref="SizedToSource(EncoderChain)"/>).
-    /// <paramref name="path"/> is the file a session with no Rewind writes.
-    /// </summary>
+    /// <summary>Makes every chain of the session, at the snapshot's size or, when matching the source, the source's size.</summary>
     private EncoderChain NewChain(SessionSpec spec, string encoder, VideoCodec codec, string? path, D3D11Device device) =>
         SizedToSource(new EncoderChain(spec, encoder, codec, path, _options, device, _audio, _micMute, _loggers, _log, Fail));
 
-    /// <summary>
-    /// Story 12.1: a game session's <paramref name="chain"/>, not yet built, sized from the game's
-    /// captured size at the anchor when its snapshot has <c>matchSource</c> on (Core's
-    /// <see cref="SourceOutputSize"/>: even sides, scaled only to fit the chain's codec, and a game
-    /// under 640×360 keeping the snapshot's size). Unchanged otherwise, and for the Monitor session.
-    /// </summary>
+    /// <summary>Sizes an unbuilt game chain from the game's captured size when the snapshot has <c>matchSource</c> on.</summary>
     private EncoderChain SizedToSource(EncoderChain chain) => SizedToSource(chain, IsMonitor, _movingTo ?? _sourceSize);
 
-    /// <summary><see cref="SizedToSource(EncoderChain)"/> for a session that <paramref name="isMonitor"/> or not, whose game was <paramref name="source"/> at the anchor.</summary>
+    /// <summary>The same sizing with the session kind and the game's size at the anchor passed in.</summary>
     internal static EncoderChain SizedToSource(EncoderChain chain, bool isMonitor, VideoSize? source)
     {
         if (!isMonitor && chain.Spec.Snapshot.Video.MatchSource && source is { } captured
@@ -617,14 +464,10 @@ internal sealed class CaptureSession : ICaptureSession
         return chain;
     }
 
-    /// <summary>Story 12.2: whether a size move may build its chain ahead (false while a Monitor Recording holds the other chain).</summary>
+    /// <summary>Whether a size move may build its chain ahead (false while a Monitor Recording holds the other chain).</summary>
     public void SetBuildAhead(bool allowed) => _buildAhead = allowed;
 
-    /// <summary>
-    /// Story 12.2 (AD-26): one captured frame's size, under the gate. With <c>matchSource</c> on, no
-    /// move running and the current chain live, a size that held 3 s (none while a Recording is
-    /// attached) starts a move; a move's prepared chain waiting for a Recording to end arms once it has.
-    /// </summary>
+    /// <summary>Watches one frame's size, under the gate: a size that held 3 s starts a move, unless a Recording is attached.</summary>
     private void WatchSourceSize(long qpc, VideoSize content)
     {
         EncoderChain? current;
@@ -649,16 +492,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// Story 12.2: moves Rewind to <paramref name="target"/>, under the gate. With build-ahead
-    /// allowed, the current spec's chain is built ahead at that size in the prepared slot (the
-    /// <c>ChainKey</c> is unchanged, so no settings change would) and armed without a save once built
-    /// (<see cref="ArmMove"/>). While a Monitor Recording holds the other chain, the current chain is
-    /// torn down first and rebuilt at that size into a fresh ring (<see cref="SwitchChain"/>'s
-    /// machinery). Either way a gap over a frame raises <c>reset-gap</c>. Refused, to be found again
-    /// after another 3 s, while any switch, build, teardown, restart or recovery runs, a chain is
-    /// prepared, or a Recording is attached.
-    /// </summary>
+    /// <summary>Moves Rewind to a new size, under the gate; refused while anything else is changing. See docs/code-notes.md.</summary>
     private void StartMove(VideoSize target)
     {
         lock (_chainLock)
@@ -690,7 +524,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>Story 12.2: queues <see cref="ArmMove"/> when a move's chain is prepared and nothing blocks it. Under the chain lock.</summary>
+    /// <summary>Queues <see cref="ArmMove"/> when a move's chain is prepared and nothing blocks it. Under the chain lock.</summary>
     private void TryStartArmLocked()
     {
         if (!_armMove || _armPending || _prepared is null || _armed is not null || _retiring is not null || _restarting || _deviceLost
@@ -703,13 +537,7 @@ internal sealed class CaptureSession : ICaptureSession
         StartWorkerLocked("Encoder chain move", ArmMove);
     }
 
-    /// <summary>
-    /// Story 12.2: <see cref="TryArm"/>'s arm for a size move, with no save: on a background thread,
-    /// the prepared chain is armed now, its audio starting here; the first frame captured after it makes
-    /// it current, and the old chain, bound to no save, retires at once, with <c>reset-gap</c> when its
-    /// last frame and the new chain's first keyframe are more than a frame apart. Never while a
-    /// Recording is attached: it then waits for the next frame after the Recording ends.
-    /// </summary>
+    /// <summary>Arms a size move's prepared chain with no save, on a background thread; never while a Recording is attached.</summary>
     private void ArmMove()
     {
         if (_options.MoveArmDelay > TimeSpan.Zero)
@@ -748,7 +576,7 @@ internal sealed class CaptureSession : ICaptureSession
         _log.LogInformation("The size move switches Rewind to its new encoder chain {At:0.000} s after the anchor", MicrosAt(armQpc) / 1e6);
     }
 
-    /// <summary>Story 12.2: a move ends once a chain at its size is current: that size is the source's from here. Under the chain lock.</summary>
+    /// <summary>A move ends once a chain at its size is current: that size is the source's from here. Under the chain lock.</summary>
     private void CompleteMoveLocked(EncoderChain current)
     {
         if (_movingTo is { } moved && SourceOutputSize.For(moved.Width, moved.Height, current.Codec) is { } size
@@ -760,7 +588,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>For tests (12.4): whether a size move is pending (building or waiting to arm), so a Record press now cancels it.</summary>
+    /// <summary>For tests: whether a size move is pending (building or waiting to arm), so a Record press now cancels it.</summary>
     internal bool MovePending
     {
         get
@@ -772,18 +600,13 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>For tests (12.4): how many size moves a Recording's start cancelled. Under the chain lock.</summary>
+    /// <summary>For tests: how many size moves a Recording's start cancelled. Under the chain lock.</summary>
     internal int MovesCancelled { get; private set; }
 
-    /// <summary>Story 12.2: whether a Record press holds the current chain until its writer attaches. Under the chain lock.</summary>
+    /// <summary>Whether a Record press holds the current chain until its writer attaches. Under the chain lock.</summary>
     private bool RecordReservedLocked() => Stopwatch.GetTimestamp() < _recordReservedUntil;
 
-    /// <summary>
-    /// Story 12.2 (QA): a Recording starts on the current chain, so a pending size move is cancelled:
-    /// its prepared chain is torn down, a build in flight is torn down when it ends (its spec is no
-    /// longer wanted), and an arm queued finds nothing to arm. The watch finds the size again after the
-    /// Recording, if it still holds. A profile's chain waiting for a save is left alone. Under the chain lock.
-    /// </summary>
+    /// <summary>A Recording starts on the current chain, so a pending size move is cancelled. Under the chain lock.</summary>
     private void CancelMoveLocked()
     {
         if (!_armMove)
@@ -802,20 +625,20 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>Story 12.2: forgets a pending move (a failed build, a lost device, a dropped prepared chain); the size must hold again. Under the chain lock.</summary>
+    /// <summary>Forgets a pending move, so the size must hold again. Under the chain lock.</summary>
     private void DropMoveLocked()
     {
         _movingTo = null;
         _armMove = false;
     }
 
-    /// <summary>Whether this is the Monitor session (6.9), not a game window's.</summary>
+    /// <summary>Whether this is the Monitor session, not a game window's.</summary>
     private bool IsMonitor => _spec.Kind == SessionKind.Monitor;
 
     /// <inheritdoc/>
     public string? MonitorDevice => _monitor is { DeviceName.Length: > 0 } monitor ? monitor.DeviceName : null;
 
-    /// <summary>Story 11.3: the screens still composited, else <see cref="MonitorDevice"/> alone.</summary>
+    /// <summary>The screens still composited, else <see cref="MonitorDevice"/> alone.</summary>
     public IReadOnlyList<string> MonitorDevices
     {
         get
@@ -832,7 +655,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>Story 11.3: stops capturing a removed one of the composited screens; its area turns black. Outside the gate: the compositor's clock takes it.</summary>
+    /// <summary>Stops capturing a removed composited screen; its area turns black. Outside the gate.</summary>
     public bool DropMonitor(string device)
     {
         ICaptureSource? capture;
@@ -900,8 +723,7 @@ internal sealed class CaptureSession : ICaptureSession
                 return;
             }
 
-            // Built under the gate: a recovery's teardown takes the device only under it, so it
-            // can't dispose the device under this capture. No capture runs, so no frame waits here.
+            // Built under the gate, so a recovery's teardown can't dispose the device under this capture.
             next = NewCapture(target.Window, device, CaptureFps());
             _capture = next;
             _window = window;
@@ -940,8 +762,7 @@ internal sealed class CaptureSession : ICaptureSession
         _firstFrameTimer.Dispose();
         watch?.Dispose();
 
-        // A forced restart or a recovery running finishes first: the chain it installs (or the one it
-        // failed on) is current. A recovery sees the stop and installs nothing.
+        // A forced restart or recovery that is running finishes first; a recovery sees the stop and installs nothing.
         Thread? restart;
         Thread? recovery;
         lock (_chainLock)
@@ -952,8 +773,7 @@ internal sealed class CaptureSession : ICaptureSession
 
         restart?.Join();
 
-        // Bounded: an attempt hung on the driver must not freeze the orchestrator. It checks the stop
-        // before installing and frees what it built.
+        // Bounded: an attempt hung on the driver must not freeze the orchestrator.
         if (recovery is not null && !recovery.Join(RecoveryJoinWait))
         {
             _log.LogWarning("The GPU device recovery hadn't finished within {Seconds:0} s of the stop; the session ends without it", RecoveryJoinWait.TotalSeconds);
@@ -982,8 +802,7 @@ internal sealed class CaptureSession : ICaptureSession
                 return new SessionOutcome(null, _stopReason, new EngineFailure(_failure is null ? ErrorCodes.CaptureFailed : CodeOf(_failure), message));
             }
 
-            // A failed restart left nothing to flush: its chain is gone, and the session has failed. A
-            // lost device's chain can't be flushed: what its ring and Recording hold is all there is.
+            // A failed restart left nothing to flush, and a lost device's chain can't be flushed.
             if (!chain!.IsDisposed && !lost)
             {
                 // No frame can arrive now; let the encoder thread offer what is queued before the flush.
@@ -1040,17 +859,14 @@ internal sealed class CaptureSession : ICaptureSession
         return new SessionOutcome(_path, _stopReason, _failure);
     }
 
-    /// <summary>
-    /// <see cref="End"/>'s teardown, but in Replay mode the ring is kept (R1): <see cref="Save"/>
-    /// still cuts from it, to the end of what it holds, until <see cref="Release"/>.
-    /// </summary>
+    /// <summary>Like <see cref="End"/>, but in Replay mode the ring is kept, so a save still cuts from it until Release.</summary>
     public SessionOutcome Drain(string reason)
     {
         _keepRing = HasRing;
         return End(reason);
     }
 
-    /// <summary>Frees the ring <see cref="Drain"/> kept, once; a save still writing keeps its own lease (AD-8).</summary>
+    /// <summary>Frees the ring <see cref="Drain"/> kept, once; a save still writing keeps its own lease.</summary>
     public void Release()
     {
         if (!_keepRing || _released)
@@ -1072,28 +888,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// In Replay mode, once the output is open: a write of the Clip up to <paramref name="qpc"/>
-    /// (AD-10), bound here to the current encoder chain, whose sink and encoder it uses throughout.
-    /// Its write asks the encoder for a keyframe on the first frame captured after the press, which
-    /// is where the Clip ends and, once the orchestrator Resets, where the next one starts; no
-    /// keyframe is asked for unless the write starts. A write that starts with a chain prepared
-    /// (<see cref="PrepareChain"/>) and no Recording attached also arms the switch to it. Its own
-    /// thread waits up to <see cref="SaveWait"/> for that keyframe (else the Clip ends at the
-    /// press), then up to as long again for every stream to pass it by an AAC frame (encoding and
-    /// the AAC FIFO lag it), cuts <c>[max(key - bufferWindow, last Reset, earlier write's claim), key)</c>
-    /// from the first keyframe in it, and writes the Clip. The Buffer Window is the one in effect at
-    /// the press (a resize applies at a Reset), and the cut comes from one ring generation: less
-    /// than 1 s past a generation's boundary, the previous one up to the boundary, where the Clip
-    /// then ends and the next one starts (<see cref="RingGenerations.Cut"/>). A chain started
-    /// mid-session cuts from its first keyframe when that is under a frame before the start
-    /// (<see cref="EncoderChain.SnapStart"/>). The claim (<see cref="ClipClaim"/>) keeps a Clip
-    /// written while an earlier one still writes from cutting back over it. A press less than 1 s
-    /// after the anchor is refused with <see cref="ErrorCodes.ClipTooShort"/>, before any keyframe
-    /// is asked for. Once drained (<see cref="Drain"/>), the encoders are flushed and gone: the
-    /// write asks for no keyframe, and the Clip runs to the end of the ring; after
-    /// <see cref="Release"/> there is nothing to save.
-    /// </summary>
+    /// <summary>Starts a Clip write up to a QPC time, bound to the current chain; null when refused. See docs/code-notes.md.</summary>
     public IClipWrite? Save(long qpc)
     {
         // The anchor's release write publishes the chain's ring and encoder.
@@ -1106,8 +901,7 @@ internal sealed class CaptureSession : ICaptureSession
         bool lost;
         lock (_chainLock)
         {
-            // A forced restart is rebuilding the chain: nothing to cut from until it is done. A lost
-            // device's chain is cut as it is, torn down or not: its ring is kept (R3).
+            // A forced restart leaves nothing to cut until it is done; a lost device's chain is cut as it is.
             lost = _deviceLost;
             chain = _restarting && !lost ? null : _current;
         }
@@ -1128,8 +922,7 @@ internal sealed class CaptureSession : ICaptureSession
             return new ClipWrite(this, chain, null, qpc, chain.WindowSeconds);
         }
 
-        // A chain disposed while the output still runs is one a failed restart left: nothing to cut. A
-        // drained session's is disposed too, but keeps its ring for saves.
+        // A chain disposed while the output still runs is one a failed restart left; a drained one keeps its ring.
         if (chain is null || (chain.IsDisposed && !_outputFinished) || chain.Ring is null || chain.Video is not { } video)
         {
             return null;
@@ -1144,12 +937,7 @@ internal sealed class CaptureSession : ICaptureSession
         return new ClipWrite(this, chain, _outputFinished ? null : video, qpc, chain.WindowSeconds);
     }
 
-    /// <summary>
-    /// In Replay mode, or in the Monitor session, once the output is open and while it runs: a
-    /// Recording from <paramref name="qpc"/> on the current chain's encoders, through its tap; null
-    /// once drained or released, before the anchor, while a Recording is attached, while a chain
-    /// switch is armed, while a forced restart rebuilds the chain, or while the GPU device is lost.
-    /// </summary>
+    /// <summary>Starts a Recording from a QPC time on the current chain; null when the session can't record now.</summary>
     public IRecordingWrite? Record(long qpc)
     {
         // The anchor's release write publishes the tap and the encoder.
@@ -1172,8 +960,7 @@ internal sealed class CaptureSession : ICaptureSession
                 return null;
             }
 
-            // Story 12.2: the Recording keeps this chain (R12). A pending size move is cancelled, its
-            // chain torn down, and the chain reserved until the writer attaches.
+            // The Recording keeps this chain: a pending size move is cancelled and the chain reserved for its writer.
             CancelMoveLocked();
             _recordReservedUntil = Stopwatch.GetTimestamp() + (long)(RecordReserve.TotalSeconds * _qpcFrequency);
         }
@@ -1181,14 +968,7 @@ internal sealed class CaptureSession : ICaptureSession
         return new RecordingWrite(this, chain, chain.Tap!, chain.Video!, qpc);
     }
 
-    /// <summary>
-    /// Builds <paramref name="next"/>'s chain in advance, on a background thread, for the next save
-    /// press (4.9); null, or the spec of the chain that is or will be current, drops a chain prepared
-    /// and not yet armed. The spec already asked for changes nothing. A build waits for the anchor,
-    /// for a replaced chain to be torn down and for an armed one to take over, and starts then; one
-    /// a newer spec superseded is torn down, and a failed one is logged and forgotten, so the next
-    /// call retries it. Nothing in file mode, once drained or stopped.
-    /// </summary>
+    /// <summary>Builds a spec's chain in advance, on a background thread, for the next save press. See docs/code-notes.md.</summary>
     public void PrepareChain(SessionSpec? next)
     {
         if (!HasRing)
@@ -1215,7 +995,7 @@ internal sealed class CaptureSession : ICaptureSession
             EncoderChain? drop;
             if (next is not null && ChainKey.SameChain(next, current) && _armMove)
             {
-                // Story 12.2: the same settings leave a size move alone.
+                // The same settings leave a size move alone.
                 return;
             }
 
@@ -1239,7 +1019,7 @@ internal sealed class CaptureSession : ICaptureSession
                 drop = _prepared;
                 _prepared = null;
 
-                // Story 12.2: the profile's chain is built at a pending move's size, and switches at a save.
+                // The profile's chain is built at a pending move's size, and switches at a save.
                 _armMove = false;
             }
 
@@ -1253,18 +1033,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// A forced encoder restart (R4), for tests until a production trigger exists: on a thread of its
-    /// own, the current chain is taken out of the capture thread's feed, the saves bound to it are
-    /// waited for (bounded), it is torn down, and the same spec is rebuilt into a new generation of
-    /// the same ring (AD-7: the old chain is gone before the new one is built, and no other build
-    /// starts meanwhile). The new chain becomes current, then the orchestrator is told
-    /// (<see cref="ISessionEvents.ChainRestarted"/>) and only then is the old chain's Recording
-    /// ended, so its post-back always follows. A failed rebuild frees the ring and fails the session
-    /// with <see cref="ErrorCodes.EncodeFailed"/>. Refused, with false, unless in Replay mode, anchored
-    /// and live (not stopping or drained), with no switch armed or retiring and no restart running.
-    /// </summary>
-    /// <param name="reason">Why, for the log.</param>
+    /// <summary>A forced encoder restart, for tests: rebuilds the same spec into a new ring generation. docs/code-notes.md.</summary>
     internal bool RestartChain(string reason)
     {
         lock (_gate)
@@ -1287,10 +1056,7 @@ internal sealed class CaptureSession : ICaptureSession
         return true;
     }
 
-    /// <summary>
-    /// The live encoder chains (AD-7): the current one, one armed, one replaced and still fed, one
-    /// prepared, and one being built or rebuilt. Chains already being torn down don't count.
-    /// </summary>
+    /// <summary>The live encoder chains: current, armed, replaced but still fed, prepared, and one being built.</summary>
     public int Chains
     {
         get
@@ -1312,8 +1078,7 @@ internal sealed class CaptureSession : ICaptureSession
                     }
                 }
 
-                // A build no longer wanted is torn down as soon as it ends; a rebuild counts once the
-                // chain it replaces is gone, which counts until then.
+                // An unwanted build is torn down as soon as it ends; a rebuild counts once the chain it replaces is gone.
                 var building = _building && _wanted is not null;
                 var rebuilding = _restarting && _current is not { IsDisposed: false };
                 return chains + (building ? 1 : 0) + (rebuilding ? 1 : 0);
@@ -1321,16 +1086,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// Switches to <paramref name="next"/>'s chain at a Reset, tearing the current one down first
-    /// (AD-7, while a Monitor Recording holds a chain): <see cref="RestartChain"/>'s machinery on a
-    /// thread of its own, but the new chain is <paramref name="next"/>'s, into a fresh ring (the old
-    /// one goes with its chain, a save still writing keeping its lease), the frames captured meanwhile
-    /// dropped, no <see cref="ISessionEvents.ChainRestarted"/> posted, and the gap from the Reset to
-    /// its first keyframe raised as <see cref="CaptureSessionOptions.ResetGap"/>. Refused, with false,
-    /// on the same terms as a restart, and also while a chain is prepared, built or torn down, or a
-    /// Recording is attached. Orchestrator thread; never blocks on the build.
-    /// </summary>
+    /// <summary>Switches to another spec's chain at a Reset, tearing the current one down first. See docs/code-notes.md.</summary>
     public bool SwitchChain(SessionSpec next)
     {
         ArgumentNullException.ThrowIfNull(next);
@@ -1361,11 +1117,7 @@ internal sealed class CaptureSession : ICaptureSession
         return true;
     }
 
-    /// <summary>
-    /// <see cref="RestartChain"/>'s work, on its own thread; with <paramref name="switchTo"/>,
-    /// <see cref="SwitchChain"/>'s: that spec's chain in a fresh ring, the old ring disposed with
-    /// its chain, and the gap raised instead of the restart posted.
-    /// </summary>
+    /// <summary>The restart's work, on its own thread; with switchTo it is a switch: a fresh ring, and the gap is raised.</summary>
     private void Restart(EncoderChain old, string reason, SessionSpec? switchTo = null)
     {
         var began = Stopwatch.GetTimestamp();
@@ -1473,9 +1225,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
         catch (Exception e) when (IsDeviceLostNow() || TakeDeviceLoss(e))
         {
-            // The device was lost under the restart: the recovery takes it from here (R3). The ring
-            // stays for its pre-reset content, a switch's fresh one goes with its chain, and the old
-            // chain's Recording stays open until the recovery is posted.
+            // The device was lost under the restart: the recovery takes it from here, and the ring is kept.
             if (!installed)
             {
                 next?.Dispose(keepRing: switchTo is null);
@@ -1533,12 +1283,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// Starts one attempt to recover from a GPU device loss (R3), on a thread of its own: the first
-    /// tears the lost capture, chains and device down (<see cref="TearDownLost"/>), then each builds a
-    /// new device, chain and capture (<see cref="Recover"/>). False when nothing is lost, an attempt
-    /// already runs, or the session has stopped. Orchestrator thread; never blocks.
-    /// </summary>
+    /// <summary>Starts one attempt to recover from a GPU device loss, on its own thread. Orchestrator thread; never blocks.</summary>
     public bool RecoverDevice()
     {
         lock (_gate)
@@ -1561,16 +1306,7 @@ internal sealed class CaptureSession : ICaptureSession
         return true;
     }
 
-    /// <summary>
-    /// The PC is going to sleep (T-02): the session takes 8.3's lost state without a loss. It stops
-    /// feeding the chains, then, on a thread of its own (<see cref="_recoveryThread"/>, which the
-    /// next <see cref="Recover"/> joins), tears WGC, every chain (keeping the ring, so a save still
-    /// cuts the old generation) and the device down, and ends the Recording tap at its last
-    /// fragment. No frames until <see cref="RecoverDevice"/> succeeds on resume. Already lost (a GPU
-    /// reset): a recovery attempt still running installs nothing, and the teardown runs once it has
-    /// finished. Already suspended: true, and nothing more. False when it can't: not anchored, no Rewind and not the Monitor
-    /// session, or stopped, finished, draining or closed. Orchestrator thread; never blocks.
-    /// </summary>
+    /// <summary>The PC is going to sleep: tears down as for a lost device, so the resume rebuilds. Never blocks.</summary>
     public bool Suspend()
     {
         lock (_gate)
@@ -1587,8 +1323,7 @@ internal sealed class CaptureSession : ICaptureSession
                     return false;
                 }
 
-                // Already lost (a GPU reset's attempt may be running): it installs nothing now, and
-                // the teardown below runs once it has finished.
+                // Already lost: a running attempt installs nothing now, and the teardown below runs once it has finished.
                 _suspended = true;
                 _deviceLost = true;
                 DropMoveLocked();
@@ -1607,7 +1342,7 @@ internal sealed class CaptureSession : ICaptureSession
         return true;
     }
 
-    /// <summary><see cref="Suspend"/>'s thread: the last attempt and a forced restart finish, then the teardown, then the Recording tap ends.</summary>
+    /// <summary>Suspend's thread: the last attempt and a forced restart finish, then the teardown, then the tap ends.</summary>
     private void SuspendTearDown(Thread? previous)
     {
         try
@@ -1663,16 +1398,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// One recovery attempt, on its own thread (<see cref="RecoverDevice"/>): a running forced
-    /// restart and the last attempt finish first; the first attempt tears down what was lost; then
-    /// <see cref="CaptureSessionOptions.RecoveryFault"/>, a new device on the Target's adapter (the
-    /// Monitor's for the Monitor session), the spec rebuilt into a new generation of the same ring
-    /// (AD-7: the lost chain is already gone), and new capture at its fps. Installed unless the
-    /// session stopped meanwhile; then <see cref="ISessionEvents.ChainRestarted"/>, and only then is
-    /// the lost chain's Recording ended, so its post-back follows. A failure frees what the attempt
-    /// built (the ring kept) and posts <see cref="ISessionEvents.DeviceLost"/>; a stop posts nothing.
-    /// </summary>
+    /// <summary>One recovery attempt, on its own thread: a new device, chain and capture. Order: docs/code-notes.md.</summary>
     private void Recover(Thread? previous)
     {
         previous?.Join();
@@ -1734,8 +1460,7 @@ internal sealed class CaptureSession : ICaptureSession
             next = NewChain(spec, encoder, codec, null, device);
             next.Subscribe();
 
-            // The same ring, in a new generation: what it held before the reset stays saveable. One a
-            // switch under way had already freed is replaced by a fresh one.
+            // The same ring in a new generation, so what it held before the reset stays saveable.
             var ring = HasRing && lost.Ring is { IsDisposed: false } kept ? kept : null;
             next.Build(_anchorQpc, first: false, latency: null, restartOf: ring, window: ring is null ? 0 : lost.WindowSeconds);
             if (IsMonitor)
@@ -1859,12 +1584,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// The first recovery attempt's teardown, AD-7's order: WGC, then every chain (builds and
-    /// teardowns running on the lost device finish first; the current one keeps its ring, and its
-    /// Recording tap is kept open), then the device. The spec rebuilt is an armed chain's, whose
-    /// switch the orchestrator already took, else the current one's.
-    /// </summary>
+    /// <summary>The first recovery attempt's teardown, in order: WGC, then every chain (the ring kept), then the device.</summary>
     private void TearDownLost()
     {
         var began = Stopwatch.GetTimestamp();
@@ -2019,10 +1739,7 @@ internal sealed class CaptureSession : ICaptureSession
     }
 
 
-    /// <summary>
-    /// The device watchdog's tick: a device that reports itself removed or reset is a loss, as a
-    /// failure carrying the reason would be. Skipped once stopped, lost or torn down.
-    /// </summary>
+    /// <summary>The device watchdog's tick: a device that reports itself removed or reset counts as a loss.</summary>
     private void WatchDevice()
     {
         int reason;
@@ -2042,14 +1759,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// Takes <paramref name="e"/> as a GPU device loss when it is one: a later failure while the
-    /// device is lost is swallowed; a first one carrying <see cref="D3D11Device.DeviceRemoved"/> or
-    /// <see cref="D3D11Device.DeviceReset"/> in its chain, or with the device reporting itself lost,
-    /// stops feeding the chains and posts <see cref="ISessionEvents.DeviceLost"/>, when the session
-    /// can recover: anchored, holding a Rewind or the Monitor session's, and live. False
-    /// leaves it to <see cref="Fail"/>.
-    /// </summary>
+    /// <summary>Takes an exception as a GPU device loss when it is one and the session can recover; false leaves it to Fail.</summary>
     private bool TakeDeviceLoss(Exception e)
     {
         lock (_gate)
@@ -2089,7 +1799,7 @@ internal sealed class CaptureSession : ICaptureSession
         return true;
     }
 
-    /// <summary>Whether <paramref name="e"/> is a device loss: a removed or reset HRESULT in its chain, or the device reporting itself lost. Under the gate.</summary>
+    /// <summary>Whether an exception is a device loss: a removed or reset HRESULT, or a device that says it is lost.</summary>
     private bool IsDeviceLoss(Exception e)
     {
         for (var inner = e; inner is not null; inner = inner.InnerException)
@@ -2130,21 +1840,14 @@ internal sealed class CaptureSession : ICaptureSession
         _ => ErrorCodes.EncodeFailed,
     };
 
-    /// <summary>A game window's WGC capture on <paramref name="device"/> at <paramref name="fps"/>, not started; a WGC failure throws, with no fallback.</summary>
+    /// <summary>A game window's WGC capture, not started; a WGC failure throws, with no fallback.</summary>
     private WindowCapture NewCapture(nint window, D3D11Device device, int fps)
     {
         ThrowWgcFault();
         return Wire(new WindowCapture(device, window, fps, OnFrame, _loggers.CreateLogger<WindowCapture>()));
     }
 
-    /// <summary>
-    /// The Monitor session's capture on <paramref name="device"/>, started by <paramref name="start"/>
-    /// (<see cref="StartInstalled"/> at Open; a plain start in a GPU-reset recovery, which installs it
-    /// afterwards): WGC's monitor item, or, when creating or starting it throws, Desktop Duplication
-    /// of the same monitor on the same device (AD-12), raising
-    /// <see cref="CaptureSessionOptions.CaptureFallback"/> once per capture. Desktop Duplication
-    /// failing too throws.
-    /// </summary>
+    /// <summary>Starts the Monitor session's capture: WGC's monitor item, or Desktop Duplication when that throws.</summary>
     private ICaptureSource StartMonitorCapture(D3D11Device device, int fps, Action<ICaptureSource> start)
     {
         if (_composite is not null)
@@ -2202,10 +1905,7 @@ internal sealed class CaptureSession : ICaptureSession
         return duplication;
     }
 
-    /// <summary>
-    /// Makes <paramref name="capture"/> the session's capture, then starts it, so a <c>Closed</c> it
-    /// raises at once isn't taken for a replaced capture's; a failed start uninstalls it and throws.
-    /// </summary>
+    /// <summary>Makes a capture the session's, then starts it, so a Closed it raises at once isn't taken for an old capture's.</summary>
     private void StartInstalled(ICaptureSource capture)
     {
         lock (_gate)
@@ -2231,7 +1931,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>Spike 11.1: the composited capture of <see cref="_composite"/> on <paramref name="device"/>, not started.</summary>
+    /// <summary>The composited capture of <see cref="_composite"/> on <paramref name="device"/>, not started.</summary>
     private CompositeCapture NewComposite(D3D11Device device, int fps)
     {
         var forced = _options.DuplicationScreens;
@@ -2305,8 +2005,7 @@ internal sealed class CaptureSession : ICaptureSession
                 WatchSourceSize(qpc, contentSize);
             }
 
-            // The first frame captured after an armed press: the new chain's first, and the one the
-            // old chain's forced keyframe lands on, so the next Clip starts where this one ends.
+            // The first frame after an armed press: the new chain's first, and where the old chain's forced keyframe lands.
             if (_armed is { } armed && qpc > _armedQpc)
             {
                 SwitchTo(armed, qpc);
@@ -2325,11 +2024,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// The encoder and codec for <paramref name="spec"/>: the forced encoder, else the probe's for
-    /// the snapshot's codec, else (a codec this PC can't encode, from a hand-edited or copied
-    /// document) H.264's.
-    /// </summary>
+    /// <summary>The encoder and codec for a spec: the forced encoder, else the probe's for its codec, else H.264's.</summary>
     private (string Encoder, VideoCodec Codec) ResolveEncoder(SessionSpec spec)
     {
         if (_options.Encoder is { } forced)
@@ -2376,14 +2071,13 @@ internal sealed class CaptureSession : ICaptureSession
         _stats?.SnapshotAnchor();
         chain.Build(anchorQpc, first: true, _stats?.Latency);
 
-        // The hub's streams have run since Open; each device takes blocks from here, its held ones
-        // replayed first, cut at the anchor once, and fanned out to every Track that holds it.
+        // The hub's streams have run since Open; each device takes blocks from here, cut once at the anchor.
         chain.StartAudio(anchorQpc);
 
         // A release write: SetMicMuted, Save and Record read the anchor without the gate.
         Volatile.Write(ref _anchored, true);
 
-        // Only a session that can recover watches its device (R3).
+        // Only a session that can recover watches its device.
         if (HasRing || IsMonitor)
         {
             _deviceWatch = new Timer(_ => WatchDevice(), null, _options.DeviceWatchInterval, _options.DeviceWatchInterval);
@@ -2401,10 +2095,7 @@ internal sealed class CaptureSession : ICaptureSession
         _events.Anchored(anchorQpc);
     }
 
-    /// <summary>
-    /// Makes the armed chain current at the frame captured at <paramref name="qpc"/>; the old one is
-    /// fed until every save bound to it has cut, then torn down. Under the gate.
-    /// </summary>
+    /// <summary>Makes the armed chain current at this frame; the old one is fed until its saves have cut. Under the gate.</summary>
     private void SwitchTo(EncoderChain armed, long qpc)
     {
         lock (_chainLock)
@@ -2423,14 +2114,7 @@ internal sealed class CaptureSession : ICaptureSession
             MicrosAt(qpc) / 1e6, armed.OutputSize, armed.Spec.Audio.Tracks.Count);
     }
 
-    /// <summary>
-    /// Arms the prepared chain at the press <paramref name="qpc"/>, for a write bound to the
-    /// current <paramref name="chain"/> that has just asked for its keyframe: when one is ready,
-    /// nothing is armed or retiring, no Recording is attached and the session is live. Its audio
-    /// starts at the press; its video at the first frame captured after <paramref name="armQpc"/>,
-    /// read under the gate, which is where the old chain's keyframe must then be asked for. Returns
-    /// it, or null. Orchestrator thread.
-    /// </summary>
+    /// <summary>Arms the prepared chain at a save press, when one is ready and nothing else is changing. Orchestrator thread.</summary>
     private EncoderChain? TryArm(EncoderChain chain, long qpc, out long armQpc)
     {
         EncoderChain? armed = null;
@@ -2442,8 +2126,7 @@ internal sealed class CaptureSession : ICaptureSession
                 return null;
             }
 
-            // Under the gate: no frame is being handed to the chains, so every frame captured after
-            // this instant reaches the new chain, and none at or before it does.
+            // Under the gate no frame is in flight, so every frame captured after this instant reaches the new chain.
             armQpc = Math.Max(qpc, Stopwatch.GetTimestamp());
 
             lock (_chainLock)
@@ -2472,7 +2155,7 @@ internal sealed class CaptureSession : ICaptureSession
         return armed;
     }
 
-    /// <summary>Ends a save's registration on <paramref name="chain"/>, once it has cut or failed; the switching save first records its Clip's end.</summary>
+    /// <summary>Ends a save's registration on a chain once it has cut or failed; a switching save records its Clip's end.</summary>
     private void EndWriter(EncoderChain chain, long? switchEndUs)
     {
         lock (_chainLock)
@@ -2487,7 +2170,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>Starts <paramref name="chain"/>'s retirement once it is replaced and no save is bound to it. Under the chain lock.</summary>
+    /// <summary>Starts a chain's retirement once it is replaced and no save is bound to it. Under the chain lock.</summary>
     private void TakeRetirementLocked(EncoderChain chain)
     {
         if (!chain.Retiring || chain.Writers > 0 || chain.RetireStarted || _chainsClosed)
@@ -2499,12 +2182,7 @@ internal sealed class CaptureSession : ICaptureSession
         StartWorkerLocked("Encoder chain retirement", () => Retire(chain));
     }
 
-    /// <summary>
-    /// On a background thread: takes the replaced chain out of the capture thread's feed and tears
-    /// it down, with no flush; checks the new chain started within a frame of the old Clip's end
-    /// (else <c>reset-gap</c>); sets the capture to the new chain's fps; then starts a build asked
-    /// for meanwhile.
-    /// </summary>
+    /// <summary>On a background thread: tears down the replaced chain, checks for a gap, then starts any build asked for.</summary>
     private void Retire(EncoderChain old)
     {
         lock (_gate)
@@ -2538,10 +2216,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>
-    /// Waits up to <see cref="SaveWait"/> for <paramref name="next"/>'s first keyframe; when it is
-    /// more than one of its frames after the switching Clip's end, raises <c>reset-gap</c> with the gap.
-    /// </summary>
+    /// <summary>Waits for the next chain's first keyframe; raises <c>reset-gap</c> when it is over a frame after the old Clip.</summary>
     private void CheckGap(EncoderChain old, EncoderChain next)
     {
         var end = old.SwitchEndUs;
@@ -2574,12 +2249,7 @@ internal sealed class CaptureSession : ICaptureSession
         _options.ResetGap?.Invoke(message);
     }
 
-    /// <summary>
-    /// After a switch at a Reset (<see cref="SwitchChain"/>): waits up to <see cref="SaveWait"/> for
-    /// <paramref name="next"/>'s first keyframe, and raises <c>reset-gap</c> with the gap from the
-    /// last Reset to it (the frames captured while the old chain was torn down and the new one built
-    /// are in no Clip).
-    /// </summary>
+    /// <summary>After a switch at a Reset: raises <c>reset-gap</c> with the gap from the last Reset to the first keyframe.</summary>
     private void ReportSwitchGap(EncoderChain next)
     {
         if (next.Ring is not { } ring)
@@ -2608,11 +2278,7 @@ internal sealed class CaptureSession : ICaptureSession
         _options.ResetGap?.Invoke(message);
     }
 
-    /// <summary>
-    /// Starts the build of the spec asked for, when there is one, the session has anchored, it is
-    /// not built yet, and no build, armed chain, retirement or forced restart is in the way. Under
-    /// the chain lock.
-    /// </summary>
+    /// <summary>Starts the build of the spec asked for, when nothing is in the way. Under the chain lock.</summary>
     private void StartBuildLocked()
     {
         if (_wanted is not { } spec || _chainsClosed || !Volatile.Read(ref _anchored) || _building || _restarting || _deviceLost
@@ -2625,11 +2291,7 @@ internal sealed class CaptureSession : ICaptureSession
         StartWorkerLocked("Encoder chain build", () => Build(spec));
     }
 
-    /// <summary>
-    /// On a background thread: builds <paramref name="spec"/>'s chain, idle, and hands it over as
-    /// prepared when it is still the one asked for and the session is live; otherwise it is torn
-    /// down. A failure is logged and forgets the request, so the next one retries.
-    /// </summary>
+    /// <summary>On a background thread: builds a spec's chain and hands it over as prepared when it is still wanted.</summary>
     private void Build(SessionSpec spec)
     {
         EncoderChain? chain = null;
@@ -2658,7 +2320,7 @@ internal sealed class CaptureSession : ICaptureSession
             {
                 _prepared = chain;
 
-                // Story 12.2: a move's chain arms at once, without a save.
+                // A move's chain arms at once, without a save.
                 TryStartArmLocked();
             }
             else if (chain is not null)
@@ -2679,7 +2341,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>Tears <paramref name="chain"/> down on a background thread; no build starts until it is gone. Under the chain lock.</summary>
+    /// <summary>Tears a chain down on a background thread; no build starts until it is gone. Under the chain lock.</summary>
     private void TearDownLocked(EncoderChain chain)
     {
         _tearingDown++;
@@ -2723,11 +2385,7 @@ internal sealed class CaptureSession : ICaptureSession
         thread.Start();
     }
 
-    /// <summary>
-    /// End's side of the chains: no build, teardown or retirement starts from here, those running
-    /// are waited for, and the prepared and armed chains are torn down. The replaced chain still
-    /// fed, if any, goes in <see cref="DisposeAll"/>.
-    /// </summary>
+    /// <summary>End's side of the chains: running builds and teardowns are waited for, then prepared and armed chains go.</summary>
     private void CloseChains()
     {
         List<Thread> workers;
@@ -2761,7 +2419,7 @@ internal sealed class CaptureSession : ICaptureSession
         armed?.Dispose();
     }
 
-    /// <summary>Sets the device's GPU thread priority once (AD-7); a failure is logged and the run goes on.</summary>
+    /// <summary>Sets the device's GPU thread priority once; a failure is logged and the run goes on.</summary>
     private void SetGpuPriority(int priority)
     {
         int hr;
@@ -2828,8 +2486,7 @@ internal sealed class CaptureSession : ICaptureSession
             pacer?.SkippedSlots ?? 0,
             pacer?.HeldReplaced ?? 0);
 
-        // Every device, with the hub's stamp and stream readouts, and the samples encoded by the
-        // first Track that holds it.
+        // Every device, with the hub's readouts and the samples encoded by the first Track that holds it.
         var audio = new List<AudioReport>();
         for (var i = 0; i < chain.AudioTracks.Count; i++)
         {
@@ -2917,10 +2574,7 @@ internal sealed class CaptureSession : ICaptureSession
             $"No frame arrived from the window within {_options.FirstFrameTimeout.TotalSeconds:0} s."));
     }
 
-    /// <summary>
-    /// Records the first failure and stops; the orchestrator is told, and ends the session. A GPU
-    /// device loss the session can recover from is posted as one instead (<see cref="TakeDeviceLoss"/>).
-    /// </summary>
+    /// <summary>Records the first failure and stops; the orchestrator is told and ends the session.</summary>
     private void Fail(Exception e)
     {
         if (TakeDeviceLoss(e))
@@ -2952,25 +2606,17 @@ internal sealed class CaptureSession : ICaptureSession
     /// <summary>Microseconds since the anchor at <paramref name="qpc"/>.</summary>
     private long MicrosAt(long qpc) => (long)((Int128)(qpc - _anchorQpc) * 1_000_000 / _qpcFrequency);
 
-    /// <summary>The Buffer Window from the next Reset on (AD-8); the orchestrator calls it just before a Reset.</summary>
+    /// <summary>The Buffer Window from the next Reset on; the orchestrator calls it just before a Reset.</summary>
     public void SetBufferWindow(int seconds) => _pendingWindow = seconds;
 
-    /// <summary>
-    /// At the Reset <paramref name="us"/> (orchestrator thread): moves the current chain's Replay
-    /// Buffer to a ring of the Buffer Window <see cref="SetBufferWindow"/> asked for, seeded from
-    /// the Reset keyframe on (<see cref="EncoderChain.SnapStart"/>), when that differs from the
-    /// ring's. Nothing on a drained session, or one without a ring.
-    /// </summary>
+    /// <summary>At a Reset: moves the ring to the Buffer Window that was asked for, seeded from the Reset keyframe on.</summary>
     private void ResizeAt(long us)
     {
         var pending = _pendingWindow;
         EncoderChain? chain;
         lock (_chainLock)
         {
-            // An armed chain takes over at the next frame: resizing the outgoing one would be lost,
-            // so the incoming one takes the window at the next Reset instead.
-            // A forced restart moves the ring to a generation of its own; the window applies at the next
-            // Reset. So does a recovery from a lost device.
+            // The window waits for the next Reset while a chain is armed, a restart runs or the device is lost.
             chain = _armed is null && !_restarting && !_deviceLost ? _current : null;
         }
 
@@ -3013,7 +2659,7 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>Frees the replaced chain, if any, the current one (a drained session keeps its ring until Release) and the device.</summary>
+    /// <summary>Frees the replaced chain, the current one (a drained session keeps its ring) and the device.</summary>
     private void DisposeAll()
     {
         EncoderChain? retiring;
@@ -3026,8 +2672,7 @@ internal sealed class CaptureSession : ICaptureSession
 
         retiring?.Dispose();
 
-        // A save still writing holds its own lease and pins; the ring goes when the last is released.
-        // A chain a GPU reset tore down kept its ring: it goes here unless drained.
+        // A save still writing holds its own lease; a chain a GPU reset tore down gives up its kept ring here.
         if (current is { IsDisposed: true } && !_keepRing)
         {
             current.Ring?.Dispose();
@@ -3037,16 +2682,7 @@ internal sealed class CaptureSession : ICaptureSession
         _device?.Dispose();
     }
 
-    /// <summary>
-    /// One save's write (AD-8), bound to one encoder chain: its sink and encoder throughout, so it
-    /// never mixes two chains' PTS. It leases the ring on the orchestrator thread, so ending the
-    /// session can't free it, and registers on the chain, so a switch can't tear it down before the
-    /// cut; it then waits, cuts (pinning the slabs and releasing the lease) and writes on a
-    /// background thread of its own, which never blocks the ring, and ends its registration once.
-    /// <see cref="Write"/> requests the keyframe after the press before that thread starts, and may
-    /// arm the switch to a prepared chain (<see cref="SwitchesTo"/>); with no
-    /// <paramref name="video"/> (a drained session) it asks for none, and the Clip ends at the press.
-    /// </summary>
+    /// <summary>One save's write, bound to one encoder chain so it never mixes two chains' PTS. See docs/code-notes.md.</summary>
     private sealed class ClipWrite(CaptureSession session, EncoderChain chain, VideoEncoder? video, long qpc, int windowSeconds) : IClipWrite
     {
         private EncoderChain _chain = chain;
@@ -3078,8 +2714,7 @@ internal sealed class CaptureSession : ICaptureSession
             ArgumentNullException.ThrowIfNull(done);
             lock (session._chainLock)
             {
-                // Replaced and torn down since Save (an earlier press's switch took a frame in
-                // between): the press cuts from the chain that replaced it.
+                // Replaced and torn down since Save: the press cuts from the chain that replaced it.
                 if (_chain.RetireStarted && session._current is { } current && !ReferenceEquals(current, _chain))
                 {
                     _chain = current;
@@ -3100,9 +2735,7 @@ internal sealed class CaptureSession : ICaptureSession
 
             try
             {
-                // A switch is armed first: then its keyframe is asked for after the arm, the instant the
-                // new chain takes frames from, so the old Clip ends on the new chain's first frame. Frames
-                // captured between the press and the arm reach only the old chain, and stay in its Clip.
+                // A switch is armed first, so the keyframe is asked for at the instant the new chain takes frames from.
                 var armed = session.TryArm(bound, qpc, out var armQpc);
                 SwitchesTo = armed?.Spec;
 
@@ -3161,14 +2794,13 @@ internal sealed class CaptureSession : ICaptureSession
                 var ownFromUs = Math.Max(toUs - windowUs, Volatile.Read(ref session._resetUs));
                 var fromUs = Math.Max(ownFromUs, previous);
 
-                // R4: an empty cut, whatever set its start, makes no Clip.
+                // An empty cut, whatever set its start, makes no Clip.
                 if (toUs <= fromUs)
                 {
                     throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The cut is empty: its start is at or after its end.");
                 }
 
-                // R4: an earlier write still in flight has claimed all but less than 1 s of the span. Strictly
-                // past the Reset: a succeeded claim equals the Reset once it lands, and the orchestrator gates that case.
+                // An earlier write still in flight has claimed all but under 1 s of the span.
                 if (previous > ownFromUs && toUs - fromUs < 1_000_000)
                 {
                     throw new ErrorCodeException(ErrorCodes.ClipTooShort, "An earlier Clip still being written leaves less than 1 s to save.");
@@ -3241,11 +2873,7 @@ internal sealed class CaptureSession : ICaptureSession
             }
         }
 
-        /// <summary>
-        /// The forced keyframe's start in µs since the anchor, once the encoder has taken a frame
-        /// after the request; the press itself when that takes longer than <see cref="SaveWait"/> or
-        /// the output has finished first.
-        /// </summary>
+        /// <summary>The forced keyframe's time in µs since the anchor; the press itself when it takes too long.</summary>
         private long WaitForKey(ReplayRingSink ring, long pressUs)
         {
             if (_video is not { } video)
@@ -3275,11 +2903,7 @@ internal sealed class CaptureSession : ICaptureSession
         private long Deadline() => Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * session._qpcFrequency);
     }
 
-    /// <summary>
-    /// One Recording (R2): <see cref="Start"/> attaches a <see cref="RecordingWriter"/> with its own
-    /// copies of the streams to the tap, then asks the encoder for a keyframe after the press; the
-    /// writer's thread does the rest. <see cref="Stop"/> hands it the press as µs since the anchor.
-    /// </summary>
+    /// <summary>One Recording: Start attaches a writer to the tap and asks for a keyframe; the writer's thread does the rest.</summary>
     private sealed class RecordingWrite(CaptureSession session, EncoderChain chain, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
     {
         private RecordingWriter? _writer;
@@ -3315,9 +2939,7 @@ internal sealed class CaptureSession : ICaptureSession
 
             try
             {
-                // Story 12.2: attached under the chain lock, and only to the chain Record reserved
-                // while it is still current, so a size move can't switch it out from under the
-                // Recording; the reservation ends here either way.
+                // Attached under the chain lock, and only to the chain Record reserved, so a size move can't switch it out.
                 lock (session._chainLock)
                 {
                     session._recordReservedUntil = 0;

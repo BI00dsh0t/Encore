@@ -4,12 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Encore.Engine.Logging;
 
-/// <summary>
-/// A minimal, NativeAOT-safe Microsoft.Extensions.Logging provider: a daily rolling file
-/// (<c>&lt;prefix&gt;-yyyyMMdd.log</c>) plus the console, with warnings and above on stderr.
-/// Lines are written by one background thread, so callers (capture threads included) never
-/// touch the file. Chosen over Serilog, whose destructuring raises IL2072 under trimming.
-/// </summary>
+/// <summary>A small NativeAOT-safe logging provider: a daily file plus the console, written by one background thread.</summary>
 public sealed class TextLoggerProvider : ILoggerProvider
 {
     private readonly string _folder;

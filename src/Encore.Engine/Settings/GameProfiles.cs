@@ -6,19 +6,10 @@ using Encore.Platform.Windows;
 
 namespace Encore.Engine.Settings;
 
-/// <summary>Game Profile auto-creation (story 3.4).</summary>
+/// <summary>Game Profile auto-creation.</summary>
 internal static class GameProfiles
 {
-    /// <summary>
-    /// Creates the Game Profile <paramref name="profileId"/> when the document lacks it: one
-    /// <c>name</c> set through <see cref="SettingsStore.Update"/> (AD-4), named from the executable's
-    /// version resource, else <paramref name="fileName"/> without its extension. With
-    /// <c>captureNewGames</c> off, the same update sets <c>ignored</c>, unless the game is in
-    /// <c>manualGames</c> (story 13.1), and <paramref name="notCaptured"/> gets the game's name once the
-    /// write commits. Everything else is the store's default (Recordings off, no overrides, a folder
-    /// assigned). An existing profile is never touched. A conflict with another write is retried while
-    /// the profile is still missing; any other failure is logged.
-    /// </summary>
+    /// <summary>Creates a Game Profile when the document lacks one, named from the executable. Rules: docs/code-notes.md.</summary>
     public static void EnsureProfile(SettingsStore store, string profileId, string fileName, ILogger log, Action<string>? notCaptured = null)
     {
         if (store.Current.Profiles.ContainsKey(profileId))

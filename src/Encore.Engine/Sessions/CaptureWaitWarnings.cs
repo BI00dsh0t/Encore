@@ -7,13 +7,7 @@ using Encore.Platform.Windows;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>
-/// The engine's side of following a Target Game's process (<see cref="CaptureWait"/>): its window
-/// to capture is the one it was given while that can be captured (visible, titled, not minimized or
-/// cloaked, at least <see cref="MinWidth"/> × <see cref="MinHeight"/>), else its largest that can.
-/// Each run of waits is logged once and shown on the status line as a <c>capture-failed</c> Warning
-/// saying capture is waiting, withdrawn when the run ends. Called on the orchestrator thread only.
-/// </summary>
+/// <summary>Picks the Target's window to capture, and warns on the status line while capture waits. Orchestrator thread.</summary>
 internal sealed class CaptureWaitWarnings(Warnings warnings, ILogger log)
 {
     /// <summary>The smallest client area captured: a startup placeholder (Rocket League's is 156×27) is smaller.</summary>

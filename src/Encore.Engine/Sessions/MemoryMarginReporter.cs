@@ -5,11 +5,7 @@ using Encore.Engine.Ipc;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>
-/// Turns each <see cref="MemoryMargin"/> event into one <c>memory-margin</c> warning (R3): severity
-/// warning, source <c>replay</c>, no overlay, dismissable. Leaving the margin raises and dismisses
-/// nothing: warnings go only by <c>warning.dismiss</c> (AD-3).
-/// </summary>
+/// <summary>Turns each memory margin event into one <c>memory-margin</c> warning; leaving the margin raises nothing.</summary>
 internal sealed class MemoryMarginReporter : IDisposable
 {
     private readonly MemoryMargin _margin;

@@ -6,22 +6,14 @@ using Encore.Platform.FFmpeg;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>Which encoder a session uses for each codec (R2, AD-14).</summary>
+/// <summary>Which encoder a session uses for each codec.</summary>
 internal interface IVideoEncoderCatalog
 {
-    /// <summary>
-    /// The FFmpeg encoder the probe chose for <paramref name="codec"/>, or null when none works on
-    /// this PC. The codec is probed on first use; a result is cached, a throw is not.
-    /// </summary>
-    /// <exception cref="Exception">The probe itself failed (FFmpeg missing, no D3D11 device); the next call probes again.</exception>
+    /// <summary>The FFmpeg encoder the probe chose for a codec, or null when none works; a probe that throws is retried.</summary>
     string? EncoderFor(VideoCodec codec);
 }
 
-/// <summary>
-/// The encoder probe, run once per codec and cached for the engine's life; a probe that throws is
-/// not cached, so a transient failure is retried on the next use. Each codec is probed on its own
-/// D3D11 device on adapter 0; choosing the adapter per game is not done.
-/// </summary>
+/// <summary>The encoder probe, run once per codec and cached for the engine's life; each probes on adapter 0.</summary>
 internal sealed class VideoEncoderCatalog : IVideoEncoderCatalog
 {
     private readonly ILoggerFactory _loggers;
@@ -68,11 +60,7 @@ internal sealed class VideoEncoderCatalog : IVideoEncoderCatalog
         }
     }
 
-    /// <summary>
-    /// Probes every codec and returns the options to publish. A codec whose probe throws (FFmpeg
-    /// missing, no device) is logged as a warning and not offered; the others still are.
-    /// </summary>
-    /// <exception cref="OperationCanceledException">Cancelled between two codecs.</exception>
+    /// <summary>Probes every codec and returns the options to publish; a codec whose probe throws is logged and not offered.</summary>
     public VideoOptions ProbeAll(CancellationToken cancellationToken)
     {
         var offers = new List<CodecOffer>();

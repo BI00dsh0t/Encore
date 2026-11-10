@@ -6,12 +6,7 @@ using Encore.Engine.Ipc;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>
-/// The status line's side of a GPU driver reset (R3): each loss raises <c>gpu-reset</c> (Warning,
-/// not on the Overlay). A recovery withdraws the oldest one still shown, so the line no longer
-/// says Rewind is rebuilding. A give-up withdraws it too, and raises
-/// <c>gpu-reset-failed</c> (Error). Called on the orchestrator thread only.
-/// </summary>
+/// <summary>The status line's side of a GPU driver reset: warns on a loss, withdraws on recovery. Orchestrator thread.</summary>
 internal sealed class GpuResetWarnings(Warnings warnings, ILogger log)
 {
     // One per session still recovering, oldest first.

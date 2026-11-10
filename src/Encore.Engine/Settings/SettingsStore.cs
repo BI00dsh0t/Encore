@@ -11,11 +11,7 @@ namespace Encore.Engine.Settings;
 /// <summary>What <see cref="SettingsStore.Open"/> found: the store, and an error code if the file was unreadable.</summary>
 public sealed record SettingsLoad(SettingsStore Store, string? LoadCode);
 
-/// <summary>
-/// The engine's settings owner (AD-4): the instance's <c>settings.json</c>, revision-checked
-/// all-or-nothing updates, atomic writes. <see cref="Current"/> is an immutable document that is
-/// swapped only after the file holds it.
-/// </summary>
+/// <summary>The engine's settings owner: <c>settings.json</c>, revision-checked all-or-nothing updates, atomic writes.</summary>
 public sealed class SettingsStore
 {
     public const string FileName = "settings.json";
@@ -33,10 +29,7 @@ public sealed class SettingsStore
         _current = document;
     }
 
-    /// <summary>
-    /// Raised after each commit, under the store's lock, with the new document. A handler's exception
-    /// propagates out of <see cref="Update"/>, but the update has already committed.
-    /// </summary>
+    /// <summary>Raised after each commit, under the store's lock; a handler's exception propagates, but the commit stands.</summary>
     public event Action<SettingsDocument>? Changed;
 
     public string Folder { get; }
@@ -46,21 +39,13 @@ public sealed class SettingsStore
     /// <summary>The last committed document.</summary>
     public SettingsDocument Current => Volatile.Read(ref _current);
 
-    /// <summary>
-    /// The folder rule (AD-17, story 10.9): given the cache folder's and the Clips folder's defaults, an
-    /// update that sets or removes <c>ringPath</c> or <c>outputFolder</c> and leaves them nested is refused
-    /// with <see cref="ErrorCodes.RingPathInvalid"/>. Null (the default) checks nothing; the engine host sets it.
-    /// </summary>
+    /// <summary>The folder defaults for the no-nesting rule; null checks nothing. The engine host sets it.</summary>
     public (string Cache, string Clips)? FolderDefaults { get; set; }
 
     /// <summary>Test seam: runs after the temp file is written and before it replaces the settings file.</summary>
     internal Action? BeforeReplace { get; set; }
 
-    /// <summary>
-    /// Opens the store for <paramref name="folder"/> (normally <see cref="Instance.RoamingDataFolder"/>).
-    /// A missing file is the empty document; an unreadable one is moved aside and reported as
-    /// <see cref="ErrorCodes.SettingsUnreadable"/>. A stale temp file from a killed write is deleted.
-    /// </summary>
+    /// <summary>Opens the store for a folder; a missing file is the empty document, an unreadable one is moved aside.</summary>
     public static SettingsLoad Open(string folder)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
@@ -84,13 +69,7 @@ public sealed class SettingsStore
         return new SettingsLoad(new SettingsStore(folder, SettingsDocument.Empty), ErrorCodes.SettingsUnreadable);
     }
 
-    /// <summary>
-    /// Reads the document in <paramref name="folder"/> without opening a store: nothing in the folder
-    /// is written, moved or deleted. A missing file is the empty document.
-    /// </summary>
-    /// <exception cref="ErrorCodeException">
-    /// <see cref="ErrorCodes.SettingsUnreadable"/>: the file can't be read or isn't a settings document; it is left in place.
-    /// </exception>
+    /// <summary>Reads the document without opening a store or changing the folder; throws when the file can't be read.</summary>
     public static SettingsDocument ReadDocument(string folder)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
@@ -113,16 +92,7 @@ public sealed class SettingsStore
             ?? throw new ErrorCodeException(ErrorCodes.SettingsUnreadable, $"'{path}' is not a readable settings document.");
     }
 
-    /// <summary>
-    /// Applies <paramref name="update"/> all-or-nothing: validates every op, writes the file, swaps
-    /// <see cref="Current"/> and raises <see cref="Changed"/>. A refused update changes nothing.
-    /// </summary>
-    /// <returns>The committed document, one revision on.</returns>
-    /// <exception cref="ErrorCodeException">The update was refused; <see cref="ErrorCodeException.Code"/> says why.</exception>
-    /// <remarks>
-    /// An exception thrown by a <see cref="Changed"/> handler propagates out of this method after the
-    /// update has committed: the file and <see cref="Current"/> already hold the new document.
-    /// </remarks>
+    /// <summary>Applies an update all-or-nothing and returns the committed document; a refused update throws, changing nothing.</summary>
     public SettingsDocument Update(SettingsUpdate update)
     {
         ArgumentNullException.ThrowIfNull(update);
@@ -182,7 +152,7 @@ public sealed class SettingsStore
         return document with { Global = global.ToImmutable(), Profiles = profiles.ToImmutable() };
     }
 
-    /// <summary>An update that sets <c>hotkeys</c> with two actions on one combination is refused (AD-11).</summary>
+    /// <summary>An update that sets <c>hotkeys</c> with two actions on one combination is refused.</summary>
     private static void RefuseDuplicateHotkeys(ImmutableSortedDictionary<string, JsonElement>.Builder global, IReadOnlyList<SettingsOp> ops)
     {
         var index = -1;

@@ -1,11 +1,6 @@
 namespace Encore.Engine.Ipc;
 
-/// <summary>
-/// One connection's outgoing frames (AD-3), bounded. A frame with a coalescing key replaces the
-/// queued frame with the same key, moving to the tail so frames stay in <c>seq</c> order. Enqueuing
-/// never blocks: past <see cref="MaxQueued"/> it fails and closes the queue, and the connection is
-/// dropped. <see cref="Lag"/> is the age of the oldest frame not yet written, the in-flight one included.
-/// </summary>
+/// <summary>One connection's outgoing frames, bounded; enqueuing never blocks, and a full queue drops the connection.</summary>
 internal sealed class WriterQueue(int maxQueued, TimeProvider time)
 {
     private readonly Lock _lock = new();
@@ -42,7 +37,7 @@ internal sealed class WriterQueue(int maxQueued, TimeProvider time)
         }
     }
 
-    /// <summary>Queues a frame. <c>false</c> when the queue is closed or would exceed <see cref="MaxQueued"/>; the latter closes it.</summary>
+    /// <summary>Queues a frame; false when the queue is closed or full, and a full queue is then closed.</summary>
     public bool TryEnqueue(byte[] frame, string? coalesceKey = null)
     {
         TaskCompletionSource? waiter;
@@ -82,10 +77,7 @@ internal sealed class WriterQueue(int maxQueued, TimeProvider time)
         return accepted;
     }
 
-    /// <summary>
-    /// The next frame to write, waiting for one; <c>null</c> once the queue is closed, or completed
-    /// and empty. Call <see cref="Written"/> after writing it.
-    /// </summary>
+    /// <summary>The next frame to write, waiting for one; null once closed. Call <see cref="Written"/> after writing it.</summary>
     public async ValueTask<byte[]?> DequeueAsync(CancellationToken cancellationToken)
     {
         while (true)

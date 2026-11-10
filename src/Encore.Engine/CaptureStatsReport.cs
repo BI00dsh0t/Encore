@@ -17,11 +17,7 @@ public readonly record struct ResourceSnapshot(long Qpc, TimeSpan Cpu, long Allo
         GC.CollectionCount(2));
 }
 
-/// <summary>
-/// The recorders of one <c>debug-capture --stats</c> run (story 1.2). Each recorder has one
-/// writer thread (frames, video packets), and is read once those threads have stopped. Audio
-/// stamps are recorded by the hub, per device (story 1.12). Nothing here allocates per frame or per packet.
-/// </summary>
+/// <summary>The recorders of one <c>debug-capture --stats</c> run; each has one writer thread and is read after it stops.</summary>
 public sealed class CaptureStatsCollector
 {
     /// <summary>The first 10 s after the anchor are left out of the CPU, GC and allocation rates.</summary>
@@ -98,10 +94,7 @@ public sealed class CaptureStatsCollector
     public static LatencyReport Report(LatencyHistogram h, long? flushed = null) => new(
         h.Count, h.Percentile(50), h.Percentile(99), h.MaxMilliseconds, h.MeanMilliseconds, h.BucketMilliseconds, h.Overflow, h.Negative, flushed);
 
-    /// <summary>
-    /// One device: its stamps and stream counters from the hub, which run from when the device opened;
-    /// <c>writtenFrames</c> is the session timeline's, from the anchor.
-    /// </summary>
+    /// <summary>One device's report: the hub's counters run from when the device opened, writtenFrames from the anchor.</summary>
     public static AudioReport Report(string role, string device, AudioStampStats stamps, DeviceStream stream, AudioTimeline timeline, long samplesEncoded) => new(
         role,
         device,
@@ -134,10 +127,7 @@ public sealed class CaptureStatsCollector
             stream.MaxSettledErrorSamples,
             stream.OutputFrames));
 
-    /// <summary>
-    /// Checks, before a run, that <paramref name="path"/> can be written: creates its folder
-    /// and opens the file for writing. A file the check created is removed again.
-    /// </summary>
+    /// <summary>Checks before a run that the path can be written; a file the check created is removed again.</summary>
     public static void EnsureWritable(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -152,11 +142,7 @@ public sealed class CaptureStatsCollector
         }
     }
 
-    /// <summary>
-    /// Writes <paramref name="report"/> as indented JSON (source-generated, AOT-safe) to
-    /// <c>&lt;path&gt;.tmp</c>, then moves it over <paramref name="path"/>, so a failed write
-    /// never leaves a truncated file.
-    /// </summary>
+    /// <summary>Writes the report as JSON to a temp file, then moves it into place, so a failed write leaves no cut-off file.</summary>
     public static void Write(string path, CaptureStatsReport report)
     {
         var temporary = path + ".tmp";
@@ -190,27 +176,13 @@ public sealed record CaptureStatsReport(
     public const int CurrentSchema = 1;
 }
 
-/// <param name="Hresult">The HRESULT of <c>SetGPUThreadPriority</c>, as 0xXXXXXXXX.</param>
-/// <param name="ReadBack">What <c>GetGPUThreadPriority</c> reports afterwards.</param>
+/// <summary>Hresult is <c>SetGPUThreadPriority</c>'s result as 0xXXXXXXXX; ReadBack is what the device reports afterwards.</summary>
 public sealed record GpuPriorityReport(int Requested, string Hresult, bool Succeeded, int? ReadBack);
 
-/// <param name="Stages">full, copy or wgc.</param>
-/// <param name="Preset">The h264_nvenc preset.</param>
-/// <param name="Tune">The h264_nvenc tune, or null for FFmpeg's default.</param>
-/// <param name="Color">x1 (BGRA into NVENC) or x2 (VideoProcessor NV12).</param>
-/// <param name="EncodeThread">Submit and drain on the encoder thread: always, since story 1.11, when anything is encoded.</param>
+/// <summary>Stages is full, copy or wgc; Color is x1 (BGRA into NVENC) or x2 (VideoProcessor NV12).</summary>
 public sealed record EncoderReport(string Stages, string Preset, string? Tune, string Color, bool EncodeThread);
 
-/// <param name="FramesArrived">Frames WGC delivered after the anchor, warm-up included.</param>
-/// <param name="FramesEncoded">Video packets written to the file: one per slot, new or repeated.</param>
-/// <param name="Duplicates">Slots the pacer filled by repeating the last frame (story 1.11).</param>
-/// <param name="QueueDrops">Frames not drawn because the encoder thread's hand-off, or the frame pool, was full.</param>
-/// <param name="NonIncreasingStamps">Arrived frames whose capture stamp was not after the previous one.</param>
-/// <param name="MissedSlots">WGC's cadence: sum of <c>round(Δ × 60) − 1</c> over steps longer than 1.5/60 s.</param>
-/// <param name="DuplicatePercent">Repeated slots as a share of all slots encoded.</param>
-/// <param name="FreshSlots">Slots encoded with a new frame.</param>
-/// <param name="SkippedSlots">Slots the pacer jumped over because the encoder fell more than 4 slots behind.</param>
-/// <param name="HeldReplaced">Frames held for the next slot that a newer frame replaced before it.</param>
+/// <summary>One run's video counts; each field is explained in docs/code-notes.md.</summary>
 public sealed record VideoReport(
     int Width,
     int Height,
@@ -241,9 +213,7 @@ public sealed record LatencyReport(
     long Negative,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Flushed = null);
 
-/// <param name="Steady">From warm-up end to stop; null when the run ended inside the warm-up.</param>
-/// <param name="Run">From the anchor to stop.</param>
-/// <param name="StartupToAnchorMs">Process start to the first captured frame.</param>
+/// <summary>Steady runs from warm-up end to stop, and is null when the run ended inside the warm-up; Run is from the anchor.</summary>
 public sealed record ResourceReport(int LogicalProcessors, double WarmUpSeconds, double? StartupToAnchorMs, SteadyReport? Steady, RunReport? Run);
 
 public sealed record SteadyReport(
@@ -259,9 +229,7 @@ public sealed record RunReport(double CpuSeconds, long AllocatedBytes, GcReport 
 
 public sealed record GcReport(int Gen0, int Gen1, int Gen2);
 
-/// <param name="Role">"output" (loopback) or "input".</param>
-/// <param name="SamplesEncoded">Frames the AAC encoder received, silence fill included.</param>
-/// <param name="Resampler">The hub's steering of this device to QPC (story 1.12).</param>
+/// <summary>Role is "output" (loopback) or "input"; SamplesEncoded counts the frames the AAC encoder got, fill included.</summary>
 public sealed record AudioReport(
     string Role,
     string Device,
@@ -273,12 +241,7 @@ public sealed record AudioReport(
     long SamplesEncoded,
     ResamplerReport? Resampler = null);
 
-/// <param name="RatioPpm">The resampler's ratio at stop, (step − 1) × 10⁶; about −drift.</param>
-/// <param name="MeanRatioPpm">The mean ratio after the 5 s settle.</param>
-/// <param name="StepCorrections">Errors past 5 ms without a discontinuity flag, corrected by silence or a trim.</param>
-/// <param name="SettledPackets">Steered packets after the settle, which the error figures cover.</param>
-/// <param name="ErrorP99Samples">|content position − stamp| at the 99th percentile, in samples (bucket upper edge).</param>
-/// <param name="OutputFrames">Frames the device's stream produced since it opened.</param>
+/// <summary>How the hub steered this device to QPC; each field is explained in docs/code-notes.md.</summary>
 public sealed record ResamplerReport(
     double RatioPpm,
     double MeanRatioPpm,
@@ -288,8 +251,7 @@ public sealed record ResamplerReport(
     double ErrorMaxSamples,
     long OutputFrames);
 
-/// <param name="Jitter">|stamp − (previous stamp + previous frames)|, consecutive good packets.</param>
-/// <param name="Age">QPC at <c>GetBuffer</c> minus the stamp.</param>
+/// <summary>Jitter is each stamp against the previous stamp plus its frames; Age is the read time minus the stamp.</summary>
 public sealed record StampReport(
     long TimestampErrors,
     long Zero,

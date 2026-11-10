@@ -5,19 +5,10 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Engine.Settings;
 
-/// <summary>
-/// The first-run seed (R6, AD-24): when <c>settings.json</c> has no Global <c>trackLayout</c>, the
-/// engine writes the Simple preset from the Windows default devices, once, through the store's own
-/// update path (AD-4). An existing value, Global or a profile's, is never touched, and the catalog
-/// default is unchanged.
-/// </summary>
+/// <summary>The first-run seed: with no Global <c>trackLayout</c>, writes the Simple preset from the default devices, once.</summary>
 internal static class TrackLayoutSeed
 {
-    /// <summary>Seeds <paramref name="store"/> when its document has no Global <c>trackLayout</c>.</summary>
-    /// <returns>
-    /// The seeded layout, or <c>null</c> when the document has one already, no default device is
-    /// listed (nothing is written, so a later start retries), or the write failed (logged).
-    /// </returns>
+    /// <summary>Seeds the store; null when it already has a layout, no default device is listed, or the write failed.</summary>
     public static TrackLayout? Apply(SettingsStore store, IReadOnlyList<AudioDevice> devices, ILogger log)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -28,8 +19,7 @@ internal static class TrackLayoutSeed
             return null;
         }
 
-        // No default device (or a failed listing): the seed would equal the catalog default, so
-        // nothing is written and a later start tries again.
+        // With no default device the seed would equal the catalog default, so nothing is written and a later start retries.
         var layout = TrackLayoutPresets.Seed(devices);
         if (layout.Devices.Count == 0)
         {

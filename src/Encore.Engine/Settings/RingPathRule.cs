@@ -3,11 +3,7 @@ using Encore.Core.Settings;
 
 namespace Encore.Engine.Settings;
 
-/// <summary>
-/// AD-17's rule, enforced by the engine as the one settings writer (AD-4, story 10.9): the cache folder
-/// (<c>ringPath</c>, or its default) and the Clips folder (<c>outputFolder</c>, or its default) never
-/// nest, in either direction. Pure.
-/// </summary>
+/// <summary>The cache folder and the Clips folder never nest, in either direction; the engine enforces it. Pure.</summary>
 internal static class RingPathRule
 {
     /// <summary>The refusal's text; the App shows its own words for each folder picker.</summary>

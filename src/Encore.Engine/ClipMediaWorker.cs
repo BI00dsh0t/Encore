@@ -6,7 +6,7 @@ using Encore.Waveforms;
 
 namespace Encore.Engine;
 
-/// <summary>AD-28 isolated worker. No settings, capture host, instance mutex or live IPC.</summary>
+/// <summary>The isolated media worker: no settings, capture host, instance mutex or live IPC.</summary>
 public static class ClipMediaWorker
 {
     private static string Number(double value) => value.ToString("0.#########", CultureInfo.InvariantCulture);
@@ -173,8 +173,7 @@ public static class ClipMediaWorker
         CheckRange(request.Start, request.End, metadata.Duration);
         if (request.Format == "mp3")
         {
-            // Audio-only boundaries are independent of the video's frame cadence. Output is 48 kHz;
-            // atrim/resample retain each source stream's timing relative to this common sample origin.
+            // Audio cuts don't follow the video's frame cadence; each stream keeps its timing from this common 48 kHz origin.
             var startSample = Math.Ceiling(request.Start * 48000 - 0.0000001);
             var endSample = Math.Ceiling(request.End * 48000 - 0.0000001);
             if (endSample <= startSample) { throw new IOException("Choose a range containing at least one audio sample."); }

@@ -4,12 +4,7 @@ using Encore.Contracts.Ipc;
 
 namespace Encore.Engine.Ipc;
 
-/// <summary>
-/// One client connection (AD-3). Its writer loop is the only code that writes the pipe, fed by a
-/// <see cref="WriterQueue"/>; its reader loop dispatches each command on its own, so a slow command
-/// holds up nothing else. A full queue, a lagging client, a malformed frame or a broken pipe drops
-/// the connection; the engine carries on.
-/// </summary>
+/// <summary>One client connection: only its writer loop writes the pipe, and each command is dispatched on its own.</summary>
 internal sealed class Connection : IFrameSink
 {
     private readonly NamedPipeServerStream _pipe;

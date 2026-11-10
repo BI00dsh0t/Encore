@@ -5,18 +5,7 @@ using Encore.Core.Settings;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>Keeps the Global settings' storage estimate (R2).</summary>
-/// <remarks>
-/// It is the ring's bytes against the free RAM (Memory)
-/// or the ring folder drive's free space (Disk). The first estimate is made without publishing, for
-/// the initial snapshot. It re-checks when the settings change and every 30 s, and publishes
-/// <c>estimate.changed</c> only when the storage, the bytes or the over-free flag change, or the
-/// free bytes move by 10 % or more. The ring's own use counts back as free, so a running buffer that
-/// fits doesn't warn: in Disk mode the <c>ring-&lt;n&gt;.bin</c> files in the ring folder, in Memory mode
-/// this process's working set, an approximation of the ring's resident slabs. A settings change is
-/// re-estimated on the thread pool, off the updating thread; an estimate from an older settings
-/// revision than the last one is dropped, and a failed re-estimate is skipped.
-/// </remarks>
+/// <summary>Keeps the Global settings' storage estimate, re-checked on settings changes and every 30 s. docs/code-notes.md.</summary>
 internal sealed class EstimatePublisher : IDisposable
 {
     /// <summary>How often the free bytes are read again.</summary>
@@ -93,9 +82,7 @@ internal sealed class EstimatePublisher : IDisposable
         }
     }
 
-    /// <summary>
-    /// Free disk space of <paramref name="folder"/>'s drive; null when it can't be read.
-    /// </summary>
+    /// <summary>Free disk space of the folder's drive; null when it can't be read.</summary>
     public static long? FreeDiskBytes(string folder)
     {
         try

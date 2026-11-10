@@ -5,11 +5,7 @@ using Encore.Engine.Ipc;
 
 namespace Encore.Engine.Audio;
 
-/// <summary>
-/// Turns each audio device dropout into one <c>device-dropout</c> warning (R5): severity warning,
-/// source <c>audio</c>, no overlay, dismissable. A resume raises nothing and dismisses nothing:
-/// warnings go only by <c>warning.dismiss</c> (AD-3). It logs nothing; the hub's entry is the log line.
-/// </summary>
+/// <summary>Turns each audio device dropout into one <c>device-dropout</c> warning; a resume raises and dismisses nothing.</summary>
 internal sealed class DeviceDropoutReporter : IDisposable
 {
     private readonly IAudioDropoutSource _source;

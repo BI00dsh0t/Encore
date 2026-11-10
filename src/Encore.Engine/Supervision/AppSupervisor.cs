@@ -22,20 +22,11 @@ internal interface IAppLauncher
     /// <summary>Opens the running process <paramref name="pid"/>, or returns <c>null</c> when it is gone.</summary>
     IWatchedProcess? Open(int pid);
 
-    /// <summary>Starts the App in the tray.</summary>
-    /// <exception cref="Exception">The App couldn't be started.</exception>
+    /// <summary>Starts the App in the tray; throws when it couldn't be started.</summary>
     IWatchedProcess Start();
 }
 
-/// <summary>
-/// The engine's half of two-way supervision (AD-16). <c>app.attach</c> names the App to watch; when
-/// that App exits while no <c>engine.shutdown</c> has been received, the engine starts it again
-/// with backoff and raises <c>app-restarted</c>. It relaunches only an App that attached, or one it
-/// started itself that then failed (a non-zero exit before attaching). After
-/// <see cref="Contracts.Supervision.CrashLoopRestarts"/> relaunches within
-/// <see cref="Contracts.Supervision.CrashLoopWindow"/>, the next exit is a crash loop: it logs and raises
-/// <c>app-crash-loop</c> and stops watching, until an App attaches again.
-/// </summary>
+/// <summary>The engine's half of two-way supervision: restarts an attached App that exits unasked. docs/code-notes.md.</summary>
 internal sealed class AppSupervisor(EventHub hub, Warnings warnings, IAppLauncher launcher, TimeProvider time, ILogger log) : IDisposable
 {
     /// <summary>Makes the check and the raise of <see cref="RaiseEngineRestarted"/> one step.</summary>
@@ -58,11 +49,7 @@ internal sealed class AppSupervisor(EventHub hub, Warnings warnings, IAppLaunche
     /// <summary>The watch loop of the current App, for tests.</summary>
     internal Task Watching { get; private set; } = Task.CompletedTask;
 
-    /// <summary>
-    /// Raises <c>engine-restarted</c> for <paramref name="reason"/>, unless one is already active: the
-    /// engine raises it at start from <c>serve --restarted</c>, and an <c>app.attach</c> that carries
-    /// the reason too adds no second one.
-    /// </summary>
+    /// <summary>Raises <c>engine-restarted</c> for a reason, unless one is already active.</summary>
     public static void RaiseEngineRestarted(EventHub hub, Warnings warnings, EngineRestartReason reason)
     {
         ArgumentNullException.ThrowIfNull(hub);
@@ -317,11 +304,7 @@ internal sealed class AppSupervisor(EventHub hub, Warnings warnings, IAppLaunche
     }
 }
 
-/// <summary>
-/// The real App: <c>Encore.App.exe</c> beside the engine, started with <c>--tray</c>, and on a test
-/// instance with <c>--instance</c> and any <paramref name="arguments"/> (<c>--rewind</c>), so a
-/// relaunched App launches its own engine the same way.
-/// </summary>
+/// <summary>The real App beside the engine, started with <c>--tray</c>; a test instance passes its own arguments on.</summary>
 internal sealed class AppLauncher(string appPath, Instance instance, IReadOnlyList<string>? arguments = null) : IAppLauncher
 {
     public const string AppFileName = "Encore.App.exe";

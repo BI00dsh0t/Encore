@@ -23,13 +23,7 @@ public sealed class EngineFailure(string code, string message, IReadOnlyList<str
     public IReadOnlyList<string> Candidates { get; } = candidates ?? [];
 }
 
-/// <summary>
-/// The <c>debug-capture</c> driver: resolves the window and devices from the command line, then
-/// drives one session only through orchestrator messages: Start, wait (<c>--seconds</c> from the
-/// anchor, Ctrl+C, or the session ending itself), End. The session starts with the instance's saved
-/// mic mute (<c>runtime.json</c>, muted when there is none); with no Hotkeys it never changes, so a
-/// muted run silences each Mic Device in the Track Layout's <c>muteAffected</c> Tracks.
-/// </summary>
+/// <summary>The <c>debug-capture</c> driver: resolves the window and devices, then drives one session by messages.</summary>
 public sealed class TracerCapture(DebugCaptureCommand command, Instance instance, ILoggerFactory loggers)
 {
     private readonly ILogger _log = loggers.CreateLogger<TracerCapture>();
@@ -44,7 +38,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         var stored = command.TrackLayout ? SettingsStore.ReadDocument(instance.RoamingDataFolder) : SettingsDocument.Empty;
         var audio = command.TrackLayout ? LayoutAudio(stored) : null;
 
-        // Spike 11.1: --monitors captures the composited monitors, with no window.
+        // The monitors option captures the composited monitors, with no window.
         var window = command.Monitors is null ? ResolveWindow() : null;
         if (audio is null)
         {
@@ -104,8 +98,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             Anchored = qpc => anchored.TrySetResult(qpc),
         };
 
-        // debug-capture doesn't open the settings store: the snapshot resolves against the document
-        // read with --track-layout (else the empty one) with the command line's video value set.
+        // The settings store isn't opened here: the snapshot is the stored document with the command line's video value.
         var document = stored with { Global = stored.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(VideoFor(window))) };
 
         // One hub for the run, disposed after the orchestrator has ended the session.
@@ -129,11 +122,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         return outcome.Path!;
     }
 
-    /// <summary>
-    /// The session audio of the stored Global <c>trackLayout</c>: refused when the stored value is
-    /// invalid, or when a device is not present with its flow. A Track with no devices is a silent
-    /// Track (<see cref="SessionAudio.FromLayout"/>).
-    /// </summary>
+    /// <summary>The session audio of the stored Global <c>trackLayout</c>; refused when it is invalid or a device is missing.</summary>
     private SessionAudio LayoutAudio(SettingsDocument document)
     {
         if (document.Global.TryGetValue(Keys.TrackLayout.Name, out var raw) && !Keys.TrackLayout.IsValid(raw))
@@ -195,10 +184,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         }
     }
 
-    /// <summary>
-    /// The session's <c>video</c> value from the command line, sized to the window (made even) when
-    /// no <c>--size</c> is given.
-    /// </summary>
+    /// <summary>The session's <c>video</c> value from the command line, sized to the window (made even) when no size is given.</summary>
     private VideoSettings VideoFor(WindowInfo? window)
     {
         int width, height;
@@ -208,7 +194,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         }
         else if (window is null)
         {
-            // Spike 11.1: the canvas rule, fitted to the codec's largest side only (no pixel budget).
+            // The canvas rule, fitted to the codec's largest side only (no pixel budget).
             var placements = MonitorCanvas.Place(command.Monitors!);
             if (placements.Count == 0)
             {
@@ -228,7 +214,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
             (width, height) = (even.Width, even.Height);
         }
 
-        // --match-source (story 12.1): the chain takes the window's own size at its first frame; width and height are the fallback.
+        // --match-source: the chain takes the window's own size at its first frame; width and height are the fallback.
         var video = new VideoSettings(command.Codec, width, height, command.Fps, command.BitrateKbps, RateControl.Cbr, command.MatchSource);
         _log.LogInformation("Video: {Codec} {Width}x{Height} at {Fps} fps, CBR {Kbps} kbps{Forced}",
             video.Codec, width, height, video.Fps, video.BitrateKbps, command.Encoder is { } forced ? $", encoder forced to {forced}" : "");
