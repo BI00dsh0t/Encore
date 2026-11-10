@@ -9,19 +9,40 @@ internal partial class ClipExportDialog
     {
         InitializeComponent();
         DataContext = page;
-        Loaded += (_, _) => { NameBox.Focus(); NameBox.SelectAll(); };
+        Loaded += (_, _) =>
+        {
+            NameBox.Focus();
+            NameBox.SelectAll();
+        };
     }
+
+    /// <summary>Raised as each dialog is about to show; tests answer through it.</summary>
     internal static event Action<ClipExportDialog>? Showing;
+
+    /// <summary>Shows the dialog modally over its owner, or centred on the screen; true when the builder saved.</summary>
     internal bool Ask(Window? owner)
     {
-        if (owner is { IsVisible: true }) { Owner = owner; MaxHeight = Math.Max(240, owner.ActualHeight - 32); }
-        else { WindowStartupLocation = WindowStartupLocation.CenterScreen; }
+        if (owner is { IsVisible: true })
+        {
+            Owner = owner;
+            MaxHeight = Math.Max(240, owner.ActualHeight - 32);
+        }
+        else
+        {
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
         Showing?.Invoke(this);
         return ShowDialog() == true;
     }
-    private void Save(object sender, RoutedEventArgs e)
+
+    private void OnSaveClick(object sender, RoutedEventArgs e)
     {
-        if (DataContext is ClipCreatorPage { CanSave: true }) { DialogResult = true; }
+        if (DataContext is ClipCreatorPage { CanSave: true })
+        {
+            DialogResult = true;
+        }
     }
-    private void Cancel(object sender, RoutedEventArgs e) => DialogResult = false;
+
+    private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;
 }

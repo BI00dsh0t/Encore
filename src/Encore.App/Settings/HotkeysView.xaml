@@ -75,57 +75,69 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="{Binding Label}" />
+                <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="{Binding Label}" />
                 <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding BindingText}" />
                 <Button Grid.Column="2" Margin="8,4,0,4" Command="{Binding SetCommand}" Content="Set" />
                 <Button Grid.Column="3" Margin="8,4,0,4" Command="{Binding ClearCommand}" Content="Clear" />
-                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,0,0,6"
-                           Style="{StaticResource HotkeyStatus}" Text="{Binding StatusText}" />
+                <TextBlock Grid.Row="1"
+                           Grid.Column="1"
+                           Grid.ColumnSpan="3"
+                           Margin="0,0,0,6"
+                           Style="{StaticResource HotkeyStatus}"
+                           Text="{Binding StatusText}" />
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
-            <HeaderedContentControl Header="Clips" Style="{DynamicResource RbSettingsSectionStyle}">
+        <theme:SettingsContent Style="{DynamicResource EncoreSettingsContentStyle}">
+            <HeaderedContentControl Header="Clips" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
-                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding ClipsHelp}" />
+                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding ClipsHelp}" />
                     <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding ClipRows}" />
                 </StackPanel>
             </HeaderedContentControl>
 
-            <HeaderedContentControl Header="Recordings" Style="{DynamicResource RbSettingsSectionStyle}">
+            <HeaderedContentControl Header="Recordings" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
-                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding RecordingsHelp}" />
+                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding RecordingsHelp}" />
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Record mode" />
+                        <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Record mode" />
                         <StackPanel Grid.Column="1">
                             <RadioButton Content="One key starts and stops" GroupName="RecordMode" IsChecked="{Binding IsToggleMode}" />
-                            <RadioButton Margin="0,4,0,0" Content="Separate start and stop keys" GroupName="RecordMode" IsChecked="{Binding IsSeparateMode}" />
+                            <RadioButton Margin="0,4,0,0"
+                                         Content="Separate start and stop keys"
+                                         GroupName="RecordMode"
+                                         IsChecked="{Binding IsSeparateMode}" />
                         </StackPanel>
                     </Grid>
                     <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding RecordRows}" />
                 </StackPanel>
             </HeaderedContentControl>
 
-            <HeaderedContentControl Header="Monitor Recording" Style="{DynamicResource RbSettingsSectionStyle}">
+            <HeaderedContentControl Header="Monitor Recording" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
-                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding MonitorHelp}" />
-                    <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding MonitorRows}" />
+                    <TextBlock Margin="0,0,0,8" Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding MonitorHelp}" />
+                    <ItemsControl Focusable="False"
+                                  ItemTemplate="{StaticResource HotkeyRowTemplate}"
+                                  ItemsSource="{Binding MonitorRows}" />
                     <!-- The screens a Monitor Recording composites (design-multi-monitor.md's picker). -->
                     <Grid x:Name="ScreenPicker" Margin="0,4,0,0" DataContext="{Binding Monitor}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" SharedSizeGroup="HotkeyLabel" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Top" Style="{DynamicResource RbSettingsLabelStyle}" Text="Screens to record" />
+                        <TextBlock VerticalAlignment="Top" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Screens to record" />
                         <StackPanel Grid.Column="1">
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton Content="All screens" GroupName="MonitorScreens" IsChecked="{Binding IsAllScreens}" />
-                                <RadioButton Margin="16,0,0,0" Content="Chosen screens" GroupName="MonitorScreens" IsChecked="{Binding IsChosenScreens}" />
+                                <RadioButton Margin="16,0,0,0"
+                                             Content="Chosen screens"
+                                             GroupName="MonitorScreens"
+                                             IsChecked="{Binding IsChosenScreens}" />
                             </StackPanel>
                             <!-- Windows' arrangement; each screen toggles its row's tick. Hidden without positions. -->
                             <Border x:Name="ScreenPreview"
@@ -158,7 +170,10 @@
                                                           Style="{StaticResource ScreenTileStyle}"
                                                           ToolTip="{Binding Row.ToolTip}">
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="{Binding Number}" />
+                                                    <TextBlock HorizontalAlignment="Center"
+                                                               FontSize="16"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding Number}" />
                                                     <TextBlock HorizontalAlignment="Center"
                                                                FontSize="11"
                                                                Text="primary"
@@ -187,7 +202,9 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock VerticalAlignment="Center" Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding OutputText}" />
+                                <TextBlock VerticalAlignment="Center"
+                                           Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                                           Text="{Binding OutputText}" />
                                 <Button Grid.Column="1"
                                         Margin="8,4,0,4"
                                         Command="{Binding RefreshCommand}"
@@ -198,10 +215,10 @@
                 </StackPanel>
             </HeaderedContentControl>
 
-            <HeaderedContentControl Header="Microphone" Style="{DynamicResource RbSettingsSectionStyle}">
+            <HeaderedContentControl Header="Microphone" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
                     <ItemsControl Focusable="False" ItemTemplate="{StaticResource HotkeyRowTemplate}" ItemsSource="{Binding MicRows}" />
-                    <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding MicHelp, Mode=OneWay}" />
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding MicHelp, Mode=OneWay}" />
                 </StackPanel>
             </HeaderedContentControl>
         </theme:SettingsContent>

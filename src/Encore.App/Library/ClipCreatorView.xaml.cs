@@ -1,99 +1,142 @@
-using System.IO;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Threading;
-using Microsoft.Win32;
 
 namespace Encore.App.Library;
 
+/// <summary>The clip creator's view: it runs the playhead's clock and opens the export menu and dialogs.</summary>
 internal partial class ClipCreatorView
 {
+    // How often the playhead follows the preview.
+    private static readonly TimeSpan PositionInterval = TimeSpan.FromMilliseconds(100);
+
     private readonly DispatcherTimer _position;
+
     public ClipCreatorView()
     {
         InitializeComponent();
-        _position = new DispatcherTimer(TimeSpan.FromMilliseconds(100), DispatcherPriority.Background, (_, _) => Page?.Tick(), Dispatcher) { IsEnabled = false };
+        _position = new DispatcherTimer(PositionInterval, DispatcherPriority.Background, (_, _) => Page?.Tick(), Dispatcher)
+        {
+            IsEnabled = false,
+        };
         Loaded += (_, _) => _position.Start();
         Unloaded += (_, _) => _position.Stop();
     }
+
+    /// <summary>Asks where the export goes; tests replace the Windows dialogs.</summary>
+    internal Func<ClipCreatorPage, Task<string?>> ChooseDestination { get; set; } = ClipExportDestination.ChooseAsync;
+
     private ClipCreatorPage? Page => DataContext as ClipCreatorPage;
+
+    /// <summary>Focuses the timeline, when the creator opens.</summary>
     public void FocusFirstControl() => Timeline.Focus();
-    private void KeyboardHelp(object sender, RoutedEventArgs e)
+
+    private void OnKeyboardHelpClick(object sender, RoutedEventArgs e)
     {
-        var trigger = (System.Windows.Controls.Button)sender;
         var owner = Window.GetWindow(this);
         var dialog = new ClipShortcutsDialog { Owner = owner };
-        if (owner is not null) { dialog.MaxHeight = Math.Max(240, owner.ActualHeight - 32); }
-        try { dialog.ShowDialog(); }
-        finally { trigger.Focus(); }
+        if (owner is not null)
+        {
+            dialog.MaxHeight = Math.Max(240, owner.ActualHeight - 32);
+        }
+
+        try
+        {
+            dialog.ShowDialog();
+        }
+        finally
+        {
+            ((Button)sender).Focus();
+        }
     }
-    private void CommitTime(object sender, System.Windows.Input.KeyEventArgs e)
+
+    // The time boxes commit on Enter as well as on leaving them.
+    private void OnTimeBoxKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != System.Windows.Input.Key.Enter) { return; }
-        ((System.Windows.Controls.TextBox)sender).GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        ((TextBox)sender).GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
         e.Handled = true;
     }
-    private void StartMinus(object sender, RoutedEventArgs e) => Page?.Nudge(false, -1);
-    private void StartPlus(object sender, RoutedEventArgs e) => Page?.Nudge(false, 1);
-    private void EndMinus(object sender, RoutedEventArgs e) => Page?.Nudge(true, -1);
-    private void EndPlus(object sender, RoutedEventArgs e) => Page?.Nudge(true, 1);
-    internal Func<ClipCreatorPage, Task<string?>> ChooseDestination { get; set; } = ClipExportDestination.ChooseAsync;
-    private void ChooseType(object sender, RoutedEventArgs e)
+
+    private void OnStartMinusClick(object sender, RoutedEventArgs e) => Page?.Nudge(false, -1);
+
+    private void OnStartPlusClick(object sender, RoutedEventArgs e) => Page?.Nudge(false, 1);
+
+    private void OnEndMinusClick(object sender, RoutedEventArgs e) => Page?.Nudge(true, -1);
+
+    private void OnEndPlusClick(object sender, RoutedEventArgs e) => Page?.Nudge(true, 1);
+
+    // The arrow beside Export: a menu to choose video or audio, with the current one ticked.
+    private void OnExportTypeClick(object sender, RoutedEventArgs e)
     {
-        if (Page is not { CanOpenOptions: true } page) { return; }
-        var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = ExportArrow };
-        menu.SetResourceReference(StyleProperty, "RbClipMenuStyle");
-        foreach (var (format, label) in new[] { ("mp4", "Export as video"), ("mp3", "Export as audio") })
+        if (Page is not { CanOpenOptions: true } page)
         {
-            var header = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
-            var icon = new System.Windows.Shapes.Path
-            {
-                Width = 16, Height = 16, Stretch = System.Windows.Media.Stretch.Uniform, StrokeThickness = 1.5,
-                Data = System.Windows.Media.Geometry.Parse(format == "mp4"
-                    ? "M 1,1 L 15,1 L 15,15 L 1,15 Z M 5,1 L 5,15 M 11,1 L 11,15 M 1,5 L 5,5 M 1,11 L 5,11 M 11,5 L 15,5 M 11,11 L 15,11"
-                    : "M 6,12 L 6,3 L 14,1 L 14,10 M 6,3 L 14,1 M 6,12 C 6,16 0,16 0,13 C 0,10 6,10 6,12 M 14,10 C 14,14 8,14 8,11 C 8,8 14,8 14,10"),
-            };
-            icon.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "TextFillColorPrimaryBrush");
-            header.Children.Add(icon);
-            header.Children.Add(new System.Windows.Controls.TextBlock { Text = label, Margin = new Thickness(8, 0, 0, 0), FontFamily = new System.Windows.Media.FontFamily("Segoe UI"), FontSize = 14, FontWeight = FontWeights.Normal });
-            var item = new System.Windows.Controls.MenuItem { Header = header, IsCheckable = true, IsChecked = page.Format == format };
-            System.Windows.Automation.AutomationProperties.SetName(item, label);
-            item.SetResourceReference(StyleProperty, "RbClipMenuItemStyle");
-            item.Click += (_, _) => { page.Format = format; };
-            menu.Items.Add(item);
+            return;
         }
+
+        var menu = new ContextMenu { PlacementTarget = ExportArrow };
+        menu.SetResourceReference(StyleProperty, "EncoreClipMenuStyle");
+        menu.Items.Add(FormatItem(page, "mp4", "Export as video", "VideoIcon"));
+        menu.Items.Add(FormatItem(page, "mp3", "Export as audio", "AudioIcon"));
         menu.Closed += (_, _) => ExportArrow.Focus();
         ExportArrow.ContextMenu = menu;
         menu.IsOpen = true;
     }
-    private async void Export(object sender, RoutedEventArgs e)
+
+    private MenuItem FormatItem(ClipCreatorPage page, string format, string label, string iconKey)
     {
-        if (Page is not { CanOpenOptions: true } page) { return; }
+        var icon = new Path
+        {
+            Width = 16,
+            Height = 16,
+            Stretch = Stretch.Uniform,
+            StrokeThickness = 1.5,
+            Data = (Geometry)FindResource(iconKey),
+        };
+        icon.SetResourceReference(Shape.StrokeProperty, "TextFillColorPrimaryBrush");
+        var header = new StackPanel { Orientation = Orientation.Horizontal };
+        header.Children.Add(icon);
+        header.Children.Add(new TextBlock
+        {
+            Text = label,
+            Margin = new Thickness(8, 0, 0, 0),
+            FontFamily = new FontFamily("Segoe UI"),
+            FontSize = 14,
+            FontWeight = FontWeights.Normal,
+        });
+        var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = page.Format == format };
+        AutomationProperties.SetName(item, label);
+        item.SetResourceReference(StyleProperty, "EncoreClipMenuItemStyle");
+        item.Click += (_, _) => page.Format = format;
+        return item;
+    }
+
+    private async void OnExportClick(object sender, RoutedEventArgs e)
+    {
+        if (Page is not { CanOpenOptions: true } page)
+        {
+            return;
+        }
+
         var dialog = new ClipExportDialog(page);
         try
         {
-            if (dialog.Ask(Window.GetWindow(this))) { await page.ChooseAndExportAsync(ChooseDestination); }
+            if (dialog.Ask(Window.GetWindow(this)))
+            {
+                await page.ChooseAndExportAsync(ChooseDestination);
+            }
         }
-        finally { ExportButton.Focus(); }
-    }
-}
-
-internal static class ClipExportDestination
-{
-    internal static Task<string?> ChooseAsync(ClipCreatorPage page)
-    {
-        var owner = Application.Current?.Windows.OfType<ClipExportDialog>().FirstOrDefault(w => w.IsVisible)
-            ?? Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);
-        if (page.SeparateAudioFiles)
+        finally
         {
-            var folder = new OpenFolderDialog { Title = "Choose the parent folder for the new named MP3 directory", Multiselect = false };
-            return Task.FromResult(folder.ShowDialog(owner) == true ? Path.Combine(folder.FolderName, page.ExportName) : null);
+            ExportButton.Focus();
         }
-        var dialog = new SaveFileDialog
-        {
-            Title = page.SaveLabel, FileName = page.ExportName + "." + page.Format,
-            Filter = page.IsMp4 ? "MP4 video|*.mp4" : "MP3 audio|*.mp3",
-            AddExtension = true, DefaultExt = page.Format, OverwritePrompt = false, CheckFileExists = false,
-        };
-        return Task.FromResult(dialog.ShowDialog(owner) == true ? dialog.FileName : null);
     }
 }

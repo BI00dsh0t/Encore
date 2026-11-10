@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace Encore.App.Settings;
 
@@ -12,18 +12,23 @@ internal partial class TrackLayoutView
     public TrackLayoutView()
     {
         InitializeComponent();
-        DataContextChanged += (_, _) =>
-        {
-            if (DataContext is TrackLayoutPage page)
-            {
-                var rows = CollectionViewSource.GetDefaultView(page.PickerRows);
-                rows.GroupDescriptions.Clear();
-                rows.GroupDescriptions.Add(new PropertyGroupDescription(nameof(AudioPickerRow.Section)));
-            }
-        };
+        DataContextChanged += (_, _) => GroupPickerRows();
     }
 
     private TrackLayoutPage? Page => DataContext as TrackLayoutPage;
+
+    private static bool IsControlDown => Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+
+    // The sound picker lists its rows under their section headings.
+    private void GroupPickerRows()
+    {
+        if (Page is { } page)
+        {
+            var rows = CollectionViewSource.GetDefaultView(page.PickerRows);
+            rows.GroupDescriptions.Clear();
+            rows.GroupDescriptions.Add(new PropertyGroupDescription(nameof(AudioPickerRow.Section)));
+        }
+    }
 
     /// <summary>Drops the root ScrollViewer when hosted inside another page: a nested one swallows the mouse wheel.</summary>
     public void Unscroll()
@@ -37,19 +42,8 @@ internal partial class TrackLayoutView
         }
     }
 
-    private void OnMenuButtonClick(object sender, RoutedEventArgs e) => OpenMenu(sender);
-
-    private void OnPresetButtonClick(object sender, RoutedEventArgs e) => OpenMenu(sender);
-
-    private static void OpenMenu(object sender)
-    {
-        if (sender is Button { ContextMenu: { } menu } button)
-        {
-            menu.PlacementTarget = button;
-            menu.Placement = PlacementMode.Bottom;
-            menu.IsOpen = true;
-        }
-    }
+    // A track's ⋯ button and the Presets button open their menus under themselves.
+    private void OnMenuButtonClick(object sender, RoutedEventArgs e) => ButtonMenu.OpenBelow(sender);
 
     private void OnPresetClick(object sender, RoutedEventArgs e)
     {
@@ -65,44 +59,50 @@ internal partial class TrackLayoutView
         {
             Picker.PlacementTarget = button;
             page.OpenPicker(card);
-            Dispatcher.BeginInvoke(() => PickerSearchBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+            Dispatcher.BeginInvoke(() => PickerSearchBox.Focus(), DispatcherPriority.Input);
         }
     }
 
     private void OnPickerClosed(object? sender, EventArgs e) => Page?.ClosePicker();
 
+    // Down moves from the search box into the list; Enter and Escape work as they do in the list.
     private void OnPickerSearchKeyDown(object sender, KeyEventArgs e)
     {
-        switch (e.Key)
+        if (e.Key == Key.Down && PickerList.Items.Count > 0)
         {
-            case Key.Down when PickerList.Items.Count > 0:
-                FocusSelectedRow();
-                e.Handled = true;
-                break;
-            case Key.Enter when Page?.PickerSelection is { } row:
-                Page.Pick(row, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
-                e.Handled = true;
-                break;
-            case Key.Escape:
-                Page?.ClosePicker();
-                e.Handled = true;
-                break;
+            FocusSelectedRow();
+            e.Handled = true;
+        }
+        else if (HandlePickerKey(e.Key))
+        {
+            e.Handled = true;
         }
     }
 
     private void OnPickerListKeyDown(object sender, KeyEventArgs e)
     {
-        switch (e.Key)
+        if (HandlePickerKey(e.Key))
         {
-            case Key.Enter when Page?.PickerSelection is { } row:
-                Page.Pick(row, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
-                e.Handled = true;
-                break;
-            case Key.Escape:
-                Page?.ClosePicker();
-                e.Handled = true;
-                break;
+            e.Handled = true;
         }
+    }
+
+    // Enter adds the selected row (with Ctrl the picker stays open); Escape closes the picker.
+    private bool HandlePickerKey(Key key)
+    {
+        if (key == Key.Enter && Page?.PickerSelection is { } row)
+        {
+            Page.Pick(row, IsControlDown);
+            return true;
+        }
+
+        if (key == Key.Escape)
+        {
+            Page?.ClosePicker();
+            return true;
+        }
+
+        return false;
     }
 
     // Typing in the list goes to the search box.
@@ -121,7 +121,7 @@ internal partial class TrackLayoutView
             && ItemsControl.ContainerFromElement(PickerList, hit) is ListBoxItem { DataContext: AudioPickerRow row, IsEnabled: true }
             && Page is { } page)
         {
-            page.Pick(row, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
+            page.Pick(row, IsControlDown);
             e.Handled = true;
         }
     }

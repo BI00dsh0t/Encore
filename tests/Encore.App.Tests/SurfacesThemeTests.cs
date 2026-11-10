@@ -181,7 +181,7 @@ public sealed class SurfacesThemeTests
 
             theme.Apply(AppTheme.Fluent);
             Sta.Pump(TimeSpan.FromMilliseconds(100));
-            Assert.Same(overlay.FindResource("RbOverlayCardBrush"), card.Background);
+            Assert.Same(overlay.FindResource("EncoreOverlayCardBrush"), card.Background);
             Assert.Same(overlay.FindResource("SystemFillColorCriticalBrush"), text.Foreground);
             Assert.Equal(fixedBrushes, GlyphColours(glyphs));
             Save(root, "overlay-card-fluent.png");

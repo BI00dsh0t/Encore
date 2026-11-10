@@ -25,6 +25,40 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void EscapeAndBackCloseAnOpenItemPageAndTheSettingsButtonOpensSettings()
+    {
+        var model = Create();
+        Assert.False(model.HandleEscape());
+        Assert.False(model.GoBack());
+
+        model.OpenSettings();
+        Assert.True(model.IsSettingsTabSelected);
+        model.SelectedPage = model.GameProfiles;
+        var drillIn = model.CurrentDrillIn!;
+        drillIn.Open("game", "Game");
+        Assert.True(model.HandleEscape());
+        Assert.False(drillIn.IsOpen);
+
+        drillIn.Open("game", "Game");
+        Assert.True(model.GoBack());
+        Assert.False(drillIn.IsOpen);
+
+        // Pressed again on the settings pages, the Settings button goes back to the page's list.
+        drillIn.Open("game", "Game");
+        model.OpenSettings();
+        Assert.False(drillIn.IsOpen);
+        Assert.Same(model.GameProfiles, model.SelectedPage);
+    }
+
+    [Fact]
+    public void TheNavPaneIsFullNarrowInASmallWindowAndARailWhenCollapsed()
+    {
+        Assert.Equal(200, NavPaneLayout.WidthFor(expanded: true, windowWidth: 960));
+        Assert.Equal(160, NavPaneLayout.WidthFor(expanded: true, windowWidth: 600));
+        Assert.Equal(58, NavPaneLayout.WidthFor(expanded: false, windowWidth: 960));
+    }
+
+    [Fact]
     public void ARefreshRendersTheSnapshotAndTheSettingsPages()
     {
         var model = Create();

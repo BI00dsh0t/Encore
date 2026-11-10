@@ -60,10 +60,15 @@ public sealed class MainWindowTests
                 sections.Focus();
                 sections.IsDropDownOpen = true;
                 window.UpdateLayout();
+
+                // The list highlights its current section on a dispatcher turn after it opens.
+                Sta.Pump(TimeSpan.FromMilliseconds(30));
             }
             OpenSectionMenu();
             var current = (ComboBoxItem)sections.ItemContainerGenerator.ContainerFromItem(model.SelectedNavItem);
-            current.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = UIElement.PreviewMouseLeftButtonUpEvent });
+            // The left-button event is direct, so the click is raised as the tunnelling mouse-up the section list hears.
+            var click = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseUpEvent };
+            current.RaiseEvent(click);
             Assert.False(drillIn.IsOpen);
             sections.IsDropDownOpen = false;
 

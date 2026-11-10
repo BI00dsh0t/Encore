@@ -40,7 +40,7 @@ internal sealed class OverlayWindow : ShellWindow
     private static readonly Brush Light = Freeze(new SolidColorBrush(Color.FromRgb(0xEE, 0xEE, 0xEE)));
 
     // The message card's theme keys (DESIGN.md "Overlay message card"); the glyphs above keep fixed colours.
-    internal const string CardBrushKey = "RbOverlayCardBrush";
+    internal const string CardBrushKey = "EncoreOverlayCardBrush";
     internal const string CardStrokeKey = "SurfaceStrokeColorFlyoutBrush";
     internal const string ErrorTextKey = "SystemFillColorCriticalBrush";
     internal const string NoticeTextKey = "SystemFillColorSuccessBrush";

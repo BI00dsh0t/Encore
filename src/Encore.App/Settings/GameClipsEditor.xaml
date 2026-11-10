@@ -9,8 +9,12 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
-        <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Save the last" />
-        <TextBox Grid.Column="1" MinWidth="80" Margin="0,4" AutomationProperties.Name="Clip length in seconds" Text="{Binding BufferWindowText}" />
+        <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Save the last" />
+        <TextBox Grid.Column="1"
+                 MinWidth="80"
+                 Margin="0,4"
+                 AutomationProperties.Name="Clip length in seconds"
+                 Text="{Binding BufferWindowText}" />
         <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" Text="seconds" />
     </Grid>
 </UserControl>

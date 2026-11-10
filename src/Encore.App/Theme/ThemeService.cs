@@ -50,13 +50,13 @@ internal sealed class ThemeService
         "ControlStrongStrokeColorDisabledBrush", "TextFillColorPrimaryBrush", "TextFillColorSecondaryBrush",
         "TextFillColorDisabledBrush", "TextOnAccentFillColorPrimaryBrush", "TextOnAccentFillColorDisabledBrush",
         "AccentTextFillColorPrimaryBrush", "AccentFillColorDefaultBrush", "AccentFillColorSecondaryBrush",
-        "AccentFillColorTertiaryBrush", "AccentFillColorDisabledBrush", "RbAccentSubtleBrush",
+        "AccentFillColorTertiaryBrush", "AccentFillColorDisabledBrush", "EncoreAccentSubtleBrush",
         "SystemFillColorCriticalBrush", "SystemFillColorCriticalBackgroundBrush", "SystemFillColorCautionBrush",
-        "SystemFillColorCautionBackgroundBrush", "SystemFillColorSuccessBrush", "RbRecordBrush",
-        "FocusStrokeColorOuterBrush", "FocusStrokeColorInnerBrush", "RbOverlayCardBrush",
-        "ControlCornerRadius", "OverlayCornerRadius", "RbSmallCornerRadius", "RbNavItemCornerRadius",
+        "SystemFillColorCautionBackgroundBrush", "SystemFillColorSuccessBrush", "EncoreRecordBrush",
+        "FocusStrokeColorOuterBrush", "FocusStrokeColorInnerBrush", "EncoreOverlayCardBrush",
+        "ControlCornerRadius", "OverlayCornerRadius", "EncoreSmallCornerRadius", "EncoreNavItemCornerRadius",
         "CaptionTextBlockStyle", "BodyTextBlockStyle", "BodyStrongTextBlockStyle", "SubtitleTextBlockStyle",
-        "RbSectionHeaderStyle", "RbPageTitleStyle", "RbBrandStyle",
+        "EncoreSectionHeaderStyle", "EncorePageTitleStyle", "EncoreBrandStyle",
         "AccentButtonStyle", "DefaultControlFocusVisualStyle",
     ];
 

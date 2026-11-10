@@ -4,10 +4,10 @@
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <FontFamily x:Key="RbAudioGlyphFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <FontFamily x:Key="EncoreAudioGlyphFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
     <!-- The save bar: a neutral info bar, card-secondary with an accent left edge, sticky above the page content. -->
-    <Style x:Key="RbAudioSaveBarStyle" TargetType="ContentControl">
+    <Style x:Key="EncoreAudioSaveBarStyle" TargetType="ContentControl">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}" />
@@ -33,7 +33,7 @@
     </Style>
 
     <!-- A Track card, spacing.sm apart; focusable so F2 and Alt+arrows act on it. -->
-    <Style x:Key="RbAudioTrackCardStyle" TargetType="Border">
+    <Style x:Key="EncoreAudioTrackCardStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -45,7 +45,7 @@
     </Style>
 
     <!-- The track number: subtitle, text-secondary. -->
-    <Style x:Key="RbAudioTrackNumberStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreAudioTrackNumberStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="20" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -55,7 +55,7 @@
     </Style>
 
     <!-- The name's outline: danger while a save was refused for its blank name, else invisible. -->
-    <Style x:Key="RbAudioNameOutlineStyle" TargetType="Border">
+    <Style x:Key="EncoreAudioNameOutlineStyle" TargetType="Border">
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="BorderBrush" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
         <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}" />
@@ -67,7 +67,7 @@
     </Style>
 
     <!-- The summary under the name: caption, text-secondary, or caution when the track is silent. -->
-    <Style x:Key="RbAudioSummaryStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreAudioSummaryStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{DynamicResource CaptionTextBlockFontSize}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="Margin" Value="0,2,0,0" />
@@ -79,8 +79,8 @@
     </Style>
 
     <!-- A playback or microphone glyph, text-secondary. -->
-    <Style x:Key="RbAudioGlyphStyle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource RbAudioGlyphFont}" />
+    <Style x:Key="EncoreAudioGlyphStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource EncoreAudioGlyphFont}" />
         <Setter Property="FontSize" Value="16" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="VerticalAlignment" Value="Center" />
@@ -94,7 +94,7 @@
     </Style>
 
     <!-- A source row's kind ("playback", "microphone"): caption, text-secondary. -->
-    <Style x:Key="RbAudioCaptionStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreAudioCaptionStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{DynamicResource CaptionTextBlockFontSize}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="VerticalAlignment" Value="Center" />
@@ -102,7 +102,7 @@
     </Style>
 
     <!-- A source row: focusable, so Delete removes it from the Track. -->
-    <Style x:Key="RbAudioSourceRowStyle" TargetType="Border">
+    <Style x:Key="EncoreAudioSourceRowStyle" TargetType="Border">
         <Setter Property="Padding" Value="4,4" />
         <Setter Property="Focusable" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
@@ -116,7 +116,7 @@
     </Style>
 
     <!-- The sound picker: the flyout surface, at most 420 tall, scrolling inside. -->
-    <Style x:Key="RbAudioPickerStyle" TargetType="Border">
+    <Style x:Key="EncoreAudioPickerStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorQuarternaryBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -127,7 +127,7 @@
     </Style>
 
     <!-- A picker row's caption: the parent, or "Windows default" in text-accent. -->
-    <Style x:Key="RbAudioPickerCaptionStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreAudioPickerCaptionStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{DynamicResource CaptionTextBlockFontSize}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Style.Triggers>
@@ -138,7 +138,7 @@
     </Style>
 
     <!-- A picker row's container: subtle hover and highlight; an added row is disabled. -->
-    <Style x:Key="RbAudioPickerItemStyle" TargetType="ListBoxItem">
+    <Style x:Key="EncoreAudioPickerItemStyle" TargetType="ListBoxItem">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />

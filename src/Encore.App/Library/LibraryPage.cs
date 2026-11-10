@@ -909,6 +909,78 @@ internal sealed class LibraryPage : Observable
         }
     }
 
+    /// <summary>A click on a row: selects it by the Ctrl and Shift rules, and a plain double click also opens it.</summary>
+    public void ClickRow(LibraryRow row, int clickCount, bool ctrl, bool shift)
+    {
+        Click(row, ctrl, shift);
+        if (clickCount == 2 && !ctrl && !shift)
+        {
+            OpenFocused();
+        }
+    }
+
+    /// <summary>Readies the selection for the context menu. False when the menu has nothing to act on, so it stays shut.</summary>
+    public bool TryPrepareContextMenu(bool fromKeyboard, bool onRow)
+    {
+        if (fromKeyboard)
+        {
+            PrepareContextMenu(FocusedRow);
+        }
+        else if (!onRow)
+        {
+            return false;
+        }
+
+        return HasShownSelection;
+    }
+
+    /// <summary>The row that takes keyboard focus as it enters the list: the focused row, else the first.</summary>
+    public LibraryRow? FocusForEntry()
+    {
+        if (FocusedRow is null)
+        {
+            MoveFocus(LibraryMove.Home, 0, ctrl: true, shift: false);
+        }
+
+        return FocusedRow;
+    }
+
+    /// <summary>Runs the list's shortcut for a key that doesn't move the focus. False when the key isn't one.</summary>
+    public bool HandleKey(Key key, bool ctrl)
+    {
+        switch (key)
+        {
+            case Key.A when ctrl:
+                SelectAll();
+                break;
+            case Key.Space when ctrl:
+                ToggleFocusedSelection();
+                break;
+            case Key.Space:
+                ToggleFocusedFavourite();
+                break;
+            case Key.Enter:
+                OpenFocused();
+                break;
+            case Key.Delete:
+                DeleteSelection();
+                break;
+            case Key.F2:
+                RenameCommand.Execute(null);
+                break;
+            case Key.C when ctrl:
+                CopyCommand.Execute(null);
+                break;
+            case Key.Escape:
+                ClearSelection();
+                break;
+            default:
+                return false;
+        }
+
+        return true;
+    }
+
     /// <summary>Pauses the player, if one is playing: the window was hidden.</summary>
     public void PausePlayer()
     {

@@ -1,3 +1,4 @@
+using System.Windows.Input;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -59,6 +60,32 @@ public sealed class LibraryPlayerTests : IDisposable
     }
 
     [Fact]
+    public void ADoubleClickOpensARowAndTheListsKeysAndMenuFollowTheSelection()
+    {
+        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        page.Render(State());
+
+        // The menu stays shut off a row and with nothing selected; from the keyboard it takes the focused row.
+        Assert.False(page.TryPrepareContextMenu(fromKeyboard: false, onRow: false));
+        Assert.False(page.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
+        var entry = page.FocusForEntry();
+        Assert.NotNull(entry);
+        Assert.Same(entry, page.FocusedRow);
+        Assert.True(page.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
+
+        // Escape is the list's key and clears the selection; a key the list doesn't know is left alone.
+        Assert.True(page.HandleKey(Key.Escape, ctrl: false));
+        Assert.False(page.HasShownSelection);
+        Assert.False(page.HandleKey(Key.B, ctrl: false));
+
+        // A double click with Ctrl only selects; a plain one opens the player page.
+        page.ClickRow(Row(page, Clip), clickCount: 2, ctrl: true, shift: false);
+        Assert.False(page.DrillIn.IsOpen);
+        page.ClickRow(Row(page, Clip), clickCount: 2, ctrl: false, shift: false);
+        Assert.True(page.DrillIn.IsOpen);
+    }
+
+    [Fact]
     public void ThePlayerSharesTheFileForRenameAndDeleteAndBackReleasesIt()
     {
         var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
@@ -117,9 +144,7 @@ public sealed class LibraryPlayerTests : IDisposable
         var page = PlayingPage();
         var released = false;
 
-        PlayerView.Draw(
-            page,
-            () => throw failure switch
+        page.DrawFrame(() => throw failure switch
             {
                 "out of video memory" => new OutOfMemoryException(),
                 "com" => new COMException("device removed", unchecked((int)0x887A0005)),
@@ -141,10 +166,26 @@ public sealed class LibraryPlayerTests : IDisposable
         _player.CopyFails = new COMException("lost", unchecked((int)0x887A0007));
         using var surface = new VideoSurface(64, 36, new WindowInteropHelper(new Window()).EnsureHandle());
 
-        PlayerView.Draw(page, () => surface, _ => Assert.Fail("A skipped frame isn't shown."), () => Assert.Fail("The surface is kept."));
+        page.DrawFrame(() => surface, _ => Assert.Fail("A skipped frame isn't shown."), () => Assert.Fail("The surface is kept."));
 
         Assert.Equal(PlayerState.Playing, page.State);
     });
+
+    [Fact]
+    public void ThePagesKeysPauseSeekAndChangeTheVolume()
+    {
+        var page = PlayingPage();
+
+        Assert.True(page.HandleKey(Key.Space));
+        Assert.False(_player.IsPlaying);
+        Assert.True(page.HandleKey(Key.Right));
+        Assert.Equal([PlayerPage.SeekStep], _player.Seeks);
+        Assert.True(page.HandleKey(Key.Down));
+        Assert.Equal(0.95, _player.Volume);
+        Assert.True(page.HandleKey(Key.F));
+        Assert.True(page.IsFullScreen);
+        Assert.False(page.HandleKey(Key.B));
+    }
 
     private PlayerPage PlayingPage()
     {
@@ -177,9 +218,9 @@ public sealed class LibraryPlayerTests : IDisposable
     [Fact]
     public void TheSurfaceFitsTheVideosAspectIntoThePictureAndNeverGrowsPastIt()
     {
-        Assert.Equal((1600, 540), PlayerView.Fit(6400, 2160, 1600, 900));
-        Assert.Equal((1280, 720), PlayerView.Fit(1280, 720, 3840, 2160));
-        Assert.Equal((800, 450), PlayerView.Fit(1920, 1080, 801, 900));
+        Assert.Equal((1600, 540), PictureFit.Size(6400, 2160, 1600, 900));
+        Assert.Equal((1280, 720), PictureFit.Size(1280, 720, 3840, 2160));
+        Assert.Equal((800, 450), PictureFit.Size(1920, 1080, 801, 900));
     }
 
     private StateSnapshot State() => _engine.State! with

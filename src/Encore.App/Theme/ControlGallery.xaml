@@ -9,12 +9,14 @@
                  WindowStartupLocation="CenterScreen">
     <!-- Every generic control in every state, for checking both themes; the window keeps no resources of its own. -->
     <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto">
-        <StackPanel x:Name="Root" Margin="{DynamicResource RbPagePadding}">
-            <ContentControl Content="Control gallery" Style="{DynamicResource RbPageTitleStyle}" />
-            <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Style="{DynamicResource CaptionTextBlockStyle}"
+        <StackPanel x:Name="Root" Margin="{DynamicResource EncorePagePadding}">
+            <ContentControl Content="Control gallery" Style="{DynamicResource EncorePageTitleStyle}" />
+            <TextBlock Margin="0,4,0,0"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Style="{DynamicResource CaptionTextBlockStyle}"
                        Text="Hover, press and Tab through the controls to see their live states. Switch the theme on the General page." />
 
-            <ContentControl Margin="0,24,0,0" Content="Buttons" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,24,0,0" Content="Buttons" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <WrapPanel Margin="0,8,0,0">
                 <Button Content="Button" Margin="0,0,12,8" />
                 <Button Content="Disabled" IsEnabled="False" Margin="0,0,12,8" />
@@ -22,24 +24,24 @@
                 <Button Content="Accent disabled" IsEnabled="False" Style="{DynamicResource AccentButtonStyle}" Margin="0,0,12,8" />
             </WrapPanel>
 
-            <ContentControl Margin="0,16,0,0" Content="Toggle buttons" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,16,0,0" Content="Toggle buttons" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <WrapPanel Margin="0,8,0,0">
                 <ToggleButton Content="Favourites only" Margin="0,0,12,8" />
                 <ToggleButton Content="Checked" IsChecked="True" Margin="0,0,12,8" />
                 <ToggleButton Content="Disabled" IsEnabled="False" Margin="0,0,12,8" />
                 <ToggleButton Content="Checked disabled" IsChecked="True" IsEnabled="False" Margin="0,0,12,8" />
-                <ToggleButton Style="{DynamicResource RbStarToggleStyle}" ToolTip="Favourite" Margin="0,0,12,8" />
-                <ToggleButton IsChecked="True" Style="{DynamicResource RbStarToggleStyle}" ToolTip="Favourite" Margin="0,0,12,8" />
+                <ToggleButton Style="{DynamicResource EncoreStarToggleStyle}" ToolTip="Favourite" Margin="0,0,12,8" />
+                <ToggleButton IsChecked="True" Style="{DynamicResource EncoreStarToggleStyle}" ToolTip="Favourite" Margin="0,0,12,8" />
             </WrapPanel>
 
-            <ContentControl Margin="0,16,0,0" Content="Text boxes" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,16,0,0" Content="Text boxes" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <WrapPanel Margin="0,8,0,0">
                 <TextBox Width="200" Text="Text box" Margin="0,0,12,8" />
                 <TextBox Width="200" IsReadOnly="True" Text="Read-only" Margin="0,0,12,8" />
                 <TextBox Width="200" IsEnabled="False" Text="Disabled" Margin="0,0,12,8" />
             </WrapPanel>
 
-            <ContentControl Margin="0,16,0,0" Content="Combo boxes" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,16,0,0" Content="Combo boxes" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <WrapPanel Margin="0,8,0,0">
                 <ComboBox Width="200" SelectedIndex="0" Margin="0,0,12,8">
                     <ComboBoxItem Content="Fluent (follows Windows)" />
@@ -51,7 +53,7 @@
                 </ComboBox>
             </WrapPanel>
 
-            <ContentControl Margin="0,16,0,0" Content="Check boxes and radio buttons" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,16,0,0" Content="Check boxes and radio buttons" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <WrapPanel Margin="0,8,0,0">
                 <CheckBox Content="Unchecked" Margin="0,0,16,8" />
                 <CheckBox Content="Checked" IsChecked="True" Margin="0,0,16,8" />
@@ -65,13 +67,13 @@
                 <RadioButton Content="Checked disabled" GroupName="GalleryDisabled" IsChecked="True" IsEnabled="False" Margin="0,0,16,8" />
             </WrapPanel>
 
-            <ContentControl Margin="0,16,0,0" Content="Sliders" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,16,0,0" Content="Sliders" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <WrapPanel Margin="0,8,0,0">
                 <Slider Width="200" Maximum="100" Value="40" Margin="0,0,24,8" />
                 <Slider Width="200" IsEnabled="False" Maximum="100" Value="60" Margin="0,0,24,8" />
             </WrapPanel>
 
-            <ContentControl Margin="0,16,0,0" Content="Lists" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,16,0,0" Content="Lists" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <WrapPanel Margin="0,8,0,0">
                 <ListBox Width="200" Height="130" SelectedIndex="1" Margin="0,0,12,8">
                     <ListBoxItem Content="Microphone" />
@@ -92,9 +94,11 @@
                 </ListView>
             </WrapPanel>
 
-            <ContentControl Margin="0,16,0,0" Content="Menus, tool tips and tabs" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,16,0,0" Content="Menus, tool tips and tabs" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <WrapPanel Margin="0,8,0,0">
-                <Button Content="Right-click for a menu" Margin="0,0,12,8" ToolTip="A tool tip. Long tips wrap at 320 pixels, so this one runs over two lines to show it.">
+                <Button Content="Right-click for a menu"
+                        Margin="0,0,12,8"
+                        ToolTip="A tool tip. Long tips wrap at 320 pixels, so this one runs over two lines to show it.">
                     <Button.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="Open" InputGestureText="Enter" />
@@ -105,7 +109,10 @@
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
-                <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="Hover the button for its tool tip." Margin="0,0,12,8" />
+                <TextBlock VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="Hover the button for its tool tip."
+                           Margin="0,0,12,8" />
             </WrapPanel>
             <TabControl Height="90" Margin="0,8,0,0">
                 <TabItem Header="Selected">
@@ -115,33 +122,39 @@
                 <TabItem Header="Disabled" IsEnabled="False" />
             </TabControl>
 
-            <ContentControl Margin="0,16,0,0" Content="Progress and level meters" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,16,0,0" Content="Progress and level meters" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <StackPanel Width="300" Margin="0,8,0,0" HorizontalAlignment="Left">
                 <ProgressBar Maximum="1" Value="0.6" />
                 <ProgressBar Margin="0,8,0,0" IsEnabled="False" Maximum="1" Value="0.6" />
-                <ProgressBar Margin="0,12,0,0" Maximum="1" Style="{DynamicResource RbLevelMeterStyle}" Value="0.5" />
-                <ProgressBar Margin="0,8,0,0" Maximum="1" Style="{DynamicResource RbLevelMeterStyle}" Value="0.95" />
-                <ProgressBar Margin="0,8,0,0" IsEnabled="False" Maximum="1" Style="{DynamicResource RbLevelMeterStyle}" Value="0.7" />
+                <ProgressBar Margin="0,12,0,0" Maximum="1" Style="{DynamicResource EncoreLevelMeterStyle}" Value="0.5" />
+                <ProgressBar Margin="0,8,0,0" Maximum="1" Style="{DynamicResource EncoreLevelMeterStyle}" Value="0.95" />
+                <ProgressBar Margin="0,8,0,0" IsEnabled="False" Maximum="1" Style="{DynamicResource EncoreLevelMeterStyle}" Value="0.7" />
             </StackPanel>
 
-            <ContentControl Margin="0,16,0,0" Content="Cards and info bars" Style="{DynamicResource RbSectionHeaderStyle}" />
-            <Border Margin="0,8,0,0" Style="{DynamicResource RbCardStyle}">
+            <ContentControl Margin="0,16,0,0" Content="Cards and info bars" Style="{DynamicResource EncoreSectionHeaderStyle}" />
+            <Border Margin="0,8,0,0" Style="{DynamicResource EncoreCardStyle}">
                 <StackPanel>
                     <TextBlock Style="{DynamicResource BodyStrongTextBlockStyle}" Text="A card" />
-                    <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" Style="{DynamicResource CaptionTextBlockStyle}" Text="Settings sections and the status header are cards." />
+                    <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Style="{DynamicResource CaptionTextBlockStyle}"
+                               Text="Settings sections and the status header are cards." />
                 </StackPanel>
             </Border>
-            <ContentControl Margin="0,8,0,0" Content="Saving failed: the Clips folder is full." Style="{DynamicResource RbInfoBarDangerStyle}" />
-            <ContentControl Margin="0,8,0,0" Style="{DynamicResource RbInfoBarCautionStyle}">
+            <ContentControl Margin="0,8,0,0"
+                            Content="Saving failed: the Clips folder is full."
+                            Style="{DynamicResource EncoreInfoBarDangerStyle}" />
+            <ContentControl Margin="0,8,0,0" Style="{DynamicResource EncoreInfoBarCautionStyle}">
                 <DockPanel>
                     <Button Margin="12,0,0,0" Content="Acknowledge" DockPanel.Dock="Right" />
-                    <TextBlock VerticalAlignment="Center" Text="The Library index was rebuilt. Cleanup waits until you acknowledge it." TextWrapping="Wrap" />
+                    <TextBlock VerticalAlignment="Center"
+                               Text="The Library index was rebuilt. Cleanup waits until you acknowledge it."
+                               TextWrapping="Wrap" />
                 </DockPanel>
             </ContentControl>
 
-            <ContentControl Margin="0,16,0,0" Content="Type and colour" Style="{DynamicResource RbSectionHeaderStyle}" />
+            <ContentControl Margin="0,16,0,0" Content="Type and colour" Style="{DynamicResource EncoreSectionHeaderStyle}" />
             <StackPanel Margin="0,8,0,0">
-                <ContentControl Content="Encore" Style="{DynamicResource RbBrandStyle}" />
+                <ContentControl Content="Encore" Style="{DynamicResource EncoreBrandStyle}" />
                 <TextBlock Style="{DynamicResource SubtitleTextBlockStyle}" Text="Subtitle" />
                 <TextBlock Style="{DynamicResource BodyStrongTextBlockStyle}" Text="Body strong" />
                 <TextBlock Style="{DynamicResource BodyTextBlockStyle}" Text="Body text, in text-primary." />
@@ -153,12 +166,20 @@
                     <TextBlock Margin="0,0,16,0" Foreground="{DynamicResource SystemFillColorCriticalBrush}" Text="Danger" />
                     <TextBlock Margin="0,0,16,0" Foreground="{DynamicResource SystemFillColorCautionBrush}" Text="Caution" />
                     <TextBlock Margin="0,0,16,0" Foreground="{DynamicResource SystemFillColorSuccessBrush}" Text="Success" />
-                    <Ellipse Width="10" Height="10" Margin="0,0,6,0" Fill="{DynamicResource RbRecordBrush}" />
+                    <Ellipse Width="10" Height="10" Margin="0,0,6,0" Fill="{DynamicResource EncoreRecordBrush}" />
                     <TextBlock Text="Record" />
                 </WrapPanel>
-                <Border Width="260" Margin="0,8,0,0" Padding="8,3" HorizontalAlignment="Left" Background="{DynamicResource RbOverlayCardBrush}"
-                        BorderBrush="{DynamicResource SurfaceStrokeColorFlyoutBrush}" BorderThickness="1" CornerRadius="{DynamicResource ControlCornerRadius}">
-                    <TextBlock Foreground="{DynamicResource SystemFillColorSuccessBrush}" Style="{DynamicResource CaptionTextBlockStyle}" Text="Overlay card: Clip saved" />
+                <Border Width="260"
+                        Margin="0,8,0,0"
+                        Padding="8,3"
+                        HorizontalAlignment="Left"
+                        Background="{DynamicResource EncoreOverlayCardBrush}"
+                        BorderBrush="{DynamicResource SurfaceStrokeColorFlyoutBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{DynamicResource ControlCornerRadius}">
+                    <TextBlock Foreground="{DynamicResource SystemFillColorSuccessBrush}"
+                               Style="{DynamicResource CaptionTextBlockStyle}"
+                               Text="Overlay card: Clip saved" />
                 </Border>
             </StackPanel>
         </StackPanel>

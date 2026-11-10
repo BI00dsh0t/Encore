@@ -12,7 +12,7 @@
         <ScrollViewer x:Name="ListScroller"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
-            <theme:SettingsContent Style="{DynamicResource RbSettingsContentStyle}">
+            <theme:SettingsContent Style="{DynamicResource EncoreSettingsContentStyle}">
                 <DockPanel Margin="0,0,0,12">
                     <Button Margin="12,0,0,0"
                             VerticalAlignment="Top"
@@ -32,7 +32,7 @@
                          AutomationProperties.Name="Games"
                          Background="{DynamicResource SubtleFillColorTransparentBrush}"
                          BorderThickness="0"
-                         ItemContainerStyle="{DynamicResource RbGameRowStyle}"
+                         ItemContainerStyle="{DynamicResource EncoreGameRowStyle}"
                          ItemsSource="{Binding Profiles}"
                          KeyDown="OnListKeyDown"
                          MouseLeftButtonUp="OnListClick"
@@ -51,7 +51,7 @@
                                 <DataTemplate>
                                     <ContentControl Margin="0,12,0,8"
                                                     Content="{Binding Name}"
-                                                    Style="{DynamicResource RbSectionHeaderStyle}"
+                                                    Style="{DynamicResource EncoreSectionHeaderStyle}"
                                                     Visibility="{Binding Name, Converter={StaticResource GroupHeaderVisible}}" />
                                 </DataTemplate>
                             </GroupStyle.HeaderTemplate>
@@ -60,29 +60,33 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <DockPanel>
-                                <Border DockPanel.Dock="Left" Style="{DynamicResource RbGameIconTileStyle}">
+                                <Border DockPanel.Dock="Left" Style="{DynamicResource EncoreGameIconTileStyle}">
                                     <Grid>
                                         <TextBlock HorizontalAlignment="Center"
                                                    VerticalAlignment="Center"
                                                    FontWeight="SemiBold"
                                                    Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
                                                    Text="{Binding Initial}" />
-                                        <Image Source="{Binding Icon}" Stretch="Uniform" Visibility="{Binding HasIcon, Converter={StaticResource Visible}}" />
+                                        <Image Source="{Binding Icon}"
+                                               Stretch="Uniform"
+                                               Visibility="{Binding HasIcon, Converter={StaticResource Visible}}" />
                                     </Grid>
                                 </Border>
-                                <TextBlock DockPanel.Dock="Right" Style="{DynamicResource RbGamesChevronStyle}" />
+                                <TextBlock DockPanel.Dock="Right" Style="{DynamicResource EncoreGamesChevronStyle}" />
                                 <Border DockPanel.Dock="Right"
-                                        Style="{DynamicResource RbGamesUnsavedDotStyle}"
+                                        Style="{DynamicResource EncoreGamesUnsavedDotStyle}"
                                         ToolTip="Unsaved changes"
                                         Visibility="{Binding HasUnsavedChanges, Converter={StaticResource Visible}}" />
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Style="{DynamicResource RbGameNameStyle}" Text="{Binding Name}" />
+                                    <TextBlock Style="{DynamicResource EncoreGameNameStyle}" Text="{Binding Name}" />
                                     <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
-                                        <TextBlock Style="{DynamicResource RbGameCaptionStyle}" Text="{Binding Caption}" />
-                                        <Border Style="{DynamicResource RbPillAccentStyle}" Visibility="{Binding IsCapturing, Converter={StaticResource Visible}}">
+                                        <TextBlock Style="{DynamicResource EncoreGameCaptionStyle}" Text="{Binding Caption}" />
+                                        <Border Style="{DynamicResource EncorePillAccentStyle}"
+                                                Visibility="{Binding IsCapturing, Converter={StaticResource Visible}}">
                                             <TextBlock Text="Capturing now" />
                                         </Border>
-                                        <Border Style="{DynamicResource RbPillNeutralStyle}" Visibility="{Binding Ignored, Converter={StaticResource Visible}}">
+                                        <Border Style="{DynamicResource EncorePillNeutralStyle}"
+                                                Visibility="{Binding Ignored, Converter={StaticResource Visible}}">
                                             <TextBlock Text="Not captured" />
                                         </Border>
                                     </StackPanel>

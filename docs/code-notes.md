@@ -1733,6 +1733,8 @@ Volume:
 - The position is read for the seek bar about ten times a second while playing.
 - Keys bubble to the page (KeyDown, not PreviewKeyDown), so a focused control's own keys win.
 - The gear's menu is the theme's ContextMenu: Esc, a click outside and a choice close it. Its heading is not an item.
+- The no-picture wait is `NoPictureWatch`, the texture size rule is `PictureFit`, and one present's work and the
+  page's keys are `PlayerPage.DrawFrame` and `PlayerPage.HandleKey`.
 
 ### WindowsMediaPlayer
 

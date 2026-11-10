@@ -19,23 +19,44 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock Style="{DynamicResource RbSettingsLabelStyle}" Text="Format" />
-        <ComboBox Grid.Column="1" Margin="0,4" DisplayMemberPath="Label" ItemsSource="{Binding Codecs}" SelectedItem="{Binding SelectedCodec}" />
-        <TextBlock Grid.Row="1" Margin="0,10,12,0" VerticalAlignment="Top" Style="{DynamicResource RbSettingsLabelStyle}" Text="Resolution" />
+        <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Format" />
+        <ComboBox Grid.Column="1"
+                  Margin="0,4"
+                  DisplayMemberPath="Label"
+                  ItemsSource="{Binding Codecs}"
+                  SelectedItem="{Binding SelectedCodec}" />
+        <TextBlock Grid.Row="1"
+                   Margin="0,10,12,0"
+                   VerticalAlignment="Top"
+                   Style="{DynamicResource EncoreSettingsLabelStyle}"
+                   Text="Resolution" />
         <StackPanel Grid.Row="1" Grid.Column="1">
-            <ComboBox Margin="0,4" DisplayMemberPath="Label" ItemsSource="{Binding Resolutions}" SelectedItem="{Binding SelectedResolution}" />
-            <TextBlock Style="{DynamicResource RbSettingsHelpTextStyle}" Text="{Binding SourceHelp}" Visibility="{Binding SourceHelp, Converter={StaticResource Collapsed}}" />
+            <ComboBox Margin="0,4"
+                      DisplayMemberPath="Label"
+                      ItemsSource="{Binding Resolutions}"
+                      SelectedItem="{Binding SelectedResolution}" />
+            <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                       Text="{Binding SourceHelp}"
+                       Visibility="{Binding SourceHelp, Converter={StaticResource Collapsed}}" />
         </StackPanel>
-        <TextBlock Grid.Row="2" Style="{DynamicResource RbSettingsLabelStyle}" Text="Frame rate" />
+        <TextBlock Grid.Row="2" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Frame rate" />
         <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
             <TextBox MinWidth="80" Margin="0,4" Text="{Binding FpsText}" />
-            <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Style="{DynamicResource RbSettingsStatusTextStyle}" Text="{Binding MaxFps, StringFormat='fps (up to {0})'}" />
+            <TextBlock Margin="8,0,0,0"
+                       VerticalAlignment="Center"
+                       Style="{DynamicResource EncoreSettingsStatusTextStyle}"
+                       Text="{Binding MaxFps, StringFormat='fps (up to {0})'}" />
         </StackPanel>
-        <TextBlock Grid.Row="3" Style="{DynamicResource RbSettingsLabelStyle}" Text="Bitrate" />
+        <TextBlock Grid.Row="3" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Bitrate" />
         <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
             <TextBox MinWidth="100" Margin="0,4" Text="{Binding BitrateText}" />
-            <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Style="{DynamicResource RbSettingsStatusTextStyle}" Text="kbps" />
+            <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Style="{DynamicResource EncoreSettingsStatusTextStyle}" Text="kbps" />
         </StackPanel>
-        <CheckBox Grid.Row="4" Grid.Column="1" Margin="0,8,0,4" FontSize="{DynamicResource BodyTextBlockFontSize}" Content="Variable bitrate (smaller files in quiet scenes)" IsChecked="{Binding IsVbr}" />
+        <CheckBox Grid.Row="4"
+                  Grid.Column="1"
+                  Margin="0,8,0,4"
+                  FontSize="{DynamicResource BodyTextBlockFontSize}"
+                  Content="Variable bitrate (smaller files in quiet scenes)"
+                  IsChecked="{Binding IsVbr}" />
     </Grid>
 </UserControl>

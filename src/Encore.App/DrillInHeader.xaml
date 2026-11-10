@@ -12,14 +12,14 @@
                 AutomationProperties.Name="{Binding BackName}"
                 Command="{Binding BackCommand}"
                 ToolTip="Back (Esc)">
-            <TextBlock FontFamily="{DynamicResource RbGamesGlyphFont}" FontSize="16" Text="&#xE72B;" />
+            <TextBlock FontFamily="{DynamicResource EncoreGamesGlyphFont}" FontSize="16" Text="&#xE72B;" />
         </Button>
         <TextBlock VerticalAlignment="Center" FontSize="20">
-            <Hyperlink Command="{Binding BackCommand}" Style="{DynamicResource RbGamesLinkStyle}">
+            <Hyperlink Command="{Binding BackCommand}" Style="{DynamicResource EncoreGamesLinkStyle}">
                 <Run Text="{Binding ParentTitle, Mode=OneWay}" />
             </Hyperlink>
         </TextBlock>
-        <TextBlock Margin="12,0" VerticalAlignment="Center" Style="{DynamicResource RbGamesChevronStyle}" />
-        <ContentControl VerticalAlignment="Center" Content="{Binding ItemTitle}" Style="{DynamicResource RbPageTitleStyle}" />
+        <TextBlock Margin="12,0" VerticalAlignment="Center" Style="{DynamicResource EncoreGamesChevronStyle}" />
+        <ContentControl VerticalAlignment="Center" Content="{Binding ItemTitle}" Style="{DynamicResource EncorePageTitleStyle}" />
     </StackPanel>
 </UserControl>

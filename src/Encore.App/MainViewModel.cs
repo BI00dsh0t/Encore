@@ -152,6 +152,41 @@ internal sealed class MainViewModel : Observable
         }
     }
 
+    /// <summary>Esc: leaves the player's full screen, else closes an open item page. False when it did neither.</summary>
+    public bool HandleEscape()
+    {
+        if (IsPlayerFullScreen)
+        {
+            LeavePlayerFullScreen();
+            return true;
+        }
+
+        return GoBack();
+    }
+
+    /// <summary>Alt+Left and the mouse's Back button: closes an open item page. False on a list page.</summary>
+    public bool GoBack()
+    {
+        if (CurrentDrillIn is not { IsOpen: true } drillIn)
+        {
+            return false;
+        }
+
+        drillIn.Close();
+        return true;
+    }
+
+    /// <summary>The Settings button: shows the settings pages; pressed again on them, an open item page goes back to its list.</summary>
+    public void OpenSettings()
+    {
+        if (IsSettingsTabSelected)
+        {
+            ReselectNavItem(SelectedNavItem);
+        }
+
+        IsSettingsTabSelected = true;
+    }
+
     /// <summary>Whether the player page fills the screen: the window drops its frame, nav and headers.</summary>
     public bool IsPlayerFullScreen => Library.Player?.IsFullScreen == true;
 
@@ -323,44 +358,4 @@ internal sealed class MainViewModel : Observable
         TrackLayout.IsOpen = trackLayout;
         GameProfiles.IsOpen = gameProfiles;
     }
-}
-
-/// <summary>One item of the shell's navigation: the Library, the Settings section label, or a settings page.</summary>
-internal sealed class NavItem : Observable
-{
-    public NavItem(string title, SettingsPage? page, bool isSection)
-    {
-        Title = title;
-        Page = page;
-        IsSection = isSection;
-        if (page is not null)
-        {
-            page.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(SettingsPage.HasUnsavedChanges))
-                {
-                    OnPropertyChanged(nameof(HasUnsavedChanges));
-                }
-            };
-        }
-    }
-
-    /// <summary>The nav item's dot: its page holds unsaved changes.</summary>
-    public bool HasUnsavedChanges => Page?.HasUnsavedChanges ?? false;
-
-    /// <summary>The page's title, in sentence case; Gaming dark uppercases it in its template only.</summary>
-    public string Title { get; }
-
-    /// <summary>The settings page it opens; null for the Library and the section label.</summary>
-    public SettingsPage? Page { get; }
-
-    /// <summary>The non-selectable Settings label above the settings pages.</summary>
-    public bool IsSection { get; }
-    public string Glyph => Page is null ? "\uE8F1" : Title switch
-    {
-        "General" => "\uE713", "Rewind" => "\uE714", "Hotkeys" => "\uE765",
-        "Audio Tracks" => "\uE8D6", "Games" => "\uE7FC", "Feedback Sounds" => "\uE767", _ => "\uE8B7",
-    };
-
-    public override string ToString() => Title;
 }

@@ -4,10 +4,10 @@
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <FontFamily x:Key="RbGamesGlyphFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <FontFamily x:Key="EncoreGamesGlyphFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
     <!-- A game row: the Library row's card, with its hover, selected (accent-subtle and the accent bar) and focus states. -->
-    <Style x:Key="RbGameRowStyle" TargetType="ListBoxItem">
+    <Style x:Key="EncoreGameRowStyle" TargetType="ListBoxItem">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -32,7 +32,7 @@
                                 Height="24"
                                 HorizontalAlignment="Left"
                                 Background="{DynamicResource AccentFillColorDefaultBrush}"
-                                CornerRadius="{DynamicResource RbSmallCornerRadius}"
+                                CornerRadius="{DynamicResource EncoreSmallCornerRadius}"
                                 Visibility="Collapsed" />
                     </Grid>
                     <ControlTemplate.Triggers>
@@ -40,7 +40,7 @@
                             <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" />
+                            <Setter Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" />
                             <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -50,40 +50,40 @@
     </Style>
 
     <!-- The 32 px icon tile: the program's icon, or its first letter on accent-subtle. -->
-    <Style x:Key="RbGameIconTileStyle" TargetType="Border">
+    <Style x:Key="EncoreGameIconTileStyle" TargetType="Border">
         <Setter Property="Width" Value="32" />
         <Setter Property="Height" Value="32" />
         <Setter Property="Margin" Value="0,0,12,0" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RbSmallCornerRadius}" />
-        <Setter Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreSmallCornerRadius}" />
+        <Setter Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <Style x:Key="RbGameNameStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreGameNameStyle" TargetType="TextBlock">
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="FontSize" Value="{DynamicResource BodyTextBlockFontSize}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
-    <Style x:Key="RbGameCaptionStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreGameCaptionStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{DynamicResource CaptionTextBlockFontSize}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
     <!-- Pills in the caption line: Capturing now (accent-subtle, text-accent) and Not captured (fill-control, text-secondary). -->
-    <Style x:Key="RbPillAccentStyle" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RbSmallCornerRadius}" />
+    <Style x:Key="EncorePillAccentStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreSmallCornerRadius}" />
         <Setter Property="Padding" Value="6,1" />
         <Setter Property="Margin" Value="8,0,0,0" />
         <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
         <Setter Property="TextElement.FontSize" Value="{DynamicResource CaptionTextBlockFontSize}" />
     </Style>
-    <Style x:Key="RbPillNeutralStyle" TargetType="Border">
+    <Style x:Key="EncorePillNeutralStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RbSmallCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreSmallCornerRadius}" />
         <Setter Property="Padding" Value="6,1" />
         <Setter Property="Margin" Value="8,0,0,0" />
         <Setter Property="TextElement.Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -91,18 +91,18 @@
     </Style>
 
     <!-- The inheritance chip: neutral for the main setting, accent-subtle with an accent border when changed. -->
-    <Style x:Key="RbInheritChipStyle" TargetType="Border">
+    <Style x:Key="EncoreInheritChipStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RbSmallCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreSmallCornerRadius}" />
         <Setter Property="Padding" Value="8,2" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="TextElement.Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="TextElement.FontSize" Value="{DynamicResource CaptionTextBlockFontSize}" />
         <Style.Triggers>
             <DataTrigger Binding="{Binding IsChanged}" Value="True">
-                <Setter Property="Background" Value="{DynamicResource RbAccentSubtleBrush}" />
+                <Setter Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
                 <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
             </DataTrigger>
@@ -110,14 +110,14 @@
     </Style>
 
     <!-- A hyperlink, such as Edit the main setting and the breadcrumb's parent: text-accent. -->
-    <Style x:Key="RbGamesLinkStyle" TargetType="Hyperlink">
+    <Style x:Key="EncoreGamesLinkStyle" TargetType="Hyperlink">
         <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
     </Style>
 
     <!-- The › chevron and the breadcrumb separator: text-secondary. -->
-    <Style x:Key="RbGamesChevronStyle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource RbGamesGlyphFont}" />
+    <Style x:Key="EncoreGamesChevronStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource EncoreGamesGlyphFont}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="VerticalAlignment" Value="Center" />
@@ -125,12 +125,12 @@
     </Style>
 
     <!-- The unsaved dot: the nav dirty dot. -->
-    <Style x:Key="RbGamesUnsavedDotStyle" TargetType="Border">
+    <Style x:Key="EncoreGamesUnsavedDotStyle" TargetType="Border">
         <Setter Property="Width" Value="6" />
         <Setter Property="Height" Value="6" />
         <Setter Property="Margin" Value="0,0,12,0" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RbSmallCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource EncoreSmallCornerRadius}" />
     </Style>
 </ResourceDictionary>

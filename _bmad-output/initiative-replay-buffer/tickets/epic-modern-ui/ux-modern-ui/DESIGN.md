@@ -251,16 +251,16 @@ The mockups (`research/ui-look-mockups.html`), the two renders and the `ui-look-
 | `accent-hover` | `AccentFillColorSecondaryBrush` | same key | `#5EEAD4` | Accent hover |
 | `accent-pressed` | `AccentFillColorTertiaryBrush` | same key | `#14B8A6` | Accent pressed |
 | `accent-disabled` | `AccentFillColorDisabledBrush` | same key | `#262B34` | Disabled accent fill |
-| `accent-subtle` | `RbAccentSubtleBrush` | colour `SubtleFillColorSecondary` | `#1A2DD4BF` | Selected nav item and checked toggle background |
+| `accent-subtle` | `EncoreAccentSubtleBrush` | colour `SubtleFillColorSecondary` | `#1A2DD4BF` | Selected nav item and checked toggle background |
 | `danger` | `SystemFillColorCriticalBrush` | same key | `#FF4655` | Error text, Error severity, danger info-bar edge |
 | `danger-background` | `SystemFillColorCriticalBackgroundBrush` | same key | `#2A1215` | Page error message and library-corrupt banner background |
 | `caution` | `SystemFillColorCautionBrush` | same key | `#F5B83D` | Warnings (double-counting, Warning severity), the "Saving…" lock, meter peak |
 | `caution-background` | `SystemFillColorCautionBackgroundBrush` | same key | `#2A2212` | Caution info-bar background |
 | `success` | `SystemFillColorSuccessBrush` | same key | `#4ADE80` | Buffering dot in the status header, level-meter fill, Overlay success text |
-| `record` | `RbRecordBrush` | colour `SystemFillColorCritical` | `#FF4655` | The status header's dot while Recording |
+| `record` | `EncoreRecordBrush` | colour `SystemFillColorCritical` | `#FF4655` | The status header's dot while Recording |
 | `focus-outer` | `FocusStrokeColorOuterBrush` | same key | `#2DD4BF` | Focus visual, outer 2 px |
 | `focus-inner` | `FocusStrokeColorInnerBrush` | same key | `#0A0B0E` | Focus visual, inner 1 px |
-| `overlay-card` | `RbOverlayCardBrush` | colour `SolidBackgroundFillColorQuarternary`, opacity 0.9 | `#E61E222A` | The Overlay's message card |
+| `overlay-card` | `EncoreOverlayCardBrush` | colour `SolidBackgroundFillColorQuarternary`, opacity 0.9 | `#E61E222A` | The Overlay's message card |
 
 [DECISION] Gaming dark's state colours (hover, pressed, disabled, the input, flyout and info-bar backgrounds, `success`, `caution`, `text-disabled`) aren't in the epic's palette. They're derived from it, staying in the same blue-grey family as the surfaces. `danger` reuses the record colour `#FF4655`. The subtle fills are translucent muted grey, as Fluent's are translucent white, so a hover lightens whatever it sits on: the nav pane, a card or a menu. A solid hover was darker than the menu in the first render.
 
@@ -293,12 +293,12 @@ One family per theme, with the ramp below. Under Fluent, the XAML keys are Fluen
 | `caption` | `CaptionTextBlockStyle` | 12, Regular (`CaptionTextBlockFontSize`) | 12, Regular |
 | `body` | `BodyTextBlockStyle` | 14, Regular (`BodyTextBlockFontSize`, `ControlContentThemeFontSize`) | 14, Regular |
 | `body-strong` | `BodyStrongTextBlockStyle` | 14, SemiBold | 14, Bold |
-| `section-header` | `RbSectionHeaderStyle` | 14, SemiBold (as `BodyStrongTextBlockStyle`) | 12, Bold, uppercase, 0.6 spacing, `text-secondary` |
-| `nav-item` | `RbNavItemStyle` (in the nav item template) | 14, Regular | 13, SemiBold, uppercase |
+| `section-header` | `EncoreSectionHeaderStyle` | 14, SemiBold (as `BodyStrongTextBlockStyle`) | 12, Bold, uppercase, 0.6 spacing, `text-secondary` |
+| `nav-item` | `EncoreNavItemStyle` (in the nav item template) | 14, Regular | 13, SemiBold, uppercase |
 | `button` | in the Button templates | 14, Regular, sentence case | 13, Bold, uppercase |
 | `subtitle` | `SubtitleTextBlockStyle` | 20, SemiBold (`SubtitleTextBlockFontSize`) | 20, Bold |
-| `title` | `RbPageTitleStyle` | 28, SemiBold (`TitleTextBlockFontSize`) | 26, Black, uppercase |
-| `brand` | `RbBrandStyle` | 15, SemiBold | 15, Black, uppercase |
+| `title` | `EncorePageTitleStyle` | 28, SemiBold (`TitleTextBlockFontSize`) | 26, Black, uppercase |
+| `brand` | `EncoreBrandStyle` | 15, SemiBold | 15, Black, uppercase |
 
 - **Family.** Fluent uses the family its Window style sets, and the App sets none. Gaming dark uses `Segoe UI`.
 - **Uppercase.** WPF has no text-transform. Gaming's Button, ToggleButton and nav-item templates, and its title and brand styles, uppercase string content through a converter inside the template. View models and XAML keep their sentence-case wording, so no text, test or `AutomationProperties.Name` changes. [DECISION]
@@ -306,7 +306,7 @@ One family per theme, with the ramp below. Under Fluent, the XAML keys are Fluen
 
 ## Layout & Spacing
 
-A 4 px grid, the same in both themes. Fluent has no spacing keys, so these are App constants (`Thickness` resources prefixed `Rb`, e.g. `RbPagePadding`) defined once, in story 2's shared dictionary. They live outside the two theme dictionaries.
+A 4 px grid, the same in both themes. Fluent has no spacing keys, so these are App constants (`Thickness` resources prefixed `Rb`, e.g. `EncorePagePadding`) defined once, in story 2's shared dictionary. They live outside the two theme dictionaries.
 
 | Token | Value | Use |
 |---|---|---|
@@ -337,8 +337,8 @@ Depth is tonal, not shadowed:
 |---|---|---|---|---|
 | `rounded.control` | `ControlCornerRadius` | 4 (same key) | 4 | Buttons, text boxes, combo boxes, toggle buttons, tooltips, list items, the Overlay card |
 | `rounded.overlay` | `OverlayCornerRadius` | 8 (same key) | 4 | Cards, Library rows, menus, drop-downs, the content layer's corner |
-| `rounded.small` | `RbSmallCornerRadius` | 4 | 2 | Check box, length badge, thumbnail clip, meter bars |
-| `rounded.nav-item` | `RbNavItemCornerRadius` | 4 | 0 | Nav item background; Gaming's is square with a 3 px left bar |
+| `rounded.small` | `EncoreSmallCornerRadius` | 4 | 2 | Check box, length badge, thumbnail clip, meter bars |
+| `rounded.nav-item` | `EncoreNavItemCornerRadius` | 4 | 0 | Nav item background; Gaming's is square with a 3 px left bar |
 
 ## Components
 
@@ -390,7 +390,7 @@ Used once per surface at most: the dialog's default button. [DECISION] Track Lay
 | Focused | focus visual | focus visual |
 | Disabled | built-in | as Button disabled; checked keeps an `accent-disabled` border |
 
-**Star toggle** (`RbStarToggleStyle`, the Library row's Favourite) is a borderless variant in both themes: a ★ glyph at 16 px, `text-secondary` off and `text-accent` on, with `fill-subtle-hover` behind on hover, `rounded.control`. [DECISION] It replaces the transparent Button and keeps the command binding. "Checked" is bound one-way to the item's Favourite state, so a click still only sends `library.setFavourite`.
+**Star toggle** (`EncoreStarToggleStyle`, the Library row's Favourite) is a borderless variant in both themes: a ★ glyph at 16 px, `text-secondary` off and `text-accent` on, with `fill-subtle-hover` behind on hover, `rounded.control`. [DECISION] It replaces the transparent Button and keeps the command binding. "Checked" is bound one-way to the item's Favourite state, so a click still only sends `library.setFavourite`.
 
 ### Text box
 
@@ -469,7 +469,7 @@ The App uses none today, but story 2 styles it so the gallery is complete and fu
 
 ### Nav item (the shell's navigation list)
 
-A `ListBox` with its own item style (`RbNavItemStyle`).
+A `ListBox` with its own item style (`EncoreNavItemStyle`).
 
 | State | Fluent | Gaming dark |
 |---|---|---|
@@ -513,7 +513,7 @@ Keyboard highlight is the hover look, so Gaming dark needs no separate focus rin
 
 ### Progress bar and level meter
 
-The level meter is the `ProgressBar` in Track Layout's Tracks list, with `RbLevelMeterStyle`.
+The level meter is the `ProgressBar` in Track Layout's Tracks list, with `EncoreLevelMeterStyle`.
 
 | State | Fluent | Gaming dark |
 |---|---|---|
@@ -536,7 +536,7 @@ The shell's TabControl goes (EXPERIENCE.md), and the App has no other. Story 2 s
 | Focused | focus visual | focus visual |
 | Disabled | built-in | `text-disabled` |
 
-### Card (`RbCardStyle`, a Border style)
+### Card (`EncoreCardStyle`, a Border style)
 
 `surface-card`, 1 px `stroke-card`, `rounded.overlay`, padding `spacing.lg`. It has no states. Settings sections and the status header are cards; Library rows are a card variant with hover.
 
@@ -551,7 +551,7 @@ A card at the top of the content column.
   - the message in `body`, `text-primary`;
   - a Dismiss button (Button style) where it applies.
 
-### Info bar (`RbInfoBarStyle`: danger and caution variants)
+### Info bar (`EncoreInfoBarStyle`: danger and caution variants)
 
 Used for the library-corrupt banner (caution), each settings page's error message (danger) and the Replay Buffer estimate warning (caution).
 
@@ -570,7 +570,7 @@ Short coloured messages that stay inline rather than in a bar:
 
 Every hard-coded `DarkRed`, `DarkOrange`, `Gray`, `#C42B1C` and `#D4A017` in today's XAML maps to `danger`, `caution`, `text-secondary` or `text-accent`.
 
-### Library row (`RbLibraryRowStyle`)
+### Library row (`EncoreLibraryRowStyle`)
 
 - **Box:** a card variant, `surface-card`, `stroke-card`, `rounded.overlay`, padding 8, 6 px gap between rows.
 - **Hover:** `fill-control-hover`. **Context menu open:** stays at hover. The rows aren't selectable.
@@ -585,7 +585,7 @@ Every hard-coded `DarkRed`, `DarkOrange`, `Gray`, `#C42B1C` and `#D4A017` in tod
 
 `typography.section-header` (uppercase under Gaming dark), `text-secondary`, with a `spacing.md` top gap and a 1 px `stroke-divider` rule after the text, filling the row.
 
-### Dialog (`RbDialogWindow`)
+### Dialog (`EncoreDialogWindow`)
 
 An owned window, 440 wide, height to content, centred on its owner, no resize, and no Mica in either theme.
 

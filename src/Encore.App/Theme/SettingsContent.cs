@@ -3,12 +3,6 @@ using System.Windows.Controls;
 
 namespace Encore.App.Theme;
 
-/// <summary>See <c>SettingsLayout.xaml</c>.</summary>
-internal partial class SettingsLayout
-{
-    public SettingsLayout() => InitializeComponent();
-}
-
 /// <summary>The settings pages' content column: takes the width offered up to its MaxWidth, while staying left-aligned.</summary>
 internal sealed class SettingsContent : StackPanel
 {

@@ -71,6 +71,7 @@ public sealed class ShellTests
         };
         var theme = ThemeService.ForWindow(window);
         var nav = (ListBox)window.FindName("Nav");
+        var sections = (ComboBox)window.FindName("SettingsSections");
         var page = (ContentControl)window.FindName("Page");
         try
         {
@@ -80,23 +81,26 @@ public sealed class ShellTests
                 window.Show();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
 
+                // The nav list holds the Library; the settings pages are chosen in the section list.
+                Assert.Equal([model.LibraryNav], nav.Items.Cast<NavItem>());
+                Assert.Equal(model.Pages.Select(p => p.Title), sections.Items.Cast<NavItem>().Select(i => i.Title));
                 foreach (var item in model.NavItems.Where(i => !i.IsSection))
                 {
-                    nav.SelectedItem = item;
+                    (item.Page is null ? (System.Windows.Controls.Primitives.Selector)nav : sections).SelectedItem = item;
                     Sta.Pump(TimeSpan.FromMilliseconds(30));
                     Assert.Same(item.Page?.View ?? model.Library.View, page.Content);
                     Assert.True(((FrameworkElement)page.Content).IsLoaded, $"{item.Title} didn't load under {which}");
                 }
 
-                var label = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromIndex(1);
-                Assert.False(label.IsEnabled || label.Focusable);
                 var peer = UIElementAutomationPeer.CreatePeerForElement(nav);
-                Assert.Equal(model.NavItems.Count - 1, peer.GetChildren().Count);
-                var general = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromIndex(2);
-                NavPress.SetIsPressed(general, true);
-                Assert.Equal(((SolidColorBrush)window.FindResource("SubtleFillColorTertiaryBrush")).Color, ((SolidColorBrush)general.Background).Color);
-                NavPress.SetIsPressed(general, false);
-                Assert.Equal(which == AppTheme.GamingDark ? "GENERAL" : "General", NavText(nav, model.General));
+                Assert.Single(peer.GetChildren());
+                var library = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromItem(model.LibraryNav);
+                var fill = (Border)library.Template.FindName("Fill", library);
+                NavPress.SetIsPressed(library, true);
+                var pressed = (SolidColorBrush)window.FindResource("SubtleFillColorTertiaryBrush");
+                Assert.Equal(pressed.Color, ((SolidColorBrush)fill.Background).Color);
+                NavPress.SetIsPressed(library, false);
+                Assert.Equal("Library", ((TextBlock)library.Template.FindName("Label", library)).Text);
 
                 model.SelectedNavItem = model.NavItems.First(i => i.Page == model.General);
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
@@ -109,13 +113,6 @@ public sealed class ShellTests
             window.CloseForQuit();
         }
     });
-
-    private static string NavText(ListBox nav, object page)
-    {
-        var item = nav.Items.Cast<NavItem>().First(i => i.Page == page);
-        var container = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromItem(item);
-        return ((TextBlock)container.Template.FindName("Label", container)).Text;
-    }
 
     // The builder's hand check: the shell as it renders, beside the test binary.
     private static void Save(Window window, string name)

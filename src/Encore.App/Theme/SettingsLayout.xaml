@@ -5,14 +5,14 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- The page content: at most 720 wide, left-aligned, one label column for every row on the page. -->
-    <Style x:Key="RbSettingsContentStyle" TargetType="StackPanel">
+    <Style x:Key="EncoreSettingsContentStyle" TargetType="StackPanel">
         <Setter Property="MaxWidth" Value="720" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="Grid.IsSharedSizeScope" Value="True" />
     </Style>
 
     <!-- A section: its header, 8 below it the card holding the rows, and spacing.xl to the next section. -->
-    <Style x:Key="RbSettingsSectionStyle" TargetType="HeaderedContentControl">
+    <Style x:Key="EncoreSettingsSectionStyle" TargetType="HeaderedContentControl">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Margin" Value="0,0,0,24" />
@@ -20,8 +20,10 @@
             <Setter.Value>
                 <ControlTemplate TargetType="HeaderedContentControl">
                     <StackPanel>
-                        <ContentControl Margin="0,0,0,8" Content="{TemplateBinding Header}" Style="{DynamicResource RbSectionHeaderStyle}" />
-                        <Border Style="{DynamicResource RbCardStyle}">
+                        <ContentControl Margin="0,0,0,8"
+                                        Content="{TemplateBinding Header}"
+                                        Style="{DynamicResource EncoreSectionHeaderStyle}" />
+                        <Border Style="{DynamicResource EncoreCardStyle}">
                             <ContentPresenter />
                         </Border>
                     </StackPanel>
@@ -31,7 +33,7 @@
     </Style>
 
     <!-- A row's label, in the shared label column. -->
-    <Style x:Key="RbSettingsLabelStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreSettingsLabelStyle" TargetType="TextBlock">
         <Setter Property="Margin" Value="0,0,12,0" />
         <Setter Property="FontSize" Value="{DynamicResource BodyTextBlockFontSize}" />
         <Setter Property="VerticalAlignment" Value="Center" />
@@ -39,7 +41,7 @@
     </Style>
 
     <!-- Help text under its row: caption, muted. -->
-    <Style x:Key="RbSettingsHelpTextStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreSettingsHelpTextStyle" TargetType="TextBlock">
         <Setter Property="Margin" Value="0,4,0,0" />
         <Setter Property="FontSize" Value="{DynamicResource CaptionTextBlockFontSize}" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -47,23 +49,23 @@
     </Style>
 
     <!-- Inline status beside or under a control, and its danger form. -->
-    <Style x:Key="RbSettingsStatusTextStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreSettingsStatusTextStyle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
-    <Style x:Key="RbSettingsErrorTextStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreSettingsErrorTextStyle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
     <!-- Inline caution text, such as Track Layout's double-counting warning. -->
-    <Style x:Key="RbSettingsCautionTextStyle" TargetType="TextBlock">
+    <Style x:Key="EncoreSettingsCautionTextStyle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
     <!-- The page's refused-update or validation message: a danger info bar, shown only while it has text. -->
-    <Style x:Key="RbSettingsPageMessageStyle" TargetType="ContentControl">
+    <Style x:Key="EncoreSettingsPageMessageStyle" TargetType="ContentControl">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="MaxWidth" Value="720" />
@@ -71,7 +73,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContentControl">
-                    <ContentControl Content="{TemplateBinding Content}" Style="{DynamicResource RbInfoBarDangerStyle}" />
+                    <ContentControl Content="{TemplateBinding Content}" Style="{DynamicResource EncoreInfoBarDangerStyle}" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

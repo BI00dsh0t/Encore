@@ -17,13 +17,18 @@
                 Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
                 BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="{DynamicResource RbDialogButtonBarPadding}">
+                Padding="{DynamicResource EncoreDialogButtonBarPadding}">
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                <Button x:Name="YesButton" MinWidth="96" Content="Yes" IsDefault="True" Style="{DynamicResource AccentButtonStyle}" Click="OnYes" />
+                <Button x:Name="YesButton"
+                        MinWidth="96"
+                        Content="Yes"
+                        IsDefault="True"
+                        Style="{DynamicResource AccentButtonStyle}"
+                        Click="OnYes" />
                 <Button x:Name="NoButton" MinWidth="96" Margin="8,0,0,0" Content="No" Click="OnNo" />
             </StackPanel>
         </Border>
-        <Grid x:Name="Body" Margin="{DynamicResource RbDialogContentPadding}">
+        <Grid x:Name="Body" Margin="{DynamicResource EncoreDialogContentPadding}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />

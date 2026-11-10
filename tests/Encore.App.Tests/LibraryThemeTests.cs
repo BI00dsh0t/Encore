@@ -76,7 +76,7 @@ public sealed class LibraryThemeTests
 
                 var rows = page.Rows.ToDictionary(r => r.Name);
                 var ace = RowCard(list, rows["ace.mp4"]);
-                Assert.Same(window.FindResource("RbLibraryRowStyle"), ace.Style);
+                Assert.Same(window.FindResource("EncoreLibraryRowStyle"), ace.Style);
                 Assert.True(Descendants<ToggleButton>(ace).Single().IsChecked);
                 Assert.False(Descendants<ToggleButton>(RowCard(list, rows["no-thumbnail.mp4"])).Single().IsChecked);
                 Assert.Contains(Descendants<TextBlock>(RowCard(list, rows["saving.mp4"])), t => t.Text == "Saving…" && t.IsVisible);
@@ -92,7 +92,7 @@ public sealed class LibraryThemeTests
                 Sta.PumpUntil(() => Descendants<TextBlock>(bar).Any(t => t.Text == "2 selected" && t.IsVisible), "\"2 selected\" in the command bar");
 
                 Assert.Equal((true, 40.0), (bar.IsVisible, bar.ActualHeight));
-                var selected = (SolidColorBrush)window.FindResource("RbLibraryRowSelectedBrush");
+                var selected = (SolidColorBrush)window.FindResource("EncoreLibraryRowSelectedBrush");
                 Assert.Equal((selected.Color, selected.Opacity), Fill(RowCard(list, rows["ace.mp4"])));
                 Assert.NotEqual(Fill(RowCard(list, rows["saving.mp4"])), Fill(RowCard(list, rows["ace.mp4"])));
                 Assert.True(VirtualizingPanel.GetIsVirtualizing(list));
