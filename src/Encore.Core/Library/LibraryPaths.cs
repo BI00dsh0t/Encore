@@ -3,6 +3,10 @@ namespace Encore.Core.Library;
 /// <summary>The Library's rules for paths: an item's key under the Output Folder, and which names and files are its own.</summary>
 internal static class LibraryPaths
 {
+    /// <summary>Whether an exception is a file or path failure the Library reports and carries on from.</summary>
+    public static bool IsFileFailure(Exception e) =>
+        e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException;
+
     /// <summary>The extension of every Library item.</summary>
     public const string Extension = ".mp4";
 
@@ -52,7 +56,7 @@ internal static class LibraryPaths
 
             return false;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        catch (Exception e) when (IsFileFailure(e))
         {
             // Can't tell, so Cleanup doesn't touch it.
             return true;
