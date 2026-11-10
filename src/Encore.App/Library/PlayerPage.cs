@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Windows.Input;
+using Encore.Platform.Desktop;
 
 namespace Encore.App.Library;
 
@@ -464,6 +465,77 @@ internal sealed class PlayerPage : Observable, IDisposable
         Player.Pause();
         _log($"player: no picture for {FileName}");
         Fail((FailedText, null));
+    }
+
+    /// <summary>Runs the page's shortcut for a key pressed with no modifier. False when the key isn't one.</summary>
+    public bool HandleKey(Key key)
+    {
+        if (IsClosed)
+        {
+            return false;
+        }
+
+        switch (key)
+        {
+            case Key.Space:
+                PlayPauseCommand.Execute(null);
+                break;
+            case Key.Left:
+                SeekBy(-SeekStep);
+                break;
+            case Key.Right:
+                SeekBy(SeekStep);
+                break;
+            case Key.Up:
+                ChangeVolume(VolumeStep);
+                break;
+            case Key.Down:
+                ChangeVolume(-VolumeStep);
+                break;
+            case Key.F when SupportsFullScreen:
+                FullScreenCommand.Execute(null);
+                break;
+            default:
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>One present's work: get the surface, copy the frame into it, show it. A surface failure fails the page.</summary>
+    public void DrawFrame(Func<VideoSurface?> ensureSurface, Action<VideoSurface> show, Action release)
+    {
+        VideoSurface? surface;
+        try
+        {
+            surface = ensureSurface();
+        }
+#pragma warning disable CA1031 // Every GPU failure here is the page's failure: narrowing missed OutOfMemoryException and ArgumentException.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            release();
+            ShowFailure();
+            return;
+        }
+
+        if (surface is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Player.CopyFrame(surface);
+        }
+#pragma warning disable CA1031 // A frame the player can't copy now (closing, its device lost, any mapped HRESULT) is skipped, never a crash.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return;
+        }
+
+        show(surface);
     }
 
     /// <summary>Stops the player and releases the file; safe to call twice.</summary>

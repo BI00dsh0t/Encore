@@ -144,9 +144,7 @@ public sealed class LibraryPlayerTests : IDisposable
         var page = PlayingPage();
         var released = false;
 
-        PlayerView.Draw(
-            page,
-            () => throw failure switch
+        page.DrawFrame(() => throw failure switch
             {
                 "out of video memory" => new OutOfMemoryException(),
                 "com" => new COMException("device removed", unchecked((int)0x887A0005)),
@@ -168,10 +166,26 @@ public sealed class LibraryPlayerTests : IDisposable
         _player.CopyFails = new COMException("lost", unchecked((int)0x887A0007));
         using var surface = new VideoSurface(64, 36, new WindowInteropHelper(new Window()).EnsureHandle());
 
-        PlayerView.Draw(page, () => surface, _ => Assert.Fail("A skipped frame isn't shown."), () => Assert.Fail("The surface is kept."));
+        page.DrawFrame(() => surface, _ => Assert.Fail("A skipped frame isn't shown."), () => Assert.Fail("The surface is kept."));
 
         Assert.Equal(PlayerState.Playing, page.State);
     });
+
+    [Fact]
+    public void ThePagesKeysPauseSeekAndChangeTheVolume()
+    {
+        var page = PlayingPage();
+
+        Assert.True(page.HandleKey(Key.Space));
+        Assert.False(_player.IsPlaying);
+        Assert.True(page.HandleKey(Key.Right));
+        Assert.Equal([PlayerPage.SeekStep], _player.Seeks);
+        Assert.True(page.HandleKey(Key.Down));
+        Assert.Equal(0.95, _player.Volume);
+        Assert.True(page.HandleKey(Key.F));
+        Assert.True(page.IsFullScreen);
+        Assert.False(page.HandleKey(Key.B));
+    }
 
     private PlayerPage PlayingPage()
     {
@@ -204,9 +218,9 @@ public sealed class LibraryPlayerTests : IDisposable
     [Fact]
     public void TheSurfaceFitsTheVideosAspectIntoThePictureAndNeverGrowsPastIt()
     {
-        Assert.Equal((1600, 540), PlayerView.Fit(6400, 2160, 1600, 900));
-        Assert.Equal((1280, 720), PlayerView.Fit(1280, 720, 3840, 2160));
-        Assert.Equal((800, 450), PlayerView.Fit(1920, 1080, 801, 900));
+        Assert.Equal((1600, 540), PictureFit.Size(6400, 2160, 1600, 900));
+        Assert.Equal((1280, 720), PictureFit.Size(1280, 720, 3840, 2160));
+        Assert.Equal((800, 450), PictureFit.Size(1920, 1080, 801, 900));
     }
 
     private StateSnapshot State() => _engine.State! with

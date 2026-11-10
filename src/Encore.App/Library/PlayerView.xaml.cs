@@ -10,16 +10,14 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Library;
 
-/// <summary>Draws the player page's frames into a shared surface and wires its controls. Details: docs/code-notes.md.</summary>
+/// <summary>The player page's view: it draws the player's frames into a shared surface. Details: docs/code-notes.md.</summary>
 internal partial class PlayerView
 {
-    public static readonly DependencyProperty IsClipEditorProperty = DependencyProperty.Register(nameof(IsClipEditor), typeof(bool), typeof(PlayerView), new PropertyMetadata(false));
-    public bool IsClipEditor { get => (bool)GetValue(IsClipEditorProperty); set => SetValue(IsClipEditorProperty, value); }
+    public static readonly DependencyProperty IsClipEditorProperty = DependencyProperty.Register(
+        nameof(IsClipEditor), typeof(bool), typeof(PlayerView), new PropertyMetadata(false));
+
     // How long the picture's size must hold before the texture is remade at it.
     private static readonly TimeSpan ResizeSettle = TimeSpan.FromMilliseconds(150);
-
-    /// <summary>How long the page waits for its first picture before saying the file can't be played; tests shorten it.</summary>
-    internal static TimeSpan NoPictureTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
     // How often the seek bar and time follow the player while it plays.
     private static readonly TimeSpan PositionInterval = TimeSpan.FromMilliseconds(100);
@@ -27,73 +25,98 @@ internal partial class PlayerView
     private readonly D3DImage _image = new();
     private readonly DispatcherTimer _settle;
     private readonly DispatcherTimer _position;
-    private readonly DispatcherTimer _noPicture;
+    private readonly NoPictureWatch _noPicture;
     private PlayerPage? _page;
     private VideoSurface? _surface;
     private int _presentPending;
     private ContextMenu? _menu;
     private bool _volumeHover;
 
-    // Frames the player itself has delivered since the page opened: what the no-picture timer waits for.
-    private int _playerFrames;
-
-    // Whether the no-picture timer is due: started when the media is there, paused while the front buffer is gone.
-    private bool _noPictureWaiting;
-
-    // Whether D3DImage has its front buffer: the one signal the present, the no-picture timer and the handler read.
-    private bool _frontBufferAvailable = true;
+    // Whether D3DImage has its front buffer; nothing can be presented without it.
+    private bool _frontBufferAvailable;
 
     public PlayerView()
     {
         InitializeComponent();
         Picture.Source = _image;
         _settle = new DispatcherTimer(ResizeSettle, DispatcherPriority.Render, OnResizeSettled, Dispatcher) { IsEnabled = false };
-        _position = new DispatcherTimer(PositionInterval, DispatcherPriority.Background, (_, _) => _page?.RefreshPosition(), Dispatcher) { IsEnabled = false };
-        _noPicture = new DispatcherTimer(NoPictureTimeout, DispatcherPriority.Background, OnNoPicture, Dispatcher) { IsEnabled = false };
+        _position = new DispatcherTimer(PositionInterval, DispatcherPriority.Background, OnPositionTick, Dispatcher) { IsEnabled = false };
+        _noPicture = new NoPictureWatch(Dispatcher, OnNoPicture);
         SeekBar.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnScrubStarted));
         SeekBar.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnScrubCompleted));
         _frontBufferAvailable = _image.IsFrontBufferAvailable;
-        _image.IsFrontBufferAvailableChanged += OnFrontBufferAvailableChanged;
-        ((FrameworkElement)Picture.Parent).SizeChanged += (_, _) =>
+        if (!_frontBufferAvailable)
         {
-            _settle.Stop();
-            _settle.Start();
-        };
+            _noPicture.Pause();
+        }
+
+        _image.IsFrontBufferAvailableChanged += OnFrontBufferAvailableChanged;
+        PictureArea.SizeChanged += OnPictureAreaSizeChanged;
         DataContextChanged += (_, e) => Attach(e.NewValue as PlayerPage);
         Unloaded += (_, _) => Attach(null);
         Loaded += (_, _) => Attach(DataContext as PlayerPage);
 
         // The volume slider slides out while the pointer or keyboard focus is in the speaker's group.
-        VolumeGroup.MouseEnter += (_, _) =>
-        {
-            _volumeHover = true;
-            UpdateVolumeShown();
-        };
-        VolumeGroup.MouseLeave += (_, _) =>
-        {
-            _volumeHover = false;
-            UpdateVolumeShown();
-        };
+        VolumeGroup.MouseEnter += (_, _) => SetVolumeHover(true);
+        VolumeGroup.MouseLeave += (_, _) => SetVolumeHover(false);
         VolumeGroup.IsKeyboardFocusWithinChanged += (_, _) => UpdateVolumeShown();
     }
 
+    /// <summary>Whether this is the clip creator's preview, which hides the seek bar, the play button and the time.</summary>
+    public bool IsClipEditor
+    {
+        get => (bool)GetValue(IsClipEditorProperty);
+        set => SetValue(IsClipEditorProperty, value);
+    }
+
     /// <summary>The surface's texture size now, or null with none: for tests.</summary>
-    internal (int Width, int Height)? SurfaceSize => _surface is { Width: > 0 } s ? (s.Width, s.Height) : null;
+    internal (int Width, int Height)? SurfaceSize => _surface is { Width: > 0 } surface ? (surface.Width, surface.Height) : null;
+
+    /// <summary>Whether the volume slider shows: for tests.</summary>
+    internal bool IsVolumeShown => VolumeBar.Visibility == Visibility.Visible;
+
+    /// <summary>The gear's menu while it's open, else null: for tests.</summary>
+    internal ContextMenu? SettingsMenu => _menu is { IsOpen: true } menu ? menu : null;
+
+    // The space the video is fitted into.
+    private FrameworkElement PictureArea => (FrameworkElement)Picture.Parent;
 
     /// <summary>Focuses the play button, when the page opens.</summary>
     public void FocusFirstControl() => PlayPause.Focus();
 
-    /// <summary>The surface size for a video shown in an area: the video's aspect, never larger than the video, sides even.</summary>
-    internal static (int Width, int Height) Fit(int videoWidth, int videoHeight, double areaWidth, double areaHeight)
+    /// <summary>Opens the gear's menu: the Tracks in file order with the playing one ticked, then "Open in default player".</summary>
+    internal ContextMenu? OpenSettingsMenu()
     {
-        if (videoWidth <= 0 || videoHeight <= 0)
+        if (_page is not { IsClosed: false } page)
         {
-            return (2, 2);
+            return null;
         }
 
-        var scale = Math.Min(1, Math.Min(Math.Max(areaWidth, 2) / videoWidth, Math.Max(areaHeight, 2) / videoHeight));
-        static int Even(double value) => Math.Max(2, (int)value & ~1);
-        return (Even(videoWidth * scale), Even(videoHeight * scale));
+        CloseSettingsMenu();
+        var menu = BuildSettingsMenu(page);
+        menu.Closed += (_, _) => Gear.IsChecked = false;
+        _menu = menu;
+        menu.IsOpen = true;
+        Gear.IsChecked = true;
+        return menu;
+    }
+
+    /// <summary>The front buffer went or came back: the no-picture wait pauses while it is gone, and the surface is remade.</summary>
+    internal void FrontBufferChanged(bool available)
+    {
+        _frontBufferAvailable = available;
+        if (!available)
+        {
+            _noPicture.Pause();
+            return;
+        }
+
+        _noPicture.Resume();
+        if (_page is { IsClosed: false })
+        {
+            ReleaseSurface();
+            RequestPresent();
+        }
     }
 
     private void Attach(PlayerPage? page)
@@ -103,6 +126,27 @@ internal partial class PlayerView
             return;
         }
 
+        Detach();
+        if (page is null || !IsLoaded)
+        {
+            return;
+        }
+
+        _page = page;
+        _noPicture.ForgetFrames();
+        page.Player.FrameAvailable += OnPlayerFrame;
+        page.PropertyChanged += OnPagePropertyChanged;
+        _position.IsEnabled = page.IsPlaying;
+
+        // A page that opened before this view attached already has its media: wait for its picture from now.
+        if (page.Media is not null && !page.IsFailed)
+        {
+            _noPicture.Start();
+        }
+    }
+
+    private void Detach()
+    {
         if (_page is { } old)
         {
             old.Player.FrameAvailable -= OnPlayerFrame;
@@ -115,45 +159,19 @@ internal partial class PlayerView
         _page = null;
         _settle.Stop();
         _position.Stop();
-        _noPicture.Stop();
-        _noPictureWaiting = false;
+        _noPicture.Cancel();
         ReleaseSurface();
-        if (page is not null && IsLoaded)
-        {
-            _page = page;
-            Interlocked.Exchange(ref _playerFrames, 0);
-            page.Player.FrameAvailable += OnPlayerFrame;
-            page.PropertyChanged += OnPagePropertyChanged;
-            _position.IsEnabled = page.IsPlaying;
-
-            // A page that opened before this view attached already has its media: wait for its picture from now.
-            if (page.Media is not null && !page.IsFailed)
-            {
-                StartNoPictureWait();
-            }
-        }
-    }
-
-    private void StartNoPictureWait()
-    {
-        _noPicture.Stop();
-        _noPicture.Interval = NoPictureTimeout;
-        _noPictureWaiting = true;
-        if (_frontBufferAvailable)
-        {
-            _noPicture.Start();
-        }
     }
 
     // Any thread: a frame from the player itself.
     private void OnPlayerFrame()
     {
-        Interlocked.Increment(ref _playerFrames);
-        OnFrameAvailable();
+        _noPicture.FrameArrived();
+        RequestPresent();
     }
 
     // Any thread: at most one present waits on the UI thread at a time.
-    private void OnFrameAvailable()
+    private void RequestPresent()
     {
         if (Interlocked.Exchange(ref _presentPending, 1) == 0)
         {
@@ -164,48 +182,10 @@ internal partial class PlayerView
     private void Present()
     {
         Interlocked.Exchange(ref _presentPending, 0);
-        if (_page is not { IsClosed: false, IsFailed: false, Media: { } media } page || !_frontBufferAvailable)
+        if (_page is { IsClosed: false, IsFailed: false, Media: { } media } page && _frontBufferAvailable)
         {
-            return;
+            page.DrawFrame(() => EnsureSurface(media), Show, ReleaseSurface);
         }
-
-        Draw(page, () => EnsureSurface(media), Show, ReleaseSurface);
-    }
-
-    /// <summary>One present's work: build or reuse the surface, copy the frame, show it; a surface failure fails the page.</summary>
-    internal static void Draw(PlayerPage page, Func<VideoSurface?> ensureSurface, Action<VideoSurface> show, Action release)
-    {
-        VideoSurface? surface;
-        try
-        {
-            surface = ensureSurface();
-        }
-#pragma warning disable CA1031 // Every GPU failure here is the page's failure: narrowing missed OutOfMemoryException and ArgumentException.
-        catch (Exception)
-#pragma warning restore CA1031
-        {
-            release();
-            page.ShowFailure();
-            return;
-        }
-
-        if (surface is null)
-        {
-            return;
-        }
-
-        try
-        {
-            page.Player.CopyFrame(surface);
-        }
-#pragma warning disable CA1031 // A frame the player can't copy now (closing, its device lost, any mapped HRESULT) is skipped, never a crash.
-        catch (Exception)
-#pragma warning restore CA1031
-        {
-            return;
-        }
-
-        show(surface);
     }
 
     private void Show(VideoSurface surface)
@@ -220,8 +200,8 @@ internal partial class PlayerView
     private VideoSurface? EnsureSurface(PlayerMedia media)
     {
         var dpi = VisualTreeHelper.GetDpi(this);
-        var area = (FrameworkElement)Picture.Parent;
-        var (width, height) = Fit(media.Width, media.Height, area.ActualWidth * dpi.DpiScaleX, area.ActualHeight * dpi.DpiScaleY);
+        var area = PictureArea;
+        var (width, height) = PictureFit.Size(media.Width, media.Height, area.ActualWidth * dpi.DpiScaleX, area.ActualHeight * dpi.DpiScaleY);
         if (_surface is { Width: > 0 } current && (_settle.IsEnabled || (current.Width == width && current.Height == height)))
         {
             return current;
@@ -260,21 +240,28 @@ internal partial class PlayerView
     }
 
     // No frame since the file opened, such as a cut-off file: the page says it can't be played.
-    private void OnNoPicture(object? sender, EventArgs e)
+    private void OnNoPicture()
     {
-        _noPicture.Stop();
-        _noPictureWaiting = false;
-        if (Volatile.Read(ref _playerFrames) == 0 && _page is { IsClosed: false, IsFailed: false } page)
+        if (_page is { IsClosed: false, IsFailed: false } page)
         {
             page.ShowFailure();
         }
+    }
+
+    private void OnPositionTick(object? sender, EventArgs e) => _page?.RefreshPosition();
+
+    // The texture is remade only once the size has held for a moment.
+    private void OnPictureAreaSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        _settle.Stop();
+        _settle.Start();
     }
 
     // The size held: redraw at it (the present remakes the texture).
     private void OnResizeSettled(object? sender, EventArgs e)
     {
         _settle.Stop();
-        OnFrameAvailable();
+        RequestPresent();
     }
 
     // Once the page has its media, the first frame (already shown, paused) is drawn for this view.
@@ -282,8 +269,8 @@ internal partial class PlayerView
     {
         if (e.PropertyName == nameof(PlayerPage.Media))
         {
-            StartNoPictureWait();
-            OnFrameAvailable();
+            _noPicture.Start();
+            RequestPresent();
         }
         else if (e.PropertyName == nameof(PlayerPage.IsPlaying) && _page is { } page)
         {
@@ -291,70 +278,23 @@ internal partial class PlayerView
         }
     }
 
-    // The page's keys, after the focused control's own: Space, Left and Right, Up and Down. Esc is the shell's.
+    // The page's keys, after the focused control's own; they take no modifier. Esc is the shell's.
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (_page is not { IsClosed: false } page || Keyboard.Modifiers != ModifierKeys.None)
+        if (Keyboard.Modifiers == ModifierKeys.None && _page?.HandleKey(e.Key) == true)
         {
-            return;
+            e.Handled = true;
         }
-
-        switch (e.Key)
-        {
-            case Key.Space:
-                page.PlayPauseCommand.Execute(null);
-                break;
-            case Key.Left:
-                page.SeekBy(-PlayerPage.SeekStep);
-                break;
-            case Key.Right:
-                page.SeekBy(PlayerPage.SeekStep);
-                break;
-            case Key.Up:
-                page.ChangeVolume(PlayerPage.VolumeStep);
-                break;
-            case Key.Down:
-                page.ChangeVolume(-PlayerPage.VolumeStep);
-                break;
-            case Key.F when page.SupportsFullScreen:
-                page.FullScreenCommand.Execute(null);
-                break;
-            default:
-                return;
-        }
-
-        e.Handled = true;
     }
 
-    /// <summary>Whether the volume slider shows: for tests.</summary>
-    internal bool IsVolumeShown => VolumeBar.Visibility == Visibility.Visible;
-
-    /// <summary>The gear's menu while it's open, else null: for tests.</summary>
-    internal ContextMenu? SettingsMenu => _menu is { IsOpen: true } menu ? menu : null;
-
-    /// <summary>Opens the gear's menu: the Tracks in file order with the playing one ticked, then "Open in default player".</summary>
-    internal ContextMenu? OpenSettingsMenu()
+    private ContextMenu BuildSettingsMenu(PlayerPage page)
     {
-        if (_page is not { IsClosed: false } page)
-        {
-            return null;
-        }
-
-        CloseSettingsMenu();
         var menu = new ContextMenu { PlacementTarget = Gear, Placement = PlacementMode.Top };
         var itemStyle = (Style)FindResource("EncorePlayerMenuItemStyle");
-        menu.Items.Add(new MenuItem
-        {
-            Header = new TextBlock { Text = "Audio track", Style = (Style)FindResource("EncorePlayerMenuHeadingStyle") },
-            Style = itemStyle,
-            Focusable = false,
-            IsHitTestVisible = false,
-        });
+        menu.Items.Add(HeadingItem("Audio track", itemStyle));
         foreach (var track in page.Tracks)
         {
-            var item = new MenuItem { Header = track.Name, Style = itemStyle, IsCheckable = true, IsChecked = track.IsPlaying, IsEnabled = track.IsAvailable };
-            item.Click += (_, _) => page.SelectedTrack = track;
-            menu.Items.Add(item);
+            menu.Items.Add(TrackItem(page, track, itemStyle));
         }
 
         if (page.SupportsExternalActions)
@@ -362,11 +302,31 @@ internal partial class PlayerView
             menu.Items.Add(new Separator());
             menu.Items.Add(new MenuItem { Header = "Open in default player", Style = itemStyle, Command = page.OpenInDefaultPlayerCommand });
         }
-        menu.Closed += (_, _) => Gear.IsChecked = false;
-        _menu = menu;
-        menu.IsOpen = true;
-        Gear.IsChecked = true;
+
         return menu;
+    }
+
+    // A caption inside the menu: it can't be chosen or focused.
+    private MenuItem HeadingItem(string text, Style itemStyle) => new()
+    {
+        Header = new TextBlock { Text = text, Style = (Style)FindResource("EncorePlayerMenuHeadingStyle") },
+        Style = itemStyle,
+        Focusable = false,
+        IsHitTestVisible = false,
+    };
+
+    private static MenuItem TrackItem(PlayerPage page, PlayerTrack track, Style itemStyle)
+    {
+        var item = new MenuItem
+        {
+            Header = track.Name,
+            Style = itemStyle,
+            IsCheckable = true,
+            IsChecked = track.IsPlaying,
+            IsEnabled = track.IsAvailable,
+        };
+        item.Click += (_, _) => page.SelectedTrack = track;
+        return item;
     }
 
     // The gear, by click, Enter or Space: opens its menu, or closes it when it's open.
@@ -393,6 +353,12 @@ internal partial class PlayerView
         }
 
         Gear.IsChecked = false;
+    }
+
+    private void SetVolumeHover(bool hover)
+    {
+        _volumeHover = hover;
+        UpdateVolumeShown();
     }
 
     private void UpdateVolumeShown() =>
@@ -422,30 +388,6 @@ internal partial class PlayerView
     private void OnRendering(object? sender, EventArgs e) => _page?.ApplyPendingScrub();
 
     // A lock screen or display change loses the D3D9 device: remake the surface and redraw the current frame.
-    private void OnFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e) => FrontBufferChanged(e.NewValue is true);
-
-    /// <summary>The front buffer went or came back: the no-picture timer pauses while it is gone, and the surface is remade.</summary>
-    internal void FrontBufferChanged(bool available)
-    {
-        _frontBufferAvailable = available;
-        if (!available)
-        {
-            _noPicture.Stop();
-            return;
-        }
-
-        if (_page is not { IsClosed: false })
-        {
-            return;
-        }
-
-        if (_noPictureWaiting && Volatile.Read(ref _playerFrames) == 0)
-        {
-            _noPicture.Stop();
-            _noPicture.Start();
-        }
-
-        ReleaseSurface();
-        OnFrameAvailable();
-    }
+    private void OnFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e) =>
+        FrontBufferChanged(e.NewValue is true);
 }

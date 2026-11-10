@@ -309,8 +309,8 @@ public sealed class PlayerViewThemeTests : IDisposable
         var player = new FakePlayer();
         var model = new MainViewModel(engine, action => action(), player: () => player);
         var window = new MainWindow { DataContext = model, WindowStartupLocation = WindowStartupLocation.Manual, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
-        var timeout = PlayerView.NoPictureTimeout;
-        PlayerView.NoPictureTimeout = TimeSpan.FromMilliseconds(300);
+        var timeout = NoPictureWatch.Timeout;
+        NoPictureWatch.Timeout = TimeSpan.FromMilliseconds(300);
         try
         {
             window.Show();
@@ -333,7 +333,7 @@ public sealed class PlayerViewThemeTests : IDisposable
         }
         finally
         {
-            PlayerView.NoPictureTimeout = timeout;
+            NoPictureWatch.Timeout = timeout;
             window.CloseForQuit();
         }
     });
