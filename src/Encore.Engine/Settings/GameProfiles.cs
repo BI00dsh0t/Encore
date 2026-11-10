@@ -10,7 +10,12 @@ namespace Encore.Engine.Settings;
 internal static class GameProfiles
 {
     /// <summary>Creates a Game Profile when the document lacks one, named from the executable. Rules: docs/code-notes.md.</summary>
-    public static void EnsureProfile(SettingsStore store, string profileId, string fileName, ILogger log, Action<string>? notCaptured = null)
+    public static void EnsureProfile(
+        SettingsStore store,
+        string profileId,
+        string fileName,
+        ILogger log,
+        Action<string>? notCaptured = null)
     {
         if (store.Current.Profiles.ContainsKey(profileId))
         {
@@ -22,32 +27,45 @@ internal static class GameProfiles
         var ignored = false;
         try
         {
-            var created = SettingsRetry.Update(store, current =>
+            if (!SettingsRetry.Update(store, current => CreationUpdate(current, profileId, value, out ignored)))
             {
-                if (current.Profiles.ContainsKey(profileId))
-                {
-                    return null;
-                }
+                return;
+            }
 
-                ignored = !CapturedWhenNew(current, profileId);
-                SettingsOp[] ops = ignored
-                    ? [SettingsOp.SetProfile(profileId, ProfileAttributes.Name, value), SettingsOp.SetProfile(profileId, ProfileAttributes.Ignored, JsonSerializer.SerializeToElement(true, SettingsJsonContext.Default.Boolean))]
-                    : [SettingsOp.SetProfile(profileId, ProfileAttributes.Name, value)];
-                return new SettingsUpdate(current.Revision, ops);
-            });
-            if (created)
+            log.LogInformation(
+                "Created the Game Profile {Name} at {ProfileId}{Ignored}",
+                name,
+                profileId,
+                ignored ? ", not captured (captureNewGames is off)" : "");
+            if (ignored)
             {
-                log.LogInformation("Created the Game Profile {Name} at {ProfileId}{Ignored}", name, profileId, ignored ? ", not captured (captureNewGames is off)" : "");
-                if (ignored)
-                {
-                    notCaptured?.Invoke(name);
-                }
+                notCaptured?.Invoke(name);
             }
         }
         catch (Exception e)
         {
             log.LogWarning(e, "The Game Profile of {ProfileId} couldn't be created", profileId);
         }
+    }
+
+    /// <summary>The ops that create the profile, ignored when new games aren't captured; null when another write made it.</summary>
+    private static SettingsUpdate? CreationUpdate(SettingsDocument current, string profileId, JsonElement name, out bool ignored)
+    {
+        ignored = false;
+        if (current.Profiles.ContainsKey(profileId))
+        {
+            return null;
+        }
+
+        ignored = !CapturedWhenNew(current, profileId);
+        var named = SettingsOp.SetProfile(profileId, ProfileAttributes.Name, name);
+        if (!ignored)
+        {
+            return new SettingsUpdate(current.Revision, [named]);
+        }
+
+        var ignoredValue = JsonSerializer.SerializeToElement(true, SettingsJsonContext.Default.Boolean);
+        return new SettingsUpdate(current.Revision, [named, SettingsOp.SetProfile(profileId, ProfileAttributes.Ignored, ignoredValue)]);
     }
 
     // A new game is captured when captureNewGames is on, or when it was added by hand (manualGames).

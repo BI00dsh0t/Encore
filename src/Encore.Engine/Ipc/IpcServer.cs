@@ -3,24 +3,8 @@ using System.IO.Pipes;
 using System.Security.AccessControl;
 using Microsoft.Extensions.Logging;
 using Encore.Contracts;
-using Encore.Contracts.Ipc;
 
 namespace Encore.Engine.Ipc;
-
-/// <summary>The writer queue's limits; tests shorten them.</summary>
-internal sealed record IpcServerOptions
-{
-    public int MaxQueued { get; init; } = 1000;
-
-    public TimeSpan MaxLag { get; init; } = TimeSpan.FromSeconds(5);
-
-    public int MaxFrameBytes { get; init; } = Protocol.MaxEngineFrameBytes;
-
-    /// <summary>How long a shutdown waits for queued frames to be written.</summary>
-    public TimeSpan Drain { get; init; } = TimeSpan.FromSeconds(1);
-
-    public TimeProvider Time { get; init; } = TimeProvider.System;
-}
 
 /// <summary>The engine's pipe server; the constructor claims the pipe for the current user only. See docs/code-notes.md.</summary>
 internal sealed class IpcServer : IAsyncDisposable
@@ -107,7 +91,7 @@ internal sealed class IpcServer : IAsyncDisposable
             await listener.DisposeAsync().ConfigureAwait(false);
         }
 
-        await Task.WhenAll(_connections.Values.Select(c => c.CloseAsync(_options.Drain))).ConfigureAwait(false);
+        await Task.WhenAll(_connections.Values.Select(connection => connection.CloseAsync(_options.Drain))).ConfigureAwait(false);
         _stop.Dispose();
         _stopAccepting.Dispose();
     }
@@ -119,45 +103,10 @@ internal sealed class IpcServer : IAsyncDisposable
         {
             while (true)
             {
-                var connected = _listener!;
-                try
+                if (await AcceptOneAsync(stop.Token).ConfigureAwait(false) is { } pipe)
                 {
-                    await connected.WaitForConnectionAsync(stop.Token).ConfigureAwait(false);
+                    Serve(pipe, hub, router);
                 }
-                catch (IOException e) when (!stop.IsCancellationRequested)
-                {
-                    // A client connected and left before the wait took it; a new pipe instance replaces this one, created first.
-                    _log.LogWarning("A client left before its connection was accepted: {Message}", e.Message);
-                    try
-                    {
-                        _listener = Create(first: false);
-                    }
-                    finally
-                    {
-                        await connected.DisposeAsync().ConfigureAwait(false);
-                    }
-
-                    continue;
-                }
-
-                // The next listener exists before this one is handed off, so the name is never free.
-                _listener = Create(first: false);
-
-                var connection = new Connection(Interlocked.Increment(ref _nextId), connected, hub, router, _options, _log);
-                _connections[connection.Id] = connection;
-                connection.Start();
-                _ = connection.Completion.ContinueWith(
-                    (_, state) =>
-                    {
-                        if (_connections.TryRemove((int)state!, out Connection? _) && _connections.IsEmpty)
-                        {
-                            LastDisconnected?.Invoke();
-                        }
-                    },
-                    connection.Id,
-                    CancellationToken.None,
-                    TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default);
             }
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
@@ -169,6 +118,56 @@ internal sealed class IpcServer : IAsyncDisposable
         }
     }
 
+    /// <summary>Waits for a client; null when it left before the wait took it. The next listener exists on return.</summary>
+    private async Task<NamedPipeServerStream?> AcceptOneAsync(CancellationToken stop)
+    {
+        var connected = _listener!;
+        try
+        {
+            await connected.WaitForConnectionAsync(stop).ConfigureAwait(false);
+        }
+        catch (IOException e) when (!stop.IsCancellationRequested)
+        {
+            // A client connected and left before the wait took it; a new pipe instance replaces this one, created first.
+            _log.LogWarning("A client left before its connection was accepted: {Message}", e.Message);
+            try
+            {
+                _listener = Create(first: false);
+            }
+            finally
+            {
+                await connected.DisposeAsync().ConfigureAwait(false);
+            }
+
+            return null;
+        }
+
+        // The next listener exists before this one is handed off, so the name is never free.
+        _listener = Create(first: false);
+        return connected;
+    }
+
+    private void Serve(NamedPipeServerStream pipe, EventHub hub, CommandRouter router)
+    {
+        var connection = new Connection(Interlocked.Increment(ref _nextId), pipe, hub, router, _options, _log);
+        _connections[connection.Id] = connection;
+        connection.Start();
+        _ = connection.Completion.ContinueWith(
+            (_, state) => Forget((int)state!),
+            connection.Id,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    private void Forget(int connectionId)
+    {
+        if (_connections.TryRemove(connectionId, out Connection? _) && _connections.IsEmpty)
+        {
+            LastDisconnected?.Invoke();
+        }
+    }
+
     private async Task LagCheckLoopAsync()
     {
         using var timer = new PeriodicTimer(LagCheckInterval, _options.Time);
@@ -176,17 +175,22 @@ internal sealed class IpcServer : IAsyncDisposable
         {
             while (await timer.WaitForNextTickAsync(_stop.Token).ConfigureAwait(false))
             {
-                foreach (var connection in _connections.Values)
-                {
-                    if (connection.Lag > _options.MaxLag)
-                    {
-                        connection.Drop($"it is more than {_options.MaxLag.TotalSeconds:0.###} s behind");
-                    }
-                }
+                DropLagging();
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
+        }
+    }
+
+    private void DropLagging()
+    {
+        foreach (var connection in _connections.Values)
+        {
+            if (connection.Lag > _options.MaxLag)
+            {
+                connection.Drop($"it is more than {_options.MaxLag.TotalSeconds:0.###} s behind");
+            }
         }
     }
 

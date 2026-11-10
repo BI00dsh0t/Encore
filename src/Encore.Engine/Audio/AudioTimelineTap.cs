@@ -31,8 +31,6 @@ internal class AudioTimelineTap : IAudioPcmSubscriber
         _blocks = holdFrames == 0 ? [] : new HeldBlock[MaxHeldBlocks];
     }
 
-    public AudioTimeline? Timeline => _timeline;
-
     public void Publish(AudioTimeline timeline)
     {
         if (_holdFrames == 0)
@@ -52,7 +50,8 @@ internal class AudioTimelineTap : IAudioPcmSubscriber
                 }
                 else
                 {
-                    timeline.Push(block.StartQpc, block.Frames, _samples.AsSpan(block.Offset, block.Frames * AudioFormat.Channels), AudioPacketFlags.None);
+                    var samples = _samples.AsSpan(block.Offset, block.Frames * AudioFormat.Channels);
+                    timeline.Push(block.StartQpc, block.Frames, samples, AudioPacketFlags.None);
                 }
             }
 

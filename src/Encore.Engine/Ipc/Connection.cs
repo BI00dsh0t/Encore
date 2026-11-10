@@ -42,7 +42,7 @@ internal sealed class Connection : IFrameSink
         if (!_queue.TryEnqueue(frame, coalesceKey) && Volatile.Read(ref _dropped) == 0)
         {
             // Called under the hub's lock: the drop itself runs elsewhere.
-            ThreadPool.QueueUserWorkItem(static c => c.Drop("its queue is full"), this, preferLocal: false);
+            ThreadPool.QueueUserWorkItem(static connection => connection.Drop("its queue is full"), this, preferLocal: false);
         }
     }
 

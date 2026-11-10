@@ -49,6 +49,7 @@ public sealed partial class GlossaryTests
         @"src\Encore.Engine\Sessions\CaptureWaitWarnings.cs",
         @"src\Encore.Engine\Sessions\InterruptedRecordings.cs",
         @"src\Encore.Engine\Supervision\AppSupervisor.cs",
+        @"src\Encore.Engine\Supervision\EngineRestartedWarning.cs",
         @"src\Encore.Core\Feedback\FeedbackRouter.cs",
     ];
 

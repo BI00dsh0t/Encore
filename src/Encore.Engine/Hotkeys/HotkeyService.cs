@@ -37,7 +37,7 @@ internal sealed class HotkeyService : IDisposable
         _status = hub.State.Hotkeys;
 
         // Runs on the Hotkey thread: posting is all it does, so the next press isn't held up.
-        _thread = new HotkeyThread((action, qpc) => sessions.Post(new HotkeyPressed(action, qpc)));
+        _thread = new HotkeyThread((action, timestamp) => sessions.Post(new HotkeyPressed(action, timestamp)));
         try
         {
             lock (_lock)
@@ -97,18 +97,23 @@ internal sealed class HotkeyService : IDisposable
     {
         var plan = HotkeyPlan.For(document, _useCatalogDefault);
         IReadOnlyList<(HotkeyAction Action, HotkeyBinding Binding)> wanted =
-            [.. plan.Where(e => e.Registers).Select(e => (e.Action, e.Binding!))];
+            [.. plan.Where(entry => entry.Registers).Select(entry => (entry.Action, entry.Binding!))];
 
         if (!wanted.SequenceEqual(_applied))
         {
-            _results = _thread.Apply(wanted).ToDictionary(r => r.Action);
+            _results = _thread.Apply(wanted).ToDictionary(result => result.Action);
             _applied = wanted;
-            foreach (var result in _results.Values.Where(r => r.Outcome != HotkeyRegistrationOutcome.Registered))
+            foreach (var result in _results.Values.Where(result => result.Outcome != HotkeyRegistrationOutcome.Registered))
             {
-                _log.LogWarning("Hotkey {Action} not registered: {Outcome} (error {Error})", ActionName(result.Action), result.Outcome, result.Error);
+                _log.LogWarning(
+                    "Hotkey {Action} not registered: {Outcome} (error {Error})",
+                    ActionName(result.Action),
+                    result.Outcome,
+                    result.Error);
             }
 
-            _log.LogInformation("Hotkeys registered: {Count} of {Wanted}", _results.Values.Count(r => r.Outcome == HotkeyRegistrationOutcome.Registered), wanted.Count);
+            var registered = _results.Values.Count(result => result.Outcome == HotkeyRegistrationOutcome.Registered);
+            _log.LogInformation("Hotkeys registered: {Count} of {Wanted}", registered, wanted.Count);
         }
 
         var status = new HotkeyStatus([.. plan.Select(Status)]);

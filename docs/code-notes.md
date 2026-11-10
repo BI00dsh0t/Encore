@@ -766,7 +766,9 @@ Nothing in the collector allocates per frame or per packet. Audio stamps are rec
 
 ### EngineHost
 
-What `serve` sets up, roughly in order:
+`EngineStartup` (in `Hosting`) builds the services, one method per service, and `EngineHost` owns them while the
+engine serves. If a step fails, `StartupCleanup` disposes what was already built, newest first. What `serve` sets up,
+roughly in order:
 
 - It claims the instance's pipe and opens the settings store.
 - It lists the audio devices before the event hub exists, so the first snapshot holds them. After that it publishes

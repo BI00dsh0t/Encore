@@ -5,6 +5,7 @@ using Encore.Contracts;
 using Encore.Contracts.Ipc;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
+using Encore.Engine.Hosting;
 
 namespace Encore.Engine.Tests;
 
@@ -72,7 +73,7 @@ public sealed class EngineServeTests : IDisposable
         Assert.Equal(1, client.State.Settings.Revision);
         Assert.True(File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), _instance, "settings.json")));
 
-        var pending = client.SendAsync(EngineHost.DebugHold, Empty.Value, Token);
+        var pending = client.SendAsync(DebugCommands.Hold, Empty.Value, Token);
         await Task.Delay(200, Token);
         Assert.False(pending.IsCompleted);
 
@@ -126,7 +127,7 @@ public sealed class EngineServeTests : IDisposable
         Assert.InRange(gap, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(2.5));
         Assert.NotNull(client.State.HeartbeatAt);
 
-        var hang = client.SendAsync(EngineHost.DebugHang, Empty.Value, Token);
+        var hang = client.SendAsync(DebugCommands.Hang, Empty.Value, Token);
         await Task.Delay(200, Token);
         while (heartbeats.Reader.TryRead(out _))
         {

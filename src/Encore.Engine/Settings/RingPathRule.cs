@@ -26,7 +26,8 @@ internal static class RingPathRule
 
         try
         {
-            return WithSeparator(Path.GetFullPath(path)).StartsWith(WithSeparator(Path.GetFullPath(folder)), StringComparison.OrdinalIgnoreCase);
+            var inner = WithSeparator(Path.GetFullPath(path));
+            return inner.StartsWith(WithSeparator(Path.GetFullPath(folder)), StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
         {

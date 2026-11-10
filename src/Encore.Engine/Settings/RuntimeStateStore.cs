@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Encore.Core.Sessions;
 
@@ -11,9 +10,7 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     public const string FileName = "runtime.json";
 
     private readonly ILogger _log;
-    private readonly string _folder;
     private readonly string _path;
-    private readonly string _tempPath;
     private readonly Lock _lock = new();
     private readonly List<string> _open = [];
     private bool? _muted;
@@ -23,9 +20,7 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
         ArgumentNullException.ThrowIfNull(log);
-        _folder = Path.GetFullPath(folder);
-        _path = Path.Combine(_folder, FileName);
-        _tempPath = _path + ".tmp";
+        _path = Path.Combine(Path.GetFullPath(folder), FileName);
         _log = log;
     }
 
@@ -64,7 +59,11 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
             _muted = muted;
             if (Write() is { } error)
             {
-                _log.LogWarning("Mic mute ({State}) could not be saved to {Path}: {Message}; it holds until the engine stops", muted ? "muted" : "unmuted", _path, error);
+                _log.LogWarning(
+                    "Mic mute ({State}) could not be saved to {Path}: {Message}; it holds until the engine stops",
+                    muted ? "muted" : "unmuted",
+                    _path,
+                    error);
             }
         }
     }
@@ -76,7 +75,11 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
             _open.Add(path);
             if (Write() is { } error)
             {
-                _log.LogWarning("The open Recording {Recording} could not be saved to {Path}: {Message}; if the engine dies, it won't be reported", path, _path, error);
+                _log.LogWarning(
+                    "The open Recording {Recording} could not be saved to {Path}: {Message}; if the engine dies, it won't be reported",
+                    path,
+                    _path,
+                    error);
             }
         }
     }
@@ -87,7 +90,12 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
         {
             if (_open.Remove(path) && Write() is { } error)
             {
-                _log.LogWarning("The closed Recording {Recording} could not be removed from {Path}: {Message}; the next start reports it as interrupted", path, _path, error);
+                _log.LogWarning(
+                    "The closed Recording {Recording} could not be removed from {Path}: {Message}; "
+                        + "the next start reports it as interrupted",
+                    path,
+                    _path,
+                    error);
             }
         }
     }
@@ -133,7 +141,11 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
             _interrupted = false;
             if (Write() is { } error)
             {
-                _log.LogWarning("The interrupted Recordings could not be cleared from {Path}: {Message}; they stay in it until the next successful write", _path, error);
+                _log.LogWarning(
+                    "The interrupted Recordings could not be cleared from {Path}: {Message}; "
+                        + "they stay in it until the next successful write",
+                    _path,
+                    error);
             }
         }
     }
@@ -150,17 +162,6 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
         }
     }
 
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            File.Delete(path);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // A temp file that can't be deleted is overwritten by the next save.
-        }
-    }
 
     private bool Loaded(bool muted)
     {
@@ -176,30 +177,14 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     {
         try
         {
-            Directory.CreateDirectory(_folder);
-            using (var stream = new FileStream(_tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                JsonSerializer.Serialize(stream, new RuntimeState(_muted, _open.Count > 0 ? [.. _open] : null), RuntimeJsonContext.Default.RuntimeState);
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(_tempPath, _path, overwrite: true);
+            AtomicFile.Replace(_path, stream => JsonSerializer.Serialize(stream, Snapshot(), RuntimeJsonContext.Default.RuntimeState));
             return null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            TryDelete(_tempPath);
             return e.Message;
         }
     }
+
+    private RuntimeState Snapshot() => new(_muted, _open.Count > 0 ? [.. _open] : null);
 }
-
-/// <summary>The file's shape; a missing <c>micMuted</c> makes it unreadable, and an empty list is left out when writing.</summary>
-internal sealed record RuntimeState(bool? MicMuted, IReadOnlyList<string>? OpenRecordings = null);
-
-[JsonSourceGenerationOptions(
-    JsonSerializerDefaults.General,
-    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
-[JsonSerializable(typeof(RuntimeState))]
-internal sealed partial class RuntimeJsonContext : JsonSerializerContext;

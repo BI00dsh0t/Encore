@@ -8,6 +8,7 @@ using Encore.Contracts;
 using Encore.Contracts.Ipc;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
+using Encore.Engine.Hosting;
 using Encore.Engine.Ipc;
 using Encore.Engine.Settings;
 
@@ -169,7 +170,7 @@ public sealed class IpcTests : IAsyncLifetime
     {
         StartHost();
         var (client, _) = await ConnectAsync();
-        var pending = client.SendAsync(EngineHost.DebugHold, Empty.Value, Token);
+        var pending = client.SendAsync(DebugCommands.Hold, Empty.Value, Token);
         await Task.Delay(100, Token);
         Assert.False(pending.IsCompleted);
 

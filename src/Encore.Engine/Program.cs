@@ -39,15 +39,8 @@ using var loggers = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogL
 var log = loggers.CreateLogger("Engine");
 log.LogInformation("Encore engine, instance {Instance}, pid {Pid}", instance.Name, Environment.ProcessId);
 
-// Keep this console's own title from matching a --window query.
-try
-{
-    Console.Title = $"{instance.Name} engine";
-}
-catch (IOException)
-{
-}
 
+SetConsoleTitle(instance);
 if (parsed.Command is null)
 {
     Console.Error.WriteLine($"error {ErrorCodes.InvalidArguments}: {parsed.Error}");
@@ -57,73 +50,45 @@ if (parsed.Command is null)
 
 try
 {
-    switch (parsed.Command)
+    return parsed.Command switch
     {
-        case ServeCommand serve:
-            return await Serve(instance, serve, loggers, log);
+        ServeCommand serve => await Serve(instance, serve, loggers, log),
+        DebugListCommand => DebugList(),
+        DebugCaptureCommand capture => RunDebugCapture(instance, capture, loggers),
+        _ => 2,
+    };
+}
+catch (Exception error)
+{
+    return ReportFailure(error, log);
+}
 
-        case DebugListCommand:
-            DebugList();
-            return 0;
-
-        case DebugCaptureCommand capture:
-            using (var cancel = new CancellationTokenSource())
-            {
-                Console.CancelKeyPress += (_, e) =>
-                {
-                    e.Cancel = true;
-                    cancel.Cancel();
-                };
-
-                var path = new TracerCapture(capture, instance, loggers).Run(cancel.Token);
-                Console.WriteLine(path);
-                return 0;
-            }
-
-        default:
-            return 2;
+// Keep this console's own title from matching a --window query.
+static void SetConsoleTitle(Instance instance)
+{
+    try
+    {
+        Console.Title = $"{instance.Name} engine";
+    }
+    catch (IOException)
+    {
     }
 }
-catch (Exception e)
+
+static CancellationTokenSource CancelOnCtrlC()
 {
-    var (code, candidates) = e switch
+    var cancel = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, press) =>
     {
-        EngineFailure f => (f.Code, f.Candidates),
-        ErrorCodeException c => (c.Code, (IReadOnlyList<string>)[]),
-        _ => (ErrorCodes.CaptureFailed, (IReadOnlyList<string>)[]),
+        press.Cancel = true;
+        cancel.Cancel();
     };
-    if (e is EngineFailure or ErrorCodeException)
-    {
-        // An expected failure: the code and message are enough on the console; the trace goes to the file.
-        log.LogDebug(e, "{Code}: {Message}", code, e.Message);
-    }
-    else
-    {
-        log.LogError(e, "{Code}: {Message}", code, e.Message);
-    }
-
-    Console.Error.WriteLine($"error {code}: {e.Message}");
-    if (candidates.Count > 0)
-    {
-        Console.Error.WriteLine("Candidates:");
-        foreach (var candidate in candidates)
-        {
-            Console.Error.WriteLine("  " + candidate);
-        }
-    }
-
-    return 1;
+    return cancel;
 }
 
 static async Task<int> Serve(Instance instance, ServeCommand serve, ILoggerFactory loggers, ILogger log)
 {
-    using var cancel = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) =>
-    {
-        e.Cancel = true;
-        cancel.Cancel();
-    };
-
+    using var cancel = CancelOnCtrlC();
     await using var host = EngineHost.Start(instance, loggers, hostOptions: new EngineHostOptions
     {
         DebugCapture = serve.DebugCapture,
@@ -138,35 +103,79 @@ static async Task<int> Serve(Instance instance, ServeCommand serve, ILoggerFacto
     return 0;
 }
 
-static void DebugList()
+static int RunDebugCapture(Instance instance, DebugCaptureCommand capture, ILoggerFactory loggers)
+{
+    using var cancel = CancelOnCtrlC();
+    var path = new TracerCapture(capture, instance, loggers).Run(cancel.Token);
+    Console.WriteLine(path);
+    return 0;
+}
+
+static int DebugList()
 {
     Console.WriteLine("Windows:");
     foreach (var window in WindowFinder.List())
     {
-        Console.WriteLine("  " + TracerCapture.Describe(window));
+        Console.WriteLine("  " + DebugCaptureSources.Describe(window));
     }
 
     foreach (var flow in new[] { AudioFlow.Output, AudioFlow.Input })
     {
-        AudioEndpoint? fallback = null;
-        try
-        {
-            fallback = AudioEndpoints.Default(flow);
-        }
-        catch (Exception)
-        {
-            // No default endpoint for this flow.
-        }
-
+        var fallback = DefaultEndpoint(flow);
         Console.WriteLine();
         Console.WriteLine(flow == AudioFlow.Output ? "Output Devices (loopback):" : "Input Devices:");
         foreach (var endpoint in AudioEndpoints.List(flow))
         {
             var marker = endpoint.Id == fallback?.Id ? "* " : "  ";
-            Console.WriteLine(marker + TracerCapture.DescribeFully(endpoint));
+            Console.WriteLine(marker + DebugCaptureSources.DescribeFully(endpoint));
         }
     }
 
     Console.WriteLine();
     Console.WriteLine("* = default (eConsole) device, used when no --output-device / --input-device is given.");
+    return 0;
+}
+
+static AudioEndpoint? DefaultEndpoint(AudioFlow flow)
+{
+    try
+    {
+        return AudioEndpoints.Default(flow);
+    }
+    catch (Exception)
+    {
+        // No default endpoint for this flow.
+        return null;
+    }
+}
+
+// Prints the failure's code, message and candidates; an expected failure logs its trace at debug level only.
+static int ReportFailure(Exception error, ILogger log)
+{
+    var (code, candidates) = error switch
+    {
+        EngineFailure failure => (failure.Code, failure.Candidates),
+        ErrorCodeException coded => (coded.Code, (IReadOnlyList<string>)[]),
+        _ => (ErrorCodes.CaptureFailed, (IReadOnlyList<string>)[]),
+    };
+    if (error is EngineFailure or ErrorCodeException)
+    {
+        log.LogDebug(error, "{Code}: {Message}", code, error.Message);
+    }
+    else
+    {
+        log.LogError(error, "{Code}: {Message}", code, error.Message);
+    }
+
+    Console.Error.WriteLine($"error {code}: {error.Message}");
+    if (candidates.Count > 0)
+    {
+        Console.Error.WriteLine("Candidates:");
+        foreach (var candidate in candidates)
+        {
+            Console.Error.WriteLine("  " + candidate);
+        }
+    }
+
+    return 1;
 }
