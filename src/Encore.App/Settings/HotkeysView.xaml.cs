@@ -36,7 +36,7 @@ internal partial class HotkeysView
             return;
         }
 
-        if (HotkeysViewModel.FromKey(e.Key, e.SystemKey, Keyboard.Modifiers) is { } binding)
+        if (HotkeyBindings.FromKey(e.Key, e.SystemKey, Keyboard.Modifiers) is { } binding)
         {
             viewModel.Capture(row.Action, binding);
         }

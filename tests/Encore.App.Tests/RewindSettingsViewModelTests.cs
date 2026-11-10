@@ -32,8 +32,8 @@ public sealed class RewindSettingsViewModelTests
 
         viewModel.BufferWindowText = "120";
         viewModel.IsDisk = true;
-        viewModel.BitrateText = "20000";
-        viewModel.IsVbr = true;
+        viewModel.Video.BitrateText = "20000";
+        viewModel.Video.IsVbr = true;
 
         var video = Keys.Video.Default with { BitrateKbps = 20000 };
         Assert.All(updates, u => Assert.Equal(3, u.ExpectedRevision));
@@ -76,9 +76,9 @@ public sealed class RewindSettingsViewModelTests
             ]),
         };
         model.Refresh();
-        Assert.Equal(["H.264 (plays everywhere)", "HEVC (smaller files) — may not play everywhere"], viewModel.Codecs.Select(c => c.Label));
-        Assert.Equal(VideoCodec.H264, viewModel.SelectedCodec?.Codec);
-        Assert.Contains(viewModel.Resolutions, r => r.Label == "1920 × 1080");
+        Assert.Equal(["H.264 (plays everywhere)", "HEVC (smaller files) — may not play everywhere"], viewModel.Video.Codecs.Select(c => c.Label));
+        Assert.Equal(VideoCodec.H264, viewModel.Video.SelectedCodec?.Codec);
+        Assert.Contains(viewModel.Video.Resolutions, r => r.Label == "1920 × 1080");
     }
 
     [Fact]
@@ -95,16 +95,16 @@ public sealed class RewindSettingsViewModelTests
             VideoOptions = VideoOptions.FromProbe([new CodecOffer(VideoCodec.H264, "h264_nvenc", false), new CodecOffer(VideoCodec.Hevc, "hevc_nvenc", true)]),
         };
         var viewModel = Create().Rewind;
-        Assert.Equal(Encore.App.Settings.RewindSettingsViewModel.SourceLabel, viewModel.Resolutions[0].Label);
-        Assert.Null(viewModel.SourceHelp);
+        Assert.Equal(Encore.App.Settings.VideoQualityViewModel.SourceLabel, viewModel.Video.Resolutions[0].Label);
+        Assert.Null(viewModel.Video.SourceHelp);
 
-        viewModel.SelectedResolution = viewModel.Resolutions[0];
-        Assert.True(viewModel.SelectedResolution!.IsSource);
-        Assert.Contains("4096 px", viewModel.SourceHelp, StringComparison.Ordinal);
-        viewModel.SelectedCodec = viewModel.Codecs.Single(c => c.Codec == VideoCodec.Hevc);
-        Assert.DoesNotContain("4096", viewModel.SourceHelp, StringComparison.Ordinal);
-        viewModel.SelectedResolution = viewModel.Resolutions.Single(r => r.Label == "1280 × 720");
-        Assert.Null(viewModel.SourceHelp);
+        viewModel.Video.SelectedResolution = viewModel.Video.Resolutions[0];
+        Assert.True(viewModel.Video.SelectedResolution!.IsSource);
+        Assert.Contains("4096 px", viewModel.Video.SourceHelp, StringComparison.Ordinal);
+        viewModel.Video.SelectedCodec = viewModel.Video.Codecs.Single(c => c.Codec == VideoCodec.Hevc);
+        Assert.DoesNotContain("4096", viewModel.Video.SourceHelp, StringComparison.Ordinal);
+        viewModel.Video.SelectedResolution = viewModel.Video.Resolutions.Single(r => r.Label == "1280 × 720");
+        Assert.Null(viewModel.Video.SourceHelp);
 
         Assert.Equal(
             [

@@ -112,7 +112,7 @@ internal sealed class StatusLine(IEngineSession engine) : Observable
             return "";
         }
 
-        return $"· {HotkeysViewModel.Describe(save)} saves the last {HotkeysViewModel.ClipLength(SettingsValues.Global(state.Settings, Keys.BufferWindow))}";
+        return $"· {HotkeyText.Describe(save)} saves the last {HotkeyText.ClipLength(SettingsValues.Global(state.Settings, Keys.BufferWindow))}";
     }
 
     private static StatusDot DotFor(CaptureState capture) =>

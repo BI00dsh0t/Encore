@@ -43,10 +43,10 @@ internal sealed class GameViewModel : SettingsViewModel
             () => new GameClipsEditor { DataContext = Output });
         Video = new InheritedSetting(
             "Video quality",
-            () => Output.VideoUsesGlobal = false,
-            () => Reset("video quality", () => Output.VideoUsesGlobal = true),
+            () => Output.Video.UsesGlobal = false,
+            () => Reset("video quality", () => Output.Video.UsesGlobal = true),
             () => parent.EditMain?.Invoke(Keys.Video),
-            () => new GameVideoEditor { DataContext = Output });
+            () => new GameVideoEditor { DataContext = Output.Video });
         AudioTracks = new InheritedSetting(
             "Audio tracks",
             () => Tracks.UsesGlobal = false,
@@ -246,7 +246,7 @@ internal sealed class GameViewModel : SettingsViewModel
 
         var hotkeys = SettingsValues.Global(document, Keys.Hotkeys);
         var record = SettingsValues.Global(document, Keys.RecordHotkeyMode) == RecordHotkeyMode.Toggle ? hotkeys.RecordToggle : hotkeys.RecordStart;
-        _recordKey = record is { } key ? HotkeysViewModel.Describe(key) : "the Record key";
+        _recordKey = record is { } key ? HotkeyText.Describe(key) : "the Record key";
         OnPropertyChanged(nameof(RecordingsHelp));
 
         Output.Render(document);

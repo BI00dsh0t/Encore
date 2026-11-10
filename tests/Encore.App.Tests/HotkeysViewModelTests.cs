@@ -33,7 +33,7 @@ public sealed class HotkeysViewModelTests
 
         viewModel.Rows[0].SetCommand.Execute(null);
         Assert.Same(viewModel.Rows[0], viewModel.CapturingRow);
-        var combo = HotkeysViewModel.FromKey(Key.F5, Key.None, ModifierKeys.Control | ModifierKeys.Shift)!;
+        var combo = HotkeyBindings.FromKey(Key.F5, Key.None, ModifierKeys.Control | ModifierKeys.Shift)!;
         Assert.Equal(new HotkeyBinding(0x74, HotkeyModifiers.Control | HotkeyModifiers.Shift), combo);
         viewModel.Capture(HotkeyAction.Save, combo);
         Assert.Null(viewModel.CapturingRow);
@@ -43,7 +43,7 @@ public sealed class HotkeysViewModelTests
         Assert.Single(updates);
         Assert.Equal("Ctrl+Shift+F5 is already the Save Clip Hotkey.", viewModel.Message);
 
-        viewModel.Capture(HotkeyAction.MicMute, HotkeysViewModel.FromKey(Key.A, Key.None, ModifierKeys.None)!);
+        viewModel.Capture(HotkeyAction.MicMute, HotkeyBindings.FromKey(Key.A, Key.None, ModifierKeys.None)!);
         Assert.Single(updates);
         Assert.Equal("Add Ctrl, Alt, Shift or Win; only F1 to F24 work alone.", viewModel.Message);
 
@@ -59,8 +59,8 @@ public sealed class HotkeysViewModelTests
             updates.Select(u => Assert.Single(u.Ops)).Select(o => (o.Key, o.Value.GetRawText())));
         Assert.All(updates, u => Assert.Equal(SettingsScope.Global, u.Ops[0].Scope));
 
-        Assert.Null(HotkeysViewModel.FromKey(Key.System, Key.LeftAlt, ModifierKeys.Alt));
-        Assert.Equal(new HotkeyBinding(0x79, HotkeyModifiers.Alt), HotkeysViewModel.FromKey(Key.System, Key.F10, ModifierKeys.Alt));
+        Assert.Null(HotkeyBindings.FromKey(Key.System, Key.LeftAlt, ModifierKeys.Alt));
+        Assert.Equal(new HotkeyBinding(0x79, HotkeyModifiers.Alt), HotkeyBindings.FromKey(Key.System, Key.F10, ModifierKeys.Alt));
     }
 
     [Fact]

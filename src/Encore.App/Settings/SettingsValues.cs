@@ -24,6 +24,11 @@ internal static class SettingsValues
         ? SetGlobal(key, value)
         : SettingsOp.SetProfile(profileId, key.Name, key.ToJson(value));
 
+    /// <summary>The op for "use the main setting": ticked removes the game's override, unticked copies the Global value.</summary>
+    public static SettingsOp UseGlobal<T>(SettingKey<T> key, string profileId, bool useGlobal, T global) => useGlobal
+        ? SettingsOp.RemoveProfile(profileId, key.Name)
+        : Set(key, global, profileId);
+
     private static bool TryOverride<T>(SettingsDocument document, SettingKey<T> key, string profileId, out T value)
     {
         if (document.Profiles.TryGetValue(profileId, out var profile)

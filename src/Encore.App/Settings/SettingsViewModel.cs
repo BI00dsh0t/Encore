@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Windows;
 using Encore.Contracts.Settings;
 
@@ -74,6 +75,29 @@ internal abstract class SettingsViewModel(SettingsSender sender) : Observable
             default:
                 return null;
         }
+    }
+
+    /// <summary>A setter's work for a setting sent on every change: keeps the value, raises the property and sends one op.</summary>
+    protected void SetAndSend<T>(ref T field, T value, SettingKey<T> key, [CallerMemberName] string? name = null)
+    {
+        if (Set(ref field, value, name))
+        {
+            _ = SendAsync([SettingsValues.SetGlobal(key, value)]);
+        }
+    }
+
+    /// <summary>A render's work for one Global setting: takes the document's value and raises the property.</summary>
+    protected void ShowGlobal<T>(ref T field, SettingKey<T> key, string name)
+    {
+        field = SettingsValues.Global(Document, key);
+        OnPropertyChanged(name);
+    }
+
+    /// <summary>Shows the rendered value again, with why the entry wasn't sent.</summary>
+    protected void Refuse(string message, string property)
+    {
+        Message = message;
+        OnPropertyChanged(property);
     }
 
     /// <summary>A folder picker's send: a refusal the picker words itself shows on the picker, not the page's error bar.</summary>

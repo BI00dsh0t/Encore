@@ -41,7 +41,7 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
         Confirm = ConfirmWithPrompt;
         ClipsFolder = new FolderPicker(Keys.OutputFolder, ops => SendForPickerAsync(ops, ErrorCodes.RingPathInvalid))
         {
-            RefusalText = code => code == ErrorCodes.RingPathInvalid ? RewindSettingsViewModel.ClipsContainsCache : null,
+            RefusalText = code => code == ErrorCodes.RingPathInvalid ? FolderRules.ClipsContainsCache : null,
             DialogTitle = "Choose the Clips folder",
             Help = "Where Clips and Recordings are saved. Each game gets its own folder, and Monitor Recordings have theirs.",
             Validate = ValidateClipsFolder,
@@ -65,7 +65,7 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
     /// <summary>The folder the Library lists: the engine's, else the setting, else the default.</summary>
     public string FolderSizeText => string.Create(
         CultureInfo.InvariantCulture,
-        $"{RewindSettingsViewModel.FormatBytes(_folderBytes)} in {_folderCount} {(_folderCount == 1 ? "file" : "files")}");
+        $"{SettingsText.Bytes(_folderBytes)} in {_folderCount} {(_folderCount == 1 ? "file" : "files")}");
 
     /// <summary>The note shown while Cleanup is blocked by a rebuilt index; null otherwise.</summary>
     public string? CleanupBlockedText => _cleanupBlocked
@@ -222,7 +222,7 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
             ? "Nothing would be deleted now."
             : string.Create(
                 CultureInfo.InvariantCulture,
-                $"Cleanup would delete {plan.Count} {(plan.Count == 1 ? "file" : "files")} ({RewindSettingsViewModel.FormatBytes(plan.Bytes)}) now.");
+                $"Cleanup would delete {plan.Count} {(plan.Count == 1 ? "file" : "files")} ({SettingsText.Bytes(plan.Bytes)}) now.");
         return now
             + "\n\nCleanup deletes permanently: files don't go to the Recycle Bin."
             + " Favourites and files being written are never deleted."
@@ -317,19 +317,12 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
     /// <summary>The Clips folder's refusals: it contains the cache folder, or it isn't writable.</summary>
     private string? ValidateClipsFolder(string path)
     {
-        if ((_ringPath ?? DefaultCacheFolder) is { Length: > 0 } cache && RewindSettingsViewModel.IsInside(cache, path))
+        if ((_ringPath ?? DefaultCacheFolder) is { Length: > 0 } cache && FolderRules.IsInside(cache, path))
         {
-            return RewindSettingsViewModel.ClipsContainsCache;
+            return FolderRules.ClipsContainsCache;
         }
 
-        return FolderProbe.CanWrite(path) ? null : RewindSettingsViewModel.CantWrite;
-    }
-
-    // Shows the rendered value again, with why the entry wasn't sent.
-    private void Refuse(string message, string property)
-    {
-        Message = message;
-        OnPropertyChanged(property);
+        return FolderProbe.CanWrite(path) ? null : FolderRules.CantWrite;
     }
 
     private bool ConfirmWithPrompt(string message) => Prompts.YesNo(_view, message, Title, MessageBoxImage.Warning);

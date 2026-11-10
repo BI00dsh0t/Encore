@@ -12,90 +12,58 @@ internal sealed class GeneralSettingsViewModel(SettingsSender sender) : Settings
     private AppTheme _appTheme = Keys.AppTheme.Default;
     private bool _captureNewGames = Keys.CaptureNewGames.Default;
 
-    private static readonly IReadOnlyList<OverlayDotChoice> Choices =
-    [
-        new(OverlayDotMode.Auto, "Automatic: always, unless it would cost a borderless game FPS"),
-        new(OverlayDotMode.Always, "Always, while capture runs"),
-        new(OverlayDotMode.OnChange, $"For {(int)OverlayViewModel.DotOnChangeDuration.TotalSeconds} seconds after each change"),
-    ];
-
-    private static readonly IReadOnlyList<AppThemeChoice> Themes =
-    [
-        new(AppTheme.Fluent, "Fluent (follows Windows)"),
-        new(AppTheme.GamingDark, "Gaming dark"),
-    ];
-
     public override string Title => "General";
 
     /// <c>startWithWindows</c>: setting it sends the change; the Run value is written once the engine commits it.
     public bool StartWithWindows
     {
         get => _startWithWindows;
-        set
-        {
-            if (Set(ref _startWithWindows, value))
-            {
-                _ = SendAsync([SettingsValues.SetGlobal(Keys.StartWithWindows, value)]);
-            }
-        }
+        set => SetAndSend(ref _startWithWindows, value, Keys.StartWithWindows);
     }
 
     /// <summary>The <c>overlayDot</c> choices, as the page lists them.</summary>
-    public IReadOnlyList<OverlayDotChoice> OverlayDotChoices => Choices;
+    public IReadOnlyList<OverlayDotChoice> OverlayDotChoices { get; } =
+    [
+        new(OverlayDotMode.Auto, "Automatic: always, unless it would cost a borderless game FPS"),
+        new(OverlayDotMode.Always, "Always, while capture runs"),
+        new(OverlayDotMode.OnChange, $"For {(int)OverlayViewModel.DotOnChangeDuration.TotalSeconds} seconds after each change"),
+    ];
 
     /// <summary><c>overlayDot</c>: when the Overlay's dot shows. Setting it sends the change.</summary>
     public OverlayDotMode OverlayDot
     {
         get => _overlayDot;
-        set
-        {
-            if (Set(ref _overlayDot, value))
-            {
-                _ = SendAsync([SettingsValues.SetGlobal(Keys.OverlayDot, value)]);
-            }
-        }
+        set => SetAndSend(ref _overlayDot, value, Keys.OverlayDot);
     }
 
     /// <summary>The <c>appTheme</c> choices, as the page lists them.</summary>
-    public IReadOnlyList<AppThemeChoice> AppThemeChoices => Themes;
+    public IReadOnlyList<AppThemeChoice> AppThemeChoices { get; } =
+    [
+        new(AppTheme.Fluent, "Fluent (follows Windows)"),
+        new(AppTheme.GamingDark, "Gaming dark"),
+    ];
 
     /// <c>appTheme</c>: setting it sends the change; the App restyles only when the engine's commit comes back.
     public AppTheme AppTheme
     {
         get => _appTheme;
-        set
-        {
-            if (Set(ref _appTheme, value))
-            {
-                _ = SendAsync([SettingsValues.SetGlobal(Keys.AppTheme, value)]);
-            }
-        }
+        set => SetAndSend(ref _appTheme, value, Keys.AppTheme);
     }
 
     /// <c>captureNewGames</c>: whether a game found for the first time is captured; existing games keep their choice.
     public bool CaptureNewGames
     {
         get => _captureNewGames;
-        set
-        {
-            if (Set(ref _captureNewGames, value))
-            {
-                _ = SendAsync([SettingsValues.SetGlobal(Keys.CaptureNewGames, value)]);
-            }
-        }
+        set => SetAndSend(ref _captureNewGames, value, Keys.CaptureNewGames);
     }
 
     protected override FrameworkElement CreateView() => new GeneralSettingsView { DataContext = this };
 
     protected override void OnRender(SettingsDocument document)
     {
-        _startWithWindows = SettingsValues.Global(document, Keys.StartWithWindows);
-        OnPropertyChanged(nameof(StartWithWindows));
-        _overlayDot = SettingsValues.Global(document, Keys.OverlayDot);
-        OnPropertyChanged(nameof(OverlayDot));
-        _appTheme = SettingsValues.Global(document, Keys.AppTheme);
-        OnPropertyChanged(nameof(AppTheme));
-        _captureNewGames = SettingsValues.Global(document, Keys.CaptureNewGames);
-        OnPropertyChanged(nameof(CaptureNewGames));
+        ShowGlobal(ref _startWithWindows, Keys.StartWithWindows, nameof(StartWithWindows));
+        ShowGlobal(ref _overlayDot, Keys.OverlayDot, nameof(OverlayDot));
+        ShowGlobal(ref _appTheme, Keys.AppTheme, nameof(AppTheme));
+        ShowGlobal(ref _captureNewGames, Keys.CaptureNewGames, nameof(CaptureNewGames));
     }
 }

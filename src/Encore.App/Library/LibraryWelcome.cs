@@ -83,8 +83,8 @@ internal sealed class LibraryWelcome : Observable
         ArgumentNullException.ThrowIfNull(state);
         var settings = state.Settings;
         var hotkeys = SettingsValues.Global(settings, Keys.Hotkeys);
-        SaveKey = hotkeys.Save is { } save ? HotkeysViewModel.Describe(save) : "the Save Clip key";
-        ClipLength = HotkeysViewModel.ClipLength(SettingsValues.Global(settings, Keys.BufferWindow));
+        SaveKey = hotkeys.Save is { } save ? HotkeyText.Describe(save) : "the Save Clip key";
+        ClipLength = HotkeyText.ClipLength(SettingsValues.Global(settings, Keys.BufferWindow));
         OnPropertyChanged(nameof(LeadTail));
 
         var layout = SettingsValues.Global(settings, Keys.TrackLayout);
@@ -96,7 +96,7 @@ internal sealed class LibraryWelcome : Observable
         Folder = $"Clips are saved in {(state.LibraryFolder is { Length: > 0 } folder ? folder : "your Videos folder")}";
 
         var record = SettingsValues.Global(settings, Keys.RecordHotkeyMode) == RecordHotkeyMode.Toggle ? hotkeys.RecordToggle : hotkeys.RecordStart;
-        _recordKey = record is { } key ? HotkeysViewModel.Describe(key) : "the Record key";
+        _recordKey = record is { } key ? HotkeyText.Describe(key) : "the Record key";
         OnPropertyChanged(nameof(Recordings));
     }
 }
