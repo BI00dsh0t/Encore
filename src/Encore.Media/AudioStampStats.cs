@@ -75,38 +75,61 @@ public sealed class AudioStampStats
             Discontinuities++;
         }
 
-        if ((flags & AudioPacketFlags.TimestampError) != 0)
+        if (IsBadStamp(stampQpc, flags))
         {
-            TimestampErrors++;
-            Break();
-            return;
-        }
-
-        if (stampQpc == 0)
-        {
-            ZeroStamps++;
-            Break();
-            return;
-        }
-
-        if (_hasGood && stampQpc <= _lastGoodStamp)
-        {
-            BackwardStamps++;
             Break();
             return;
         }
 
         StampAge.Record(readQpc - stampQpc);
+        TrackSegment(stampQpc, IsPredictable(stampQpc, discontinuity));
+        _hasGood = true;
+        _previousWasGood = true;
+        _lastGoodStamp = stampQpc;
+        _lastGoodFrames = frames;
+    }
 
-        var predictable = false;
-        if (_previousWasGood && !discontinuity)
+    /// <summary>Counts a flagged, zero or backward stamp; such a stamp breaks the drift segment.</summary>
+    private bool IsBadStamp(long stampQpc, AudioPacketFlags flags)
+    {
+        if ((flags & AudioPacketFlags.TimestampError) != 0)
         {
-            var expected = _lastGoodStamp + QpcClock.ToUnits(_lastGoodFrames, AudioTimeline.SampleRate, _qpcFrequency);
-            var error = Math.Abs(stampQpc - expected);
-            Jitter.Record(error);
-            predictable = error <= _segmentBreakTicks;
+            TimestampErrors++;
+            return true;
         }
 
+        if (stampQpc == 0)
+        {
+            ZeroStamps++;
+            return true;
+        }
+
+        if (_hasGood && stampQpc <= _lastGoodStamp)
+        {
+            BackwardStamps++;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether the stamp follows the last good one by its frames, within the break; records the jitter when it can tell.</summary>
+    private bool IsPredictable(long stampQpc, bool discontinuity)
+    {
+        if (!_previousWasGood || discontinuity)
+        {
+            return false;
+        }
+
+        var expected = _lastGoodStamp + QpcClock.ToUnits(_lastGoodFrames, AudioTimeline.SampleRate, _qpcFrequency);
+        var error = Math.Abs(stampQpc - expected);
+        Jitter.Record(error);
+        return error <= _segmentBreakTicks;
+    }
+
+    /// <summary>Extends the drift segment with a predictable stamp, keeping the longest; any other stamp starts a new one.</summary>
+    private void TrackSegment(long stampQpc, bool predictable)
+    {
         if (_inSegment && predictable)
         {
             _segmentFrames += _lastGoodFrames;
@@ -125,11 +148,6 @@ public sealed class AudioStampStats
             _segmentFrames = 0;
             Segments++;
         }
-
-        _hasGood = true;
-        _previousWasGood = true;
-        _lastGoodStamp = stampQpc;
-        _lastGoodFrames = frames;
     }
 
     private void Break()

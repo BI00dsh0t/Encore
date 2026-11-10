@@ -196,27 +196,32 @@ public sealed class TrackMixer
 
                 var chunk = (int)Math.Min(ChunkFrames, frames - offset);
                 var start = _written[input];
-                for (var done = 0; done < chunk;)
-                {
-                    var slot = (int)((start + done) % RingFrames);
-                    var run = Math.Min(chunk - done, RingFrames - slot);
-                    var target = ring.AsSpan(slot * Channels, run * Channels);
-                    if (silent)
-                    {
-                        target.Clear();
-                    }
-                    else
-                    {
-                        interleaved.Slice((int)(offset + done) * Channels, run * Channels).CopyTo(target);
-                    }
-
-                    done += run;
-                }
-
+                CopyIntoRing(ring, start, chunk, interleaved, offset, silent);
                 _written[input] = start + chunk;
                 offset += chunk;
                 Advance();
             }
+        }
+    }
+
+    /// <summary>Copies one chunk, or as much silence, into an input's ring from a frame position, wrapping at its end.</summary>
+    private static void CopyIntoRing(float[] ring, long start, int chunk, ReadOnlySpan<float> interleaved, long offset, bool silent)
+    {
+        for (var done = 0; done < chunk;)
+        {
+            var slot = (int)((start + done) % RingFrames);
+            var run = Math.Min(chunk - done, RingFrames - slot);
+            var target = ring.AsSpan(slot * Channels, run * Channels);
+            if (silent)
+            {
+                target.Clear();
+            }
+            else
+            {
+                interleaved.Slice((int)(offset + done) * Channels, run * Channels).CopyTo(target);
+            }
+
+            done += run;
         }
     }
 
@@ -300,28 +305,6 @@ public sealed class TrackMixer
             {
                 mixer.Append(index, [], frames);
             }
-        }
-    }
-}
-
-/// <summary>Writes one stream to several sinks: a device shared by several Tracks feeds each Track's mixer.</summary>
-public sealed class AudioFanOut(IReadOnlyList<IAudioSampleSink> sinks) : IAudioSampleSink
-{
-    private readonly IAudioSampleSink[] _sinks = [.. sinks];
-
-    public void Write(ReadOnlySpan<float> interleaved)
-    {
-        foreach (var sink in _sinks)
-        {
-            sink.Write(interleaved);
-        }
-    }
-
-    public void WriteSilence(long frames)
-    {
-        foreach (var sink in _sinks)
-        {
-            sink.WriteSilence(frames);
         }
     }
 }
