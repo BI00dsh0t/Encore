@@ -7,8 +7,15 @@ namespace Encore.Engine.Audio;
 internal static class TrackWiring
 {
     /// <summary>The sink for one device: each Track's mixer input for it, with mic mute gating a Mic Device where a Track asks.</summary>
-    public static IAudioSampleSink DeviceSink(int device, bool isMic, IReadOnlyList<SessionTrack> tracks, IReadOnlyList<IReadOnlyList<int>> inputs,
-        IReadOnlyList<TrackMixer> mixers, MicMuteSchedule schedule, long frequency, long anchorQpc)
+    public static IAudioSampleSink DeviceSink(
+        int device,
+        bool isMic,
+        IReadOnlyList<SessionTrack> tracks,
+        IReadOnlyList<IReadOnlyList<int>> inputs,
+        IReadOnlyList<TrackMixer> mixers,
+        MicMuteSchedule schedule,
+        long frequency,
+        long anchor)
     {
         var sinks = new List<IAudioSampleSink>();
         for (var t = 0; t < tracks.Count; t++)
@@ -19,7 +26,7 @@ internal static class TrackWiring
                 // Mic mute acts before the mix, and only on a Mic Device in a Track it affects.
                 var sink = mixers[t].Input(input);
                 sinks.Add(isMic && tracks[t].MuteAffected
-                    ? new MicMuteGate(sink, schedule, frequency, anchorQpc)
+                    ? new MicMuteGate(sink, schedule, frequency, anchor)
                     : sink);
             }
         }

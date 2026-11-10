@@ -129,7 +129,13 @@ internal sealed class TrackMeters : IDisposable
         private readonly ManualResetEvent _stop = new(false);
         private readonly Thread _thread;
 
-        public ActiveWatch(IAudioDeviceHub hub, TrackLayout layout, SessionAudio audio, bool micMuted, Action<MeterLevels> publish, ILogger log)
+        public ActiveWatch(
+            IAudioDeviceHub hub,
+            TrackLayout layout,
+            SessionAudio audio,
+            bool micMuted,
+            Action<MeterLevels> publish,
+            ILogger log)
         {
             _publish = publish;
             var anchor = Stopwatch.GetTimestamp();

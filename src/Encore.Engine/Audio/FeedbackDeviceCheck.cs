@@ -25,7 +25,13 @@ internal sealed class FeedbackDeviceCheck : IDisposable
     private bool _disposed;
 
     /// <summary>Subscribes to settings and endpoint changes; the owner calls Check on a target change and at start.</summary>
-    public FeedbackDeviceCheck(FeedbackSoundPlayer sounds, SettingsStore store, IAudioEndpointSource endpoints, Func<string?> profileId, Warnings warnings, ILogger log)
+    public FeedbackDeviceCheck(
+        FeedbackSoundPlayer sounds,
+        SettingsStore store,
+        IAudioEndpointSource endpoints,
+        Func<string?> profileId,
+        Warnings warnings,
+        ILogger log)
     {
         _sounds = sounds;
         _store = store;
@@ -52,7 +58,8 @@ internal sealed class FeedbackDeviceCheck : IDisposable
                 endpoint is null ? [] : FeedbackCapture.CapturingTracks(layout, endpoint);
             var condition = captured.Count == 0
                 ? null
-                : endpoint + "|" + string.Join(",", captured.Select(c => $"{c.Track.Id:N}:{c.Track.Name}:{c.Device.FriendlyName}"));
+                : endpoint + "|" + string.Join(",", captured.Select(capture =>
+                    $"{capture.Track.Id:N}:{capture.Track.Name}:{capture.Device.FriendlyName}"));
             if (condition == _condition)
             {
                 return;
@@ -66,7 +73,7 @@ internal sealed class FeedbackDeviceCheck : IDisposable
             }
 
             var device = captured[0].Device.FriendlyName;
-            var tracks = string.Join(", ", captured.Select(c => $"'{c.Track.Name}'"));
+            var tracks = string.Join(", ", captured.Select(capture => $"'{capture.Track.Name}'"));
             _warning.Raise(Message(device, tracks, captured.Count));
             _log.LogWarning("Feedback Sounds play on {Device}, which {Tracks} record", device, tracks);
         }
