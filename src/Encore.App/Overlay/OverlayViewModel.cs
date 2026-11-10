@@ -6,14 +6,6 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Overlay;
 
-/// <summary>What the Overlay shows: no dot, a hollow one (Rewind on) or a solid one (recording).</summary>
-internal enum OverlayDot
-{
-    None,
-    Hollow,
-    Solid,
-}
-
 /// <summary>The Overlay's state, derived only from the engine's state: the dot, icons and queued messages. docs/code-notes.md.</summary>
 internal sealed class OverlayViewModel : Observable
 {

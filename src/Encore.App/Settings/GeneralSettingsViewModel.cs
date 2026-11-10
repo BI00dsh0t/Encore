@@ -99,9 +99,3 @@ internal sealed class GeneralSettingsViewModel(SettingsSender sender) : Settings
         OnPropertyChanged(nameof(CaptureNewGames));
     }
 }
-
-/// <summary>One <c>overlayDot</c> choice on the General page.</summary>
-internal sealed record OverlayDotChoice(OverlayDotMode Mode, string Label);
-
-/// <summary>One <c>appTheme</c> choice on the General page.</summary>
-internal sealed record AppThemeChoice(AppTheme Theme, string Label);

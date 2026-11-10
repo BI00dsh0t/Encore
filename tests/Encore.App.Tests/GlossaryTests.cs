@@ -35,14 +35,12 @@ public sealed partial class GlossaryTests
     /// <summary>The source files whose string literals are user-facing text; log and exception lines and comments are skipped.</summary>
     private static readonly string[] UserFacingSources =
     [
-        @"src\Encore.App\Status\StatusLine.cs",
+        @"src\Encore.App\Status\Status*.cs",
         @"src\Encore.App\TrayCapture.cs",
         @"src\Encore.App\Overlay\OverlayViewModel.cs",
         @"src\Encore.App\Library\Library*.cs",
         @"src\Encore.App\ShellApp.cs",
-        @"src\Encore.App\Settings\*ViewModel.cs",
-        @"src\Encore.App\Settings\FolderPicker.cs",
-        @"src\Encore.App\Settings\MonitorPicker.cs",
+        @"src\Encore.App\Settings\*.cs",
         @"src\Encore.Engine\Audio\DeviceDropoutReporter.cs",
         @"src\Encore.Engine\Audio\FeedbackDeviceCheck.cs",
         @"src\Encore.Engine\Sessions\MemoryMarginReporter.cs",

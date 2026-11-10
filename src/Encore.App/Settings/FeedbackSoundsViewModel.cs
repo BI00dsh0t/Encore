@@ -1,14 +1,10 @@
 using System.Windows;
-using System.Windows.Input;
 using Encore.App.Engine;
 using Encore.Contracts;
 using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
-
-/// <summary>A device the Feedback Sounds page offers; a null id is the default communications device.</summary>
-internal sealed record FeedbackDeviceItem(string? EndpointId, string Label);
 
 /// <summary>The Feedback Sounds page: a switch and a Play button per sound, and the sound device. UI thread.</summary>
 internal sealed class FeedbackSoundsViewModel : SettingsViewModel
@@ -151,34 +147,4 @@ internal sealed class FeedbackSoundsViewModel : SettingsViewModel
 
         OnPropertyChanged(nameof(SelectedDevice));
     }
-}
-
-/// <summary>One sound on the Feedback Sounds page: its switch and its Play button.</summary>
-internal sealed class FeedbackSoundRow : Observable
-{
-    private readonly FeedbackSoundsViewModel _viewModel;
-
-    public FeedbackSoundRow(FeedbackSoundsViewModel viewModel, FeedbackSound sound, string label)
-    {
-        _viewModel = viewModel;
-        Sound = sound;
-        Label = label;
-        PlayCommand = new RelayCommand(() => _ = viewModel.PlayAsync(sound));
-    }
-
-    public FeedbackSound Sound { get; }
-
-    public string Label { get; }
-
-    /// <summary>The sound's <c>feedbackSounds</c> flag; setting it sends the whole value with that flag changed.</summary>
-    public bool IsOn
-    {
-        get => _viewModel.IsOn(Sound);
-        set => _viewModel.Switch(this, value);
-    }
-
-    /// <summary>Sends <c>feedback.preview</c> for the sound, whether or not it is switched on.</summary>
-    public ICommand PlayCommand { get; }
-
-    internal void Changed() => OnPropertyChanged(nameof(IsOn));
 }

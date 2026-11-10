@@ -7,12 +7,6 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
-/// <summary>A codec the page offers, with its label.</summary>
-internal sealed record CodecItem(VideoCodec Codec, string Label);
-
-/// <summary>An output resolution the page offers; IsSource is "Source", the game's or screen's own size.</summary>
-internal sealed record ResolutionItem(int Width, int Height, string Label, bool IsSource = false);
-
 /// <summary>The Clips and Output settings, each edit sent at once; with a profile id it edits that game's overrides.</summary>
 internal sealed class RewindSettingsViewModel(SettingsSender sender, string? profileId = null, string? defaultCacheFolder = null) : SettingsViewModel(sender)
 {
