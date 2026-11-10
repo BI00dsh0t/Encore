@@ -1,30 +1,5 @@
 namespace Encore.Media;
 
-/// <summary>What the pacer tells the encoder thread to do.</summary>
-public enum PacerAction
-{
-    /// <summary>Nothing is due yet.</summary>
-    None,
-
-    /// <summary>Encode the frame just offered into <see cref="PacerDecision.Slot"/>.</summary>
-    Emit,
-
-    /// <summary>Keep the frame just offered as the held frame, for the next slot.</summary>
-    Hold,
-
-    /// <summary>The frame just offered is older than one already taken: release it.</summary>
-    Drop,
-
-    /// <summary>Encode the held frame into <see cref="PacerDecision.Slot"/>.</summary>
-    EmitHeld,
-
-    /// <summary>Encode the last emitted frame again into <see cref="PacerDecision.Slot"/>.</summary>
-    Repeat,
-}
-
-/// <summary>ReplacedHeld means the held frame is superseded by the one offered: release it.</summary>
-public readonly record struct PacerDecision(PacerAction Action, long Slot, long Pts, bool ReplacedHeld = false);
-
 /// <summary>The constant-frame-rate pacer: exactly one frame per slot of the output fps. Rules: docs/code-notes.md.</summary>
 public sealed class FramePacer
 {
@@ -34,7 +9,6 @@ public sealed class FramePacer
     private readonly long _timeBase;
     private readonly bool _firstFrameTakesNearestSlot;
     private long _newestQpc = long.MinValue;
-    private long _heldQpc;
     private bool _running;
 
     /// <summary>With firstFrameTakesNearestSlot, a chain that starts mid-session gets no repeats for the slots before it.</summary>
@@ -124,12 +98,8 @@ public sealed class FramePacer
         }
 
         HasHeld = true;
-        _heldQpc = captureQpc;
         return new PacerDecision(PacerAction.Hold, NextSlot, Pts(NextSlot), replaced);
     }
-
-    /// <summary>The capture QPC of the held frame; meaningful only while <see cref="HasHeld"/>.</summary>
-    public long HeldQpc => _heldQpc;
 
     /// <summary>The next piece of time-driven work at <paramref name="nowQpc"/>, or <see cref="PacerAction.None"/>.</summary>
     public PacerDecision Poll(long nowQpc)

@@ -79,7 +79,8 @@ internal sealed unsafe class EndpointWatcher : IDisposable
             try
             {
                 enumerator = AudioEndpoints.CreateEnumerator();
-                _unknown = NotificationWrappers.Instance.GetOrCreateComInterfaceForObject(new NotificationSink(this), CreateComInterfaceFlags.None);
+                _unknown = NotificationWrappers.Instance.GetOrCreateComInterfaceForObject(
+                    new NotificationSink(this), CreateComInterfaceFlags.None);
                 var iid = IMMNotificationClient.IID_Guid;
                 ((HRESULT)Marshal.QueryInterface(_unknown, in iid, out var client)).ThrowOnFailure();
                 _client = (IMMNotificationClient*)client;
@@ -212,13 +213,15 @@ internal sealed unsafe class EndpointWatcher : IDisposable
         private static ComInterfaceEntry* CreateEntries()
         {
             GetIUnknownImpl(out var queryInterface, out var addRef, out var release);
-            var vtable = (IMMNotificationClient.Vtbl*)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(NotificationWrappers), sizeof(IMMNotificationClient.Vtbl));
+            var vtable = (IMMNotificationClient.Vtbl*)RuntimeHelpers.AllocateTypeAssociatedMemory(
+                typeof(NotificationWrappers), sizeof(IMMNotificationClient.Vtbl));
             vtable->QueryInterface_1 = (delegate* unmanaged[Stdcall]<IMMNotificationClient*, Guid*, void**, HRESULT>)queryInterface;
             vtable->AddRef_2 = (delegate* unmanaged[Stdcall]<IMMNotificationClient*, uint>)addRef;
             vtable->Release_3 = (delegate* unmanaged[Stdcall]<IMMNotificationClient*, uint>)release;
             IMMNotificationClient.PopulateVTable(vtable);
 
-            var entries = (ComInterfaceEntry*)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(NotificationWrappers), sizeof(ComInterfaceEntry));
+            var entries = (ComInterfaceEntry*)RuntimeHelpers.AllocateTypeAssociatedMemory(
+                typeof(NotificationWrappers), sizeof(ComInterfaceEntry));
             entries->IID = IMMNotificationClient.IID_Guid;
             entries->Vtable = (nint)vtable;
             return entries;

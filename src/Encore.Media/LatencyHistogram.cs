@@ -17,7 +17,10 @@ public sealed class LatencyHistogram
     private long _maxTicks;
     private Int128 _sumTicks;
 
-    public LatencyHistogram(long qpcFrequency, long bucketMicroseconds = DefaultBucketMicroseconds, long rangeMicroseconds = DefaultRangeMicroseconds)
+    public LatencyHistogram(
+        long qpcFrequency,
+        long bucketMicroseconds = DefaultBucketMicroseconds,
+        long rangeMicroseconds = DefaultRangeMicroseconds)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(qpcFrequency);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bucketMicroseconds);

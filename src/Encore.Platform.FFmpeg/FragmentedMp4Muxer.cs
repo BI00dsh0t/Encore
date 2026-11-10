@@ -7,9 +7,6 @@ namespace Encore.Platform.FFmpeg;
 /// <summary>Writes fragmented MP4 under one lock; a Recording's durable muxer flushes each fragment. docs/code-notes.md.</summary>
 public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
 {
-    // MKTAG('h', 'v', 'c', '1').
-    private const uint HevcTag = 'h' | ('v' << 8) | ('c' << 16) | ((uint)'1' << 24);
-
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
     private readonly bool _durable;
@@ -58,7 +55,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     {
         var stream = NewStream();
         FFmpegLibrary.Check(ffmpeg.avcodec_parameters_from_context(stream->codecpar, encoder), "avcodec_parameters_from_context");
-        return Describe(stream, encoder->time_base, title, isDefault);
+        return Mp4Streams.Describe(stream, encoder->time_base, title, isDefault);
     }
 
     /// <summary>Adds a stream from copied codec parameters, as a Recording does. Call before <see cref="Start"/>.</summary>
@@ -66,7 +63,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
     {
         var stream = NewStream();
         FFmpegLibrary.Check(ffmpeg.avcodec_parameters_copy(stream->codecpar, parameters), "avcodec_parameters_copy");
-        return Describe(stream, timeBase, title, isDefault);
+        return Mp4Streams.Describe(stream, timeBase, title, isDefault);
     }
 
     private AVStream* NewStream()
@@ -76,33 +73,7 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             throw new InvalidOperationException("Streams must be added before the header is written.");
         }
 
-        var stream = ffmpeg.avformat_new_stream(_context, null);
-        if (stream is null)
-        {
-            throw new InvalidOperationException("avformat_new_stream failed.");
-        }
-
-        return stream;
-    }
-
-    // The tag, time base, disposition and title every stream gets, whatever its parameters came from.
-    private static int Describe(AVStream* stream, AVRational timeBase, string? title, bool isDefault)
-    {
-        if (stream->codecpar->codec_id == AVCodecID.AV_CODEC_ID_HEVC)
-        {
-            // hvc1 (parameter sets in the sample entry) rather than mp4's default hev1: Apple players need it.
-            stream->codecpar->codec_tag = HevcTag;
-        }
-
-        stream->time_base = timeBase;
-        stream->disposition = isDefault ? ffmpeg.AV_DISPOSITION_DEFAULT : 0;
-        if (title is not null)
-        {
-            ffmpeg.av_dict_set(&stream->metadata, "title", title, 0);
-            ffmpeg.av_dict_set(&stream->metadata, "handler_name", title, 0);
-        }
-
-        return stream->index;
+        return Mp4Streams.New(_context);
     }
 
     /// <summary>Opens the file and writes the header.</summary>
@@ -168,30 +139,38 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             ffmpeg.av_packet_rescale_ts(packet, timeBase, _context->streams[streamIndex]->time_base);
             if (_durable)
             {
-                // av_write_frame keeps its own reference; this one is the caller's to drop.
-                try
-                {
-                    var (dts, duration) = (packet->dts, packet->duration);
-                    Check(ffmpeg.av_write_frame(_context, packet), "av_write_frame");
-                    if (dts != ffmpeg.AV_NOPTS_VALUE)
-                    {
-                        if (_firstDts[streamIndex] == ffmpeg.AV_NOPTS_VALUE)
-                        {
-                            _firstDts[streamIndex] = dts;
-                        }
-
-                        _lastEnd[streamIndex] = dts + duration;
-                    }
-                }
-                finally
-                {
-                    ffmpeg.av_packet_unref(packet);
-                }
+                WriteDurable(packet, streamIndex);
             }
             else
             {
                 FFmpegLibrary.Check(ffmpeg.av_interleaved_write_frame(_context, packet), "av_interleaved_write_frame");
             }
+        }
+    }
+
+    /// <summary>Writes a packet into the fragment being built and notes its stream's span, for the mehd. Under the lock.</summary>
+    private void WriteDurable(AVPacket* packet, int streamIndex)
+    {
+        // av_write_frame keeps its own reference; this one is the caller's to drop.
+        try
+        {
+            var (dts, duration) = (packet->dts, packet->duration);
+            Check(ffmpeg.av_write_frame(_context, packet), "av_write_frame");
+            if (dts == ffmpeg.AV_NOPTS_VALUE)
+            {
+                return;
+            }
+
+            if (_firstDts[streamIndex] == ffmpeg.AV_NOPTS_VALUE)
+            {
+                _firstDts[streamIndex] = dts;
+            }
+
+            _lastEnd[streamIndex] = dts + duration;
+        }
+        finally
+        {
+            ffmpeg.av_packet_unref(packet);
         }
     }
 
@@ -283,7 +262,9 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             if (_firstDts[i] != ffmpeg.AV_NOPTS_VALUE)
             {
                 var timeBase = _context->streams[i]->time_base;
-                durationUs = Math.Max(durationUs, ffmpeg.av_rescale_rnd(_lastEnd[i] - _firstDts[i], 1_000_000L * timeBase.num, timeBase.den, AVRounding.AV_ROUND_UP));
+                var streamUs = ffmpeg.av_rescale_rnd(
+                    _lastEnd[i] - _firstDts[i], 1_000_000L * timeBase.num, timeBase.den, AVRounding.AV_ROUND_UP);
+                durationUs = Math.Max(durationUs, streamUs);
             }
         }
 

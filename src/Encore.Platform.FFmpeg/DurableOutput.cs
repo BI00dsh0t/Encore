@@ -8,10 +8,7 @@ namespace Encore.Platform.FFmpeg;
 /// <summary>A custom AVIO over a file it owns; Flush pushes FFmpeg's buffer to the file and the file to the disk.</summary>
 internal sealed unsafe class DurableOutput : IDisposable
 {
-    private const int BufferSize = 64 * 1024;
-
-    // AVERROR(EIO).
-    private const int Eio = -5;
+    private const int Eio = FileAvio.Eio;
 
     private readonly FileStream _file;
     private readonly bool _flushToDisk;
@@ -34,25 +31,14 @@ internal sealed unsafe class DurableOutput : IDisposable
         try
         {
             _handle = GCHandle.Alloc(this);
-            var buffer = (byte*)ffmpeg.av_malloc(BufferSize);
-            if (buffer is null)
-            {
-                throw new InvalidOperationException("av_malloc failed.");
-            }
-
-            _context = ffmpeg.avio_alloc_context(
-                buffer,
-                BufferSize,
-                1,
-                (void*)GCHandle.ToIntPtr(_handle),
+            var write = (delegate* unmanaged[Cdecl]<void*, byte*, int, int>)&WritePacket;
+            var seek = (delegate* unmanaged[Cdecl]<void*, long, int, long>)&Seek;
+            _context = FileAvio.Allocate(
+                _handle,
+                writable: true,
                 default,
-                new avio_alloc_context_write_packet_func { Pointer = (nint)(delegate* unmanaged[Cdecl]<void*, byte*, int, int>)&WritePacket },
-                new avio_alloc_context_seek_func { Pointer = (nint)(delegate* unmanaged[Cdecl]<void*, long, int, long>)&Seek });
-            if (_context is null)
-            {
-                ffmpeg.av_free(buffer);
-                throw new InvalidOperationException("avio_alloc_context failed.");
-            }
+                new avio_alloc_context_write_packet_func { Pointer = (nint)write },
+                new avio_alloc_context_seek_func { Pointer = (nint)seek });
         }
         catch
         {
@@ -110,20 +96,7 @@ internal sealed unsafe class DurableOutput : IDisposable
 
     public void Dispose()
     {
-        if (_context is not null)
-        {
-            // FFmpeg may have replaced the buffer it was given; free the one it holds.
-            ffmpeg.av_freep(&_context->buffer);
-            var context = _context;
-            ffmpeg.avio_context_free(&context);
-            _context = null;
-        }
-
-        if (_handle.IsAllocated)
-        {
-            _handle.Free();
-        }
-
+        FileAvio.Free(ref _context, ref _handle);
         _file.Dispose();
     }
 
@@ -174,14 +147,7 @@ internal sealed unsafe class DurableOutput : IDisposable
 
         try
         {
-            whence &= ~ffmpeg.AVSEEK_FORCE;
-            if (whence == ffmpeg.AVSEEK_SIZE)
-            {
-                return output._file.Length;
-            }
-
-            // SEEK_SET, SEEK_CUR and SEEK_END are SeekOrigin's values.
-            return whence is >= 0 and <= 2 ? output._file.Seek(offset, (SeekOrigin)whence) : Eio;
+            return FileAvio.Seek(output._file, offset, whence);
         }
         catch (Exception e)
         {

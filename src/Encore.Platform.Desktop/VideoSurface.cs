@@ -116,7 +116,10 @@ public sealed unsafe class VideoSurface : IDisposable
     internal nint[] AddRefsForTest()
     {
         // The D3D9 surface level shares its count with its texture, so the texture stands for both.
-        var all = new nint[] { (nint)_winrtSurface, (nint)_texture9, (nint)_texture, (nint)_device9, (nint)_d3d9, (nint)_context, (nint)_device };
+        var all = new nint[]
+        {
+            (nint)_winrtSurface, (nint)_texture9, (nint)_texture, (nint)_device9, (nint)_d3d9, (nint)_context, (nint)_device,
+        };
         foreach (var pointer in all)
         {
             ((IUnknown*)pointer)->AddRef();
@@ -212,7 +215,15 @@ public sealed unsafe class VideoSurface : IDisposable
     private void CreateD3D9View(HANDLE shared, int width, int height)
     {
         IDirect3DTexture9* texture9;
-        _device9->CreateTexture((uint)width, (uint)height, 1, PInvoke.D3DUSAGE_RENDERTARGET, D3DFORMAT.D3DFMT_A8R8G8B8, D3DPOOL.D3DPOOL_DEFAULT, &texture9, &shared);
+        _device9->CreateTexture(
+            (uint)width,
+            (uint)height,
+            1,
+            PInvoke.D3DUSAGE_RENDERTARGET,
+            D3DFORMAT.D3DFMT_A8R8G8B8,
+            D3DPOOL.D3DPOOL_DEFAULT,
+            &texture9,
+            &shared);
         _texture9 = texture9;
         IDirect3DSurface9* surface9;
         _texture9->GetSurfaceLevel(0, &surface9);

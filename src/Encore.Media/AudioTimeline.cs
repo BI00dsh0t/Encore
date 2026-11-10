@@ -2,32 +2,6 @@ using Encore.Core.Audio;
 
 namespace Encore.Media;
 
-/// <summary>Per-packet flags, mirroring WASAPI's <c>AUDCLNT_BUFFERFLAGS_*</c>.</summary>
-[Flags]
-public enum AudioPacketFlags
-{
-    None = 0,
-
-    /// <summary>The packet follows a gap in the device's stream.</summary>
-    DataDiscontinuity = 1,
-
-    /// <summary>The packet is silence; its samples are not read.</summary>
-    Silent = 2,
-
-    /// <summary>The device could not stamp the packet.</summary>
-    TimestampError = 4,
-}
-
-/// <summary>Receives the contiguous output of an <see cref="AudioTimeline"/>.</summary>
-public interface IAudioSampleSink
-{
-    /// <summary>Appends interleaved 48 kHz stereo float frames.</summary>
-    void Write(ReadOnlySpan<float> interleaved);
-
-    /// <summary>Appends <paramref name="frames"/> frames of silence.</summary>
-    void WriteSilence(long frames);
-}
-
 /// <summary>Turns one device's QPC-stamped packets into a contiguous stream whose frame 0 is the session anchor.</summary>
 public sealed class AudioTimeline
 {
@@ -100,31 +74,7 @@ public sealed class AudioTimeline
 
         // At the start, after a discontinuity, or after synthetic fill, the stamp is placed exactly.
         var exact = _writtenFrames == 0 || _lastWriteWasFill || (flags & AudioPacketFlags.DataDiscontinuity) != 0;
-        var tolerance = exact ? 0 : ToleranceFrames;
-
-        // Exact placement (start, idle resume) is normal; only a step past the tolerance is a correction.
-        var correction = Math.Abs(delta) > ToleranceFrames;
-        long skip = 0;
-        if (delta > tolerance)
-        {
-            _sink.WriteSilence(delta);
-            _writtenFrames += delta;
-            if (correction)
-            {
-                GapFills++;
-                GapFillFrames += delta;
-            }
-        }
-        else if (delta < -tolerance)
-        {
-            skip = -delta;
-            if (correction)
-            {
-                Trims++;
-                TrimmedFrames += Math.Min(skip, frames);
-            }
-        }
-
+        var skip = Place(delta, frames, exact);
         if (skip >= frames)
         {
             return;
@@ -142,6 +92,41 @@ public sealed class AudioTimeline
 
         _writtenFrames += keep;
         _lastWriteWasFill = false;
+    }
+
+    /// <summary>Fills a gap before the packet with silence, or returns the frames to trim where it overlaps the stream.</summary>
+    private long Place(long delta, int frames, bool exact)
+    {
+        var tolerance = exact ? 0 : ToleranceFrames;
+
+        // Exact placement (start, idle resume) is normal; only a step past the tolerance is a correction.
+        var correction = Math.Abs(delta) > ToleranceFrames;
+        if (delta > tolerance)
+        {
+            _sink.WriteSilence(delta);
+            _writtenFrames += delta;
+            if (correction)
+            {
+                GapFills++;
+                GapFillFrames += delta;
+            }
+
+            return 0;
+        }
+
+        if (delta >= -tolerance)
+        {
+            return 0;
+        }
+
+        var skip = -delta;
+        if (correction)
+        {
+            Trims++;
+            TrimmedFrames += Math.Min(skip, frames);
+        }
+
+        return skip;
     }
 
     /// <summary>Writes silence up to <paramref name="qpc"/>, if the stream is behind it.</summary>

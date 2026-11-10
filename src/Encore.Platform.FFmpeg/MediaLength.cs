@@ -1,8 +1,6 @@
 using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using Encore.Contracts;
-using Windows.Win32;
-using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.FFmpeg;
 
@@ -17,60 +15,24 @@ public static unsafe class MediaLength
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(logger);
-
-        try
+        if (!TryInitialize(path, logger))
         {
-            FFmpegLibrary.Initialize(logger);
-        }
-        catch (ErrorCodeException e)
-        {
-            logger.LogWarning("The length of {Path} couldn't be read: {Message}", path, e.Message);
             return null;
         }
 
-        var background = PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_BEGIN);
+        var background = BackgroundMode.TryEnter();
         AVFormatContext* context = null;
         SharedInput? input = null;
         try
         {
-            // Through a shared handle, not FFmpeg's file protocol: the read mustn't block a rename or delete.
-            try
+            input = TryOpenShared(path, logger);
+            if (input is null || !TryOpenInput(&context, input, path, logger))
             {
-                input = new SharedInput(path);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                logger.LogWarning("The length of {Path} couldn't be read: {Message}", path, e.Message);
-                return null;
-            }
-
-            context = ffmpeg.avformat_alloc_context();
-            context->pb = input.Context;
-            context->flags |= ffmpeg.AVFMT_FLAG_CUSTOM_IO;
-
-            // On failure it frees the context and sets it to null.
-            var result = ffmpeg.avformat_open_input(&context, path, null, null);
-            if (result < 0)
-            {
-                logger.LogWarning("The length of {Path} couldn't be read: avformat_open_input failed: {Error}", path, FFmpegLibrary.ErrorText(result));
                 return null;
             }
 
             whileOpen?.Invoke();
-            result = ffmpeg.avformat_find_stream_info(context, null);
-            if (result < 0)
-            {
-                logger.LogWarning("The length of {Path} couldn't be read: avformat_find_stream_info failed: {Error}", path, FFmpegLibrary.ErrorText(result));
-                return null;
-            }
-
-            if (Length(context) is { } length)
-            {
-                return length;
-            }
-
-            logger.LogWarning("The length of {Path} couldn't be read: it has no duration", path);
-            return null;
+            return ReadLength(context, path, logger);
         }
         finally
         {
@@ -83,9 +45,73 @@ public static unsafe class MediaLength
 
             if (background)
             {
-                PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_END);
+                BackgroundMode.Leave();
             }
         }
+    }
+
+    private static bool TryInitialize(string path, ILogger logger)
+    {
+        try
+        {
+            FFmpegLibrary.Initialize(logger);
+            return true;
+        }
+        catch (ErrorCodeException e)
+        {
+            logger.LogWarning("The length of {Path} couldn't be read: {Message}", path, e.Message);
+            return false;
+        }
+    }
+
+    // Through a shared handle, not FFmpeg's file protocol: the read mustn't block a rename or delete.
+    private static SharedInput? TryOpenShared(string path, ILogger logger)
+    {
+        try
+        {
+            return new SharedInput(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning("The length of {Path} couldn't be read: {Message}", path, e.Message);
+            return null;
+        }
+    }
+
+    /// <summary>Opens the demuxer over the shared input into the caller's context; a failed open frees it and nulls it.</summary>
+    private static bool TryOpenInput(AVFormatContext** context, SharedInput input, string path, ILogger logger)
+    {
+        *context = ffmpeg.avformat_alloc_context();
+        (*context)->pb = input.Context;
+        (*context)->flags |= ffmpeg.AVFMT_FLAG_CUSTOM_IO;
+        var result = ffmpeg.avformat_open_input(context, path, null, null);
+        if (result >= 0)
+        {
+            return true;
+        }
+
+        logger.LogWarning(
+            "The length of {Path} couldn't be read: avformat_open_input failed: {Error}", path, FFmpegLibrary.ErrorText(result));
+        return false;
+    }
+
+    private static double? ReadLength(AVFormatContext* context, string path, ILogger logger)
+    {
+        var result = ffmpeg.avformat_find_stream_info(context, null);
+        if (result < 0)
+        {
+            logger.LogWarning(
+                "The length of {Path} couldn't be read: avformat_find_stream_info failed: {Error}", path, FFmpegLibrary.ErrorText(result));
+            return null;
+        }
+
+        if (Length(context) is { } length)
+        {
+            return length;
+        }
+
+        logger.LogWarning("The length of {Path} couldn't be read: it has no duration", path);
+        return null;
     }
 
     private static double? Length(AVFormatContext* context)

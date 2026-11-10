@@ -37,7 +37,7 @@ public sealed unsafe partial class DisplayMonitors(ILogger logger) : IDisplayMon
     {
         try
         {
-            return [.. MonitorFinder.Describe().Select(m => new DisplayMonitor(m.DeviceName, m.FriendlyName, m.Width, m.Height, m.IsPrimary, m.MonitorId, m.X, m.Y, m.RefreshHz, m.Hdr))];
+            return [.. MonitorFinder.Describe().Select(ToDisplayMonitor)];
         }
         catch (Exception e)
         {
@@ -77,6 +77,10 @@ public sealed unsafe partial class DisplayMonitors(ILogger logger) : IDisplayMon
             return _listener is { } listener && PostMessageW(listener.Window, WmDisplayChange, 32, 0);
         }
     }
+
+    private static DisplayMonitor ToDisplayMonitor(MonitorDescription monitor) =>
+        new(monitor.DeviceName, monitor.FriendlyName, monitor.Width, monitor.Height, monitor.IsPrimary,
+            monitor.MonitorId, monitor.X, monitor.Y, monitor.RefreshHz, monitor.Hdr);
 
     private void Unsubscribe(Action changed)
     {
@@ -181,7 +185,19 @@ public sealed unsafe partial class DisplayMonitors(ILogger logger) : IDisplayMon
     private static partial ushort RegisterClassExW(WndClassEx* windowClass);
 
     [LibraryImport("user32.dll", SetLastError = true)]
-    private static partial nint CreateWindowExW(uint exStyle, char* className, char* windowName, uint style, int x, int y, int width, int height, nint parent, nint menu, nint instance, void* param);
+    private static partial nint CreateWindowExW(
+        uint extendedStyle,
+        char* className,
+        char* windowName,
+        uint style,
+        int x,
+        int y,
+        int width,
+        int height,
+        nint parent,
+        nint menu,
+        nint instance,
+        void* parameter);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

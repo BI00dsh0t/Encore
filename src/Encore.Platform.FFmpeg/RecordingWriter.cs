@@ -1,11 +1,8 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using Encore.Contracts;
 using Encore.Core.Output;
-using Windows.Win32;
-using Windows.Win32.System.Threading;
 
 namespace Encore.Platform.FFmpeg;
 
@@ -29,23 +26,15 @@ public sealed unsafe class RecordingWriter
 
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(50);
 
-    private static readonly Comparison<Held> ByTime = (a, b) => a.TimeUs != b.TimeUs ? a.TimeUs.CompareTo(b.TimeUs) : a.Stream.CompareTo(b.Stream);
-
     private readonly string _path;
     private readonly RecordingStreams _streams;
     private readonly Func<long?> _forcedKey;
     private readonly long _pressUs;
     private readonly ILogger _log;
     private readonly Action<Exception?> _done;
-    private readonly ConcurrentQueue<(nint Packet, int Stream)> _queue = new();
-    private readonly SemaphoreSlim _signal = new(0);
-    private readonly Lock _queueLock = new();
-    private readonly List<Held> _held = [];
-    private readonly List<Held> _pending = [];
-    private readonly List<Held> _batch = [];
-    private bool _closed;
+    private readonly RecordingQueue _queue = new();
+    private readonly List<HeldPacket> _held = [];
     private volatile bool _outputEnded;
-    private volatile bool _cloneFailed;
     private long _stopUs = long.MaxValue;
     private long _stopQpc;
     private int _started;
@@ -55,15 +44,12 @@ public sealed unsafe class RecordingWriter
     private int _videoStream = -1;
     private long? _targetUs;
     private long? _keyUs;
-    private long[] _origins = [];
     private bool[] _passed = [];
-    private long[] _reached = [];
-    private long _fragmentUs;
-    private long? _cutUs;
-    private long _written;
+    private RecordingFragments? _fragments;
 
     /// <summary>The writer owns the streams; forcedKey and done are called on the writer thread; pressUs is µs since the anchor.</summary>
-    public RecordingWriter(string path, RecordingStreams streams, Func<long?> forcedKey, long pressUs, ILogger logger, Action<Exception?> done)
+    public RecordingWriter(
+        string path, RecordingStreams streams, Func<long?> forcedKey, long pressUs, ILogger logger, Action<Exception?> done)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(streams);
@@ -89,6 +75,8 @@ public sealed unsafe class RecordingWriter
 
     /// <summary>The packets offered and not yet taken by the writer thread; for tests to pace themselves.</summary>
     internal int Queued => _queue.Count;
+
+    private long Written => _fragments?.Written ?? 0;
 
     /// <summary>Starts the writer thread, once.</summary>
     public void Start()
@@ -121,9 +109,9 @@ public sealed unsafe class RecordingWriter
         }
 
         Tap?.Detach(this);
-        CloseQueue();
+        _queue.Close();
         _streams.Dispose();
-        _signal.Dispose();
+        _queue.Dispose();
     }
 
     /// <summary>Ends the Recording at a time in µs since the anchor; a second stop is ignored. Never blocks.</summary>
@@ -131,73 +119,22 @@ public sealed unsafe class RecordingWriter
     {
         Volatile.Write(ref _stopQpc, Stopwatch.GetTimestamp());
         Interlocked.CompareExchange(ref _stopUs, us, long.MaxValue);
-        Signal();
+        _queue.Signal();
     }
 
     /// <summary>Takes a new reference to the packet for the writer thread; called on the encoders' threads.</summary>
-    internal void Offer(AVPacket* packet, int stream)
-    {
-        var clone = ffmpeg.av_packet_clone(packet);
-        if (clone is null)
-        {
-            _cloneFailed = true;
-            Signal();
-            return;
-        }
-
-        lock (_queueLock)
-        {
-            if (!_closed)
-            {
-                _queue.Enqueue(((nint)clone, stream));
-                clone = null;
-            }
-        }
-
-        if (clone is not null)
-        {
-            // Closed: the writer has finished.
-            ffmpeg.av_packet_free(&clone);
-            return;
-        }
-
-        Signal();
-    }
+    internal void Offer(AVPacket* packet, int stream) => _queue.Offer(packet, stream);
 
     /// <summary>The session's output has ended: the writer finishes with what it was handed.</summary>
     internal void OutputEnded()
     {
         _outputEnded = true;
-        Signal();
-    }
-
-    private static long ToMicros(long ticks, AVRational timeBase) =>
-        (long)((Int128)ticks * 1_000_000 * timeBase.num / timeBase.den);
-
-    private static long FromMicros(long us, AVRational timeBase) =>
-        (long)((Int128)us * timeBase.den / ((Int128)1_000_000 * timeBase.num));
-
-    private static void Free(nint packet)
-    {
-        var pointer = (AVPacket*)packet;
-        ffmpeg.av_packet_free(&pointer);
-    }
-
-    private void Signal()
-    {
-        try
-        {
-            _signal.Release();
-        }
-        catch (ObjectDisposedException)
-        {
-            // The writer has finished.
-        }
+        _queue.Signal();
     }
 
     private void Run()
     {
-        var background = ClipWriter.EnterBackgroundMode(_log);
+        var background = BackgroundMode.Enter(_log);
         Exception? error = null;
         FragmentedMp4Muxer? muxer = null;
         long? keepBytes = null;
@@ -205,37 +142,12 @@ public sealed unsafe class RecordingWriter
         {
             muxer = Open();
             Loop(muxer);
-            WritePending(muxer, long.MaxValue);
-            Release();
-            if (_written == 0)
-            {
-                throw new ErrorCodeException(ErrorCodes.SaveFailed, "The Recording ended before its first keyframe; nothing was written.");
-            }
-
-            muxer.Finish();
-            _log.LogInformation("Recording of {Packets} packets from {Start:0.000} s after the anchor written to {Path}", _written, _keyUs / 1e6, _path);
+            Finish(muxer);
         }
         catch (Exception e)
         {
             error = e;
-            Release();
-            if (WriteFailures.ReasonOf(e) == ErrorCodes.DiskFull)
-            {
-                // The trailer would fail too; the file is cut back to its last whole fragment below.
-                keepBytes = muxer is { Fragments: > 0 } ? muxer.DurableBytes : 0;
-            }
-            else if (muxer is not null && _written > 0)
-            {
-                // What it holds stays playable: finish it as far as it got.
-                try
-                {
-                    muxer.Finish();
-                }
-                catch (Exception finish)
-                {
-                    _log.LogWarning("Could not finish the failed Recording {Path}: {Message}", _path, finish.Message);
-                }
-            }
+            keepBytes = Salvage(muxer, e);
         }
         finally
         {
@@ -243,30 +155,27 @@ public sealed unsafe class RecordingWriter
             _streams.Dispose();
             if (background)
             {
-                PInvoke.SetThreadPriority(PInvoke.GetCurrentThread(), THREAD_PRIORITY.THREAD_MODE_BACKGROUND_END);
+                BackgroundMode.Leave();
             }
         }
 
         if (keepBytes is { } keep)
         {
-            KeepWholeFragments(keep);
+            RecordingFile.KeepWholeFragments(_path, keep, _log);
         }
-        else if (error is not null && _written == 0)
+        else if (error is not null && Written == 0)
         {
-            TryDelete();
+            OutputFiles.TryDelete(_path, _log);
         }
 
-        _signal.Dispose();
+        _queue.Dispose();
         _done(error);
     }
 
     private FragmentedMp4Muxer Open()
     {
         var streams = _streams.Streams;
-        _origins = new long[streams.Count];
         _passed = new bool[streams.Count];
-        _reached = new long[streams.Count];
-        Array.Fill(_reached, long.MinValue);
         var muxer = new FragmentedMp4Muxer(_path, _log, durable: true, FlushToDisk, CapacityBytes);
         try
         {
@@ -286,6 +195,7 @@ public sealed unsafe class RecordingWriter
                 throw new InvalidOperationException("The session has no video stream to record.");
             }
 
+            _fragments = new RecordingFragments(_streams, _videoStream);
             muxer.Start();
             return muxer;
         }
@@ -301,50 +211,104 @@ public sealed unsafe class RecordingWriter
         var keyDeadline = _keyDeadline;
         while (true)
         {
-            _signal.Wait(Poll);
+            _queue.Wait(Poll);
 
             // Read before the drain: every packet was queued before the output ended.
             var ended = _outputEnded;
             if (_targetUs is null)
             {
-                if (_forcedKey() is { } pts)
-                {
-                    _targetUs = ToMicros(pts, _streams.Streams[_videoStream].TimeBase);
-                }
-                else if (ended || Stopwatch.GetTimestamp() >= keyDeadline)
-                {
-                    _log.LogInformation("No keyframe was forced after the press within {Seconds:0.0} s; the Recording starts on the next one", KeyWait.TotalSeconds);
-                    _targetUs = _pressUs;
-                }
-
-                if (_targetUs is not null)
-                {
-                    FindKeyInHeld(muxer);
-                }
+                ChooseTarget(muxer, ended, keyDeadline);
             }
 
-            while (_queue.TryDequeue(out var item))
+            while (_queue.TryTake(out var item))
             {
                 Take(muxer, item.Packet, item.Stream);
             }
 
-            if (_cloneFailed)
+            if (_queue.CloneFailed)
             {
                 throw new InvalidOperationException("av_packet_clone failed; the Recording lost a packet.");
             }
 
-            if (ended)
-            {
-                return;
-            }
-
-            var stopUs = Interlocked.Read(ref _stopUs);
-            if (stopUs != long.MaxValue
-                && (_passed.All(p => p) || Stopwatch.GetTimestamp() - Volatile.Read(ref _stopQpc) >= (long)(StopWait.TotalSeconds * Stopwatch.Frequency)))
+            if (ended || StopReached())
             {
                 return;
             }
         }
+    }
+
+    /// <summary>Sets K's target: the forced keyframe once it came, else the press once the wait is over; then looks in the hold.</summary>
+    private void ChooseTarget(FragmentedMp4Muxer muxer, bool ended, long keyDeadline)
+    {
+        if (_forcedKey() is { } pts)
+        {
+            _targetUs = MicroTime.ToMicros(pts, _streams.Streams[_videoStream].TimeBase);
+        }
+        else if (ended || Stopwatch.GetTimestamp() >= keyDeadline)
+        {
+            _log.LogInformation(
+                "No keyframe was forced after the press within {Seconds:0.0} s; the Recording starts on the next one",
+                KeyWait.TotalSeconds);
+            _targetUs = _pressUs;
+        }
+
+        if (_targetUs is not null)
+        {
+            FindKeyInHeld(muxer);
+        }
+    }
+
+    /// <summary>A stop was asked and every stream has passed it, or the wait for them is over.</summary>
+    private bool StopReached()
+    {
+        if (Interlocked.Read(ref _stopUs) == long.MaxValue)
+        {
+            return false;
+        }
+
+        var waited = Stopwatch.GetTimestamp() - Volatile.Read(ref _stopQpc) >= (long)(StopWait.TotalSeconds * Stopwatch.Frequency);
+        return _passed.All(passed => passed) || waited;
+    }
+
+    /// <summary>The Recording ended normally: the rest is written, and the file is finished.</summary>
+    private void Finish(FragmentedMp4Muxer muxer)
+    {
+        _fragments!.WritePending(muxer, long.MaxValue);
+        Release();
+        if (Written == 0)
+        {
+            throw new ErrorCodeException(ErrorCodes.SaveFailed, "The Recording ended before its first keyframe; nothing was written.");
+        }
+
+        muxer.Finish();
+        _log.LogInformation(
+            "Recording of {Packets} packets from {Start:0.000} s after the anchor written to {Path}", Written, _keyUs / 1e6, _path);
+    }
+
+    /// <summary>After a failure: frees what is held; returns the bytes a full disk keeps, else finishes what was written.</summary>
+    private long? Salvage(FragmentedMp4Muxer? muxer, Exception error)
+    {
+        Release();
+        if (WriteFailures.ReasonOf(error) == ErrorCodes.DiskFull)
+        {
+            // The trailer would fail too; the file is cut back to its last whole fragment.
+            return muxer is { Fragments: > 0 } ? muxer.DurableBytes : 0;
+        }
+
+        if (muxer is not null && Written > 0)
+        {
+            // What it holds stays playable: finish it as far as it got.
+            try
+            {
+                muxer.Finish();
+            }
+            catch (Exception finish)
+            {
+                _log.LogWarning("Could not finish the failed Recording {Path}: {Message}", _path, finish.Message);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>One packet from the queue: held until K is known, then written or freed.</summary>
@@ -352,36 +316,37 @@ public sealed unsafe class RecordingWriter
     {
         var pointer = (AVPacket*)packet;
         var timeBase = _streams.Streams[stream].TimeBase;
-        var timeUs = ToMicros(pointer->pts, timeBase);
+        var timeUs = MicroTime.ToMicros(pointer->pts, timeBase);
         var video = stream == _videoStream;
-        var atUs = video ? timeUs : timeUs + (ToMicros(pointer->duration, timeBase) / 2);
+        var atUs = video ? timeUs : timeUs + (MicroTime.ToMicros(pointer->duration, timeBase) / 2);
         if (atUs >= Interlocked.Read(ref _stopUs))
         {
             _passed[stream] = true;
         }
 
-        if (_keyUs is null)
+        if (_keyUs is not null)
         {
-            _held.Add(new Held(packet, stream, timeUs, atUs));
-            if (_targetUs is { } target && video && (pointer->flags & ffmpeg.AV_PKT_FLAG_KEY) != 0 && timeUs >= target)
-            {
-                StartAt(muxer, _held.Count - 1);
-                return;
-            }
-
-            // At most HoldUs of packets wait for K.
-            var drop = 0;
-            while (drop < _held.Count && _held[drop].TimeUs < timeUs - HoldUs)
-            {
-                Free(_held[drop].Packet);
-                drop++;
-            }
-
-            _held.RemoveRange(0, drop);
+            Emit(muxer, packet, stream, timeUs, atUs);
             return;
         }
 
-        Emit(muxer, packet, stream, timeUs, atUs);
+        var held = new HeldPacket(packet, stream, timeUs, atUs);
+        _held.Add(held);
+        if (_targetUs is { } target && video && held.IsKey && timeUs >= target)
+        {
+            StartAt(muxer, _held.Count - 1);
+            return;
+        }
+
+        // At most HoldUs of packets wait for K.
+        var drop = 0;
+        while (drop < _held.Count && _held[drop].TimeUs < timeUs - HoldUs)
+        {
+            HeldPacket.Free(_held[drop].Packet);
+            drop++;
+        }
+
+        _held.RemoveRange(0, drop);
     }
 
     private void FindKeyInHeld(FragmentedMp4Muxer muxer)
@@ -389,7 +354,7 @@ public sealed unsafe class RecordingWriter
         for (var i = 0; i < _held.Count; i++)
         {
             var held = _held[i];
-            if (held.Stream == _videoStream && held.TimeUs >= _targetUs && (((AVPacket*)held.Packet)->flags & ffmpeg.AV_PKT_FLAG_KEY) != 0)
+            if (held.Stream == _videoStream && held.TimeUs >= _targetUs && held.IsKey)
             {
                 StartAt(muxer, i);
                 return;
@@ -403,14 +368,12 @@ public sealed unsafe class RecordingWriter
         var keyPacket = _held[key];
         var keyUs = keyPacket.TimeUs;
         _keyUs = keyUs;
-        _fragmentUs = keyUs;
-        var streams = _streams.Streams;
-        for (var s = 0; s < streams.Count; s++)
-        {
-            _origins[s] = s == _videoStream ? ((AVPacket*)keyPacket.Packet)->pts : FromMicros(keyUs, streams[s].TimeBase);
-        }
+        _fragments!.Begin(keyUs, ((AVPacket*)keyPacket.Packet)->pts);
+        _log.LogInformation(
+            "The Recording starts on the keyframe {Seconds:0.000} s after the anchor ({Press:0.000} s after the press)",
+            keyUs / 1e6,
+            (keyUs - _pressUs) / 1e6);
 
-        _log.LogInformation("The Recording starts on the keyframe {Seconds:0.000} s after the anchor ({Press:0.000} s after the press)", keyUs / 1e6, (keyUs - _pressUs) / 1e6);
         // Each packet leaves the hold as it is emitted, so a failed write leaves only the rest held, for Release to free.
         var emitted = 0;
         try
@@ -430,194 +393,32 @@ public sealed unsafe class RecordingWriter
     /// <summary>Keeps a packet from K and before the stop for the next cut, and frees any other; then makes every ready cut.</summary>
     private void Emit(FragmentedMp4Muxer muxer, nint packet, int stream, long timeUs, long atUs)
     {
-        _reached[stream] = Math.Max(_reached[stream], atUs);
+        _fragments!.Reach(stream, atUs);
+
         // From K by its start, not its centre: with no edit list, an early audio packet would stretch the first frame.
         if (timeUs < _keyUs || atUs >= Interlocked.Read(ref _stopUs))
         {
-            Free(packet);
+            HeldPacket.Free(packet);
         }
         else
         {
-            _pending.Add(new Held(packet, stream, timeUs, atUs));
-            if (_cutUs is null && stream == _videoStream && IsCut(packet, atUs))
-            {
-                _cutUs = atUs;
-            }
+            _fragments.Add(new HeldPacket(packet, stream, timeUs, atUs));
         }
 
-        Cut(muxer);
-    }
-
-    /// <summary>A video packet that starts the next fragment: a keyframe, or one <see cref="FragmentUs"/> into this one.</summary>
-    private bool IsCut(nint packet, long atUs) =>
-        atUs > _fragmentUs && (atUs >= _fragmentUs + FragmentUs || (((AVPacket*)packet)->flags & ffmpeg.AV_PKT_FLAG_KEY) != 0);
-
-    /// <summary>Makes each cut that is ready: the packets before it go out as one fragment, flushed to the disk.</summary>
-    private void Cut(FragmentedMp4Muxer muxer)
-    {
-        while (_cutUs is { } cut && Ready(cut))
-        {
-            WritePending(muxer, cut);
-            muxer.CutFragment();
-            _fragmentUs = cut;
-            _cutUs = null;
-            foreach (var pending in _pending)
-            {
-                if (pending.Stream == _videoStream && IsCut(pending.Packet, pending.AtUs))
-                {
-                    _cutUs = pending.AtUs;
-                    break;
-                }
-            }
-        }
-    }
-
-    /// <summary>Every audio stream has reached the cut, or the video is <see cref="AudioWaitUs"/> past it.</summary>
-    private bool Ready(long cut)
-    {
-        if (_reached[_videoStream] >= cut + AudioWaitUs)
-        {
-            return true;
-        }
-
-        for (var s = 0; s < _reached.Length; s++)
-        {
-            if (s != _videoStream && _reached[s] < cut)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>Writes the pending packets before a time, in time order across the streams; each is freed on every path.</summary>
-    private void WritePending(FragmentedMp4Muxer muxer, long beforeUs)
-    {
-        var kept = 0;
-        for (var i = 0; i < _pending.Count; i++)
-        {
-            var pending = _pending[i];
-            if (pending.AtUs < beforeUs)
-            {
-                _batch.Add(pending);
-            }
-            else
-            {
-                _pending[kept++] = pending;
-            }
-        }
-
-        _pending.RemoveRange(kept, _pending.Count - kept);
-
-        // Each stream's times only grow, so sorting by time keeps every stream's own order.
-        _batch.Sort(ByTime);
-        var next = 0;
-        try
-        {
-            while (next < _batch.Count)
-            {
-                var item = _batch[next++];
-                var pointer = (AVPacket*)item.Packet;
-                try
-                {
-                    var origin = _origins[item.Stream];
-                    pointer->pts -= origin;
-                    if (pointer->dts != ffmpeg.AV_NOPTS_VALUE)
-                    {
-                        pointer->dts -= origin;
-                    }
-
-                    // Takes the packet's reference whether it succeeds or not; the struct is freed below.
-                    muxer.Write(pointer, item.Stream, _streams.Streams[item.Stream].TimeBase);
-                    _written++;
-                }
-                finally
-                {
-                    ffmpeg.av_packet_free(&pointer);
-                }
-            }
-        }
-        finally
-        {
-            // On a throw, the rest of the batch is freed unwritten.
-            while (next < _batch.Count)
-            {
-                Free(_batch[next++].Packet);
-            }
-
-            _batch.Clear();
-        }
+        _fragments.Cut(muxer);
     }
 
     /// <summary>Detaches from the tap, then frees whatever is queued or held; a later Offer frees its own packet.</summary>
     private void Release()
     {
         Tap?.Detach(this);
-        CloseQueue();
+        _queue.Close();
         foreach (var held in _held)
         {
-            Free(held.Packet);
+            HeldPacket.Free(held.Packet);
         }
 
         _held.Clear();
-        foreach (var pending in _pending)
-        {
-            Free(pending.Packet);
-        }
-
-        _pending.Clear();
+        _fragments?.Release();
     }
-
-    private void CloseQueue()
-    {
-        lock (_queueLock)
-        {
-            _closed = true;
-            while (_queue.TryDequeue(out var item))
-            {
-                Free(item.Packet);
-            }
-        }
-    }
-
-    /// <summary>A full disk: the file is cut back to its header and whole fragments, or deleted when there are none.</summary>
-    private void KeepWholeFragments(long bytes)
-    {
-        if (bytes == 0)
-        {
-            _log.LogWarning("The disk filled before the Recording {Path} had a whole fragment; it is deleted", _path);
-            TryDelete();
-            return;
-        }
-
-        try
-        {
-            // Shrinking a file needs no free space.
-            using (var file = new FileStream(_path, FileMode.Open, FileAccess.Write, FileShare.Read))
-            {
-                file.SetLength(bytes);
-            }
-
-            _log.LogWarning("The disk filled during the Recording {Path}; it keeps its {Bytes} bytes of whole fragments", _path, bytes);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            _log.LogWarning("Could not cut the Recording {Path} back to its whole fragments: {Message}", _path, e.Message);
-        }
-    }
-
-    private void TryDelete()
-    {
-        try
-        {
-            File.Delete(_path);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            _log.LogWarning("Could not delete {Path}: {Message}", _path, e.Message);
-        }
-    }
-
-    private readonly record struct Held(nint Packet, int Stream, long TimeUs, long AtUs);
 }

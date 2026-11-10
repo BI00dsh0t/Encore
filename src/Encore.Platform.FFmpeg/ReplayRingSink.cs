@@ -27,18 +27,6 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
     /// <summary>Clips carry their codec headers in the sample entry.</summary>
     internal override bool NeedsGlobalHeader => true;
 
-    /// <summary>The current generation's streams.</summary>
-    public int StreamCount
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _streams[_generations.Current].Count;
-            }
-        }
-    }
-
     /// <summary>The current ring generation, counting from 1.</summary>
     public int Generation => _generations.Current;
 
@@ -156,17 +144,7 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
             var streams = new List<ClipStream>(source.Count);
             try
             {
-                foreach (var stream in source)
-                {
-                    var copy = ffmpeg.avcodec_parameters_alloc();
-                    if (copy is null)
-                    {
-                        throw new InvalidOperationException("avcodec_parameters_alloc failed.");
-                    }
-
-                    streams.Add(new ClipStream(copy, stream.Title, stream.IsDefault, stream.TimeBase));
-                    FFmpegLibrary.Check(ffmpeg.avcodec_parameters_copy(copy, stream.Parameters), "avcodec_parameters_copy");
-                }
+                CopyParameters(source, streams);
             }
             catch
             {
@@ -175,6 +153,22 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
             }
 
             return new ClipSource(cut, streams);
+        }
+    }
+
+    /// <summary>Adds a copy of each stream's parameters to the list, which owns every copy made before a failure.</summary>
+    private static void CopyParameters(List<ClipStream> source, List<ClipStream> streams)
+    {
+        foreach (var stream in source)
+        {
+            var copy = ffmpeg.avcodec_parameters_alloc();
+            if (copy is null)
+            {
+                throw new InvalidOperationException("avcodec_parameters_alloc failed.");
+            }
+
+            streams.Add(new ClipStream(copy, stream.Title, stream.IsDefault, stream.TimeBase));
+            FFmpegLibrary.Check(ffmpeg.avcodec_parameters_copy(copy, stream.Parameters), "avcodec_parameters_copy");
         }
     }
 
@@ -232,52 +226,5 @@ public sealed unsafe class ReplayRingSink : PacketSink, IDisposable
 
         _closed = true;
         Release();
-    }
-}
-
-/// <summary>One stream of a Clip: its codec parameters, title, default flag and time base.</summary>
-internal sealed unsafe class ClipStream(AVCodecParameters* parameters, string? title, bool isDefault, AVRational timeBase)
-{
-    public AVCodecParameters* Parameters { get; } = parameters;
-
-    public string? Title { get; } = title;
-
-    public bool IsDefault { get; } = isDefault;
-
-    public AVRational TimeBase { get; } = timeBase;
-}
-
-/// <summary>What a Clip is written from: a pinned cut and its streams' parameters. Disposing it unpins and frees them.</summary>
-public sealed unsafe class ClipSource : IDisposable
-{
-    private int _disposed;
-
-    internal ClipSource(RingCut cut, IReadOnlyList<ClipStream> streams)
-    {
-        Cut = cut;
-        Streams = streams;
-    }
-
-    public RingCut Cut { get; }
-
-    internal IReadOnlyList<ClipStream> Streams { get; }
-
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
-        {
-            return;
-        }
-
-        foreach (var stream in Streams)
-        {
-            var parameters = stream.Parameters;
-            if (parameters is not null)
-            {
-                ffmpeg.avcodec_parameters_free(&parameters);
-            }
-        }
-
-        Cut.Dispose();
     }
 }

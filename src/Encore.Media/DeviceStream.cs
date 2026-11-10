@@ -11,11 +11,11 @@ public sealed class DeviceStream
     /// <summary>The steering ratio stays within 1 ± 10⁻³.</summary>
     public const double MaxRatioDeviation = 1e-3;
 
-    /// <summary>Proportional gain, per sample of error: with <see cref="Ki"/>, a critically damped loop at ω = 1 rad/s.</summary>
-    public const double Kp = 2.0 / AudioFormat.SampleRate;
+    /// <summary>Gain per sample of error: with <see cref="IntegralGain"/>, a critically damped loop at ω = 1 rad/s.</summary>
+    public const double ProportionalGain = 2.0 / AudioFormat.SampleRate;
 
-    /// <summary>Integral gain, per sample-second of error.</summary>
-    public const double Ki = 1.0 / AudioFormat.SampleRate;
+    /// <summary>Gain per sample-second of error.</summary>
+    public const double IntegralGain = 1.0 / AudioFormat.SampleRate;
 
     /// <summary>The steering error is recorded from this long after the origin.</summary>
     public const double SettleSeconds = 5;
@@ -146,48 +146,10 @@ public sealed class DeviceStream
         long skip = 0;
         if (exact || continuing || stepped)
         {
-            if (stepped)
+            if (!TryPlace(stamp, frames, error, exact, continuing, stepped, out skip))
             {
-                StepCorrections++;
-            }
-
-            // Input frames to insert (positive) or trim (negative) so the packet lands on its stamp.
-            var correction = (long)Math.Round(-error * _resampler.Step);
-            var counted = !continuing && Math.Abs(error) > ToleranceFrames;
-            if (correction > 0)
-            {
-                InsertSilence(correction);
-                if (counted)
-                {
-                    GapFills++;
-                    GapFillFrames += correction;
-                }
-            }
-            else if (correction < 0)
-            {
-                skip = -correction;
-                if (counted)
-                {
-                    Trims++;
-                }
-
-                if (counted || continuing)
-                {
-                    TrimmedFrames += Math.Min(skip, frames);
-                }
-            }
-
-            if (skip >= frames)
-            {
-                // Nothing of it is kept; the next packet is placed the same way.
-                _exactNext = exact;
-                _continuingCorrection = counted || continuing;
-                LastErrorSamples = error - frames;
                 return;
             }
-
-            // The first kept frame's stamp is skip frames after the packet's.
-            LastErrorSamples = Error(stamp) - skip;
         }
         else
         {
@@ -196,22 +158,7 @@ public sealed class DeviceStream
         }
 
         _exactNext = false;
-        var keep = frames - (int)skip;
-        if (silent)
-        {
-            InsertSilence(keep);
-        }
-        else
-        {
-            var samples = interleaved.Slice((int)skip * Channels, keep * Channels);
-            while (!samples.IsEmpty)
-            {
-                var chunk = Math.Min(samples.Length / Channels, _resampler.FreeInput);
-                _resampler.Push(samples[..(chunk * Channels)]);
-                samples = samples[(chunk * Channels)..];
-                Drain();
-            }
-        }
+        PushKept(interleaved, frames, skip, silent);
     }
 
     /// <summary>Fills the stream with silence up to a QPC time when it is behind; the next packet is then placed exactly.</summary>
@@ -237,6 +184,75 @@ public sealed class DeviceStream
         _exactNext = true;
     }
 
+    /// <summary>Places a packet exactly on its stamp by inserting silence or trimming it; false when nothing of it is kept.</summary>
+    private bool TryPlace(long stamp, int frames, double error, bool exact, bool continuing, bool stepped, out long skip)
+    {
+        if (stepped)
+        {
+            StepCorrections++;
+        }
+
+        // Input frames to insert (positive) or trim (negative) so the packet lands on its stamp.
+        var correction = (long)Math.Round(-error * _resampler.Step);
+        var counted = !continuing && Math.Abs(error) > ToleranceFrames;
+        skip = 0;
+        if (correction > 0)
+        {
+            InsertSilence(correction);
+            if (counted)
+            {
+                GapFills++;
+                GapFillFrames += correction;
+            }
+        }
+        else if (correction < 0)
+        {
+            skip = -correction;
+            if (counted)
+            {
+                Trims++;
+            }
+
+            if (counted || continuing)
+            {
+                TrimmedFrames += Math.Min(skip, frames);
+            }
+        }
+
+        if (skip >= frames)
+        {
+            // Nothing of it is kept; the next packet is placed the same way.
+            _exactNext = exact;
+            _continuingCorrection = counted || continuing;
+            LastErrorSamples = error - frames;
+            return false;
+        }
+
+        // The first kept frame's stamp is skip frames after the packet's.
+        LastErrorSamples = Error(stamp) - skip;
+        return true;
+    }
+
+    /// <summary>Feeds the packet's frames after the skipped ones to the resampler, or as much silence when it is silent.</summary>
+    private void PushKept(ReadOnlySpan<float> interleaved, int frames, long skip, bool silent)
+    {
+        var keep = frames - (int)skip;
+        if (silent)
+        {
+            InsertSilence(keep);
+            return;
+        }
+
+        var samples = interleaved.Slice((int)skip * Channels, keep * Channels);
+        while (!samples.IsEmpty)
+        {
+            var chunk = Math.Min(samples.Length / Channels, _resampler.FreeInput);
+            _resampler.Push(samples[..(chunk * Channels)]);
+            samples = samples[(chunk * Channels)..];
+            Drain();
+        }
+    }
+
     private void Start(long originQpc)
     {
         _started = true;
@@ -249,10 +265,10 @@ public sealed class DeviceStream
 
     private void Steer(double error, long sincePrevious, long stamp)
     {
-        var dt = Math.Clamp((double)sincePrevious / _qpcFrequency, 0, MaxIntegralSeconds);
-        var limit = MaxRatioDeviation / Ki;
-        _integral = Math.Clamp(_integral + (error * dt), -limit, limit);
-        var deviation = Math.Clamp((Kp * error) + (Ki * _integral), -MaxRatioDeviation, MaxRatioDeviation);
+        var seconds = Math.Clamp((double)sincePrevious / _qpcFrequency, 0, MaxIntegralSeconds);
+        var limit = MaxRatioDeviation / IntegralGain;
+        _integral = Math.Clamp(_integral + (error * seconds), -limit, limit);
+        var deviation = Math.Clamp((ProportionalGain * error) + (IntegralGain * _integral), -MaxRatioDeviation, MaxRatioDeviation);
         _resampler.Step = 1 + deviation;
 
         if (stamp - _originQpc >= _settleTicks)

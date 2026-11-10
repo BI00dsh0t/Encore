@@ -5,9 +5,6 @@ using Windows.Win32.UI.Shell;
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>A thumbnail's pixels: 32-bpp premultiplied BGRA, top-down, <c>Width * 4</c> bytes a row.</summary>
-public sealed record ShellImage(int Width, int Height, byte[] Bgra);
-
 /// <summary>A file's thumbnail from the Windows shell. Call it on an STA thread, never the UI thread: it can be slow.</summary>
 public static unsafe class ShellThumbnail
 {

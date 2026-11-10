@@ -97,22 +97,25 @@ public sealed unsafe class D3D11Device : IDisposable
 
     internal ID3D11DeviceContext* Context => _context;
 
+    /// <summary>Queries the device's <c>IDXGIDevice</c>, which the caller releases, and returns the query's result.</summary>
+    internal HRESULT QueryDxgiDevice(IDXGIDevice** dxgiDevice) => QueryDxgiDevice(_device, dxgiDevice);
+
     /// <summary>The WinRT wrapper WGC frame pools are created on.</summary>
     public IDirect3DDevice WinRTDevice { get; }
 
     public string AdapterName { get; }
 
     /// <summary>Creates the device on the adapter showing the window, or on adapter 0 when none does or the window is zero.</summary>
-    public static D3D11Device Create(nint hwnd, ILogger logger)
+    public static D3D11Device Create(nint window, ILogger logger)
     {
-        var monitor = hwnd == 0
+        var monitor = window == 0
             ? default
-            : PInvoke.MonitorFromWindow(new HWND((void*)hwnd), MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
+            : PInvoke.MonitorFromWindow(new HWND((void*)window), MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
         return Create(monitor, logger);
     }
 
     /// <summary>Creates the device on the adapter that drives the monitor, or on adapter 0 when none does or it is zero.</summary>
-    public static D3D11Device CreateForMonitor(nint hmonitor, ILogger logger) => Create(new HMONITOR((void*)hmonitor), logger);
+    public static D3D11Device CreateForMonitor(nint monitor, ILogger logger) => Create(new HMONITOR((void*)monitor), logger);
 
     private static D3D11Device Create(HMONITOR monitor, ILogger logger)
     {
@@ -125,28 +128,10 @@ public sealed unsafe class D3D11Device : IDisposable
             var factoryIid = IDXGIFactory1.IID_Guid;
             PInvoke.CreateDXGIFactory1(&factoryIid, (void**)&factory).ThrowOnFailure();
             adapter = PickAdapter(factory, monitor);
-
-            var desc = adapter->GetDesc();
-            var adapterName = desc.Description.AsReadOnlySpan().SliceAtNull().ToString();
-
-            ReadOnlySpan<D3D_FEATURE_LEVEL> levels = [D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0];
-            PInvoke.D3D11CreateDevice(
-                (IDXGIAdapter*)adapter,
-                D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN,
-                default,
-                D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
-                levels,
-                PInvoke.D3D11_SDK_VERSION,
-                &device,
-                out var featureLevel,
-                &context).ThrowOnFailure();
-
-            ID3D10Multithread* multithread = null;
-            var multithreadIid = ID3D10Multithread.IID_Guid;
-            ((IUnknown*)device)->QueryInterface(&multithreadIid, (void**)&multithread).ThrowOnFailure();
-            multithread->SetMultithreadProtected(true);
-            multithread->Release();
-
+            var adapterDescription = adapter->GetDesc();
+            var adapterName = adapterDescription.Description.AsReadOnlySpan().SliceAtNull().ToString();
+            var featureLevel = CreateDevice(adapter, &device, &context);
+            ProtectMultithreaded(device);
             var winRtDevice = CreateWinRTDevice(device);
             logger.LogInformation("D3D11 device on {Adapter}, feature level {FeatureLevel}", adapterName, featureLevel);
 
@@ -164,45 +149,77 @@ public sealed unsafe class D3D11Device : IDisposable
         }
     }
 
+    /// <summary>Creates the device and its context on the adapter, into the caller's locals; returns the feature level.</summary>
+    private static D3D_FEATURE_LEVEL CreateDevice(IDXGIAdapter1* adapter, ID3D11Device** device, ID3D11DeviceContext** context)
+    {
+        ReadOnlySpan<D3D_FEATURE_LEVEL> levels = [D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0];
+        PInvoke.D3D11CreateDevice(
+            (IDXGIAdapter*)adapter,
+            D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN,
+            default,
+            D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+            levels,
+            PInvoke.D3D11_SDK_VERSION,
+            device,
+            out var featureLevel,
+            context).ThrowOnFailure();
+        return featureLevel;
+    }
+
+    /// <summary>Makes the context safe to share across threads: WGC, the engine and the encoder all use it.</summary>
+    private static void ProtectMultithreaded(ID3D11Device* device)
+    {
+        ID3D10Multithread* multithread = null;
+        var multithreadIid = ID3D10Multithread.IID_Guid;
+        ((IUnknown*)device)->QueryInterface(&multithreadIid, (void**)&multithread).ThrowOnFailure();
+        multithread->SetMultithreadProtected(true);
+        multithread->Release();
+    }
+
     /// <summary>Copies a captured frame into one slice of the target; a size mismatch clears to black and clips, never scales.</summary>
     public void CopyFrame(nint source, VideoSize contentSize, nint target, uint targetSubresource, VideoSize targetSize)
     {
-        var src = (ID3D11Texture2D*)source;
-        src->GetDesc(out var srcDesc);
-        var copy = contentSize.Intersect(targetSize).Intersect(new VideoSize((int)srcDesc.Width, (int)srcDesc.Height));
-
+        var copy = ClippedCopy(source, contentSize, targetSize);
         if (copy != targetSize)
         {
             Clear(target, targetSubresource, 0f, 0f, 0f);
         }
 
-        var box = new D3D11_BOX { left = 0, top = 0, front = 0, right = (uint)copy.Width, bottom = (uint)copy.Height, back = 1 };
-        _context->CopySubresourceRegion((ID3D11Resource*)target, targetSubresource, 0, 0, 0, (ID3D11Resource*)src, 0, &box);
+        var box = BoxOf(copy);
+        _context->CopySubresourceRegion((ID3D11Resource*)target, targetSubresource, 0, 0, 0, (ID3D11Resource*)source, 0, &box);
     }
 
     /// <summary>Copies a captured frame to a position inside the target, clipped to the monitor's area; never scales.</summary>
     public void CopyFrameTo(nint source, VideoSize contentSize, nint target, int x, int y, VideoSize area)
     {
-        var src = (ID3D11Texture2D*)source;
-        src->GetDesc(out var srcDesc);
-        var copy = contentSize.Intersect(area).Intersect(new VideoSize((int)srcDesc.Width, (int)srcDesc.Height));
-        var box = new D3D11_BOX { left = 0, top = 0, front = 0, right = (uint)copy.Width, bottom = (uint)copy.Height, back = 1 };
-        _context->CopySubresourceRegion((ID3D11Resource*)target, 0, (uint)x, (uint)y, 0, (ID3D11Resource*)src, 0, &box);
+        var box = BoxOf(ClippedCopy(source, contentSize, area));
+        _context->CopySubresourceRegion((ID3D11Resource*)target, 0, (uint)x, (uint)y, 0, (ID3D11Resource*)source, 0, &box);
+    }
+
+    /// <summary>The top-left region of a texture of this size, as a copy's source box.</summary>
+    internal static D3D11_BOX BoxOf(VideoSize size) =>
+        new() { left = 0, top = 0, front = 0, right = (uint)size.Width, bottom = (uint)size.Height, back = 1 };
+
+    /// <summary>What of a frame can be copied: its content, inside the area and the texture's own size.</summary>
+    private static VideoSize ClippedCopy(nint source, VideoSize contentSize, VideoSize area)
+    {
+        ((ID3D11Texture2D*)source)->GetDesc(out var description);
+        return contentSize.Intersect(area).Intersect(new VideoSize((int)description.Width, (int)description.Height));
     }
 
     /// <summary>The average GPU time of one <see cref="CopyFrameTo"/>, in microseconds; null when it can't be measured. Blocks.</summary>
     public double? TimeCopies(nint source, nint target, int x, int y, int count)
     {
-        ((ID3D11Texture2D*)source)->GetDesc(out var desc);
-        var size = new VideoSize((int)desc.Width, (int)desc.Height);
+        ((ID3D11Texture2D*)source)->GetDesc(out var description);
+        var size = new VideoSize((int)description.Width, (int)description.Height);
         ID3D11Query* disjoint = null, begin = null, end = null;
         try
         {
-            var disjointDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_TIMESTAMP_DISJOINT };
-            var stampDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_TIMESTAMP };
-            _device->CreateQuery(&disjointDesc, &disjoint);
-            _device->CreateQuery(&stampDesc, &begin);
-            _device->CreateQuery(&stampDesc, &end);
+            var disjointQuery = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_TIMESTAMP_DISJOINT };
+            var stampQuery = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_TIMESTAMP };
+            _device->CreateQuery(&disjointQuery, &disjoint);
+            _device->CreateQuery(&stampQuery, &begin);
+            _device->CreateQuery(&stampQuery, &end);
 
             _context->Begin((ID3D11Asynchronous*)disjoint);
             _context->End((ID3D11Asynchronous*)begin);
@@ -215,29 +232,26 @@ public sealed unsafe class D3D11Device : IDisposable
             _context->End((ID3D11Asynchronous*)disjoint);
 
             TimestampDisjoint data;
-            while (GetData((ID3D11Asynchronous*)disjoint, &data, (uint)sizeof(TimestampDisjoint)) != HRESULT.S_OK)
-            {
-                Thread.Yield();
-            }
-
-            ulong t0, t1;
-            while (GetData((ID3D11Asynchronous*)begin, &t0, sizeof(ulong)) != HRESULT.S_OK)
-            {
-                Thread.Yield();
-            }
-
-            while (GetData((ID3D11Asynchronous*)end, &t1, sizeof(ulong)) != HRESULT.S_OK)
-            {
-                Thread.Yield();
-            }
-
-            return data.Disjoint != 0 ? null : (t1 - t0) * 1e6 / data.Frequency / count;
+            ulong started, ended;
+            WaitForData((ID3D11Asynchronous*)disjoint, &data, (uint)sizeof(TimestampDisjoint));
+            WaitForData((ID3D11Asynchronous*)begin, &started, sizeof(ulong));
+            WaitForData((ID3D11Asynchronous*)end, &ended, sizeof(ulong));
+            return data.Disjoint != 0 ? null : (ended - started) * 1e6 / data.Frequency / count;
         }
         finally
         {
             if (end is not null) ((IUnknown*)end)->Release();
             if (begin is not null) ((IUnknown*)begin)->Release();
             if (disjoint is not null) ((IUnknown*)disjoint)->Release();
+        }
+    }
+
+    /// <summary>Spins, yielding, until the query's result is ready and read into data.</summary>
+    private void WaitForData(ID3D11Asynchronous* query, void* data, uint size)
+    {
+        while (GetData(query, data, size) != HRESULT.S_OK)
+        {
+            Thread.Yield();
         }
     }
 
@@ -264,10 +278,10 @@ public sealed unsafe class D3D11Device : IDisposable
     public void Clear(nint target, uint subresource, float red, float green, float blue)
     {
         var texture = (ID3D11Texture2D*)target;
-        texture->GetDesc(out var desc);
+        texture->GetDesc(out var description);
 
-        var view = new D3D11_RENDER_TARGET_VIEW_DESC { Format = desc.Format };
-        if (desc.ArraySize > 1)
+        var view = new D3D11_RENDER_TARGET_VIEW_DESC { Format = description.Format };
+        if (description.ArraySize > 1)
         {
             view.ViewDimension = D3D11_RTV_DIMENSION.D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
             view.Anonymous.Texture2DArray = new D3D11_TEX2D_ARRAY_RTV { MipSlice = 0, FirstArraySlice = subresource, ArraySize = 1 };
@@ -277,16 +291,16 @@ public sealed unsafe class D3D11Device : IDisposable
             view.ViewDimension = D3D11_RTV_DIMENSION.D3D11_RTV_DIMENSION_TEXTURE2D;
         }
 
-        ID3D11RenderTargetView* rtv = null;
-        _device->CreateRenderTargetView((ID3D11Resource*)texture, &view, &rtv);
+        ID3D11RenderTargetView* targetView = null;
+        _device->CreateRenderTargetView((ID3D11Resource*)texture, &view, &targetView);
         try
         {
             var color = stackalloc float[4] { red, green, blue, 1f };
-            _context->ClearRenderTargetView(rtv, color);
+            _context->ClearRenderTargetView(targetView, color);
         }
         finally
         {
-            rtv->Release();
+            targetView->Release();
         }
     }
 
@@ -300,11 +314,10 @@ public sealed unsafe class D3D11Device : IDisposable
         IDXGIDevice* dxgiDevice = null;
         try
         {
-            var dxgiIid = IDXGIDevice.IID_Guid;
-            var hr = ((IUnknown*)_device)->QueryInterface(&dxgiIid, (void**)&dxgiDevice);
-            if (hr.Failed)
+            var result = QueryDxgiDevice(&dxgiDevice);
+            if (result.Failed)
             {
-                return hr.Value;
+                return result.Value;
             }
 
             // CsWin32 turns a failed HRESULT into an exception carrying it.
@@ -314,7 +327,7 @@ public sealed unsafe class D3D11Device : IDisposable
             }
             catch (Exception e)
             {
-                hr = new HRESULT(e.HResult);
+                result = new HRESULT(e.HResult);
             }
 
             try
@@ -328,7 +341,7 @@ public sealed unsafe class D3D11Device : IDisposable
                 // The read-back is informational only.
             }
 
-            return hr.Value;
+            return result.Value;
         }
         finally
         {
@@ -339,7 +352,7 @@ public sealed unsafe class D3D11Device : IDisposable
     /// <summary>Creates a BGRA render-target texture, for synthetic sources.</summary>
     public nint CreateTexture(VideoSize size)
     {
-        var desc = new D3D11_TEXTURE2D_DESC
+        var description = new D3D11_TEXTURE2D_DESC
         {
             Width = (uint)size.Width,
             Height = (uint)size.Height,
@@ -351,7 +364,7 @@ public sealed unsafe class D3D11Device : IDisposable
             BindFlags = D3D11_BIND_FLAG.D3D11_BIND_RENDER_TARGET | D3D11_BIND_FLAG.D3D11_BIND_SHADER_RESOURCE,
         };
         ID3D11Texture2D* texture = null;
-        _device->CreateTexture2D(&desc, null, &texture);
+        _device->CreateTexture2D(&description, null, &texture);
         return (nint)texture;
     }
 
@@ -386,13 +399,13 @@ public sealed unsafe class D3D11Device : IDisposable
         for (uint i = 0; ; i++)
         {
             IDXGIAdapter1* adapter = null;
-            var hr = factory->EnumAdapters1(i, &adapter);
-            if (hr == HRESULT.DXGI_ERROR_NOT_FOUND)
+            var result = factory->EnumAdapters1(i, &adapter);
+            if (result == HRESULT.DXGI_ERROR_NOT_FOUND)
             {
                 break;
             }
 
-            hr.ThrowOnFailure();
+            result.ThrowOnFailure();
             if (monitor != default && OwnsMonitor(adapter, monitor))
             {
                 if (first is not null) first->Release();
@@ -414,10 +427,10 @@ public sealed unsafe class D3D11Device : IDisposable
 
     private static bool OwnsMonitor(IDXGIAdapter1* adapter, HMONITOR monitor)
     {
-        for (uint j = 0; ; j++)
+        for (uint index = 0; ; index++)
         {
             IDXGIOutput* output = null;
-            if (adapter->EnumOutputs(j, &output).Failed)
+            if (adapter->EnumOutputs(index, &output).Failed)
             {
                 return false;
             }
@@ -431,14 +444,19 @@ public sealed unsafe class D3D11Device : IDisposable
         }
     }
 
+    private static HRESULT QueryDxgiDevice(ID3D11Device* device, IDXGIDevice** dxgiDevice)
+    {
+        var dxgiIid = IDXGIDevice.IID_Guid;
+        return ((IUnknown*)device)->QueryInterface(&dxgiIid, (void**)dxgiDevice);
+    }
+
     private static IDirect3DDevice CreateWinRTDevice(ID3D11Device* device)
     {
         IDXGIDevice* dxgiDevice = null;
         IInspectable* inspectable = null;
         try
         {
-            var dxgiIid = IDXGIDevice.IID_Guid;
-            ((IUnknown*)device)->QueryInterface(&dxgiIid, (void**)&dxgiDevice).ThrowOnFailure();
+            QueryDxgiDevice(device, &dxgiDevice).ThrowOnFailure();
             PInvoke.CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice, &inspectable).ThrowOnFailure();
             return MarshalInterface<IDirect3DDevice>.FromAbi((nint)inspectable);
         }
