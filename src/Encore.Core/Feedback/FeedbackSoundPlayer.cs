@@ -5,38 +5,6 @@ using Encore.Core.Settings;
 
 namespace Encore.Core.Feedback;
 
-/// <summary>The <c>feedbackSounds</c> names a <see cref="FeedbackNotice"/> carries as its sound.</summary>
-public static class FeedbackSoundNames
-{
-    public const string ClipSaved = "clipSaved";
-    public const string SaveFailed = "saveFailed";
-    public const string RecordingStarted = "recordingStarted";
-    public const string RecordingStopped = "recordingStopped";
-    public const string DiskFull = "diskFull";
-}
-
-/// <summary>Where Feedback Sounds play: the platform's render endpoints.</summary>
-public interface IFeedbackSoundOutput
-{
-    /// <summary>The id of the default communications render endpoint, or <c>null</c> when there is none.</summary>
-    string? DefaultEndpointId();
-
-    /// <summary>Plays the samples on an endpoint and returns once played; throws when the endpoint can't be opened or fails.</summary>
-    void Play(string endpointId, ReadOnlyMemory<float> pcm);
-}
-
-/// <summary>An output that plays nothing, on a placeholder endpoint no layout holds; test instances get it.</summary>
-public sealed class SilentFeedbackSoundOutput : IFeedbackSoundOutput
-{
-    public static SilentFeedbackSoundOutput Instance { get; } = new();
-
-    public string? DefaultEndpointId() => "silent";
-
-    public void Play(string endpointId, ReadOnlyMemory<float> pcm)
-    {
-    }
-}
-
 /// <summary>Plays Feedback Sounds in order on one worker thread, so callers never block on audio and nothing throws.</summary>
 public sealed class FeedbackSoundPlayer : IDisposable
 {

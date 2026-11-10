@@ -23,13 +23,13 @@ public static class ProfileFolders
             }
         }
 
-        foreach (var (id, profile) in profiles.Where(p => p.Value.Folder is null).ToList())
+        foreach (var (id, profile) in profiles.Where(pair => pair.Value.Folder is null).ToList())
         {
             var name = PathNames.Sanitize(profile.Name, PathNames.GameFallback);
             var folder = name;
-            for (var n = 2; taken.Contains(folder); n++)
+            for (var number = 2; taken.Contains(folder); number++)
             {
-                folder = $"{name} ({n})";
+                folder = $"{name} ({number})";
             }
 
             taken.Add(folder);

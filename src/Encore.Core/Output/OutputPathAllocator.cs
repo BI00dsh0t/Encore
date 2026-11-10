@@ -55,10 +55,11 @@ public sealed class OutputPathAllocator(TimeProvider time)
         ArgumentNullException.ThrowIfNull(name);
 
         Directory.CreateDirectory(folder);
-        var stem = $"{PathNames.Sanitize(name, PathNames.GameFallback)}_{localTime.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture)}";
-        for (var n = 1; ; n++)
+        var stamp = localTime.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture);
+        var stem = $"{PathNames.Sanitize(name, PathNames.GameFallback)}_{stamp}";
+        for (var number = 1; ; number++)
         {
-            var path = Path.Combine(folder, n == 1 ? stem + ".mp4" : $"{stem}_{n}.mp4");
+            var path = Path.Combine(folder, number == 1 ? stem + ".mp4" : $"{stem}_{number}.mp4");
             try
             {
                 new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None).Dispose();

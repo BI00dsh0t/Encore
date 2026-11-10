@@ -7,7 +7,13 @@ namespace Encore.Core.Monitors;
 public sealed record CanvasArea(DisplayMonitor Screen, int X, int Y, int Width, int Height);
 
 /// <summary>A Monitor Recording's canvas: the screens' bounding box, where each sits in it, and the codec and size encoded.</summary>
-public sealed record CanvasPlan(VideoCodec Codec, int Width, int Height, int NativeWidth, int NativeHeight, IReadOnlyList<CanvasArea> Areas)
+public sealed record CanvasPlan(
+    VideoCodec Codec,
+    int Width,
+    int Height,
+    int NativeWidth,
+    int NativeHeight,
+    IReadOnlyList<CanvasArea> Areas)
 {
     public bool Scaled => Width < NativeWidth || Height < NativeHeight;
 }
@@ -29,10 +35,10 @@ public static class MonitorCanvasRule
     {
         ArgumentOutOfRangeException.ThrowIfZero(screens.Count);
         var placed = Place(screens);
-        var left = placed.Min(p => p.X);
-        var top = placed.Min(p => p.Y);
-        var nativeWidth = placed.Max(p => p.X + p.Width) - left;
-        var nativeHeight = placed.Max(p => p.Y + p.Height) - top;
+        var left = placed.Min(area => area.X);
+        var top = placed.Min(area => area.Y);
+        var nativeWidth = placed.Max(area => area.X + area.Width) - left;
+        var nativeHeight = placed.Max(area => area.Y + area.Height) - top;
 
         var codec = outputCodec;
         if (codec == VideoCodec.H264 && Math.Max(nativeWidth, nativeHeight) > H264MaxSide)
@@ -42,7 +48,7 @@ public static class MonitorCanvasRule
 
         var (width, height) = Fit(nativeWidth, nativeHeight, MaxSide(codec));
         return new CanvasPlan(codec, width, height, nativeWidth, nativeHeight,
-            [.. placed.Select(p => p with { X = p.X - left, Y = p.Y - top })]);
+            [.. placed.Select(area => area with { X = area.X - left, Y = area.Y - top })]);
     }
 
     /// <summary>A size scaled down, aspect kept, so neither side exceeds maxSide; never up, and both sides are made even.</summary>
@@ -62,7 +68,9 @@ public static class MonitorCanvasRule
         var nextX = 0;
         foreach (var screen in screens)
         {
-            var area = screen is { X: { } x, Y: { } y } ? new CanvasArea(screen, x, y, screen.Width, screen.Height) : new CanvasArea(screen, nextX, 0, screen.Width, screen.Height);
+            var area = screen is { X: { } x, Y: { } y }
+                ? new CanvasArea(screen, x, y, screen.Width, screen.Height)
+                : new CanvasArea(screen, nextX, 0, screen.Width, screen.Height);
             placed.Add(area);
             nextX = area.X + area.Width;
         }

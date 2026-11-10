@@ -331,7 +331,7 @@ public sealed class LibraryCleanupTests : IDisposable
         File.WriteAllBytes(Path.Combine(Output, "in.mp4"), LibraryActorTests.Mp4());
 
         // The engine's own start: a scan, then the actor over what it found.
-        var load = LibraryActor.Load(Output, Path.Combine(_folder, "library.json"), _ => null, _ => { });
+        var load = LibraryLoader.Load(Output, Path.Combine(_folder, "library.json"), _ => null, _ => { });
         Start(load.Items, new CleanupSettings(1, null));
         _time.Advance(StartDelay);
         WaitForPasses(1);

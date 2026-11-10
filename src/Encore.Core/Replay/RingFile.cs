@@ -41,7 +41,11 @@ public sealed class RingFile
     public int BlockBytes { get; }
 
     /// <summary>Creates a new preallocated ring file of the whole blocks that fit in the given size; throws when it can't.</summary>
-    public static RingFile Create(string folder, long bytes, int blockBytes = PacketRing.DefaultSlabBytes, Action<SafeFileHandle>? configure = null)
+    public static RingFile Create(
+        string folder,
+        long bytes,
+        int blockBytes = PacketRing.DefaultSlabBytes,
+        Action<SafeFileHandle>? configure = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
         ArgumentOutOfRangeException.ThrowIfLessThan(bytes, 1);
@@ -49,7 +53,13 @@ public sealed class RingFile
         Directory.CreateDirectory(folder);
         var blocks = (int)Math.Clamp(bytes / blockBytes, 2, int.MaxValue);
         var path = System.IO.Path.Combine(folder, Prefix + Interlocked.Increment(ref s_next) + Extension);
-        var handle = File.OpenHandle(path, FileMode.Create, FileAccess.ReadWrite, FileShare.Read, FileOptions.DeleteOnClose, preallocationSize: (long)blocks * blockBytes);
+        var handle = File.OpenHandle(
+            path,
+            FileMode.Create,
+            FileAccess.ReadWrite,
+            FileShare.Read,
+            FileOptions.DeleteOnClose,
+            preallocationSize: (long)blocks * blockBytes);
         try
         {
             configure?.Invoke(handle);
@@ -138,13 +148,13 @@ public sealed class RingFile
         var read = 0;
         while (read < destination.Length)
         {
-            var n = RandomAccess.Read(_handle, destination[read..], offset + read);
-            if (n == 0)
+            var count = RandomAccess.Read(_handle, destination[read..], offset + read);
+            if (count == 0)
             {
                 throw new EndOfStreamException($"The ring file '{Path}' ended at {offset + read}.");
             }
 
-            read += n;
+            read += count;
         }
     }
 

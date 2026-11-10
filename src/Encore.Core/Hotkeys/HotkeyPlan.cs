@@ -4,13 +4,6 @@ using Encore.Core.Settings;
 
 namespace Encore.Core.Hotkeys;
 
-/// <summary>What to do with one Hotkey action: register its binding, or skip it for SkipCode.</summary>
-public sealed record HotkeyPlanEntry(HotkeyAction Action, HotkeyBinding? Binding, string? SkipCode)
-{
-    /// <summary>Whether this action is to be registered.</summary>
-    public bool Registers => SkipCode is null;
-}
-
 /// <summary>Which Hotkeys to register, from the settings alone. Pure; every action appears once, in enum order.</summary>
 public static class HotkeyPlan
 {
@@ -45,7 +38,7 @@ public static class HotkeyPlan
             {
                 skip = ErrorCodes.HotkeyInactive;
             }
-            else if (taken.Any(t => SameCombination(t, binding)))
+            else if (taken.Any(other => SameCombination(other, binding)))
             {
                 skip = ErrorCodes.HotkeyDuplicate;
             }
@@ -65,7 +58,8 @@ public static class HotkeyPlan
     public static bool IsActive(HotkeyAction action, RecordHotkeyMode mode) => action switch
     {
         HotkeyAction.RecordToggle or HotkeyAction.MonitorRecordToggle => mode == RecordHotkeyMode.Toggle,
-        HotkeyAction.RecordStart or HotkeyAction.RecordStop or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop => mode == RecordHotkeyMode.Separate,
+        HotkeyAction.RecordStart or HotkeyAction.RecordStop or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop =>
+            mode == RecordHotkeyMode.Separate,
         _ => true,
     };
 

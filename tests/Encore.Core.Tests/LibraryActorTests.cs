@@ -52,7 +52,7 @@ public sealed class LibraryActorTests : IDisposable
             """);
         var failures = new List<Exception>();
 
-        var load = LibraryActor.Load(Output, LibraryFile, _ => null, failures.Add);
+        var load = LibraryLoader.Load(Output, LibraryFile, _ => null, failures.Add);
         var items = load.Items.OrderBy(i => i.Path, StringComparer.Ordinal).ToList();
 
         Assert.Empty(failures);
@@ -72,7 +72,7 @@ public sealed class LibraryActorTests : IDisposable
         File.WriteAllText(LibraryFile, "{ not json");
         var failures = new List<Exception>();
 
-        var load = LibraryActor.Load(Output, LibraryFile, _ => null, failures.Add);
+        var load = LibraryLoader.Load(Output, LibraryFile, _ => null, failures.Add);
 
         Assert.Equal(@"Game\clip.mp4", Assert.Single(load.Items).Path);
         Assert.Single(failures);
@@ -108,7 +108,7 @@ public sealed class LibraryActorTests : IDisposable
         File.WriteAllBytes(Path.Combine(Output, "truncated.mp4"), Mp4(100)[..60]);
         File.WriteAllBytes(Path.Combine(Output, "Game", "clip.mp4"), Mp4());
 
-        var load = LibraryActor.Load(Output, LibraryFile, folder => folder == "Game" ? ProfileId : null, _ => { });
+        var load = LibraryLoader.Load(Output, LibraryFile, folder => folder == "Game" ? ProfileId : null, _ => { });
 
         Assert.False(File.Exists(part));
         Assert.False(File.Exists(reservation));
@@ -148,7 +148,7 @@ public sealed class LibraryActorTests : IDisposable
         var deleted = Path.Combine(Output, "deleted.mp4");
         File.WriteAllBytes(kept, Mp4());
         File.WriteAllBytes(deleted, Mp4());
-        var load = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { });
+        var load = LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { });
         using var library = new Harness(this, load.Items);
 
         library.Actor.Watching = false;
@@ -168,7 +168,7 @@ public sealed class LibraryActorTests : IDisposable
             {"version":1,"items":[{"path":"clip.mp4","profileId":"c:\\games\\a.exe","date":"2026-11-01T10:00:00+00:00","size":48,"favourite":true}]}
             """);
 
-        var fromBak = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { });
+        var fromBak = LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { });
 
         Assert.False(fromBak.Corrupt);
         Assert.Equal((ProfileId, true), (Assert.Single(fromBak.Items).ProfileId, fromBak.Items[0].Favourite));
@@ -177,28 +177,28 @@ public sealed class LibraryActorTests : IDisposable
         File.WriteAllText(LibraryFile, "{ not json");
         File.WriteAllText(LibraryFile + ".bak", "[]");
 
-        var fromScan = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { });
+        var fromScan = LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { });
 
         Assert.True(fromScan.Corrupt);
         Assert.Null(Assert.Single(fromScan.Items).ProfileId);
 
         // The block is saved, so a restart before it is acknowledged still holds Cleanup off.
         new Harness(this, fromScan.Items, cleanupBlocked: true).Dispose();
-        Assert.True(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Corrupt);
+        Assert.True(LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Corrupt);
 
         using (var library = new Harness(this, fromScan.Items, cleanupBlocked: true))
         {
             library.Actor.AcknowledgeCorrupt();
         }
 
-        Assert.False(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Corrupt);
+        Assert.False(LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Corrupt);
     }
 
     [Fact]
     public void AnOutputFolderChangeRebuildsTheIndex()
     {
         File.WriteAllBytes(Path.Combine(Output, "old.mp4"), Mp4());
-        var load = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { });
+        var load = LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { });
         var missing = Path.Combine(_folder, "missing");
         var other = Path.Combine(_folder, "other");
         Directory.CreateDirectory(other);
@@ -246,7 +246,7 @@ public sealed class LibraryActorTests : IDisposable
         }
 
         // A restart with the file unchanged reuses the saved length without reading it.
-        var load = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { });
+        var load = LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { });
         Assert.Equal(30, Assert.Single(load.Items).LengthSeconds);
         var second = 0;
         using var restarted = new Harness(this, load.Items, readLength: _ => { Interlocked.Increment(ref second); return 12; });
@@ -270,7 +270,7 @@ public sealed class LibraryActorTests : IDisposable
         Directory.CreateDirectory(Path.Combine(Output, "Game"));
         File.WriteAllBytes(Path.Combine(Output, "Monitor Recordings", "desk.mp4"), Mp4());
         File.WriteAllBytes(Path.Combine(Output, "Game", "found.mp4"), Mp4());
-        using (var library = new Harness(this, LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items))
+        using (var library = new Harness(this, LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Items))
         {
             library.Actor.Watching = true;
             library.Actor.BeginWrite(clip, ProfileId, LibraryItemKinds.Clip);
@@ -282,7 +282,7 @@ public sealed class LibraryActorTests : IDisposable
             library.WaitFor(index => index.TryGetValue(@"Game\match.mp4", out var r) && !r.BeingWritten && index.TryGetValue(@"Game\clip.mp4", out var c) && !c.BeingWritten);
         }
 
-        var kinds = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items.ToDictionary(i => i.Path, i => i.Kind);
+        var kinds = LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Items.ToDictionary(i => i.Path, i => i.Kind);
         Assert.Equal(LibraryItemKinds.Clip, kinds[@"Game\clip.mp4"]);
         Assert.Equal(LibraryItemKinds.Recording, kinds[@"Game\match.mp4"]);
         Assert.Null(kinds[@"Game\found.mp4"]);
@@ -293,7 +293,7 @@ public sealed class LibraryActorTests : IDisposable
     public async Task AFavouriteIsSavedAndMovesWithAnOutsideRename()
     {
         File.WriteAllBytes(Path.Combine(Output, "Game", "clip.mp4"), Mp4());
-        var item = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items);
+        var item = Assert.Single(LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Items);
         using (var library = new Harness(this, [item]))
         {
             await library.Actor.SetFavourite(new LibrarySetFavourite(item.Path, item.Size, item.Modified, true));
@@ -301,7 +301,7 @@ public sealed class LibraryActorTests : IDisposable
         }
 
         // A restart keeps it, and a rename in Explorer moves it with the item.
-        var loaded = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items);
+        var loaded = Assert.Single(LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Items);
         Assert.True(loaded.Favourite);
         using var restarted = new Harness(this, [loaded]);
         restarted.Actor.Watching = true;
@@ -314,7 +314,7 @@ public sealed class LibraryActorTests : IDisposable
     {
         // Library.json held open without delete sharing (a backup, a scanner) fails File.Replace.
         File.WriteAllBytes(Path.Combine(Output, "Game", "clip.mp4"), Mp4());
-        var item = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items);
+        var item = Assert.Single(LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Items);
         using var library = new Harness(this, [item]);
         await library.Actor.SetFavourite(new LibrarySetFavourite(item.Path, item.Size, item.Modified, true));
         Assert.True(Until(() => SavedFavourite() == true, TimeSpan.FromSeconds(5)), "the first save never landed");
@@ -367,7 +367,7 @@ public sealed class LibraryActorTests : IDisposable
     {
         var clip = Path.Combine(Output, "clip.mp4");
         File.WriteAllBytes(clip, Mp4());
-        var item = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items);
+        var item = Assert.Single(LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Items);
         using var library = new Harness(this, [item]);
 
         var older = await Assert.ThrowsAsync<ErrorCodeException>(() =>
@@ -404,7 +404,7 @@ public sealed class LibraryActorTests : IDisposable
     public async Task ARenameMovesTheFileKeepsItsFavouriteAndIsPublishedOnce()
     {
         File.WriteAllBytes(Path.Combine(Output, "Game", "a.mp4"), Mp4());
-        var item = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items) with { Favourite = true };
+        var item = Assert.Single(LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Items) with { Favourite = true };
         using var library = new Harness(this, [item]);
 
         await library.Actor.Rename(new LibraryRename(item.Path, item.Size, item.Modified, "b"));
@@ -425,7 +425,7 @@ public sealed class LibraryActorTests : IDisposable
         Directory.CreateDirectory(bin);
         File.WriteAllBytes(Path.Combine(Output, "a.mp4"), Mp4());
         File.WriteAllBytes(Path.Combine(Output, "kept.mp4"), Mp4());
-        var items = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items.OrderBy(i => i.Path, StringComparer.Ordinal).ToList();
+        var items = LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Items.OrderBy(i => i.Path, StringComparer.Ordinal).ToList();
         var recycled = new List<string>();
         using var library = new Harness(this, items, recycle: path =>
         {
@@ -496,7 +496,7 @@ public sealed class LibraryActorTests : IDisposable
     {
         File.WriteAllBytes(Path.Combine(Output, "a.mp4"), Mp4());
         File.WriteAllBytes(Path.Combine(Output, "b.mp4"), Mp4());
-        var items = LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items;
+        var items = LibraryLoader.Load(Output, LibraryFile, _ => null, _ => { }).Items;
         var item = items.Single(i => i.Path == "a.mp4");
         using var library = new Harness(this, items);
 
