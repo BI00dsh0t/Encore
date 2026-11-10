@@ -1,0 +1,127 @@
+<!-- What both themes' shells share: the nav item and the Settings button. Each theme's file adds its own text colours. -->
+<ResourceDictionary x:Class="Encore.App.Theme.ShellShared"
+                    x:ClassModifier="internal"
+                    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:theme="clr-namespace:Encore.App.Theme">
+
+    <!-- Nav item: a subtle fill on hover and press, an accent tint when selected, and a dot for an unsaved draft. -->
+    <Style x:Key="EncoreNavItemBaseStyle" TargetType="ListBoxItem">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+        <Setter Property="ToolTip" Value="{Binding Title}" />
+        <Setter Property="theme:NavPress.Track" Value="True" />
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Margin" Value="4,1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid>
+                        <Border x:Name="Fill" Background="Transparent" CornerRadius="6" />
+                        <Border x:Name="SelectedFill"
+                                Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                Opacity="0.12"
+                                CornerRadius="6"
+                                Visibility="Collapsed" />
+                        <DockPanel x:Name="NavContent" Margin="{TemplateBinding Padding}" LastChildFill="False">
+                            <TextBlock x:Name="NavGlyph"
+                                       DockPanel.Dock="Left"
+                                       Text="{Binding Glyph}"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="16"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,12,0" />
+                            <TextBlock x:Name="Label"
+                                       DockPanel.Dock="Left"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding Title}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <!-- An unsaved draft on the page: a 6 px accent dot. -->
+                            <Border x:Name="UnsavedDot"
+                                    Width="6"
+                                    Height="6"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                    CornerRadius="3"
+                                    DockPanel.Dock="Left"
+                                    Visibility="Collapsed" />
+                        </DockPanel>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- The collapsed pane is a rail: only the glyph shows, centred. -->
+                        <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="Rail">
+                            <Setter TargetName="Label" Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter TargetName="NavContent" Property="HorizontalAlignment" Value="Center" />
+                            <Setter TargetName="NavGlyph" Property="Margin" Value="0" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True">
+                            <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="SelectedFill" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="theme:NavPress.IsPressed" Value="True">
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The Settings button and the pane's collapse button: a nav item's look on a toggle button. -->
+    <Style x:Key="EncoreSettingsNavStyle" TargetType="ToggleButton">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Margin" Value="4,8,4,0" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid>
+                        <Border x:Name="Fill" Background="Transparent" CornerRadius="6" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <!-- On the rail the content is centred, as the nav items' glyphs are. -->
+            <DataTrigger Binding="{Binding IsNavigationExpanded}" Value="False">
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="Padding" Value="0" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+</ResourceDictionary>
