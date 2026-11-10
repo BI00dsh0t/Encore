@@ -247,7 +247,8 @@ public sealed unsafe class RecordingWriter
         else if (ended || Stopwatch.GetTimestamp() >= keyDeadline)
         {
             _log.LogInformation(
-                "No keyframe was forced after the press within {Seconds:0.0} s; the Recording starts on the next one", KeyWait.TotalSeconds);
+                "No keyframe was forced after the press within {Seconds:0.0} s; the Recording starts on the next one",
+                KeyWait.TotalSeconds);
             _targetUs = _pressUs;
         }
 
@@ -284,7 +285,7 @@ public sealed unsafe class RecordingWriter
             "Recording of {Packets} packets from {Start:0.000} s after the anchor written to {Path}", Written, _keyUs / 1e6, _path);
     }
 
-    /// <summary>After a failure: frees what is held; returns the bytes to keep after a full disk, else finishes what was written.</summary>
+    /// <summary>After a failure: frees what is held; returns the bytes a full disk keeps, else finishes what was written.</summary>
     private long? Salvage(FragmentedMp4Muxer? muxer, Exception error)
     {
         Release();

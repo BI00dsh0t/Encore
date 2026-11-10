@@ -78,7 +78,7 @@ public static unsafe class MediaLength
         }
     }
 
-    /// <summary>Opens the demuxer over the shared input into the caller's context; on failure FFmpeg frees it and sets it to null.</summary>
+    /// <summary>Opens the demuxer over the shared input into the caller's context; a failed open frees it and nulls it.</summary>
     private static bool TryOpenInput(AVFormatContext** context, SharedInput input, string path, ILogger logger)
     {
         *context = ffmpeg.avformat_alloc_context();

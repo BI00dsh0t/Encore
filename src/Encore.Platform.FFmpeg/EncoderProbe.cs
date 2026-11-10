@@ -6,16 +6,6 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>The kind of an FFmpeg video encoder, which decides its rate-control options.</summary>
-public enum EncoderFamily
-{
-    Nvenc,
-    Amf,
-    Qsv,
-    X264,
-    Other,
-}
-
 /// <summary>Finds which codecs this PC can encode by feeding each candidate encoder one frame. See docs/code-notes.md.</summary>
 public static unsafe class EncoderProbe
 {

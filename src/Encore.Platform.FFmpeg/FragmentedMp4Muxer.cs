@@ -139,30 +139,38 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             ffmpeg.av_packet_rescale_ts(packet, timeBase, _context->streams[streamIndex]->time_base);
             if (_durable)
             {
-                // av_write_frame keeps its own reference; this one is the caller's to drop.
-                try
-                {
-                    var (dts, duration) = (packet->dts, packet->duration);
-                    Check(ffmpeg.av_write_frame(_context, packet), "av_write_frame");
-                    if (dts != ffmpeg.AV_NOPTS_VALUE)
-                    {
-                        if (_firstDts[streamIndex] == ffmpeg.AV_NOPTS_VALUE)
-                        {
-                            _firstDts[streamIndex] = dts;
-                        }
-
-                        _lastEnd[streamIndex] = dts + duration;
-                    }
-                }
-                finally
-                {
-                    ffmpeg.av_packet_unref(packet);
-                }
+                WriteDurable(packet, streamIndex);
             }
             else
             {
                 FFmpegLibrary.Check(ffmpeg.av_interleaved_write_frame(_context, packet), "av_interleaved_write_frame");
             }
+        }
+    }
+
+    /// <summary>Writes a packet into the fragment being built and notes its stream's span, for the mehd. Under the lock.</summary>
+    private void WriteDurable(AVPacket* packet, int streamIndex)
+    {
+        // av_write_frame keeps its own reference; this one is the caller's to drop.
+        try
+        {
+            var (dts, duration) = (packet->dts, packet->duration);
+            Check(ffmpeg.av_write_frame(_context, packet), "av_write_frame");
+            if (dts == ffmpeg.AV_NOPTS_VALUE)
+            {
+                return;
+            }
+
+            if (_firstDts[streamIndex] == ffmpeg.AV_NOPTS_VALUE)
+            {
+                _firstDts[streamIndex] = dts;
+            }
+
+            _lastEnd[streamIndex] = dts + duration;
+        }
+        finally
+        {
+            ffmpeg.av_packet_unref(packet);
         }
     }
 
@@ -254,7 +262,9 @@ public sealed unsafe class FragmentedMp4Muxer : PacketSink, IDisposable
             if (_firstDts[i] != ffmpeg.AV_NOPTS_VALUE)
             {
                 var timeBase = _context->streams[i]->time_base;
-                durationUs = Math.Max(durationUs, ffmpeg.av_rescale_rnd(_lastEnd[i] - _firstDts[i], 1_000_000L * timeBase.num, timeBase.den, AVRounding.AV_ROUND_UP));
+                var streamUs = ffmpeg.av_rescale_rnd(
+                    _lastEnd[i] - _firstDts[i], 1_000_000L * timeBase.num, timeBase.den, AVRounding.AV_ROUND_UP);
+                durationUs = Math.Max(durationUs, streamUs);
             }
         }
 
