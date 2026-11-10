@@ -202,6 +202,12 @@ public sealed partial class SessionOrchestrator : IDisposable
             }
         }
 
+        ShutDown();
+    }
+
+    // The channel is complete: the sessions end, the Recording writers get one bounded wait, and the timers go.
+    private void ShutDown()
+    {
         if (_active is not null)
         {
             EndActive("engine stopping", failure: null, RecordingStopReasons.Shutdown);
@@ -212,42 +218,7 @@ public sealed partial class SessionOrchestrator : IDisposable
             EndMonitor("engine stopping", RecordingStopReasons.Shutdown);
         }
 
-        // The channel is complete, so the writers' post-backs can't arrive: wait for them here, in one bounded wait.
-        var waited = Stopwatch.StartNew();
-        foreach (var recording in new[] { _ending, _recording, _monitorEnding, _monitorRecording })
-        {
-            if (recording is null)
-            {
-                continue;
-            }
-
-            var left = ShutdownWait - waited.Elapsed;
-            if (recording.Done.Task.Wait(left > TimeSpan.Zero ? left : TimeSpan.Zero))
-            {
-                OnRecordingWritten(new RecordingWritten(recording, recording.Done.Task.Result), commitPending: false);
-                continue;
-            }
-
-            // Left open: the next start reports it interrupted.
-            if (ReferenceEquals(_ending, recording))
-            {
-                _ending = null;
-            }
-            else if (ReferenceEquals(_monitorEnding, recording))
-            {
-                _monitorEnding = null;
-            }
-            else if (ReferenceEquals(_monitorRecording, recording))
-            {
-                _monitorRecording = null;
-            }
-            else
-            {
-                _recording = null;
-            }
-
-            _recordings?.Info?.Invoke($"The Recording at {recording.Path} didn't finish within {ShutdownWait.TotalSeconds:0} s of shutdown; it was left open");
-        }
+        WaitForRecordingWriters();
 
         // The published state no longer claims a Recording runs.
         if (_recording is null && _ending is null)
@@ -265,6 +236,53 @@ public sealed partial class SessionOrchestrator : IDisposable
         _captureTimer = null;
     }
 
+    // The writers' post-backs can't arrive any more, so each is waited for here, all within ShutdownWait.
+    private void WaitForRecordingWriters()
+    {
+        var waited = Stopwatch.StartNew();
+        foreach (var recording in new[] { _ending, _recording, _monitorEnding, _monitorRecording })
+        {
+            if (recording is null)
+            {
+                continue;
+            }
+
+            var left = ShutdownWait - waited.Elapsed;
+            if (recording.Done.Task.Wait(left > TimeSpan.Zero ? left : TimeSpan.Zero))
+            {
+                OnRecordingWritten(new RecordingWritten(recording, recording.Done.Task.Result), commitPending: false);
+                continue;
+            }
+
+            // Left open: the next start reports it interrupted.
+            Forget(recording);
+            _recordings?.Info?.Invoke(
+                $"The Recording at {recording.Path} didn't finish within {ShutdownWait.TotalSeconds:0} s of shutdown; it was left open");
+        }
+    }
+
+    // Clears whichever of the four Recording fields holds this Recording.
+    private void Forget(RecordingRun recording)
+    {
+        if (ReferenceEquals(_ending, recording))
+        {
+            _ending = null;
+        }
+        else if (ReferenceEquals(_monitorEnding, recording))
+        {
+            _monitorEnding = null;
+        }
+        else if (ReferenceEquals(_monitorRecording, recording))
+        {
+            _monitorRecording = null;
+        }
+        else
+        {
+            _recording = null;
+        }
+    }
+
+    // One case per message type, in the order the types are documented; a handler ignores a message that is out of date.
     private void Handle(SessionMessage message)
     {
         switch (message)
@@ -282,24 +300,7 @@ public sealed partial class SessionOrchestrator : IDisposable
                 break;
 
             case HotkeyPressed pressed:
-                if (pressed.Action == HotkeyAction.MicMute)
-                {
-                    ToggleMicMute(pressed.Qpc);
-                }
-                else if (pressed.Action == HotkeyAction.Save)
-                {
-                    SaveClip(pressed.Qpc);
-                }
-                else if (pressed.Action is HotkeyAction.RecordToggle or HotkeyAction.RecordStart or HotkeyAction.RecordStop)
-                {
-                    OnRecordPress(pressed.Action, pressed.Qpc);
-                }
-                else if (pressed.Action is HotkeyAction.MonitorRecordToggle or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop)
-                {
-                    OnMonitorPress(pressed.Action, pressed.Qpc);
-                }
-
-                _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
+                OnHotkeyPressed(pressed);
                 break;
 
             case ProposeTarget propose:
@@ -307,12 +308,7 @@ public sealed partial class SessionOrchestrator : IDisposable
                 break;
 
             case RecordingRunning recording:
-                // dev.simulate's display state only: a real Recording's state wins, and it never holds the Target.
-                if (_recording is null && _ending is null)
-                {
-                    SetState(_state with { Recording = recording.Running ? RecordingState.Running : RecordingState.Off });
-                }
-
+                OnSimulatedRecording(recording);
                 break;
 
             case ClipWritten written:
@@ -320,11 +316,7 @@ public sealed partial class SessionOrchestrator : IDisposable
                 break;
 
             case SettingsUpdated:
-                if (_active is { } active)
-                {
-                    ApplySettings(active);
-                }
-
+                OnSettingsUpdated();
                 break;
 
             case RecordingWritten recorded:
@@ -332,99 +324,44 @@ public sealed partial class SessionOrchestrator : IDisposable
                 OnRecordingWritten(recorded, commitPending: Volatile.Read(ref _disposed) == 0);
                 break;
 
-            case SessionClosed closed when _monitor?.Id == closed.SessionId:
-                // WGC can see the monitor go before the display change arrives.
-                if (!EndMonitorIfRemoved(_monitor))
-                {
-                    EndMonitor(closed.Reason, RecordingStopReasons.SessionEnded);
-                }
-
+            case SessionClosed closed:
+                OnSessionClosed(closed);
                 break;
 
-            case SessionFailed failed when _monitor?.Id == failed.SessionId:
-                if (!EndMonitorIfRemoved(_monitor))
-                {
-                    _recordings?.Failed(failed.Failure);
-                    EndMonitor("failure: " + failed.Failure.Message, RecordingStopReasons.SessionEnded);
-                }
-
+            case SessionFailed failed:
+                OnSessionFailed(failed);
                 break;
 
-            case SessionAnchored anchored when _monitor?.Id == anchored.SessionId:
-                OnMonitorAnchored(_monitor, anchored.Qpc);
+            case SessionAnchored anchored:
+                OnSessionAnchored(anchored);
                 break;
 
-            case SessionDeviceLost lost when _monitor?.Id == lost.SessionId:
-                OnDeviceLost(_monitor, lost.Failure, monitor: true);
+            case SessionDeviceLost lost:
+                OnSessionDeviceLost(lost);
                 break;
 
-            case RetryDeviceRecovery retry when _monitor?.Id == retry.SessionId:
-                TryRecover(_monitor, monitor: true);
+            case RetryDeviceRecovery retry:
+                OnRetryDeviceRecovery(retry);
                 break;
 
-            case SessionChainRestarted restarted when _monitor?.Id == restarted.SessionId:
-                OnRecovered(_monitor);
-                OnMonitorChainRestarted(_monitor, restarted.Qpc);
+            case SessionChainRestarted restarted:
+                OnSessionChainRestarted(restarted);
                 break;
 
-            case SessionClosed closed when _active?.Id == closed.SessionId:
-                // A game whose process still runs is followed to its next window (TargetCapture.Wait).
-                if (Follows(_active))
-                {
-                    OnWindowClosed(_active);
-                }
-
-                // WGC can see the window close before Game Detection sees the exit: drain here too.
-                else if (Drains(_active))
-                {
-                    DrainActive(closed.Reason, RecordingStopReasons.GameExit);
-                }
-                else
-                {
-                    EndActive(closed.Reason, failure: null, RecordingStopReasons.GameExit);
-                }
-
+            case DrainExpired expired:
+                OnDrainExpired(expired);
                 break;
 
-            case DrainExpired expired when _drain?.Id == expired.SessionId:
-                ReleaseDrain();
+            case CaptureRetry:
+                OnCaptureRetry();
                 break;
 
-            case SessionFailed failed when _active?.Id == failed.SessionId:
-                OnActiveFailed(_active, failed.Failure);
+            case FollowCheck check:
+                OnFollowCheck(check);
                 break;
 
-            case SessionAnchored anchored when _active?.Id == anchored.SessionId:
-                OnActiveAnchored(_active);
-                break;
-
-            case CaptureRetry when _captureWait is { } waiting:
-                RetryCapture(waiting);
-                break;
-
-            case FollowCheck check when _active?.Id == check.SessionId:
-                if (Follows(_active))
-                {
-                    FollowWindow(_active, _targetCapture!.Wait!, _active.Spec.Target.Window);
-                }
-
-                break;
-
-            case SessionChainRestarted restarted when _active?.Id == restarted.SessionId:
-                OnRecovered(_active);
-                OnChainRestarted(_active, restarted.Qpc);
-                break;
-
-            case SessionDeviceLost lost when _active?.Id == lost.SessionId:
-                OnDeviceLost(_active, lost.Failure, monitor: false);
-                break;
-
-            case RetryDeviceRecovery retry when _active?.Id == retry.SessionId:
-                TryRecover(_active, monitor: false);
-                break;
-
-            case RingRecheck when _ringWait is { } wait:
-                RecheckRing(wait);
+            case RingRecheck:
+                OnRingRecheck();
                 break;
 
             case PowerSuspending suspending:
@@ -436,16 +373,192 @@ public sealed partial class SessionOrchestrator : IDisposable
                 break;
 
             case DisplaysChanged:
-                if (_monitor is { } changedMonitor)
-                {
-                    EndMonitorIfRemoved(changedMonitor);
-                }
+                OnDisplaysChanged();
+                break;
+        }
+    }
 
+    /// <summary>A Hotkey press goes to its feature, then to the engine's own listener.</summary>
+    private void OnHotkeyPressed(HotkeyPressed pressed)
+    {
+        switch (pressed.Action)
+        {
+            case HotkeyAction.MicMute:
+                ToggleMicMute(pressed.Qpc);
                 break;
 
-            default:
-                // A post-back from a session that has already ended.
+            case HotkeyAction.Save:
+                SaveClip(pressed.Qpc);
                 break;
+
+            case HotkeyAction.RecordToggle or HotkeyAction.RecordStart or HotkeyAction.RecordStop:
+                OnRecordPress(pressed.Action, pressed.Qpc);
+                break;
+
+            case HotkeyAction.MonitorRecordToggle or HotkeyAction.MonitorRecordStart or HotkeyAction.MonitorRecordStop:
+                OnMonitorPress(pressed.Action, pressed.Qpc);
+                break;
+        }
+
+        _hotkeyPressed?.Invoke(new HotkeyPress(pressed.Action, pressed.Qpc));
+    }
+
+    /// <summary>dev.simulate's display state only: a real Recording's state wins, and it never holds the Target.</summary>
+    private void OnSimulatedRecording(RecordingRunning recording)
+    {
+        if (_recording is null && _ending is null)
+        {
+            SetState(_state with { Recording = recording.Running ? RecordingState.Running : RecordingState.Off });
+        }
+    }
+
+    private void OnSettingsUpdated()
+    {
+        if (_active is { } active)
+        {
+            ApplySettings(active);
+        }
+    }
+
+    /// <summary>A session's capture ended on its own: the Monitor session ends; the game session follows, drains or ends.</summary>
+    private void OnSessionClosed(SessionClosed closed)
+    {
+        if (_monitor is { } monitor && monitor.Id == closed.SessionId)
+        {
+            // WGC can see the monitor go before the display change arrives.
+            if (!EndMonitorIfRemoved(monitor))
+            {
+                EndMonitor(closed.Reason, RecordingStopReasons.SessionEnded);
+            }
+        }
+        else if (_active is { } active && active.Id == closed.SessionId)
+        {
+            OnActiveClosed(active, closed.Reason);
+        }
+    }
+
+    private void OnActiveClosed(Active active, string reason)
+    {
+        // A game whose process still runs is followed to its next window (TargetCapture.Wait).
+        if (Follows(active))
+        {
+            OnWindowClosed(active);
+        }
+
+        // WGC can see the window close before Game Detection sees the exit: drain here too.
+        else if (Drains(active))
+        {
+            DrainActive(reason, RecordingStopReasons.GameExit);
+        }
+        else
+        {
+            EndActive(reason, failure: null, RecordingStopReasons.GameExit);
+        }
+    }
+
+    private void OnSessionFailed(SessionFailed failed)
+    {
+        if (_monitor is { } monitor && monitor.Id == failed.SessionId)
+        {
+            if (!EndMonitorIfRemoved(monitor))
+            {
+                _recordings?.Failed(failed.Failure);
+                EndMonitor("failure: " + failed.Failure.Message, RecordingStopReasons.SessionEnded);
+            }
+        }
+        else if (_active is { } active && active.Id == failed.SessionId)
+        {
+            OnActiveFailed(active, failed.Failure);
+        }
+    }
+
+    private void OnSessionAnchored(SessionAnchored anchored)
+    {
+        if (_monitor is { } monitor && monitor.Id == anchored.SessionId)
+        {
+            OnMonitorAnchored(monitor, anchored.Qpc);
+        }
+        else if (_active is { } active && active.Id == anchored.SessionId)
+        {
+            OnActiveAnchored(active);
+        }
+    }
+
+    private void OnSessionDeviceLost(SessionDeviceLost lost)
+    {
+        if (_monitor is { } monitor && monitor.Id == lost.SessionId)
+        {
+            OnDeviceLost(monitor, lost.Failure, monitor: true);
+        }
+        else if (_active is { } active && active.Id == lost.SessionId)
+        {
+            OnDeviceLost(active, lost.Failure, monitor: false);
+        }
+    }
+
+    private void OnRetryDeviceRecovery(RetryDeviceRecovery retry)
+    {
+        if (_monitor is { } monitor && monitor.Id == retry.SessionId)
+        {
+            TryRecover(monitor, monitor: true);
+        }
+        else if (_active is { } active && active.Id == retry.SessionId)
+        {
+            TryRecover(active, monitor: false);
+        }
+    }
+
+    private void OnSessionChainRestarted(SessionChainRestarted restarted)
+    {
+        if (_monitor is { } monitor && monitor.Id == restarted.SessionId)
+        {
+            OnRecovered(monitor);
+            OnMonitorChainRestarted(monitor, restarted.Qpc);
+        }
+        else if (_active is { } active && active.Id == restarted.SessionId)
+        {
+            OnRecovered(active);
+            OnChainRestarted(active, restarted.Qpc);
+        }
+    }
+
+    private void OnDrainExpired(DrainExpired expired)
+    {
+        if (_drain?.Id == expired.SessionId)
+        {
+            ReleaseDrain();
+        }
+    }
+
+    private void OnCaptureRetry()
+    {
+        if (_captureWait is { } waiting)
+        {
+            RetryCapture(waiting);
+        }
+    }
+
+    private void OnFollowCheck(FollowCheck check)
+    {
+        if (_active is { } active && active.Id == check.SessionId && Follows(active))
+        {
+            FollowWindow(active, _targetCapture!.Wait!, active.Spec.Target.Window);
+        }
+    }
+
+    private void OnRingRecheck()
+    {
+        if (_ringWait is { } wait)
+        {
+            RecheckRing(wait);
+        }
+    }
+
+    private void OnDisplaysChanged()
+    {
+        if (_monitor is { } monitor)
+        {
+            EndMonitorIfRemoved(monitor);
         }
     }
 

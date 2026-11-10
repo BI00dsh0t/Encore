@@ -702,12 +702,11 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
                 break;
 
             case RetrySave:
-                _dirty = true;
+                OnRetrySave();
                 break;
 
             case Watch watch:
-                SetWatching(watch.On);
-                watch.Done.TrySetResult();
+                OnWatch(watch);
                 break;
 
             case LengthRead read:
@@ -715,40 +714,15 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
                 break;
 
             case SetFavouriteRequest request:
-                try
-                {
-                    OnSetFavourite(request);
-                }
-                finally
-                {
-                    // A no-op once answered; an unexpected failure (reported by Run) mustn't leave the router waiting.
-                    request.Done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, "The Favourite couldn't be set."));
-                }
-
+                Answered(request.Done, "The Favourite couldn't be set.", () => OnSetFavourite(request));
                 break;
 
             case RenameRequest request:
-                try
-                {
-                    OnRename(request);
-                }
-                finally
-                {
-                    request.Done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, "The file couldn't be renamed."));
-                }
-
+                Answered(request.Done, "The file couldn't be renamed.", () => OnRename(request));
                 break;
 
             case DeleteRequest request:
-                try
-                {
-                    OnDelete(request);
-                }
-                finally
-                {
-                    request.Done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, "The file couldn't be deleted."));
-                }
-
+                Answered(request.Done, "The file couldn't be deleted.", () => OnDelete(request));
                 break;
 
             case CleanupTick tick:
@@ -756,30 +730,62 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
                 break;
 
             case CleanupStep:
-                try
-                {
-                    OnCleanupStep();
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-                {
-                    // A step that fails ends its pass, so the next trigger starts another.
-                    _passRunning = false;
-                    _failed(e);
-                }
-
+                OnCleanupStepOrEndPass();
                 break;
 
             case PreviewRequest request:
-                try
-                {
-                    request.Done.TrySetResult(Preview(request.Args));
-                }
-                finally
-                {
-                    request.Done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, "The Cleanup preview failed."));
-                }
-
+                OnPreview(request);
                 break;
+        }
+    }
+
+    // Runs a command's handler; an unexpected failure (reported by Run) mustn't leave the router waiting for its answer.
+    private static void Answered(TaskCompletionSource done, string unanswered, Action handler)
+    {
+        try
+        {
+            handler();
+        }
+        finally
+        {
+            // A no-op once the handler has answered.
+            done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, unanswered));
+        }
+    }
+
+    // The next loop of Run saves again.
+    private void OnRetrySave() => _dirty = true;
+
+    private void OnWatch(Watch watch)
+    {
+        SetWatching(watch.On);
+        watch.Done.TrySetResult();
+    }
+
+    private void OnCleanupStepOrEndPass()
+    {
+        try
+        {
+            OnCleanupStep();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // A step that fails ends its pass, so the next trigger starts another.
+            _passRunning = false;
+            _failed(e);
+        }
+    }
+
+    private void OnPreview(PreviewRequest request)
+    {
+        try
+        {
+            request.Done.TrySetResult(Preview(request.Args));
+        }
+        finally
+        {
+            // A no-op once answered.
+            request.Done.TrySetException(new ErrorCodeException(ErrorCodes.CommandFailed, "The Cleanup preview failed."));
         }
     }
 
