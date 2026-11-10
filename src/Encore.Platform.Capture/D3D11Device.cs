@@ -170,27 +170,32 @@ public sealed unsafe class D3D11Device : IDisposable
     /// <summary>Copies a captured frame into one slice of the target; a size mismatch clears to black and clips, never scales.</summary>
     public void CopyFrame(nint source, VideoSize contentSize, nint target, uint targetSubresource, VideoSize targetSize)
     {
-        var src = (ID3D11Texture2D*)source;
-        src->GetDesc(out var srcDesc);
-        var copy = contentSize.Intersect(targetSize).Intersect(new VideoSize((int)srcDesc.Width, (int)srcDesc.Height));
-
+        var copy = ClippedCopy(source, contentSize, targetSize);
         if (copy != targetSize)
         {
             Clear(target, targetSubresource, 0f, 0f, 0f);
         }
 
-        var box = new D3D11_BOX { left = 0, top = 0, front = 0, right = (uint)copy.Width, bottom = (uint)copy.Height, back = 1 };
-        _context->CopySubresourceRegion((ID3D11Resource*)target, targetSubresource, 0, 0, 0, (ID3D11Resource*)src, 0, &box);
+        var box = BoxOf(copy);
+        _context->CopySubresourceRegion((ID3D11Resource*)target, targetSubresource, 0, 0, 0, (ID3D11Resource*)source, 0, &box);
     }
 
     /// <summary>Copies a captured frame to a position inside the target, clipped to the monitor's area; never scales.</summary>
     public void CopyFrameTo(nint source, VideoSize contentSize, nint target, int x, int y, VideoSize area)
     {
-        var src = (ID3D11Texture2D*)source;
-        src->GetDesc(out var srcDesc);
-        var copy = contentSize.Intersect(area).Intersect(new VideoSize((int)srcDesc.Width, (int)srcDesc.Height));
-        var box = new D3D11_BOX { left = 0, top = 0, front = 0, right = (uint)copy.Width, bottom = (uint)copy.Height, back = 1 };
-        _context->CopySubresourceRegion((ID3D11Resource*)target, 0, (uint)x, (uint)y, 0, (ID3D11Resource*)src, 0, &box);
+        var box = BoxOf(ClippedCopy(source, contentSize, area));
+        _context->CopySubresourceRegion((ID3D11Resource*)target, 0, (uint)x, (uint)y, 0, (ID3D11Resource*)source, 0, &box);
+    }
+
+    /// <summary>The top-left region of a texture of this size, as a copy's source box.</summary>
+    internal static D3D11_BOX BoxOf(VideoSize size) =>
+        new() { left = 0, top = 0, front = 0, right = (uint)size.Width, bottom = (uint)size.Height, back = 1 };
+
+    /// <summary>What of a frame can be copied: its content, inside the area and the texture's own size.</summary>
+    private static VideoSize ClippedCopy(nint source, VideoSize contentSize, VideoSize area)
+    {
+        ((ID3D11Texture2D*)source)->GetDesc(out var description);
+        return contentSize.Intersect(area).Intersect(new VideoSize((int)description.Width, (int)description.Height));
     }
 
     /// <summary>The average GPU time of one <see cref="CopyFrameTo"/>, in microseconds; null when it can't be measured. Blocks.</summary>

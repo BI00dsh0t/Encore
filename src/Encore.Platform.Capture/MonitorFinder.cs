@@ -8,22 +8,6 @@ using Windows.Win32.Graphics.Gdi;
 
 namespace Encore.Platform.Capture;
 
-/// <summary>A display monitor: its <c>HMONITOR</c> and its GDI device name, such as <c>\\.\DISPLAY1</c>.</summary>
-public sealed record MonitorInfo(nint Handle, string DeviceName, bool IsPrimary);
-
-/// <summary>A display monitor as the Main App lists it; a value that can't be read is null (false for HDR).</summary>
-public sealed record MonitorDescription(
-    string DeviceName,
-    string FriendlyName,
-    int Width,
-    int Height,
-    bool IsPrimary,
-    string? MonitorId = null,
-    int? X = null,
-    int? Y = null,
-    int? RefreshHz = null,
-    bool Hdr = false);
-
 /// <summary>Finds the monitor a Monitor Recording captures, and describes the attached monitors for the App's list.</summary>
 public static unsafe class MonitorFinder
 {
@@ -35,7 +19,9 @@ public static unsafe class MonitorFinder
         var monitors = All();
         if (deviceName is not null)
         {
-            if (monitors.FirstOrDefault(m => string.Equals(m.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase)) is { } named)
+            var named = monitors.FirstOrDefault(
+                monitor => string.Equals(monitor.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase));
+            if (named is not null)
             {
                 return named;
             }
@@ -43,7 +29,7 @@ public static unsafe class MonitorFinder
             logger?.LogWarning("No monitor is named '{Name}'; the primary monitor is captured", deviceName);
         }
 
-        if ((monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors.FirstOrDefault()) is { } primary)
+        if ((monitors.FirstOrDefault(monitor => monitor.IsPrimary) ?? monitors.FirstOrDefault()) is { } primary)
         {
             return primary;
         }
@@ -75,20 +61,26 @@ public static unsafe class MonitorFinder
     public static IReadOnlyList<MonitorDescription> Describe()
     {
         var targets = Targets();
-        return
-        [
-            .. All()
-                .OrderBy(m => m.IsPrimary ? 0 : 1)
-                .Select(m =>
-                {
-                    var mode = CurrentMode(m.DeviceName);
-                    targets.TryGetValue(m.DeviceName, out var target);
-                    var name = target?.FriendlyName is { Length: > 0 } f ? f : DeviceString(m.DeviceName);
-                    return new MonitorDescription(
-                        m.DeviceName, name ?? m.DeviceName, mode?.Width ?? 0, mode?.Height ?? 0, m.IsPrimary,
-                        target?.MonitorId, mode?.X, mode?.Y, mode?.RefreshHz, target?.Hdr ?? false);
-                }),
-        ];
+        return [.. All().OrderBy(monitor => monitor.IsPrimary ? 0 : 1).Select(monitor => Describe(monitor, targets))];
+    }
+
+    /// <summary>The current display mode: physical size, virtual-desktop position and refresh rate; null when unreadable.</summary>
+    internal static (int Width, int Height, int X, int Y, int RefreshHz)? CurrentMode(string deviceName)
+    {
+        var mode = new DEVMODEW { dmSize = (ushort)sizeof(DEVMODEW) };
+        return PInvoke.EnumDisplaySettings(deviceName, ENUM_DISPLAY_SETTINGS_MODE.ENUM_CURRENT_SETTINGS, ref mode)
+            ? ((int)mode.dmPelsWidth, (int)mode.dmPelsHeight, mode.dmPosition.x, mode.dmPosition.y, (int)mode.dmDisplayFrequency)
+            : null;
+    }
+
+    private static MonitorDescription Describe(MonitorInfo monitor, Dictionary<string, DisplayTarget> targets)
+    {
+        var mode = CurrentMode(monitor.DeviceName);
+        targets.TryGetValue(monitor.DeviceName, out var target);
+        var name = target?.FriendlyName is { Length: > 0 } friendly ? friendly : DeviceString(monitor.DeviceName);
+        return new MonitorDescription(
+            monitor.DeviceName, name ?? monitor.DeviceName, mode?.Width ?? 0, mode?.Height ?? 0, monitor.IsPrimary,
+            target?.MonitorId, mode?.X, mode?.Y, mode?.RefreshHz, target?.Hdr ?? false);
     }
 
     /// <summary>One active source's monitor as DisplayConfig names it.</summary>
@@ -100,58 +92,16 @@ public static unsafe class MonitorFinder
         var names = new Dictionary<string, DisplayTarget>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            DISPLAYCONFIG_PATH_INFO[] paths;
-            DISPLAYCONFIG_MODE_INFO[] modes;
-            uint pathCount, modeCount;
-            WIN32_ERROR result;
-            do
-            {
-                if (PInvoke.GetDisplayConfigBufferSizes(QUERY_DISPLAY_CONFIG_FLAGS.QDC_ONLY_ACTIVE_PATHS, out pathCount, out modeCount) != WIN32_ERROR.ERROR_SUCCESS)
-                {
-                    return names;
-                }
-
-                paths = new DISPLAYCONFIG_PATH_INFO[pathCount];
-                modes = new DISPLAYCONFIG_MODE_INFO[modeCount];
-                result = PInvoke.QueryDisplayConfig(QUERY_DISPLAY_CONFIG_FLAGS.QDC_ONLY_ACTIVE_PATHS, ref pathCount, paths, ref modeCount, modes);
-            }
-            while (result == WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER);
-
-            if (result != WIN32_ERROR.ERROR_SUCCESS)
+            if (ReadActivePaths() is not { } paths)
             {
                 return names;
             }
 
-            for (var i = 0; i < pathCount; i++)
+            foreach (var path in paths)
             {
-                var path = paths[i];
-                var source = new DISPLAYCONFIG_SOURCE_DEVICE_NAME();
-                source.header.type = DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
-                source.header.size = (uint)sizeof(DISPLAYCONFIG_SOURCE_DEVICE_NAME);
-                source.header.adapterId = path.sourceInfo.adapterId;
-                source.header.id = path.sourceInfo.id;
-                var target = new DISPLAYCONFIG_TARGET_DEVICE_NAME();
-                target.header.type = DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
-                target.header.size = (uint)sizeof(DISPLAYCONFIG_TARGET_DEVICE_NAME);
-                target.header.adapterId = path.targetInfo.adapterId;
-                target.header.id = path.targetInfo.id;
-                if (PInvoke.DisplayConfigGetDeviceInfo(&source.header) != 0 || PInvoke.DisplayConfigGetDeviceInfo(&target.header) != 0)
+                if (ReadTarget(path) is { } named)
                 {
-                    continue;
-                }
-
-                var device = source.viewGdiDeviceName.AsReadOnlySpan().SliceAtNull().ToString();
-                var name = target.monitorFriendlyDeviceName.AsReadOnlySpan().SliceAtNull().ToString();
-                var devicePath = target.monitorDevicePath.AsReadOnlySpan().SliceAtNull().ToString();
-                var color = new DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO();
-                color.header.type = DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
-                color.header.size = (uint)sizeof(DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO);
-                color.header.adapterId = path.targetInfo.adapterId;
-                color.header.id = path.targetInfo.id;
-                var hdr = PInvoke.DisplayConfigGetDeviceInfo(&color.header) == 0 && color.advancedColorEnabled;
-                if (device.Length > 0)
-                {
-                    names.TryAdd(device, new DisplayTarget(name.Length > 0 ? name : null, devicePath.Length > 0 ? devicePath : null, hdr));
+                    names.TryAdd(named.Device, named.Target);
                 }
             }
         }
@@ -163,6 +113,63 @@ public static unsafe class MonitorFinder
         return names;
     }
 
+    /// <summary>The active display paths, asked again while the buffers were too small; null when the query failed.</summary>
+    private static DISPLAYCONFIG_PATH_INFO[]? ReadActivePaths()
+    {
+        const QUERY_DISPLAY_CONFIG_FLAGS activeOnly = QUERY_DISPLAY_CONFIG_FLAGS.QDC_ONLY_ACTIVE_PATHS;
+        DISPLAYCONFIG_PATH_INFO[] paths;
+        uint pathCount;
+        WIN32_ERROR result;
+        do
+        {
+            if (PInvoke.GetDisplayConfigBufferSizes(activeOnly, out pathCount, out var modeCount) != WIN32_ERROR.ERROR_SUCCESS)
+            {
+                return null;
+            }
+
+            paths = new DISPLAYCONFIG_PATH_INFO[pathCount];
+            var modes = new DISPLAYCONFIG_MODE_INFO[modeCount];
+            result = PInvoke.QueryDisplayConfig(activeOnly, ref pathCount, paths, ref modeCount, modes);
+        }
+        while (result == WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER);
+
+        return result == WIN32_ERROR.ERROR_SUCCESS ? paths[..(int)pathCount] : null;
+    }
+
+    /// <summary>One path's GDI device name and its monitor's names and HDR state; null when either name can't be read.</summary>
+    private static (string Device, DisplayTarget Target)? ReadTarget(DISPLAYCONFIG_PATH_INFO path)
+    {
+        var source = new DISPLAYCONFIG_SOURCE_DEVICE_NAME();
+        source.header = Header<DISPLAYCONFIG_SOURCE_DEVICE_NAME>(
+            DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, path.sourceInfo.adapterId, path.sourceInfo.id);
+        var target = new DISPLAYCONFIG_TARGET_DEVICE_NAME();
+        target.header = Header<DISPLAYCONFIG_TARGET_DEVICE_NAME>(
+            DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, path.targetInfo.adapterId, path.targetInfo.id);
+        if (PInvoke.DisplayConfigGetDeviceInfo(&source.header) != 0 || PInvoke.DisplayConfigGetDeviceInfo(&target.header) != 0)
+        {
+            return null;
+        }
+
+        var device = source.viewGdiDeviceName.AsReadOnlySpan().SliceAtNull().ToString();
+        var name = target.monitorFriendlyDeviceName.AsReadOnlySpan().SliceAtNull().ToString();
+        var devicePath = target.monitorDevicePath.AsReadOnlySpan().SliceAtNull().ToString();
+        var color = new DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO();
+        color.header = Header<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>(
+            DISPLAYCONFIG_DEVICE_INFO_TYPE.DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO, path.targetInfo.adapterId, path.targetInfo.id);
+        var hdr = PInvoke.DisplayConfigGetDeviceInfo(&color.header) == 0 && color.advancedColorEnabled;
+        if (device.Length == 0)
+        {
+            return null;
+        }
+
+        return (device, new DisplayTarget(name.Length > 0 ? name : null, devicePath.Length > 0 ? devicePath : null, hdr));
+    }
+
+    /// <summary>The header DisplayConfigGetDeviceInfo reads: what to fetch, the size of the struct it fills, and for which path end.</summary>
+    private static DISPLAYCONFIG_DEVICE_INFO_HEADER Header<T>(DISPLAYCONFIG_DEVICE_INFO_TYPE type, LUID adapterId, uint id)
+        where T : unmanaged =>
+        new() { type = type, size = (uint)sizeof(T), adapterId = adapterId, id = id };
+
     /// <summary>The first monitor's <c>EnumDisplayDevices</c> description under a device name, or null.</summary>
     private static string? DeviceString(string deviceName)
     {
@@ -173,17 +180,8 @@ public static unsafe class MonitorFinder
             : null;
     }
 
-    /// <summary>The current display mode: physical size, virtual-desktop position and refresh rate; null when unreadable.</summary>
-    private static (int Width, int Height, int X, int Y, int RefreshHz)? CurrentMode(string deviceName)
-    {
-        var mode = new DEVMODEW { dmSize = (ushort)sizeof(DEVMODEW) };
-        return PInvoke.EnumDisplaySettings(deviceName, ENUM_DISPLAY_SETTINGS_MODE.ENUM_CURRENT_SETTINGS, ref mode)
-            ? ((int)mode.dmPelsWidth, (int)mode.dmPelsHeight, mode.dmPosition.x, mode.dmPosition.y, (int)mode.dmDisplayFrequency)
-            : null;
-    }
-
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static BOOL OnMonitor(HMONITOR monitor, HDC hdc, RECT* clip, LPARAM data)
+    private static BOOL OnMonitor(HMONITOR monitor, HDC deviceContext, RECT* clip, LPARAM data)
     {
         var monitors = (List<MonitorInfo>)GCHandle.FromIntPtr(data).Target!;
         var info = new MONITORINFOEXW();
