@@ -7,7 +7,6 @@ using Windows.Win32.Storage.FileSystem;
 
 namespace Encore.Platform.Windows;
 
-/// <summary>Game executable paths.</summary>
 public static unsafe class GamePaths
 {
     private const string VerbatimPrefix = @"\\?\";

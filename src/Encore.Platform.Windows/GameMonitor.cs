@@ -21,7 +21,6 @@ public interface IGameProcess : IDisposable
     /// <summary>The process's executable, as the system reports it (not canonical).</summary>
     string ImagePath { get; }
 
-    /// <summary>Whether the process has exited.</summary>
     bool HasExited { get; }
 
     /// <summary>When the process started, UTC; <see cref="DateTime.MinValue"/> when it couldn't be read.</summary>
