@@ -150,52 +150,25 @@ public sealed partial class RingGenerations : IDisposable
     /// <summary>Pins a time range from one generation: the newest that starts before its end. Null when there is nothing.</summary>
     public (RingCut Cut, int Generation)? Cut(long fromUs, long toUs)
     {
-        Generation chosen;
-        long cutFrom;
-        long cutTo;
-        bool fallback;
+        CutRange range;
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            Generation? current = null;
-            Generation? previous = null;
-            for (var i = _generations.Count - 1; i >= 0; i--)
-            {
-                if (_generations[i].StartUs < toUs)
-                {
-                    current = _generations[i];
-                    previous = i > 0 ? _generations[i - 1] : null;
-                    break;
-                }
-            }
-
-            if (current is null)
+            if (RangeFor(fromUs, toUs) is not { } found)
             {
                 return null;
             }
 
-            fallback = previous is not null && toUs - current.StartUs < MinClipUs;
-            if (fallback)
-            {
-                chosen = previous!;
-                cutFrom = fromUs;
-                cutTo = current.StartUs;
-            }
-            else
-            {
-                chosen = current;
-                cutFrom = Math.Max(fromUs, current.StartUs);
-                cutTo = toUs;
-            }
-
-            chosen.Users++;
+            range = found;
+            range.Generation.Users++;
         }
 
+        var chosen = range.Generation;
         RingCut? cut = null;
         try
         {
-            cut = chosen.Ring.Cut(cutFrom, cutTo);
-            if (fallback && cut is not null && cut.EndUs - cut.StartUs < MinClipUs)
+            cut = chosen.Ring.Cut(range.FromUs, range.ToUs);
+            if (range.Fallback && cut is not null && cut.EndUs - cut.StartUs < MinClipUs)
             {
                 cut.Dispose();
                 cut = null;
@@ -203,14 +176,7 @@ public sealed partial class RingGenerations : IDisposable
         }
         finally
         {
-            lock (_lock)
-            {
-                chosen.Users--;
-                if (chosen.Retired && chosen.Users == 0)
-                {
-                    chosen.Ring.Dispose();
-                }
-            }
+            ReleaseUser(chosen);
         }
 
         return cut is null ? null : (cut, chosen.Number);
@@ -230,6 +196,39 @@ public sealed partial class RingGenerations : IDisposable
             for (var i = _generations.Count - 1; i >= 0; i--)
             {
                 Retire(_generations[i]);
+            }
+        }
+    }
+
+    /// <summary>The generation a time range is cut from, and the range cut there; null when none starts before its end. Under the lock.</summary>
+    private CutRange? RangeFor(long fromUs, long toUs)
+    {
+        for (var i = _generations.Count - 1; i >= 0; i--)
+        {
+            if (_generations[i].StartUs < toUs)
+            {
+                return RangeIn(_generations[i], i > 0 ? _generations[i - 1] : null, fromUs, toUs);
+            }
+        }
+
+        return null;
+    }
+
+    // A range that ends too soon after a generation's start is cut from the one before, up to that start.
+    private static CutRange RangeIn(Generation current, Generation? previous, long fromUs, long toUs) =>
+        previous is not null && toUs - current.StartUs < MinClipUs
+            ? new CutRange(previous, fromUs, current.StartUs, Fallback: true)
+            : new CutRange(current, Math.Max(fromUs, current.StartUs), toUs, Fallback: false);
+
+    /// <summary>A cut is done reading a generation's ring; a retired one's ring is disposed with its last reader.</summary>
+    private void ReleaseUser(Generation generation)
+    {
+        lock (_lock)
+        {
+            generation.Users--;
+            if (generation.Retired && generation.Users == 0)
+            {
+                generation.Ring.Dispose();
             }
         }
     }

@@ -6,7 +6,16 @@ public readonly struct RingPacket
     private readonly PacketRing.Slab _slab;
     private readonly int _offset;
 
-    internal RingPacket(PacketRing.Slab slab, int offset, int length, int stream, long pts, long dts, long duration, bool isKey, long timeUs)
+    internal RingPacket(
+        PacketRing.Slab slab,
+        int offset,
+        int length,
+        int stream,
+        long pts,
+        long dts,
+        long duration,
+        bool isKey,
+        long timeUs)
     {
         _slab = slab;
         _offset = offset;
