@@ -51,15 +51,12 @@ public sealed partial class SessionOrchestrator : IDisposable
     private TargetCandidate? _ringWait;
     private Timer? _ringTimer;
 
-    // A run of waits for the Target's window: the Target, the timer for the next try, and the failures so far.
-    private TargetCandidate? _captureWait;
-    private Timer? _captureTimer;
-    private int _captureFailures;
+    // The run of waits for the Target's window, when the game session can't capture one yet.
+    private readonly CaptureWaitRun _captureWait;
     private CaptureState _state = CaptureState.Initial;
     private long _nextSessionId;
 
-    // The Hotkey QPC of the last accepted save press, which the Save Cooldown runs from; a new session keeps it.
-    private long? _cooldownFrom;
+    private readonly SaveCooldown _saveCooldown = new();
 
     // Clip writes started and not yet posted back, across sessions.
     private int _writing;
@@ -106,6 +103,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         _clips = clips;
         _recordings = recordings;
         _deviceRecovery = deviceRecovery ?? new DeviceRecovery();
+        _captureWait = new CaptureWaitRun(targetCapture?.Wait, () => Post(new CaptureRetry()));
 
         // Before the thread runs, so no session can start with any other mute.
         _state = CaptureState.Initial with { MicMuted = LoadMicMuted(micMute) };
@@ -226,8 +224,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         // No callback: the engine is stopping.
         _ringTimer?.Dispose();
         _ringTimer = null;
-        _captureTimer?.Dispose();
-        _captureTimer = null;
+        _captureWait.CancelRetry();
     }
 
     // The writers' post-backs can't arrive any more, so each is waited for here, all within ShutdownWait.
@@ -509,7 +506,7 @@ public sealed partial class SessionOrchestrator : IDisposable
 
     private void OnCaptureRetry()
     {
-        if (_captureWait is { } waiting)
+        if (_captureWait.Target is { } waiting)
         {
             RetryCapture(waiting);
         }
@@ -795,30 +792,31 @@ public sealed partial class SessionOrchestrator : IDisposable
     {
         var current = _target;
         var to = propose.To;
-        if (to is not null && current is not null && to.ProcessId == current.ProcessId)
-        {
-            _pendingTarget = null;
-            if (to.Window != current.Window)
-            {
-                _target = current with { Window = to.Window };
-                FollowTargetWindow(_target);
-            }
-
-            return;
-        }
-
-        if (!_gameRecording.IsOff && current is not null && to is not null && propose.Reason is not (TargetChangeReason.Exit or TargetChangeReason.Ignored))
+        var decision = TargetSwitch.Decide(current, to, propose.Reason, recording: !_gameRecording.IsOff);
+        if (decision == TargetDecision.Held)
         {
             _pendingTarget = propose;
             return;
         }
 
         _pendingTarget = null;
-        if (to is null && current is null)
+        if (decision == TargetDecision.SameProcess)
         {
-            return;
+            if (to!.Window != current!.Window)
+            {
+                _target = current with { Window = to.Window };
+                FollowTargetWindow(_target);
+            }
         }
+        else if (decision == TargetDecision.Switch)
+        {
+            SwitchTarget(current, to, propose.Reason);
+        }
+    }
 
+    /// <summary>The Target becomes another game, or none: waits tied to the old one end, its session ends, and the new one starts.</summary>
+    private void SwitchTarget(TargetCandidate? current, TargetCandidate? to, TargetChangeReason reason)
+    {
         _target = to;
 
         // A Rewind given up on a GPU reset stays off only for the Target it stopped on.
@@ -826,15 +824,15 @@ public sealed partial class SessionOrchestrator : IDisposable
 
         // A wait for room for the ring belongs to the Target it stopped on, as does a wait for its window.
         ClearRingWait();
-        EndCaptureWait(captured: false);
-        _targetChanged?.Invoke(new TargetChanged(current?.ToTargetGame(), to?.ToTargetGame(), propose.Reason));
+        _captureWait.End(captured: false);
+        _targetChanged?.Invoke(new TargetChanged(current?.ToTargetGame(), to?.ToTargetGame(), reason));
         if (_targetCapture is null)
         {
             return;
         }
 
         // Only an exit to no game leaves a drain running (one a closed window started, say).
-        if (to is not null || propose.Reason != TargetChangeReason.Exit)
+        if (to is not null || reason != TargetChangeReason.Exit)
         {
             ReleaseDrain();
         }
@@ -842,13 +840,8 @@ public sealed partial class SessionOrchestrator : IDisposable
         if (_active is { Spec.Kind: SessionKind.Game })
         {
             // Only an exit with no other game drains; a switch or Ignored ends at once.
-            var recordingReason = propose.Reason switch
-            {
-                TargetChangeReason.Exit => RecordingStopReasons.GameExit,
-                TargetChangeReason.Ignored => RecordingStopReasons.Ignored,
-                _ => RecordingStopReasons.SessionEnded,
-            };
-            if (to is null && propose.Reason == TargetChangeReason.Exit && Drains(_active))
+            var recordingReason = TargetSwitch.RecordingReasonFor(reason);
+            if (to is null && reason == TargetChangeReason.Exit && Drains(_active))
             {
                 DrainActive("target exited", recordingReason);
             }
@@ -912,14 +905,13 @@ public sealed partial class SessionOrchestrator : IDisposable
         var wait = capture.Wait;
 
         // A new window, a ring recheck or the timer: this try replaces any one still pending.
-        _captureTimer?.Dispose();
-        _captureTimer = null;
+        _captureWait.CancelRetry();
         if (wait is not null)
         {
             var window = Find(wait, target);
             if (!window.Found)
             {
-                WaitForCapture(wait, target, window.Why ?? "no window of it can be captured", failed: false);
+                WaitForCapture(target, window.Why ?? "no window of it can be captured", failed: false);
                 return;
             }
 
@@ -936,7 +928,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         }
         catch (Exception e) when (wait is not null && wait.Retry(e))
         {
-            WaitForCapture(wait, target, e.Message, failed: true);
+            WaitForCapture(target, e.Message, failed: true);
         }
         catch (Exception e)
         {
@@ -974,7 +966,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         EndActive("failure: " + failure.Message, failure);
         if (retry)
         {
-            WaitForCapture(_targetCapture!.Wait!, _target!, failure.Message, failed: true);
+            WaitForCapture(_target!, failure.Message, failed: true);
         }
     }
 
@@ -985,7 +977,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         if (!active.Anchored)
         {
             EndActive("window closed", failure: null);
-            WaitForCapture(wait, _target!, "the window closed before its first frame", failed: true);
+            WaitForCapture(_target!, "the window closed before its first frame", failed: true);
             return;
         }
 
@@ -1004,9 +996,9 @@ public sealed partial class SessionOrchestrator : IDisposable
             active.Follow = new Timer(_ => Post(new FollowCheck(id)), null, poll, poll);
         }
 
-        if (_captureWait is { } waiting && waiting.ProcessId == active.Spec.Target.ProcessId)
+        if (_captureWait.Target is { } waiting && waiting.ProcessId == active.Spec.Target.ProcessId)
         {
-            EndCaptureWait(captured: true);
+            _captureWait.End(captured: true);
         }
     }
 
@@ -1021,15 +1013,15 @@ public sealed partial class SessionOrchestrator : IDisposable
         var found = Find(wait, target with { Window = prefer });
         if (!found.Found)
         {
-            BeginCaptureWait(wait, target, found.Why ?? "no window of it can be captured");
+            _captureWait.Begin(target, found.Why ?? "no window of it can be captured");
             return;
         }
 
         if (found.Window == active.Spec.Target.Window && !active.WindowClosed)
         {
-            if (_captureWait is { } same && same.ProcessId == target.ProcessId)
+            if (_captureWait.Target is { } same && same.ProcessId == target.ProcessId)
             {
-                EndCaptureWait(captured: true);
+                _captureWait.End(captured: true);
             }
 
             return;
@@ -1048,7 +1040,7 @@ public sealed partial class SessionOrchestrator : IDisposable
         {
             // It had already stopped itself (its post-back is still queued): start again.
             EndActive("retarget after stop", failure: null);
-            WaitForCapture(wait, target, e.Message, failed: true);
+            WaitForCapture(target, e.Message, failed: true);
             return;
         }
         catch (Exception e)
@@ -1057,7 +1049,7 @@ public sealed partial class SessionOrchestrator : IDisposable
             active.FollowFailures++;
             active.FollowAfter = Stopwatch.GetTimestamp() + (long)(wait.Backoff(active.FollowFailures).TotalSeconds * Stopwatch.Frequency);
             active.WindowClosed = true;
-            BeginCaptureWait(wait, target, e.Message);
+            _captureWait.Begin(target, e.Message);
             return;
         }
 
@@ -1066,47 +1058,23 @@ public sealed partial class SessionOrchestrator : IDisposable
         active.FollowAfter = 0;
         active.Spec = active.Spec with { Target = active.Spec.Target with { Window = found.Window } };
         _target = target with { Window = found.Window };
-        if (_captureWait is { } waiting && waiting.ProcessId == target.ProcessId)
+        if (_captureWait.Target is { } waiting && waiting.ProcessId == target.ProcessId)
         {
-            EndCaptureWait(captured: true);
+            _captureWait.End(captured: true);
         }
-    }
-
-    /// <summary>Starts a run of waits for a Target's window, reported once; a run for another process ends first.</summary>
-    private void BeginCaptureWait(CaptureWait wait, TargetCandidate target, string why)
-    {
-        if (_captureWait is { } running && running.ProcessId != target.ProcessId)
-        {
-            EndCaptureWait(captured: false);
-        }
-
-        if (_captureWait is null)
-        {
-            _captureFailures = 0;
-            wait.Waiting(target, why);
-        }
-
-        _captureWait = target;
     }
 
     /// <summary>Waits for the Target's window with no session: the run's first wait is reported, and the next try is posted.</summary>
-    private void WaitForCapture(CaptureWait wait, TargetCandidate target, string why, bool failed)
+    private void WaitForCapture(TargetCandidate target, string why, bool failed)
     {
-        BeginCaptureWait(wait, target, why);
-        if (failed)
-        {
-            _captureFailures++;
-        }
-
-        _captureTimer?.Dispose();
-        _captureTimer = new Timer(_ => Post(new CaptureRetry()), null, failed ? wait.Backoff(_captureFailures) : wait.Poll, System.Threading.Timeout.InfiniteTimeSpan);
+        _captureWait.Begin(target, why);
+        _captureWait.ScheduleRetry(failed);
     }
 
     /// <summary>The capture wait's timer fired: the game session starts on the Target if it is still the one waited for.</summary>
     private void RetryCapture(TargetCandidate waiting)
     {
-        _captureTimer?.Dispose();
-        _captureTimer = null;
+        _captureWait.CancelRetry();
         if (_active is { Spec.Kind: SessionKind.Game } running && running.Spec.Target.ProcessId == waiting.ProcessId)
         {
             // A tick posted before the session started: the session follows the window now.
@@ -1116,33 +1084,18 @@ public sealed partial class SessionOrchestrator : IDisposable
         if (_active is not null || _targetCapture is null || _target is not { } target || target.ProcessId != waiting.ProcessId)
         {
             // A session runs (one started by hand), or the Target moved on without a commit ending the wait.
-            EndCaptureWait(captured: false);
+            _captureWait.End(captured: false);
             return;
         }
 
         if (_ringWait is not null || _gpuStoppedPid == target.ProcessId)
         {
             // A full disk or a given-up GPU reset holds Rewind off; their own waits restart it.
-            EndCaptureWait(captured: false);
+            _captureWait.End(captured: false);
             return;
         }
 
         StartOnTarget(target);
-    }
-
-    /// <summary>Ends a wait for the Target's window, if any, and reports how it ended.</summary>
-    private void EndCaptureWait(bool captured)
-    {
-        if (_captureWait is not { } waiting)
-        {
-            return;
-        }
-
-        _captureWait = null;
-        _captureFailures = 0;
-        _captureTimer?.Dispose();
-        _captureTimer = null;
-        _targetCapture?.Wait?.Ended(waiting, captured);
     }
 
     /// <summary>A save press: checks the cooldown and limits, reserves the path, then hands the session the write.</summary>
@@ -1158,13 +1111,12 @@ public sealed partial class SessionOrchestrator : IDisposable
         var document = _currentDocument();
         var global = SettingsResolver.Resolve(document, null);
         var cooldown = Math.Max(0, global.SaveCooldown) * Stopwatch.Frequency;
-        if (_cooldownFrom is { } from && qpc - from < cooldown)
+        if (_saveCooldown.Accept(qpc, cooldown) is { } sinceLastSave)
         {
-            _clips.Ignored?.Invoke(TimeSpan.FromSeconds((qpc - from) / (double)Stopwatch.Frequency));
+            _clips.Ignored?.Invoke(sinceLastSave);
             return;
         }
 
-        _cooldownFrom = qpc;
         DateTimeOffset? until = cooldown == 0
             ? null
             : DateTimeOffset.UtcNow + TimeSpan.FromSeconds((qpc + cooldown - Stopwatch.GetTimestamp()) / (double)Stopwatch.Frequency);
@@ -1321,51 +1273,57 @@ public sealed partial class SessionOrchestrator : IDisposable
 
         try
         {
-            if (ChainKey.SameChain(next, active.Spec))
+            var recordingOnSession = _gameRecording.Running?.SessionId == active.Id;
+            switch (ChainChange.Decide(ChainKey.SameChain(next, active.Spec), recordingOnSession, monitorRuns: _monitor is not null))
             {
-                if (active.Pending)
-                {
-                    active.Pending = false;
-                    active.Session.PrepareChain(null);
-                }
-            }
-            else if (_gameRecording.Running?.SessionId == active.Id)
-            {
-                // A Recording keeps the session on one chain until its writer posts back.
-                if (active.Pending)
-                {
-                    active.Pending = false;
-                    active.Session.PrepareChain(null);
-                }
+                case ChainDecision.Keep:
+                    DropPreparedChain(active);
+                    break;
 
-                if (!active.Deferred)
-                {
-                    active.Deferred = true;
-                    _recordings?.Info?.Invoke("This game's video quality or audio tracks changed during a Recording; the change applies once the Recording stops");
-                }
-            }
-            else if (_monitor is not null)
-            {
-                if (active.Pending)
-                {
-                    active.Pending = false;
-                    active.Session.PrepareChain(null);
-                }
+                case ChainDecision.HeldByRecording:
+                    DropPreparedChain(active);
+                    DeferChainChange(active);
+                    break;
 
-                if (atReset && active.Session.SwitchChain(next))
-                {
-                    active.Spec = active.Spec with { Snapshot = next.Snapshot, Audio = next.Audio };
-                }
-            }
-            else
-            {
-                active.Pending = true;
-                active.Session.PrepareChain(next);
+                case ChainDecision.SwitchAtReset:
+                    DropPreparedChain(active);
+                    if (atReset && active.Session.SwitchChain(next))
+                    {
+                        active.Spec = active.Spec with { Snapshot = next.Snapshot, Audio = next.Audio };
+                    }
+
+                    break;
+
+                default:
+                    active.Pending = true;
+                    active.Session.PrepareChain(next);
+                    break;
             }
         }
         catch (Exception)
         {
             // The session's own failure path ends it if it is broken.
+        }
+    }
+
+    // Tells the session to drop a chain it was asked to prepare; a no-op when it was asked for none.
+    private static void DropPreparedChain(Active active)
+    {
+        if (active.Pending)
+        {
+            active.Pending = false;
+            active.Session.PrepareChain(null);
+        }
+    }
+
+    // Said once per Recording: the change applies when the Recording stops.
+    private void DeferChainChange(Active active)
+    {
+        if (!active.Deferred)
+        {
+            active.Deferred = true;
+            _recordings?.Info?.Invoke(
+                "This game's video quality or audio tracks changed during a Recording; the change applies once the Recording stops");
         }
     }
 
@@ -1493,17 +1451,13 @@ public sealed partial class SessionOrchestrator : IDisposable
         _gameRecording.Start(recording);
 
         // A chain prepared before the press is dropped; the change waits for the Recording's end.
-        if (active.Pending)
+        try
         {
-            active.Pending = false;
-            try
-            {
-                active.Session.PrepareChain(null);
-            }
-            catch (Exception)
-            {
-                // The session's own failure path ends it if it is broken.
-            }
+            DropPreparedChain(active);
+        }
+        catch (Exception)
+        {
+            // The session's own failure path ends it if it is broken.
         }
 
         active.Deferred = false;
@@ -1739,12 +1693,7 @@ public sealed partial class SessionOrchestrator : IDisposable
             int chains;
             try
             {
-                if (game.Pending)
-                {
-                    game.Pending = false;
-                    game.Session.PrepareChain(null);
-                }
-
+                DropPreparedChain(game);
                 chains = game.Session.Chains;
             }
             catch (Exception)
@@ -2094,23 +2043,15 @@ public sealed partial class SessionOrchestrator : IDisposable
             return false;
         }
 
-        static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+        var change = MonitorChange.Compare(devices, attached);
 
         // Under All screens, a monitor that arrives joins at the next Monitor Recording.
         if (monitor.Spec.Screens is not null && monitor.Spec.Snapshot.MonitorRecordingScreens?.Mode == MonitorScreensMode.All)
         {
-            foreach (var arrived in attached.Where(m => m.Width > 0 && !devices.Any(d => Same(d, m.DeviceName))))
-            {
-                if (monitor.Announced.Add(arrived.DeviceName))
-                {
-                    _recordings?.Warn?.Invoke(
-                        ErrorCodes.MonitorAddedNextRecording,
-                        $"Screen {arrived.DeviceName} was connected; it joins at the next Monitor Recording (the video's size can't change inside a file)");
-                }
-            }
+            AnnounceArrivals(monitor, change.Arrived);
         }
 
-        var gone = devices.Where(d => !attached.Any(m => Same(m.DeviceName, d))).ToList();
+        var gone = change.Gone;
         if (gone.Count == 0)
         {
             return false;
@@ -2137,6 +2078,20 @@ public sealed partial class SessionOrchestrator : IDisposable
             ErrorCodes.MonitorRemoved,
             $"Screen {string.Join(", ", gone)} was removed; the Monitor Recording ended at its last frame and its file was kept");
         return true;
+    }
+
+    // Each arrival is announced once per Monitor session.
+    private void AnnounceArrivals(Active monitor, IReadOnlyList<string> arrived)
+    {
+        foreach (var device in arrived)
+        {
+            if (monitor.Announced.Add(device))
+            {
+                _recordings?.Warn?.Invoke(
+                    ErrorCodes.MonitorAddedNextRecording,
+                    $"Screen {device} was connected; it joins at the next Monitor Recording (the video's size can't change inside a file)");
+            }
+        }
     }
 
     /// <summary>Ends a session's recovery wait, if any: no retry is posted after this.</summary>
