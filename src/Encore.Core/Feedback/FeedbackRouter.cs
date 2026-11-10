@@ -4,19 +4,6 @@ using Encore.Core.Sessions;
 
 namespace Encore.Core.Feedback;
 
-/// <summary>A user-facing notice of an outcome, raised as a warning the Overlay shows and the user may dismiss.</summary>
-public sealed record FeedbackNotice(string Code, WarningSeverity Severity, string Source, string Message, string? Sound);
-
-/// <summary>Where the <see cref="FeedbackRouter"/> raises its notices; the engine's warnings.</summary>
-public interface IFeedbackNotices
-{
-    /// <summary>Raises <paramref name="notice"/>, overlay and dismissable, and returns its id.</summary>
-    string Raise(FeedbackNotice notice);
-
-    /// <summary>Removes the notice <paramref name="id"/> if it is still active; nothing happens if it isn't.</summary>
-    void Withdraw(string id);
-}
-
 /// <summary>Turns outcomes (Clip saved or not, Recording events, disk full) into notices and sounds. docs/code-notes.md.</summary>
 public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, FeedbackSoundPlayer? sounds = null) : IDisposable
 {

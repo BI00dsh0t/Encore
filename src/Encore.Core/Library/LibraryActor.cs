@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Encore.Contracts;
 using Encore.Contracts.Messages;
@@ -9,11 +8,8 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Core.Library;
 
-/// <summary>What the load found at start; Corrupt means the index was rebuilt and Cleanup stays blocked.</summary>
-public sealed record LibraryLoad(IReadOnlyList<LibraryItem> Items, bool Corrupt);
-
 /// <summary>The single-threaded Library index: every change, disk check and save runs on its own thread. docs/code-notes.md.</summary>
-public sealed class LibraryActor : ILibraryWrites, IDisposable
+public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 {
     /// <summary>What a Clip is written to before its rename (the writer's <c>ClipWriter.PartExtension</c>).</summary>
     internal const string PartExtension = ".rbpart";
@@ -1910,58 +1906,5 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     private sealed record Registration(long Id, ITimer Timer);
 
-    private abstract record Message;
-
-    private sealed record Start : Message;
-
-    private sealed record Begin(string Path, string? ProfileId, string? Kind = null) : Message;
-
-    private sealed record End(string Path, WriteOutcome Outcome) : Message;
-
-    private sealed record Watched(WatcherChangeTypes Kind, string Path, string? OldPath) : Message;
-
-    private sealed record Settle : Message;
-
-    private sealed record WatchError(Exception Error) : Message;
-
-    private sealed record Expired(string Path, long Id) : Message;
-
-    private sealed record FolderChanged : Message;
-
-    private sealed record Acknowledge : Message;
-
-    private sealed record RetrySave : Message;
-
-    private sealed record Watch(bool On, TaskCompletionSource Done) : Message;
-
-    private sealed record LengthRead(string Folder, string Key, long Size, DateTime Modified, double? Length) : Message;
-
-    private sealed record SetFavouriteRequest(LibrarySetFavourite Args, TaskCompletionSource Done) : Message;
-
-    private sealed record RenameRequest(LibraryRename Args, TaskCompletionSource Done) : Message;
-
-    private sealed record DeleteRequest(LibraryDelete Args, TaskCompletionSource Done) : Message;
-
-    // A Cleanup trigger: a timer's, or a settings change (Changed) that counts only when the limits differ.
-    private sealed record CleanupTick(bool Changed) : Message;
-
-    private sealed record CleanupStep : Message;
-
-    private sealed record PreviewRequest(LibraryCleanupPreview Args, TaskCompletionSource<LibraryCleanupPlan> Done) : Message;
-
     private sealed record LengthJob(string Folder, string Key, string Path, long Size);
 }
-
-/// <summary>The index file: the saved items, the Output Folder they were saved for, and whether a rebuild is unacknowledged.</summary>
-internal sealed record LibraryFile(int Version, IReadOnlyList<LibraryFileEntry> Items, string? OutputFolder = null, bool CleanupBlocked = false);
-
-/// <summary>One saved item; its size and modified time tell a file changed outside the app. Fields: docs/code-notes.md.</summary>
-internal sealed record LibraryFileEntry(string Path, string? ProfileId, DateTimeOffset Date, long? Size = null, double? LengthSeconds = null, DateTime? Modified = null, bool Favourite = false, string? Kind = null);
-
-[JsonSourceGenerationOptions(
-    JsonSerializerDefaults.General,
-    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    RespectNullableAnnotations = true,
-    RespectRequiredConstructorParameters = true)]
-[JsonSerializable(typeof(LibraryFile))]
-internal sealed partial class LibraryFileJsonContext : JsonSerializerContext;

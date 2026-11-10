@@ -1,7 +1,7 @@
 namespace Encore.Core.Replay;
 
 /// <summary>Rewind as numbered generations, each a ring with its own streams; packets go into the newest. docs/code-notes.md.</summary>
-public sealed class RingGenerations : IDisposable
+public sealed partial class RingGenerations : IDisposable
 {
     /// <summary>The shortest Clip, and how far past a boundary a cut must end to come from the new generation.</summary>
     public const long MinClipUs = 1_000_000;
@@ -266,21 +266,5 @@ public sealed class RingGenerations : IDisposable
         {
             generation.Ring.Dispose();
         }
-    }
-
-    private sealed class Generation(int number, PacketRing ring, long startUs)
-    {
-        public int Number { get; } = number;
-
-        public PacketRing Ring { get; } = ring;
-
-        /// <summary>Its boundary in µs since the anchor: MinValue for generation 1, else its first keyframe (MaxValue before).</summary>
-        public long StartUs { get; set; } = startUs;
-
-        /// <summary>Cuts reading its ring outside the lock. The lock guards it.</summary>
-        public int Users { get; set; }
-
-        /// <summary>The lock guards it.</summary>
-        public bool Retired { get; set; }
     }
 }

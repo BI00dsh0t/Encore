@@ -3,9 +3,6 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Core.Library;
 
-/// <summary>What a Cleanup pass would delete now, oldest first; Unreachable means the size limit can't be met.</summary>
-internal sealed record CleanupPlan(IReadOnlyList<LibraryItem> Items, long Bytes, long Remaining, bool Unreachable);
-
 /// <summary>Cleanup's choice of what to delete: one function, so a preview and a pass agree.</summary>
 internal static class CleanupPlanner
 {
