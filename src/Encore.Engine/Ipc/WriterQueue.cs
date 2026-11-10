@@ -40,40 +40,8 @@ internal sealed class WriterQueue(int maxQueued, TimeProvider time)
     /// <summary>Queues a frame; false when the queue is closed or full, and a full queue is then closed.</summary>
     public bool TryEnqueue(byte[] frame, string? coalesceKey = null)
     {
-        TaskCompletionSource? waiter;
-        bool accepted;
-        lock (_lock)
-        {
-            if (_closed || _completed)
-            {
-                return false;
-            }
-
-            if (coalesceKey is not null && _coalescing.Remove(coalesceKey, out var stale))
-            {
-                _items.Remove(stale);
-            }
-
-            if (_items.Count >= MaxQueued)
-            {
-                CloseLocked();
-                accepted = false;
-            }
-            else
-            {
-                var node = _items.AddLast(new Item(frame, coalesceKey, time.GetTimestamp()));
-                if (coalesceKey is not null)
-                {
-                    _coalescing[coalesceKey] = node;
-                }
-
-                accepted = true;
-            }
-
-            waiter = TakeWaiter();
-        }
-
-        waiter?.TrySetResult();
+        var accepted = false;
+        WakeAfter(() => accepted = EnqueueLocked(frame, coalesceKey));
         return accepted;
     }
 
@@ -125,26 +93,47 @@ internal sealed class WriterQueue(int maxQueued, TimeProvider time)
     }
 
     /// <summary>Refuses new frames; the queued ones are still handed out, then <see cref="DequeueAsync"/> returns <c>null</c>.</summary>
-    public void Complete()
-    {
-        TaskCompletionSource? waiter;
-        lock (_lock)
-        {
-            _completed = true;
-            waiter = TakeWaiter();
-        }
-
-        waiter?.TrySetResult();
-    }
+    public void Complete() => WakeAfter(() => _completed = true);
 
     /// <summary>Discards every frame and refuses new ones.</summary>
-    public void Close()
+    public void Close() => WakeAfter(CloseLocked);
+
+    private bool EnqueueLocked(byte[] frame, string? coalesceKey)
+    {
+        if (_closed || _completed)
+        {
+            return false;
+        }
+
+        if (coalesceKey is not null && _coalescing.Remove(coalesceKey, out var stale))
+        {
+            _items.Remove(stale);
+        }
+
+        if (_items.Count >= MaxQueued)
+        {
+            CloseLocked();
+            return false;
+        }
+
+        var node = _items.AddLast(new Item(frame, coalesceKey, time.GetTimestamp()));
+        if (coalesceKey is not null)
+        {
+            _coalescing[coalesceKey] = node;
+        }
+
+        return true;
+    }
+
+    /// <summary>Makes a change under the lock, then wakes a waiting writer outside it.</summary>
+    private void WakeAfter(Action changeLocked)
     {
         TaskCompletionSource? waiter;
         lock (_lock)
         {
-            CloseLocked();
-            waiter = TakeWaiter();
+            changeLocked();
+            waiter = _waiter;
+            _waiter = null;
         }
 
         waiter?.TrySetResult();
@@ -158,12 +147,6 @@ internal sealed class WriterQueue(int maxQueued, TimeProvider time)
         _inFlightSince = null;
     }
 
-    private TaskCompletionSource? TakeWaiter()
-    {
-        var waiter = _waiter;
-        _waiter = null;
-        return waiter;
-    }
 
     private readonly record struct Item(byte[] Frame, string? CoalesceKey, long EnqueuedAt);
 }
