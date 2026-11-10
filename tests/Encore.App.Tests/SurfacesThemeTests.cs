@@ -28,7 +28,7 @@ public sealed class SurfacesThemeTests
     public void TheTrayMenuResolvesItsStylesFromTheThemeAndFollowsASwitch() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
-        var menu = ShellApp.CreateTrayMenu(model, () => { }, () => { }, gallery: () => { });
+        var menu = TrayMenu.Create(model, () => { }, () => { }, gallery: () => { });
         var target = new Border { Width = 10, Height = 10, ContextMenu = menu };
         var window = Offscreen(new Window { Content = target, Width = 100, Height = 100 });
         var theme = ThemeService.ForWindow(window);

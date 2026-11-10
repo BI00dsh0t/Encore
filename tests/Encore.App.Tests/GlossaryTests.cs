@@ -40,6 +40,8 @@ public sealed partial class GlossaryTests
         @"src\Encore.App\Overlay\OverlayViewModel.cs",
         @"src\Encore.App\Library\Library*.cs",
         @"src\Encore.App\ShellApp.cs",
+        @"src\Encore.App\TrayMenu.cs",
+        @"src\Encore.App\AppTray.cs",
         @"src\Encore.App\Settings\*.cs",
         @"src\Encore.Engine\Audio\DeviceDropoutReporter.cs",
         @"src\Encore.Engine\Audio\FeedbackDeviceCheck.cs",

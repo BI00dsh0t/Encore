@@ -211,14 +211,14 @@ public sealed partial class ThemeTests
         var model = new MainViewModel(new FakeEngineSession(), action => action());
         var opened = 0;
 
-        var dev = ShellApp.CreateTrayMenu(model, () => { }, () => { }, gallery: () => opened++);
-        var installed = ShellApp.CreateTrayMenu(model, () => { }, () => { });
+        var dev = TrayMenu.Create(model, () => { }, () => { }, gallery: () => opened++);
+        var installed = TrayMenu.Create(model, () => { }, () => { });
 
-        var item = dev.Items.OfType<MenuItem>().Single(i => i.Name == ShellApp.GalleryItemName);
+        var item = dev.Items.OfType<MenuItem>().Single(i => i.Name == TrayMenu.GalleryItemName);
         Assert.Equal("Control gallery", item.Header);
         item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Assert.Equal(1, opened);
-        Assert.DoesNotContain(installed.Items.OfType<MenuItem>(), i => i.Name == ShellApp.GalleryItemName);
+        Assert.DoesNotContain(installed.Items.OfType<MenuItem>(), i => i.Name == TrayMenu.GalleryItemName);
     });
 
     private static SettingsDocument WithTheme(AppTheme theme) => SettingsDocument.Empty with

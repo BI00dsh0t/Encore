@@ -78,11 +78,11 @@ public sealed class PlayerFailureTests : IDisposable
         var dev = new Instance(Instance.DevName, _folder, _folder);
         var installed = new Instance(Instance.InstalledName, _folder, _folder);
 
-        Assert.Equal("AV1", ShellApp.PlayerUnsupported(["--player-unsupported=av1"], dev));
-        Assert.Equal("HEVC", ShellApp.PlayerUnsupported(["--tray", "--player-unsupported=HEVC"], dev));
-        Assert.Null(ShellApp.PlayerUnsupported(["--player-unsupported=hevc"], installed));
-        Assert.Null(ShellApp.PlayerUnsupported(["--player-unsupported=vp9"], dev));
-        Assert.Null(ShellApp.PlayerUnsupported([], dev));
+        Assert.Equal("AV1", AppArguments.PlayerUnsupported(["--player-unsupported=av1"], dev));
+        Assert.Equal("HEVC", AppArguments.PlayerUnsupported(["--tray", "--player-unsupported=HEVC"], dev));
+        Assert.Null(AppArguments.PlayerUnsupported(["--player-unsupported=hevc"], installed));
+        Assert.Null(AppArguments.PlayerUnsupported(["--player-unsupported=vp9"], dev));
+        Assert.Null(AppArguments.PlayerUnsupported([], dev));
     }
 
     private static PlayerMedia Media(bool decodable, string codec) =>

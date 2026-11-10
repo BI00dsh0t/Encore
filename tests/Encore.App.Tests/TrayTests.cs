@@ -14,19 +14,19 @@ public sealed class TrayTests
     [InlineData(new string[0], false)]
     [InlineData(new[] { "--tray" }, true)]
     public void OnlyTheTrayArgumentStartsWithNoWindow(string[] args, bool inTray) =>
-        Assert.Equal(inTray, ShellApp.StartsInTray(args));
+        Assert.Equal(inTray, AppArguments.StartsInTray(args));
 
     [Fact]
     public void WithNoInstanceArgumentTheAppRunsOnItsOwnInstance()
     {
-        Assert.True(ShellApp.TryParseInstance(["--tray"], out var instance));
+        Assert.True(AppArguments.TryParseInstance(["--tray"], out var instance));
         Assert.Equal(Contracts.Instance.Current, instance);
     }
 
     [Fact]
     public void TheInstanceArgumentTakesATestInstance()
     {
-        Assert.True(ShellApp.TryParseInstance(["--tray", "--instance", "Encore-Test-x1"], out var instance));
+        Assert.True(AppArguments.TryParseInstance(["--tray", "--instance", "Encore-Test-x1"], out var instance));
         Assert.Equal("Encore-Test-x1", instance.Name);
         Assert.True(instance.IsTest);
     }
@@ -39,7 +39,7 @@ public sealed class TrayTests
     {
         string[] args = name is null ? ["--tray", "--instance"] : ["--instance", name];
 
-        Assert.False(ShellApp.TryParseInstance(args, out _));
+        Assert.False(AppArguments.TryParseInstance(args, out _));
     }
 
     [Fact]
@@ -47,26 +47,26 @@ public sealed class TrayTests
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
         var restarts = 0;
-        var menu = ShellApp.CreateTrayMenu(model, () => { }, () => { }, () => restarts++);
+        var menu = TrayMenu.Create(model, () => { }, () => { }, () => restarts++);
 
-        var restart = menu.Items.OfType<MenuItem>().Single(i => i.Name == ShellApp.RestartItemName);
+        var restart = menu.Items.OfType<MenuItem>().Single(i => i.Name == TrayMenu.RestartItemName);
         Assert.Equal(Visibility.Collapsed, restart.Visibility);
         restart.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Assert.Equal(1, restarts);
 
-        ShellApp.ShowCrashLoop(restart, crashLoop: true);
+        TrayMenu.ShowCrashLoop(restart, crashLoop: true);
         Assert.Equal(Visibility.Visible, restart.Visibility);
         Assert.Equal("!", TrayCapture.CrashLoopIcon().Text);
-        ShellApp.ShowCrashLoop(restart, crashLoop: false);
+        TrayMenu.ShowCrashLoop(restart, crashLoop: false);
         Assert.Equal(Visibility.Collapsed, restart.Visibility);
     });
 
     [Fact]
     public void RewindIsAcceptedOnATestInstanceOnly()
     {
-        Assert.True(ShellApp.TryParseArguments(["--tray", "--instance", "Encore-Test-x1", "--rewind"], out var instance));
+        Assert.True(AppArguments.TryParse(["--tray", "--instance", "Encore-Test-x1", "--rewind"], out var instance));
         Assert.True(instance.IsTest);
-        Assert.False(ShellApp.TryParseArguments(["--tray", "--rewind"], out _));
+        Assert.False(AppArguments.TryParse(["--tray", "--rewind"], out _));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class TrayTests
         var opened = 0;
         var quit = 0;
         var folders = new List<string>();
-        var menu = ShellApp.CreateTrayMenu(model, () => opened++, () => quit++, openFolder: folders.Add);
+        var menu = TrayMenu.Create(model, () => opened++, () => quit++, openFolder: folders.Add);
         var all = menu.Items.OfType<MenuItem>().Where(i => i.Visibility == Visibility.Visible).ToList();
 
         // The live status first, then Open, Open Library and Open the Clips folder.

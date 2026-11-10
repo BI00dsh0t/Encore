@@ -365,7 +365,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
             Assert.Equal(EngineStatus.Connected, engine.Status);
             Until(() => main.SettingsViewModels.All(p => p.View is not null), "the pages");
 
-            var menu = ShellApp.CreateTrayMenu(main, () => { }, () => { }, gallery: () => { });
+            var menu = App.TrayMenu.Create(main, () => { }, () => { }, gallery: () => { });
             menu.PlacementTarget = trayTarget;
             menu.Placement = PlacementMode.AbsolutePoint;
             (menu.HorizontalOffset, menu.VerticalOffset) = (-30000, -30000);
