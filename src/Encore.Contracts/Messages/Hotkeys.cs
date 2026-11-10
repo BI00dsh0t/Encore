@@ -5,13 +5,10 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Contracts.Messages;
 
-/// <summary>One Hotkey action in <see cref="HotkeyStatus"/>.</summary>
-/// <param name="Binding">The configured binding, or <c>null</c> when the action is unbound.</param>
-/// <param name="Registered">Whether the engine holds the combination now.</param>
-/// <param name="Code">Why it isn't registered, one of <see cref="ErrorCodes"/>; <c>null</c> when registered.</param>
+/// <summary>One Hotkey action's status; Code says why it isn't registered and is <c>null</c> when it is.</summary>
 public sealed record HotkeyBindingStatus(HotkeyAction Action, HotkeyBinding? Binding, bool Registered, string? Code);
 
-/// <summary><c>hotkey.status</c> (AD-11): every <see cref="HotkeyAction"/>, in order, and whether it is registered.</summary>
+/// <summary><c>hotkey.status</c>: every <see cref="HotkeyAction"/>, in order, and whether it is registered.</summary>
 public sealed record HotkeyStatus(IReadOnlyList<HotkeyBindingStatus> Bindings)
 {
     /// <summary>Nothing registered: every action <see cref="ErrorCodes.HotkeyUnbound"/>.</summary>
@@ -34,13 +31,10 @@ public sealed record HotkeyStatus(IReadOnlyList<HotkeyBindingStatus> Bindings)
     }
 }
 
-/// <summary>
-/// <c>hotkey.pressed</c>: a registered Hotkey was pressed. <see cref="Qpc"/> is the QPC read when the
-/// engine received <c>WM_HOTKEY</c> (AD-6).
-/// </summary>
+/// <c>hotkey.pressed</c>: a registered Hotkey was pressed; Qpc is the time the engine received <c>WM_HOTKEY</c>.
 public sealed record HotkeyPress(HotkeyAction Action, long Qpc);
 
-/// <summary>Hotkey messages (AD-11): registration status and presses. The SessionOrchestrator publishes presses (AD-19).</summary>
+/// <summary>Hotkey messages: registration status and presses. The SessionOrchestrator publishes presses.</summary>
 public static class HotkeyMessages
 {
     public static EventType<HotkeyStatus> Status { get; } = new(

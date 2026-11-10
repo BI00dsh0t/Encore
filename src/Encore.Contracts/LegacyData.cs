@@ -1,10 +1,6 @@
 namespace Encore.Contracts;
 
-/// <summary>
-/// The app was called ReplayBuffer before it was rebranded to Encore (2026-11-10). On the first start of
-/// an Encore instance, its data folders are copied once from the matching ReplayBuffer ones, so settings,
-/// the Library index and the App's view state carry over. The old folders are never moved or deleted.
-/// </summary>
+/// <summary>The app was called ReplayBuffer before; on first start an Encore instance copies its data folders from the old ones.</summary>
 public static class LegacyData
 {
     /// <summary>The cache (ring) folder is rebuilt, never copied: it is large and holds nothing worth keeping.</summary>
@@ -22,13 +18,7 @@ public static class LegacyData
         };
     }
 
-    /// <summary>
-    /// Copies the instance's old ReplayBuffer roaming and local data folders to its Encore ones, each only
-    /// when the Encore folder doesn't exist yet and the old one does. The copy goes to a temporary folder
-    /// first and is renamed into place, so a second process starting at the same moment sees either
-    /// nothing or the whole copy. Failures are swallowed: a missed copy only means starting fresh.
-    /// </summary>
-    /// <returns>The folders copied, for the caller's log.</returns>
+    /// <summary>Copies the old data folders, each only when the new one is missing; failures are swallowed. Returns the copies.</summary>
     public static IReadOnlyList<string> CopyIfFirstStart(Instance instance)
     {
         var legacy = LegacyName(instance);

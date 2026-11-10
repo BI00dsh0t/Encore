@@ -7,12 +7,7 @@ using Windows.Win32.UI.Shell;
 
 namespace Encore.Platform.Windows;
 
-/// <summary>
-/// Moves a file to the Recycle Bin through the shell's <c>IFileOperation</c> (story 7.7), the Library's
-/// delete. It never deletes permanently and never shows UI: a volume that isn't a fixed drive with a
-/// Recycle Bin is refused up front, and a progress sink aborts any delete the shell couldn't recycle
-/// (its Recycle Bin is off, or the file is over its quota), which is reported as no Recycle Bin.
-/// </summary>
+/// <summary>Moves a file to the Recycle Bin through the shell; it never deletes permanently and never shows UI.</summary>
 public static unsafe class RecycleBin
 {
     private const int ErrorSharingViolation = unchecked((int)0x80070020);
@@ -34,12 +29,7 @@ public static unsafe class RecycleBin
     // The sink's vtable: IUnknown, then IFileOperationProgressSink's 16 methods in shobjidl order. Lives for the process.
     private static readonly void** SinkVtable = CreateSinkVtable();
 
-    /// <summary>
-    /// Moves <paramref name="path"/> (absolute) to the Recycle Bin, on a new STA thread. False when its
-    /// volume has no Recycle Bin, the shell couldn't recycle it, or the operation was aborted, so the
-    /// file wasn't deleted; throws an
-    /// <see cref="IOException"/> whose <see cref="Exception.HResult"/> is the shell's when it failed.
-    /// </summary>
+    /// <summary>Recycles a file on a new STA thread. False when it wasn't deleted; throws IOException when the shell failed.</summary>
     public static bool Recycle(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -161,8 +151,7 @@ public static unsafe class RecycleBin
         return PInvoke.SHQueryRecycleBin(root, ref info).Succeeded;
     }
 
-    // The copy engine's sharing violations (COPYENGINE_E_SHARING_VIOLATION_SRC/_DEST) read as Win32's,
-    // so a file another process holds open (the length read) is tried again like a rename.
+    // A sharing violation from the copy engine reads as Win32's, so a file held open is retried like a rename.
     private static int Win32Code(int hresult) =>
         hresult is unchecked((int)0x80270027) or unchecked((int)0x80270028) ? ErrorSharingViolation : hresult;
 

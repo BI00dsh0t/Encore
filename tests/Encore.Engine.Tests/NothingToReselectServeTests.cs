@@ -16,12 +16,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Story 8.6 (R6, NFR-6; PLAN.md T-05 to T-07), in process on a throwaway test instance whose data
-/// folders are in a temp folder. A reboot is a cold engine start on those folders; a mixer restart
-/// is the real <see cref="AudioDeviceHub"/> over fake clients and a fake endpoint list, whose
-/// endpoints are removed and recreated under the same ids, then under new ids with the same names.
-/// </summary>
+/// <summary>Nothing needs re-selecting after a reboot or a mixer restart; in process, with fake audio clients and endpoints.</summary>
 public sealed class NothingToReselectServeTests : IAsyncLifetime
 {
     private const int GamePid = 4321;
@@ -80,7 +75,7 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
         var (host, client) = await StartAsync(new EngineHostOptions { GameWindows = probe, AudioEndpoints = endpoints });
         await probe.PolledAsync(2);
 
-        // The game is detected, its Game Profile auto-created (3.4) and given an override and an attribute.
+        // The game is detected, its Game Profile auto-created and given an override and an attribute.
         probe.Add(GamePid, GamePath);
         probe.Foreground = new GameWindow(0x10, GamePid);
         var profileId = GamePaths.Canonicalize(GamePath);
@@ -216,10 +211,7 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
     private Dictionary<string, string> Snapshot() =>
         new[] { SettingsFile, RuntimeFile, LibraryFile }.ToDictionary(f => Path.GetFileName(f), f => Convert.ToBase64String(ReadShared(f)));
 
-    /// <summary>
-    /// A file the engine may be replacing right now: read with sharing, so the read never blocks the
-    /// engine's swap, and retried for up to 2 s while the swap holds it (a loaded machine widens that window).
-    /// </summary>
+    /// <summary>A file the engine may be replacing: read with sharing, and retried for up to 2 s while the swap holds it.</summary>
     private static byte[] ReadShared(string path)
     {
         var clock = Stopwatch.StartNew();

@@ -1,9 +1,6 @@
 namespace Encore.Core.Tests;
 
-/// <summary>
-/// A thread-safe clock that moves only when told: <see cref="Advance"/> fires the timers that come due,
-/// in due order, outside its lock; periodic timers re-arm.
-/// </summary>
+/// <summary>A thread-safe clock that moves only when told; Advance fires the timers that come due, outside its lock.</summary>
 internal sealed class ManualTime : TimeProvider
 {
     private readonly Lock _lock = new();

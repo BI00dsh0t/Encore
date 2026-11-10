@@ -8,17 +8,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Overlay;
 
-/// <summary>
-/// The Overlay: a dot in the top-right corner of the Target Game's monitor; to its left, right to
-/// left, the mic-muted icon while the mic is muted, the green saving icon while a Clip is being saved
-/// (R2) and a red X while the disk is full (R3); and the queued message below them (R3) on the
-/// theme's card, in its success colour for a notice and its danger colour for an error. The glyphs keep
-/// fixed colours in both themes (AD-23). It is a topmost, click-through window that is never activated
-/// and permits screenshots/recording (AD-15). The window is one fixed-width strip of fixed slots, so the dot stays
-/// put as the icons come and go; while a message shows it grows left and down, the dot still in its
-/// place. It is hidden while there is no dot, icon, X or message. Nothing is drawn in or hooked onto
-/// the game (NFR-3).
-/// </summary>
+/// <summary>The Overlay: a topmost, click-through window with the dot, the icons and a message. Layout: docs/code-notes.md.</summary>
 internal sealed class OverlayWindow : ShellWindow
 {
     /// <summary>The dot's diameter.</summary>
@@ -36,7 +26,6 @@ internal sealed class OverlayWindow : ShellWindow
     /// <summary>The message's width at most, right-aligned to the dot.</summary>
     private const double MessageWidthDip = 260;
 
-    /// <summary>The message's height.</summary>
     private const double MessageHeightDip = 22;
 
     /// <summary>The space between the strip and the message.</summary>
@@ -89,11 +78,7 @@ internal sealed class OverlayWindow : ShellWindow
     private readonly Border _message;
     private readonly Grid _root;
 
-    /// <param name="model">What the Overlay shows.</param>
-    /// <param name="locate">
-    /// The monitor of a process (null: the primary), which the dot sits on (5.1's rule); <c>Monitors.ForProcess</c>
-    /// when null. Read again at each placement, so a display change moves the window (T-03).
-    /// </param>
+    /// <summary>Locate gives the monitor of a process; it is read at each placement, so a display change moves the window.</summary>
     public OverlayWindow(OverlayViewModel model, Func<int?, MonitorArea>? locate = null)
     {
         _model = model;
@@ -135,8 +120,7 @@ internal sealed class OverlayWindow : ShellWindow
             VerticalAlignment = VerticalAlignment.Top,
             Children = { _cross, _icon, _mic, _dot },
         };
-        // The card is the Overlay's one themed element: its fill, stroke, corner and type follow the theme
-        // live through resource references, while the window itself stays transparent.
+        // The card is the Overlay's one themed element; the window itself stays transparent.
         _text.SetResourceReference(StyleProperty, "CaptionTextBlockStyle");
         _message = new Border
         {
@@ -228,9 +212,7 @@ internal sealed class OverlayWindow : ShellWindow
     private (double Width, double Height) ExtentDip =>
         _model.Message is null ? (WidthDip, DotSizeDip) : (MessageWidthDip, MessageAreaHeightDip);
 
-    // In physical pixels, so WPF's DIP conversion across mixed-DPI monitors doesn't matter. The dot
-    // sits where Monitors.TopRight puts it; the icons and the gaps extend the window to its left, and
-    // a message extends it further left and down.
+    // In physical pixels, so WPF's DIP conversion across mixed-DPI monitors doesn't matter.
     private void Place()
     {
         if (!Showing)

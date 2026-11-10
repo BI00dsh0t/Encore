@@ -6,11 +6,7 @@ using System.Windows.Input;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// Audio Tracks' view (story 10.5). The code here is view-only: opening the ⋯ and preset menus on a
-/// click, anchoring the sound picker to the pressed + Add sound, the picker's keys (↑ ↓ Enter Esc, typing
-/// to search, Ctrl+click to keep it open) and focusing a card's name box for Rename.
-/// </summary>
+/// <summary>Audio Tracks' view, view-only code: the menus, anchoring the sound picker, the picker's keys and Rename focus.</summary>
 internal partial class TrackLayoutView
 {
     public TrackLayoutView()
@@ -29,10 +25,7 @@ internal partial class TrackLayoutView
 
     private TrackLayoutPage? Page => DataContext as TrackLayoutPage;
 
-    /// <summary>
-    /// Drops the root ScrollViewer for a page hosted inside another page's view (a game's own tracks):
-    /// a nested ScrollViewer never scrolls there but swallows the mouse wheel.
-    /// </summary>
+    /// <summary>Drops the root ScrollViewer when hosted inside another page: a nested one swallows the mouse wheel.</summary>
     public void Unscroll()
     {
         if (Scroller.Content is UIElement content)

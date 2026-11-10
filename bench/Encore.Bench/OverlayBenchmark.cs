@@ -37,9 +37,7 @@ internal sealed record OverlayModeSummary(
     IReadOnlyList<string> FullscreenChanges,
     bool ExclusiveKept);
 
-/// <summary><c>overlay.json</c>.</summary>
-/// <param name="OverlayDot">The App's <c>overlayDot</c> mode (<c>--host app</c>, story 5.12); null for the stand-in.</param>
-/// <param name="OverlayPlanes">Per entry of <c>Loads</c>: <c>SupportsOverlays</c> for the load's monitor, null when DXGI couldn't say.</param>
+/// <summary>The <c>overlay.json</c> report; OverlayPlanes is per load, null when DXGI couldn't say.</summary>
 internal sealed record OverlayReport(
     DateTimeOffset Created,
     string Host,
@@ -54,14 +52,7 @@ internal sealed record OverlayReport(
     string? OverlayDot = null,
     IReadOnlyList<bool?>? OverlayPlanes = null);
 
-/// <summary>
-/// <c>bench overlay</c> (story 5.2, PRD Q-4): for each <c>--modes</c> entry it starts the synthetic GPU load in that
-/// mode and story 5.1's Overlay window beside it, then records the load's presents with PresentMon with the dot
-/// hidden, shown, and hidden again, and each phase's <c>SHQueryUserNotificationState</c>. It writes
-/// <c>overlay.json</c> and <c>overlay.md</c> into the run folder. <c>--host app</c> (story 5.8) drives the real
-/// App's Overlay instead, through its engine (<see cref="AppOverlayHost"/>), with a saved and a failed notice in
-/// the shown phase.
-/// </summary>
+/// <c>bench overlay</c>: measures the load's presents with the Overlay's dot hidden, shown and hidden again.
 internal static class OverlayBenchmark
 {
     public const string FileName = "overlay.json";
@@ -76,8 +67,7 @@ internal static class OverlayBenchmark
     private const int QunsRunningD3DFullScreen = 3;
     private const string LoadNotePrefix = "load: ";
 
-    // --host app: each Overlay message shows for 4 s, and the shown phase queues three. Off-again is hidden only
-    // once its own Recording-stopped message has gone (settle) and the shown phase outlasted its queue.
+    // With the App as host, each message shows for 4 s, so the phases must outlast the message queue.
     private const int AppMinSettle = 5;
     private const int AppMinSeconds = 10;
 
@@ -377,10 +367,7 @@ internal static class OverlayBenchmark
         return process.ExitCode == 0 ? null : $"PresentMon exited with {process.ExitCode}";
     }
 
-    /// <summary>
-    /// Brings <paramref name="hwnd"/> to the front. Bench runs from a background shell, which Windows refuses the
-    /// foreground, so it shares the foreground thread's input state for the call, as the load itself does.
-    /// </summary>
+    /// <summary>Brings a window to the front by sharing the foreground thread's input state, as the load itself does.</summary>
     private static void BringToFront(nint hwnd)
     {
         var foreground = Encore.Platform.Desktop.OverlayWindowStyle.ForegroundWindow();
@@ -462,10 +449,7 @@ internal sealed record PresentMonSummary(
 
 internal static class PresentMonCsv
 {
-    /// <summary>
-    /// Reads a PresentMon CSV: frame time from <c>MsBetweenPresents</c> (1.x and <c>--v1_metrics</c>) or
-    /// <c>FrameTime</c> (2.x), as <c>measure-path-a.ps1</c> does, and the <c>PresentMode</c> of every present.
-    /// </summary>
+    /// <summary>Reads a PresentMon CSV: the frame time column of either version, and every present's mode.</summary>
     public static PresentMonSummary Analyze(string path)
     {
         if (!File.Exists(path))

@@ -5,7 +5,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 10.2: the Library's selection, kept by the page, and the bulk actions on it.</summary>
+/// <summary>The Library's selection, kept by the page, and the bulk actions on it.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class LibrarySelectionTests : IDisposable
 {

@@ -10,10 +10,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// The App's connection and settings sender against the real engine, launched by the connection on a
-/// throwaway test instance.
-/// </summary>
+/// <summary>The App's connection and settings sender against the real engine, on a throwaway test instance.</summary>
 public sealed class EngineConnectionTests : IAsyncDisposable
 {
     private readonly string _instance = "Encore-Test-" + Guid.NewGuid().ToString("N");

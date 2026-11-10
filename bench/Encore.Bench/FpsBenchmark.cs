@@ -25,13 +25,7 @@ internal sealed record FpsRun(
     string? GcSteady,
     string? PresentMode = null);
 
-/// <summary>
-/// <c>bench fps --overlay</c> (story 5.12): the App's Overlay was on for the capture runs, with this <c>overlayDot</c>
-/// mode and a message every <paramref name="MessageSeconds"/>; <paramref name="OverlayPlanes"/> is
-/// <c>SupportsOverlays</c> for the load's monitor (null when DXGI couldn't say).
-/// </summary>
-/// <param name="Recording">Story 8.7 (<c>--recording</c>): the capture runs were the App's own engine on the load, with
-/// Rewind and a real Recording on, not the script's debug-capture.</param>
+/// <c>bench fps --overlay</c>: the App's Overlay was on for the capture runs, with this dot mode and message interval.
 internal sealed record FpsOverlay(string Dot, bool? OverlayPlanes, int MessageSeconds, bool Recording = false);
 
 /// <summary>The capture condition's means over its runs.</summary>
@@ -47,8 +41,7 @@ internal sealed record FpsCapture(
     double? AllocBytesPerSecond,
     long? Gen2Collections);
 
-/// <summary><c>fps.json</c>.</summary>
-/// <param name="Load">What was measured: the synthetic load and its calibration, or the real game; null in a file written before it was recorded.</param>
+/// <summary>The <c>fps.json</c> report; Load is null in a file written before it was recorded.</summary>
 internal sealed record FpsReport(
     DateTimeOffset Created,
     string Game,
@@ -66,21 +59,16 @@ internal sealed record FpsReport(
     GpuLoadInfo? Load = null,
     FpsOverlay? Overlay = null);
 
-/// <summary>
-/// <c>bench fps</c>: <c>tools/measure-path-a.ps1</c> runs baseline against capture in balanced passes, at
-/// the output size and rate; Bench maps its <c>summary.json</c> and each capture run's stats file into <c>fps.json</c>.
-/// Without <c>--game</c> it measures Bench's own synthetic GPU load (<see cref="GpuLoadProcess"/>), which the
-/// script finds and PresentMon traces by its process name, like a game; Bench stops it on every path.
-/// </summary>
+/// <c>bench fps</c>: a script runs baseline against capture, and Bench maps its results into <c>fps.json</c>.
 internal static class FpsBenchmark
 {
     public const string FileName = "fps.json";
     public const double TargetLossPercent = 3;
 
-    /// <summary>The script's condition whose capture is the App's own (story 8.7, <c>--recording</c>).</summary>
+    /// <summary>The script's condition whose capture is the App's own.</summary>
     public const string AppCondition = "app";
 
-    /// <summary><c>--seconds</c> with <c>--recording</c>: 2.5 minutes, halved from 1.14's 5 by the builder (2026-11-04).</summary>
+    /// <summary>The default run length with a Recording: 2.5 minutes, as the builder chose.</summary>
     public const int RecordingSeconds = 150;
 
     /// <summary>With <c>--overlay</c>, the App shows a message this often while its dot is on.</summary>
@@ -107,7 +95,7 @@ internal static class FpsBenchmark
             throw new BenchUsageException("--app-exe is for --overlay.");
         }
 
-        // Story 8.7: the capture runs are the real App's capture of the load, with a Recording, in the script's app condition.
+        // The capture runs are the real App's capture of the load, with a Recording, in the script's app condition.
         var withRecording = options.Flag("recording");
         if (withRecording && !withOverlay)
         {
@@ -251,9 +239,7 @@ internal static class FpsBenchmark
 
             Console.WriteLine($"FPS: {pwsh} {string.Join(' ', args)}");
 
-            // The script's stderr (where its refusals go) is relayed line by line to errors, so the message reaches
-            // whoever runs Bench. Its stdout streams to the console; with --overlay Bench reads it to follow the
-            // runs, and echoes every line.
+            // The script's stderr is relayed to errors line by line; its stdout streams to the console and is read for the overlay.
             var start = new ProcessStartInfo(pwsh) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = overlay is not null };
             foreach (var arg in args)
             {
@@ -358,17 +344,11 @@ internal static class FpsBenchmark
         : !report.Runs.Any(r => r.Condition != "baseline" && r.AvgFps is not null) ? "No capture run has a frame rate; nothing was measured."
         : null;
 
-    /// <summary>
-    /// The Overlay's state from one line of the script's stdout: on as a capture run starts settling, off as a
-    /// baseline run does, and null (no change) for any other line.
-    /// </summary>
+    /// <summary>The Overlay's state from one line of the script's output: on, off, or null for no change.</summary>
     internal static bool? OverlayFor(string line) =>
         SettlingLine.Match(line) is { Success: true } match ? match.Groups["condition"].Value != "baseline" : null;
 
-    /// <summary>
-    /// Maps the script's <c>summary.json</c> (and the capture runs' stats files and every run's PresentMon CSV
-    /// beside it) into the report.
-    /// </summary>
+    /// <summary>Maps the script's summary, the capture runs' stats files and each run's PresentMon CSV into the report.</summary>
     internal static FpsReport Map(
         string summaryJson, string summaryPath, string folder, string game, CaptureSettings settings, int seconds, int passes,
         GpuLoadInfo? load = null, FpsOverlay? overlay = null)
@@ -476,11 +456,7 @@ internal static class FpsBenchmark
         }
     }
 
-    /// <summary>
-    /// The App's Overlay during <c>bench fps --overlay</c>: on and off as the runs change, and the timer's
-    /// messages. One lock serializes them, so no message is sent once the dot is off. A failure from the App's
-    /// engine is reported, never thrown (on the timer's thread it would end Bench), and fails the run.
-    /// </summary>
+    /// <summary>The App's Overlay during the run; one lock serializes on, off and messages; a failure is reported, not thrown.</summary>
     private sealed class OverlaySwitch(Action on, Action off, Action message, TextWriter errors)
     {
         private readonly Lock _lock = new();

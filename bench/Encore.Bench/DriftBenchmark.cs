@@ -5,9 +5,7 @@ using Encore.Platform.Audio;
 
 namespace Encore.Bench;
 
-/// <summary>The source log of one marked capture: kept beside the file, so it can be analysed again.</summary>
-/// <param name="Minutes">The capture's length; null in a log written before it was recorded.</param>
-/// <param name="Capture">The capture's output settings; null in a log written before they were recorded.</param>
+/// <summary>The source log of one marked capture, kept beside the file so it can be analysed again.</summary>
 internal sealed record MarkerLog(
     long QpcFrequency,
     long EngineStartQpc,
@@ -21,9 +19,7 @@ internal sealed record MarkerLog(
     double? Minutes = null,
     CaptureSettings? Capture = null);
 
-/// <summary>One audio track's sample count in the file against the video's duration (from its first packet's timestamp to the end of its last packet).</summary>
-/// <param name="Samples">Decoded samples for the burst track; AAC packets × 1024 for the others.</param>
-/// <param name="DurationSeconds">Samples / 48 kHz.</param>
+/// <summary>One audio track's sample count in the file against the video's duration.</summary>
 internal sealed record TrackCheck(int Track, string? Title, long Samples, double DurationSeconds, double MinusVideoMs, double TargetMs, string Mark);
 
 /// <summary><c>drift.json</c>.</summary>
@@ -46,14 +42,10 @@ internal sealed record DriftReport(
     string Verdict,
     IReadOnlyList<string> Warnings);
 
-/// <summary>
-/// A capture of the marker window while the tone player plays its bursts into the Output Device: the
-/// engine's <c>debug-capture</c> with both devices, the marker flashing on the bursts' second grid.
-/// </summary>
+/// <summary>A capture of the marker window while the tone player plays its bursts, the marker flashing on the same grid.</summary>
 internal static class MarkedCapture
 {
-    /// <param name="codec">The engine's <c>--codec</c> (h264, hevc or av1); null is its default, H.264.</param>
-    /// <param name="probe">Screen grabs around the marker: one before the engine starts, one <see cref="BorderProbe.Delay"/> into its capture.</param>
+    /// <summary>The codec is the engine's option (null is H.264); the probe takes screen grabs around the marker.</summary>
     public static (int ExitCode, string Stderr, MarkerLog Log) Run(
         string engine, CaptureSettings settings, int seconds, string mp4, string? statsPath, string logPrefix, double toneDbfs, List<string> warnings,
         BorderProbe? probe = null, string? codec = null)
@@ -217,10 +209,7 @@ internal static class EngineProcess
     }
 }
 
-/// <summary>
-/// <c>bench drift</c>: a marked capture of <c>--minutes</c>, then the analysis of its file: A/V from the
-/// flashes and bursts, audio-to-audio from the stats file's per-device steering.
-/// </summary>
+/// <c>bench drift</c>: a marked capture, then A/V drift from flashes and bursts and audio-to-audio from the stats.
 internal static class DriftBenchmark
 {
     public const string FileName = "drift.json";
@@ -373,11 +362,7 @@ internal static class DriftBenchmark
             av, audioToAudio, tracks, verdict, warnings);
     }
 
-    /// <summary>
-    /// Each track's sample count against the video's span from its packet timestamps, not its frame count over
-    /// the fps: a slot the pacer skips leaves a gap in the timestamps and no frame. A track's ends are whole AAC
-    /// frames, so the tolerance is one AAC frame (1024 samples) plus one video frame.
-    /// </summary>
+    /// <summary>Checks each track's sample count against the video's span, within one AAC frame plus one video frame.</summary>
     internal static List<TrackCheck> CheckTracks(MediaScan scan, double frameMs)
     {
         const int AacFrameSamples = 1024;

@@ -7,11 +7,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Platform.Audio.Tests;
 
-/// <summary>
-/// Finds the onsets of <see cref="TonePlayer"/>'s 3 kHz bursts in a loopback stream: a 2 ms
-/// quadrature detector at 3 kHz (one cycle is 16 frames at 48 kHz), with an onset where its
-/// envelope first crosses the threshold, re-armed after 200 ms below a lower one. Allocation-free.
-/// </summary>
+/// <summary>Finds the onsets of the tone player's 3 kHz bursts in a loopback stream. Allocation-free.</summary>
 internal sealed class BurstDetector : IAudioPcmSubscriber
 {
     private const int Window = 96;
@@ -84,11 +80,7 @@ internal sealed class CountingSubscriber : IAudioPcmSubscriber
     public void OnPcm(in AudioBlock block) => Interlocked.Add(ref _frames, block.Frames);
 }
 
-/// <summary>
-/// Forwards to <paramref name="inner"/> and records each block's delivery age: QPC now minus the
-/// QPC its last frame stands for, in samples. The smallest age in each window is the stream's lag
-/// behind wall-clock QPC without the scheduling noise of the delivery itself.
-/// </summary>
+/// <summary>Forwards blocks and records each one's delivery age; the smallest age in a window is the stream's true lag.</summary>
 internal sealed class DeliveryAgeTap(IAudioPcmSubscriber inner) : IAudioPcmSubscriber
 {
     private readonly long _qpf = Stopwatch.Frequency;
@@ -119,17 +111,7 @@ internal sealed class DeliveryAgeTap(IAudioPcmSubscriber inner) : IAudioPcmSubsc
     }
 }
 
-/// <summary>
-/// Story 1.12's verify, on the builder's PC: a quiet tone with a 3 kHz burst each second plays into
-/// the BEACN Game output while the hub captures its loopback and the BEACN Mic. Once a second, each
-/// stream's error (where its latest packet's content comes out minus where its stamp puts it, in
-/// samples) is read; the loopback's burst onsets are matched to the player's QPC for each burst.
-/// Independently of the stamps, each stream's lag behind wall-clock QPC is read as the smallest
-/// delivery age of its blocks in each second; that lag holds the capture latency but must not drift. Both errors, their difference,
-/// the spread of each lag and of the out − mic lag, and the spread of the burst offsets must stay within one AAC frame
-/// (1024 samples). 60 s normally, 10 minutes with <c>REPLAYBUFFER_LONG_TESTS=1</c>. The devices are
-/// found by name, or by <c>REPLAYBUFFER_TEST_OUTPUT</c> / <c>REPLAYBUFFER_TEST_INPUT</c>.
-/// </summary>
+/// <summary>On the builder's PC: a tone plays into a real output while the hub captures it; errors stay within one AAC frame.</summary>
 public sealed class DeviceSyncVerifyTests
 {
     private const int AacFrame = 1024;
@@ -170,8 +152,7 @@ public sealed class DeviceSyncVerifyTests
 
             token.ThrowIfCancellationRequested();
 
-            // Independent of the device stamps: each stream's frames against wall-clock QPC, the
-            // smallest delivery age over the last second.
+            // Independent of the device stamps: each stream's frames against wall-clock QPC.
             var outLag = outAge.TakeMinAgeSamples();
             var micLag = micAge.TakeMinAgeSamples();
             if (second > SettleSeconds)

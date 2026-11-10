@@ -1,8 +1,4 @@
-<!--
-    The Main App's shell (EXPERIENCE.md Shell layout): the nav pane with the brand, then the content
-    column with the status header, the page header and the page. The theme's shell dictionary
-    (ShellFluent or ShellGamingDark) supplies the nav and layer styles; every colour is a token.
--->
+<!-- The Main App's shell: the nav pane, then the status header, the page header and the page. Every colour is a token. -->
 <app:ShellWindow x:Class="Encore.App.MainWindow"
                  x:ClassModifier="internal"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

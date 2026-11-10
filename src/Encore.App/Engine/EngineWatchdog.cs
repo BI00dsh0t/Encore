@@ -3,11 +3,7 @@ using Encore.Contracts;
 
 namespace Encore.App.Engine;
 
-/// <summary>
-/// Decides when a connected engine is hung (AD-16): no event for <see cref="Supervision.SilenceLimit"/>
-/// (3 missed heartbeats; any event counts), or a command with no reply for <see cref="Supervision.ReplyLimit"/>.
-/// It only keeps time; the connection acts on <see cref="Check"/>. Thread-safe.
-/// </summary>
+/// <summary>Decides when a connected engine is hung: no event for too long, or a command with no reply. Thread-safe.</summary>
 internal sealed class EngineWatchdog
 {
     private readonly TimeProvider _time;

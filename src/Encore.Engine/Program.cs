@@ -23,7 +23,7 @@ var instance = testInstance is not null ? Instance.ForTest(testInstance) : Insta
 // The rebrand (2026-11-10): an Encore instance's first start copies its old ReplayBuffer data once.
 LegacyData.CopyIfFirstStart(instance);
 
-// AD-16: one engine per instance. Taken before anything else, and held until the process ends.
+// One engine per instance. Taken before anything else, and held until the process ends.
 using var single = parsed.Command is ServeCommand ? SingleInstance.TryAcquire(SingleInstance.Engine, instance.Name) : null;
 if (parsed.Command is ServeCommand && single is null)
 {
@@ -33,8 +33,7 @@ if (parsed.Command is ServeCommand && single is null)
 var logFolder = Path.Combine(instance.LocalDataFolder, "logs");
 Directory.CreateDirectory(logFolder);
 
-// Owned here, not by the factory (which never disposes providers added by instance), and
-// declared first so it is disposed last and drains its queue.
+// Owned here, not by the factory, and declared first so it is disposed last and drains its queue.
 using var logProvider = new TextLoggerProvider(logFolder, "engine");
 using var loggers = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddProvider(logProvider));
 var log = loggers.CreateLogger("Engine");

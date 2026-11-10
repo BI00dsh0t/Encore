@@ -28,13 +28,7 @@ public interface IAudioSampleSink
     void WriteSilence(long frames);
 }
 
-/// <summary>
-/// Turns one device's QPC-stamped packets into a contiguous 48 kHz stereo stream whose
-/// frame 0 is the session anchor (AD-6). A session feeds it the hub's blocks, which are already
-/// contiguous and QPC-locked, so in practice it only cuts the stream at the anchor. Gaps are filled with silence and overlaps trimmed
-/// once they pass <see cref="ToleranceFrames"/>; data before the anchor is dropped.
-/// Not thread-safe: one device thread drives it.
-/// </summary>
+/// <summary>Turns one device's QPC-stamped packets into a contiguous stream whose frame 0 is the session anchor.</summary>
 public sealed class AudioTimeline
 {
     public const int SampleRate = AudioFormat.SampleRate;
@@ -70,7 +64,7 @@ public sealed class AudioTimeline
     /// <summary>Silent frames written by <see cref="GapFills"/>.</summary>
     public long GapFillFrames { get; private set; }
 
-    /// <summary>Packets that overlapped the stream, or began before the anchor, by more than the tolerance and were trimmed.</summary>
+    /// <summary>Packets trimmed because they overlapped the stream, or began before the anchor, by more than the tolerance.</summary>
     public long Trims { get; private set; }
 
     /// <summary>Frames dropped by <see cref="Trims"/>.</summary>
@@ -82,10 +76,7 @@ public sealed class AudioTimeline
     /// <summary>Packets whose stamp was missing, flagged bad or not after the last one, and so extrapolated.</summary>
     public long ResolvedStamps { get; private set; }
 
-    /// <summary>
-    /// Adds one packet. <paramref name="interleaved"/> holds <paramref name="frames"/> × 2
-    /// samples, or is ignored when the packet is <see cref="AudioPacketFlags.Silent"/>.
-    /// </summary>
+    /// <summary>Adds one packet; the samples are ignored when the packet is flagged silent.</summary>
     public void Push(long qpc, int frames, ReadOnlySpan<float> interleaved, AudioPacketFlags flags)
     {
         if (frames <= 0)

@@ -28,10 +28,10 @@ namespace Encore.Engine;
 /// <summary>The engine host's own options; tests turn the heartbeat off and fake the App.</summary>
 internal sealed record EngineHostOptions
 {
-    /// <summary>The <c>engine.heartbeat</c> interval (AD-16), or <c>null</c> for none.</summary>
+    /// <summary>The <c>engine.heartbeat</c> interval, or <c>null</c> for none.</summary>
     public TimeSpan? Heartbeat { get; init; } = Contracts.Supervision.HeartbeatInterval;
 
-    /// <summary>Whether the encoders are probed at startup and <c>capture.videoOptions</c> published; tests that count events turn it off.</summary>
+    /// <summary>Whether the encoders are probed at startup and the result published; tests that count events turn it off.</summary>
     public bool ProbeEncoders { get; init; } = true;
 
     /// <summary>Opens and starts the App; <c>null</c> for <c>Encore.App.exe</c> beside the engine.</summary>
@@ -40,111 +40,55 @@ internal sealed record EngineHostOptions
     /// <summary>The PC's audio endpoints for the device list; <c>null</c> for the engine's <see cref="AudioDeviceHub"/>.</summary>
     public IAudioEndpointSource? AudioEndpoints { get; init; }
 
-    /// <summary>
-    /// Builds the engine's one <see cref="AudioDeviceHub"/>, which the host then owns; <c>null</c> for the
-    /// PC's endpoints. Tests pass a hub over fake clients and endpoints to restart a mixer (story 8.6).
-    /// </summary>
+    /// <summary>Builds the engine's one audio hub; null uses the PC's endpoints. Tests pass a hub over fakes.</summary>
     public Func<ILoggerFactory, AudioDeviceHub>? AudioHub { get; init; }
 
     /// <summary>The hub the Track meters subscribe to; <c>null</c> for the engine's <see cref="AudioDeviceHub"/>.</summary>
     public IAudioDeviceHub? MeterAudio { get; init; }
 
-    /// <summary>
-    /// The foreground window probe of Game Detection; <c>null</c> for the real one. Injecting one turns
-    /// detection on for a test instance, where it is otherwise off unless <see cref="DebugCapture"/> is set.
-    /// </summary>
+    /// <summary>Game Detection's window probe; null is the real one. Injecting one turns detection on for a test instance.</summary>
     public IGameWindowProbe? GameWindows { get; init; }
 
     /// <summary><c>serve --debug-capture</c>: a capture session follows the Target Game.</summary>
     public bool DebugCapture { get; init; }
 
-    /// <summary>
-    /// Whether a Rewind session follows the Target Game and a <c>save</c> press writes a
-    /// Clip (R1, R4); null is on for every instance but a test one. <see cref="DebugCapture"/> wins.
-    /// </summary>
+    /// <summary>Whether Rewind follows the Target Game and a save writes a Clip; null is on except for a test instance.</summary>
     public bool? Rewind { get; init; }
 
-    /// <summary>
-    /// <c>serve --restarted</c>: why the App relaunched this engine, if it did. The engine raises
-    /// <c>engine-restarted</c> before its pipe serves, so the first snapshot carries it (AD-16).
-    /// </summary>
+    /// <summary>Why the App relaunched this engine, if it did; <c>engine-restarted</c> is raised before the pipe serves.</summary>
     public EngineRestartReason? Restarted { get; init; }
 
-    /// <summary>
-    /// Whether the engine seeds a first-run Track Layout from the default devices when settings.json
-    /// has none (R6, story 10.4); null is on for every instance but a test one.
-    /// </summary>
+    /// <summary>Whether a first-run Track Layout is seeded from the default devices; null is on except for a test instance.</summary>
     public bool? SeedTrackLayout { get; init; }
 
     /// <summary>The time between Game Detection polls.</summary>
     public TimeSpan GameScanInterval { get; init; } = TimeSpan.FromSeconds(1);
 
-    /// <summary>
-    /// Where Feedback Sounds play; <c>null</c> for WASAPI on a non-test instance, and a silent
-    /// output on a test one.
-    /// </summary>
+    /// <summary>Where Feedback Sounds play; null is WASAPI, or a silent output on a test instance.</summary>
     public IFeedbackSoundOutput? FeedbackSounds { get; init; }
 
-    /// <summary>The PC's sleep and resume (T-02); <c>null</c> for Windows' suspend and resume notifications.</summary>
+    /// <summary>The PC's sleep and resume; <c>null</c> for Windows' suspend and resume notifications.</summary>
     public IPowerNotifications? Power { get; init; }
 
-    /// <summary>The attached monitors and their changes (T-03); <c>null</c> for Windows' (<c>WM_DISPLAYCHANGE</c>).</summary>
+    /// <summary>The attached monitors and their changes; <c>null</c> for Windows' (<c>WM_DISPLAYCHANGE</c>).</summary>
     public IDisplayMonitors? Displays { get; init; }
 
-    /// <summary>Moves a Library file to the Recycle Bin; <c>null</c> for the Windows Recycle Bin. Tests delete their temp files instead.</summary>
+    /// <summary>Moves a Library file to the Recycle Bin; null is the Windows one. Tests delete their temp files instead.</summary>
     public Func<string, bool>? Recycle { get; init; }
 
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
-/// <summary>
-/// The engine's composition root for <c>serve</c>: claims the instance's pipe, opens the settings
-/// store, and serves its commands and events until <c>engine.shutdown</c>. It publishes the
-/// heartbeat and supervises the App that attaches (AD-16). It composes the SessionOrchestrator
-/// (AD-19), which publishes <c>capture.stateChanged</c> through the hub; a session starts only on the Target Game.
-/// The orchestrator owns mic mute, kept in the instance's <c>runtime.json</c> (AD-5) and loaded
-/// before the pipe serves. It registers the Hotkeys (AD-11) before the pipe accepts connections; the
-/// orchestrator publishes each press as <c>hotkey.pressed</c>, and a <c>micMute</c> press also toggles
-/// mic mute, a <c>save</c> press saves a Clip, and a <c>recordToggle</c> press starts or stops a
-/// Recording beside Rewind, published as <c>recording.started</c> and
-/// <c>recording.stopped</c>. Once the pipe serves, it
-/// probes the video encoders off that path and publishes the result as <c>capture.videoOptions</c>.
-/// It lists the audio devices before the hub exists, so the first snapshot holds them, and then
-/// publishes <c>devices.changed</c> when the endpoints or the Track Layouts change them (R1).
-/// Each audio device dropout the hub reports raises a <c>device-dropout</c> warning (R5).
-/// <c>meters.watch</c> meters a Track Layout on the hub with its own mixer, nothing captured, and
-/// publishes <c>meters.levels</c> until <c>meters.unwatch</c> or the next watch; the orchestrator's
-/// mic mute reaches the meters as it does a session (R6).
-/// Game Detection proposes the Target Game to the orchestrator, which publishes <c>target.changed</c>;
-/// a Rewind session follows the Target, its audio from the snapshot's Track Layout, and a
-/// <c>save</c> press writes a Clip, published as <c>clip.saved</c>, or one too soon after the last
-/// Reset or the session's start is refused as <c>clip.failed</c>. With <c>--debug-capture</c> a
-/// capture session writing one file follows the Target instead.
-/// The FeedbackRouter turns Clips saved and not saved, Recording state changes and a disk full into
-/// <c>warning.raised</c> notices, and dismisses the info ones after 10 s. <c>dev.simulate</c> injects a
-/// stub Recording state, a disk full, a save failure, a saved notice or an engine hang; the installed instance refuses it.
-/// Started with <c>--restarted</c>, it raises <c>engine-restarted</c> before its pipe serves.
-/// Each notice's Feedback Sound, if switched on, plays on a worker on <c>feedbackSoundDevice</c> or
-/// the default communications endpoint; <c>feedback.preview</c> plays one even when it is off. While
-/// a Track of the active Track Layout mixes that endpoint, a <c>feedback-device-captured</c> warning
-/// is active, re-checked on settings, endpoint and target changes.
-/// </summary>
+/// <summary>The engine's composition root for <c>serve</c>: builds every service and serves the pipe. See docs/code-notes.md.</summary>
 internal sealed class EngineHost : IAsyncDisposable
 {
     /// <summary>A command that never replies, registered only for test instances, so a test can hold one pending.</summary>
     internal static readonly CommandType<Empty, Empty> DebugHold = new("debug.hold", EngineJsonContext.Default.Empty, EngineJsonContext.Default.Empty);
 
-    /// <summary>
-    /// Test instances only: stops the heartbeat and never replies, so the engine looks hung to the
-    /// App while its process stays alive.
-    /// </summary>
+    /// <summary>Test instances only: stops the heartbeat and never replies, so the engine looks hung while its process lives.</summary>
     internal static readonly CommandType<Empty, Empty> DebugHang = new("debug.hang", EngineJsonContext.Default.Empty, EngineJsonContext.Default.Empty);
 
-    /// <summary>
-    /// Test instances only: after its reply, ends every connection, the App's included, as a writer-queue
-    /// drop would; with <see cref="DebugDrop.RefuseNew"/> the engine also stops accepting connections,
-    /// so it stays alive but unreachable.
-    /// </summary>
+    /// <summary>Test instances only: ends every connection after its reply; with RefuseNew it also stops accepting new ones.</summary>
     internal static readonly CommandType<DebugDrop, Empty> DebugDropCommand = new("debug.drop", DebugJsonContext.Default.DebugDrop, DebugJsonContext.Default.Empty);
 
     private readonly TaskCompletionSource _shutdown = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -206,19 +150,19 @@ internal sealed class EngineHost : IAsyncDisposable
 
     public HotkeyService Hotkeys { get; }
 
-    /// <summary>The device list (R1), served by <c>devices.list</c> and published as <c>devices.changed</c>.</summary>
+    /// <summary>The device list, served by <c>devices.list</c> and published as <c>devices.changed</c>.</summary>
     public DeviceListPublisher Devices { get; }
 
-    /// <summary>Raises <c>device-dropout</c> for each audio device dropout (R5).</summary>
+    /// <summary>Raises <c>device-dropout</c> for each audio device dropout.</summary>
     public DeviceDropoutReporter Dropouts { get; }
 
-    /// <summary>The Track meters (R6), served by <c>meters.watch</c> and <c>meters.unwatch</c>.</summary>
+    /// <summary>The Track meters, served by <c>meters.watch</c> and <c>meters.unwatch</c>.</summary>
     public TrackMeters Meters { get; }
 
-    /// <summary>The engine's one audio hub (AD-20); disposed last, after every session has ended.</summary>
+    /// <summary>The engine's one audio hub; disposed last, after every session has ended.</summary>
     public AudioDeviceHub Audio { get; }
 
-    /// <summary>The LibraryActor, which a writer tells about each file it writes (R6).</summary>
+    /// <summary>The LibraryActor, which a writer tells about each file it writes.</summary>
     internal ILibraryWrites Library => _library;
 
     public string PipeName => Server.PipeName;
@@ -263,13 +207,13 @@ internal sealed class EngineHost : IAsyncDisposable
             string OutputFolder() =>
                 SettingsResolver.Resolve(load.Store.Current, null).OutputFolder
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), instance.Name);
-            // FR-12: the Recordings the last run left open are trimmed before the Library sees them.
+            // The Recordings the last run left open are trimmed before the Library sees them.
             var runtime = new RuntimeStateStore(instance.LocalDataFolder, loggers.CreateLogger("Runtime"));
             var interrupted = InterruptedRecordings.Recover(runtime.ReadInterrupted(), recordingLog);
 
             var libraryFile = Path.Combine(instance.RoamingDataFolder, "library.json");
 
-            // A top-level folder's Game Profile, for files found on disk (AD-21).
+            // A top-level folder's Game Profile, for files found on disk.
             string? ProfileForFolder(string folder) =>
                 load.Store.Current.Profiles.FirstOrDefault(p => string.Equals(p.Value.Folder, folder, StringComparison.OrdinalIgnoreCase)).Key;
             var libraryLoad = LibraryActor.Load(
@@ -285,13 +229,13 @@ internal sealed class EngineHost : IAsyncDisposable
                 () => load.Store.Current,
                 list => Volatile.Read(ref publishTo)?.Publish(AudioMessages.Changed, list),
                 loggers.CreateLogger("Audio"));
-            // R6: a first run records the default devices; before the snapshot, so it starts seeded.
+            // A first run records the default devices; before the snapshot, so it starts seeded.
             if (hostOptions.SeedTrackLayout ?? !instance.IsTest)
             {
                 TrackLayoutSeed.Apply(load.Store, devices.Current.Devices, loggers.CreateLogger("Settings"));
             }
 
-            // The storage estimate (R2) seeds the initial state likewise.
+            // The storage estimate seeds the initial state likewise.
             estimates = new EstimatePublisher(
                 () => load.Store.Current,
                 new SystemMemoryStatus(),
@@ -306,7 +250,7 @@ internal sealed class EngineHost : IAsyncDisposable
             load.Store.Changed += devices.OnSettingsChanged;
             load.Store.Changed += estimates.OnSettingsChanged;
 
-            // Every commit re-resolves the game session's settings (R7, R8), once the orchestrator exists.
+            // Every commit re-resolves the game session's settings, once the orchestrator exists.
             SessionOrchestrator? settingsTo = null;
             load.Store.Changed += _ => Volatile.Read(ref settingsTo)?.Post(new SettingsUpdated());
 
@@ -532,7 +476,7 @@ internal sealed class EngineHost : IAsyncDisposable
                         Warn: (code, message) =>
                         {
                             recordingLog.LogWarning("{Code}: {Message}", code, message);
-                            // Story 11.3: a skipped or arriving screen is a notice in the Main App, not an Overlay message.
+                            // A skipped or arriving screen is a notice in the Main App, not an Overlay message.
                             var overlay = code is not (ErrorCodes.MonitorMissing or ErrorCodes.MonitorAddedNextRecording);
                             warnings.Raise(code, WarningSeverity.Warning, "recordings", message, overlay);
                         })
@@ -558,13 +502,13 @@ internal sealed class EngineHost : IAsyncDisposable
                     InstallFolder(),
                     game =>
                     {
-                        // The profile exists before anything names it (story 3.4).
+                        // The profile exists before anything names it.
                         GameProfiles.EnsureProfile(
                             load.Store,
                             game.ProfileId,
                             game.Name,
                             gameLog,
-                            // Story 13.1: once per game, as its profile is created not captured.
+                            // Once per game, as its profile is created not captured.
                             name => warnings.Raise(
                                 ErrorCodes.NewGameNotCaptured,
                                 WarningSeverity.Info,
@@ -579,7 +523,7 @@ internal sealed class EngineHost : IAsyncDisposable
                     id => load.Store.Current.Profiles.TryGetValue(id, out var profile) && profile.Ignored);
             }
 
-            // AD-16: only the installed instance falls back to the catalog's default Hotkeys.
+            // Only the installed instance falls back to the catalog's default Hotkeys.
             hotkeys = new HotkeyService(load.Store, hub, sessions, instance.Name == Instance.InstalledName, hotkeyLog);
             var host = new EngineHost(server, load.Store, hub, router, warnings, apps, sessions, hotkeys, devices, dropouts, trackMeters, audio) { _games = games, _library = libraryActor, _feedback = notices, _feedbackCheck = soundCheck, _sounds = player, _marginReporter = marginReporter, _estimates = estimates };
 
@@ -590,8 +534,7 @@ internal sealed class EngineHost : IAsyncDisposable
                 trackMeters.Watch(watch.Layout);
                 return ValueTask.FromResult(Empty.Value);
             });
-            // A watch outlives no client: a crashed or killed App would leave every probed device open.
-            // Queued, so it re-checks: a client that connected and watched since keeps its watch.
+            // A watch outlives no client, or a crashed App would leave devices open; queued, so a newer watch is kept.
             server.LastDisconnected += () =>
             {
                 var generation = trackMeters.Generation;
@@ -629,7 +572,7 @@ internal sealed class EngineHost : IAsyncDisposable
             });
             router.Register(LibraryMessages.SetFavourite, async (favourite, _) =>
             {
-                // Never retried: a stale identity comes back as library-item-changed (AD-3).
+                // Never retried: a stale identity comes back as library-item-changed.
                 await libraryActor.SetFavourite(favourite).ConfigureAwait(false);
                 return Empty.Value;
             });
@@ -721,7 +664,7 @@ internal sealed class EngineHost : IAsyncDisposable
                     overlay: false);
             }
 
-            // AD-16: an interrupted Recording is never resumed, only reported.
+            // An interrupted Recording is never resumed, only reported.
             foreach (var message in interrupted)
             {
                 warnings.Raise(ErrorCodes.RecordingInterrupted, WarningSeverity.Warning, "recordings", message, overlay: true);
@@ -742,7 +685,7 @@ internal sealed class EngineHost : IAsyncDisposable
 
             soundCheck.Check();
 
-            // T-03: the picker follows the monitors. Changes come one at a time, on the source's thread.
+            // The picker follows the monitors. Changes come one at a time, on the source's thread.
             MonitorList? lastMonitors = null;
             host._displaysPublished = displays.Subscribe(() =>
             {
@@ -809,7 +752,7 @@ internal sealed class EngineHost : IAsyncDisposable
         // Ends a running session, finishing its file, and joins the orchestrator thread.
         Sessions.Dispose();
 
-        // After the orchestrator, so every write it ended has been saved. A write still in flight here gets no EndWrite (4.5 deferred) and is found by the next start scan without its profile.
+        // After the orchestrator, so every write it ended is saved; one still in flight is found by the next start scan.
         _library.Dispose();
 
         // No more outcomes reach the router once the orchestrator has stopped.
@@ -831,10 +774,7 @@ internal sealed class EngineHost : IAsyncDisposable
         _stopProbe.Dispose();
     }
 
-    /// <summary>
-    /// Probes the encoders on a pool thread and publishes <c>capture.videoOptions</c> once (R2).
-    /// A failed probe publishes probed options with no codecs; a cancelled one publishes nothing.
-    /// </summary>
+    /// <summary>Probes the encoders on a pool thread and publishes the result once; a failed probe publishes no codecs.</summary>
     private async Task ProbeAsync(VideoEncoderCatalog encoders)
     {
         var token = _stopProbe.Token;
@@ -848,10 +788,7 @@ internal sealed class EngineHost : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// The listed games for Game Detection: Windows' game list and <c>manualGames</c> (canonical, or lowercase when not on disk),
-    /// rebuilt only when either source returns a different instance. Called on the monitor's thread.
-    /// </summary>
+    /// <summary>The listed games for Game Detection, rebuilt only when a source changes. Called on the monitor's thread.</summary>
     private static Func<IReadOnlySet<string>> ListedGames(GameConfigStore windowsList, Func<SettingsDocument> settings)
     {
         IReadOnlySet<string>? fromList = null;
@@ -888,7 +825,7 @@ internal sealed class EngineHost : IAsyncDisposable
         return folder.EndsWith('\\') ? folder : folder + '\\';
     }
 
-    /// <summary>Publishes <c>engine.heartbeat</c> every <paramref name="interval"/> until stopped (AD-16).</summary>
+    /// <summary>Publishes <c>engine.heartbeat</c> every <paramref name="interval"/> until stopped.</summary>
     private async Task HeartbeatAsync(TimeSpan interval, TimeProvider time)
     {
         using var timer = new PeriodicTimer(interval, time);

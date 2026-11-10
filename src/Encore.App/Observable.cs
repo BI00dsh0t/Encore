@@ -26,10 +26,7 @@ internal abstract class Observable : INotifyPropertyChanged
     }
 }
 
-/// <summary>
-/// A command that runs <paramref name="execute"/>, always or while <paramref name="canExecute"/> is
-/// true; <see cref="RaiseCanExecuteChanged"/> tells the bound controls to ask again.
-/// </summary>
+/// <summary>A command that runs an action, always or while canExecute is true.</summary>
 internal sealed class RelayCommand(Action execute, Func<bool>? canExecute = null) : ICommand
 {
     public event EventHandler? CanExecuteChanged;

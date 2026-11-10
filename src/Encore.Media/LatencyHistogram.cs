@@ -1,10 +1,6 @@
 namespace Encore.Media;
 
-/// <summary>
-/// A fixed-size histogram of QPC intervals: equal-width buckets up to a range, plus one
-/// overflow bucket. Recording never allocates. Not thread-safe: one thread records, and
-/// the readout happens once that thread has stopped.
-/// </summary>
+/// <summary>A fixed-size histogram of QPC intervals with one overflow bucket; read it only after the recording thread stops.</summary>
 public sealed class LatencyHistogram
 {
     /// <summary>The capture→encoded default: 0.1 ms buckets to 250 ms.</summary>
@@ -75,10 +71,7 @@ public sealed class LatencyHistogram
         }
     }
 
-    /// <summary>
-    /// The upper edge, in milliseconds, of the bucket holding the <paramref name="percentile"/>
-    /// (0–100) value; the exact maximum when that value is in the overflow; 0 when empty.
-    /// </summary>
+    /// <summary>The upper edge, in ms, of the bucket holding a percentile (0–100); the exact maximum in overflow; 0 when empty.</summary>
     public double Percentile(double percentile)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(percentile, 0);

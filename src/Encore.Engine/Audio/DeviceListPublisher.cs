@@ -5,13 +5,7 @@ using Encore.Core.Audio;
 
 namespace Encore.Engine.Audio;
 
-/// <summary>
-/// Keeps the device list (R1): the present endpoints merged with every Track Layout's devices
-/// (<see cref="AudioDeviceListBuilder"/>). It re-lists when the endpoints change and rebuilds when
-/// the settings do, publishing the list only when it differs from the last one. The first list is
-/// built without publishing, for the initial snapshot. A failed listing is logged and keeps the
-/// previous present endpoints.
-/// </summary>
+/// <summary>Keeps the device list: present endpoints merged with every Track Layout's devices, published when it changes.</summary>
 internal sealed class DeviceListPublisher : IDisposable
 {
     private readonly Lock _lock = new();
@@ -34,8 +28,7 @@ internal sealed class DeviceListPublisher : IDisposable
         _present = [];
         _current = AudioDeviceListBuilder.Build(_present, settings());
 
-        // Subscribe before the first listing: for the hub, subscribing starts the watcher, so a
-        // change after this listing is raised. An early change may publish before anything receives it.
+        // Subscribe before the first listing, so a change after this listing is still raised.
         _source.EndpointsChanged += OnEndpointsChanged;
         var listing = Interlocked.Increment(ref _listings);
         var present = TryList();
@@ -65,10 +58,7 @@ internal sealed class DeviceListPublisher : IDisposable
         }
     }
 
-    /// <summary>
-    /// Runs <paramref name="seed"/> with <see cref="Current"/> under the lock, so no change is
-    /// published between reading the list and what <paramref name="seed"/> sets up to receive the next one.
-    /// </summary>
+    /// <summary>Runs seed with the current list under the lock, so no change is published between the read and the setup.</summary>
     public T Seed<T>(Func<AudioDeviceList, T> seed)
     {
         ArgumentNullException.ThrowIfNull(seed);

@@ -11,8 +11,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Bench;
 
-/// <summary>One Save press of the soak and its Clip.</summary>
-/// <param name="Outcome"><c>saved</c>, <c>failed</c> (<c>clip.failed</c>), <c>no-event</c> (nothing within 30 s) or <c>not-pressed</c> (SendInput refused).</param>
+/// <summary>One Save press of the soak and its Clip; Outcome is saved, failed, no-event or not-pressed.</summary>
 internal sealed record SoakClipRow(int Press, DateTimeOffset At, double ElapsedSeconds, string Outcome, string? Path, SoakClipResult? Check, bool Pass, string? Failure)
 {
     public const string CsvHeader = "press,time,elapsedSeconds,outcome,pass,videoSeconds,audioSeconds,tracks,frames,expectedFrames,path,failure";
@@ -37,10 +36,7 @@ internal sealed record SoakClipRow(int Press, DateTimeOffset At, double ElapsedS
     private static string Csv(string text) => text.IndexOfAny([',', '"', '\n']) >= 0 ? "\"" + text.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"" : text;
 }
 
-/// <summary>
-/// One recovery the soak checked (story 8.2): <c>kill-engine</c>, <c>hang-engine</c> or <c>kill-app</c>,
-/// <paramref name="AtSeconds"/> into the loop, back after <paramref name="Seconds"/> (or the limit, when it wasn't).
-/// </summary>
+/// <summary>One recovery the soak checked: an engine kill, an engine hang or an App kill, and how long it took.</summary>
 internal sealed record SoakRecovery(string Kind, double AtSeconds, double Seconds, bool Pass, string Detail);
 
 /// <summary><c>soak.json</c>.</summary>
@@ -71,19 +67,7 @@ internal sealed record SoakReport(
     int ExtraPresses = 0,
     IReadOnlyList<SoakRecovery>? Recoveries = null);
 
-/// <summary>
-/// <c>bench soak</c> (story 8.1): the real engine (<c>serve --instance … --rewind</c>) and App
-/// (<c>--tray --instance …</c>) as separate processes on a throwaway test instance, with the synthetic GPU
-/// load as the Target Game. The Save Hotkey is injected every <c>--press-seconds</c>; both processes are
-/// sampled every <c>--sample-seconds</c>; every Clip is checked with ffprobe and ffmpeg. Writes
-/// <c>soak-samples.csv</c>, <c>soak-clips.csv</c>, <c>soak.json</c> and <c>soak.md</c>. Holds the
-/// <c>.bench-running</c> lock for the whole run. Exit 0 only when every Clip passes, at least one was made,
-/// and every bound is met. <c>--kill-engine</c>, <c>--kill-app</c> and <c>--hang-engine</c> (story 8.2) each
-/// kill the engine, kill the App or hang the engine once, that many minutes into the loop, and check the
-/// recovery; every recovery must pass too. Sampling follows the new processes, and the bounds use each
-/// process's first pid only. Kills go only to this instance's processes: the engine serving its pipe, the
-/// App its snapshot names, each checked against the expected image.
-/// </summary>
+/// <c>bench soak</c>: the real engine and App with the GPU load as the game, pressing Save on a timer. docs/code-notes.md.
 internal static class SoakRun
 {
     public const string SamplesFile = "soak-samples.csv";
@@ -96,7 +80,7 @@ internal static class SoakRun
     private static readonly TimeSpan ClipTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
 
-    /// <summary>How soon a killed engine, or a killed App, must be back (story 8.2).</summary>
+    /// <summary>How soon a killed engine, or a killed App, must be back.</summary>
     private static readonly TimeSpan KillRecovery = TimeSpan.FromSeconds(10);
 
     /// <summary>How soon a hung engine must be back: up to 6 s of silence before the App kills it, then the relaunch.</summary>
@@ -339,8 +323,7 @@ internal static class SoakRun
                 Console.WriteLine($"  {kind} at {recovery.AtSeconds:0} s: {(pass ? "recovered" : "FAILED")} after {recovery.Seconds:0.#} s; {detail}");
             }
 
-            // --kill-engine and --hang-engine: the App relaunches the engine; a new client must see it buffering
-            // on the load again, with engine-restarted, within the limit.
+            // After an engine kill or hang the App relaunches it; a new client must see it buffering again within the limit.
             void RecoverEngine(string kind)
             {
                 var hang = kind == "hang-engine";
@@ -448,8 +431,7 @@ internal static class SoakRun
                 }
             }
 
-            // --kill-app: a Save press with the App gone must save; the engine relaunches the App, which must
-            // attach, with app-restarted, within the limit.
+            // After an App kill a Save press must still save, and the engine must relaunch the App within the limit.
             void RecoverApp()
             {
                 const string kind = "kill-app";
@@ -557,7 +539,7 @@ internal static class SoakRun
 
         var warmup = TimeSpan.FromMinutes(warmupMinutes);
         var bounds = schedule.Samples > 0
-            // Each process's first pid only: a relaunched one starts its own series (story 8.8 kills late).
+            // Each process's first pid only: a relaunched one starts its own series.
             ? SoakBounds.Evaluate(
                 samples.ToDictionary(
                     p => p.Key,
@@ -587,10 +569,7 @@ internal static class SoakRun
         return pass ? 0 : 1;
     }
 
-    /// <summary>
-    /// <c>.bench-running</c> in the main checkout: the folder above <c>.claude\worktrees\&lt;name&gt;</c> when
-    /// <paramref name="repoRoot"/> is a worktree, else the repo root.
-    /// </summary>
+    /// <summary>The lock file in the main checkout: the folder above the worktrees folder when the repo root is a worktree.</summary>
     internal static string DefaultLock(string repoRoot)
     {
         var dir = new DirectoryInfo(Path.GetFullPath(repoRoot).TrimEnd(Path.DirectorySeparatorChar));
@@ -664,7 +643,7 @@ internal static class SoakRun
         return Process.Start(start) ?? throw new BenchFailure($"Could not start {exe}.");
     }
 
-    /// <summary>Shuts the engine down (the App quits with it), stops whatever is left, deletes the instance's folders; returns what survived.</summary>
+    /// <summary>Shuts the engine down (the App quits with it), stops what is left, deletes the folders; returns what survived.</summary>
     private static List<string> Cleanup(Process? engine, Process? app, EngineClient? client, GpuLoadProcess? load, Instance instance, string ring)
     {
         var leftovers = new List<string>();
@@ -882,10 +861,7 @@ internal static class SoakRun
     }
 }
 
-/// <summary>
-/// The <c>.bench-running</c> lock: created with <see cref="FileMode.CreateNew"/>, so only one soak or heavy run
-/// holds it, and deleted on dispose.
-/// </summary>
+/// <summary>The <c>.bench-running</c> lock: created exclusively, so only one heavy run holds it, and deleted on dispose.</summary>
 internal sealed class BenchLock : IDisposable
 {
     private readonly string _path;

@@ -9,16 +9,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// Audio Tracks (story 10.5, epic 10's EXPERIENCE.md "Audio Tracks"): the Global <c>trackLayout</c>
-/// (R14 to R19), or with a profile id that game's own (R7), edited as one card per Track listing the
-/// sounds it records. The draft is story 10.4's <see cref="AudioTracksDraft"/>, so a device is one record
-/// across Tracks and a device on no Track is dropped at save (AD-24). Save changes sends one
-/// <c>settings.update</c>. While the page is open it meters the draft through <c>meters.watch</c>, with
-/// one probe Track per source and, while the sound picker is open, per listed device
-/// (<see cref="MeterProbes"/>). A profile without its own tracks shows a read-only summary until
-/// "Use the main audio tracks" is unticked. Members run on the UI thread.
-/// </summary>
+/// <summary>Audio Tracks: the Global layout, or one game's, edited as one card per Track, with live meters. UI thread.</summary>
 internal sealed class TrackLayoutPage : SettingsPage
 {
     public const string PageTitle = "Audio Tracks";
@@ -66,11 +57,7 @@ internal sealed class TrackLayoutPage : SettingsPage
 
     public bool IsProfile => ProfileId is not null;
 
-    /// <summary>
-    /// Whether the game has no tracks of its own and so uses the main ones; false on the main page.
-    /// Ticking it removes the game's own value and drops the draft; unticking it sets the game's own
-    /// value to the main tracks as they are, so the Track ids and device keys stay the same (AD-4).
-    /// </summary>
+    /// <summary>Whether the game uses the main tracks; unticking copies them as they are, so Track ids and device keys stay.</summary>
     public bool UsesGlobal
     {
         get => _usesGlobal;
@@ -142,10 +129,7 @@ internal sealed class TrackLayoutPage : SettingsPage
 
     public bool HasSaveProblem => SaveProblem is not null;
 
-    /// <summary>
-    /// Whether the page is on screen: the window shown and this settings page selected in the nav. Opening
-    /// watches the draft; closing sends <c>meters.unwatch</c>, closes the picker and zeroes every level.
-    /// </summary>
+    /// <summary>Whether the page is on screen; opening watches the draft's meters, closing unwatches and zeroes every level.</summary>
     public bool IsOpen
     {
         get => _isOpen;
@@ -222,7 +206,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         }
     }
 
-    /// <summary>The picker's rows, playback first, then microphones and other inputs; the view groups them by <see cref="AudioPickerRow.Section"/>.</summary>
+    /// <summary>The picker's rows, playback first, then microphones and other inputs; the view groups them by section.</summary>
     public ObservableCollection<AudioPickerRow> PickerRows { get; } = [];
 
     /// <summary>The picker's highlighted row, kept across live device updates.</summary>
@@ -247,17 +231,14 @@ internal sealed class TrackLayoutPage : SettingsPage
         MetersMayChange();
     }
 
-    /// <summary>
-    /// Takes the snapshot's meter levels and engine run: sets each Track's and source's level, and
-    /// watches the draft again when the page is open and the engine is a new run or the link was lost.
-    /// </summary>
+    /// <summary>Takes the snapshot's meter levels; watches again when the engine is a new run or the link was lost.</summary>
     public void ShowMeters(MeterLevels levels, string engineInstanceId)
     {
         ArgumentNullException.ThrowIfNull(levels);
         _levels = levels;
         _engineInstanceId = engineInstanceId;
 
-        // The engine stops a watch when its last client leaves (story 10.4), so a reconnect watches again.
+        // The engine stops a watch when its last client leaves, so a reconnect watches again.
         if (_engine.Status != EngineStatus.Connected)
         {
             _watchedInstanceId = null;
@@ -310,10 +291,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         MetersMayChange();
     }
 
-    /// <summary>
-    /// Adds a picker row's device to the picker's Track (a recording device as a microphone), then closes
-    /// the picker unless <paramref name="keepOpen"/> (Ctrl+click).
-    /// </summary>
+    /// <summary>Adds a picker row's device to the picker's Track, then closes the picker unless keepOpen (Ctrl+click).</summary>
     public void Pick(AudioPickerRow row, bool keepOpen = false)
     {
         ArgumentNullException.ThrowIfNull(row);
@@ -439,8 +417,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         }
     }
 
-    // Records' list members compare by reference, so layouts compare as JSON; a device on no Track
-    // doesn't count, since saving drops it.
+    // Layouts compare as JSON, because records' lists compare by reference; a device on no Track doesn't count.
     private static bool Same(TrackLayout a, TrackLayout b) =>
         JsonElement.DeepEquals(Keys.TrackLayout.ToJson(AudioTracksDraft.From(a).ToLayout()), Keys.TrackLayout.ToJson(AudioTracksDraft.From(b).ToLayout()));
 
@@ -449,7 +426,7 @@ internal sealed class TrackLayoutPage : SettingsPage
 
     private void Load(TrackLayout layout)
     {
-        // The picker's Track belongs to the draft being replaced (QA 10.5).
+        // The picker's Track belongs to the draft being replaced.
         ClosePicker();
         _draft = AudioTracksDraft.From(layout);
         SaveProblem = null;
@@ -457,7 +434,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         StructureChanged();
     }
 
-    /// <summary>After any edit that changes the Tracks, their sources or a device record: syncs the cards, then <see cref="DraftChanged"/>.</summary>
+    /// <summary>After any edit that changes the Tracks, their sources or a device record: syncs the cards, then tells the page.</summary>
     private void StructureChanged()
     {
         // Cards are kept by Track id, so a focused card or name box survives a move or an added sound.
@@ -512,7 +489,7 @@ internal sealed class TrackLayoutPage : SettingsPage
 
         foreach (var card in Tracks)
         {
-            // R15: outputs from two or more parent devices may carry the same audio twice. Inputs never count.
+            // Outputs from two or more parent devices may carry the same audio twice. Inputs never count.
             var parents = card.Sources
                 .Where(s => s.Device.Flow == AudioFlow.Output)
                 .Select(s => s.Device.ParentName)
@@ -596,7 +573,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         }
     }
 
-    /// <summary>Each Track's, source's and picker row's level from the last levels; 0 when the page is closed or the levels don't list it.</summary>
+    /// <summary>Each Track's, source's and picker row's level from the last levels; 0 when closed or not listed.</summary>
     private void ShowLevels()
     {
         var levels = IsOpen ? _levels : MeterLevels.Empty;
@@ -642,7 +619,7 @@ internal sealed class TrackLayoutPage : SettingsPage
         OnPropertyChanged(nameof(Summary));
     }
 
-    /// <summary>Rebuilds the picker's rows from the device list, keeping the highlighted row (R14's live updates).</summary>
+    /// <summary>Rebuilds the picker's rows from the device list, keeping the highlighted row.</summary>
     private void RefreshPicker()
     {
         if (PickerTrack is not { } track)
@@ -835,7 +812,7 @@ internal sealed class AudioTrackCard : Observable
     /// <summary>The mute switch shows only when the Track has a microphone.</summary>
     public bool HasMicrophone => Sources.Any(s => s.IsMic);
 
-    /// <summary>The double-count line; empty when there is none. It never blocks Save (R15).</summary>
+    /// <summary>The double-count line; empty when there is none. It never blocks Save.</summary>
     public string Warning
     {
         get => _warning;
@@ -1011,7 +988,7 @@ internal sealed class AudioSourceRow : Observable
         }
     }
 
-    /// <summary>The not-connected note, or empty. It stays on the Track and records silence (R14).</summary>
+    /// <summary>The not-connected note, or empty. It stays on the Track and records silence.</summary>
     public string Note => Available ? "" : "Not connected — records silence until it's back";
 
     public bool HasNote => !Available;

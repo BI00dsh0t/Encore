@@ -1,9 +1,7 @@
 using System.Globalization;
 using Encore.Bench;
 
-// Story 1.14: the FPS, drift, playback and Hotkey benchmarks of R4, R5, NFR-4 and R11, and story 2.9's
-// Named Tracks check of R3 and R7, and story 5.2's Overlay measurement, each into one run folder, merged into report.md and report.json after
-// every measurement.
+// Bench: the FPS, drift, playback, Hotkey, Tracks and Overlay measurements, each into one run folder with a report.
 
 // One number format on every locale, for report.md and every message, on every thread.
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
@@ -29,7 +27,7 @@ catch (BenchUsageException e)
     return 2;
 }
 
-// Like measure-path-a.ps1: the engine must run as it will in use (AD-7), so never elevated.
+// Like measure-path-a.ps1: the engine must run as it will in use, so never elevated.
 if (BenchContext.IsElevated())
 {
     Console.Error.WriteLine("This terminal is elevated. Run Bench unelevated: the engine must run as it will in use (AD-7). Join \"Performance Log Users\" so PresentMon can trace without elevation.");

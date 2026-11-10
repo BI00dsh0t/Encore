@@ -21,7 +21,7 @@ public sealed class LibraryActorTests : IDisposable
 
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
-    /// <summary>A minimal complete MP4: <c>ftyp</c>, an empty <c>moov</c>, and an <c>mdat</c> of <paramref name="payload"/> bytes.</summary>
+    /// <summary>A minimal complete MP4: <c>ftyp</c>, an empty <c>moov</c>, and an <c>mdat</c> of the given payload size.</summary>
     internal static byte[] Mp4(int payload = 16)
     {
         var bytes = new byte[16 + 8 + 8 + payload];
@@ -263,7 +263,7 @@ public sealed class LibraryActorTests : IDisposable
     [Fact]
     public void KindsAreKeptThroughTheIndexAndARestartAndAScannedFileHasNoneOutsideMonitorRecordings()
     {
-        // Story 10.6 (AD-22): the writer says what it writes; the scan can't tell, except in Monitor Recordings.
+        // The writer says what it writes; the scan can't tell, except in Monitor Recordings.
         var clip = Path.Combine(Output, "Game", "clip.mp4");
         var recording = Path.Combine(Output, "Game", "match.mp4");
         Directory.CreateDirectory(Path.Combine(Output, "Monitor Recordings"));
@@ -312,7 +312,7 @@ public sealed class LibraryActorTests : IDisposable
     [Fact]
     public async Task ASaveBlockedByAReaderIsRetriedSoAFavouriteReachesTheDisk()
     {
-        // Story 8.6: library.json held open without delete sharing (a backup, a scanner) fails File.Replace.
+        // Library.json held open without delete sharing (a backup, a scanner) fails File.Replace.
         File.WriteAllBytes(Path.Combine(Output, "Game", "clip.mp4"), Mp4());
         var item = Assert.Single(LibraryActor.Load(Output, LibraryFile, _ => null, _ => { }).Items);
         using var library = new Harness(this, [item]);

@@ -20,13 +20,7 @@ internal sealed record SoakClipResult(
     bool Pass,
     IReadOnlyList<string> Failures);
 
-/// <summary>
-/// <c>bench soak</c>'s check of each Clip. Every expected Track is present by name, in order; the video is
-/// [window − one GOP (1 s) − one frame, window + one frame] long, since a Clip starts at the first keyframe
-/// inside the window (AD-8); each audio Track is within one frame of the video, or one AAC packet
-/// (<see cref="AudioPacketSeconds"/>) when that is longer, as the audio ends on a whole packet; and the whole file decodes
-/// (<c>ffmpeg -v error -i clip -map 0 -f null -</c> exits 0 with nothing on stderr).
-/// </summary>
+/// <c>bench soak</c>'s check of each Clip: its Tracks by name, its length, and that the whole file decodes.
 internal static class SoakClipCheck
 {
     public const double GopSeconds = 1;

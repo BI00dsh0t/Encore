@@ -3,25 +3,13 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Core.Library;
 
-/// <summary>What a Cleanup pass would delete now, oldest first.</summary>
-/// <param name="Items">The items to delete, in order.</param>
-/// <param name="Bytes">Their total size in bytes.</param>
-/// <param name="Remaining">The Library's total size once they are deleted.</param>
-/// <param name="Unreachable">Whether a size limit is set and the Library stays over it with nothing left to delete: only Favourites and files being written are left over it.</param>
+/// <summary>What a Cleanup pass would delete now, oldest first; Unreachable means the size limit can't be met.</summary>
 internal sealed record CleanupPlan(IReadOnlyList<LibraryItem> Items, long Bytes, long Remaining, bool Unreachable);
 
-/// <summary>Cleanup's choice of what to delete (R7, story 7.8): one function, so a preview and a pass agree.</summary>
+/// <summary>Cleanup's choice of what to delete: one function, so a preview and a pass agree.</summary>
 internal static class CleanupPlanner
 {
-    /// <summary>
-    /// The oldest items to delete so the Library is within <paramref name="limits"/> at <paramref name="now"/>.
-    /// The total counts every item, Favourites and files being written included. A candidate isn't being
-    /// written, isn't a Favourite, isn't in <paramref name="skip"/>, and is an <c>.mp4</c> under
-    /// <paramref name="folder"/>. Candidates are taken by date, then path, while the total is over the size
-    /// limit or the candidate is older than the age limit; the first that is neither ends the plan. A
-    /// candidate reached is passed over when <paramref name="inside"/> says its file may really be outside
-    /// the folder (a junction or link).
-    /// </summary>
+    /// <summary>The oldest items to delete so the Library is within its limits. Rules: docs/code-notes.md.</summary>
     public static CleanupPlan Plan(DateTimeOffset now, CleanupSettings limits, IEnumerable<LibraryItem> items, string folder, IReadOnlySet<string> skip, Func<string, bool> inside)
     {
         ArgumentNullException.ThrowIfNull(inside);

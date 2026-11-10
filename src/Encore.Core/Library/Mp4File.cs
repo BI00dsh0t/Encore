@@ -2,15 +2,7 @@ using System.Buffers.Binary;
 
 namespace Encore.Core.Library;
 
-/// <summary>
-/// The one MP4 box walk (R2, FR-12). The Library's partial-file check: a file is a complete MP4
-/// when its top-level boxes start with <c>ftyp</c>, include a <c>moov</c>, and end exactly at the
-/// file's length, so a copy that stopped, or a write cut off mid-box, fails the walk. And where a
-/// fragmented Recording's last whole fragment ends, so one a dead engine left open can be trimmed
-/// back to it. And the in-place <c>mehd</c> patch that gives a finalized one its length (R5, AD-27).
-/// A box is a 32-bit big-endian size and a four-letter type; a size of 1 means a 64-bit
-/// size follows, and 0 means the box runs to the end of the file.
-/// </summary>
+/// <summary>The one MP4 box walk: is a file complete, where a Recording's last whole fragment ends, and the length patch.</summary>
 public static class Mp4File
 {
     private const uint Ftyp = ('f' << 24) | ('t' << 16) | ('y' << 8) | 'p';
@@ -26,8 +18,7 @@ public static class Mp4File
     // A version-1 mehd: header, version and flags, a 64-bit fragment duration.
     private const int MehdSize = 20;
 
-    /// <summary>Whether <paramref name="path"/> is a complete MP4.</summary>
-    /// <exception cref="IOException">The file can't be read now, e.g. it is locked; retry later.</exception>
+    /// <summary>Whether the file is a complete MP4; throws IOException when it can't be read now, so retry later.</summary>
     public static bool IsComplete(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -51,18 +42,10 @@ public static class Mp4File
         return boxes > 0 && moov;
     }
 
-    /// <summary>
-    /// The end of the last whole box from the start of <paramref name="stream"/>, not counting a
-    /// <c>moof</c> whose <c>mdat</c> isn't whole after it; 0 when it has no <c>ftyp</c> first and a
-    /// <c>moov</c>.
-    /// </summary>
+    /// <summary>The end of the last whole box, not counting a <c>moof</c> whose <c>mdat</c> isn't whole; 0 when it isn't an MP4.</summary>
     public static long PlayableLength(Stream stream) => Walk(stream).Length;
 
-    /// <summary>
-    /// Truncates the file to <see cref="PlayableLength"/>, flushed to the disk, and returns how many
-    /// whole fragments (<c>moof</c> + <c>mdat</c>) it kept.
-    /// </summary>
-    /// <exception cref="IOException">The file can't be opened, read or truncated.</exception>
+    /// <summary>Truncates the file to its playable length, flushed to disk; returns the whole fragments kept.</summary>
     public static int TrimToLastFragment(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
@@ -126,19 +109,7 @@ public static class Mp4File
         return ftyp && moov ? (end, fragments) : (0, 0);
     }
 
-    /// <summary>
-    /// The patch that gives a finalized fragmented Recording its length (R5, AD-27): Media
-    /// Foundation otherwise stops at the last <c>tfra</c> entry. <paramref name="header"/> is the
-    /// file's first bytes, its <c>ftyp</c> and <c>moov</c>; the patch turns the first 20 bytes of the
-    /// <c>udta</c> right after <c>mvex</c> into a version-1 <c>mehd</c> of
-    /// <paramref name="durationUs"/> in the <c>mvhd</c> timescale, rounded up, and the rest of it into
-    /// a <c>free</c> box, then grows <c>mvex</c> by 20 to take the <c>mehd</c> in as its last child.
-    /// No byte after the <c>moov</c> moves. Null unless the layout is exactly that: a <c>moov</c>
-    /// with an <c>mvhd</c>, and an <c>mvex</c> with no <c>mehd</c> directly followed by a
-    /// <c>udta</c> of 20 bytes or at least 28, both with 32-bit sizes.
-    /// </summary>
-    /// <param name="header">The file's bytes from offset 0 through at least its <c>moov</c>.</param>
-    /// <param name="durationUs">The Recording's length in µs; positive.</param>
+    /// <summary>Plans the patch that gives a finished fragmented Recording its length; null unless the layout is as expected.</summary>
     public static FragmentDurationPatch? PlanFragmentDuration(ReadOnlySpan<byte> header, long durationUs)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(durationUs);
@@ -226,7 +197,7 @@ public static class Mp4File
         return new FragmentDurationPatch(udta.Start, mehdAndFree, x.Start, mvexSize, duration, timescale);
     }
 
-    /// <summary>The first box of <paramref name="type"/> among those that tile [<paramref name="start"/>, <paramref name="end"/>), or null.</summary>
+    /// <summary>The first box of a type among those that tile the given byte range, or null.</summary>
     private static (uint Type, int Start, int HeaderSize, int End)? FindChild(ReadOnlySpan<byte> span, int start, int end, uint type)
     {
         var position = start;
@@ -243,7 +214,7 @@ public static class Mp4File
         return null;
     }
 
-    /// <summary>The whole box at <paramref name="position"/> of <paramref name="span"/>, or null when it runs past <paramref name="end"/>.</summary>
+    /// <summary>The whole box at a position of the span, or null when it runs past the end.</summary>
     private static (uint Type, int Start, int HeaderSize, int End)? Box(ReadOnlySpan<byte> span, int position, int end)
     {
         if (end - position < 8)
@@ -314,15 +285,5 @@ public static class Mp4File
     }
 }
 
-/// <summary>
-/// <see cref="Mp4File.PlanFragmentDuration"/>'s two writes, to be made in order, each flushed to the
-/// disk before the next: the <c>mehd</c> and the <c>free</c> header over the <c>udta</c>'s start,
-/// then <c>mvex</c>'s new size. The file is a valid box tree before, between and after them.
-/// </summary>
-/// <param name="MehdOffset">The file offset of the first write: the <c>udta</c>'s start.</param>
-/// <param name="MehdAndFree">The <c>mehd</c> (20 bytes), then the <c>free</c> box's header unless the <c>udta</c> was exactly 20 bytes.</param>
-/// <param name="MvexOffset">The file offset of the second write: <c>mvex</c>'s size field.</param>
-/// <param name="MvexSize">The <c>mvex</c>'s new 32-bit big-endian size, 20 more than before.</param>
-/// <param name="Duration">The <c>mehd</c>'s fragment duration, in <paramref name="Timescale"/> units.</param>
-/// <param name="Timescale">The <c>mvhd</c> timescale.</param>
+/// <summary>The patch's two writes, made in order and each flushed; the file is a valid box tree between them.</summary>
 public sealed record FragmentDurationPatch(long MehdOffset, byte[] MehdAndFree, long MvexOffset, byte[] MvexSize, ulong Duration, uint Timescale);

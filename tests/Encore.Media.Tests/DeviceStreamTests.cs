@@ -27,10 +27,7 @@ internal sealed class BlockSink(long qpcFrequency) : IAudioPcmSubscriber
     }
 }
 
-/// <summary>
-/// A device with its own clock: frame n is captured at <c>t0 + n / 48 000 × (1 + ppm × 10⁻⁶)</c>
-/// seconds of QPC, delivered in 10 ms packets whose stamps carry uniform jitter.
-/// </summary>
+/// <summary>A device with its own clock, drifting by a set ppm, delivered in 10 ms packets whose stamps carry jitter.</summary>
 internal sealed class SyntheticDevice
 {
     public const long Qpf = 10_000_000;
@@ -64,10 +61,7 @@ internal sealed class SyntheticDevice
 
     public long TrueQpc(long frame) => T0 + (long)Math.Round(frame / 48_000.0 * (1 + (_ppm * 1e-6)) * Qpf);
 
-    /// <summary>
-    /// Delivers the next packet and returns the true placement error of its first frame, in samples:
-    /// where it comes out, on the stream's QPC grid, minus when it was captured.
-    /// </summary>
+    /// <summary>Delivers the next packet and returns the true placement error of its first frame, in samples.</summary>
     public double Next(AudioPacketFlags flags = AudioPacketFlags.None, long? stamp = null, int frames = PacketFrames)
     {
         var trueQpc = TrueQpc(Frame);

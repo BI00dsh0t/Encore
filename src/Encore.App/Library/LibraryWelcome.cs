@@ -12,11 +12,7 @@ internal enum WelcomeLink
     Storage,
 }
 
-/// <summary>
-/// The empty Library's welcome card (story 10.6, EXPERIENCE.md "Welcome and the empty Library"): what to
-/// press and how much it saves, the audio being recorded, where Clips go, and how to get a Recording,
-/// all from the live settings, each linking to its page. It shows only on an empty, unfiltered Library.
-/// </summary>
+/// <summary>The empty Library's welcome card: what to press, what is recorded and where Clips go, from the live settings.</summary>
 internal sealed class LibraryWelcome : Observable
 {
     private string _saveKey = "the Save Clip key";

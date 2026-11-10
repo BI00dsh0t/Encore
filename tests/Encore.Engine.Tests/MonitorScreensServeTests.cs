@@ -7,10 +7,7 @@ using Encore.Core.Settings;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Story 11.2 over a real pipe of a throwaway test instance: the <c>monitorRecordingScreens</c> key and
-/// <c>monitors.list</c>'s new fields on this PC's real displays, which it only reads.
-/// </summary>
+/// <summary>The screens key and <c>monitors.list</c>'s fields over a real pipe, on this PC's displays, which it only reads.</summary>
 public sealed class MonitorScreensServeTests : IAsyncLifetime
 {
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "rb-screens-" + Guid.NewGuid().ToString("N"));

@@ -4,18 +4,7 @@ using Encore.Contracts.Ipc;
 
 namespace Encore.Contracts.Messages;
 
-/// <summary>
-/// One file in the Library: a Clip or a Recording in the Output Folder.
-/// </summary>
-/// <param name="Path">The file's path relative to the Output Folder; the item's key (compared ordinal ignore-case).</param>
-/// <param name="ProfileId">The Game Profile it was saved for, or <c>null</c> when unknown (a file the start scan found).</param>
-/// <param name="Size">The file's size in bytes; 0 while it is being written.</param>
-/// <param name="Date">When it was saved: the write's start, or the file's creation time for a scanned file.</param>
-/// <param name="BeingWritten">Whether a writer is still writing it; such an item is shown locked and never persisted.</param>
-/// <param name="LengthSeconds">Its length in seconds, read by FFmpeg's demuxer (story 7.3); <c>null</c> until read, or when it can't be read.</param>
-/// <param name="Favourite">Whether it is a Favourite (story 7.4), set by <c>library.setFavourite</c>.</param>
-/// <param name="Modified">The file's last write time (UTC) at <see cref="Size"/>; with the path and size it is the item's identity (AD-3). <c>null</c> while being written.</param>
-/// <param name="Kind">A <see cref="LibraryItemKinds"/> value, or <c>null</c> when unknown (story 10.6; optional, AD-22).</param>
+/// <summary>One file in the Library: a Clip or a Recording in the Output Folder. Fields: docs/code-notes.md.</summary>
 public sealed record LibraryItem(
     string Path,
     string? ProfileId,
@@ -27,10 +16,7 @@ public sealed record LibraryItem(
     DateTimeOffset? Modified = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kind = null);
 
-/// <summary>
-/// The <see cref="LibraryItem.Kind"/> values (story 10.6, AD-22): set by the engine when a writer begins.
-/// A file the folder scan finds has none, except one in the Monitor Recordings folder.
-/// </summary>
+/// <summary>The <see cref="LibraryItem.Kind"/> values, set by the engine when a writer begins; a scanned file has none.</summary>
 public static class LibraryItemKinds
 {
     public const string Clip = "clip";
@@ -38,78 +24,41 @@ public static class LibraryItemKinds
     public const string MonitorRecording = "monitorRecording";
 }
 
-/// <summary>
-/// <c>library.setFavourite</c>'s arguments: the item's identity as the App saw it (AD-3) and the
-/// wanted flag. Refused with <c>library-item-changed</c> when the identity no longer matches.
-/// </summary>
-/// <param name="Path">The item's path relative to the Output Folder.</param>
-/// <param name="Size">The item's <see cref="LibraryItem.Size"/>.</param>
-/// <param name="Modified">The item's <see cref="LibraryItem.Modified"/>.</param>
-/// <param name="Favourite">Whether it should be a Favourite.</param>
+/// <c>library.setFavourite</c>'s arguments: the item's identity as the App saw it, and the wanted flag.
 public sealed record LibrarySetFavourite(string Path, long Size, DateTimeOffset? Modified, bool Favourite);
 
-/// <summary>
-/// <c>library.rename</c>'s arguments (story 7.7): the item's identity as the App saw it (AD-3) and its
-/// new base name. The engine appends <c>.mp4</c> and keeps the folder.
-/// </summary>
-/// <param name="Path">The item's path relative to the Output Folder.</param>
-/// <param name="Size">The item's <see cref="LibraryItem.Size"/>.</param>
-/// <param name="Modified">The item's <see cref="LibraryItem.Modified"/>.</param>
-/// <param name="NewName">The new file name without its folder or the <c>.mp4</c> extension.</param>
+/// <c>library.rename</c>'s arguments: the item's identity and a new base name, without folder or extension.
 public sealed record LibraryRename(string Path, long Size, DateTimeOffset? Modified, string NewName);
 
-/// <summary>
-/// <c>library.delete</c>'s arguments (story 7.7): the item's identity as the App saw it (AD-3). The file
-/// is moved to the Recycle Bin, never deleted permanently.
-/// </summary>
-/// <param name="Path">The item's path relative to the Output Folder.</param>
-/// <param name="Size">The item's <see cref="LibraryItem.Size"/>.</param>
-/// <param name="Modified">The item's <see cref="LibraryItem.Modified"/>.</param>
+/// <c>library.delete</c>'s arguments: the item's identity; the file goes to the Recycle Bin, never deleted for good.
 public sealed record LibraryDelete(string Path, long Size, DateTimeOffset? Modified);
 
-/// <summary><c>library.itemRemoved</c>: the item at <see cref="Path"/> (relative to the Output Folder) left the Library.</summary>
-/// <param name="Path">The item's path relative to the Output Folder.</param>
-/// <param name="Reason">Why it left, when the engine removed it itself: one of <see cref="LibraryRemovalReasons"/>; <c>null</c> otherwise.</param>
+/// <c>library.itemRemoved</c>: the item at this relative path left the Library; Reason is set when the engine removed it.
 public sealed record LibraryItemRemoved(string Path, string? Reason = null);
 
 /// <summary>The <see cref="LibraryItemRemoved.Reason"/> values.</summary>
 public static class LibraryRemovalReasons
 {
-    /// <summary>Cleanup (story 7.8) deleted the file permanently to keep the Output Folder within its limits.</summary>
+    /// <summary>Cleanup deleted the file permanently to keep the Output Folder within its limits.</summary>
     public const string Cleanup = "cleanup";
 }
 
-/// <summary>
-/// <c>cleanup.preview</c>'s arguments (story 7.8): the limits to plan with, each null when off, like the
-/// <c>cleanup</c> setting. Nothing is deleted.
-/// </summary>
-/// <param name="MaxBytes">The Output Folder's size limit in bytes, or <c>null</c>.</param>
-/// <param name="MaxAgeSeconds">The age limit in seconds, or <c>null</c>.</param>
+/// <c>cleanup.preview</c>'s arguments: the limits to plan with, each null when off; nothing is deleted.
 public sealed record LibraryCleanupPreview(long? MaxBytes, long? MaxAgeSeconds);
 
-/// <summary><c>cleanup.preview</c>'s result: what a Cleanup pass with those limits would delete now, oldest first.</summary>
-/// <param name="Count">How many files it would delete.</param>
-/// <param name="Bytes">Their total size in bytes.</param>
-/// <param name="Paths">Their paths relative to the Output Folder, in the order they would be deleted.</param>
+/// <c>cleanup.preview</c>'s result: what a Cleanup pass with those limits would delete now, oldest first.
 public sealed record LibraryCleanupPlan(int Count, long Bytes, IReadOnlyList<string> Paths);
 
 /// <summary><c>library.reset</c>: the Library is now exactly <see cref="Items"/>, e.g. after the Output Folder changed.</summary>
 public sealed record LibraryReset(IReadOnlyList<LibraryItem> Items);
 
-/// <summary><c>library.folderChanged</c>: the Library now indexes <see cref="Folder"/>, the absolute Output Folder its paths are relative to.</summary>
+/// <c>library.folderChanged</c>: the Library now indexes this absolute Output Folder.
 public sealed record LibraryFolderChanged(string Folder);
 
-/// <summary>
-/// <c>library.cleanupBlockedChanged</c>: whether Cleanup is held off because the index was rebuilt
-/// from the Output Folder (a corrupt <c>library.json</c>) and that hasn't been acknowledged yet.
-/// </summary>
+/// <c>library.cleanupBlockedChanged</c>: whether Cleanup is held off after the index was rebuilt from the folder.
 public sealed record LibraryCleanupBlocked(bool Blocked);
 
-/// <summary>
-/// Library messages (epic-library-cleanup): the Library index and Cleanup.
-/// The area's payloads, its own JSON context and its entries in these lists are added here only (AD-22).
-/// The LibraryActor is the only producer of the events (AD-17).
-/// </summary>
+/// <summary>Library messages: the Library index and Cleanup; the LibraryActor is the only producer of the events.</summary>
 public static class LibraryMessages
 {
     /// <summary>An item joined the Library; it replaces any item with the same path.</summary>
@@ -147,35 +96,26 @@ public static class LibraryMessages
         "cleanupBlocked",
         (snapshot, blocked) => snapshot with { CleanupBlocked = blocked.Blocked });
 
-    /// <summary>The Output Folder the Library indexes changed; published just before the <c>library.reset</c> that rebuilds it.</summary>
+    /// <summary>The Output Folder changed; published just before the <c>library.reset</c> that rebuilds the Library.</summary>
     public static EventType<LibraryFolderChanged> FolderChanged { get; } = new(
         "library.folderChanged",
         LibraryJsonContext.Default.LibraryFolderChanged,
         "libraryFolder",
         (snapshot, changed) => snapshot with { LibraryFolder = changed.Folder });
 
-    /// <summary>Sets or clears an item's Favourite; it is published as <c>library.itemChanged</c>, never applied by the App first.</summary>
+    /// <summary>Sets or clears an item's Favourite; the change comes back as <c>library.itemChanged</c>.</summary>
     public static CommandType<LibrarySetFavourite, Empty> SetFavourite { get; } =
         new("library.setFavourite", LibraryJsonContext.Default.LibrarySetFavourite, LibraryJsonContext.Default.Empty);
 
-    /// <summary>
-    /// Renames an item's file in its folder; it is published as <c>library.itemRemoved</c> and
-    /// <c>library.itemAdded</c>, keeping the item's metadata. Refused while the item is being written.
-    /// </summary>
+    /// <summary>Renames an item's file in its folder, keeping its metadata; refused while the item is being written.</summary>
     public static CommandType<LibraryRename, Empty> Rename { get; } =
         new("library.rename", LibraryJsonContext.Default.LibraryRename, LibraryJsonContext.Default.Empty);
 
-    /// <summary>
-    /// Moves an item's file to the Recycle Bin; it is published as <c>library.itemRemoved</c>. Refused
-    /// while the item is being written, or when its volume has no Recycle Bin.
-    /// </summary>
+    /// <summary>Moves an item's file to the Recycle Bin; refused while it is being written or when there is no Recycle Bin.</summary>
     public static CommandType<LibraryDelete, Empty> Delete { get; } =
         new("library.delete", LibraryJsonContext.Default.LibraryDelete, LibraryJsonContext.Default.Empty);
 
-    /// <summary>
-    /// What Cleanup would delete now with the given limits (story 7.8), ignoring whether it may run yet;
-    /// nothing is deleted.
-    /// </summary>
+    /// <summary>What Cleanup would delete now with the given limits, ignoring whether it may run yet; nothing is deleted.</summary>
     public static CommandType<LibraryCleanupPreview, LibraryCleanupPlan> CleanupPreview { get; } =
         new("cleanup.preview", LibraryJsonContext.Default.LibraryCleanupPreview, LibraryJsonContext.Default.LibraryCleanupPlan);
 

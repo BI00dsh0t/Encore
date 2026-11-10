@@ -9,38 +9,10 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Core.Library;
 
-/// <summary>What <see cref="LibraryActor.Load"/> found at start.</summary>
-/// <param name="Items">The Library's items.</param>
-/// <param name="Corrupt">Whether <c>library.json</c> and its <c>.bak</c> were both unreadable, so the items come from the scan alone, or an earlier rebuild is still unacknowledged; Cleanup stays blocked either way.</param>
+/// <summary>What the load found at start; Corrupt means the index was rebuilt and Cleanup stays blocked.</summary>
 public sealed record LibraryLoad(IReadOnlyList<LibraryItem> Items, bool Corrupt);
 
-/// <summary>
-/// The single-threaded Library index (AD-17): every index change, every disk check and every
-/// <c>library.json</c> write runs on its own thread, reading a single-reader channel; the public
-/// members, the timers and the <see cref="FileSystemWatcher"/> over the Output Folder only post. An
-/// item's key is its path relative to the Output Folder (ordinal ignore-case). A write's lifecycle
-/// publishes <c>library.itemAdded</c> (locked) at its start, then <c>library.itemChanged</c> with its
-/// size, or <c>library.itemRemoved</c> when it failed. Changes made outside the app are reconciled
-/// against disk (R2), so only what differs from the index is published. Items being written are never
-/// persisted. Each item's length (story 7.3) is read by a low-priority worker beside the actor, which
-/// only reads the file and posts the result back; the actor applies it, publishes it as
-/// <c>library.itemChanged</c> and caches it in <c>library.json</c> by size and modified time. The App's
-/// rename and delete (story 7.7) run here too, by the item's identity (AD-3): never on a file being
-/// written, and each path they touch is registered first, so the watcher's echo isn't an outside change.
-/// The App's delete only ever moves the file to the Recycle Bin, through the injected port. The App's
-/// <c>library.setFavourite</c> (story 7.4) runs here too, by the same identity.
-/// <para>
-/// Cleanup (story 7.8, R7) runs here too, and is the only permanent delete: a pass starts on a written
-/// Clip or Recording, a change of the <c>cleanup</c> limits, the end of a rescan, an acknowledged
-/// rebuild, 60 s after start and every 10 minutes, but only once 60 s have passed since start and while
-/// no rescan is pending and Cleanup isn't blocked. It logs the <see cref="CleanupPlanner"/>'s plan, then
-/// deletes one item per message, planning again and re-checking the item against the index and the
-/// disk right before each delete, so a command queued meanwhile (a Favourite) is honoured. A file that
-/// can't be deleted is skipped for the rest of the pass. Never a Favourite, a file being written, a
-/// path outside the Output Folder or a file that isn't an <c>.mp4</c>. <c>cleanup.preview</c> runs the
-/// same planner over the index without deleting anything.
-/// </para>
-/// </summary>
+/// <summary>The single-threaded Library index: every change, disk check and save runs on its own thread. docs/code-notes.md.</summary>
 public sealed class LibraryActor : ILibraryWrites, IDisposable
 {
     /// <summary>What a Clip is written to before its rename (the writer's <c>ClipWriter.PartExtension</c>).</summary>
@@ -57,7 +29,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     // How long watcher events gather before their paths are reconciled, and the retry of a busy file.
     private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(250);
 
-    /// <summary>How soon a failed save of the index is tried again (story 8.6).</summary>
+    /// <summary>How soon a failed save of the index is tried again.</summary>
     internal static readonly TimeSpan SaveRetryDelay = TimeSpan.FromSeconds(1);
 
     // An incomplete file written this recently may still be growing, so it is checked again.
@@ -88,7 +60,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         RecurseSubdirectories = true,
         IgnoreInaccessible = true,
         MatchType = MatchType.Simple,
-        // Hidden and system files are listed; a junction or symbolic link is neither followed nor listed (story 7.8).
+        // Hidden and system files are listed; a junction or symbolic link is neither followed nor listed.
         AttributesToSkip = FileAttributes.ReparsePoint,
     };
 
@@ -124,7 +96,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     // Actor thread only.
     private readonly Dictionary<string, LibraryItem> _items = new(StringComparer.OrdinalIgnoreCase);
 
-    // Actor thread only: each write under way, by absolute path (AD-9), to its item's key.
+    // Actor thread only: each write under way, by absolute path, to its item's key.
     private readonly Dictionary<string, string> _beingWritten = new(StringComparer.OrdinalIgnoreCase);
 
     // Actor thread only: the paths of the actor's own file operations, by absolute path, to their expiry.
@@ -168,26 +140,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private volatile bool _watching = true;
     private int _disposed;
 
-    /// <param name="items">The items <see cref="Load"/> found; already in the first snapshot, so not published.</param>
-    /// <param name="outputFolder">The current Output Folder, re-read by <see cref="OutputFolderChanged"/>.</param>
-    /// <param name="libraryFile">The <c>library.json</c> path.</param>
-    /// <param name="profileForFolder">The Game Profile whose folder is a top-level folder's name, or null; for files found on disk.</param>
-    /// <param name="cleanupBlocked">Whether the load was corrupt, so Cleanup stays off until <see cref="AcknowledgeCorrupt"/>.</param>
-    /// <param name="added">Publishes <c>library.itemAdded</c>.</param>
-    /// <param name="changed">Publishes <c>library.itemChanged</c>.</param>
-    /// <param name="removed">Publishes <c>library.itemRemoved</c>.</param>
-    /// <param name="reset">Publishes <c>library.reset</c>.</param>
-    /// <param name="cleanupBlockedChanged">Publishes <c>library.cleanupBlockedChanged</c>.</param>
-    /// <param name="time">The clock a write's date is read from, and the settle timers' source.</param>
-    /// <param name="failed">Reports a disk operation that failed; the index is unaffected.</param>
-    /// <param name="createMissingFolder">Whether a missing Output Folder is created so it can be watched.</param>
-    /// <param name="readLength">Reads a file's length in seconds by its absolute path, or null when it can't; called on a low-priority worker. Without it no length is read.</param>
-    /// <param name="folderChanged">Publishes <c>library.folderChanged</c>, just before the <c>library.reset</c> of a new Output Folder.</param>
-    /// <param name="recycle">Moves a file to the Recycle Bin by its absolute path, on the actor thread: false when its volume has none, an <see cref="IOException"/> carrying the HRESULT when it fails. Without it every delete is refused with <see cref="ErrorCodes.RecycleBinUnavailable"/>.</param>
-    /// <param name="cleanup">The current <c>cleanup</c> limits, read on the actor thread; without it Cleanup is off.</param>
-    /// <param name="limitUnreachable">Raises <see cref="ErrorCodes.CleanupLimitUnreachable"/> with its message; once until a pass ends within the limit or Cleanup is off.</param>
-    /// <param name="log">Logs Cleanup's plans and deletes, on the actor thread.</param>
-    /// <param name="finalPath">A path's final target, every junction and link followed; throws when it can't be read. A delete, rename or Cleanup is refused unless the item's final path is under the Output Folder's. Without it only the path's own folders are checked for reparse points.</param>
+    /// <summary>The publish callbacks run on the actor thread; each optional port is explained in docs/code-notes.md.</summary>
     public LibraryActor(
         IReadOnlyList<LibraryItem> items,
         Func<string> outputFolder,
@@ -247,10 +200,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _thread.Start();
     }
 
-    /// <summary>
-    /// A test seam: whether the watcher raises events. Setting it waits until the actor has applied it,
-    /// so changes made afterwards aren't seen until it is set again; a watcher restart keeps the setting.
-    /// </summary>
+    /// <summary>A test seam: whether the watcher raises events; setting it waits until the actor has applied it.</summary>
     internal bool Watching
     {
         get => _watching;
@@ -270,15 +220,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <summary>
-    /// The Library at start. It deletes a crash's leftovers (each <c>*.rbpart</c>, and an empty
-    /// <c>.mp4</c> beside one), reads <paramref name="libraryFile"/>, else its <c>.bak</c> (a
-    /// <c>library.json</c> that doesn't parse is moved to <c>library.json.corrupt</c>), and ignores
-    /// entries saved for a different Output Folder. It lists each non-empty <c>*.mp4</c> with its saved
-    /// profile and date when its size still matches its entry, and any other only when it is a
-    /// complete MP4, with the profile of its top-level folder and its creation time. Failures are
-    /// reported to <paramref name="failed"/>.
-    /// </summary>
+    /// <summary>The Library at start: clears a crash's leftovers, reads the index or its backup, then lists the files on disk.</summary>
     public static LibraryLoad Load(string outputFolder, string libraryFile, Func<string, string?> profileForFolder, Action<Exception> failed)
     {
         ArgumentException.ThrowIfNullOrEmpty(outputFolder);
@@ -312,7 +254,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
                     continue;
                 }
 
-                // A file the index doesn't know at this size must be a complete MP4; a 7.1 entry has no size.
+                // A file the index doesn't know at this size must be a complete MP4; an old entry has no size.
                 saved.TryGetValue(key, out var entry);
                 var known = entry is not null && (entry.Size is null || entry.Size == file.Length);
                 if (!known && !CompleteNow(path))
@@ -359,48 +301,28 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <summary>
-    /// <c>library.setFavourite</c> (story 7.4): sets the item's Favourite when the identity (AD-3) in
-    /// <paramref name="args"/> matches the item and, unless it is being written, the file on disk;
-    /// publishes <c>library.itemChanged</c> and saves it. Faults with <see cref="ErrorCodes.LibraryItemChanged"/>
-    /// when the identity is stale (a file that changed on disk is refreshed and published first), and
-    /// with <see cref="ErrorCodes.EngineDisconnected"/> once the actor is disposed.
-    /// </summary>
+    /// <c>library.setFavourite</c>: sets the Favourite when the identity matches; faults when it is stale.
     public Task SetFavourite(LibrarySetFavourite args)
     {
         ArgumentNullException.ThrowIfNull(args);
         return Post(done => new SetFavouriteRequest(args, done));
     }
 
-    /// <summary>
-    /// <c>library.rename</c> (story 7.7): renames the item's file to <see cref="LibraryRename.NewName"/>
-    /// plus its own <c>.mp4</c> extension (its case kept) in the same folder, and publishes exactly <c>library.itemRemoved</c> and
-    /// <c>library.itemAdded</c>, keeping its metadata. Faults with <see cref="ErrorCodes.FileBeingWritten"/>,
-    /// <see cref="ErrorCodes.LibraryItemChanged"/>, <see cref="ErrorCodes.InvalidFileName"/>,
-    /// <see cref="ErrorCodes.FileNameTaken"/> or <see cref="ErrorCodes.CommandFailed"/>, the index unchanged.
-    /// </summary>
+    /// <c>library.rename</c>: renames the item's file in its folder, keeping extension and metadata; faults when refused.
     public Task Rename(LibraryRename args)
     {
         ArgumentNullException.ThrowIfNull(args);
         return Post(done => new RenameRequest(args, done));
     }
 
-    /// <summary>
-    /// <c>library.delete</c> (story 7.7): moves the item's file to the Recycle Bin, publishes
-    /// <c>library.itemRemoved</c> and saves. Faults with <see cref="ErrorCodes.FileBeingWritten"/>,
-    /// <see cref="ErrorCodes.LibraryItemChanged"/>, <see cref="ErrorCodes.RecycleBinUnavailable"/> (the file
-    /// untouched) or <see cref="ErrorCodes.CommandFailed"/>, the index unchanged.
-    /// </summary>
+    /// <c>library.delete</c>: moves the item's file to the Recycle Bin and removes the item; faults when refused.
     public Task Delete(LibraryDelete args)
     {
         ArgumentNullException.ThrowIfNull(args);
         return Post(done => new DeleteRequest(args, done));
     }
 
-    /// <summary>
-    /// The settings changed: when the Output Folder is now a different folder, the index is rebuilt from
-    /// it (the scan only, without saved metadata), published as <c>library.reset</c>, saved and watched.
-    /// </summary>
+    /// <summary>The settings changed: when the Output Folder is a different folder, the index is rebuilt from it and published.</summary>
     public void OutputFolderChanged() => _channel.Writer.TryWrite(new FolderChanged());
 
     /// <summary>The <c>library-corrupt</c> warning was dismissed: Cleanup is no longer blocked.</summary>
@@ -409,11 +331,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>The settings changed: when the <c>cleanup</c> limits differ from the last seen, a Cleanup pass may start.</summary>
     public void CleanupChanged() => _channel.Writer.TryWrite(new CleanupTick(Changed: true));
 
-    /// <summary>
-    /// <c>cleanup.preview</c> (story 7.8): what a Cleanup pass with <paramref name="args"/>'s limits would
-    /// delete now, whether or not Cleanup may run yet; nothing is deleted. Faults with
-    /// <see cref="ErrorCodes.EngineDisconnected"/> once the actor is disposed.
-    /// </summary>
+    /// <c>cleanup.preview</c>: what a pass with these limits would delete now, may it run or not; nothing is deleted.
     public Task<LibraryCleanupPlan> PreviewCleanup(LibraryCleanupPreview args)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -423,10 +341,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>The watcher's <see cref="FileSystemWatcher.Error"/> handler: a buffer overflow, or the folder went away.</summary>
     internal void OnWatcherError(Exception error) => _channel.Writer.TryWrite(new WatchError(error));
 
-    /// <summary>
-    /// Stops taking messages, handles those already posted, and joins the thread; then stops the length
-    /// worker, which skips the jobs still queued, and joins it.
-    /// </summary>
+    /// <summary>Stops taking messages, handles those already posted and joins the thread; then stops the length worker.</summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -447,10 +362,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <summary>
-    /// Whether <paramref name="name"/> can be a file's base name: not empty, no character Windows forbids,
-    /// not ending with a dot or a space, and not a reserved device name before its first dot.
-    /// </summary>
+    /// <summary>Whether a name can be a file's base name: not empty, no forbidden character, no trailing dot, not reserved.</summary>
     private static bool ValidName(string? name)
     {
         if (string.IsNullOrEmpty(name)
@@ -469,11 +381,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     internal static bool IsMp4(string path) => string.Equals(Path.GetExtension(path), Extension, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Whether <paramref name="path"/>, or a folder between <paramref name="folder"/> and it, is a reparse
-    /// point (a junction or symbolic link), so the file may really be outside the folder; true when it
-    /// can't be read, e.g. a missing file.
-    /// </summary>
+    /// <summary>Whether the path, or a folder above it up to the given folder, is a junction or link; true when unreadable.</summary>
     internal static bool ThroughReparsePoint(string folder, string path)
     {
         try
@@ -496,7 +404,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <summary>The key of <paramref name="path"/> under <paramref name="folder"/>; false for a path outside it, or the folder itself.</summary>
+    /// <summary>The key of a path under a folder; false for a path outside it, or the folder itself.</summary>
     internal static bool TryKey(string folder, string path, out string key)
     {
         key = Path.GetRelativePath(folder, path);
@@ -514,10 +422,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         return new LibraryItem(key, profileId, file.Length, new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero), false, Modified: Utc(file.LastWriteTimeUtc), Kind: ScannedKind(key));
     }
 
-    /// <summary>
-    /// A scanned file's kind (story 10.6): a Monitor Recording when it's in the Monitor Recordings folder;
-    /// otherwise unknown, since the scan can't tell a Clip from a Recording.
-    /// </summary>
+    /// <summary>A scanned file's kind: a Monitor Recording when it is in that folder; otherwise unknown.</summary>
     private static string? ScannedKind(string key) =>
         key.StartsWith(ProfileFolders.MonitorRecordings + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             ? LibraryItemKinds.MonitorRecording
@@ -539,7 +444,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <summary>The files under <paramref name="folder"/> with <paramref name="extension"/>; an enumeration that fails is reported, keeping what it found.</summary>
+    /// <summary>The files under a folder with an extension; a failed enumeration is reported, keeping what it found.</summary>
     private static List<string> Files(string folder, string extension, Action<Exception> failed)
     {
         var files = new List<string>();
@@ -594,10 +499,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <summary>
-    /// The saved entries: <c>library.json</c>, else its <c>.bak</c>. Corrupt when neither parses and at
-    /// least one exists. Entries saved for a different Output Folder are ignored.
-    /// </summary>
+    /// <summary>The saved entries from <c>library.json</c>, else its backup; corrupt when neither parses and one exists.</summary>
     private static (Dictionary<string, LibraryFileEntry> Entries, bool Corrupt) ReadIndex(string libraryFile, string folder, Action<Exception> failed)
     {
         var entries = new Dictionary<string, LibraryFileEntry>(StringComparer.OrdinalIgnoreCase);
@@ -730,7 +632,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         DisposeRegistrations();
     }
 
-    // The length worker: it only reads a file and posts the result to the actor (AD-17).
+    // The length worker: it only reads a file and posts the result to the actor.
     private void RunLengths()
     {
         var reader = _lengthJobs.Reader;
@@ -922,7 +824,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _cleanupPeriodic = _time.CreateTimer(OnCleanupTimer, null, CleanupInterval, CleanupInterval);
     }
 
-    // Both Cleanup timers only post (AD-17).
+    // Both Cleanup timers only post.
     private void OnCleanupTimer(object? state) => _channel.Writer.TryWrite(new CleanupTick(Changed: false));
 
     private void OnBegin(Begin begin)
@@ -1153,13 +1055,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <summary>
-    /// Reconciles one path against disk (see the story's Design Notes): a file that is gone, isn't an
-    /// <c>.mp4</c> or is empty is removed; one indexed at the same size is left alone; any other is
-    /// listed only when it is a complete MP4. A path reached through a reparse point (a junction or
-    /// symbolic link) is removed too. A busy file, or an incomplete one written in the last 2 s, is
-    /// checked again once the next settle is due.
-    /// </summary>
+    /// <summary>Checks one path against disk: removes, keeps or lists it; a busy or incomplete file is checked again later.</summary>
     private void Reconcile(string path)
     {
         if (!TryKey(_folder, path, out var key) || Ignored(path))
@@ -1209,10 +1105,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         QueueLength(key);
     }
 
-    /// <summary>
-    /// Sets the Favourite when the command's identity matches the item and, for a written item, the file
-    /// on disk; else refuses it (see <see cref="TryMatch"/>).
-    /// </summary>
+    /// <summary>Sets the Favourite when the command's identity matches the item and the file on disk; else refuses it.</summary>
     private void OnSetFavourite(SetFavouriteRequest request)
     {
         var args = request.Args;
@@ -1232,12 +1125,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         request.Done.TrySetResult();
     }
 
-    /// <summary>
-    /// Whether a command's identity (AD-3) matches the item and, unless it is being written, the file on
-    /// disk; else it is refused with <see cref="ErrorCodes.LibraryItemChanged"/>. A file missing on disk is
-    /// reconciled once it settles; one whose size or modified time differs is refreshed and published, so
-    /// the App's next command matches.
-    /// </summary>
+    /// <summary>Whether a command's identity matches the item and the file on disk; a stale one is refused and refreshed.</summary>
     private bool TryMatch(string? path, long size, DateTimeOffset? modified, TaskCompletionSource done, out string key, out LibraryItem item)
     {
         if (!TryItem(path, out key, out var found)
@@ -1315,10 +1203,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         return true;
     }
 
-    /// <summary>
-    /// Renames a written item's file in its folder (see <see cref="Rename"/>): both paths are registered
-    /// first, so the watcher's echo is ignored, and the move keeps the item's metadata.
-    /// </summary>
+    /// <summary>Renames a written item's file; both paths are registered first, so the watcher's echo is ignored.</summary>
     private void OnRename(RenameRequest request)
     {
         var args = request.Args;
@@ -1374,10 +1259,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         request.Done.TrySetResult();
     }
 
-    /// <summary>
-    /// Moves a written item's file to the Recycle Bin (see <see cref="Delete"/>); its path is registered
-    /// first, so the watcher's echo is ignored.
-    /// </summary>
+    /// <summary>Moves a written item's file to the Recycle Bin; its path is registered first, so the watcher's echo is ignored.</summary>
     private void OnDelete(DeleteRequest request)
     {
         var args = request.Args;
@@ -1416,10 +1298,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         request.Done.TrySetResult();
     }
 
-    /// <summary>
-    /// Runs a file operation, trying a sharing violation again up to 10 times 50 ms apart; any other
-    /// failure, or the last try, is reported and refuses the command with <see cref="ErrorCodes.CommandFailed"/>.
-    /// </summary>
+    /// <summary>Runs a file operation, retrying a sharing violation up to 10 times, 50 ms apart; other failures refuse it.</summary>
     private bool Retried(Action operation, TaskCompletionSource done, string message)
     {
         for (var attempt = 0; ; attempt++)
@@ -1452,10 +1331,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>The <c>cleanup</c> limits now; off without the port.</summary>
     private CleanupSettings CleanupLimits() => _cleanup?.Invoke() ?? CleanupOff;
 
-    /// <summary>
-    /// Whether Cleanup may run now: a limit is set, the start rescan has run, no rescan is pending, the
-    /// index isn't an unacknowledged rebuild, and 60 s have passed since start.
-    /// </summary>
+    /// <summary>Whether Cleanup may run now: a limit is set, no rescan is pending, the index is trusted, and 60 s have passed.</summary>
     private bool CleanupOpen(CleanupSettings limits) =>
         (limits.MaxBytes is not null || limits.MaxAgeSeconds is not null)
         && _started
@@ -1497,10 +1373,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         StartCleanup();
     }
 
-    /// <summary>
-    /// Starts a Cleanup pass unless one is running or Cleanup may not run now: logs its plan, then posts
-    /// its first step. A plan with nothing to delete ends the pass at once.
-    /// </summary>
+    /// <summary>Starts a Cleanup pass unless one runs or Cleanup may not run: logs its plan, then posts its first step.</summary>
     private void StartCleanup()
     {
         if (_passRunning)
@@ -1602,12 +1475,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <summary>
-    /// Deletes an item's file permanently once it is re-checked: still indexed, not being written, not a
-    /// Favourite, an <c>.mp4</c> under the Output Folder, and on disk at its indexed size and modified time
-    /// (a file that differs is reconciled once it settles). Its path is registered first, so the watcher's
-    /// echo is ignored. False when it wasn't deleted.
-    /// </summary>
+    /// <summary>Deletes an item's file for good once it is re-checked against the index and the disk; false when it wasn't.</summary>
     private bool CleanupDelete(string key)
     {
         if (!_items.TryGetValue(key, out var item) || item.BeingWritten || item.Favourite)
@@ -1668,11 +1536,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     private void LogChangedOnDisk(string key) => Log($"Cleanup skipped {key}: the file changed on disk.");
 
-    /// <summary>
-    /// Whether the actor may delete, rename or clean up the file at <paramref name="full"/>: no reparse
-    /// point from below the Output Folder down to the file, and, with the port, its final path (every link
-    /// followed) under the Output Folder's own final path. False when either can't be read.
-    /// </summary>
+    /// <summary>Whether the actor may change the file: no junction or link on its path, and it is under the Output Folder.</summary>
     private bool Inside(string full)
     {
         if (!TryKey(_folder, full, out _) || ThroughReparsePoint(_folder, full))
@@ -1727,10 +1591,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <summary>
-    /// The worker read a length: applied only when the folder is the same, and the item still exists,
-    /// isn't being written and has the size the job was queued at.
-    /// </summary>
+    /// <summary>The worker read a length: applied only when the folder, the item and its size are still the same.</summary>
     private void OnLengthRead(LengthRead read)
     {
         if (!string.Equals(read.Folder, _folder, StringComparison.OrdinalIgnoreCase))
@@ -1758,7 +1619,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         _dirty = true;
     }
 
-    /// <summary>The file when it is a non-empty, complete MP4; else null, pending a busy or recently written file for another check.</summary>
+    /// <summary>The file when it is a non-empty, complete MP4; else null, with a busy or fresh file queued for another check.</summary>
     private FileInfo? Check(string path)
     {
         var file = new FileInfo(path);
@@ -1921,7 +1782,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    // Callbacks only post (AD-17).
+    // Callbacks only post.
     private void StartWatcher()
     {
         StopWatcher();
@@ -1974,9 +1835,7 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
 
     private void OnError(object sender, ErrorEventArgs e) => OnWatcherError(e.GetException());
 
-    // Atomic: a temp file flushed to disk, then swapped in, keeping the previous file as library.json.bak.
-    // A save that fails (library.json held open by a backup or a scanner) is tried again until it
-    // lands, so a Favourite never lives only in memory until the next change (story 8.6).
+    // Atomic: a temp file is flushed, then swapped in, keeping a backup; a failed save is retried until it lands.
     private void Save()
     {
         var temp = _libraryFile + ".tmp";
@@ -2093,19 +1952,10 @@ public sealed class LibraryActor : ILibraryWrites, IDisposable
     private sealed record LengthJob(string Folder, string Key, string Path, long Size);
 }
 
-/// <summary>
-/// <c>library.json</c>: the saved items, the Output Folder they were saved for (null in a file from
-/// before story 7.2, which is read for any folder), and whether a rebuilt index is unacknowledged.
-/// </summary>
+/// <summary>The index file: the saved items, the Output Folder they were saved for, and whether a rebuild is unacknowledged.</summary>
 internal sealed record LibraryFile(int Version, IReadOnlyList<LibraryFileEntry> Items, string? OutputFolder = null, bool CleanupBlocked = false);
 
-/// <summary>
-/// One saved item: its path relative to the Output Folder, its Game Profile, its date, and its size
-/// when saved (null in a file from before story 7.2), which tells a file changed outside the app. Its
-/// length in seconds and the file's modified time (UTC) it was read at, both null when no length was
-/// read (or in a file from before story 7.3); the length is reused only while size and time match.
-/// Whether it is a Favourite (story 7.4); kept through a size change while the engine was off.
-/// </summary>
+/// <summary>One saved item; its size and modified time tell a file changed outside the app. Fields: docs/code-notes.md.</summary>
 internal sealed record LibraryFileEntry(string Path, string? ProfileId, DateTimeOffset Date, long? Size = null, double? LengthSeconds = null, DateTime? Modified = null, bool Favourite = false, string? Kind = null);
 
 [JsonSourceGenerationOptions(

@@ -1,10 +1,7 @@
 using System.Globalization;
 using Encore.Bench.GpuLoad;
 
-// Story 1.14: Bench's synthetic GPU-bound load. A borderless popup over the primary monitor draws a
-// shader whose cost is calibrated during warm-up to --target-fps, then held, so `bench fps` can measure
-// the capture's FPS loss without a game. It prints one `ready {json}` line on stdout, then runs until
-// Escape, WM_CLOSE, or the --parent process exits.
+// Bench's synthetic GPU load: prints one ready line once calibrated, then runs until Escape, close or its parent exits.
 
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;

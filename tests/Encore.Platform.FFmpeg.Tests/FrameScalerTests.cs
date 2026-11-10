@@ -5,10 +5,7 @@ using Encore.Platform.Capture;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// Story 1.11's scaler on the real D3D11 VideoProcessor + NVENC path: content letterboxed into the
-/// fixed output, bars black over stale pool content, BGRA (X1) and NV12 (X2), and the copy-in fallback.
-/// </summary>
+/// <summary>The scaler on the real GPU path: content letterboxed, bars black, BGRA and NV12, and the copy-in fallback.</summary>
 public sealed class FrameScalerTests : IDisposable
 {
     private const int Width = 640;

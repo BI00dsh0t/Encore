@@ -6,10 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace Encore.Bench;
 
-/// <summary>
-/// <c>Encore.Bench.Overlay.exe</c>, story 5.1's Overlay window hosted on its own for <c>bench overlay</c>:
-/// Bench waits for its <c>ready</c> line, shows and hides the dot over stdin, and stops it on every path.
-/// </summary>
+/// <summary>The stand-in Overlay process: Bench waits for its ready line, shows and hides the dot over stdin, and stops it.</summary>
 internal sealed class OverlayHostProcess : IOverlayHost
 {
     public const string ProcessName = "Encore.Bench.Overlay";
@@ -89,8 +86,7 @@ internal sealed class OverlayHostProcess : IOverlayHost
         return new OverlayHostProcess(process, ready, stderr);
     }
 
-    /// <summary>Parses <c>ready 0x&lt;hwnd&gt; excluded=&lt;bool&gt; exstyle=0x&lt;hex&gt;</c>.</summary>
-    /// <exception cref="FormatException">It is not that line.</exception>
+    /// <summary>Parses the host's ready line; throws FormatException when it is not that line.</summary>
     internal static OverlayHostReady ParseReady(string line)
     {
         var parts = line.Split(' ');

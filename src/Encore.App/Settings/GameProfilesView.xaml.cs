@@ -7,11 +7,7 @@ using System.Windows.Threading;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// The Games list (story 10.10). View-only code: the Ignored group, opening a row on click or Enter, and
-/// the drill-in's focus rules: an opened game's page takes focus on its first control, and going back
-/// focuses the row it came from with the list's scroll restored.
-/// </summary>
+/// <summary>The Games list, view-only code: the Ignored group, opening a row, and the drill-in's focus rules.</summary>
 internal partial class GameProfilesView
 {
     private double _listOffset;

@@ -5,14 +5,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Engine.Settings;
 
-/// <summary>
-/// The engine's runtime state (AD-5): <c>runtime.json</c> in the instance's local data folder,
-/// <c>{ "micMuted": bool }</c>, and, while a Recording is being written, its path in
-/// <c>openRecordings</c> (FR-12), so the next start can tell which ones a dead engine left open. It
-/// is never a setting and never in a snapshot. A missing or unreadable file means muted; writes are
-/// atomic (a flushed temp file moved over the old one), and a failed write is logged and leaves the
-/// old file. Both values are kept in memory and written together on every change.
-/// </summary>
+/// <summary>The engine's runtime state in <c>runtime.json</c>: mic mute and open Recordings. Never a setting.</summary>
 internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
 {
     public const string FileName = "runtime.json";
@@ -26,7 +19,6 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     private bool? _muted;
     private bool _interrupted;
 
-    /// <param name="folder">Normally <see cref="Contracts.Instance.LocalDataFolder"/>.</param>
     public RuntimeStateStore(string folder, ILogger log)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
@@ -100,11 +92,7 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
         }
     }
 
-    /// <summary>
-    /// The Recordings the last run left open (FR-12), read without changing the file; empty when
-    /// there are none or the file can't be read. Call it before anything opens a Recording, and
-    /// <see cref="ClearInterrupted"/> once they have been reported.
-    /// </summary>
+    /// <summary>The Recordings the last run left open, read without changing the file. Call it before any Recording opens.</summary>
     public IReadOnlyList<string> ReadInterrupted()
     {
         lock (_lock)
@@ -132,10 +120,7 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
         }
     }
 
-    /// <summary>
-    /// Rewrites the file without the Recordings <see cref="ReadInterrupted"/> found, keeping its mic
-    /// mute; nothing happens when it found none. Call it once they have been reported.
-    /// </summary>
+    /// <summary>Rewrites the file without the interrupted Recordings, keeping mic mute; call it once they are reported.</summary>
     public void ClearInterrupted()
     {
         lock (_lock)
@@ -209,10 +194,7 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     }
 }
 
-/// <summary>
-/// <c>runtime.json</c>'s shape; a missing <c>micMuted</c> makes the file unreadable for mic mute. A
-/// null value is left out when writing, so <c>openRecordings</c> is there only while it isn't empty.
-/// </summary>
+/// <summary>The file's shape; a missing <c>micMuted</c> makes it unreadable, and an empty list is left out when writing.</summary>
 internal sealed record RuntimeState(bool? MicMuted, IReadOnlyList<string>? OpenRecordings = null);
 
 [JsonSourceGenerationOptions(

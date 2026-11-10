@@ -4,10 +4,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// One page of the Settings area. It renders the settings document it is given and changes it only
-/// through <see cref="SendAsync"/>, against the revision it rendered (AD-4). Its members run on the UI thread.
-/// </summary>
+/// <summary>One page of the Settings area; it changes the document only through <see cref="SendAsync"/>. UI thread.</summary>
 internal abstract class SettingsPage(SettingsSender sender) : Observable
 {
     private FrameworkElement? _view;
@@ -31,10 +28,10 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
 
     public FrameworkElement View => _view ??= CreateView();
 
-    /// <summary>The page's drill-in, when it opens item pages (story 10.10's Games); null for a plain page.</summary>
+    /// <summary>The page's drill-in, when it opens item pages; null for a plain page.</summary>
     public virtual DrillIn? DrillIn => null;
 
-    /// <summary>Whether the page holds an unsaved draft: the nav item shows a dot (story 10.5). Raised as a property change.</summary>
+    /// <summary>Whether the page holds an unsaved draft: the nav item shows a dot. Raised as a property change.</summary>
     public virtual bool HasUnsavedChanges => false;
 
     /// <summary>The document the page shows, and the basis of its updates.</summary>
@@ -56,11 +53,7 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
     /// <summary>Copies the document's values into the page's properties.</summary>
     protected abstract void OnRender(SettingsDocument document);
 
-    /// <summary>
-    /// Sends <paramref name="ops"/>. On success the <c>settings.changed</c> event renders the result; on a
-    /// conflict the page reloads the current document, and on a refusal it shows its document again.
-    /// </summary>
-    /// <returns>The refusal's error code, or null when the update committed.</returns>
+    /// <summary>Sends the ops and returns a refusal's error code, or null; a conflict reloads the current document.</summary>
     protected async Task<string?> SendAsync(IReadOnlyList<SettingsOp> ops)
     {
         switch (await sender.UpdateAsync(Document, ops))
@@ -84,10 +77,7 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
         }
     }
 
-    /// <summary>
-    /// A folder picker's send: as <see cref="SendAsync"/>, but a refusal the picker words itself
-    /// (<paramref name="pickerCode"/>) shows on the picker instead of the page's error bar.
-    /// </summary>
+    /// <summary>A folder picker's send: a refusal the picker words itself shows on the picker, not the page's error bar.</summary>
     protected async Task<string?> SendForPickerAsync(IReadOnlyList<SettingsOp> ops, string pickerCode)
     {
         var code = await SendAsync(ops);
@@ -110,12 +100,7 @@ internal abstract class SettingsPage(SettingsSender sender) : Observable
 /// <summary>The pages of the Settings area, in navigation order.</summary>
 internal static class SettingsPages
 {
-    /// <summary>
-    /// Every page, in story 10.9's order: General, Clips, Hotkeys, Audio Tracks, Games, Sounds, and
-    /// Storage and Cleanup. The Recordings page is gone; its screen picker is on Hotkeys.
-    /// </summary>
-    /// <param name="defaultCacheFolder">The engine's default cache folder, shown as the cache folder's default.</param>
-    /// <param name="gameShell">The shell the Games pages use; null for Windows'.</param>
+    /// <summary>Every page in nav order: General, Clips, Hotkeys, Audio Tracks, Games, Sounds, then Storage and Cleanup.</summary>
     public static IReadOnlyList<SettingsPage> Create(SettingsSender sender, IEngineSession engine, string? defaultCacheFolder = null, IGameShell? gameShell = null) =>
     [
         new GeneralSettingsPage(sender),

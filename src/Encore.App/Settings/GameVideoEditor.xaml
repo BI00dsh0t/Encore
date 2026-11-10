@@ -6,7 +6,7 @@
     <UserControl.Resources>
         <theme:EmptyToCollapsedConverter x:Key="Collapsed" />
     </UserControl.Resources>
-    <!-- A game's own Video quality (story 10.10): the Clips page's rows, on a game-scoped Clips view model. -->
+    <!-- A game's own Video quality: the Clips page's rows, on a game-scoped Clips view model. -->
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />

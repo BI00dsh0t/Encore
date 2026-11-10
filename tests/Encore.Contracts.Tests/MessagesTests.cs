@@ -111,7 +111,7 @@ public sealed partial class MessagesTests
             """{"replay":"draining","recording":"off","monitorRecording":"running","micMuted":true,"cooldownUntil":"2026-10-25T12:00:00+00:00","clipsWriting":1}""",
             JsonSerializer.Serialize(state, CaptureJsonContext.Default.CaptureState));
 
-        // AD-22, additive: JSON from before clipsWriting reads as no Clip being written.
+        // JSON from before clipsWriting reads as no Clip being written.
         var old = JsonSerializer.Deserialize(
             """{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null}""",
             CaptureJsonContext.Default.CaptureState);
@@ -145,7 +145,7 @@ public sealed partial class MessagesTests
         Assert.True(EngineMessages.Heartbeat.Coalesces);
         Assert.False(EngineMessages.Attached.Coalesces);
 
-        // An engine from before story 8 sends neither field.
+        // An older engine sends neither field.
         var old = JsonSerializer.Deserialize(
             """{"engineInstanceId":"e","pid":1,"seq":0,"settings":{"schemaVersion":1,"revision":0,"global":{},"profiles":{}},"capture":{"replay":"off","recording":"off","monitorRecording":"off","micMuted":true,"cooldownUntil":null},"warnings":[]}""",
             EngineJsonContext.Default.StateSnapshot)!;
@@ -285,7 +285,7 @@ public sealed partial class MessagesTests
             LibraryMessages.SetFavourite.ArgsType);
         Assert.Equal(new LibrarySetFavourite(@"Game\clip.mp4", 48, modified, true), favourite);
 
-        // AD-22, additive: an item and a snapshot from before story 7.3 read as no length and no folder.
+        // An item and a snapshot from an older engine read as no length and no folder.
         var old = JsonSerializer.Deserialize(
             """{"path":"clip.mp4","profileId":null,"size":48,"date":"2026-11-03T10:00:00+00:00","beingWritten":false}""",
             LibraryJsonContext.Default.LibraryItem);

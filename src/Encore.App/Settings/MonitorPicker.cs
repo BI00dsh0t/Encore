@@ -8,19 +8,7 @@ using Encore.Core.Monitors;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// The screens a Monitor Recording composites (story 11.4, design-multi-monitor.md's picker), beside the
-/// Monitor Recording key on Hotkeys. It replaces story 10.9's one-screen combo box:
-/// <list type="bullet">
-/// <item>All screens, or Chosen screens with one <see cref="ScreenRow"/> per screen, at least one kept ticked;</item>
-/// <item>a layout preview of <see cref="ScreenTile"/>s at the screens' positions, hidden when the engine
-/// reports none, each toggling the same selection;</item>
-/// <item>the output line from the canvas rule (AD-25), and chosen screens that aren't attached, greyed.</item>
-/// </list>
-/// Each choice is one Global <c>monitorRecordingScreens</c> op, sent through the hosting page; the App never
-/// writes <c>monitorRecordingMonitor</c>, which is only read while the new key is null. The list comes from
-/// <c>monitors.list</c> per engine run and follows <c>monitors.changed</c>. Members run on the UI thread.
-/// </summary>
+/// <summary>The screens a Monitor Recording composites: all or chosen ones, with a layout preview. UI thread.</summary>
 internal sealed class MonitorPicker : Observable
 {
     /// <summary>The preview's largest size, in device-independent pixels.</summary>
@@ -49,8 +37,7 @@ internal sealed class MonitorPicker : Observable
     private MonitorList? _changed;
     private bool _listed;
 
-    /// <param name="send">Sends the ops, as the hosting page's <c>SendAsync</c>.</param>
-    /// <param name="message">Shows a note on the hosting page's error bar; null clears it.</param>
+    /// <summary>Send sends the ops through the hosting page; message shows a note on its error bar, and null clears it.</summary>
     public MonitorPicker(IEngineSession engine, Func<IReadOnlyList<SettingsOp>, Task> send, Action<string?> message)
     {
         _engine = engine;
@@ -138,10 +125,7 @@ internal sealed class MonitorPicker : Observable
     /// <summary>Lists the screens again.</summary>
     public ICommand RefreshCommand { get; }
 
-    /// <summary>
-    /// Fetches the screens from a newly connected engine run, shows the list a <c>monitors.changed</c>
-    /// carries (T-03), and takes the encoder probe's codecs. Called before the hosting page renders.
-    /// </summary>
+    /// <summary>Fetches the screens from a new engine run, follows <c>monitors.changed</c>, and takes the probe's codecs.</summary>
     public void ShowState(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -183,10 +167,7 @@ internal sealed class MonitorPicker : Observable
         Show();
     }
 
-    /// <summary>
-    /// Ticks or unticks <paramref name="row"/>'s screen under Chosen screens and sends the selection.
-    /// Unticking the last chosen screen is refused, and the row shows ticked again.
-    /// </summary>
+    /// <summary>Ticks or unticks a screen under Chosen screens and sends it; unticking the last one is refused.</summary>
     internal void Toggle(ScreenRow row, bool chosen)
     {
         var ids = ChosenIds().ToList();
@@ -245,10 +226,7 @@ internal sealed class MonitorPicker : Observable
         _ = _send([SettingsValues.SetGlobal(Keys.MonitorRecordingScreens, screens)]);
     }
 
-    /// <summary>
-    /// The chosen ids under Chosen screens. An unset key is the screen the old setting records: its device
-    /// name's screen, else the primary.
-    /// </summary>
+    /// <summary>The chosen ids; with the key unset, the screen the older setting names, else the primary.</summary>
     private IReadOnlyList<string> ChosenIds()
     {
         if (_screens is { Mode: MonitorScreensMode.Selected, Monitors: { } ids })
@@ -486,8 +464,5 @@ internal sealed class ScreenRow(MonitorPicker picker, string id) : Observable
     }
 }
 
-/// <summary>
-/// One attached screen in the layout preview, in preview pixels, sharing <see cref="Row"/>'s selection.
-/// A record, so an unchanged layout keeps its tiles.
-/// </summary>
+/// <summary>One attached screen in the layout preview, in preview pixels; a record, so an unchanged layout keeps its tiles.</summary>
 internal sealed record ScreenTile(ScreenRow Row, string Number, bool Primary, double Left, double Top, double Width, double Height);

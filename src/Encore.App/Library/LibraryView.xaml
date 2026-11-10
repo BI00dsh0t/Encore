@@ -1,11 +1,4 @@
-<!--
-    The Library (story 4; selection, the command bar and the shortcuts from story 10.2; search and sort from
-    story 10.3): the search box and filters, the corrupt-index
-    banner, the last action's failure, the command bar, then one virtualized list of group headers and rows. The
-    list's own selection is unused: the page holds the selection, and the code-behind routes the mouse and keys
-    to it. Every colour, corner and type comes from LibraryTheme.xaml and the token keys; the shell's page title
-    is the heading.
--->
+<!-- The Library: search and filters, banner, command bar, then one virtualized list; the page holds the selection. -->
 <UserControl x:Class="Encore.App.Library.LibraryView"
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -45,7 +38,7 @@
                             <Border Style="{DynamicResource RbLibraryLengthBadgeStyle}">
                                 <TextBlock Style="{DynamicResource RbLibraryLengthTextStyle}" Text="{Binding Length}" />
                             </Border>
-                            <!-- Story 10.6: a Recording's or Monitor Recording's kind, top left; a Clip shows none. -->
+                            <!-- A Recording's or Monitor Recording's kind, top left; a Clip shows none. -->
                             <Border HorizontalAlignment="Left"
                                     VerticalAlignment="Top"
                                     Style="{DynamicResource RbLibraryLengthBadgeStyle}"
@@ -106,7 +99,7 @@
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
-    <!-- The list, or (story 14.2) the drill-in's player page in its place; the list is hidden, not unloaded, so its scroll and focus survive. -->
+    <!-- The list, or the drill-in's player page in its place; the list is hidden, not unloaded, so its scroll and focus survive. -->
     <Grid>
     <local:PlayerView x:Name="PlayerContent" DataContext="{Binding Player}" Visibility="{Binding Converter={StaticResource NotEmpty}}" />
     <local:ClipCreatorView x:Name="CreatorContent" DataContext="{Binding Creator}" Visibility="{Binding Converter={StaticResource NotEmpty}}" />
@@ -333,7 +326,7 @@
                     </ContextMenu>
                 </ListBox.ContextMenu>
             </ListBox>
-            <!-- A search that matches nothing says so (story 10.3); a filter that matches nothing shows an empty list. -->
+            <!-- A search that matches nothing says so; a filter that matches nothing shows an empty list. -->
             <TextBlock x:Name="NoResultsMessage"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
@@ -352,7 +345,7 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
-            <!-- Story 10.6's welcome card, only for a Library with nothing in it (no filter or search). -->
+            <!-- The welcome card, only for a Library with nothing in it (no filter or search). -->
             <Border x:Name="EmptyMessage"
                     MaxWidth="520"
                     HorizontalAlignment="Center"

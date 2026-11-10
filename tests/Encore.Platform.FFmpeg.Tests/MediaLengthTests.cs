@@ -52,8 +52,7 @@ public sealed class MediaLengthTests : IDisposable
     [Fact]
     public void AFileBeingReadCanBeRenamed()
     {
-        // The bug that bit (full-run-flaky-tests): FFmpeg's own file protocol shares no delete, so a
-        // rename during a starved length read failed as "in use".
+        // A bug that bit: FFmpeg's file protocol shares no delete, so a rename during a slow length read failed.
         RequireFFmpeg();
         var clip = Generate("held.mp4", 30, "");
         var renamed = Path.Combine(_directory, "renamed.mp4");

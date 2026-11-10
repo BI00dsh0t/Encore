@@ -5,10 +5,7 @@ using Windows.Win32.UI.Controls;
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>
-/// The DWM side of a themed window (AD-23): the Mica backdrop behind the Main App under Fluent, and the
-/// caption colours Gaming dark sets on the system title bar. Calls on a window that is gone do nothing.
-/// </summary>
+/// <summary>The DWM side of a themed window: the Mica backdrop and the title bar's colours. A closed window is ignored.</summary>
 public static class WindowFrame
 {
     /// <summary>DWM's "use the system's own colour" for the caption, border and text attributes.</summary>
@@ -17,10 +14,7 @@ public static class WindowFrame
     /// <summary>Whether Windows draws system backdrops (Windows 11 22H2, build 22621, and later).</summary>
     public static bool SupportsMica { get; } = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621);
 
-    /// <summary>
-    /// Turns Mica on or off behind the whole window. With it on, the frame is extended over the client
-    /// area, so WPF's content must leave its own background transparent where Mica should show.
-    /// </summary>
+    /// <summary>Turns Mica on or off; with it on, WPF content must leave its background transparent where Mica should show.</summary>
     public static unsafe void SetMica(nint hwnd, bool on)
     {
         var margins = on ? new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 } : default;
@@ -37,10 +31,7 @@ public static class WindowFrame
             && type == DWM_SYSTEMBACKDROP_TYPE.DWMSBT_MAINWINDOW;
     }
 
-    /// <summary>
-    /// Colours the system title bar: the caption colour behind it and the text colour for
-    /// the title, each as 0xRRGGBB. Null puts both back to the system's own.
-    /// </summary>
+    /// <summary>Colours the system title bar and its text, each as 0xRRGGBB; null puts both back to the system's own.</summary>
     public static unsafe void SetCaptionColors(nint hwnd, (uint Caption, uint Text)? colors)
     {
         var caption = colors is { } c ? ColorRef(c.Caption) : DefaultColor;

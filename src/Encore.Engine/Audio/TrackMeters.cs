@@ -9,16 +9,7 @@ using Encore.Media;
 
 namespace Encore.Engine.Audio;
 
-/// <summary>
-/// The Track meters (R6, AD-20): <c>meters.watch</c> builds a meter-only mixer for a Track Layout on
-/// the hub's fan-out, with nothing captured. Each distinct device is subscribed once, cut by an
-/// <see cref="AudioTimeline"/> and fanned out to its Tracks' <see cref="TrackMixer"/>s (mic mute
-/// gating a Mic Device in a <c>muteAffected</c> Track, as in a capture), whose output is a
-/// <see cref="PeakMeter"/> rather than an encoder. A meter thread publishes each Track's peak as
-/// <c>meters.levels</c>, never twice within <see cref="PublishInterval"/>. One watch at a time: a new
-/// one replaces it, and <see cref="Unwatch"/> closes its subscriptions and publishes no Tracks.
-/// Thread-safe: every call is under one lock.
-/// </summary>
+/// <summary>The Track meters: <c>meters.watch</c> builds a meter-only mixer for a layout; nothing is captured. Thread-safe.</summary>
 internal sealed class TrackMeters : IDisposable
 {
     /// <summary>50 ms: at most 20 publishes a second.</summary>
@@ -42,13 +33,7 @@ internal sealed class TrackMeters : IDisposable
         _log = log;
     }
 
-    /// <summary>
-    /// Meters <paramref name="layout"/>, replacing any previous watch: its subscriptions are closed
-    /// before the new ones open. A device that can't be opened is left out, with a warning logged.
-    /// </summary>
-    /// <exception cref="ErrorCodeException">
-    /// <see cref="ErrorCodes.InvalidArguments"/>: a Track names a device key the layout lacks; the previous watch is kept.
-    /// </exception>
+    /// <summary>Meters a layout, replacing any previous watch; a device that can't be opened is left out with a warning.</summary>
     public void Watch(TrackLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -98,11 +83,7 @@ internal sealed class TrackMeters : IDisposable
         }
     }
 
-    /// <summary>
-    /// <see cref="Unwatch"/>, unless a watch arrived after <paramref name="generation"/> was read: a
-    /// late unwatch for a departed client must not stop a newly connected one's watch.
-    /// </summary>
-    /// <returns>Whether it stopped the watch (or there was none).</returns>
+    /// <summary>Unwatches unless a newer watch arrived since generation was read, so a late unwatch can't stop a new one.</summary>
     public bool UnwatchIf(long generation)
     {
         lock (_lock)
@@ -238,7 +219,7 @@ internal sealed class TrackMeters : IDisposable
             _subscriptions.Clear();
         }
 
-        /// <summary>Publishes the peaks whenever at least <see cref="PublishInterval"/> has passed since the last publish, by Stopwatch.</summary>
+        /// <summary>Publishes the peaks once at least <see cref="PublishInterval"/> has passed since the last publish.</summary>
         private void Run()
         {
             var interval = (long)(PublishInterval.TotalSeconds * Stopwatch.Frequency);
@@ -276,10 +257,7 @@ internal sealed class TrackMeters : IDisposable
     }
 }
 
-/// <summary>
-/// A Track's meter: the largest |sample| written since the last <see cref="Take"/>. Written on device
-/// threads without allocating or blocking (a compare-and-swap on the peak's bits); silence is a no-op.
-/// </summary>
+/// <summary>A Track's meter: the largest sample since the last <see cref="Take"/>; device threads write it without blocking.</summary>
 internal sealed class PeakMeter : IAudioSampleSink
 {
     private int _bits;

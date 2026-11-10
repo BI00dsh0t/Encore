@@ -12,22 +12,7 @@ using VideoCodec = Encore.Contracts.Settings.VideoCodec;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>
-/// One encoder chain of a <see cref="CaptureSession"/> (4.9): everything one spec encodes with. Its
-/// device taps, each cut by one <see cref="AudioTimeline"/> and fanned out to every Track that holds
-/// it; each Track's <see cref="TrackMixer"/> and <see cref="AacEncoder"/>; the frame pool, scaler
-/// and paced video encoder at the spec's output size; and Rewind's
-/// <see cref="ReplayRingSink"/> behind a <see cref="RecordingTap"/>, or the file's muxer, or (the
-/// Monitor session, 6.9) a tap with a <see cref="NullPacketSink"/> behind it. Every PTS is
-/// relative to the one session anchor, so Clips of two chains meet on one timeline. The session's
-/// first chain starts at the anchor, video and audio alike. A later one is built in advance and
-/// stays idle: its audio starts at the save press that switches the session to it
-/// (<see cref="StartAudio"/>), its frames at the first one captured after that press, in the slot
-/// nearest it. A Track with no devices is silence, advanced from QPC every
-/// <see cref="SilenceInterval"/> by a timer, off the capture thread. A chain rebuilt by a forced
-/// encoder restart (R4) takes over its predecessor's <see cref="ReplayRingSink"/> in a new ring
-/// generation. The session's locks guard the writer count and the retirement fields.
-/// </summary>
+/// <summary>One encoder chain of a session: everything one spec encodes with. Details: docs/code-notes.md.</summary>
 internal sealed class EncoderChain : IDisposable
 {
     /// <summary>AAC packets a second (48 kHz in 1024-sample frames), rounded up, for sizing the ring.</summary>
@@ -64,8 +49,7 @@ internal sealed class EncoderChain : IDisposable
     private long _audioAnchorQpc;
     private int _disposed;
 
-    /// <param name="path">The file a session with no Rewind writes; null in Replay mode.</param>
-    /// <param name="fail">Called with an encode failure: the session fails.</param>
+    /// <summary>The path is the file a session with no Rewind writes; fail is called with an encode failure.</summary>
     public EncoderChain(
         SessionSpec spec,
         string encoderName,
@@ -110,10 +94,7 @@ internal sealed class EncoderChain : IDisposable
 
     public VideoSize OutputSize { get; private set; }
 
-    /// <summary>
-    /// Story 12.1 (matchSource): sets the output size before <see cref="Build"/> creates the frame
-    /// pool and scaler at it. A built chain keeps its size.
-    /// </summary>
+    /// <summary>Sets the output size before <see cref="Build"/> creates the frame pool and scaler; a built chain keeps its size.</summary>
     public void SizeTo(VideoSize size)
     {
         if (IsBuilt)
@@ -132,7 +113,6 @@ internal sealed class EncoderChain : IDisposable
     /// <summary>Whether <see cref="Build"/> has opened every encoder.</summary>
     public bool IsBuilt { get; private set; }
 
-    /// <summary>Whether it has been disposed.</summary>
     public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     /// <summary>Where its audio starts: the session anchor for the first chain, the switching press for a later one.</summary>
@@ -158,9 +138,7 @@ internal sealed class EncoderChain : IDisposable
 
     public IReadOnlyList<AudioTimeline> AudioTimelines => _audioTimelines;
 
-    // The session's chain bookkeeping, under its chain lock: saves bound to this chain and not yet
-    // cut, whether it was replaced and its retirement has begun, the chain that replaced it, and the
-    // end of the Clip its switching press cut (µs since the anchor; long.MinValue when unknown).
+    // The session's bookkeeping for this chain, under its chain lock: bound saves, retirement and what replaced it.
     public int Writers { get; set; }
 
     public bool Retiring { get; set; }
@@ -174,7 +152,7 @@ internal sealed class EncoderChain : IDisposable
     /// <summary>Whether the capture thread still draws into it; under the session's gate.</summary>
     public bool Fed { get; set; } = true;
 
-    /// <summary>Subscribes a tap to each of the spec's devices; each holds its last second of blocks until <see cref="StartAudio"/>.</summary>
+    /// <summary>Subscribes a tap to each of the spec's devices; each holds its last second of blocks until the audio starts.</summary>
     public void Subscribe()
     {
         foreach (var device in Spec.Audio.Devices)
@@ -193,17 +171,7 @@ internal sealed class EncoderChain : IDisposable
         }
     }
 
-    /// <summary>
-    /// Opens the outputs and every encoder, its PTS relative to <paramref name="sessionAnchorQpc"/>.
-    /// The first chain's pacer gives its first frame slot 0; a later one's, the slot nearest it.
-    /// </summary>
-    /// <param name="latency">The stats' latency histogram, for the first chain of a measured run.</param>
-    /// <param name="restartOf">
-    /// A forced restart's predecessor's ring, whose encoders have stopped writing: this chain takes it
-    /// over in a new generation (<see cref="ReplayRingSink.Restart"/>) of <paramref name="window"/>
-    /// seconds, instead of a ring of its own; null for a new ring.
-    /// </param>
-    /// <param name="window">The Buffer Window the restarted ring holds, in seconds; with <paramref name="restartOf"/> only.</param>
+    /// <summary>Opens the outputs and every encoder; restartOf hands over a predecessor's ring in a new generation.</summary>
     public void Build(long sessionAnchorQpc, bool first, LatencyHistogram? latency, ReplayRingSink? restartOf = null, int window = 0)
     {
         _sessionAnchorQpc = sessionAnchorQpc;
@@ -211,7 +179,7 @@ internal sealed class EncoderChain : IDisposable
         var video = Spec.Snapshot.Video;
         if (Spec.Kind == SessionKind.Monitor)
         {
-            // The Monitor session (6.9): no ring and no file of its own, only its Recording.
+            // The Monitor session: no ring and no file of its own, only its Recording.
             _tap = new RecordingTap(new NullPacketSink());
             packets = _tap;
             _log.LogInformation("Monitor capture: the encoders feed only its Recording");
@@ -278,12 +246,7 @@ internal sealed class EncoderChain : IDisposable
         IsBuilt = true;
     }
 
-    /// <summary>
-    /// Starts the audio at <paramref name="audioAnchorQpc"/>: each device takes blocks from here,
-    /// its held ones replayed first and cut there once, fanned out to every Track that holds it; mic
-    /// mute positions count from it, and each Track's first sample has its frames since the session
-    /// anchor as its PTS. A Track with no devices starts the silence clock.
-    /// </summary>
+    /// <summary>Starts the audio at a QPC time: each device takes blocks from here, and mic mute positions count from it.</summary>
     public void StartAudio(long audioAnchorQpc)
     {
         _audioAnchorQpc = audioAnchorQpc;
@@ -320,10 +283,7 @@ internal sealed class EncoderChain : IDisposable
         }
     }
 
-    /// <summary>
-    /// Scales one captured frame into the chain's output and posts it to the encoder thread; under
-    /// the session's gate, on the capture thread. A full hand-off drops the frame.
-    /// </summary>
+    /// <summary>Scales one captured frame and posts it to the encoder thread; capture thread, under the session's gate.</summary>
     public void Draw(long qpc, nint texture, VideoSize contentSize)
     {
         if (_paced is null)
@@ -364,10 +324,7 @@ internal sealed class EncoderChain : IDisposable
         _paced.Post(frame, qpc);
     }
 
-    /// <summary>
-    /// Takes the Recording tap out of the chain, so <see cref="Dispose()"/> leaves it to the caller: a
-    /// forced restart closes it, ending the Recording, only once the orchestrator has been told.
-    /// </summary>
+    /// <summary>Takes the Recording tap out of the chain, so the caller closes it once the orchestrator has been told.</summary>
     public RecordingTap? TakeTap()
     {
         var tap = _tap;
@@ -387,13 +344,7 @@ internal sealed class EncoderChain : IDisposable
         }
     }
 
-    /// <summary>
-    /// Flushes the chain into its output once the taps are stopped: every Track is padded with
-    /// silence to one end frame, the longest device's or the video's end, whichever is later (or
-    /// where the clock already took a silent Track, should that be later still), then the encoders
-    /// are drained. The video ends where its pacer's next slot starts: one past the last emitted
-    /// slot, skips included, which repeats can take past the last captured frame.
-    /// </summary>
+    /// <summary>Flushes the chain: pads every Track with silence to one end frame, then drains the encoders.</summary>
     public void Finish(long lastFrameQpc)
     {
         if (!IsBuilt || (_muxer is null && _ring is null && _tap is null) || _video is null || _audioEncoders.Count != Spec.Audio.Tracks.Count)
@@ -444,7 +395,7 @@ internal sealed class EncoderChain : IDisposable
             var name = track.Device.FriendlyName;
             if (track.Subscription?.SubscriberFault is ErrorCodeException { Code: ErrorCodes.EncodeFailed or ErrorCodes.DiskFull or ErrorCodes.AccessDenied } encodeFault)
             {
-                // The encoder or muxer broke (Check maps a full disk or denied access to their own codes), not the device: the file is damaged.
+                // The encoder or muxer broke, not the device: the file is damaged.
                 _fail(encodeFault);
             }
             else if (track.Subscription?.SubscriberFault is { } trackFault)
@@ -461,19 +412,14 @@ internal sealed class EncoderChain : IDisposable
         }
     }
 
-    /// <summary>
-    /// The start a Clip from this chain cuts from, for <paramref name="fromUs"/> (µs since the
-    /// anchor): its first keyframe when that is less than one frame before it, else
-    /// <paramref name="fromUs"/>. A chain that started mid-session may give its first frame the slot
-    /// before the old chain's last key; cutting from that key would skip to its next keyframe.
-    /// </summary>
+    /// <summary>The start a Clip cuts from: the chain's first keyframe when that is under one frame before the given time.</summary>
     public long SnapStart(long fromUs)
     {
         var first = _ring?.FirstKeyUs ?? long.MaxValue;
         return first != long.MaxValue && first < fromUs && fromUs <= first + FrameUs ? first : fromUs;
     }
 
-    /// <summary>The ring of a <paramref name="seconds"/> s Buffer Window, as <see cref="Build"/> makes it; for a resize at a Reset.</summary>
+    /// <summary>The ring of a Buffer Window of this many seconds, as <see cref="Build"/> makes it; for a resize at a Reset.</summary>
     public PacketRing NewRing(int seconds) => ReplayRings.Create(
         seconds * 1_000_000L,
         RingCapacity(seconds),
@@ -519,11 +465,7 @@ internal sealed class EncoderChain : IDisposable
 
     public void Dispose() => Dispose(keepRing: false);
 
-    /// <summary>
-    /// Frees everything, once, with no flush; with <paramref name="keepRing"/> (a drained session)
-    /// the ring is kept for saves until the session's <c>Release</c>. A save still writing holds its
-    /// own lease and pins, and a Recording still finishing owns its own copies of the streams.
-    /// </summary>
+    /// <summary>Frees everything once, with no flush; keepRing leaves the ring for saves until the session's Release.</summary>
     public void Dispose(bool keepRing)
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)

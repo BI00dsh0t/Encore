@@ -4,7 +4,7 @@ using Encore.Core.Monitors;
 
 namespace Encore.Core.Tests;
 
-/// <summary>Story 11.2: Core's screen resolver and the shared canvas rule (AD-25).</summary>
+/// <summary>Core's screen resolver and the shared canvas rule.</summary>
 public sealed class MonitorScreensTests
 {
     // The builder's PC: a 2560x1440 primary, and a 3840x2160 to its right (physical pixels).

@@ -13,11 +13,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// A capture session driven only through orchestrator messages, in process: one pwsh process opens
-/// two windows; the session starts on the first, is retargeted to the second, and ends. The file must
-/// hold one unbroken set of streams. Uses the default (eConsole) audio devices; the file is deleted afterwards.
-/// </summary>
+/// <summary>A capture session driven by orchestrator messages: started, retargeted and ended, with one unbroken set of streams.</summary>
 public sealed class SessionCaptureTests : IDisposable
 {
     private const string WindowsScript =

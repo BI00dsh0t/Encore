@@ -2,7 +2,7 @@ using System.IO;
 
 namespace Encore.Waveforms;
 
-// Pure, linked source: the App and worker agree on disk layout without an assembly edge.
+// Compiled into both the App and the worker, so they agree on the file layout without sharing an assembly.
 internal static class ClipPeakFile
 {
     internal const int Version = 1;

@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace Encore.Bench.Tests;
 
-/// <summary>Story 8.1's soak harness, without the soak: the sampler, the bounds, the Clip check and the schedule.</summary>
+/// <summary>The soak harness without the soak: the sampler, the bounds, the Clip check and the schedule.</summary>
 public sealed class SoakTests
 {
     private const long Mb = 1024 * 1024;
@@ -80,7 +80,7 @@ public sealed class SoakTests
     [Fact]
     public void ATrackOnePacketShortOfTheVideoPassesAndTwoFail()
     {
-        // 1747 frames at 60 fps against 1364 AAC packets: 18 ms, more than a frame but less than a packet (story 8.2's soak).
+        // 1747 frames at 60 fps against 1364 AAC packets: 18 ms apart, more than a frame but less than a packet.
         Assert.True(SoakClipCheck.Evaluate(new ClipProbe([Video(29.117), Audio("Everything", 29.099)], null), ["Everything"], 30, 60).Pass);
         Assert.False(SoakClipCheck.Evaluate(new ClipProbe([Video(29.117), Audio("Everything", 29.077)], null), ["Everything"], 30, 60).Pass);
     }

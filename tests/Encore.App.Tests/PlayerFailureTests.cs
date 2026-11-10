@@ -5,7 +5,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 14.6: the player page when Windows can't play the file, over a fake player.</summary>
+/// <summary>The player page when Windows can't play the file, over a fake player.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class PlayerFailureTests : IDisposable
 {

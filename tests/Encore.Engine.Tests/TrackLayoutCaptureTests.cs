@@ -11,11 +11,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// <c>debug-capture --track-layout</c> end to end: the published engine reads a throwaway test
-/// instance's Global <c>trackLayout</c> and writes one titled AAC stream per Track. Uses the default
-/// (eConsole) output and input endpoints; the instance's folders are deleted afterwards.
-/// </summary>
+/// <c>debug-capture --track-layout</c> end to end: one titled AAC stream per Track of the instance's layout.
 public sealed class TrackLayoutCaptureTests : IDisposable
 {
     private const string WindowScript =
@@ -276,10 +272,7 @@ public sealed class TrackLayoutCaptureTests : IDisposable
         return peak;
     }
 
-    /// <summary>
-    /// Each stream's codec, title, default flag and duration. The mp4 muxer stores a stream's
-    /// <c>title</c> in the track's udta <c>name</c> box, which FFmpeg reads back as the <c>name</c> tag.
-    /// </summary>
+    /// <summary>Each stream's codec, title, default flag and duration; FFmpeg reads the title back as the <c>name</c> tag.</summary>
     private static List<(string Codec, string? Title, bool Default, double Duration)> Probe(string file)
     {
         var start = new ProcessStartInfo(Path.Combine(BinFolder, "ffprobe.exe"))

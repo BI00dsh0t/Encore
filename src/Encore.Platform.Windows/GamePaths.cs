@@ -7,19 +7,13 @@ using Windows.Win32.Storage.FileSystem;
 
 namespace Encore.Platform.Windows;
 
-/// <summary>Game executable paths.</summary>
 public static unsafe class GamePaths
 {
     private const string VerbatimPrefix = @"\\?\";
     private const string VerbatimUncPrefix = @"\\?\UNC\";
     private const uint FileReadAttributes = 0x80;
 
-    /// <summary>
-    /// The Game Profile id of an executable (AD-18), and the only place one is made: the file's final
-    /// path from <c>GetFinalPathNameByHandle(FILE_NAME_NORMALIZED | VOLUME_NAME_DOS)</c>, with
-    /// <c>\\?\</c> stripped (<c>\\?\UNC\</c> becomes <c>\\</c>), in lowercase (invariant).
-    /// </summary>
-    /// <exception cref="Win32Exception">The file couldn't be opened or its final path read.</exception>
+    /// <summary>The Game Profile id of an executable, made only here: its final path, lowercase, without the <c>\\?\</c> prefix.</summary>
     public static string Canonicalize(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -76,17 +70,11 @@ public static unsafe class GamePaths
         }
     }
 
-    /// <summary>
-    /// Whether <paramref name="e"/> is a failure of <see cref="Canonicalize"/> to read the file, which
-    /// callers recover from, rather than a bug.
-    /// </summary>
+    /// <summary>Whether an exception is <see cref="Canonicalize"/> failing to read the file, which callers recover from.</summary>
     public static bool CanonicalizeFailed(Exception e) =>
         e is Win32Exception or IOException or UnauthorizedAccessException or ArgumentException;
 
-    /// <summary>
-    /// A listed path as matched against Game Profile ids (AD-18): canonical, or in lowercase (invariant)
-    /// when it can't be canonicalized (not on disk).
-    /// </summary>
+    /// <summary>A listed path as matched against Game Profile ids: canonical, or lowercase when the file is not on disk.</summary>
     public static string CanonicalOrLowercase(string path)
     {
         try
@@ -99,12 +87,7 @@ public static unsafe class GamePaths
         }
     }
 
-    /// <summary>
-    /// A game's display name (story 3.4): the <c>ProductName</c> of the executable's version resource,
-    /// trimmed, read from the file on disk without loading it (AD-12); when that is empty, unreadable or
-    /// the file isn't a PE image, the file name of <paramref name="fallbackName"/> (else of
-    /// <paramref name="path"/>) without its extension, or with it when that leaves nothing.
-    /// </summary>
+    /// <summary>A game's display name: the ProductName of the executable's version resource, else its file name.</summary>
     public static string ProductName(string path, string? fallbackName = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);

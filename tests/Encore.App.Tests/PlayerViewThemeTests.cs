@@ -16,7 +16,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 14.2: the player page in the Main App window, in both looks, over a fake player.</summary>
+/// <summary>The player page in the Main App window, in both looks, over a fake player.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class PlayerViewThemeTests : IDisposable
 {
@@ -121,8 +121,7 @@ public sealed class PlayerViewThemeTests : IDisposable
             ShowActivated = false,
             ShowInTaskbar = false,
         };
-        // One service for the window, as the App has: each ForWindow makes its own dictionaries, and a second
-        // couldn't swap the first's out.
+        // One service for the window, as the App has: a second couldn't swap the first's dictionaries out.
         var looks = ThemeService.ForWindow(window);
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
@@ -150,8 +149,7 @@ public sealed class PlayerViewThemeTests : IDisposable
                 var play = (Button)player.FindName("PlayPause");
                 Assert.Equal(("Play", true), (AutomationProperties.GetName(play), play.IsVisible));
 
-                // Story 14.9, resting: the thin seek bar over one row, Play, the speaker, the time; the gear and full
-                // screen on the right; the volume slider hidden until the speaker is hovered or focused.
+                // Resting: the seek bar over one row; the volume slider is hidden until the speaker is hovered or focused.
                 page.Player!.SeekTo(TimeSpan.FromSeconds(4));
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
                 Assert.True(((FrameworkElement)player.FindName("SeekBar")).IsVisible);
@@ -172,7 +170,7 @@ public sealed class PlayerViewThemeTests : IDisposable
                 play.Focus();
                 Assert.False(player.IsVolumeShown);
 
-                // The page's keys, as in 14.5: Right seeks 5 s, Down lowers the volume 5 %, Space plays.
+                // The page's keys: Right seeks 5 s, Down lowers the volume 5 %, Space plays.
                 foreach (var key in new[] { Key.Right, Key.Down, Key.Space })
                 {
                     player.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, key) { RoutedEvent = Keyboard.KeyDownEvent });
@@ -183,8 +181,7 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.True(last.IsPlaying);
                 page.Player.Volume = 1;
 
-                // The gear's menu: "Audio track", the Tracks with the playing one ticked, a divider, then Open in
-                // default player. The heading isn't a choice; the Tracks and the last item take arrow-key focus.
+                // The gear's menu: the heading isn't a choice; the Tracks and the last item take arrow-key focus.
                 var menu = player.OpenSettingsMenu()!;
                 Sta.Pump(TimeSpan.FromMilliseconds(200));
                 Assert.Same(menu, player.SettingsMenu);
@@ -221,8 +218,7 @@ public sealed class PlayerViewThemeTests : IDisposable
                 Assert.Empty(engine.Sent);
                 Assert.False(row.IsRenaming);
 
-                // Story 14.9, full screen: F enters it (the window loses its frame, nav and headers), Esc leaves it
-                // with the page still open, the button enters it again, and closing the page leaves it.
+                // Full screen: F enters it, Esc leaves it with the page still open, and closing the page leaves it.
                 var pageHost = (FrameworkElement)window.FindName("Page");
                 var margin = new Thickness(3, 15, 7, 9);
                 pageHost.Margin = margin;
@@ -268,7 +264,7 @@ public sealed class PlayerViewThemeTests : IDisposable
             Save(window, "player-failed-gaming.png");
             model.CurrentDrillIn!.Close();
 
-            // Story 14.6: a missing HEVC Video Extension, named, with its Store page, in both looks.
+            // A missing HEVC Video Extension, named, with its Store page, in both looks.
             (failing, undecodable) = (false, "HEVC");
             foreach (var (theme, file) in new[] { (AppTheme.Fluent, "player-codec-fluent.png"), (AppTheme.GamingDark, "player-codec-gaming.png") })
             {
@@ -297,7 +293,7 @@ public sealed class PlayerViewThemeTests : IDisposable
         }
     });
 
-    // Story 14.6, deferred to the 14.7 sweep: a page that gets no picture in time says the file can't be played.
+    // A page that gets no picture in time says the file can't be played.
     [Fact]
     public void APageWithNoPictureInTimeSaysTheFileCantBePlayed() => Sta.Run(() =>
     {
@@ -323,7 +319,7 @@ public sealed class PlayerViewThemeTests : IDisposable
             model.Library.Click(model.Library.Rows.Single(), ctrl: false, shift: false);
             model.Library.OpenFocused();
 
-            // QA 14.6: while the front buffer is gone (a lock screen) the timer waits; it restarts when it's back.
+            // While the front buffer is gone (a lock screen) the timer waits; it restarts when it's back.
             var player2 = (PlayerView)view.FindName("PlayerContent");
             player2.FrontBufferChanged(false);
             Sta.Pump(TimeSpan.FromMilliseconds(700));

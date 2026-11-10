@@ -16,7 +16,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>The Library restyled (story 9.4) and selectable (story 10.2): its rows, banner, empty state, selection and command bar, in both themes.</summary>
+/// <summary>The Library restyled and selectable: its rows, banner, empty state, selection and command bar, in both themes.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class LibraryThemeTests
 {
@@ -83,7 +83,7 @@ public sealed class LibraryThemeTests
 
                 Save(window, $"library-{name}.png");
 
-                // Story 10.2: two rows selected, the second focused, with keyboard focus in the list.
+                // Two rows selected, the second focused, with keyboard focus in the list.
                 page.Click(rows["ace.mp4"], ctrl: false, shift: false);
                 page.Click(rows["no-thumbnail.mp4"], ctrl: true, shift: false);
                 window.Activate();
@@ -100,7 +100,7 @@ public sealed class LibraryThemeTests
 
                 Save(window, $"library-selected-{name}.png");
 
-                // Story 10.3: a search with Largest first and Group by None, nothing selected.
+                // A search with Largest first and Group by None, nothing selected.
                 page.ClearSelection();
                 (page.GroupBy, page.Sort, page.SearchText) = (LibraryGrouping.None, LibrarySort.LargestFirst, "a");
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
@@ -140,7 +140,7 @@ public sealed class LibraryThemeTests
         Layout(view);
         Assert.Equal(Visibility.Collapsed, empty.Visibility);
 
-        // Story 10.3: a search that matches nothing says so, apart from the empty Library's message.
+        // A search that matches nothing says so, apart from the empty Library's message.
         var noResults = (TextBlock)view.FindName("NoResultsMessage");
         Assert.Equal(Visibility.Collapsed, noResults.Visibility);
         page.SearchText = "zzz";
@@ -168,7 +168,7 @@ public sealed class LibraryThemeTests
     [Fact]
     public void TheWelcomeCardABadgedRowAndTheStatusHintLoadInBothThemes() => Sta.Run(() =>
     {
-        // Story 10.6: the welcome card on an empty Library, then a Recording's badge and the header's hint.
+        // The welcome card on an empty Library, then a Recording's badge and the header's hint.
         var engine = new FakeEngineSession { Reply = (_, _) => Empty.Value };
         var settings = SettingsDocument.Empty with
         {

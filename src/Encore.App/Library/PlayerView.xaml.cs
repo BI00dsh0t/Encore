@@ -10,24 +10,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Library;
 
-/// <summary>
-/// Draws the player page's frames (AD-27, story 14.2).
-/// <list type="bullet">
-/// <item>The player's frame events are coalesced into one present on the UI thread. It copies the frame
-/// into the <see cref="VideoSurface"/> and marks the <see cref="D3DImage"/> dirty.</item>
-/// <item>The surface's two devices are made once per page. Its texture is sized to the picture's pixels,
-/// with the video's aspect and never above the video's own size. It's remade only after a resize settles,
-/// and until then the old one is drawn scaled, so a paused picture never blanks.</item>
-/// <item>A GPU failure building the surface, or no picture within 5 s of opening (story 14.6), puts the page in its
-/// Failed state rather than leaving a blank picture.</item>
-/// <item>After a lost front buffer (a lock screen, a display change) the surface is remade and the current frame redrawn.</item>
-/// <item>Leaving the page drops its frames before the back buffer goes (the proof's close order).</item>
-/// <item>The controls (story 14.9): the gear's menu, the volume slider that slides out, and F for full screen.</item>
-/// <item>The transport (story 14.5): the position is read for the seek bar about ten times a second while playing,
-/// a drag of the seek bar's thumb seeks about once a rendered frame, and the keys bubble here, so a focused
-/// control's own keys win.</item>
-/// </list>
-/// </summary>
+/// <summary>Draws the player page's frames into a shared surface and wires its controls. Details: docs/code-notes.md.</summary>
 internal partial class PlayerView
 {
     public static readonly DependencyProperty IsClipEditorProperty = DependencyProperty.Register(nameof(IsClipEditor), typeof(bool), typeof(PlayerView), new PropertyMetadata(false));
@@ -35,7 +18,7 @@ internal partial class PlayerView
     // How long the picture's size must hold before the texture is remade at it.
     private static readonly TimeSpan ResizeSettle = TimeSpan.FromMilliseconds(150);
 
-    /// <summary>How long the page waits for its first picture before saying the file can't be played (story 14.6); tests shorten it.</summary>
+    /// <summary>How long the page waits for its first picture before saying the file can't be played; tests shorten it.</summary>
     internal static TimeSpan NoPictureTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
     // How often the seek bar and time follow the player while it plays.
@@ -57,8 +40,7 @@ internal partial class PlayerView
     // Whether the no-picture timer is due: started when the media is there, paused while the front buffer is gone.
     private bool _noPictureWaiting;
 
-    // Whether D3DImage has its front buffer: the one signal the present, the no-picture timer and
-    // FrontBufferChanged all read (QA 14.7).
+    // Whether D3DImage has its front buffer: the one signal the present, the no-picture timer and the handler read.
     private bool _frontBufferAvailable = true;
 
     public PlayerView()
@@ -81,7 +63,7 @@ internal partial class PlayerView
         Unloaded += (_, _) => Attach(null);
         Loaded += (_, _) => Attach(DataContext as PlayerPage);
 
-        // Story 14.9: the volume slider slides out while the pointer or keyboard focus is in the speaker's group.
+        // The volume slider slides out while the pointer or keyboard focus is in the speaker's group.
         VolumeGroup.MouseEnter += (_, _) =>
         {
             _volumeHover = true;
@@ -101,11 +83,7 @@ internal partial class PlayerView
     /// <summary>Focuses the play button, when the page opens.</summary>
     public void FocusFirstControl() => PlayPause.Focus();
 
-    /// <summary>
-    /// The surface size for a <paramref name="videoWidth"/> × <paramref name="videoHeight"/> video shown in
-    /// <paramref name="areaWidth"/> × <paramref name="areaHeight"/> pixels: the video's aspect fitted into the
-    /// area, never larger than the video, both sides even and at least 2.
-    /// </summary>
+    /// <summary>The surface size for a video shown in an area: the video's aspect, never larger than the video, sides even.</summary>
     internal static (int Width, int Height) Fit(int videoWidth, int videoHeight, double areaWidth, double areaHeight)
     {
         if (videoWidth <= 0 || videoHeight <= 0)
@@ -131,7 +109,7 @@ internal partial class PlayerView
             old.PropertyChanged -= OnPagePropertyChanged;
         }
 
-        // The scrub stops while its page is still known, so the page's IsScrubbing is cleared (QA 14.5).
+        // The scrub stops while its page is still known, so the page's IsScrubbing is cleared.
         StopScrub();
         CloseSettingsMenu();
         _page = null;
@@ -148,8 +126,7 @@ internal partial class PlayerView
             page.PropertyChanged += OnPagePropertyChanged;
             _position.IsEnabled = page.IsPlaying;
 
-            // A page that opened before this view attached (a fast open) has its media already: wait for its
-            // picture from now, as the Media change would have started (QA 14.7).
+            // A page that opened before this view attached already has its media: wait for its picture from now.
             if (page.Media is not null && !page.IsFailed)
             {
                 StartNoPictureWait();
@@ -195,16 +172,7 @@ internal partial class PlayerView
         Draw(page, () => EnsureSurface(media), Show, ReleaseSurface);
     }
 
-    /// <summary>
-    /// One present's work: build or reuse the surface, copy the frame into it, show it.
-    /// <list type="bullet">
-    /// <item>Any failure building the surface releases it and puts the page in its Failed state, paused,
-    /// never a blank picture or a crash. That covers a failing HRESULT however it's mapped:
-    /// <c>COMException</c>, or <c>OutOfMemoryException</c> for out of video memory, or <c>ArgumentException</c>
-    /// for a size the GPU won't take.</item>
-    /// <item>A frame that can't be copied is skipped; the next one comes.</item>
-    /// </list>
-    /// </summary>
+    /// <summary>One present's work: build or reuse the surface, copy the frame, show it; a surface failure fails the page.</summary>
     internal static void Draw(PlayerPage page, Func<VideoSurface?> ensureSurface, Action<VideoSurface> show, Action release)
     {
         VideoSurface? surface;
@@ -212,7 +180,7 @@ internal partial class PlayerView
         {
             surface = ensureSurface();
         }
-#pragma warning disable CA1031 // Every GPU failure here is the page's failure (QA 14.2 round 2): narrowing missed OutOfMemoryException and ArgumentException.
+#pragma warning disable CA1031 // Every GPU failure here is the page's failure: narrowing missed OutOfMemoryException and ArgumentException.
         catch (Exception)
 #pragma warning restore CA1031
         {
@@ -248,8 +216,7 @@ internal partial class PlayerView
         _image.Unlock();
     }
 
-    // The surface at the size the picture wants now; during a resize the old one stays until the size settles.
-    // Null when there's no window to make it on yet.
+    // The surface at the size the picture wants now; during a resize the old one stays. Null with no window yet.
     private VideoSurface? EnsureSurface(PlayerMedia media)
     {
         var dpi = VisualTreeHelper.GetDpi(this);
@@ -292,8 +259,7 @@ internal partial class PlayerView
         _surface = null;
     }
 
-    // No frame from the player since the file opened (a truncated file, say): the page says it can't be played
-    // (story 14.6). The view's own presents (a resize, the media arriving) don't count.
+    // No frame since the file opened, such as a cut-off file: the page says it can't be played.
     private void OnNoPicture(object? sender, EventArgs e)
     {
         _noPicture.Stop();
@@ -325,8 +291,7 @@ internal partial class PlayerView
         }
     }
 
-    // The page's keys, after the focused control's own: Space plays and pauses, Left and Right seek 5 s,
-    // Up and Down change the volume 5 %. Esc is the shell's (it closes the drill-in).
+    // The page's keys, after the focused control's own: Space, Left and Right, Up and Down. Esc is the shell's.
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         if (_page is not { IsClosed: false } page || Keyboard.Modifiers != ModifierKeys.None)
@@ -367,12 +332,7 @@ internal partial class PlayerView
     /// <summary>The gear's menu while it's open, else null: for tests.</summary>
     internal ContextMenu? SettingsMenu => _menu is { IsOpen: true } menu ? menu : null;
 
-    /// <summary>
-    /// Opens the gear's menu (story 14.9): headed "Audio track", the Tracks in file order with the playing one
-    /// ticked (one Windows can't decode is shown and can't be chosen), a divider, then "Open in default player".
-    /// It's the theme's ContextMenu, so Esc, a click outside and a choice close it, and the arrow keys move through
-    /// its items; the heading isn't one of them.
-    /// </summary>
+    /// <summary>Opens the gear's menu: the Tracks in file order with the playing one ticked, then "Open in default player".</summary>
     internal ContextMenu? OpenSettingsMenu()
     {
         if (_page is not { IsClosed: false } page)
@@ -461,15 +421,10 @@ internal partial class PlayerView
 
     private void OnRendering(object? sender, EventArgs e) => _page?.ApplyPendingScrub();
 
-    // A lock screen or display change loses the D3D9 device: remake the surface on new devices when it's
-    // back, and redraw the current frame, paused or playing.
+    // A lock screen or display change loses the D3D9 device: remake the surface and redraw the current frame.
     private void OnFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e) => FrontBufferChanged(e.NewValue is true);
 
-    /// <summary>
-    /// The front buffer went (<paramref name="available"/> false: a lock screen, a display change) or came back.
-    /// While it's gone no frame can be shown, so the no-picture timer pauses, and it restarts in full when it's
-    /// back (QA 14.6). On its return the surface is remade on new devices and the current frame redrawn.
-    /// </summary>
+    /// <summary>The front buffer went or came back: the no-picture timer pauses while it is gone, and the surface is remade.</summary>
     internal void FrontBufferChanged(bool available)
     {
         _frontBufferAvailable = available;

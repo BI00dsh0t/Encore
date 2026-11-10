@@ -5,13 +5,7 @@ using System.Windows.Forms;
 
 namespace Encore.Bench;
 
-/// <summary>
-/// The drift run's video marker: a black 640×360 top-level window titled <see cref="Title"/> that turns
-/// white at each whole second from its origin, for 3 frames at the output fps (and at least 3 DWM
-/// compositions), then black again. Each flash is painted with GDI from a thread of its own, then
-/// <c>DwmFlush</c> waits for the composition that shows it, and the QPC read right after is the
-/// flash's stamp. The window lives on an STA thread of its own, so the caller's thread stays free.
-/// </summary>
+/// <summary>The drift run's video marker: a black window that flashes white each second and stamps each flash with QPC.</summary>
 internal sealed class MarkerWindow : IDisposable
 {
     public const string Title = "Encore Bench Marker";

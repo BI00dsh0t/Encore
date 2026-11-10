@@ -13,15 +13,7 @@ using Encore.Engine.Supervision;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Story 10.8's closing check of epic 10, unattended and with no capture: the whole engine
-/// (<c>EngineHost</c>) in-process on a throwaway test instance in temp folders, with fake audio
-/// endpoints and a Recycle Bin that deletes the temp files, and the App's own
-/// <see cref="EngineConnection"/> and view models. It starts from an empty settings folder and checks the
-/// seed; drives a fabricated Library through selection, a bulk Favourite, Copy, sort, search and a
-/// delete that keeps the Favourites; applies and saves a preset; changes and resets a game's Clip length;
-/// and checks the nav has no Recordings page. The glossary and every other App test run in the same suite.
-/// </summary>
+/// <summary>The settings and Library flows end to end, unattended and with no capture, on fake audio endpoints.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class UxPass2EndToEndTests : IDisposable
 {
@@ -62,16 +54,16 @@ public sealed class UxPass2EndToEndTests : IDisposable
         engine.Changed += () => post(() => main.Refresh());
         main.Refresh();
 
-        // R6: an empty settings folder is seeded with the default playback and microphone on Track 1.
+        // An empty settings folder is seeded with the default playback and microphone on Track 1.
         var seeded = Layout(engine.State!.Settings);
         Assert.Equal([(Speakers.EndpointId, false), (Mic.EndpointId, true)], seeded.Devices.Select(d => (d.EndpointId, d.IsMic)));
         Assert.Equal(Keys.EverythingTrackId, Assert.Single(seeded.Tracks).Id);
         Assert.Equal(["Everything"], main.TrackLayout.Tracks.Select(t => t.Name));
 
-        // R10: the settings pages are named for what they control, and there is no Recordings page.
+        // The settings pages are named for what they control, and there is no Recordings page.
         Assert.DoesNotContain(main.NavItems, i => i.Title.Contains("Recording", StringComparison.OrdinalIgnoreCase));
 
-        // R5: a preset applied and saved.
+        // A preset applied and saved.
         main.TrackLayout.Confirm = (_, _) => true;
         main.TrackLayout.ApplyPresetCommand.Execute(TrackLayoutPreset.ForEditing);
         Assert.True(main.TrackLayout.IsDirty);
@@ -101,7 +93,7 @@ public sealed class UxPass2EndToEndTests : IDisposable
         library.Render(engine.State!);
         Assert.False(library.ShowsWelcome);
 
-        // R4: sort and search.
+        // Sort and search.
         (library.GroupBy, library.Sort) = (LibraryGrouping.None, LibrarySort.NewestFirst);
         // The engine dated each item by the creation time set above, an hour apart.
         Assert.Equal(names, engine.State!.Library.OrderBy(i => i.Date).Select(i => i.Path));
@@ -112,7 +104,7 @@ public sealed class UxPass2EndToEndTests : IDisposable
         Assert.Equal(["bravo.mp4"], Shown(library));
         library.ClearSearchCommand.Execute(null);
 
-        // R1, R2: a mouse selection of two, then a bulk Favourite.
+        // A mouse selection of two, then a bulk Favourite.
         library.Click(Row(library, "alpha.mp4"), ctrl: false, shift: false);
         library.Click(Row(library, "bravo.mp4"), ctrl: true, shift: false);
         library.FavouriteSelectionCommand.Execute(null);
@@ -129,7 +121,7 @@ public sealed class UxPass2EndToEndTests : IDisposable
         Assert.False(File.Exists(Path.Combine(output, "charlie.mp4")));
         Assert.True(File.Exists(Path.Combine(output, "alpha.mp4")) && File.Exists(Path.Combine(output, "bravo.mp4")));
 
-        // R9: a game's page, its Clip length changed for the game and reset to the main setting.
+        // A game's page, its Clip length changed for the game and reset to the main setting.
         Run(engine.SendAsync(SettingsMessages.Update, new SettingsUpdate(
             engine.State!.Settings.Revision,
             [SettingsOp.SetProfile(GameId, ProfileAttributes.Name, JsonSerializer.SerializeToElement("Demo"))])));

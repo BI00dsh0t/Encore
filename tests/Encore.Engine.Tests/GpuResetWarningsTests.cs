@@ -7,7 +7,7 @@ using Encore.Engine.Sessions;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>Story 8.3: the status line shows <c>gpu-reset</c> only while a session recovers.</summary>
+/// <summary>The status line shows <c>gpu-reset</c> only while a session recovers.</summary>
 public sealed class GpuResetWarningsTests
 {
     [Fact]

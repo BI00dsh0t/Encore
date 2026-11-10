@@ -1,11 +1,6 @@
 namespace Encore.Media;
 
-/// <summary>
-/// A session's mic mute over time: its state at Start, then each change with the QPC it applies
-/// from (AD-13). Thread-safe: <see cref="Set"/> comes from the orchestrator thread and swaps an
-/// immutable log, which the audio threads' <see cref="MicMuteGate"/>s read with one
-/// <c>Volatile.Read</c> per run, without a lock.
-/// </summary>
+/// <summary>A session's mic mute over time: the state at Start, then each change with the QPC it applies from. Thread-safe.</summary>
 public sealed class MicMuteSchedule
 {
     private readonly Lock _writer = new();
@@ -13,7 +8,7 @@ public sealed class MicMuteSchedule
     /// <summary>The changes in QPC order; the first is the Start state, from the beginning of time.</summary>
     private (long Qpc, bool Muted)[] _changes;
 
-    /// <param name="muted">The mute at Start, in place from the first frame.</param>
+    /// <summary>The muted argument is the mute at Start, in place from the first frame.</summary>
     public MicMuteSchedule(bool muted) => _changes = [(long.MinValue, muted)];
 
     /// <summary>The latest state.</summary>
@@ -22,10 +17,7 @@ public sealed class MicMuteSchedule
     /// <summary>The log, read once per run by a gate.</summary>
     internal (long Qpc, bool Muted)[] Changes => Volatile.Read(ref _changes);
 
-    /// <summary>
-    /// Sets the mute from <paramref name="qpc"/> on. A set to the current state changes nothing; a
-    /// QPC earlier than the last change's is taken as that change's, so the log stays in order.
-    /// </summary>
+    /// <summary>Sets the mute from a QPC time on; a time earlier than the last change's is taken as that change's.</summary>
     public void Set(bool muted, long qpc)
     {
         lock (_writer)
@@ -45,15 +37,7 @@ public sealed class MicMuteSchedule
     }
 }
 
-/// <summary>
-/// Silences one Mic Device's input to one <c>muteAffected</c> Track while its
-/// <see cref="MicMuteSchedule"/> says muted, before the mix (AD-13). It sits between a device's
-/// <see cref="AudioTimeline"/> (whose output frame k is k frames after the anchor, AD-6) and the
-/// Track's mixer input, counts its frame position from 0, and maps each change to its first frame
-/// at or after the change's QPC (a change at or before the anchor applies from frame 0). Muted runs
-/// go on as <see cref="IAudioSampleSink.WriteSilence"/>, the rest unchanged; frames already passed
-/// on are never revisited. Driven by one device thread; nothing is allocated or locked per write.
-/// </summary>
+/// <summary>Silences one mic's input to one Track while the schedule says muted, before the mix. One device thread drives it.</summary>
 public sealed class MicMuteGate : IAudioSampleSink
 {
     private const int Channels = AudioTimeline.Channels;
@@ -64,10 +48,7 @@ public sealed class MicMuteGate : IAudioSampleSink
     private readonly long _anchorQpc;
     private long _position;
 
-    /// <param name="inner">The Track's mixer input for this device.</param>
-    /// <param name="schedule">The session's mic mute.</param>
-    /// <param name="qpcFrequency">QPC ticks per second.</param>
-    /// <param name="anchorQpc">The session anchor: frame 0.</param>
+    /// <summary>The inner sink is the Track's mixer input for this device; anchorQpc is the session anchor, frame 0.</summary>
     public MicMuteGate(IAudioSampleSink inner, MicMuteSchedule schedule, long qpcFrequency, long anchorQpc)
     {
         ArgumentNullException.ThrowIfNull(inner);
@@ -115,7 +96,7 @@ public sealed class MicMuteGate : IAudioSampleSink
         _inner.WriteSilence(frames);
     }
 
-    /// <summary>The mute at <paramref name="frame"/>, and the frame the next change applies from (<see cref="long.MaxValue"/> for none).</summary>
+    /// <summary>The mute at a frame, and the frame the next change applies from (<see cref="long.MaxValue"/> for none).</summary>
     private (bool Muted, long Until) StateAt(long frame)
     {
         var changes = _schedule.Changes;
@@ -134,10 +115,7 @@ public sealed class MicMuteGate : IAudioSampleSink
         return (changes[0].Muted, until);
     }
 
-    /// <summary>
-    /// The first frame at or after <paramref name="qpc"/> of a stream whose frame 0 is
-    /// <paramref name="anchorQpc"/>: ceil((qpc − anchor) · 48000 / frequency); 0 at or before the anchor.
-    /// </summary>
+    /// <summary>The first frame at or after a QPC time, in a stream whose frame 0 is the anchor; 0 at or before the anchor.</summary>
     public static long FrameFrom(long qpc, long anchorQpc, long qpcFrequency)
     {
         if (qpc <= anchorQpc)

@@ -15,31 +15,17 @@ public sealed record EngineClientOptions
 {
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
-    /// <summary>
-    /// Checks the process serving the pipe (AD-3: its image is in the install folder). Runs after
-    /// connecting and before anything is read; <c>false</c> fails the connect with
-    /// <see cref="ErrorCodes.EngineUntrusted"/>.
-    /// </summary>
+    /// <summary>Checks the process serving the pipe, before anything is read; false fails the connect as an untrusted engine.</summary>
     public Func<NamedPipeClientStream, bool>? VerifyServer { get; init; }
 
-    /// <summary>
-    /// Called for each event after the snapshot, in <c>seq</c> order, after <see cref="EngineClient.State"/>
-    /// includes it. Unregistered event types are passed on too. It runs on the client's read loop:
-    /// a reply that follows the event is not delivered until it returns, and an exception from it
-    /// ends the connection.
-    /// </summary>
+    /// <summary>Called for each event in <c>seq</c> order, on the client's read loop; a throw from it ends the connection.</summary>
     public Action<IpcEvent>? OnEvent { get; init; }
 
     /// <summary>Called once when the connection ends, with the exception that ended it, if any.</summary>
     public Action<Exception?>? OnDisconnected { get; init; }
 }
 
-/// <summary>
-/// A connection to the engine (AD-3). <see cref="ConnectAsync"/> returns once the snapshot has
-/// arrived; <see cref="State"/> then follows every event. Each command gets one reply; when the
-/// connection ends, every pending command fails with <see cref="ErrorCodes.EngineDisconnected"/>.
-/// There is no reconnect: a new connection is a new client, with a fresh snapshot.
-/// </summary>
+/// <summary>A connection to the engine: one reply per command, and no reconnect. Details: docs/code-notes.md.</summary>
 public sealed class EngineClient : IAsyncDisposable
 {
     private readonly NamedPipeClientStream _pipe;
@@ -71,11 +57,7 @@ public sealed class EngineClient : IAsyncDisposable
 
     public bool IsConnected => Volatile.Read(ref _closed) == 0;
 
-    /// <summary>Connects to the engine's pipe and waits for its snapshot.</summary>
-    /// <exception cref="ErrorCodeException">
-    /// <see cref="ErrorCodes.EngineDisconnected"/> when no engine answers or the connection drops
-    /// before the snapshot; <see cref="ErrorCodes.EngineUntrusted"/> when the server check fails.
-    /// </exception>
+    /// <summary>Connects to the engine's pipe and waits for its snapshot; throws ErrorCodeException when it can't.</summary>
     public static async Task<EngineClient> ConnectAsync(string pipeName, EngineClientOptions? options = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(pipeName);
@@ -119,8 +101,7 @@ public sealed class EngineClient : IAsyncDisposable
         }
     }
 
-    /// <summary>Sends a command and waits for its reply.</summary>
-    /// <exception cref="ErrorCodeException">The engine replied with an error, or the connection ended first (<see cref="ErrorCodes.EngineDisconnected"/>).</exception>
+    /// <summary>Sends a command and waits for its reply; throws ErrorCodeException on an error reply or a lost connection.</summary>
     public async Task<TResult> SendAsync<TArgs, TResult>(CommandType<TArgs, TResult> command, TArgs args, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);

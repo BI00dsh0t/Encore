@@ -4,7 +4,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.Contracts.Ipc;
 
-/// <summary>A command (AD-3): sent by a client, answered by exactly one reply.</summary>
+/// <summary>A command: sent by a client, answered by exactly one reply.</summary>
 public abstract class CommandType(string name)
 {
     /// <summary>The <c>noun.verb</c> type name.</summary>
@@ -22,10 +22,7 @@ public sealed class CommandType<TArgs, TResult>(string name, JsonTypeInfo<TArgs>
     public JsonTypeInfo<TResult> ResultType { get; } = resultType;
 }
 
-/// <summary>
-/// An event (AD-3): sent by the engine with a <c>seq</c>. Every event changes one field of
-/// <see cref="StateSnapshot"/>, through one <c>Apply</c> that the engine and its clients share.
-/// </summary>
+/// <summary>An event: sent by the engine with a <c>seq</c>; each changes one field of <see cref="StateSnapshot"/>.</summary>
 public abstract class EventType(string name, string snapshotField, bool coalesces)
 {
     /// <summary>The <c>noun.verb</c> type name.</summary>
@@ -34,11 +31,10 @@ public abstract class EventType(string name, string snapshotField, bool coalesce
     /// <summary>The JSON name of the <see cref="StateSnapshot"/> field this event changes.</summary>
     public string SnapshotField { get; } = snapshotField;
 
-    /// <summary>Whether a connection's queue keeps only the latest of these (AD-3).</summary>
+    /// <summary>Whether a connection's queue keeps only the latest of these.</summary>
     public bool Coalesces { get; } = coalesces;
 
-    /// <summary>Applies a payload read from JSON; <c>Seq</c> is the caller's to set.</summary>
-    /// <exception cref="JsonException">The payload doesn't fit the event's type.</exception>
+    /// <summary>Applies a payload read from JSON; <c>Seq</c> is the caller's to set. Throws JsonException on a bad payload.</summary>
     public abstract StateSnapshot ApplyJson(StateSnapshot snapshot, JsonElement payload);
 
     public override string ToString() => Name;
@@ -58,17 +54,14 @@ public sealed class EventType<T>(
     /// <summary>The snapshot after this event; <c>Seq</c> is the caller's to set.</summary>
     public StateSnapshot Apply(StateSnapshot snapshot, T payload) => apply(snapshot, payload);
 
-    /// <exception cref="JsonException">The payload doesn't fit <typeparamref name="T"/>.</exception>
+    /// <summary>Reads the payload; throws JsonException when it doesn't fit <typeparamref name="T"/>.</summary>
     public T Read(JsonElement payload) =>
         payload.Deserialize(PayloadType) ?? throw new JsonException($"'{Name}' has a null payload.");
 
     public override StateSnapshot ApplyJson(StateSnapshot snapshot, JsonElement payload) => Apply(snapshot, Read(payload));
 }
 
-/// <summary>
-/// Every command and event, gathered from the message file of each area. An area adds its
-/// messages to its own file's lists, never here (AD-22).
-/// </summary>
+/// <summary>Every command and event, gathered from each area's message file; an area adds its messages there, never here.</summary>
 public static class MessageRegistry
 {
     public static IReadOnlyList<CommandType> Commands { get; } =

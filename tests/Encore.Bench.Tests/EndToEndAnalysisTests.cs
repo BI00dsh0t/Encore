@@ -3,12 +3,7 @@ using System.Globalization;
 
 namespace Encore.Bench.Tests;
 
-/// <summary>
-/// The whole analysis on a file ffmpeg makes from lavfi: a 2-minute fragmented MP4 with a 3-frame white flash
-/// each second, and a stereo AAC track of TonePlayer's signal whose bursts start 0.2 s after each flash and
-/// drift against the flashes by a set amount over the 2 minutes. The source log says each burst played
-/// exactly 0.2 s after its flash, so all the drift is the file's. Skipped without ffmpeg.
-/// </summary>
+/// <summary>The whole analysis on a file ffmpeg makes with a known drift between flashes and bursts. Skipped without ffmpeg.</summary>
 public sealed class EndToEndAnalysisTests : IDisposable
 {
     private const long Frequency = 10_000_000;
@@ -66,10 +61,7 @@ public sealed class EndToEndAnalysisTests : IDisposable
         return DriftBenchmark.Analyze(tools, file, null, log, settings, 2, "lavfi", 0, 10, 0, OnsetDetector.DefaultBurstDbfs, warnings);
     }
 
-    /// <summary>
-    /// Burst k starts at 0.2 + k (1 + drift / 119) s, so burst 119 is <paramref name="driftSeconds"/> late; a 440 Hz
-    /// tone 10 dB under the bursts plays between them, as TonePlayer's does.
-    /// </summary>
+    /// <summary>Burst k starts at 0.2 + k (1 + drift / 119) s, so burst 119 is the whole drift late; a quiet tone plays between.</summary>
     private static void Make(FfmpegTools tools, string file, double driftSeconds)
     {
         var stretch = (1 + (driftSeconds / (Seconds - 1))).ToString("R", CultureInfo.InvariantCulture);

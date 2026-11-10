@@ -2,10 +2,7 @@ using System.Diagnostics;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// The oracle for the probe: which of the hardware candidates <c>ffmpeg.exe</c> can encode one
-/// frame with, run as <c>-f lavfi -i nullsrc=s=640x360 -frames:v 1 -c:v &lt;name&gt; -f null -</c>.
-/// </summary>
+/// <summary>The oracle for the probe: which hardware encoders <c>ffmpeg.exe</c> itself can encode one frame with.</summary>
 public static class EncoderOracle
 {
     /// <summary>The accepted candidates, in <see cref="EncoderProbe.HardwareCandidates"/> order.</summary>

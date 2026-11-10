@@ -11,13 +11,7 @@ public sealed class DesktopDuplicationCaptureTests
     private const int Fps = 30;
     private static readonly long Qpf = Stopwatch.Frequency;
 
-    /// <summary>
-    /// The bug that bit (dd-frame-gaps): on a quiet monitor, the Desktop Duplication thread waited
-    /// in <c>AcquireNextFrame</c> holding the device lock, so the encoder thread fell over four
-    /// slots behind and the pacer skipped them, leaving 6 to 25-slot PTS gaps. Here the fake
-    /// duplication stalls for 0.8 s and polls under a stand-in for the device lock, which this
-    /// thread, as the encoder thread, takes for every slot it encodes.
-    /// </summary>
+    /// <summary>A bug that bit: waiting in AcquireNextFrame held the device lock, so the encoder fell behind and left PTS gaps.</summary>
     [Fact]
     public void AStallingDuplicationKeepsTheEncodedSlotsOnThe30FpsGrid()
     {

@@ -1,6 +1,4 @@
-<!--
-    Error-only header: collapses completely when there are no active errors or service failures.
--->
+<!-- Error-only header: collapses completely when there are no active errors or service failures. -->
 <UserControl x:Class="Encore.App.Status.StatusLineView"
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

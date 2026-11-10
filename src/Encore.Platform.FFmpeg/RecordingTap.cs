@@ -2,14 +2,7 @@ using FFmpeg.AutoGen.Abstractions;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>
-/// Rewind's encoders write through this (epic-recordings): every packet goes on to the
-/// inner sink (the ring) unchanged, and while a <see cref="RecordingWriter"/> is attached, a new
-/// reference to each is handed to it first. A packet costs the Recording one
-/// <c>av_packet_clone</c> (a native reference, no byte copy) and one enqueue; with no writer, nothing.
-/// It keeps its own copy of each stream's codec parameters, title, default flag and time base, so a
-/// Recording can open its file without reaching into the ring.
-/// </summary>
+/// <summary>Rewind's encoders write through this: packets go on to the ring, and a reference to each goes to a Recording.</summary>
 public sealed unsafe class RecordingTap : PacketSink, IDisposable
 {
     private readonly PacketSink _inner;
@@ -73,10 +66,7 @@ public sealed unsafe class RecordingTap : PacketSink, IDisposable
         _inner.Write(packet, streamIndex, timeBase);
     }
 
-    /// <summary>
-    /// Copies of every stream's parameters, title, default flag and time base, in index order, which
-    /// outlive the tap; the caller owns them.
-    /// </summary>
+    /// <summary>Copies of every stream's parameters, title, default flag and time base, in index order; the caller owns them.</summary>
     public RecordingStreams CopyStreams()
     {
         lock (_lock)
@@ -100,8 +90,7 @@ public sealed unsafe class RecordingTap : PacketSink, IDisposable
         }
     }
 
-    /// <summary>Hands every later packet to <paramref name="writer"/>; one writer at a time, never after <see cref="Close"/>.</summary>
-    /// <exception cref="InvalidOperationException">A writer is attached, or the tap is closed.</exception>
+    /// <summary>Hands every later packet to the writer; one writer at a time, and never after <see cref="Close"/>.</summary>
     public void Attach(RecordingWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -134,10 +123,7 @@ public sealed unsafe class RecordingTap : PacketSink, IDisposable
         }
     }
 
-    /// <summary>
-    /// The session's output has ended: no packet follows. The attached writer, if any, is detached
-    /// and told, so it finishes with what it has.
-    /// </summary>
+    /// <summary>The session's output has ended: the attached writer, if any, is detached and told to finish with what it has.</summary>
     public void Close()
     {
         RecordingWriter? writer;

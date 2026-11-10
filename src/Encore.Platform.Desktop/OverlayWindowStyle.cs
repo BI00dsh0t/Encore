@@ -6,22 +6,16 @@ using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>
-/// The Win32 side of the Overlay window (AD-2): extended styles that keep it topmost, click-through
-/// and never activated, and placement that never takes the foreground from the game.
-/// </summary>
+/// <summary>The Overlay window's Win32 styles and placement: topmost, click-through and never taking focus from the game.</summary>
 public static class OverlayWindowStyle
 {
-    /// <summary>
-    /// <c>WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW</c>.
-    /// </summary>
+    /// <summary>Topmost, click-through, layered, never activated, and hidden from the taskbar.</summary>
     public const uint Styles = (uint)(WINDOW_EX_STYLE.WS_EX_TOPMOST | WINDOW_EX_STYLE.WS_EX_TRANSPARENT
         | WINDOW_EX_STYLE.WS_EX_LAYERED | WINDOW_EX_STYLE.WS_EX_NOACTIVATE | WINDOW_EX_STYLE.WS_EX_TOOLWINDOW);
 
     private static readonly HWND Topmost = new(-1);
 
-    /// <summary>ORs <see cref="Styles"/> into the window's extended style.</summary>
-    /// <exception cref="Win32Exception">The window doesn't exist.</exception>
+    /// <summary>ORs <see cref="Styles"/> into the window's extended style; throws Win32Exception when the window doesn't exist.</summary>
     public static void Apply(nint hwnd)
     {
         var style = ExtendedStyle(hwnd);
@@ -33,8 +27,7 @@ public static class OverlayWindowStyle
         }
     }
 
-    /// <summary>The window's extended style.</summary>
-    /// <exception cref="Win32Exception">The window doesn't exist.</exception>
+    /// <summary>The window's extended style; throws Win32Exception when the window doesn't exist.</summary>
     public static uint ExtendedStyle(nint hwnd)
     {
         Marshal.SetLastPInvokeError(0);
@@ -47,11 +40,7 @@ public static class OverlayWindowStyle
         return (uint)style;
     }
 
-    /// <summary>
-    /// Moves the window to <paramref name="x"/>, <paramref name="y"/> (physical pixels), sizes it,
-    /// puts it on top of the topmost band and shows it, all without activating it.
-    /// </summary>
-    /// <exception cref="Win32Exception">The window doesn't exist.</exception>
+    /// <summary>Moves, sizes and shows the window on top without activating it; the position is in physical pixels.</summary>
     public static void ShowWithoutActivation(nint hwnd, int x, int y, int width, int height)
     {
         if (!PInvoke.SetWindowPos(new HWND(hwnd), Topmost, x, y, width, height,
@@ -61,8 +50,7 @@ public static class OverlayWindowStyle
         }
     }
 
-    /// <summary>The window's bounds (<c>GetWindowRect</c>): left, top, right and bottom.</summary>
-    /// <exception cref="Win32Exception">The window doesn't exist.</exception>
+    /// <summary>The window's bounds: left, top, right and bottom; throws Win32Exception when the window doesn't exist.</summary>
     public static (int Left, int Top, int Right, int Bottom) Bounds(nint hwnd) =>
         PInvoke.GetWindowRect(new HWND(hwnd), out var rect)
             ? (rect.left, rect.top, rect.right, rect.bottom)

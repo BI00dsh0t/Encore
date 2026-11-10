@@ -6,10 +6,7 @@ using Windows.Win32.UI.Shell.Common;
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>
-/// Explorer's "show in folder" (stories 7.6 and 10.2): opens a folder with files selected. The shell
-/// gets only the paths (AD-1). Call it on a thread where COM is initialized, such as the UI thread.
-/// </summary>
+/// <summary>Explorer's "show in folder". Call it on a thread where COM is initialized, such as the UI thread.</summary>
 public static unsafe class ShellFolder
 {
     /// <summary>Opens <paramref name="path"/>'s folder in Explorer with it selected; false when the shell failed.</summary>
@@ -35,10 +32,7 @@ public static unsafe class ShellFolder
         }
     }
 
-    /// <summary>
-    /// Opens <paramref name="folder"/> in one Explorer window with each of <paramref name="files"/> (absolute
-    /// paths inside it) selected; false when the shell failed. A file the shell can't parse is left out.
-    /// </summary>
+    /// <summary>Opens the folder in one Explorer window with each file selected; a file the shell can't parse is left out.</summary>
     public static bool SelectInExplorer(string folder, IReadOnlyList<string> files)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
@@ -99,22 +93,14 @@ public static unsafe class ShellFolder
     }
 }
 
-/// <summary>
-/// The Windows shell's own file copy (story 10.2): its progress, name-conflict and error dialogs, and an
-/// undoable copy. The App never reads the files itself (AD-1). It blocks until the copy ends, so call it on
-/// a background thread in a single-threaded apartment.
-/// </summary>
+/// <summary>The Windows shell's own file copy, with its dialogs and undo. It blocks, so call it on a background STA thread.</summary>
 public static unsafe class ShellFileCopy
 {
     private const uint FoCopy = 0x2;
     private const ushort FofAllowUndo = 0x40;
     private const int ErrorCancelled = 1223;
 
-    /// <summary>
-    /// Copies <paramref name="files"/> (absolute paths) into <paramref name="folder"/>, with the shell's
-    /// dialogs owned by <paramref name="owner"/> (a window handle, or 0). A cancel by the user returns
-    /// normally; a failure throws <see cref="Win32Exception"/>.
-    /// </summary>
+    /// <summary>Copies files into a folder; owner is a window handle or 0. A cancel by the user returns, a failure throws.</summary>
     public static void Copy(IReadOnlyList<string> files, string folder, nint owner)
     {
         ArgumentNullException.ThrowIfNull(files);

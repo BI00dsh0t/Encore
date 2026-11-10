@@ -1,10 +1,6 @@
 namespace Encore.Media;
 
-/// <summary>
-/// A fixed-capacity, allocation-free queue from one producer thread to one consumer thread.
-/// The producer never blocks (<see cref="TryAdd"/> fails when full); the consumer blocks in
-/// <see cref="TryTake"/> until an item arrives or the queue is completed and empty.
-/// </summary>
+/// <summary>A fixed-size queue from one producer thread to one consumer thread; the producer never blocks.</summary>
 public sealed class BoundedHandoff<T>
     where T : struct
 {
@@ -77,10 +73,7 @@ public sealed class BoundedHandoff<T>
         }
     }
 
-    /// <summary>
-    /// Takes the oldest item without waiting: false when the queue is empty, and then
-    /// <paramref name="drained"/> tells whether it is also completed (nothing will ever arrive).
-    /// </summary>
+    /// <summary>Takes the oldest item without waiting; when empty, drained says whether the queue is also completed.</summary>
     public bool TryTakeNow(out T item, out bool drained)
     {
         lock (_sync)

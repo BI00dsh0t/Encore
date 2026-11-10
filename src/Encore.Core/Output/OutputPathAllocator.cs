@@ -4,21 +4,13 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Core.Output;
 
-/// <summary>
-/// The one producer of output paths (R26, AD-21):
-/// <c>&lt;Output Folder&gt;\&lt;profile folder&gt;\&lt;Game&gt;_&lt;yyyy-MM-dd_HH-mm-ss&gt;.mp4</c>.
-/// Each path is reserved on disk before it is returned; nothing is cached.
-/// </summary>
+/// <summary>The one producer of output paths: Output Folder, profile folder, then game name and time. Each is reserved on disk.</summary>
 public sealed class OutputPathAllocator(TimeProvider time)
 {
     /// <summary>The allocator on the system clock.</summary>
     public static OutputPathAllocator System { get; } = new(TimeProvider.System);
 
-    /// <summary>
-    /// Reserves a path for profile <paramref name="profileId"/> in <paramref name="outputFolder"/>,
-    /// named from the profile's live name and the local time of <paramref name="qpc"/>.
-    /// </summary>
-    /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.ProfileNotFound"/>: the document has no such profile.</exception>
+    /// <summary>Reserves a path for a profile, named from its live name and the press's local time; throws when unknown.</summary>
     public string Allocate(SettingsDocument document, string profileId, string outputFolder, long qpc)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -34,11 +26,7 @@ public sealed class OutputPathAllocator(TimeProvider time)
         return Reserve(Path.Combine(outputFolder, folder), profile.Name, LocalTimeOf(qpc));
     }
 
-    /// <summary>
-    /// Reserves a path for a game whose Game Profile may not exist yet: <see cref="Allocate"/> when
-    /// <paramref name="document"/> holds profile <paramref name="profileId"/>, else a folder and file
-    /// named after <paramref name="gameName"/> (the executable's name until profiles name it).
-    /// </summary>
+    /// <summary>Reserves a path for a game whose profile may not exist yet, then named after the game.</summary>
     public string AllocateForGame(SettingsDocument document, string? profileId, string gameName, string outputFolder, long qpc)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -53,21 +41,14 @@ public sealed class OutputPathAllocator(TimeProvider time)
         return Reserve(Path.Combine(outputFolder, PathNames.Sanitize(gameName, PathNames.GameFallback)), gameName, LocalTimeOf(qpc));
     }
 
-    /// <summary>
-    /// Reserves a Monitor Recording's path (6.9):
-    /// <c>&lt;Output Folder&gt;\Monitor Recordings\Monitor_&lt;yyyy-MM-dd_HH-mm-ss&gt;.mp4</c>, from
-    /// the local time of <paramref name="qpc"/>.
-    /// </summary>
+    /// <summary>Reserves a Monitor Recording's path in the Monitor Recordings folder, from the press's local time.</summary>
     public string AllocateForMonitor(string outputFolder, long qpc)
     {
         ArgumentException.ThrowIfNullOrEmpty(outputFolder);
         return Reserve(Path.Combine(outputFolder, ProfileFolders.MonitorRecordings), "Monitor", LocalTimeOf(qpc));
     }
 
-    /// <summary>
-    /// Creates <paramref name="folder"/> and an empty <c>&lt;name&gt;_&lt;localTime&gt;.mp4</c> in it,
-    /// adding <c>_2</c>, <c>_3</c>… while the path is taken, and returns the path created.
-    /// </summary>
+    /// <summary>Creates the folder and an empty file in it, adding <c>_2</c>, <c>_3</c>… while the name is taken.</summary>
     public string Reserve(string folder, string name, DateTime localTime)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);

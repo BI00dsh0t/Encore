@@ -6,12 +6,7 @@ using Encore.App.Overlay;
 
 namespace Encore.App;
 
-/// <summary>
-/// The tray icon's capture state (story 5.15): grey while nothing captures, red while Rewind runs,
-/// and red with a dot while recording, with the state in the tooltip. It shows whatever <c>overlayDot</c> says,
-/// so the state can be read when the Overlay's dot is hidden. An engine crash loop shows the error state
-/// instead: "!" on amber, until Restart from the menu (AD-16).
-/// </summary>
+/// <summary>The tray icon's capture state: grey when idle, red while Rewind runs, a dot while recording, "!" for a crash loop.</summary>
 internal static class TrayCapture
 {
     /// <summary>The tooltip's state while the engine is in a crash loop.</summary>

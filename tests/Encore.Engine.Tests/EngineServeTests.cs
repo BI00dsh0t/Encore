@@ -76,8 +76,7 @@ public sealed class EngineServeTests : IDisposable
         await Task.Delay(200, Token);
         Assert.False(pending.IsCompleted);
 
-        // Wait for the process to be gone, then give the client's read of the broken pipe a generous
-        // bound: Kill only starts the termination, and a loaded machine took over 1 s for both.
+        // Kill only starts the termination, so wait for the process, then give the client's read a generous bound.
         engine.Kill();
         await engine.WaitForExitAsync(Token).WaitAsync(TimeSpan.FromSeconds(30), Token);
 

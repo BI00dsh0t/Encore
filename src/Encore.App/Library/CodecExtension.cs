@@ -1,10 +1,6 @@
 namespace Encore.App.Library;
 
-/// <summary>
-/// A Microsoft Store video extension Windows needs to decode a codec (story 14.6, AD-27): the codec's plain name,
-/// the extension's name and its Store page, opened through the shell. HEVC and AV1 are the codecs our files use
-/// that Windows doesn't decode out of the box; H.264 always plays.
-/// </summary>
+/// <summary>A Microsoft Store video extension Windows needs to decode a codec; HEVC and AV1 need one, H.264 always plays.</summary>
 internal sealed record CodecExtension(string Codec, string Name, string StoreLink)
 {
     public static CodecExtension Hevc { get; } = new("HEVC", "HEVC Video Extension", "ms-windows-store://pdp/?ProductId=9NMZLZ57R3T7");

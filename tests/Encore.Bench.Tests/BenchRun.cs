@@ -1,9 +1,6 @@
 namespace Encore.Bench.Tests;
 
-/// <summary>
-/// The tests that run Bench's subcommands against real processes, devices and Hotkeys: one at a time, so a
-/// held combination, the audio devices or a stray engine never meet another test's.
-/// </summary>
+/// <summary>The tests that run Bench against real processes, devices and Hotkeys: one at a time, so they never meet.</summary>
 [CollectionDefinition(nameof(BenchProcessCollection), DisableParallelization = true)]
 public sealed class BenchProcessCollection;
 
@@ -14,10 +11,7 @@ internal sealed class BenchRun : IDisposable
 
     public string Folder { get; }
 
-    /// <summary>
-    /// The engine built beside these tests (same configuration and target framework), or the folder
-    /// <c>REPLAYBUFFER_ENGINE_DIR</c> names; null when there is none.
-    /// </summary>
+    /// <summary>The engine built beside these tests, or the folder the environment variable names; null when there is none.</summary>
     public static string? EngineExe
     {
         get

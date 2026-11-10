@@ -3,22 +3,12 @@ using Xunit.Sdk;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// The retry rule for the real-time timing tests: <c>dotnet test --solution</c> runs the GPU test
-/// assemblies as parallel processes, so a timing bound can be missed because of a neighbour, not the
-/// code. A test passes on the first of <see cref="MaxAttempts"/> attempts that meets every bound;
-/// each missed attempt is logged, and when all miss the last attempt's failure is rethrown. Only a
-/// timing bound checked with <see cref="Bound"/> or <see cref="InRange{T}"/> is retried; any other
-/// assertion (a crash, a fault, a wrong count or PTS), a skip, or any other exception fails at once.
-/// </summary>
+/// <summary>The retry rule for real-time timing tests: only a missed timing bound is retried; anything else fails at once.</summary>
 public static class RealTimeAttempts
 {
     public const int MaxAttempts = 3;
 
-    /// <summary>
-    /// Runs <paramref name="attempt"/> (given the attempt number, from 1) until it returns without
-    /// missing a timing bound, at most <see cref="MaxAttempts"/> times. Each attempt must write its own files.
-    /// </summary>
+    /// <summary>Runs an attempt until it misses no timing bound, a few times at most; each attempt must write its own files.</summary>
     public static void Run(Action<int> attempt, ITestOutputHelper? output = null)
     {
         ArgumentNullException.ThrowIfNull(attempt);

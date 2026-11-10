@@ -12,12 +12,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// The mic mute capture AC (R4, AD-13), in process: a <see cref="ToneHub"/> plays a game device G
-/// (440 Hz) and a Mic Device M (1 kHz); Tracks <c>Everything</c>={G, M} and <c>Mic</c>={M} are
-/// <c>muteAffected</c>, <c>Game</c>={G} and <c>MicRaw</c>={M} are not. The session starts unmuted, a
-/// <c>micMute</c> press mutes it mid-capture and a second one 1.5 s later unmutes it.
-/// </summary>
+/// <summary>Mic mute in a capture, in process: a press mutes the mic in the Tracks it affects, and a second one unmutes it.</summary>
 public sealed class MicMuteCaptureTests : IDisposable
 {
     private const string WindowScript =
@@ -46,10 +41,7 @@ public sealed class MicMuteCaptureTests : IDisposable
     private const double GameHz = 440;
     private const double MicHz = 1000;
 
-    /// <summary>
-    /// How far from each press the spans keep: the press's handling (frames that passed the gate
-    /// before it arrived) and AAC's transform window, which spreads an edge over about 2048 frames.
-    /// </summary>
+    /// <summary>How far from each press the spans keep: the press's handling, and AAC's transform window around an edge.</summary>
     private const double EdgeSeconds = 0.05;
 
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
@@ -202,7 +194,7 @@ public sealed class MicMuteCaptureTests : IDisposable
     private static void AssertNear(double actual, double expected, double tolerance, string what) =>
         Assert.True(Math.Abs(actual - expected) <= tolerance, $"{what}: {actual}, expected {expected} ± {tolerance}");
 
-    /// <summary>The file holds video plus <paramref name="audioStreams"/> AAC streams, each within 0.1 s of the video's duration; returns that duration.</summary>
+    /// <summary>The file holds the video and the AAC streams, each within 0.1 s of the video's duration, which is returned.</summary>
     private static double AssertDurationsMatchTheVideo(string file, int audioStreams)
     {
         var streams = SessionTestKit.Probe(file, "-show_streams").GetProperty("streams").EnumerateArray()

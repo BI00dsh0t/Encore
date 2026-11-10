@@ -2,12 +2,7 @@ using Microsoft.Win32;
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>
-/// One string value under an HKCU key, such as the Run value that starts the App with Windows
-/// (AD-16). Tests point it at a throwaway subkey; only <see cref="Startup"/> names the real one.
-/// </summary>
-/// <param name="subKey">The key under <c>HKEY_CURRENT_USER</c>.</param>
-/// <param name="valueName">The value's name.</param>
+/// <summary>One string value under an HKCU key, such as the Run value that starts the App with Windows.</summary>
 public sealed class RunKey(string subKey, string valueName)
 {
     public const string StartupSubKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -23,17 +18,14 @@ public sealed class RunKey(string subKey, string valueName)
 
     public string ValueName { get; } = valueName;
 
-    /// <summary>The value's data, or <c>null</c> when the key or the value is missing.</summary>
-    /// <exception cref="System.Security.SecurityException">The key can't be read.</exception>
+    /// <summary>The value's data, or null when the key or the value is missing.</summary>
     public string? Read()
     {
         using var key = Registry.CurrentUser.OpenSubKey(SubKey, writable: false);
         return key?.GetValue(ValueName) as string;
     }
 
-    /// <summary>Writes <paramref name="command"/> as the value's data, creating the key when it is missing.</summary>
-    /// <exception cref="UnauthorizedAccessException">The key can't be written.</exception>
-    /// <exception cref="IOException">The registry write failed.</exception>
+    /// <summary>Writes the value's data, creating the key when it is missing.</summary>
     public void Write(string command)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -42,9 +34,7 @@ public sealed class RunKey(string subKey, string valueName)
         DeleteLegacy(key);
     }
 
-    /// <summary>Deletes the value. A missing key or value is fine.</summary>
-    /// <exception cref="UnauthorizedAccessException">The key can't be written.</exception>
-    /// <exception cref="IOException">The registry write failed.</exception>
+    /// <summary>Deletes the value; a missing key or value is fine.</summary>
     public void Delete()
     {
         using var key = Registry.CurrentUser.OpenSubKey(SubKey, writable: true);

@@ -10,13 +10,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// Games (story 10.10, was Game Profiles): every game in the document, Ignored ones last, each opening its
-/// own <see cref="GamePage"/> through the <see cref="DrillIn"/> pattern. Add a game… picks a program with
-/// 10.9's file picker and sends <c>game.add</c>, which writes <c>manualGames</c>. Each game page is kept
-/// for the run, keyed by its profile id, so a draft survives going back. R23 to R26 are unchanged; the
-/// engine still detects, chooses, profiles and folders games. Members run on the UI thread.
-/// </summary>
+/// <summary>Games: every game in the document, Ignored ones last, each opening its own page. UI thread.</summary>
 internal sealed class GameProfilesPage : SettingsPage
 {
     public const string PageTitle = "Games";
@@ -142,7 +136,7 @@ internal sealed class GameProfilesPage : SettingsPage
         return page;
     }
 
-    /// <summary>Takes the snapshot: the game being captured, and each game page's devices and meters. Called before <see cref="SettingsPage.Render"/>.</summary>
+    /// <summary>Takes the snapshot: the game being captured, and each game page's devices and meters. Called before Render.</summary>
     public void ShowState(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -280,7 +274,7 @@ internal sealed class GameProfileItem(string profileId) : Observable
     private bool _unsaved;
     private ImageSource? _icon;
 
-    /// <summary>The profile id: the program's canonical path (AD-18); never shown in the list.</summary>
+    /// <summary>The profile id: the program's canonical path; never shown in the list.</summary>
     public string ProfileId { get; } = profileId;
 
     public string Name => _name;

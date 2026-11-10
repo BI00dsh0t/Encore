@@ -3,10 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Encore.Contracts.Settings;
 
-/// <summary>
-/// Source-generated serialization for every settings type (AD-14: no reflection). camelCase
-/// properties, camelCase enum names, nullable annotations and required parameters enforced.
-/// </summary>
+/// <summary>Source-generated serialization for every settings type, with no reflection; camelCase names, nulls enforced.</summary>
 [JsonSourceGenerationOptions(
     JsonSerializerDefaults.General,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

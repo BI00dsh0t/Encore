@@ -1,9 +1,6 @@
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// <c>.bench-running</c> in the main folder: on-screen tests wait while another session holds it,
-/// then hold it themselves.
-/// </summary>
+/// <summary>The bench lock in the main folder: on-screen tests wait while another session holds it, then hold it.</summary>
 internal sealed class BenchLock(string path) : IDisposable
 {
     public static BenchLock Take(string holder = "Engine on-screen capture test")

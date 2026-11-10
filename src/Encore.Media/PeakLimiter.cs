@@ -1,15 +1,6 @@
 namespace Encore.Media;
 
-/// <summary>
-/// The last stage of a Track (AD-13): a stereo-linked peak limiter that acts only above full scale.
-/// Audio that stays within [-1, 1] passes through bit-identically. A frame whose peak would exceed
-/// full scale drops the gain at once to bring it to exactly full scale (instant attack, no
-/// look-ahead, so nothing is delayed); the gain then recovers toward 1 with a
-/// <see cref="ReleaseSeconds"/> time constant and snaps to exactly 1. One gain applies to both
-/// channels. Non-finite samples are written as 0. No gain control, normalisation or compression
-/// below full scale. Not thread-safe: its owner serialises the writes. Nothing is allocated once
-/// constructed.
-/// </summary>
+/// <summary>A Track's last stage: a stereo-linked peak limiter that acts only above full scale. See docs/code-notes.md.</summary>
 public sealed class PeakLimiter : IAudioSampleSink
 {
     /// <summary>The release time constant, in seconds.</summary>
@@ -28,7 +19,7 @@ public sealed class PeakLimiter : IAudioSampleSink
     private readonly float[] _scratch = new float[ChunkFrames * Channels];
     private double _gain = 1;
 
-    /// <param name="output">Receives the limited stream, typically the Track's encoder.</param>
+    /// <summary>The output receives the limited stream, typically the Track's encoder.</summary>
     public PeakLimiter(IAudioSampleSink output)
     {
         ArgumentNullException.ThrowIfNull(output);

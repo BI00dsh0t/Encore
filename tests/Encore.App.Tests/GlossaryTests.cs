@@ -7,11 +7,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Story 10.11 (R11): no text the user sees uses an internal term from epic 10's EXPERIENCE.md glossary.
-/// Settings keys, codes, message names, Contracts, logs and automation ids keep the internal names, so the
-/// test reads only what is shown: every literal Text, Content, Header and ToolTip in the App's XAML.
-/// </summary>
+/// <summary>No text the user sees uses an internal term; only literal Text, Content, Header and ToolTip in XAML are read.</summary>
 public sealed partial class GlossaryTests
 {
     /// <summary>The glossary's left column, as whole words or phrases, ignoring case.</summary>
@@ -36,11 +32,7 @@ public sealed partial class GlossaryTests
         Assert.Empty(found);
     }
 
-    /// <summary>
-    /// The source files whose string literals are user-facing text (story 10.7, QA 10.11's note): the App's
-    /// status, tray, Overlay, welcome card and settings pages, and the engine's warning and notice texts.
-    /// Log and exception lines are skipped; so are comments.
-    /// </summary>
+    /// <summary>The source files whose string literals are user-facing text; log and exception lines and comments are skipped.</summary>
     private static readonly string[] UserFacingSources =
     [
         @"src\Encore.App\Status\StatusLine.cs",
@@ -78,7 +70,7 @@ public sealed partial class GlossaryTests
         Assert.True(found.Count == 0, string.Join(Environment.NewLine, found));
     }
 
-    // Logs, exceptions, comments, argument checks and folder names keep the internal names (AD-22).
+    // Logs, exceptions, comments, argument checks and folder names keep the internal names.
     private static bool IsSkipped(string line)
     {
         var text = line.TrimStart();

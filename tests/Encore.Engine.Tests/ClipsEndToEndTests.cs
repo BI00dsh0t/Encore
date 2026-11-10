@@ -11,15 +11,7 @@ using Encore.Platform.Windows;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Story 4.14's chain from the Save Hotkey to a Clip, through the whole engine: <c>EngineHost</c> on a throwaway
-/// test instance with Rewind on, the real foreground Game Detection, and the real pipe and Hotkeys.
-/// Bench's borderless GPU load is the Target Game.
-/// Injected presses (<c>SendInput</c>) save faststart Clips with named Tracks and the Buffer Window's length.
-/// A press inside the Save Cooldown is ignored. A Global Buffer Window change and the game's own video
-/// override both take effect from the Reset after the next save. The test runs in Memory and in Disk mode.
-/// Needs the GPU, an unlocked console and the Release build of the GPU load.
-/// </summary>
+/// <summary>From the Save Hotkey to a Clip through the whole engine, in Memory and Disk mode. Needs the GPU and a console.</summary>
 [Collection(nameof(HotkeyServeCollection))]
 public sealed class ClipsEndToEndTests : IDisposable
 {
@@ -115,11 +107,7 @@ public sealed class ClipsEndToEndTests : IDisposable
         await client.SendAsync(EngineMessages.Shutdown, Empty.Value, Token);
     }
 
-    /// <summary>
-    /// Story 8.6: a reboot, as two cold engine starts on the same data folders with nothing sent between
-    /// them. After each, Rewind starts on the running game by itself, with the Save Hotkey
-    /// registered from disk, and a press saves a Clip with every Track.
-    /// </summary>
+    /// <summary>A reboot, as two cold engine starts on the same folders: Rewind starts by itself and a press saves a Clip.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public async Task TheRewindStartsOnTheGameByItselfAfterEachColdStart()
@@ -173,10 +161,7 @@ public sealed class ClipsEndToEndTests : IDisposable
         return path;
     }
 
-    /// <summary>
-    /// ffprobe: the video's size, a length in [min, max] s, named audio Tracks each within 50 ms of the
-    /// video, and moov before mdat.
-    /// </summary>
+    /// <summary>ffprobe: the video's size and length, named audio Tracks within 50 ms of the video, and moov before mdat.</summary>
     private static void Check(string clip, VideoSettings video, double min, double max)
     {
         var probe = SessionTestKit.Probe(clip, "-show_entries", "stream=codec_type,width,height,duration:stream_tags=name");

@@ -4,7 +4,7 @@ using Windows.Win32.System.SystemInformation;
 
 namespace Encore.Platform.Windows;
 
-/// <summary>Windows' physical memory, by <c>GlobalMemoryStatusEx</c>, for Rewind's RAM margin (R3).</summary>
+/// <summary>Windows' physical memory, by <c>GlobalMemoryStatusEx</c>, for Rewind's RAM margin.</summary>
 public sealed unsafe class SystemMemoryStatus : IMemoryStatus
 {
     /// <summary>The available and installed physical memory; on failure, unlimited available, so never at the margin.</summary>

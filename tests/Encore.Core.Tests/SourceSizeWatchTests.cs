@@ -3,7 +3,7 @@ using Encore.Core.Output;
 
 namespace Encore.Core.Tests;
 
-/// <summary>Story 12.2: AD-26's held size change, on synthetic frame stamps (1 tick = 1 ms).</summary>
+/// <summary>The held size change, on synthetic frame stamps (1 tick = 1 ms).</summary>
 public sealed class SourceSizeWatchTests
 {
     private const long Qpf = 1000;

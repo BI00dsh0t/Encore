@@ -10,12 +10,7 @@
                  WindowStartupLocation="CenterOwner"
                  Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
                  Foreground="{DynamicResource TextFillColorPrimaryBrush}">
-    <!--
-        The App's one dialog (DESIGN.md "Dialog"): the caption and message on bg-base, then a button bar with
-        Yes, the accent default, and No. Every colour, corner and type comes from the theme's tokens, so an open
-        dialog restyles with a switch. The window keeps no resources of its own: a window-scoped ThemeMode (the
-        tests') skips a window whose Resources were set first.
-    -->
+    <!-- The App's one dialog: caption and message, then Yes (the default) and No. It keeps no resources of its own. -->
     <DockPanel>
         <Border x:Name="ButtonBar"
                 DockPanel.Dock="Bottom"

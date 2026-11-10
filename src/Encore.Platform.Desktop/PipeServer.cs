@@ -4,11 +4,10 @@ using Windows.Win32;
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>Who serves a named pipe the App connected to (AD-3's server check).</summary>
+/// <summary>Finds which process serves a named pipe the App connected to.</summary>
 public static class PipeServer
 {
-    /// <summary>The process id of the server of the pipe whose client end is <paramref name="pipe"/>.</summary>
-    /// <exception cref="Win32Exception">The handle is not the client end of a named pipe.</exception>
+    /// <summary>The process id of the pipe's server; throws Win32Exception when the handle is not a pipe's client end.</summary>
     public static int ProcessId(SafePipeHandle pipe)
     {
         ArgumentNullException.ThrowIfNull(pipe);

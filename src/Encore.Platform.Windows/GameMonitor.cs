@@ -15,13 +15,12 @@ namespace Encore.Platform.Windows;
 /// <summary>A window that may be a game's, and the process that owns it.</summary>
 public readonly record struct GameWindow(nint Handle, int ProcessId);
 
-/// <summary>A game's process, opened with <c>PROCESS_QUERY_LIMITED_INFORMATION</c> only (AD-12).</summary>
+/// <summary>A game's process, opened with <c>PROCESS_QUERY_LIMITED_INFORMATION</c> only.</summary>
 public interface IGameProcess : IDisposable
 {
     /// <summary>The process's executable, as the system reports it (not canonical).</summary>
     string ImagePath { get; }
 
-    /// <summary>Whether the process has exited.</summary>
     bool HasExited { get; }
 
     /// <summary>When the process started, UTC; <see cref="DateTime.MinValue"/> when it couldn't be read.</summary>
@@ -31,26 +30,20 @@ public interface IGameProcess : IDisposable
 /// <summary>What Game Detection reads from the system; tests fake it.</summary>
 public interface IGameWindowProbe
 {
-    /// <summary>The foreground window when it covers its monitor with no caption and isn't the shell's; otherwise <c>null</c>.</summary>
+    /// <summary>The foreground window when it covers its monitor with no caption and isn't the shell's; otherwise null.</summary>
     GameWindow? ForegroundGameWindow();
 
-    /// <summary>The foreground window, whatever its shape, or <c>null</c> when there is none or it is the shell's.</summary>
+    /// <summary>The foreground window, whatever its shape, or null when there is none or it is the shell's.</summary>
     GameWindow? ForegroundWindow();
 
-    /// <summary>
-    /// The visible, unowned, uncloaked top-level windows that aren't tool windows or the shell's,
-    /// minimized ones included, in Z order.
-    /// </summary>
+    /// <summary>Visible, unowned, uncloaked top-level windows in Z order, minimized ones included; no tool or shell windows.</summary>
     IReadOnlyList<GameWindow> Windows();
 
-    /// <summary>Opens <paramref name="processId"/> with limited access, or returns <c>null</c> when it can't be opened or its image read.</summary>
+    /// <summary>Opens a process with limited access; null when it can't be opened or its image path read.</summary>
     IGameProcess? Open(int processId);
 }
 
-/// <summary>
-/// The real probe (AD-12): reads only top-level windows' geometry, style and owner, and opens their
-/// processes with <c>PROCESS_QUERY_LIMITED_INFORMATION</c>; no memory reads, module lists, hooks or WinEvents.
-/// </summary>
+/// <summary>The real probe: reads only window geometry, style and owner, and opens processes with limited access. No hooks.</summary>
 public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
 {
     private const uint StillActive = 259;
@@ -132,7 +125,7 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
         return new LimitedProcess(process, new string(buffer, 0, (int)size), StartTimeOf(process));
     }
 
-    // Read once, on the limited handle (AD-12).
+    // Read once, on the limited handle.
     private static DateTime StartTimeOf(HANDLE process)
     {
         System.Runtime.InteropServices.ComTypes.FILETIME created, exited, kernel, user;
@@ -145,11 +138,7 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
         return DateTime.FromFileTimeUtc(ticks);
     }
 
-    /// <summary>
-    /// Whether <paramref name="window"/> is borderless or fullscreen: visible, not cloaked or
-    /// minimized, without <c>WS_CAPTION</c>, not the shell's desktop, and its rectangle contains its
-    /// monitor's.
-    /// </summary>
+    /// <summary>Whether a window is borderless or fullscreen: visible, no caption, not the shell's, and covering its monitor.</summary>
     public static bool CoversItsMonitorWithoutCaption(nint window)
     {
         var hwnd = new HWND((void*)window);
@@ -237,7 +226,7 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
 
         public DateTime StartTime { get; } = startTime;
 
-        // AD-12: polled on the limited handle; no SYNCHRONIZE, so no wait.
+        // Polled, because the limited handle has no SYNCHRONIZE right to wait on.
         public bool HasExited
         {
             get
@@ -257,27 +246,7 @@ public sealed unsafe class ForegroundGameWindowProbe : IGameWindowProbe
     }
 }
 
-/// <summary>
-/// Game Detection (stories 3.1 to 3.4). Each poll it classifies each new process that owns a top-level
-/// window once (limited open, image path, <c>Canonicalize</c>, AD-18) and detects it when its
-/// foreground window covers its monitor with no caption (the fullscreen rule) or its path is listed
-/// (Windows' game list or <c>manualGames</c>), even windowed. A detected game stays known, its limited
-/// handle held, until its process exits; minimizing it or closing its window doesn't end it.
-/// Excluded processes and those under the install folder are never detected. It only proposes
-/// (AD-19), by R2's rules (AD-18): with no Target, the foreground detected game, else the best
-/// (reason cold-start on the first poll, detected after); another detected game once it has held the
-/// focus for <see cref="FocusToSwitch"/> (reason focus); and when the Target exits, the best of the
-/// others, or none (reason exit). The best is the most recently focused, then the most recently started.
-/// A game whose Game Profile is Ignored, read each poll (AD-5), is never detected; one that becomes
-/// Ignored while detected is forgotten as if it had exited (reason ignored), and clearing the flag lets
-/// the rules above detect it again.
-/// The fullscreen rule alone is weak evidence: a browser or a media player showing a video fullscreen
-/// passes it. So the apps in <see cref="KnownNonGames"/> (browsers, media players, Discord, Explorer,
-/// Office, Encore's own App) are never detected by it; only a listing (Windows' game list or
-/// <c>manualGames</c>) detects them. And a game found only by the fullscreen rule never takes the
-/// Target by focus from a listed one: only another listed game can. No GPU or module heuristic is
-/// used, as AD-12 reads nothing from a process beyond its image path.
-/// </summary>
+/// <summary>Game Detection: polls the windows, detects games and proposes which one to capture. Rules: docs/code-notes.md.</summary>
 public sealed class GameMonitor : IDisposable
 {
     /// <summary>How long another detected game must hold the focus, without a break, to be proposed.</summary>
@@ -285,10 +254,7 @@ public sealed class GameMonitor : IDisposable
 
     private static readonly IReadOnlySet<string> NothingListed = new HashSet<string>();
 
-    /// <summary>
-    /// Executables that are never games however they show their window: the fullscreen rule doesn't
-    /// detect them. Matched on the file name, ignoring case.
-    /// </summary>
+    /// <summary>Executables the fullscreen rule never detects as games, matched on the file name, ignoring case.</summary>
     public static IReadOnlySet<string> KnownNonGames { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         // Browsers.
@@ -339,20 +305,7 @@ public sealed class GameMonitor : IDisposable
     private Thread? _thread;
     private int _disposed;
 
-    /// <param name="probe">Reads the windows and opens processes.</param>
-    /// <param name="isExcluded">True for a process that is never a game: the engine's and the attached App's.</param>
-    /// <param name="propose">Receives each proposal, on the monitor's thread.</param>
-    /// <param name="interval">The time between polls.</param>
-    /// <param name="listed">The listed games' paths, each canonical or lowercase raw (AD-18); read each poll.</param>
-    /// <param name="installFolder">The engine's install folder, canonical; nothing under it is detected.</param>
-    /// <param name="detected">Receives each newly detected game, before any proposal of it.</param>
-    /// <param name="exited">Receives each detected game whose process exited or whose profile became Ignored, before the proposal that follows.</param>
-    /// <param name="target">
-    /// The committed Target's process, read each poll, so a Target whose switch is held (AD-19) is still
-    /// handed over on its exit; null takes the last proposal as committed.
-    /// </param>
-    /// <param name="time">Times the focus streak; <see cref="TimeProvider.System"/> when null.</param>
-    /// <param name="isIgnored">Whether a profile id's Game Profile is Ignored, read each poll; null = never.</param>
+    /// <summary>Every callback runs on the monitor's thread; listed, target and isIgnored are read on each poll.</summary>
     public GameMonitor(
         IGameWindowProbe probe,
         Func<int, bool> isExcluded,
@@ -423,10 +376,7 @@ public sealed class GameMonitor : IDisposable
         _stop.Dispose();
     }
 
-    /// <summary>
-    /// One poll: forgets exited processes and Ignored games (handing the Target over), detects new games
-    /// without proposing them, follows the focus, then decides whether to propose a Target.
-    /// </summary>
+    /// <summary>One poll: forget exited and Ignored games, detect new ones, follow the focus, then decide what to propose.</summary>
     internal void Poll()
     {
         var now = _time.GetTimestamp();
@@ -456,15 +406,14 @@ public sealed class GameMonitor : IDisposable
         _firstPoll = false;
     }
 
-    // The listed source over every top-level window and the foreground one: a listed game is detected
-    // even windowed. Proposing is Decide's.
+    // A listed game is detected even when windowed; proposing is left to Decide.
     private void ScanListed(GameWindow? foreground)
     {
         var listed = _listedNow = _listed?.Invoke() ?? NothingListed;
         var windows = _probe.Windows();
 
         var done = new HashSet<int>();
-        // The foreground window counts only when it is one of the listed top-level windows, never an owned dialog or tool window.
+        // The foreground window counts only when it is a listed top-level window, never a dialog or tool window.
         foreach (var window in foreground is { } inFront && windows.Contains(inFront) ? windows.Prepend(inFront) : windows)
         {
             if (!done.Add(window.ProcessId) || Classify(window.ProcessId) is not { Eligible: true } game)
@@ -487,9 +436,7 @@ public sealed class GameMonitor : IDisposable
         }
     }
 
-    // A known game in front: its window is the one to capture from now on. The desired or committed
-    // Target with a new window is proposed again, so the capture can follow it; any other game waits
-    // for its focus. Proposing the committed Target while a switch is held drops that switch: it is in front.
+    // A known game in front: capture its window from now on, and propose it again when it is the Target.
     private void Follow(Seen game, nint window)
     {
         var moved = game.Candidate!.Window != window;
@@ -513,8 +460,7 @@ public sealed class GameMonitor : IDisposable
     // The committed Target's process: read from the orchestrator when given, else the last proposal.
     private int? Committed() => _target is null ? _proposed : _target();
 
-    // The focus streak starts at the first poll that sees a process in front, detected or not; any other
-    // foreground (another process, the shell, none) breaks it.
+    // The streak starts at the first poll that sees a process in front; any other foreground breaks it.
     private void TrackFocus(GameWindow? foreground, long now)
     {
         var pid = foreground?.ProcessId;
@@ -551,8 +497,7 @@ public sealed class GameMonitor : IDisposable
         }
     }
 
-    // Whether the Target (a listed game) keeps its place against a focused one the fullscreen rule
-    // alone detected: only another listed game takes the Target from a listed one by focus.
+    // Only another listed game takes the Target from a listed game by focus.
     private bool Outranks(int? target, int focused) =>
         target is { } pid
         && _seen.TryGetValue(pid, out var current)
@@ -572,8 +517,7 @@ public sealed class GameMonitor : IDisposable
         .ThenByDescending(seen => seen.Process.StartTime)
         .FirstOrDefault()?.Candidate;
 
-    // The process's classification, cached with its limited handle until it exits; null when it is
-    // excluded (never opened), can't be opened (retried next poll) or has already exited.
+    // A process's classification, cached until it exits; null when it is excluded, can't be opened or has exited.
     private Seen? Classify(int pid)
     {
         // Checked every time: the App may attach after its window was first classified.
@@ -627,8 +571,7 @@ public sealed class GameMonitor : IDisposable
         _log.LogInformation("Detected {Name} (process {Pid}, window 0x{Window:X}) at {ProfileId}", candidate.Name, game.Pid, window, candidate.ProfileId);
         _detected?.Invoke(ToDetectedGame(candidate));
 
-        // The detected callback may have just created its Game Profile Ignored (captureNewGames off,
-        // story 13.1): forget it at once, so it is never proposed in this poll.
+        // The detected callback may have just made its Game Profile Ignored: forget it now, so it isn't proposed this poll.
         if (Ignored(game))
         {
             game.Candidate = null;
@@ -637,9 +580,7 @@ public sealed class GameMonitor : IDisposable
         }
     }
 
-    // Forgets each exited process. When the committed Target exited, hands over to the best other game
-    // (or none); when only a desired Target held from it exited, proposes the committed one again, which
-    // drops the held switch.
+    // Forgets each exited process, and hands the Target over when the Target was the one that exited.
     private void ForgetExited()
     {
         List<Seen>? exited = null;
@@ -678,8 +619,7 @@ public sealed class GameMonitor : IDisposable
         HandOver(committed, desired, committedExited, desiredExited, TargetChangeReason.Exit);
     }
 
-    // Un-detects each detected game whose profile is now Ignored, as ForgetExited does for an exit but
-    // keeping the process classified, so clearing the flag lets the normal rules detect it again.
+    // Un-detects games whose profile is now Ignored, but keeps them classified so clearing the flag detects them again.
     private void ForgetIgnored()
     {
         if (_isIgnored is null)
@@ -708,8 +648,7 @@ public sealed class GameMonitor : IDisposable
         HandOver(committed, desired, committedIgnored, desiredIgnored, TargetChangeReason.Ignored);
     }
 
-    // When the committed Target is gone, hands over to the best other game (or none); when only a
-    // desired Target held from it is gone, proposes the committed one again, which drops the held switch.
+    // Hands over to the best other game when the Target is gone; a lost held switch re-proposes the committed Target.
     private void HandOver(int? committed, int? desired, bool committedGone, bool desiredGone, TargetChangeReason reason)
     {
         if (committedGone)
@@ -758,11 +697,7 @@ public sealed class GameMonitor : IDisposable
         while (!_stop.Wait(_interval));
     }
 
-    /// <param name="Pid">The process.</param>
-    /// <param name="Process">Its limited handle, held until it exits.</param>
-    /// <param name="ProfileId">The canonical executable, or null when it couldn't be canonicalized (never detected).</param>
-    /// <param name="RawPath">The executable as the system reports it, lowercase (AD-18).</param>
-    /// <param name="Eligible">Whether it may be detected: canonicalized and not under the install folder.</param>
+    /// <summary>One classified process; ProfileId is null, and it is never detected, when its path can't be made canonical.</summary>
     private sealed record Seen(int Pid, IGameProcess Process, string? ProfileId, string RawPath, bool Eligible)
     {
         /// <summary>Set once the process is detected; it then stays detected until it exits or its profile is Ignored.</summary>

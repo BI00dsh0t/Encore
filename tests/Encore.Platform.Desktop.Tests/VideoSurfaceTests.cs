@@ -4,7 +4,7 @@ using System.Windows.Interop;
 
 namespace Encore.Platform.Desktop.Tests;
 
-/// <summary>Story 14.2: the in-app player's shared surface. A GPU device, but no playback; light enough for the default run.</summary>
+/// <summary>The in-app player's shared surface. A GPU device, but no playback; light enough for the default run.</summary>
 public sealed class VideoSurfaceTests
 {
     [Fact]
@@ -24,8 +24,7 @@ public sealed class VideoSurfaceTests
         Assert.Equal(IntPtr.Zero, surface.BackBuffer);
     });
 
-    // QA 14.2 round 1: the WinRT wrapper kept references on the surface, and through it on the texture and
-    // device, until a GC. After a resize and after Dispose, with no GC, every COM object it held is gone.
+    // A bug that bit: the WinRT wrapper kept references until a GC; after Dispose, with no GC, every COM object is gone.
     [Fact]
     public void DisposeReleasesEveryReferenceAtOnceEvenAfterAResize() => OnSta(() =>
     {

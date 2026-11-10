@@ -4,7 +4,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 10.9's folder picker: set on a pick, remove on Use default, nothing on a cancel, refusals and Open.</summary>
+/// <summary>The folder picker: set on a pick, remove on Use default, nothing on a cancel, refusals and Open.</summary>
 public sealed class FolderPickerTests
 {
     private readonly List<SettingsOp> _sent = [];

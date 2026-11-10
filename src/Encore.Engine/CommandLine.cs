@@ -10,10 +10,10 @@ public abstract record EngineCommand;
 /// <summary><c>debug-list</c>: windows and audio endpoints.</summary>
 public sealed record DebugListCommand : EngineCommand;
 
-/// <summary>Private AD-28 media worker, isolated from live engine startup.</summary>
+/// <summary>The private media worker, isolated from live engine startup.</summary>
 public sealed record ClipMediaWorkerCommand : EngineCommand;
 
-/// <summary>How much of the video path a <c>debug-capture</c> runs (story 1.2 cost split).</summary>
+/// <summary>How much of the video path a <c>debug-capture</c> runs, to split its cost.</summary>
 public enum CaptureStages
 {
     /// <summary>WGC → copy → NVENC → file: the tracer.</summary>
@@ -26,7 +26,7 @@ public enum CaptureStages
     Wgc,
 }
 
-/// <summary>How captured BGRA reaches NVENC (PLAN.md §6.2).</summary>
+/// <summary>How captured BGRA reaches NVENC.</summary>
 public enum ColorPath
 {
     /// <summary>BGRA straight into NVENC, which converts in hardware.</summary>
@@ -36,15 +36,7 @@ public enum ColorPath
     X2,
 }
 
-/// <summary>
-/// <c>debug-capture</c>: the tracer capture of one window. <see cref="Codec"/>, <see cref="Size"/>,
-/// <see cref="Fps"/> and <see cref="BitrateKbps"/> make the session's <c>video</c> value (CBR); a null
-/// <see cref="Size"/> is the window's size, made even. <see cref="Encoder"/> forces an FFmpeg encoder.
-/// <see cref="EncodeThread"/> (<c>--encode-thread</c>) is still accepted and has no effect: since
-/// story 1.11 the encoder thread is always on. <see cref="TrackLayout"/> (<c>--track-layout</c>)
-/// captures the Tracks of the instance's Global <c>trackLayout</c> instead of the output and input
-/// device; <see cref="Instance"/> (<c>--instance</c>, test names only) overrides the process's own instance.
-/// </summary>
+/// <c>debug-capture</c>: a test capture of one window; a null Size is the window's size, made even. docs/code-notes.md.
 public sealed record DebugCaptureCommand(
     string? Window,
     nint? Hwnd,
@@ -88,16 +80,7 @@ public sealed record DebugCaptureCommand(
 /// <summary><c>debug-capture --size</c>: the output size, <c>WxH</c>.</summary>
 public sealed record DebugCaptureSize(int Width, int Height);
 
-/// <summary>
-/// <c>serve</c>: the engine proper, serving its pipe until <c>engine.shutdown</c> or Ctrl+C.
-/// <see cref="Instance"/> overrides the process's own instance, for tests only. <see cref="DebugCapture"/>
-/// (<c>--debug-capture</c>) runs a capture session on the Target Game's window, following it, until
-/// Rewind does (epic 4); it also turns Game Detection on for a test instance.
-/// <see cref="Encore"/> (<c>--rewind</c>, test instances only) turns Rewind,
-/// and with it Game Detection, on for the test instance, so a separate engine process can save Clips.
-/// <see cref="Restarted"/> (<c>--restarted crashed|hung</c>) is how the App relaunches an engine that
-/// crashed or hung: the engine raises <c>engine-restarted</c> before its pipe serves (AD-16).
-/// </summary>
+/// <c>serve</c>: the engine proper, serving its pipe until <c>engine.shutdown</c> or Ctrl+C. Flags: docs/code-notes.md.
 public sealed record ServeCommand(string? Instance, bool DebugCapture = false, bool Rewind = false, EngineRestartReason? Restarted = null) : EngineCommand
 {
     /// <summary>The only instance names <c>--instance</c> accepts, so tests never touch a real instance.</summary>
@@ -216,7 +199,7 @@ public static class CommandLine
                     window = value;
                     break;
                 case "--monitors":
-                    // Spike 11.1: "all" (every attached monitor) or GDI device names.
+                    // "all" (every attached monitor) or GDI device names.
                     monitors = value == "all" ? [] : [.. value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
                     if (value != "all" && monitors.Count == 0)
                     {

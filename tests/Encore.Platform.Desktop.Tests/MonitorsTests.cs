@@ -26,7 +26,7 @@ public sealed class MonitorsTests
     [Fact]
     public void DxgiSaysWhetherThePrimaryMonitorHasOverlayPlanes()
     {
-        // The answer depends on the PC (5.8's research: none on the builder's with two monitors); it is known.
+        // The answer depends on the PC (none on the builder's with two monitors); it is known.
         Assert.NotNull(Monitors.OverlayPlanes(null));
     }
 }

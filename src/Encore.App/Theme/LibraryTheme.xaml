@@ -1,9 +1,4 @@
-<!--
-    The Library's look (story 4; DESIGN.md Library row, Group header, Star toggle, filters, banner, empty
-    state), the same dictionary in both themes: every colour, corner and type comes from a token key that
-    both themes define, and Gaming's uppercase comes from RbSectionHeaderStyle and its ToggleButton template.
-    Story 10.2 adds the selected row, the focus ring, the list and its containers, and the command bar.
--->
+<!-- The Library's look, the same dictionary in both themes: every colour, corner and type comes from a token key. -->
 <ResourceDictionary x:Class="Encore.App.Theme.LibraryTheme"
                     x:ClassModifier="internal"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -97,7 +92,7 @@
             <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
-    <!-- AD-28 creator uses the same semantic tokens in both looks. -->
+    <!-- The clip creator uses the same semantic tokens in both looks. -->
     <Style x:Key="RbClipWaveformStyle" TargetType="local:WaveformView">
         <Setter Property="WaveBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
         <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
@@ -109,10 +104,7 @@
         <Setter Property="VeilBrush" Value="{DynamicResource SolidBackgroundFillColorBaseBrush}" />
     </Style>
 
-    <!--
-        Library row: a card that takes fill-control-hover on hover. Selected (story 10.2; DESIGN.md addendum
-        Library row, selected), it takes RbLibraryRowSelectedBrush, hovered or not, with the accent bar.
-    -->
+    <!-- Library row: a card that takes the hover fill on hover and, when selected, the selected brush with the accent bar. -->
     <Style x:Key="RbLibraryRowStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
@@ -146,10 +138,7 @@
         </Style.Triggers>
     </Style>
 
-    <!--
-        The focused row's ring: focus-outer around the card (its margin matches the card's), shown while the
-        row is the page's focused one and keyboard focus is in the list; selected or not, so the two differ.
-    -->
+    <!-- The focused row's ring, shown while the row is the page's focused one and keyboard focus is in the list. -->
     <Style x:Key="RbLibraryFocusRingStyle" TargetType="Border">
         <Setter Property="Margin" Value="0,0,0,6" />
         <Setter Property="BorderThickness" Value="2" />
@@ -168,10 +157,7 @@
         </Style.Triggers>
     </Style>
 
-    <!--
-        The list: transparent, borderless, one virtualized panel (recycling, pixel scroll) in its own scroll
-        viewer. The background takes clicks on the empty space below the rows.
-    -->
+    <!-- The list: transparent, borderless, one virtualized panel; the background takes clicks below the rows. -->
     <Style x:Key="RbLibraryListStyle" TargetType="ListBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -207,10 +193,7 @@
         </Setter>
     </Style>
 
-    <!--
-        The list's containers: only the content, no selection look of their own (the row card draws it from the
-        page's selection). A group header's container can't take focus.
-    -->
+    <!-- The list's containers: only the content, no selection look of their own; a group header can't take focus. -->
     <Style x:Key="RbLibraryItemContainerStyle" TargetType="ListBoxItem">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -383,7 +366,7 @@
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     </Style>
 
-    <!-- The search box's glyph, hint and clear button (story 10.3; DESIGN.md addendum Search box). -->
+    <!-- The search box's glyph, hint and clear button. -->
     <Style x:Key="RbLibrarySearchGlyphStyle" TargetType="TextBlock">
         <Setter Property="Margin" Value="10,0,0,0" />
         <Setter Property="HorizontalAlignment" Value="Left" />
@@ -434,14 +417,7 @@
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
-    <!--
-        The in-app player's page (stories 14.2 to 14.7, restyled in 14.9 after the builder's approved mockup, AD-27).
-        The video on black, letterboxed, with the page's corners (square in full screen). Under it, one thin
-        full-width seek bar above a single control row, on the Overlay's card brush so it reads over any picture;
-        in full screen the bar sits over the video's bottom edge. Played parts take the accent (the volume's,
-        the text colour), the rest a strong stroke, and the thumbs are round in the text colour (white in the
-        dark looks). Icon buttons are 40 px, with Windows' Segoe MDL2 glyphs. Tokens only, in both looks.
-    -->
+    <!-- The in-app player's page: the video on black, a thin seek bar and one control row; tokens only, in both looks. -->
     <FontFamily x:Key="RbPlayerGlyphFont">Segoe MDL2 Assets, Segoe Fluent Icons</FontFamily>
     <SolidColorBrush x:Key="RbPlayerBackdropBrush" Color="Black" />
 
@@ -493,8 +469,7 @@
         <Border x:Name="Fill"
                 Background="{TemplateBinding Background}"
                 CornerRadius="{DynamicResource ControlCornerRadius}">
-            <!-- Explicit bindings beat the implicit TextBlock font style (Segoe UI in Gaming dark).
-                 A ContentPresenter's generated TextBlock only inherits the button's glyph font. -->
+            <!-- Explicit bindings beat the implicit TextBlock font style, which a generated TextBlock would otherwise take. -->
             <TextBlock x:Name="Glyph"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"

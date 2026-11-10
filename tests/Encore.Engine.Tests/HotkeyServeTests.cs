@@ -10,18 +10,11 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Runs <see cref="HotkeyServeTests"/> alone: the press latency includes <c>SendInput</c>, which the
-/// encode tests running beside it would slow.
-/// </summary>
+/// <summary>Runs the Hotkey serve tests alone: the press latency includes SendInput, which encode tests would slow.</summary>
 [CollectionDefinition(nameof(HotkeyServeCollection), DisableParallelization = true)]
 public sealed class HotkeyServeCollection;
 
-/// <summary>
-/// Runs the built engine's <c>serve</c> on a throwaway test instance with Hotkeys bound, and checks
-/// registration and presses from outside, with <c>RegisterHotKey</c> and <c>SendInput</c> of its own.
-/// Each test uses its own Ctrl+Alt+Shift+F-key combinations, so an engine a failed test left running can't hold another test's.
-/// </summary>
+/// <summary>Runs the built engine's <c>serve</c> with Hotkeys bound and checks registration and presses from outside.</summary>
 [Collection(nameof(HotkeyServeCollection))]
 public sealed class HotkeyServeTests : IDisposable
 {
@@ -71,11 +64,7 @@ public sealed class HotkeyServeTests : IDisposable
         }
     }
 
-    /// <remarks>
-    /// Opt-in: <c>SendInput</c> goes through the desktop's real keyboard, so a window that takes every
-    /// key while it has focus (a Remote Desktop client, msrdc) swallows all 20 presses and the test fails.
-    /// Run it with that window out of focus.
-    /// </remarks>
+    /// <summary>Opt-in: SendInput uses the real keyboard, so a window that takes every key swallows the presses.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public async Task AnInjectedPressArrivesPromptlyAndIsLogged()
@@ -93,10 +82,7 @@ public sealed class HotkeyServeTests : IDisposable
         });
         Assert.Equal(new HotkeyBindingStatus(HotkeyAction.Save, save, true, null), client.State.Hotkeys.Bindings[0]);
 
-        // Every press must arrive, stamped promptly: the builder's bar is no press over a second.
-        // Milliseconds don't matter. (qpc - before) includes SendInput, which runs every other
-        // process's low-level keyboard hook (1–2.5 ms seen with a Remote Desktop client running),
-        // so the timings are logged, not held to a millisecond.
+        // Every press must arrive within a second; the timings include SendInput and are logged, not held to a millisecond.
         var latencies = new List<double>();
         for (var i = 0; i < 20; i++)
         {
@@ -290,12 +276,7 @@ public sealed class HotkeyServeTests : IDisposable
         private const ushort VkControl = 0x11;
         private const ushort VkMenu = 0x12;
 
-        /// <summary>
-        /// Injects the modifiers down, then the key down on its own, then the key and modifiers up.
-        /// Each injected event passes through every low-level hook on the desktop, so the modifiers go
-        /// first and the clock starts just before the key down.
-        /// </summary>
-        /// <returns>The QPC read just before and just after the <c>SendInput</c> of the key down.</returns>
+        /// <summary>Injects the modifiers first, then the key down on its own; returns the QPC just before and after it.</summary>
         public static (long Before, long After) Press(int vk, int modifiers)
         {
             var mods = new List<ushort>();

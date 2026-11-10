@@ -10,21 +10,14 @@ namespace Encore.Engine.Ipc;
 /// <summary>A command's reply frame, and what to run once it is queued.</summary>
 internal readonly record struct CommandReply(byte[] Frame, Action? AfterReply);
 
-/// <summary>
-/// Dispatches commands to their handlers (AD-3). Every command gets exactly one reply: the
-/// handler's result, or an error with a code. A handler that throws something without a code
-/// replies <see cref="ErrorCodes.CommandFailed"/>.
-/// </summary>
+/// <summary>Dispatches commands to their handlers; every command gets exactly one reply, a result or an error with a code.</summary>
 internal sealed class CommandRouter(ILogger log)
 {
     private delegate ValueTask<CommandReply> Handler(string id, JsonElement? payload, CancellationToken cancellationToken);
 
     private readonly ConcurrentDictionary<string, Handler> _handlers = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// Registers the handler for <paramref name="command"/>. <paramref name="afterReply"/> runs once
-    /// the reply is queued, so a command such as <c>engine.shutdown</c> can act after answering.
-    /// </summary>
+    /// <summary>Registers a command's handler; afterReply runs once the reply is queued, so shutdown can act after answering.</summary>
     public void Register<TArgs, TResult>(
         CommandType<TArgs, TResult> command,
         Func<TArgs, CancellationToken, ValueTask<TResult>> handler,

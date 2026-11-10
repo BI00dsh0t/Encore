@@ -110,7 +110,7 @@ public sealed class AudioStampStatsTests
 
     private static long Ms(double ms) => (long)(ms * Qpf / 1000);
 
-    /// <summary>Records <paramref name="count"/> contiguous packets from frame <paramref name="first"/>, read 2 ms after their stamp.</summary>
+    /// <summary>Records a number of contiguous packets from a first frame, each read 2 ms after its stamp.</summary>
     private static long Run(AudioStampStats s, long first, int count, double ppm = 0)
     {
         for (var i = 0; i < count; i++)

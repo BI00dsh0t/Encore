@@ -1,9 +1,4 @@
-<!--
-    Audio Tracks' look (story 10.5; epic 10's DESIGN.md addendum: Track card, Sound picker, Save bar), one
-    dictionary for both themes: every colour, corner and type comes from a token key both themes define,
-    through DynamicResource. Its own dictionary, not the shared settings layout, which story 10.9 changes.
-    ThemeService places it.
--->
+<!-- Audio Tracks' look, one dictionary for both themes: every colour, corner and type comes from a token key. -->
 <ResourceDictionary x:Class="Encore.App.Theme.AudioTracksTheme"
                     x:ClassModifier="internal"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -37,7 +32,7 @@
         </Setter>
     </Style>
 
-    <!-- A Track card: epic 9's card, spacing.sm apart; focusable so F2 and Alt+arrows act on it. -->
+    <!-- A Track card, spacing.sm apart; focusable so F2 and Alt+arrows act on it. -->
     <Style x:Key="RbAudioTrackCardStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
@@ -120,7 +115,7 @@
         </Style.Triggers>
     </Style>
 
-    <!-- The sound picker: epic 9's flyout surface, at most 420 tall, scrolling inside. -->
+    <!-- The sound picker: the flyout surface, at most 420 tall, scrolling inside. -->
     <Style x:Key="RbAudioPickerStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorQuarternaryBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}" />

@@ -7,11 +7,7 @@ public sealed class DriftMathTests
     private const long Frequency = 10_000_000;
     private const long Anchor = 5_000_000_000;
 
-    /// <summary>
-    /// 120 s: a flash each second at source and in the file; each burst 0.2 s after its flash at source,
-    /// and in the file 0.2 s plus a constant pipeline offset plus <paramref name="driftMs"/> spread linearly over the run.
-    /// Flash frame times are quantised to 1/60 s, as in a real capture.
-    /// </summary>
+    /// <summary>A synthetic 120 s run: a flash each second, and each burst 0.2 s later plus an offset and a linear drift.</summary>
     private static AvInput Synthetic(double driftMs, double offsetMs = 23, double anchorErrorSeconds = 0.08, double bucketSeconds = 10, int dropBursts = 0)
     {
         var flashQpcs = Enumerable.Range(0, 120).Select(k => Anchor + (k * Frequency) + (31 * Frequency / 100)).ToList();

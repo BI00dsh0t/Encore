@@ -5,7 +5,7 @@ using System.Windows.Input;
 
 namespace Encore.App;
 
-/// <summary>The Main App window. Closing it only hides it; the App lives in the tray until Quit (AD-16).</summary>
+/// <summary>The Main App window. Closing it only hides it; the App lives in the tray until Quit.</summary>
 internal partial class MainWindow
 {
     /// <summary>Below this width the nav pane narrows and long titles trim (EXPERIENCE.md).</summary>
@@ -17,7 +17,7 @@ internal partial class MainWindow
 
     private bool _quitting;
 
-    // The window as it was before the player went full screen (story 14.9); null while not.
+    // The window as it was before the player went full screen; null while not.
     private (WindowStyle Style, ResizeMode Resize, WindowState State, Thickness PageMargin)? _beforeFullScreen;
 
     internal override bool UsesMica => true;
@@ -72,14 +72,13 @@ internal partial class MainWindow
         Close();
     }
 
-    // Ctrl+Tab and Ctrl+Shift+Tab step through the nav from anywhere, as the old TabControl did. On the
-    // bubbling KeyDown, so the Hotkeys page, which takes every key while capturing, keeps them.
+    // Ctrl+Tab steps through the nav; on the bubbling KeyDown, so a page capturing keys keeps them.
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
-        // Story 10.10: Esc (after a control's own) and Alt+Left close a drill-in item page.
+        // Esc (after a control's own) and Alt+Left close a drill-in item page.
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
 
-        // Story 14.9: in full screen, Esc only leaves it; the player page stays open.
+        // In full screen, Esc only leaves it; the player page stays open.
         if (key == Key.Escape && DataContext is MainViewModel { IsPlayerFullScreen: true } fullScreen)
         {
             fullScreen.LeavePlayerFullScreen();
@@ -178,8 +177,7 @@ internal partial class MainWindow
         }
     }
 
-    // Story 14.9: the player page fills the screen. The window drops its frame and covers the monitor, and the
-    // nav, status line, page header and page padding go; leaving puts each back as it was.
+    // Full screen for the player page: the window drops its frame and the shell's chrome; leaving puts each back.
     private void ApplyFullScreen(bool on)
     {
         if (on == IsFullScreen)

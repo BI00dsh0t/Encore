@@ -38,11 +38,7 @@ internal sealed record BenchReport(
     IReadOnlyList<string> Errors,
     ConformanceDriftReport? Conformance = null);
 
-/// <summary>
-/// Merges the run folder's <c>fps.json</c>, <c>drift.json</c>, <c>playback.json</c>, <c>hotkey.json</c> and <c>tracks.json</c> into
-/// <c>report.json</c> and <c>report.md</c>: a section per measurement present, each figure beside its target
-/// with a pass or miss mark, and "not run" for the rest. A malformed file is named and skipped.
-/// </summary>
+/// <summary>Merges the run folder's result files into <c>report.json</c> and <c>report.md</c>, each figure beside its target.</summary>
 internal static class Report
 {
     public const string JsonName = "report.json";
@@ -57,7 +53,7 @@ internal static class Report
         var playback = Load<PlaybackReport>(runFolder, PlaybackCheck.FileName, "Playback", errors, notRun);
         var hotkey = Load<HotkeyReport>(runFolder, HotkeyBenchmark.FileName, "Hotkey", errors, notRun);
         var tracks = Load<TracksReport>(runFolder, TracksCheck.FileName, "Named Tracks", errors, notRun);
-        // Story 8.7's drift --app: only listed when it ran, so earlier run folders keep their report.
+        // The App drift run is listed only when it ran, so earlier run folders keep their report.
         var conformance = File.Exists(Path.Combine(runFolder, ConformanceDrift.FileName))
             ? Load<ConformanceDriftReport>(runFolder, ConformanceDrift.FileName, "Conformance drift", errors, notRun)
             : null;
@@ -147,7 +143,7 @@ internal static class Report
 
         var c = fps.CaptureMeans;
 
-        // §6.3's dropped frames: the capture runs' queue drops and pacer-skipped slots, summed (interleaved runs only).
+        // Dropped frames: the capture runs' queue drops and pacer-skipped slots, summed (interleaved runs only).
         var captureRuns = fps.Runs.Where(r => r.Condition == "capture" && r.Pass != "final").ToList();
         var queueDrops = captureRuns.Select(r => r.QueueDrops).OfType<long>().ToList();
         var skippedSlots = captureRuns.Select(r => r.SkippedSlots).OfType<long>().ToList();
@@ -333,8 +329,7 @@ internal static class Report
         md.AppendLine("|---|---|---|---|---|---|");
         foreach (var p in players)
         {
-            // A pass needs both answers yes; a "no" to either is a miss; a skipped sync answer is not checked.
-            // A scripted check sees playback only: it passes that, and leaves A/V sync to a person.
+            // A pass needs both answers yes; a scripted check sees playback only and leaves A/V sync to a person.
             var mark = p.Status != "checked" ? "not-checked"
                 : p.Plays == false || p.AvInSync == false ? DriftMath.Miss
                 : p.Plays == true && p.AvInSync == true ? DriftMath.Pass
@@ -478,10 +473,7 @@ internal static class Report
         }
     }
 
-    /// <summary>
-    /// The first member declared non-nullable that is null, in <paramref name="value"/> or in the Bench records and
-    /// lists it holds, as a JSON path (e.g. <c>av.buckets</c>); null when every required member is there.
-    /// </summary>
+    /// <summary>The first non-nullable member that is null, as a JSON path; null when every required member is there.</summary>
     internal static string? MissingMember(object value, string path = "")
     {
         var nullability = new NullabilityInfoContext();

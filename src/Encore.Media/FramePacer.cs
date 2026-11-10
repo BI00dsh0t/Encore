@@ -22,22 +22,10 @@ public enum PacerAction
     Repeat,
 }
 
-/// <param name="ReplacedHeld">The held frame is superseded by the one offered: release it.</param>
+/// <summary>ReplacedHeld means the held frame is superseded by the one offered: release it.</summary>
 public readonly record struct PacerDecision(PacerAction Action, long Slot, long Pts, bool ReplacedHeld = false);
 
-/// <summary>
-/// The constant-frame-rate pacer (R1, R11): exactly one frame per slot of the output fps. Slot
-/// <c>n</c> is at <c>anchor + n/fps</c> with PTS <c>n × timeBase/fps</c>, so PTS only ever step
-/// by one slot. A new frame takes the slot nearest its capture QPC when that slot is still free;
-/// otherwise it is held for the next slot, where a newer frame replaces it. The held frame is
-/// encoded at its slot's time; a slot with no new frame by its time + ½ slot repeats the last
-/// frame. When the encoder falls more than <see cref="MaxSlotsBehind"/> slots behind, the pacer
-/// jumps to the current slot and counts the slots it skipped; until it has first caught up (the
-/// anchor frame reaches the encoder thread only after the output has opened), lateness is filled
-/// with repeats instead. Pure and allocation-free; one
-/// thread drives it: <see cref="Poll"/> until <see cref="PacerAction.None"/>, then
-/// <see cref="Offer"/> each new frame.
-/// </summary>
+/// <summary>The constant-frame-rate pacer: exactly one frame per slot of the output fps. Rules: docs/code-notes.md.</summary>
 public sealed class FramePacer
 {
     public const int MaxSlotsBehind = 4;
@@ -49,11 +37,7 @@ public sealed class FramePacer
     private long _heldQpc;
     private bool _running;
 
-    /// <param name="firstFrameTakesNearestSlot">
-    /// For an encoder chain that starts mid-session (4.9): the first frame offered, with nothing
-    /// emitted or held yet, takes the slot nearest its capture QPC, so no repeats fill the slots
-    /// from the anchor's up to it. Off, the first frame takes slot 0, the anchor frame's.
-    /// </param>
+    /// <summary>With firstFrameTakesNearestSlot, a chain that starts mid-session gets no repeats for the slots before it.</summary>
     public FramePacer(long qpcFrequency, int fps, long anchorQpc, long timeBase = 90_000, bool firstFrameTakesNearestSlot = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(qpcFrequency);

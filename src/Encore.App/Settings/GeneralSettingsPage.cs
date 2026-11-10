@@ -27,10 +27,7 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
 
     public override string Title => "General";
 
-    /// <summary>
-    /// <c>startWithWindows</c>. Setting it sends the change; <see cref="StartupRegistration"/> writes the
-    /// Run value once the engine commits it, in the installed instance only (AD-16).
-    /// </summary>
+    /// <c>startWithWindows</c>: setting it sends the change; the Run value is written once the engine commits it.
     public bool StartWithWindows
     {
         get => _startWithWindows;
@@ -62,10 +59,7 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
     /// <summary>The <c>appTheme</c> choices, as the page lists them.</summary>
     public IReadOnlyList<AppThemeChoice> AppThemeChoices => Themes;
 
-    /// <summary>
-    /// <c>appTheme</c>. Setting it sends the change at once; the App restyles when the engine's
-    /// <c>settings.changed</c> comes back (AD-23), so a refused update leaves the theme as it was.
-    /// </summary>
+    /// <c>appTheme</c>: setting it sends the change; the App restyles only when the engine's commit comes back.
     public AppTheme AppTheme
     {
         get => _appTheme;
@@ -78,10 +72,7 @@ internal sealed class GeneralSettingsPage(SettingsSender sender) : SettingsPage(
         }
     }
 
-    /// <summary>
-    /// <c>captureNewGames</c> (story 13.1): whether a game found for the first time is captured.
-    /// Setting it sends the change; existing games keep their own Capture this game.
-    /// </summary>
+    /// <c>captureNewGames</c>: whether a game found for the first time is captured; existing games keep their choice.
     public bool CaptureNewGames
     {
         get => _captureNewGames;

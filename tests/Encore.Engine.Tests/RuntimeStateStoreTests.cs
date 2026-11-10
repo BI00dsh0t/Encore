@@ -4,7 +4,7 @@ using Encore.Engine.Settings;
 
 namespace Encore.Engine.Tests;
 
-/// <summary><c>runtime.json</c>: mic mute kept between runs (AD-5), muted whenever it can't be read, and the open Recordings (FR-12).</summary>
+/// <summary><c>runtime.json</c>: mic mute kept between runs, muted whenever it can't be read, and the open Recordings.</summary>
 public sealed class RuntimeStateStoreTests : IDisposable
 {
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "rb-runtime-" + Guid.NewGuid().ToString("N"));

@@ -3,16 +3,7 @@ using Encore.Media;
 
 namespace Encore.Engine.Audio;
 
-/// <summary>
-/// A tap on one hub device, for a capture session or a meter watch. It subscribes before the anchor
-/// and, until <see cref="Publish"/> hands it its <see cref="AudioTimeline"/>, either drops its blocks
-/// or, with a hold, keeps the newest of them up to <c>holdFrames</c> frames (oldest dropped) in
-/// buffers preallocated here. Publish replays the held blocks into the timeline in order, then live
-/// blocks follow, with none lost or reordered between the two: one lock per tap, uncontended except
-/// while Publish replays. The timeline cuts the stream at the anchor and, since hub blocks are
-/// contiguous and QPC-locked, writes the rest as-is, so a held tap's stream starts with real audio
-/// instead of the fill for the blocks between the anchor and Publish. Called on the device's thread.
-/// </summary>
+/// <summary>A tap on one hub device; it can hold the newest blocks until Publish, so a stream starts with real audio.</summary>
 internal class AudioTimelineTap : IAudioPcmSubscriber
 {
     /// <summary>The most blocks held at once; the oldest is dropped beyond it.</summary>

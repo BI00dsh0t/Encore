@@ -3,22 +3,17 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Library;
 
-/// <summary>
-/// The in-app player's seam (AD-27, story 14.2): Windows' media player behind it in the App, a fake in tests.
-/// Events may arrive on any thread; everything else is called on the UI thread.
-/// </summary>
+/// <summary>The in-app player's seam: Windows' media player in the App, a fake in tests. Events may arrive on any thread.</summary>
 internal interface IPlayer : IDisposable
 {
-    /// <summary>Raised when a new frame can be copied with <see cref="CopyFrame"/>; on any thread, possibly at the display's refresh rate.</summary>
+    /// <summary>Raised when a new frame can be copied; on any thread, possibly at the display's refresh rate.</summary>
     event Action? FrameAvailable;
 
     /// <summary>Raised when playback reaches the end; on any thread.</summary>
     event Action? Ended;
 
-    /// <summary>Whether it's playing.</summary>
     bool IsPlaying { get; }
 
-    /// <summary>The position in the file.</summary>
     TimeSpan Position { get; }
 
     /// <summary>The volume, 0 to 1.</summary>
@@ -26,13 +21,13 @@ internal interface IPlayer : IDisposable
 
     bool IsMuted { get; set; }
 
-    /// <summary>The audio Track that plays, by index in file order (AD-27: one at a time).</summary>
+    /// <summary>The audio Track that plays, by index in file order; one plays at a time.</summary>
     int SelectedTrack { get; set; }
 
     /// <summary>Opens the file from <paramref name="file"/>, paused; throws <see cref="PlayerException"/> when it can't.</summary>
     Task<PlayerMedia> OpenAsync(Stream file);
 
-    /// <summary>Moves to <paramref name="position"/>, playing or paused; paused, that frame is delivered (story 14.5).</summary>
+    /// <summary>Moves to <paramref name="position"/>, playing or paused; paused, that frame is delivered.</summary>
     void Seek(TimeSpan position);
 
     /// <summary>Shows the first frame while paused.</summary>
@@ -46,11 +41,7 @@ internal interface IPlayer : IDisposable
     void CopyFrame(VideoSurface target);
 }
 
-/// <summary>
-/// What an opened file holds: its video size, its length when known, its Tracks' names, whether Windows can decode
-/// its video, the video's codec as Windows names it ("H264", "HEVC", "AV1"), and which Tracks Windows can decode
-/// (null when all can).
-/// </summary>
+/// <summary>What an opened file holds: video size, length when known, Track names, and what Windows can decode.</summary>
 internal sealed record PlayerMedia(
     int Width,
     int Height,

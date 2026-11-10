@@ -8,12 +8,7 @@ using Windows.Win32.Media.Audio;
 
 namespace Encore.Platform.Audio;
 
-/// <summary>
-/// Watches the MMDevice endpoints (R1): registers an <c>IMMNotificationClient</c> on its own MTA
-/// thread and raises a coalesced callback there when an endpoint is added, removed, changes state
-/// or is renamed, or the default communications render endpoint changes. The notification callbacks only set an event; after one, the thread waits
-/// <see cref="CoalesceWindow"/>, so a burst raises the callback once.
-/// </summary>
+/// <summary>Watches the audio endpoints on its own MTA thread and raises one callback per burst of changes.</summary>
 internal sealed unsafe class EndpointWatcher : IDisposable
 {
     /// <summary>How long the thread gathers notifications before it raises the callback.</summary>
@@ -180,8 +175,7 @@ internal sealed unsafe class EndpointWatcher : IDisposable
 
         public HRESULT OnDeviceRemoved(PCWSTR pwstrDeviceId) => Signal();
 
-        // The list marks each flow's console default (story 10.4), and the default communications
-        // render endpoint is where Feedback Sounds play, so the capture check re-runs.
+        // Default changes matter: the list marks each default, and Feedback Sounds play on the communications one.
         public HRESULT OnDefaultDeviceChanged(EDataFlow flow, ERole role, PCWSTR pwstrDefaultDeviceId) =>
             role == ERole.eConsole || (flow == EDataFlow.eRender && role == ERole.eCommunications) ? Signal() : Ok;
 

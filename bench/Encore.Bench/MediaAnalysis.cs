@@ -11,9 +11,7 @@ internal sealed record StreamSpan(int Index, string CodecType, string? Title, do
     public double DurationSeconds => EndSeconds - StartSeconds;
 }
 
-/// <summary>What the drift analysis reads out of a captured file.</summary>
-/// <param name="FlashTimes">The frame time of each flash's first frame, s.</param>
-/// <param name="OnsetTimes">Each burst onset's time in the burst track, s.</param>
+/// <summary>What the drift analysis reads out of a captured file; times are in seconds.</summary>
 internal sealed record MediaScan(
     double Fps,
     IReadOnlyList<StreamSpan> Streams,
@@ -30,11 +28,7 @@ internal sealed record MediaScan(
     public StreamSpan BurstStream => AudioStreams.ElementAt(BurstTrack);
 }
 
-/// <summary>
-/// Decodes a captured file with ffmpeg and ffprobe: the video to 64×36 gray frames (one mean luma each),
-/// the burst track to 48 kHz stereo f32 (streamed through the onset detector), and the packet timestamps
-/// of every stream. Frame i's time is its own presentation timestamp (i / fps from the start for CFR).
-/// </summary>
+/// <summary>Decodes a captured file with ffmpeg and ffprobe: frames to mean luma, the burst track to PCM, and packet timestamps.</summary>
 internal static class MediaAnalysis
 {
     private const int GrayWidth = 64;
@@ -182,7 +176,7 @@ internal static class MediaAnalysis
         return means;
     }
 
-    /// <summary>Audio track <paramref name="track"/>'s burst onsets as file times, s, and its decoded sample count (story 8.7).</summary>
+    /// <summary>Audio track <paramref name="track"/>'s burst onsets as file times, s, and its decoded sample count.</summary>
     public static (List<double> Times, long Samples) TrackOnsets(FfmpegTools tools, string file, MediaScan scan, int track, double burstDbfs, CancellationToken cancellation)
     {
         var span = scan.AudioStreams.ElementAt(track);

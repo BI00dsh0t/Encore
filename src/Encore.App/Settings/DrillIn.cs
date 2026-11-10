@@ -2,13 +2,7 @@ using System.Windows.Input;
 
 namespace Encore.App.Settings;
 
-/// <summary>
-/// The drill-in pattern (story 10.10, epic 10's EXPERIENCE.md "Drill-in pages"): a list page opens one
-/// item's page in its place, and the shell's page header becomes a breadcrumb (Back, the parent's title as
-/// a link, the item's name). It closes on Back, the parent link, Esc, Alt+Left, the mouse's Back button
-/// or the parent's nav item; the shell routes those here. The parent keeps each item's view model, so a
-/// draft survives going back. Games uses it first; a Library item page can reuse it unchanged.
-/// </summary>
+/// <summary>The drill-in pattern: a list page opens one item's page in its place, and the page header becomes a breadcrumb.</summary>
 internal sealed class DrillIn : Observable
 {
     private string? _itemId;

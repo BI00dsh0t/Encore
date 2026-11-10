@@ -10,11 +10,7 @@ namespace Encore.App.Tests;
 [CollectionDefinition(nameof(SupervisionCollection), DisableParallelization = true)]
 public sealed class SupervisionCollection;
 
-/// <summary>
-/// Two-way supervision end to end (AD-16): the real <c>Encore.App.exe --tray</c> and the engine
-/// it launches, side by side in the test's bin, on a throwaway test instance. Each test starts its
-/// own pair, so the backoff starts at 0. Timed, so they run alone.
-/// </summary>
+/// <summary>Two-way supervision end to end with the real App and engine, a fresh pair per test. Timed, so they run alone.</summary>
 [Collection(nameof(SupervisionCollection))]
 public sealed class SupervisionTests : IAsyncDisposable
 {

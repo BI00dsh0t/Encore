@@ -13,11 +13,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// The theme's logic (AD-23): the token keys, live switching on <c>settings.changed</c>, and every window
-/// and page loading in both themes. Each test scopes the theme to its own window, since a process has one
-/// <see cref="Application"/> and the other tests' views must not pick the theme up.
-/// </summary>
+/// <summary>The theme's logic: token keys, live switching, and every window and page loading in both themes.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed partial class ThemeTests
 {
@@ -125,8 +121,7 @@ public sealed partial class ThemeTests
 
             gallery.Close();
             main.CloseForQuit();
-            // Fluent's own ListBoxItem style binds its content alignment to the ancestor ItemsControl, which
-            // WPF traces as an error while a container is detached; that is the framework's, not the App's.
+            // Fluent's own ListBoxItem style traces a binding error while a container is detached; that is the framework's.
             var found = string.Join("", errors.Messages)
                 .Split("System.Windows.Data Error", StringSplitOptions.RemoveEmptyEntries)
                 .Where(e => !FluentContainerAlignment().IsMatch(e))
@@ -166,8 +161,7 @@ public sealed partial class ThemeTests
         main.CloseForQuit();
     });
 
-    // The bug that bit: a window shown before ThemeService's first use made WPF cache the switch off, and
-    // Mica then landed behind every window. Both processes now set it in their runtimeconfig.
+    // A bug that bit: a window shown before the theme service's first use made Mica land behind every window.
     [Fact]
     public void WpfsOwnBackdropIsOffFromProcessStartInTheAppAndTheTestHost()
     {

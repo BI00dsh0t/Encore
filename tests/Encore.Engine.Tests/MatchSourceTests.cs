@@ -13,7 +13,7 @@ using Encore.Platform.Capture;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>Story 12.1: matchSource through the settings and onto the game capture chain.</summary>
+/// <summary>MatchSource through the settings and onto the game capture chain.</summary>
 public sealed class MatchSourceTests : IAsyncLifetime
 {
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "rb-match-" + Guid.NewGuid().ToString("N"));
@@ -57,7 +57,7 @@ public sealed class MatchSourceTests : IAsyncLifetime
     [Fact]
     public async Task AnOldSettingsFileLoadsAndMatchSourceRoundTripsThroughSettingsUpdate()
     {
-        // A settings.json written before 12.1: its video has no matchSource.
+        // A settings.json written before matchSource existed: its video has none.
         Directory.CreateDirectory(TestInstance.RoamingDataFolder);
         await File.WriteAllTextAsync(
             Path.Combine(TestInstance.RoamingDataFolder, SettingsStore.FileName),
@@ -79,12 +79,7 @@ public sealed class MatchSourceTests : IAsyncLifetime
         Assert.Equal(on, SettingsResolver.Resolve(client.State.Settings, null).Video);
     }
 
-    /// <summary>
-    /// The real path (at night only): <c>debug-capture --match-source</c> of a borderless 2560×1440
-    /// window for 30 s records a 2560×1440 file at the Output frame rate that plays to the end, and the
-    /// anchor line reads <c>output 2560x1440</c>, at 60 fps for about 30 s. The window is on the primary screen, which must be
-    /// at least 2560×1440.
-    /// </summary>
+    /// <summary>The real path (at night only): a 2560×1440 window recorded at its own size for 30 s; needs a screen that large.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public async Task ARealCaptureOfA2560By1440WindowWithMatchSourceRecordsAt2560By1440()

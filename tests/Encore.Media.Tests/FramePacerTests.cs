@@ -1,6 +1,6 @@
 namespace Encore.Media.Tests;
 
-/// <summary>Story 1.11's pacer: slot PTS, hold, replace, repeat and skip, driven the way the encoder thread drives it.</summary>
+/// <summary>The pacer: slot PTS, hold, replace, repeat and skip, driven the way the encoder thread drives it.</summary>
 public sealed class FramePacerTests
 {
     private const long Qpf = 12_000_000; // divisible by 2 × every tested fps
@@ -49,7 +49,7 @@ public sealed class FramePacerTests
     [Fact]
     public void AFrameStarvedSourceGetsEverySlotForAMinuteWithNoPtsBreak()
     {
-        // The secure desktop (T-04): one frame, then none for 60 s.
+        // The secure desktop: one frame, then none for 60 s.
         const int fps = 60;
         var pacer = new FramePacer(Qpf, fps, Anchor);
         var run = Simulate(pacer, [Anchor], Anchor + (60 * Qpf) + (Qpf / fps));
@@ -288,10 +288,7 @@ public sealed class FramePacerTests
         Assert.Equal(1, pacer.RepeatedSlots);
     }
 
-    /// <summary>
-    /// Drives the pacer as the encoder thread does: it wakes at each frame's arrival (its capture
-    /// QPC) and at each deadline, polls until nothing is due, then offers the frame.
-    /// </summary>
+    /// <summary>Drives the pacer as the encoder thread does: polls at each arrival and deadline, then offers the frame.</summary>
     private static List<PacerDecision> Simulate(FramePacer pacer, IReadOnlyList<long> frames, long end)
     {
         var emitted = new List<PacerDecision>();

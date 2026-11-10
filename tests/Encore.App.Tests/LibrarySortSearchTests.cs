@@ -4,7 +4,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 10.3: the Library's sort, Group by None and search, and the remembered view choices.</summary>
+/// <summary>The Library's sort, Group by None and search, and the remembered view choices.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class LibrarySortSearchTests
 {
@@ -71,7 +71,7 @@ public sealed class LibrarySortSearchTests
             var reopened = new LibraryPage(_engine, viewStateFile: file);
             Assert.Equal((LibraryGrouping.None, LibrarySort.LargestFirst, ""), (reopened.GroupBy, reopened.Sort, reopened.SearchText));
 
-            // A file written before story 10.3 has no sort.
+            // A file written before the sort existed has no sort.
             File.WriteAllText(file, """{ "GroupBy": "Day", "Game": null, "Date": "All", "FavouritesOnly": true }""");
             var older = LibraryViewState.Load(file);
             Assert.Equal((LibraryGrouping.Day, true, LibrarySort.NewestFirst), (older.GroupBy, older.FavouritesOnly, older.Sort));

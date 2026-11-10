@@ -3,12 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Captures this process's own audio, 48 kHz float, mixed to mono, with Windows' process-loopback capture
-/// (Windows 10 2004 and later), and finds which of a few tones is loudest at a moment, by Goertzel. It's the
-/// in-app player research's check (story 14.4's Heavy test): the player plays at an inaudible volume, and
-/// this hears which Track it plays. Activation runs on an MTA thread, as process loopback needs.
-/// </summary>
+/// <summary>Captures this process's own audio and finds which of a few tones is loudest, to hear which Track plays.</summary>
 internal sealed class ProcessLoopback : IDisposable
 {
     public const int Rate = 48000;

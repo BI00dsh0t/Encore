@@ -3,16 +3,10 @@ using Encore.Core.Library;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>
-/// The Recordings the last engine run left open (FR-12, AD-16), at start: each file is trimmed back to
-/// its last whole fragment, or deleted when it holds none, and never resumed.
-/// </summary>
+/// <summary>At start, trims each Recording the last run left open to its last whole fragment; they are never resumed.</summary>
 internal static class InterruptedRecordings
 {
-    /// <summary>
-    /// Trims or deletes each of <paramref name="paths"/>, and returns the <c>recording-interrupted</c>
-    /// message for each, in order, naming its path. A failure is logged, never thrown.
-    /// </summary>
+    /// <summary>Trims or deletes each path and returns its <c>recording-interrupted</c> message; a failure is logged.</summary>
     public static IReadOnlyList<string> Recover(IReadOnlyList<string> paths, ILogger log)
     {
         ArgumentNullException.ThrowIfNull(paths);

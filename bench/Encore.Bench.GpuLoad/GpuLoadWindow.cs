@@ -14,15 +14,7 @@ using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace Encore.Bench.GpuLoad;
 
-/// <summary>
-/// The load: a borderless, unowned popup over the primary monitor (or <c>--size</c>), with a D3D11
-/// flip-model swap chain (FLIP_DISCARD; ALLOW_TEARING when the system supports it, presented with sync
-/// interval 0) that draws one fullscreen triangle. Its pixel shader runs a <c>[loop]</c> of N trig
-/// iterations animated by time, so every frame is new to WGC and the GPU does the work a game would.
-/// With <c>--mode fullscreen</c> the flip-model swap chain goes DXGI fullscreen; with <c>--mode exclusive</c> a
-/// blt-model (DISCARD) one does, as an older exclusive-fullscreen game's would (story 5.2). Both present with
-/// sync interval 0 and no tearing flag, which exclusive fullscreen refuses.
-/// </summary>
+/// <summary>The load: a borderless popup with a D3D11 swap chain whose shader makes the GPU work as a game would.</summary>
 internal sealed unsafe class GpuLoadWindow : IDisposable
 {
     public const string Title = "Encore Bench GPU Load";
@@ -31,7 +23,7 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
     /// <summary>Presents measured with N frozen, after the warm-up, for the calibrated rate.</summary>
     private const double VerifySeconds = 3;
 
-    /// <summary>How often a fullscreen load checks it is still fullscreen, and prints <c>fullscreen &lt;bool&gt;</c> when that changes.</summary>
+    /// <summary>How often a fullscreen load checks it is still fullscreen; it prints a line when that changes.</summary>
     private const double FullscreenCheckSeconds = 1;
 
     private const string Shader =
@@ -153,8 +145,7 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
                 return LoadExit.DeviceRemoved;
             }
 
-            // After a fullscreen transition (focus taken, mode change) a flip-model swap chain refuses Present until
-            // its buffers are resized: rebuild them, take fullscreen back as a game does, and go on.
+            // After a fullscreen transition a flip-model swap chain refuses Present until its buffers are resized.
             if (presented == HRESULT.DXGI_ERROR_INVALID_CALL && _options.Mode != LoadMode.Borderless && _recoveries++ < MaxRecoveries)
             {
                 Console.Error.WriteLine("Present refused after a fullscreen change; rebuilding the buffers.");
@@ -345,8 +336,7 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
                 throw new InvalidOperationException($"RegisterClassEx failed with error {Marshal.GetLastPInvokeError()}.");
             }
 
-            // Unowned and visible, so Get-Process finds it as the MainWindowHandle, like a borderless game; topmost,
-            // because SetForegroundWindow is refused to a process started from a background shell.
+            // Unowned and visible, like a borderless game; topmost, because a background process is refused the foreground.
             _hwnd = PInvoke.CreateWindowEx(
                 WINDOW_EX_STYLE.WS_EX_APPWINDOW | WINDOW_EX_STYLE.WS_EX_TOPMOST,
                 className,
@@ -371,11 +361,7 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
         TakeForeground();
     }
 
-    /// <summary>
-    /// Brings the window to the front. A process started from a background shell is refused that, so it
-    /// shares the foreground thread's input state for the call; DXGI fullscreen and the shell's fullscreen
-    /// detection (story 5.2) both need the window in front, as a game launched by the user has it.
-    /// </summary>
+    /// <summary>Brings the window to the front by sharing the foreground thread's input state, as fullscreen needs it in front.</summary>
     private void TakeForeground()
     {
         if (PInvoke.SetForegroundWindow(_hwnd) || PInvoke.GetForegroundWindow() == _hwnd)
@@ -504,10 +490,7 @@ internal sealed unsafe class GpuLoadWindow : IDisposable
         }
     }
 
-    /// <summary>
-    /// Takes the swap chain DXGI fullscreen on the window's output, retrying while DXGI says it is not available
-    /// yet (the window not yet in front), then resizes the buffers as DXGI asks after a switch.
-    /// </summary>
+    /// <summary>Takes the swap chain DXGI fullscreen, retrying while DXGI says not yet, then resizes the buffers.</summary>
     private void EnterFullscreen()
     {
         var deadline = Stopwatch.StartNew();

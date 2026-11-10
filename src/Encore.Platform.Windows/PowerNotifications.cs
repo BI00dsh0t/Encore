@@ -5,12 +5,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Platform.Windows;
 
-/// <summary>
-/// The PC's sleep and resume (T-02), by <c>RegisterSuspendResumeNotification</c> with
-/// <c>DEVICE_NOTIFY_CALLBACK</c>: no window, the system calls back on a thread of its own. Each
-/// change is logged at Information. AOT-safe: a blittable struct, an unmanaged callback and a
-/// <see cref="GCHandle"/> context.
-/// </summary>
+/// <summary>The PC's sleep and resume; the system calls back on a thread of its own, with no window needed.</summary>
 public sealed unsafe partial class SuspendResumeNotifications(ILogger logger) : IPowerNotifications
 {
     private const uint DeviceNotifyCallback = 2;
@@ -129,8 +124,7 @@ public sealed unsafe partial class SuspendResumeNotifications(ILogger logger) : 
                 return;
             }
 
-            // Once unregistered no callback runs, so the context and parameters can go.
-            // A failed unregistration may still call back: its context is leaked, never freed under it.
+            // Once unregistered no callback runs, so the context is freed; after a failed unregistration it is leaked instead.
             if (!UnregisterSuspendResumeNotification(_handle))
             {
                 logger.LogWarning("UnregisterSuspendResumeNotification failed (error {Error})", Marshal.GetLastPInvokeError());

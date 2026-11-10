@@ -6,25 +6,10 @@ namespace Encore.Core.Monitors;
 /// <summary>The screens a Monitor Recording will use, and the chosen ones that aren't attached (by the id the setting holds).</summary>
 public sealed record ResolvedScreens(IReadOnlyList<DisplayMonitor> Screens, IReadOnlyList<string> Missing);
 
-/// <summary>
-/// Core's one resolver of a Monitor Recording's screens (AD-25, story 11.2): <c>monitorRecordingScreens</c>
-/// when it is set, else the old <c>monitorRecordingMonitor</c> exactly as before.
-/// </summary>
+/// <summary>Core's one resolver of a Monitor Recording's screens: the screens key when set, else the older single-monitor key.</summary>
 public static class MonitorScreens
 {
-    /// <summary>
-    /// The attached screens to record, in <paramref name="attached"/>'s order (the primary first, as
-    /// <c>monitors.list</c> gives them).
-    /// <list type="bullet">
-    /// <item><paramref name="screens"/> All: every attached monitor.</item>
-    /// <item>Selected: each id matched to an attached monitor by <see cref="DisplayMonitor.MonitorId"/>,
-    /// else by <see cref="DisplayMonitor.DeviceName"/> (a value carried over from the old key); the
-    /// unmatched ids are <see cref="ResolvedScreens.Missing"/>. None attached gives no screens.</item>
-    /// <item>Null: <paramref name="legacyDeviceName"/>'s monitor, else (null, or no monitor has that name)
-    /// the primary one, as <c>monitorRecordingMonitor</c> always resolved.</item>
-    /// </list>
-    /// Ids and device names match ignoring case.
-    /// </summary>
+    /// <summary>The attached screens to record, the primary first; ids and names match ignoring case. docs/code-notes.md.</summary>
     public static ResolvedScreens Resolve(MonitorRecordingScreens? screens, string? legacyDeviceName, IReadOnlyList<DisplayMonitor> attached)
     {
         if (screens is null)

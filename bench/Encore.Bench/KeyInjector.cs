@@ -3,13 +3,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Bench;
 
-/// <summary>
-/// Presses a key combination with <c>SendInput</c> about once a second, on a thread of its own, for an
-/// unattended <c>bench hotkey --inject</c>: the modifiers down, the key down and up, the modifiers up, as one
-/// batch. The low-level hook sees each key-down flagged injected. When <c>SendInput</c> inserts nothing
-/// (UIPI: a window of higher integrity has the focus, or the desktop is locked) the injector stops and
-/// <see cref="Fault"/> names why; <see cref="Faulted"/> fires so a waiting reader stops at once.
-/// </summary>
+/// <summary>Presses a key combination with SendInput about once a second on its own thread, and stops when Windows refuses it.</summary>
 internal sealed class KeyInjector : IDisposable
 {
     private const uint InputKeyboard = 1;

@@ -6,11 +6,7 @@ using static Encore.Platform.FFmpeg.Tests.LongRecordingTests;
 
 namespace Encore.Platform.FFmpeg.Tests;
 
-/// <summary>
-/// A Recording's first frame is on the frame grid. Synthetic packets as in
-/// <see cref="LongRecordingTests"/>; the Recording starts on the keyframe at 6 s, where each AAC
-/// Track has a packet that starts 256 samples (5.3 ms) before it and is centred after it.
-/// </summary>
+/// <summary>A Recording's first frame is on the frame grid, though an audio packet starts 256 samples before its keyframe.</summary>
 public sealed class RecordingStartTests : IDisposable
 {
     private const int KeyFrame = 180;

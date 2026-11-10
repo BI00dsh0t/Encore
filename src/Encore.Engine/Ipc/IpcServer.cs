@@ -7,7 +7,7 @@ using Encore.Contracts.Ipc;
 
 namespace Encore.Engine.Ipc;
 
-/// <summary>The writer queue's limits (AD-3); tests shorten them.</summary>
+/// <summary>The writer queue's limits; tests shorten them.</summary>
 internal sealed record IpcServerOptions
 {
     public int MaxQueued { get; init; } = 1000;
@@ -22,12 +22,7 @@ internal sealed record IpcServerOptions
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
-/// <summary>
-/// The engine's pipe server (AD-3). The constructor claims the pipe: its first instance is created
-/// with <c>FILE_FLAG_FIRST_PIPE_INSTANCE</c> and a DACL for the current user only, so a second
-/// engine, or a squatter, can't serve the same name. A listening instance always exists while the
-/// server runs, and each connected client gets its own <see cref="Connection"/>.
-/// </summary>
+/// <summary>The engine's pipe server; the constructor claims the pipe for the current user only. See docs/code-notes.md.</summary>
 internal sealed class IpcServer : IAsyncDisposable
 {
     private const int BufferBytes = 64 * 1024;
@@ -66,10 +61,7 @@ internal sealed class IpcServer : IAsyncDisposable
 
     public int ConnectionCount => _connections.Count;
 
-    /// <summary>
-    /// Raised, on the closing connection's thread, when a connection closes and none is left; handlers
-    /// must not block. The meter watch stops on it (story 10.4), so a crashed App leaves no device open.
-    /// </summary>
+    /// <summary>Raised on the closing connection's thread when the last connection closes; handlers must not block.</summary>
     public event Action? LastDisconnected;
 
     /// <summary>Ends every connection at once; their clients may connect again.</summary>
@@ -81,10 +73,7 @@ internal sealed class IpcServer : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Stops accepting connections and closes the listening instance, so the pipe name disappears
-    /// while the engine lives on. Test instances use it to look unreachable (<c>debug.drop</c>).
-    /// </summary>
+    /// <summary>Stops accepting connections, so the pipe name disappears while the engine lives on; for tests.</summary>
     public async Task StopAcceptingAsync()
     {
         await _stopAccepting.CancelAsync().ConfigureAwait(false);
@@ -137,9 +126,7 @@ internal sealed class IpcServer : IAsyncDisposable
                 }
                 catch (IOException e) when (!stop.IsCancellationRequested)
                 {
-                    // A client connected and closed before the wait took it (ERROR_NO_DATA): an App whose
-                    // connect attempt timed out on a loaded machine. Only this instance is spent; a new
-                    // one takes its place, created first so the name is never free.
+                    // A client connected and left before the wait took it; a new pipe instance replaces this one, created first.
                     _log.LogWarning("A client left before its connection was accepted: {Message}", e.Message);
                     try
                     {

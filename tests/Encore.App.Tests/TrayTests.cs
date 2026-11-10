@@ -80,7 +80,7 @@ public sealed class TrayTests
         var menu = ShellApp.CreateTrayMenu(model, () => opened++, () => quit++, openFolder: folders.Add);
         var all = menu.Items.OfType<MenuItem>().Where(i => i.Visibility == Visibility.Visible).ToList();
 
-        // Story 10.6: the live status first, then Open, Open Library and Open the Clips folder.
+        // The live status first, then Open, Open Library and Open the Clips folder.
         Assert.Equal(["Waiting for a game · Mic muted", "Open", "Open Library", "Open the Clips folder", "Start with Windows", "Quit"], all.Select(i => (string)i.Header));
         Assert.False(all[0].IsEnabled);
         engine.State = engine.State! with { Capture = engine.State.Capture with { Replay = Contracts.Messages.ReplayState.Buffering, MicMuted = false }, LibraryFolder = @"C:\Clips" };

@@ -3,20 +3,13 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Core.Output;
 
-/// <summary>
-/// Game Profile folders (AD-21): each profile's folder under the Output Folder, assigned once and
-/// never moved by a rename or by other profiles.
-/// </summary>
+/// <summary>Game Profile folders: each profile's folder under the Output Folder, assigned once and never moved.</summary>
 public static class ProfileFolders
 {
     /// <summary>The folder Monitor Recordings go in; no Game Profile gets it.</summary>
     public const string MonitorRecordings = "Monitor Recordings";
 
-    /// <summary>
-    /// Gives each profile without a folder, in id order, its sanitized name, or that name with
-    /// <c> (2)</c>, <c> (3)</c>… so it is unique, case-insensitively, among every profile's folder
-    /// and <see cref="MonitorRecordings"/>. Folders already set are left alone.
-    /// </summary>
+    /// <summary>Gives each profile without a folder its sanitized name, made unique with <c> (2)</c>, <c> (3)</c>…</summary>
     public static void AssignMissing(ImmutableSortedDictionary<string, GameProfile>.Builder profiles)
     {
         ArgumentNullException.ThrowIfNull(profiles);
@@ -44,10 +37,7 @@ public static class ProfileFolders
         }
     }
 
-    /// <summary>
-    /// The folder of profile <paramref name="profileId"/>: its own, or the one the next commit of
-    /// <paramref name="document"/> will assign it. Null when the document has no such profile.
-    /// </summary>
+    /// <summary>The profile's folder: its own, or the one the next commit will assign it; null for an unknown profile.</summary>
     public static string? FolderOf(SettingsDocument document, string profileId)
     {
         ArgumentNullException.ThrowIfNull(document);

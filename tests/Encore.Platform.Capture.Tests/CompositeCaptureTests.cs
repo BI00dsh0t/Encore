@@ -3,7 +3,7 @@ using Encore.Media;
 
 namespace Encore.Platform.Capture.Tests;
 
-/// <summary>Story 11.3: the composite source's start and teardown, with fake screens and a fake canvas (no GPU).</summary>
+/// <summary>The composite source's start and teardown, with fake screens and a fake canvas (no GPU).</summary>
 public sealed class CompositeCaptureTests
 {
     private static readonly MonitorPlacement[] TwoScreens =
@@ -12,11 +12,7 @@ public sealed class CompositeCaptureTests
         new(new MonitorInfo(2, @"\\.\DISPLAY2", false), 2560, 0, 3840, 2160, 144),
     ];
 
-    /// <summary>
-    /// The bug QA found (11.3 round 1): a screen whose capture failed to start left the slot clock
-    /// unstarted, and Dispose joined it, so a ThreadStateException hid the real error and the screens
-    /// already started kept capturing.
-    /// </summary>
+    /// <summary>A bug that bit: a screen that failed to start left the slot clock unstarted, and Dispose hid the real error.</summary>
     [Fact]
     public void AScreenThatFailsToStartFailsWithItsOwnErrorAndDisposeStopsTheOthers()
     {

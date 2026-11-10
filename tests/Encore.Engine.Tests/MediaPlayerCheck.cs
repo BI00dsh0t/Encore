@@ -4,19 +4,12 @@ using Windows.Media.Playback;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Story 14.3: a Recording opened in WinRT <see cref="MediaPlayer"/> (Media Foundation, as Windows'
-/// players and the in-app player read it) from a stream has ffprobe's length and plays to its end.
-/// </summary>
+/// <summary>A Recording opened in Windows' media player has ffprobe's length and plays to its end.</summary>
 internal static class MediaPlayerCheck
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
-    /// <summary>
-    /// <see cref="MediaPlaybackSession.NaturalDuration"/> is within one frame of ffprobe's format
-    /// duration, and played from 1.5 s before it, <see cref="MediaPlayer.MediaEnded"/> fires with the
-    /// position at the end.
-    /// </summary>
+    /// <summary>The player's duration is within one frame of ffprobe's, and played from near the end it reaches the end.</summary>
     public static async Task AssertPlaysToTheEndAsync(string file, double fps, CancellationToken token)
     {
         var frame = 1.0 / fps;

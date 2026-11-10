@@ -9,12 +9,7 @@ internal partial class SettingsLayout
     public SettingsLayout() => InitializeComponent();
 }
 
-/// <summary>
-/// The settings pages' content column (with <c>RbSettingsContentStyle</c>): a vertical stack that takes the
-/// whole width it's offered up to its <see cref="FrameworkElement.MaxWidth"/>, while staying left-aligned.
-/// A plain StackPanel left-aligned would shrink to its rows' text boxes, and stretched past its MaxWidth
-/// WPF centres it.
-/// </summary>
+/// <summary>The settings pages' content column: takes the width offered up to its MaxWidth, while staying left-aligned.</summary>
 internal sealed class SettingsContent : StackPanel
 {
     protected override Size MeasureOverride(Size constraint)

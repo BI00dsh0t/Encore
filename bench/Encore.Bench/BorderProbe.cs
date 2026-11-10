@@ -4,19 +4,11 @@ using System.Runtime.InteropServices;
 
 namespace Encore.Bench;
 
-/// <summary>
-/// The screen grabs that answer §7.4's capture-border question without a person: the band around the marker
-/// window's edge (<see cref="BorderProbe.Margin"/> pixels each side), before the capture and during it.
-/// </summary>
-/// <param name="Verdict"><c>yes</c> when the band turned yellow during the capture, <c>no</c> when it didn't, <c>not-checked</c> when a grab failed.</param>
+/// <summary>The screen grabs that tell, without a person, whether WGC's capture border showed around the marker window.</summary>
 internal sealed record BorderProbeResult(
     string Verdict, int RingPixels, int YellowBefore, int YellowDuring, string? BeforeImage, string? DuringImage, string? Error);
 
-/// <summary>
-/// Grabs the screen around the marker window before the engine starts and again a few seconds into its
-/// capture, and counts yellow pixels (WGC's capture border) in the band around the window's edge. The
-/// images are kept beside the run's other files for a person to look at.
-/// </summary>
+/// <summary>Grabs the screen around the marker window before and during the capture, and counts yellow pixels at its edge.</summary>
 internal sealed class BorderProbe(string folder, TimeSpan delay)
 {
     /// <summary>The band's half-width: the border sits on the window's edge, inside or out.</summary>
@@ -41,20 +33,14 @@ internal sealed class BorderProbe(string folder, TimeSpan delay)
             ? new BorderProbeResult(Classify(_ring, before, during), _ring, before, during, _beforeImage, _duringImage, null)
             : new BorderProbeResult("not-checked", _ring, _before ?? 0, _during ?? 0, _beforeImage, _duringImage, _error ?? "a screen grab did not run");
 
-    /// <summary>
-    /// <c>yes</c> when the band gained at least 2 % of its pixels (and 50 at least) in yellow during the
-    /// capture: a border of 2 px round a 640×360 window is about 8 % of it.
-    /// </summary>
+    /// <c>yes</c> when the band gained at least 2 % of its pixels (and at least 50) in yellow during the capture.
     internal static string Classify(int ringPixels, int yellowBefore, int yellowDuring) =>
         ringPixels > 0 && yellowDuring - yellowBefore >= Math.Max(50, ringPixels * 0.02) ? "yes" : "no";
 
     /// <summary>A saturated yellow to orange, as the capture border is drawn; never the marker's black or white.</summary>
     internal static bool IsYellow(int red, int green, int blue) => red >= 180 && green >= 120 && blue <= 110 && red - blue >= 100;
 
-    /// <summary>
-    /// The yellow pixels, and all the pixels, of <paramref name="argb"/> (<paramref name="width"/> wide) within
-    /// <paramref name="margin"/> of the edge of <paramref name="inner"/>, the window's rectangle in the grab.
-    /// </summary>
+    /// <summary>The yellow pixels, and all the pixels, within a margin of the edge of the window's rectangle in the grab.</summary>
     internal static (int Yellow, int Ring) CountRing(ReadOnlySpan<int> argb, int width, Rectangle inner, int margin)
     {
         var outer = Rectangle.Inflate(inner, margin, margin);

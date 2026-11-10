@@ -10,11 +10,7 @@ using Encore.Engine.Settings;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Mic mute over a real pipe of a throwaway test instance (AD-5, AD-19): a <c>micMute</c> press
-/// toggles <c>capture.stateChanged.micMuted</c> and <c>runtime.json</c>, which the next engine run
-/// starts from; with no <c>runtime.json</c> the engine starts muted.
-/// </summary>
+/// <summary>Mic mute over a real pipe: a press toggles the state and <c>runtime.json</c>; with no file the engine starts muted.</summary>
 public sealed class MicMuteServeTests : IAsyncLifetime
 {
     private static readonly TimeSpan Within = TimeSpan.FromSeconds(5);

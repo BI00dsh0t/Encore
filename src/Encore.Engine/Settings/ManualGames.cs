@@ -5,15 +5,10 @@ using Encore.Platform.Windows;
 
 namespace Encore.Engine.Settings;
 
-/// <summary>Hand-added games (story 3.6): <c>game.add</c> appends to <c>manualGames</c> (R1).</summary>
+/// <summary>Hand-added games: <c>game.add</c> appends to <c>manualGames</c>.</summary>
 internal static class ManualGames
 {
-    /// <summary>
-    /// Adds <paramref name="add"/>'s executable to <c>manualGames</c>, canonical (AD-18), through
-    /// <see cref="SettingsStore.Update"/> (AD-4). A path already listed (ordinal ignore-case) writes
-    /// nothing. A conflict with another write is retried.
-    /// </summary>
-    /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.InvalidArguments"/>: the path isn't an existing executable.</exception>
+    /// <summary>Adds an executable to <c>manualGames</c>, canonical; a listed path writes nothing, and a bad path is refused.</summary>
     public static GameAdded Add(SettingsStore store, GameAdd add)
     {
         ArgumentNullException.ThrowIfNull(add);

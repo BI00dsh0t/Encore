@@ -84,7 +84,6 @@ public sealed class RewindSettingsPageTests
     [Fact]
     public void SourceComesFirstSendsMatchSourceKeepingTheSizeAndAFixedSizeTurnsItOff()
     {
-        // Story 12.3 (R40, AD-26).
         var updates = new List<SettingsUpdate>();
         _engine.Reply = (_, args) =>
         {
@@ -119,7 +118,7 @@ public sealed class RewindSettingsPageTests
     [Fact]
     public void TheCacheFolderIsEnabledOnlyUnderDiskAndSendsRingPathAndTimeBetweenSaves()
     {
-        // Story 10.9: the ring path is the cache folder's picker; the Clips folder is D:\Clips.
+        // The ring path is the cache folder's picker; the Clips folder is D:\Clips.
         _engine.State = _engine.State! with
         {
             Settings = SettingsDocument.Empty with { Revision = 2, Global = SettingsMaps.EmptyValues.Add(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(@"D:\Clips")) },

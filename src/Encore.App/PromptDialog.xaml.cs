@@ -3,12 +3,7 @@ using System.Windows.Input;
 
 namespace Encore.App;
 
-/// <summary>
-/// The themed Yes/No dialog behind <see cref="Prompts"/>, in place of <c>MessageBox</c> (AD-23): an owned,
-/// modal <see cref="ShellWindow"/> that permits screenshots/recording (AD-15) and follows the theme live. Yes
-/// is the default button and has focus first; Enter activates the focused button. Esc and the close box
-/// answer No, as MessageBox's YesNo does with no Cancel. Members run on the UI thread.
-/// </summary>
+/// <summary>The themed Yes/No dialog, used in place of MessageBox; Esc and the close box answer No. UI thread.</summary>
 internal partial class PromptDialog
 {
     public PromptDialog(string message, string caption, MessageBoxImage image)
@@ -41,10 +36,7 @@ internal partial class PromptDialog
     /// <summary>The answer: true for Yes, false for No, Esc or the close box.</summary>
     public bool Answer { get; private set; }
 
-    /// <summary>
-    /// Shows the dialog modally over <paramref name="owner"/>, centred on it, or centred on the screen and in
-    /// the taskbar when there is no shown owner. True is Yes.
-    /// </summary>
+    /// <summary>Shows the dialog modally over its owner, or centred on the screen with no owner; true is Yes.</summary>
     public bool Ask(Window? owner)
     {
         if (owner is { IsVisible: true })

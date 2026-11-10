@@ -2,16 +2,7 @@ using System.Text.Json;
 
 namespace Encore.Bench;
 
-/// <summary>What the A/V analysis needs: the markers found in the file, and their source log.</summary>
-/// <param name="FlashFileTimes">Each detected flash's frame time in the file, s, ascending.</param>
-/// <param name="OnsetFileTimes">Each detected burst onset's time in the file, s, ascending.</param>
-/// <param name="FlashQpcs">The marker window's flash stamps, ascending.</param>
-/// <param name="BurstQpcs">The tone player's burst stamps, ascending.</param>
-/// <param name="AnchorQpc">An estimate of the QPC at file time 0, good to well under 0.5 s.</param>
-/// <param name="VideoSpan">The video's first and last frame time, s.</param>
-/// <param name="AudioSpan">The burst track's first and last sample time, s.</param>
-/// <param name="FrameMs">One video frame at the output fps: the target.</param>
-/// <param name="BucketSeconds">The length of a median bucket; a minute by default.</param>
+/// <summary>What the A/V analysis needs: the markers found in the file, and their source log. Times are in seconds.</summary>
 internal sealed record AvInput(
     IReadOnlyList<double> FlashFileTimes,
     IReadOnlyList<double> OnsetFileTimes,
@@ -27,11 +18,7 @@ internal sealed record AvInput(
 /// <summary>One bucket of burst errors.</summary>
 internal sealed record DriftBucket(int Index, double StartSeconds, int Count, double MedianMs);
 
-/// <summary>
-/// The A/V result. <see cref="DriftMs"/> is the verdict figure: the largest change of a bucket's
-/// median from the first bucket's. <see cref="AbsoluteOffsetMs"/> is the first bucket's median, the
-/// constant pipeline offset that the drift leaves out.
-/// </summary>
+/// <summary>The A/V result: DriftMs is the verdict, the largest change of a bucket's median from the first bucket's.</summary>
 internal sealed record AvResult(
     int FlashesLogged,
     int FlashesExpected,
@@ -70,10 +57,7 @@ internal sealed record DeviceSync(
     long StepCorrections,
     long SettledPackets);
 
-/// <summary>
-/// Audio-to-audio, bounded from the stats (no acoustic coupling): |output error| + |input error|,
-/// each a device's content position against its own QPC stamps, so it trusts the stamps.
-/// </summary>
+/// <summary>Audio-to-audio drift, bounded from the stats: each device's content position against its own QPC stamps.</summary>
 internal sealed record AudioToAudioResult(
     IReadOnlyList<DeviceSync> Devices,
     double? BoundSamples,
@@ -94,12 +78,7 @@ internal static class DriftMath
     /// <summary>A detected marker counts as a logged one within this of where the mapping puts it.</summary>
     private const double IdentityToleranceSeconds = 0.25;
 
-    /// <summary>
-    /// Per burst k: <c>error_k = (onset − flash frame time) in the file − (burst QPC − flash QPC) at source</c>,
-    /// pairing each burst with the logged flash nearest it (within ±0.5 s). Logged markers are found in the
-    /// file through the anchor, refined per stream by the median residual (which takes the stream's constant
-    /// pipeline offset out of the mapping, so it only identifies markers and never enters an error).
-    /// </summary>
+    /// <summary>Per burst, the file's flash-to-burst gap minus the source's; each burst pairs with the nearest logged flash.</summary>
     public static AvResult AnalyzeAv(AvInput input)
     {
         var f = (double)input.QpcFrequency;
@@ -294,10 +273,7 @@ internal static class DriftMath
         return sxx <= 0 ? (null, span) : (sxy / sxx * 60, span);
     }
 
-    /// <summary>
-    /// Buckets of <paramref name="bucketSeconds"/> from the first error's time; a bucket needs a quarter of
-    /// its seconds in errors (at least 3), so a short last bucket doesn't count.
-    /// </summary>
+    /// <summary>Buckets from the first error's time; a bucket needs a quarter of its seconds in errors, and at least 3.</summary>
     public static List<DriftBucket> Buckets(IReadOnlyList<(double Time, double Ms)> errors, double bucketSeconds)
     {
         var buckets = new List<DriftBucket>();
@@ -320,10 +296,7 @@ internal static class DriftMath
         return buckets;
     }
 
-    /// <summary>
-    /// The median of (detected − nearest logged) times, s: the stream's constant offset from the anchor
-    /// mapping. Zero when nothing was detected.
-    /// </summary>
+    /// <summary>The median of detected minus nearest logged times: the stream's constant offset. Zero when nothing was detected.</summary>
     private static double MappingShift(IReadOnlyList<double> detected, double[] logged)
     {
         if (detected.Count == 0 || logged.Length == 0)
@@ -341,10 +314,7 @@ internal static class DriftMath
         return Median(residuals);
     }
 
-    /// <summary>
-    /// For each logged marker, the detected time within <see cref="IdentityToleranceSeconds"/> of where the
-    /// shifted mapping puts it, or null. <paramref name="expected"/> counts the logged markers inside the span.
-    /// </summary>
+    /// <summary>For each logged marker, the detected time close to where the shifted mapping puts it, or null.</summary>
     private static double?[] Identify(double[] logged, double shift, IReadOnlyList<double> detected, (double Start, double End) span, out int expected)
     {
         var found = new double?[logged.Length];

@@ -4,13 +4,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Core.Feedback;
 
-/// <summary>
-/// A user-facing notice of an outcome: raised as a <c>warning.raised</c> that the Overlay shows and
-/// the user may dismiss (AD-3).
-/// </summary>
-/// <param name="Code">One of <see cref="ErrorCodes"/>.</param>
-/// <param name="Source">The engine area it is about, such as <c>clips</c> or <c>recordings</c>.</param>
-/// <param name="Sound">The <c>feedbackSounds</c> name it plays, or <c>null</c> once the router has found it switched off.</param>
+/// <summary>A user-facing notice of an outcome, raised as a warning the Overlay shows and the user may dismiss.</summary>
 public sealed record FeedbackNotice(string Code, WarningSeverity Severity, string Source, string Message, string? Sound);
 
 /// <summary>Where the <see cref="FeedbackRouter"/> raises its notices; the engine's warnings.</summary>
@@ -23,17 +17,7 @@ public interface IFeedbackNotices
     void Withdraw(string id);
 }
 
-/// <summary>
-/// Turns outcomes into notices (FR-6): Clip saved, Clip not saved, Recording started and stopped
-/// (from the real <c>recording.started</c> and <c>recording.stopped</c> events, the stop naming its
-/// reason), Recording restarted and disk full. Info
-/// notices, and the restart's, are withdrawn after <see cref="InfoLifetime"/>; a Clip not saved
-/// stays until the next saved Clip, a disk full
-/// until the next Recording starts, a Rewind stopped by a full disk (R5) until it restarts,
-/// or until the user dismisses any of them. With a
-/// <see cref="FeedbackSoundPlayer"/>, each notice's sound is queued as it is raised; a sound that is
-/// switched off isn't played, and its notice carries no <see cref="FeedbackNotice.Sound"/>. Thread-safe.
-/// </summary>
+/// <summary>Turns outcomes (Clip saved or not, Recording events, disk full) into notices and sounds. docs/code-notes.md.</summary>
 public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, FeedbackSoundPlayer? sounds = null) : IDisposable
 {
     /// <summary>How long an info notice stays before the engine dismisses it.</summary>
@@ -74,10 +58,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         });
     }
 
-    /// <summary>
-    /// The capture state changed. It raises nothing; the router keeps the Recording state only to
-    /// tell an encoder restart's replacement from a new Recording.
-    /// </summary>
+    /// <summary>The capture state changed; nothing is raised, the Recording state is only kept to spot an encoder restart.</summary>
     public void StateChanged(CaptureState state)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -91,12 +72,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         });
     }
 
-    /// <summary>
-    /// A Recording started (<c>recording.started</c>): a <c>recording-started</c> notice with the
-    /// <c>recordingStarted</c> sound, and every <c>disk-full</c> notice is withdrawn. An encoder
-    /// restart's replacement (a start after a stop that left the state Running) raises and withdraws
-    /// nothing; its <see cref="RecordingRestarted"/> notice follows.
-    /// </summary>
+    /// <summary>A Recording started: a notice with its sound, and every <c>disk-full</c> notice is withdrawn.</summary>
     public void RecordingStarted(RecordingStarted started)
     {
         ArgumentNullException.ThrowIfNull(started);
@@ -113,19 +89,13 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         });
     }
 
-    /// <summary>
-    /// A Recording stopped (<c>recording.stopped</c>): a <c>recording-stopped</c> notice whose message
-    /// names the reason (<see cref="StopMessage"/>), with the <c>recordingStopped</c> sound. A disk-full
-    /// or encoder-restart stop is silent, as the <see cref="DiskFull"/> or
-    /// <see cref="RecordingRestarted"/> notice that follows plays its own sound; a writer failure is a warning.
-    /// </summary>
+    /// <summary>A Recording stopped: a notice naming the reason; a disk-full or restart stop is silent, as another follows.</summary>
     public void RecordingStopped(RecordingStopped stopped)
     {
         ArgumentNullException.ThrowIfNull(stopped);
         UnlessDisposed(() =>
         {
-            // The orchestrator turns the state Off before a stop unless an encoder restart's replacement
-            // follows, whatever the stop's reason (the old writer may still fail or fill the disk).
+            // The orchestrator turns the state Off before a stop, unless an encoder restart's replacement follows.
             var silent = stopped.Reason is RecordingStopReasons.DiskFull or RecordingStopReasons.EncoderRestart;
             _replacing = _recording == RecordingState.Running;
             RaiseInfo(new FeedbackNotice(
@@ -137,11 +107,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         });
     }
 
-    /// <summary>
-    /// A Monitor Recording started (6.9): the same <c>recording-started</c> notice and sound as a
-    /// Recording's, worded for the Monitor Recording, and every <c>disk-full</c> notice is withdrawn.
-    /// It never touches the game Recording's restart handover.
-    /// </summary>
+    /// <summary>A Monitor Recording started: the same notice and sound as a Recording's, worded for the Monitor Recording.</summary>
     public void MonitorRecordingStarted(RecordingStarted started)
     {
         ArgumentNullException.ThrowIfNull(started);
@@ -152,11 +118,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         });
     }
 
-    /// <summary>
-    /// A Monitor Recording stopped (6.9): the same <c>recording-stopped</c> notice and sound as a
-    /// Recording's (<see cref="MonitorStopMessage"/>), a disk-full stop silent; a writer failure is a
-    /// warning. It never touches the game Recording's restart handover.
-    /// </summary>
+    /// <summary>A Monitor Recording stopped: the same notice and sound as a Recording's; a writer failure is a warning.</summary>
     public void MonitorRecordingStopped(RecordingStopped stopped)
     {
         ArgumentNullException.ThrowIfNull(stopped);
@@ -208,12 +170,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         or RecordingStopReasons.Suspend
         or RecordingStopReasons.MonitorRemoved;
 
-    /// <summary>
-    /// A forced encoder restart ended a Recording and started another (R4): a
-    /// <c>recording-restarted</c> warning naming both files, with the <c>recordingStarted</c> sound,
-    /// withdrawn after <see cref="InfoLifetime"/>. The stop before it is silent and its replacement
-    /// raises no started notice, so this notice plays the only sound.
-    /// </summary>
+    /// <summary>A forced encoder restart ended a Recording and started another: one warning names both files.</summary>
     public void RecordingRestarted(RecordingRestart restart)
     {
         ArgumentNullException.ThrowIfNull(restart);
@@ -238,7 +195,7 @@ public sealed class FeedbackRouter(IFeedbackNotices notices, TimeProvider time, 
         });
     }
 
-    /// <summary>A full disk stopped a Disk-mode Rewind (R5): a <c>replay-stopped-disk-full</c> warning, with no sound.</summary>
+    /// <summary>A full disk stopped a Disk-mode Rewind: a <c>replay-stopped-disk-full</c> warning, with no sound.</summary>
     public void ReplayStoppedDiskFull()
     {
         UnlessDisposed(() =>

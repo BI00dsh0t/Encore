@@ -6,12 +6,7 @@ namespace Encore.Engine.Audio;
 /// <summary>The device-to-Track fan-out a capture session and a meter watch share. Wiring time only.</summary>
 internal static class TrackWiring
 {
-    /// <summary>
-    /// The sink for device <paramref name="device"/>: each Track's mixer input for it, where
-    /// <paramref name="inputs"/>[t] lists Track t's mixer inputs as device indexes, in Track order.
-    /// Mic mute gates a Mic Device's input in a <c>muteAffected</c> Track. One Track's input is
-    /// returned as-is; several are an <see cref="AudioFanOut"/>.
-    /// </summary>
+    /// <summary>The sink for one device: each Track's mixer input for it, with mic mute gating a Mic Device where a Track asks.</summary>
     public static IAudioSampleSink DeviceSink(int device, bool isMic, IReadOnlyList<SessionTrack> tracks, IReadOnlyList<IReadOnlyList<int>> inputs,
         IReadOnlyList<TrackMixer> mixers, MicMuteSchedule schedule, long frequency, long anchorQpc)
     {

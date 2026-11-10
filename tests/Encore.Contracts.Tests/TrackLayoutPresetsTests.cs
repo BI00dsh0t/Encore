@@ -4,7 +4,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Contracts.Tests;
 
-/// <summary>Story 10.4: the presets' shape from a fabricated device list, and <c>isDefault</c> on the wire.</summary>
+/// <summary>The presets' shape from a fabricated device list, and <c>isDefault</c> on the wire.</summary>
 public sealed class TrackLayoutPresetsTests
 {
     private static readonly AudioDevice Speakers = new("{out-1}", "Speakers", "Realtek", AudioFlow.Output, true, IsDefault: true);

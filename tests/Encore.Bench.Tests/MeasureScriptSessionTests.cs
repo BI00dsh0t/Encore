@@ -3,11 +3,7 @@ using System.Globalization;
 
 namespace Encore.Bench.Tests;
 
-/// <summary>
-/// <c>tools/measure-path-a.ps1</c>'s sweep of leftover <c>Encore-PathA-&lt;pid&gt;</c> ETW sessions,
-/// against the real script and real sessions (skipped when this account may not start one): a dead
-/// run's session is stopped and named, a live run's is left alone.
-/// </summary>
+/// <summary>The script's sweep of leftover ETW sessions: a dead run's is stopped, a live run's is left alone.</summary>
 [Collection(nameof(BenchProcessCollection))]
 public sealed class MeasureScriptSessionTests : IDisposable
 {
@@ -34,8 +30,7 @@ public sealed class MeasureScriptSessionTests : IDisposable
     [Trait("Category", "Heavy")]
     public void TheScriptStopsADeadRunsSessionAndLeavesALiveOneAlone()
     {
-        // The script's sweep covers the whole machine, and other worktrees run this test beside this one:
-        // one run at a time, from the first session started to the last assert.
+        // The sweep covers the whole machine, and other worktrees run this test too: one run at a time.
         using var oneRun = new Mutex(false, @"Global\Encore-MeasureScriptSessionTests");
         try
         {
@@ -78,11 +73,7 @@ public sealed class MeasureScriptSessionTests : IDisposable
         Assert.True(IsRunning(live), $"{live} was stopped");
     }
 
-    /// <summary>
-    /// A pid no process answers to, from a random start so two runs don't share a session name.
-    /// <c>OpenProcess</c> ignores a pid's low two bits, so the candidates are multiples of 4; the lookup
-    /// here is the script's, so the two agree.
-    /// </summary>
+    /// <summary>A pid no process answers to; candidates are multiples of 4, as OpenProcess ignores a pid's low two bits.</summary>
     private static int DeadPid()
     {
         for (var pid = Random.Shared.Next(100_000, 250_000) * 4; ; pid -= 4)

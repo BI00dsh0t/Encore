@@ -127,10 +127,7 @@ public sealed class PacketRingTests
         }
     }
 
-    /// <summary>
-    /// Video at 30 fps, a keyframe each second and at <paramref name="forcedKeys"/>, with AAC-sized
-    /// audio appended 100 ms behind it, as the encoders lag; then the audio's last 100 ms.
-    /// </summary>
+    /// <summary>Video at 30 fps with a keyframe each second, and AAC-sized audio appended 100 ms behind it, as encoders lag.</summary>
     private static void FeedLagging(PacketRing ring, int video, int audio, int frames, long[] forcedKeys)
     {
         const long lagUs = 100_000;

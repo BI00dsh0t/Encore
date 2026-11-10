@@ -7,16 +7,7 @@ using Windows.Win32.System.Com;
 
 namespace Encore.Platform.Capture;
 
-/// <summary>
-/// Draws captured frames into the fixed output (R20): content fitted inside the output with its
-/// aspect ratio kept, centred, black bars (<see cref="Letterbox"/>). Content equal to a BGRA output
-/// is a plain <c>CopySubresourceRegion</c>; anything else is one blit on the D3D11 VideoProcessor of
-/// the engine's one device, BGRA → BGRA (X1), or BGRA → NV12 BT.709 limited (X2). The processor is
-/// rebuilt when the content size changes. Input views are cached per captured texture and output
-/// views per target texture and slice; each cached view holds a reference on its texture, so a
-/// texture's address can't be reused while it is cached. A captured texture that can't take an
-/// input view is copied into an owned texture first, logged once. One thread draws at a time.
-/// </summary>
+/// <summary>Draws captured frames into the fixed output: fitted, centred, black bars. One thread draws at a time.</summary>
 public sealed unsafe class FrameScaler : IDisposable
 {
     private const int InputCacheSize = 4;
@@ -34,9 +25,7 @@ public sealed unsafe class FrameScaler : IDisposable
     private VideoSize _copyInSize;
     private bool _copyInLogged;
 
-    /// <param name="output">The output size every frame is drawn at.</param>
-    /// <param name="nv12">Targets are NV12 (X2); otherwise BGRA (X1).</param>
-    /// <param name="targets">How many distinct targets (texture and slice) to keep output views for.</param>
+    /// <summary>The nv12 flag picks NV12 targets over BGRA; targets is how many target slices to keep output views for.</summary>
     public FrameScaler(D3D11Device device, VideoSize output, bool nv12, int targets, ILogger logger)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(targets);
@@ -71,10 +60,7 @@ public sealed unsafe class FrameScaler : IDisposable
     /// <summary>For tests: never take an input view on the captured texture, always copy it in first.</summary>
     internal bool ForceCopyIn { get; set; }
 
-    /// <summary>
-    /// Draws <paramref name="contentSize"/> of the captured BGRA texture <paramref name="source"/>
-    /// into slice <paramref name="slice"/> of <paramref name="target"/>, letterboxed.
-    /// </summary>
+    /// <summary>Draws the content area of a captured BGRA texture into one slice of the target, letterboxed.</summary>
     public void Draw(nint source, VideoSize contentSize, nint target, uint slice)
     {
         // A simulated reset: the next device call fails, as on a real one.
@@ -281,7 +267,7 @@ public sealed unsafe class FrameScaler : IDisposable
         }
     }
 
-    /// <summary>A fixed set of views keyed by texture and slice, each holding a reference on its texture; full, it evicts round-robin.</summary>
+    /// <summary>A fixed set of views keyed by texture and slice, each holding its texture alive; when full, the oldest goes.</summary>
     private sealed class ViewCache(int capacity)
     {
         private readonly nint[] _textures = new nint[capacity];

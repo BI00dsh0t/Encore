@@ -5,11 +5,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Contracts.Messages;
 
-/// <summary>
-/// Everything the App renders (AD-3). <c>state.snapshot</c> sends it whole as the first frame on a
-/// connection; each event then changes one field. An epic adds its field here, with a default, and
-/// the event that changes it in its own message file.
-/// </summary>
+/// <summary>Everything the App renders: <c>state.snapshot</c> sends it whole first, then each event changes one field.</summary>
 public sealed record StateSnapshot
 {
     private readonly HotkeyStatus _hotkeys = HotkeyStatus.Unbound;
@@ -39,8 +35,7 @@ public sealed record StateSnapshot
     /// <summary>The process id of the App that last sent <c>app.attach</c>, or <c>null</c> before one has.</summary>
     public int? AppPid { get; init; }
 
-    /// <summary>Each Hotkey action's binding and whether it is registered (AD-11); all unbound before the first status.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 9) reads as all unbound.</remarks>
+    /// <summary>Each Hotkey action's binding and whether it is registered; all unbound before the first status.</summary>
     public HotkeyStatus Hotkeys
     {
         get => _hotkeys;
@@ -53,27 +48,21 @@ public sealed record StateSnapshot
     public HotkeyPress? LastHotkeyPress { get; init; }
 
     /// <summary>The last Clip saved, or <c>null</c> before one.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 4.1) reads as none.</remarks>
     public ClipSaved? LastClip { get; init; }
 
     /// <summary>The last accepted save press, or <c>null</c> before one.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 4.4) reads as none.</remarks>
     public ClipSaving? LastClipSaving { get; init; }
 
     /// <summary>The last save that made no Clip, or <c>null</c> before one.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 4.2) reads as none.</remarks>
     public ClipFailed? LastClipFailure { get; init; }
 
     /// <summary>The last Recording started, or <c>null</c> before one.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 6.1) reads as none.</remarks>
     public RecordingStarted? LastRecordingStarted { get; init; }
 
     /// <summary>The last Recording stopped, or <c>null</c> before one.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 6.1) reads as none.</remarks>
     public RecordingStopped? LastRecordingStopped { get; init; }
 
-    /// <summary>What the <c>video</c> key can be set to on this PC (R2); unprobed until <c>capture.videoOptions</c>.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 10) reads as unprobed.</remarks>
+    /// <summary>What the <c>video</c> key can be set to on this PC; unprobed until <c>capture.videoOptions</c>.</summary>
     public VideoOptions VideoOptions
     {
         get => _videoOptions;
@@ -82,12 +71,10 @@ public sealed record StateSnapshot
         init => _videoOptions = value ?? VideoOptions.Unprobed;
     }
 
-    /// <summary>The Global settings' storage estimate (R2), or <c>null</c> before the engine has made one.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 4.10) reads as none.</remarks>
+    /// <summary>The Global settings' storage estimate, or <c>null</c> before the engine has made one.</summary>
     public StorageEstimate? Estimate { get; init; }
 
-    /// <summary>The audio devices the App can offer (R1); empty until the engine lists them.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 2.3) reads as the empty list.</remarks>
+    /// <summary>The audio devices the App can offer; empty until the engine lists them.</summary>
     public AudioDeviceList Devices
     {
         get => _devices;
@@ -96,8 +83,7 @@ public sealed record StateSnapshot
         init => _devices = value ?? AudioDeviceList.Empty;
     }
 
-    /// <summary>The watched Tracks' latest levels (R6); empty while nothing is watched.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 2.6) reads as no Tracks.</remarks>
+    /// <summary>The watched Tracks' latest levels; empty while nothing is watched.</summary>
     public MeterLevels Meters
     {
         get => _meters;
@@ -106,15 +92,12 @@ public sealed record StateSnapshot
         init => _meters = value ?? MeterLevels.Empty;
     }
     /// <summary>The Target Game, or <c>null</c> when there is none.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 3.1) reads as none.</remarks>
     public TargetGame? TargetGame { get; init; }
 
-    /// <summary>The running games Game Detection knows, in detection order (informational, AD-19).</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 3.2) reads as <c>null</c>.</remarks>
+    /// <summary>The running games Game Detection knows, in detection order; for display only.</summary>
     public IReadOnlyList<DetectedGame>? DetectedGames { get; init; }
 
-    /// <summary>The Library's items (R1), in no particular order; the App sorts them.</summary>
-    /// <remarks>A snapshot without the field (an engine from before story 7.1) reads as the empty list.</remarks>
+    /// <summary>The Library's items, in no particular order; the App sorts them.</summary>
     public IReadOnlyList<LibraryItem> Library
     {
         get => _library;
@@ -123,25 +106,13 @@ public sealed record StateSnapshot
         init => _library = value ?? [];
     }
 
-    /// <summary>
-    /// Whether Cleanup is held off (R2): the index was rebuilt from the Output Folder because
-    /// <c>library.json</c> was corrupt, and the <c>library-corrupt</c> warning hasn't been dismissed.
-    /// </summary>
-    /// <remarks>A snapshot without the field (an engine from before story 7.2) reads as false.</remarks>
+    /// <summary>Whether Cleanup is held off: the index was rebuilt after a corrupt file, and that warning isn't dismissed yet.</summary>
     public bool CleanupBlocked { get; init; }
 
-    /// <summary>
-    /// The absolute Output Folder the Library indexes (story 7.3), which each item's path is relative
-    /// to; <c>null</c> when unknown.
-    /// </summary>
-    /// <remarks>A snapshot without the field (an engine from before story 7.3) reads as <c>null</c>.</remarks>
+    /// <summary>The absolute Output Folder the Library indexes, which item paths are relative to; <c>null</c> when unknown.</summary>
     public string? LibraryFolder { get; init; }
 
-    /// <summary>
-    /// The attached monitors as of the last <c>monitors.changed</c> (T-03), the primary first; <c>null</c>
-    /// before any change, when <c>monitors.list</c> gives them.
-    /// </summary>
-    /// <remarks>A snapshot without the field (an engine from before story 8.5) reads as <c>null</c>.</remarks>
+    /// <summary>The attached monitors as of the last <c>monitors.changed</c>, the primary first; <c>null</c> before any change.</summary>
     public MonitorList? Monitors { get; init; }
 
     /// <summary>The fields that identify the snapshot rather than state; no event changes them.</summary>
@@ -172,7 +143,7 @@ public sealed record Empty
     public static Empty Value { get; } = new();
 }
 
-/// <summary><c>engine.heartbeat</c> (AD-16): the engine is alive; sent every <see cref="Supervision.HeartbeatInterval"/>.</summary>
+/// <summary><c>engine.heartbeat</c>: the engine is alive; sent every <see cref="Supervision.HeartbeatInterval"/>.</summary>
 public sealed record EngineHeartbeat(DateTimeOffset At);
 
 /// <summary>Why the App restarted the engine it attaches to.</summary>
@@ -186,10 +157,7 @@ public enum EngineRestartReason
     Hung,
 }
 
-/// <summary>
-/// <c>app.attach</c>'s arguments (AD-16): the App's process, which the engine relaunches if it exits
-/// with no <c>engine.shutdown</c>, and why the App restarted this engine, if it did.
-/// </summary>
+/// <c>app.attach</c>'s arguments: the App's process to supervise, and why the App restarted this engine, if it did.
 public sealed record AppAttach(int Pid, EngineRestartReason? EngineRestart = null);
 
 /// <summary><c>app.attached</c>: the App the engine now supervises.</summary>
@@ -201,15 +169,15 @@ public static class EngineMessages
     /// <summary>The first frame on every connection; its payload is a <see cref="StateSnapshot"/>.</summary>
     public const string StateSnapshotType = "state.snapshot";
 
-    /// <summary>Ends the engine once the reply is written (AD-16).</summary>
+    /// <summary>Ends the engine once the reply is written.</summary>
     public static CommandType<Empty, Empty> Shutdown { get; } =
         new("engine.shutdown", EngineJsonContext.Default.Empty, EngineJsonContext.Default.Empty);
 
-    /// <summary>The App registers for supervision (AD-16); the engine raises <c>engine-restarted</c> when it carries a reason.</summary>
+    /// <summary>The App registers for supervision; the engine raises <c>engine-restarted</c> when it carries a reason.</summary>
     public static CommandType<AppAttach, Empty> Attach { get; } =
         new("app.attach", EngineJsonContext.Default.AppAttach, EngineJsonContext.Default.Empty);
 
-    /// <summary>The engine is alive (AD-16). Coalescing: a connection's queue keeps only the latest.</summary>
+    /// <summary>The engine is alive. Coalescing: a connection's queue keeps only the latest.</summary>
     public static EventType<EngineHeartbeat> Heartbeat { get; } = new(
         "engine.heartbeat",
         EngineJsonContext.Default.EngineHeartbeat,

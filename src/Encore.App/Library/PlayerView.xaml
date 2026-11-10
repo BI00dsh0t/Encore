@@ -1,14 +1,4 @@
-<!--
-    The in-app player's page (stories 14.2 to 14.7, restyled in 14.9 after the builder's approved mockup, AD-27).
-    The video fills the page, letterboxed with its aspect kept; under it (over it, in full screen) one thin
-    full-width seek bar sits above a single control row:
-      left: Play or Pause; the speaker, which mutes on click, with the volume slider sliding out on hover or
-            keyboard focus; then the time, elapsed / total;
-      right: the gear, whose menu lists the Tracks under "Audio track" (the playing one ticked) and then
-             "Open in default player"; then full screen.
-    The picture is a WPF D3DImage, so the bar and the looks draw over it. Keys bubble to the page (KeyDown, not
-    PreviewKeyDown), so a focused control's own keys win. Every colour is a token (LibraryTheme.xaml).
--->
+<!-- The in-app player's page: the video, a thin seek bar and one control row. Keys bubble, so a control's own keys win. -->
 <UserControl x:Class="Encore.App.Library.PlayerView"
              x:ClassModifier="internal"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -89,7 +79,7 @@
                                        Margin="8,0,0,0"
                                        Text="{Binding TimeText}"
                                        Style="{DynamicResource RbPlayerTimeStyle}"><TextBlock.Visibility><MultiBinding Converter="{StaticResource ClipPlayerVisible}"><Binding Path="HasControls" /><Binding Path="IsClipEditor" ElementName="PlayerRoot" /></MultiBinding></TextBlock.Visibility></TextBlock>
-                            <!-- Story 14.6: the missing extension's Store page, then the default player, when it can't play. -->
+                            <!-- The missing extension's Store page, then the default player, when it can't play. -->
                             <Button Margin="8,0,0,0"
                                     VerticalAlignment="Center"
                                     Command="{Binding OpenStoreCommand}"

@@ -8,14 +8,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Platform.Capture;
 
-/// <summary>
-/// The attached monitors and their changes (T-03) for the engine: the list is
-/// <see cref="MonitorFinder.Describe"/>'s, and a change is <c>WM_DISPLAYCHANGE</c>, which Windows
-/// broadcasts to top-level windows only (a message-only window never gets it). While anyone is
-/// subscribed, one thread owns a hidden, never-shown top-level window; a burst of changes (a hot-plug
-/// sends several) is reported once, <see cref="Settle"/> after the last. It reads the displays only and
-/// never changes them. AOT-safe: blittable structs and an unmanaged window procedure.
-/// </summary>
+/// <summary>The attached monitors and their changes, heard through a hidden top-level window. Details: docs/code-notes.md.</summary>
 public sealed unsafe partial class DisplayMonitors(ILogger logger) : IDisplayMonitors
 {
     /// <summary>How long after the last <c>WM_DISPLAYCHANGE</c> a change is reported, so the list has settled.</summary>
@@ -76,10 +69,7 @@ public sealed unsafe partial class DisplayMonitors(ILogger logger) : IDisplayMon
         return new Subscription(this, changed);
     }
 
-    /// <summary>
-    /// For tests: posts <c>WM_DISPLAYCHANGE</c> to this source's own hidden window only, as Windows'
-    /// broadcast would; nothing about the displays changes. False when nothing is subscribed.
-    /// </summary>
+    /// <summary>For tests: posts WM_DISPLAYCHANGE to this source's own hidden window only; false when nothing is subscribed.</summary>
     internal bool SimulateDisplayChange()
     {
         lock (_lock)

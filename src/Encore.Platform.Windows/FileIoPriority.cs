@@ -5,13 +5,10 @@ using Windows.Win32.Storage.FileSystem;
 
 namespace Encore.Platform.Windows;
 
-/// <summary>A file handle's I/O priority hint (AD-7).</summary>
+/// <summary>A file handle's I/O priority hint.</summary>
 public static unsafe class FileIoPriority
 {
-    /// <summary>
-    /// Sets <paramref name="handle"/>'s hint to <c>IoPriorityHintLow</c>, so its writes and their
-    /// writeback queue behind the game's I/O. Best effort: a failure is ignored.
-    /// </summary>
+    /// <summary>Marks the handle low priority, so its writes queue behind the game's I/O. A failure is ignored.</summary>
     public static void SetLow(SafeFileHandle handle)
     {
         ArgumentNullException.ThrowIfNull(handle);

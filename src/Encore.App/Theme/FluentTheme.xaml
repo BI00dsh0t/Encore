@@ -1,15 +1,11 @@
-<!--
-    Fluent's side of the token set (DESIGN.md Colors, Shapes, Typography): only the App keys Fluent has
-    no key of its own for. Every other token is Fluent's own brush key, used directly. The brushes take
-    their colour from a Fluent colour key through DynamicResource, so they follow Windows live.
--->
+<!-- Fluent's side of the token set: only the App keys Fluent has no key for; they follow Windows live. -->
 <ResourceDictionary x:Class="Encore.App.Theme.FluentTheme"
                     x:ClassModifier="internal"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <SolidColorBrush x:Key="RbAccentSubtleBrush" Color="{DynamicResource SubtleFillColorSecondary}" />
-    <!-- The selected Library row (story 10.2): the accent's light tint (what Fluent's dark accent fill uses) at a quarter, so even a grey accent reads clearly stronger than fill-subtle. -->
+    <!-- The selected Library row: the accent's light tint at a quarter, so even a grey accent reads stronger. -->
     <SolidColorBrush x:Key="RbLibraryRowSelectedBrush" Opacity="0.25" Color="{DynamicResource {x:Static SystemColors.AccentColorLight2Key}}" />
     <SolidColorBrush x:Key="RbRecordBrush" Color="{DynamicResource SystemFillColorCritical}" />
     <SolidColorBrush x:Key="RbOverlayCardBrush" Opacity="0.9" Color="{DynamicResource SolidBackgroundFillColorQuarternary}" />

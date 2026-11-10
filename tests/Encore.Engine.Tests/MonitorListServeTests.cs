@@ -6,7 +6,7 @@ using Encore.Platform.Capture;
 
 namespace Encore.Engine.Tests;
 
-/// <summary><c>monitors.list</c> over a real pipe of a throwaway test instance (6.11).</summary>
+/// <summary><c>monitors.list</c> over a real pipe of a throwaway test instance.</summary>
 public sealed class MonitorListServeTests : IAsyncLifetime
 {
     private static readonly TimeSpan Within = TimeSpan.FromSeconds(5);
@@ -64,7 +64,7 @@ public sealed class MonitorListServeTests : IAsyncLifetime
         _disposables.Add(client);
         Assert.Equal([dell, lg], (await client.SendAsync(RecordingMessages.MonitorsList, Empty.Value, Token).WaitAsync(Within, Token)).Monitors);
 
-        // The LG is unplugged (T-03): monitors.changed carries the list, and monitors.list agrees.
+        // The LG is unplugged: monitors.changed carries the list, and monitors.list agrees.
         displays.Change([dell]);
         var deadline = DateTime.UtcNow + Within;
         while (client.State.Monitors is null && DateTime.UtcNow < deadline)

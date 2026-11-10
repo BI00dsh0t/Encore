@@ -4,7 +4,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 10.4: the Audio Tracks editor's draft model, its presets and its probe meters.</summary>
+/// <summary>The Audio Tracks editor's draft model, its presets and its probe meters.</summary>
 public sealed class AudioTracksDraftTests
 {
     private static readonly AudioDevice Speakers = new("{out-1}", "Speakers", "Realtek", AudioFlow.Output, true, IsDefault: true);

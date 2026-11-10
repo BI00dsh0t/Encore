@@ -15,12 +15,7 @@ using WinRT;
 
 namespace Encore.Platform.Capture;
 
-/// <summary>
-/// The engine's one D3D11 device (AD-7), on the adapter that owns the game window's monitor.
-/// Multithread-protected, because WGC, the engine and NVENC all use its immediate context.
-/// A GPU driver reset removes it (<see cref="IsLost"/>); its calls then fail with
-/// <see cref="DeviceRemoved"/> or <see cref="DeviceReset"/>, and only a new device works again.
-/// </summary>
+/// <summary>The engine's one D3D11 device, multithread-protected because WGC, the engine and NVENC share its context.</summary>
 public sealed unsafe class D3D11Device : IDisposable
 {
     /// <summary><c>DXGI_ERROR_DEVICE_REMOVED</c>: the GPU was physically removed, or its driver was updated or crashed.</summary>
@@ -46,11 +41,7 @@ public sealed unsafe class D3D11Device : IDisposable
         _resetsAtCreate = Interlocked.Read(ref s_resets);
     }
 
-    /// <summary>
-    /// Why the device was removed (<c>GetDeviceRemovedReason</c>): S_OK (0) while it works, a failed
-    /// HRESULT such as <see cref="DeviceReset"/> once it is lost. A simulated loss reads as
-    /// <see cref="DeviceReset"/>. A disposed device reads as S_OK.
-    /// </summary>
+    /// <summary>Why the device was removed: 0 while it works, a failed HRESULT once lost; a simulated loss reads as a reset.</summary>
     public int RemovedReason
     {
         get
@@ -84,13 +75,10 @@ public sealed unsafe class D3D11Device : IDisposable
 
     private bool IsSimulatedLoss => _simulatedLoss || Interlocked.Read(ref s_resets) > _resetsAtCreate;
 
-    /// <summary>
-    /// The fault seam (tests and <c>dev.simulate gpuReset</c>, never a real TDR): this device reports
-    /// itself lost from now on, and its next draw fails as a reset device's would.
-    /// </summary>
+    /// <summary>Test seam: this device reports itself lost from now on, and its next draw fails as a reset device's would.</summary>
     public void SimulateLoss() => _simulatedLoss = true;
 
-    /// <summary>The fault seam for every device: each one created before this call reports itself lost, as after a driver reset.</summary>
+    /// <summary>Test seam for every device: each one created before this call reports itself lost, as after a driver reset.</summary>
     public static void SimulateReset() => Interlocked.Increment(ref s_resets);
 
     /// <summary>Throws what a reset device's call would (<see cref="DeviceReset"/>) when the loss is simulated.</summary>
@@ -114,10 +102,7 @@ public sealed unsafe class D3D11Device : IDisposable
 
     public string AdapterName { get; }
 
-    /// <summary>
-    /// Creates the device on the adapter whose output shows <paramref name="hwnd"/>, or on
-    /// adapter 0 when no adapter owns that monitor or <paramref name="hwnd"/> is zero.
-    /// </summary>
+    /// <summary>Creates the device on the adapter showing the window, or on adapter 0 when none does or the window is zero.</summary>
     public static D3D11Device Create(nint hwnd, ILogger logger)
     {
         var monitor = hwnd == 0
@@ -126,10 +111,7 @@ public sealed unsafe class D3D11Device : IDisposable
         return Create(monitor, logger);
     }
 
-    /// <summary>
-    /// Creates the device on the adapter whose output is <paramref name="hmonitor"/> (a Monitor
-    /// Recording's monitor, 6.9), or on adapter 0 when no adapter owns it or it is zero.
-    /// </summary>
+    /// <summary>Creates the device on the adapter that drives the monitor, or on adapter 0 when none does or it is zero.</summary>
     public static D3D11Device CreateForMonitor(nint hmonitor, ILogger logger) => Create(new HMONITOR((void*)hmonitor), logger);
 
     private static D3D11Device Create(HMONITOR monitor, ILogger logger)
@@ -182,11 +164,7 @@ public sealed unsafe class D3D11Device : IDisposable
         }
     }
 
-    /// <summary>
-    /// Copies a captured frame into slice <paramref name="targetSubresource"/> of
-    /// <paramref name="target"/>. When the content doesn't fill the target, the target is
-    /// cleared to black first and only the overlap is copied: a resize clips, never scales.
-    /// </summary>
+    /// <summary>Copies a captured frame into one slice of the target; a size mismatch clears to black and clips, never scales.</summary>
     public void CopyFrame(nint source, VideoSize contentSize, nint target, uint targetSubresource, VideoSize targetSize)
     {
         var src = (ID3D11Texture2D*)source;
@@ -202,11 +180,7 @@ public sealed unsafe class D3D11Device : IDisposable
         _context->CopySubresourceRegion((ID3D11Resource*)target, targetSubresource, 0, 0, 0, (ID3D11Resource*)src, 0, &box);
     }
 
-    /// <summary>
-    /// Spike 11.1: copies a captured frame into <paramref name="target"/> (slice 0) with its top-left
-    /// at (<paramref name="x"/>, <paramref name="y"/>), clipped to <paramref name="area"/>, the
-    /// monitor's place in a composited canvas. Same format only; a resize clips, never scales.
-    /// </summary>
+    /// <summary>Copies a captured frame to a position inside the target, clipped to the monitor's area; never scales.</summary>
     public void CopyFrameTo(nint source, VideoSize contentSize, nint target, int x, int y, VideoSize area)
     {
         var src = (ID3D11Texture2D*)source;
@@ -216,12 +190,7 @@ public sealed unsafe class D3D11Device : IDisposable
         _context->CopySubresourceRegion((ID3D11Resource*)target, 0, (uint)x, (uint)y, 0, (ID3D11Resource*)src, 0, &box);
     }
 
-    /// <summary>
-    /// Spike 11.1: the GPU time, in microseconds, of one <see cref="CopyFrameTo"/> of all of
-    /// <paramref name="source"/> into <paramref name="target"/> at (<paramref name="x"/>, <paramref name="y"/>),
-    /// averaged over <paramref name="count"/> copies between two timestamp queries. Null when the
-    /// timestamps were disjoint. Blocks until the GPU has run them.
-    /// </summary>
+    /// <summary>The average GPU time of one <see cref="CopyFrameTo"/>, in microseconds; null when it can't be measured. Blocks.</summary>
     public double? TimeCopies(nint source, nint target, int x, int y, int count)
     {
         ((ID3D11Texture2D*)source)->GetDesc(out var desc);
@@ -272,10 +241,7 @@ public sealed unsafe class D3D11Device : IDisposable
         }
     }
 
-    /// <summary>
-    /// <c>ID3D11DeviceContext::GetData</c> by its vtable slot, for its HRESULT: S_FALSE (not ready
-    /// yet) is a success CsWin32's wrapper can't tell from S_OK.
-    /// </summary>
+    /// <summary>Calls GetData by vtable slot to see its HRESULT: S_FALSE means not ready, which CsWin32's wrapper hides.</summary>
     private HRESULT GetData(ID3D11Asynchronous* query, void* data, uint size)
     {
         const int getDataSlot = 29; // IUnknown 3, ID3D11DeviceChild 4, then ID3D11DeviceContext's 22 before it
@@ -324,11 +290,7 @@ public sealed unsafe class D3D11Device : IDisposable
         }
     }
 
-    /// <summary>
-    /// Sets the GPU thread priority of this device (<c>IDXGIDevice::SetGPUThreadPriority</c>,
-    /// −7 to 7; no elevation needed) and returns the HRESULT. <paramref name="readBack"/> is
-    /// the priority the device reports afterwards, or null when it can't be read.
-    /// </summary>
+    /// <summary>Sets the device's GPU thread priority (-7 to 7) and returns the HRESULT; readBack is what it then reports.</summary>
     public int SetGpuThreadPriority(int priority, out int? readBack)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(priority, -7);

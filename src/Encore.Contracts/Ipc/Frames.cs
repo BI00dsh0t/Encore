@@ -5,10 +5,7 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Encore.Contracts.Ipc;
 
-/// <summary>
-/// Writes frames: one UTF-8 JSON object per line, ending in <c>\n</c>. The payload is written
-/// through its own generated <see cref="JsonTypeInfo{T}"/>, straight into the envelope.
-/// </summary>
+/// <summary>Writes frames: one UTF-8 JSON object per line, ending in <c>\n</c>.</summary>
 public static class FrameWriter
 {
     public static byte[] Command<T>(string id, string type, T payload, JsonTypeInfo<T> payloadType) =>
@@ -72,11 +69,7 @@ public static class FrameWriter
     }
 }
 
-/// <summary>
-/// Reads frames from a stream: one JSON object per line. Blank lines are skipped. A line longer
-/// than the limit, or one that isn't an envelope, is an <see cref="InvalidDataException"/>; the
-/// caller drops the connection, since the stream can't be trusted after it.
-/// </summary>
+/// <summary>Reads frames, one JSON object per line; a bad or over-long line throws, and the caller drops the connection.</summary>
 public sealed class FrameReader(Stream stream, int maxFrameBytes) : IAsyncDisposable
 {
     private readonly PipeReader _reader = PipeReader.Create(stream, new StreamPipeReaderOptions(leaveOpen: true));

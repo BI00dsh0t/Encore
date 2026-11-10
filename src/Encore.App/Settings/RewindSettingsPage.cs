@@ -10,22 +10,10 @@ namespace Encore.App.Settings;
 /// <summary>A codec the page offers, with its label.</summary>
 internal sealed record CodecItem(VideoCodec Codec, string Label);
 
-/// <summary>
-/// An output resolution the page offers, with its label. <see cref="IsSource"/> is "Source" (story 12.3,
-/// <c>matchSource</c>): the game's or screen's own size, with no width or height of its own.
-/// </summary>
+/// <summary>An output resolution the page offers; IsSource is "Source", the game's or screen's own size.</summary>
 internal sealed record ResolutionItem(int Width, int Height, string Label, bool IsSource = false);
 
-/// <summary>
-/// The Global Rewind and Output Settings (story 4.10): <c>bufferWindow</c>, <c>replayStorage</c>,
-/// <c>ringPath</c>, <c>saveCooldown</c> and <c>video</c>, each edit sent at once as one Global op. An
-/// invalid entry is not sent: the page shows the rendered value again with a <see cref="SettingsPage.Message"/>.
-/// It shows the engine's storage estimate (R2) and warns, blocking nothing, when it is over the free
-/// bytes. With a profile id it edits that Game Profile's <c>bufferWindow</c> and <c>video</c> overrides
-/// (R7) instead: each key either uses Global, shown and not editable, or has the profile's own value.
-/// Members run on the UI thread. Story 10.9 renames it Clips, with the glossary's labels, and the
-/// ring path becomes the cache folder's <see cref="FolderPicker"/>, enabled only under Disk.
-/// </summary>
+/// <summary>The Clips and Output settings, each edit sent at once; with a profile id it edits that game's overrides.</summary>
 internal sealed class RewindSettingsPage(SettingsSender sender, string? profileId = null, string? defaultCacheFolder = null) : SettingsPage(sender)
 {
     public const string CacheInsideClips = "The cache folder can't be inside the Clips folder.";
@@ -75,15 +63,12 @@ internal sealed class RewindSettingsPage(SettingsSender sender, string? profileI
     /// <summary>The Game Profile whose overrides this page edits; null on the Global page.</summary>
     public string? ProfileId { get; } = profileId;
 
-    /// <summary>The Global page: it also shows storage, the ring folder, the save cooldown and the estimate, which profiles can't override.</summary>
+    /// <summary>The Global page: it also shows storage, the ring folder, the save cooldown and the estimate.</summary>
     public bool IsGlobal => ProfileId is null;
 
     public bool IsProfile => !IsGlobal;
 
-    /// <summary>
-    /// Whether the profile has no <c>bufferWindow</c> override; false on the Global page. Ticking it
-    /// removes the override; unticking it sets the override to the Global value.
-    /// </summary>
+    /// <summary>Whether the profile has no <c>bufferWindow</c> override; ticking removes it, unticking copies the Global value.</summary>
     public bool BufferWindowUsesGlobal
     {
         get => _bufferWindowUsesGlobal;
@@ -195,14 +180,10 @@ internal sealed class RewindSettingsPage(SettingsSender sender, string? profileI
         private set => Set(ref _resolutions, value);
     }
 
-    /// <summary>"Source" first in <see cref="Resolutions"/> (story 12.3, AD-26).</summary>
+    /// <summary>"Source" first in <see cref="Resolutions"/>.</summary>
     public const string SourceLabel = "Source — the game's or screen's own size";
 
-    /// <summary>
-    /// The selected resolution: "Source" while <c>matchSource</c> is on, else the fixed size. Choosing
-    /// Source sends <c>matchSource</c> true and keeps the width and height as the size to fall back to;
-    /// choosing a fixed size sends it with <c>matchSource</c> false.
-    /// </summary>
+    /// <summary>The selected resolution; choosing Source turns <c>matchSource</c> on and keeps the size as the fallback.</summary>
     public ResolutionItem? SelectedResolution
     {
         get => _video.MatchSource
@@ -236,10 +217,7 @@ internal sealed class RewindSettingsPage(SettingsSender sender, string? profileI
         }
     }
 
-    /// <summary>
-    /// What "Source" records at, shown only while it's chosen; null otherwise. The H.264 line shows only
-    /// for H.264, the one codec whose 4096 px limit a game window or screen can pass (AD-26).
-    /// </summary>
+    /// <summary>What "Source" records at, shown only while it's chosen; the H.264 line is there for its 4096 px limit.</summary>
     public string? SourceHelp => _video.MatchSource
         ? "Clips and Recordings are recorded at the game window's own size, and Monitor Recordings at the screen's size. Frame rate and bitrate still apply."
             + (_video.Codec == VideoCodec.H264 ? " With H.264, anything wider or taller than 4096 px is scaled down to fit." : "")
@@ -333,7 +311,7 @@ internal sealed class RewindSettingsPage(SettingsSender sender, string? profileI
         ? string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e9:0.0} GB")
         : string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e6:0.0} MB");
 
-    // A game's Clip length and Video quality show in their own editors on its page (story 10.10), so only the main page has a view.
+    // A game's Clip length and Video quality show in their own editors on its page, so only the main page has a view.
     protected override FrameworkElement CreateView() => new RewindSettingsView { DataContext = this };
 
     protected override void OnRender(SettingsDocument document)

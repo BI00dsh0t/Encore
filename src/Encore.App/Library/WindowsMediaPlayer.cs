@@ -6,31 +6,19 @@ using MediaPlayer = Windows.Media.Playback.MediaPlayer;
 
 namespace Encore.App.Library;
 
-/// <summary>
-/// Windows' own media player (WinRT <c>Windows.Media.Playback.MediaPlayer</c>, Media Foundation) in frame-server
-/// mode (AD-27): it never draws itself; each frame is copied into the page's <see cref="VideoSurface"/>.
-/// <para>
-/// A Track switch while paused makes Media Foundation's next Play resume from the start, though a paused
-/// seek after it shows the right frame (the 14.5 probe). So the first Track is chosen as the Tracks are
-/// first listed, before the file opens, with no switch. And after a switch while paused, Play moves back
-/// to the paused position.
-/// </para>
-/// </summary>
+/// <summary>Windows' own media player in frame-server mode: it never draws itself. Track-switch quirk: docs/code-notes.md.</summary>
 internal sealed class WindowsMediaPlayer : IPlayer
 {
     private static readonly TimeSpan OpenTimeout = TimeSpan.FromSeconds(10);
 
-    // The frame server is on before any source is set (AD-27).
+    // The frame server is on before any source is set.
     private readonly MediaPlayer _player = new() { AutoPlay = false, IsVideoFrameServerEnabled = true };
     private MediaPlaybackItem? _item;
     private TimeSpan? _resumeAt;
     private readonly string? _forcedUnsupported;
     private volatile bool _disposed;
 
-    /// <param name="forcedUnsupported">
-    /// A codec ("HEVC" or "AV1") to report as undecodable, whatever the file holds: the dev-instance switch
-    /// <c>--player-unsupported</c>, for checking the page Windows shows without the extension (story 14.6). Null in a normal run.
-    /// </param>
+    /// <summary>A codec to report as undecodable whatever the file holds; a dev switch for checking the missing-extension page.</summary>
     public WindowsMediaPlayer(string? forcedUnsupported = null)
     {
         _forcedUnsupported = forcedUnsupported;
@@ -85,7 +73,7 @@ internal sealed class WindowsMediaPlayer : IPlayer
         void OnFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args) =>
             opened.TrySetException(new PlayerException($"{args.Error}: {args.ErrorMessage}"));
 
-        // The first Track, chosen as the Tracks are listed: no switch at open, which would break the next resume (AD-27).
+        // The first Track, chosen as the Tracks are listed: no switch at open, which would break the next resume.
         static void FirstTrack(MediaPlaybackItem item, Windows.Foundation.Collections.IVectorChangedEventArgs args)
         {
             if (item.AudioTracks.Count > 0 && item.AudioTracks.SelectedIndex != 0)
@@ -99,7 +87,7 @@ internal sealed class WindowsMediaPlayer : IPlayer
         MediaPlaybackItem? item = null;
         try
         {
-            // A stream, never a path: the App's own read-only handle, shared for delete (AD-27).
+            // A stream, never a path: the App's own read-only handle, shared for delete.
             item = new MediaPlaybackItem(MediaSource.CreateFromStream(file.AsRandomAccessStream(), "video/mp4"));
             item.AudioTracksChanged += FirstTrack;
             _item = item;
@@ -134,7 +122,7 @@ internal sealed class WindowsMediaPlayer : IPlayer
             item.AudioTracks.Select(t => Playable(t.SupportInfo.DecoderStatus)).ToList());
     }
 
-    // Paused, a position set delivers that frame through the frame server (the 14.2 proof, the 14.5 probe).
+    // Paused, a position set delivers that frame through the frame server.
     public void Seek(TimeSpan position)
     {
         _player.PlaybackSession.Position = position;
@@ -168,7 +156,7 @@ internal sealed class WindowsMediaPlayer : IPlayer
         }
     }
 
-    // Frames stop first, then the source goes, then the player (the 14.2 proof's close order).
+    // Frames stop first, then the source goes, then the player.
     public void Dispose()
     {
         if (_disposed)

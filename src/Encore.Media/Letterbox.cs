@@ -7,11 +7,7 @@ public readonly record struct LetterboxRect(int X, int Y, int Width, int Height)
     public bool Covers(int width, int height) => X == 0 && Y == 0 && Width == width && Height == height;
 }
 
-/// <summary>
-/// The fixed-output fit (R20): content scaled to the largest size that fits the output with its
-/// aspect ratio kept, centred, black bars around it. Every edge is even, so 4:2:0 chroma never
-/// straddles a bar; a bar that can't split evenly is the larger one at the bottom or right.
-/// </summary>
+/// <summary>Fits content inside the output, aspect kept, centred, with black bars; edges are even so chroma never straddles one.</summary>
 public static class Letterbox
 {
     public static LetterboxRect Fit(int contentWidth, int contentHeight, int outputWidth, int outputHeight)

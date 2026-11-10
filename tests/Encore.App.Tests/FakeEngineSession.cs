@@ -21,10 +21,7 @@ internal sealed class FakeEngineSession : IEngineSession
 
     public List<object> Sent { get; } = [];
 
-    /// <summary>
-    /// Answers <c>monitors.list</c>, which the Hotkeys page's screen picker sends on its own whenever an engine run
-    /// connects; kept apart from <see cref="Reply"/> and <see cref="Sent"/> so other tests don't see it.
-    /// </summary>
+    /// <summary>Answers <c>monitors.list</c>, which the screen picker sends by itself; kept apart so other tests don't see it.</summary>
     public Func<MonitorList> Monitors { get; set; } = () => new MonitorList([]);
 
     public int MonitorFetches { get; private set; }

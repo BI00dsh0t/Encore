@@ -3,14 +3,10 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Core.Settings;
 
-/// <summary>The one settings <c>Resolve</c> (AD-4).</summary>
+/// <summary>The one settings <c>Resolve</c>.</summary>
 public static class SettingsResolver
 {
-    /// <summary>
-    /// Resolves every key for a Game Profile, or for Global when <paramref name="profileId"/> is null
-    /// or names no profile. Each key is the profile's valid override (overridable keys only), else the
-    /// valid Global value, else the catalog default. Pure: reads only <paramref name="document"/>.
-    /// </summary>
+    /// <summary>Resolves every key for a Game Profile, or Global: the valid override, else the Global value, else the default.</summary>
     public static EffectiveSettings Resolve(SettingsDocument document, string? profileId)
     {
         ArgumentNullException.ThrowIfNull(document);

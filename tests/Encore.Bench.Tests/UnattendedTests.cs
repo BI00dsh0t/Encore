@@ -5,11 +5,7 @@ using Encore.Bench.GpuLoad;
 
 namespace Encore.Bench.Tests;
 
-/// <summary>
-/// The pieces of the unattended runs that need no process: the new options, the GPU load's ready line and
-/// calibration, <c>fps.json</c> with the load, the injected key batch, the scripted players' results and the
-/// capture-border grab's arithmetic.
-/// </summary>
+/// <summary>The pieces of the unattended runs that need no process: options, ready lines, reports and the grab's arithmetic.</summary>
 public sealed class UnattendedTests : IDisposable
 {
     private readonly BenchRun _run = new();

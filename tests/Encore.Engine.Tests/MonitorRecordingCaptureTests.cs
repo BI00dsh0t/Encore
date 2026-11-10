@@ -13,16 +13,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Monitor Recording (story 6.9), in process on the real primary monitor: a <c>monitorRecordToggle</c>
-/// pair with no game writes one file in <c>Monitor Recordings</c> with every Global Track; a window
-/// marked <c>WDA_EXCLUDEFROMCAPTURE</c> never shows in it; and beside a game Recording on a synthetic
-/// window, the two sessions run two encoder chains between them. With WGC forced to fail (6.10), the
-/// Monitor session records through Desktop Duplication instead, across a lost duplication, while a
-/// game session fails. A fake display port (8.5, T-03) that drops the captured monitor ends the Monitor
-/// Recording playable with <c>monitor-removed</c>, and a game Recording runs on through display changes.
-/// The displays themselves are never changed. On-screen, so each takes the bench lock.
-/// </summary>
+/// <summary>Monitor Recording, in process on the real primary monitor; the displays are never changed. Takes the bench lock.</summary>
 public sealed class MonitorRecordingCaptureTests : IDisposable
 {
     private const string GameWindowScript =
@@ -62,8 +53,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         [void] $form.ShowDialog()
         """;
 
-    // Story 12.2: a borderless, animated window at the primary screen's top-left, 1280x720, that
-    // resizes itself to 2560x1440 after $After seconds.
+    // A borderless, animated 1280x720 window at the primary screen's top-left that later resizes to 2560x1440.
     private const string ResizingWindowScript =
         """
         param([string] $Title, [string] $After)
@@ -209,7 +199,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
         var monitor = Assert.IsType<RecordingStarted>(await rig.NextAsync());
 
-        // AD-7's budget, sampled from here to the end: the switch never runs a third chain.
+        // The encoder budget, sampled from here to the end: the switch never runs a third chain.
         var most = 0;
         using var sampling = new CancellationTokenSource();
         var sampler = Task.Run(
@@ -315,7 +305,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task ATwoScreenMonitorRecordingOf60SecondsPlaysToTheEndWithEveryTrackAndBothScreensPlaced()
     {
-        // Story 11.3 on the builder's PC: All screens, composited on one chain at the canvas rule's size.
+        // On the builder's PC: all screens, composited on one chain at the canvas rule's size.
         using var bench = BenchLock.Take();
         var displays = new DisplayMonitors(NullLogger.Instance);
         var screens = RequireTwoScreens(displays);
@@ -341,7 +331,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         SessionTestKit.AssertDecodesCleanly(file);
         AssertGapsAreBlack(file, plan);
 
-        // Story 14.3: Media Foundation reads its length from the mehd and plays it to the end.
+        // Media Foundation reads its length from the mehd and plays it to the end.
         await MediaPlayerCheck.AssertPlaysToTheEndAsync(file, 30, Token);
     }
 
@@ -407,7 +397,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task ARealWindowResizedTo2560By1440MovesTheRewindAndTheNextClipHasIt()
     {
-        // Story 12.2 (AD-26): matchSource on; the window resizes itself from 1280x720 after 3 s.
+        // MatchSource on; the window resizes itself from 1280x720 after 3 s.
         using var bench = BenchLock.Take("Engine 12.2 size move test");
         var gaps = new ConcurrentQueue<string>();
         using var rig = NewRig(clips: true, resetGap: gaps.Enqueue);
@@ -431,7 +421,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task AResizeDuringAGameRecordingKeepsItsSizeAndMovesAfterItStops()
     {
-        // Story 12.2 (R12): the Recording stays one 1280x720 file; the move waits for its end.
+        // The Recording stays one 1280x720 file; the move waits for its end.
         using var bench = BenchLock.Take("Engine 12.2 size move test");
         using var rig = NewRig(recordingsEnabled: true, clips: true);
         MatchSource();
@@ -461,10 +451,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task ARecordPressWhileAMoveBuildsCancelsItAndTheRecordingKeepsItsChain()
     {
-        // Story 12.2 (QA 1, 2): the window resizes at 2 s, the size holds at 5 s and the move's chain
-        // builds; Record lands while it waits to arm. The Recording keeps the 1280x720 chain in one
-        // file, and the move is found again after the stop. Story 12.4 (QA's note): the press waits for
-        // the move to be pending and the test checks it was cancelled, so it can't pass without it.
+        // A Record press while a size move waits to arm: the Recording keeps the old chain, and the move is cancelled.
         using var bench = BenchLock.Take("Engine 12.2 size move test");
         using var rig = NewRig(recordingsEnabled: true, clips: true, moveArmDelay: TimeSpan.FromSeconds(3));
         MatchSource();
@@ -496,8 +483,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task AMonitorRecordingStartsBesideAGameRecordingAfterAResize()
     {
-        // Story 12.2 (QA 2): a resize during a game Recording parks no chain, so a Monitor Recording
-        // still fits AD-7's budget, and two chains run between the sessions.
+        // A resize during a game Recording parks no chain, so a Monitor Recording still fits the encoder budget.
         using var bench = BenchLock.Take("Engine 12.2 size move test");
         using var rig = NewRig(recordingsEnabled: true);
         MatchSource();
@@ -528,7 +514,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task AOneScreenMonitorRecordingOfThe3840By2160ScreenRecordsAtThatSize()
     {
-        // Story 12.2 (AD-26): one screen under matchSource records at its physical mode size.
+        // One screen under matchSource records at its physical mode size.
         using var bench = BenchLock.Take("Engine 12.2 one-screen source size test");
         var displays = new DisplayMonitors(NullLogger.Instance);
         var uhd = displays.List().FirstOrDefault(m => m is { Width: 3840, Height: 2160 });
@@ -630,7 +616,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
 
     private static Exception? WgcOff() => new InvalidOperationException(WgcOffMessage);
 
-    /// <summary>The attached screens, skipping the test unless there are at least two (story 11.3 needs them).</summary>
+    /// <summary>The attached screens, skipping the test unless there are at least two.</summary>
     private static IReadOnlyList<DisplayMonitor> RequireTwoScreens(DisplayMonitors displays)
     {
         var screens = displays.List();
@@ -638,7 +624,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         return screens;
     }
 
-    /// <summary>Story 12.2: <c>video.matchSource</c> on, in Global and in the test game's profile override.</summary>
+    /// <summary>Turns <c>video.matchSource</c> on, in Global and in the test game's profile override.</summary>
     private void MatchSource()
     {
         var document = Volatile.Read(ref _document);
@@ -652,17 +638,14 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         });
     }
 
-    /// <summary>Global <c>monitorRecordingScreens</c> = All screens (story 11.3).</summary>
+    /// <summary>Global <c>monitorRecordingScreens</c> = All screens.</summary>
     private void ChooseAllScreens()
     {
         var document = Volatile.Read(ref _document);
         Volatile.Write(ref _document, document with { Global = document.Global.SetItem(Keys.MonitorRecordingScreens.Name, Keys.MonitorRecordingScreens.ToJson(MonitorRecordingScreens.AllScreens)) });
     }
 
-    /// <summary>
-    /// The canvas's gaps, where no screen sits (below a shorter screen), are black in every frame: the
-    /// screens are placed as Windows arranges them, not stretched.
-    /// </summary>
+    /// <summary>The canvas's gaps, where no screen sits, are black in every frame: screens are placed, not stretched.</summary>
     private static void AssertGapsAreBlack(string file, CanvasPlan plan)
     {
         var scale = (double)plan.Width / plan.NativeWidth;
@@ -680,10 +663,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
 
     private static CaptureSession MonitorSession(Rig rig) => Assert.Single(rig.Factory.Sessions.OfType<CaptureSession>());
 
-    /// <summary>
-    /// The file's video runs at least <paramref name="atLeast"/> seconds at one 30 fps step
-    /// throughout, and both Global Tracks' durations are within 0.2 s of the video's.
-    /// </summary>
+    /// <summary>The file's video runs at least this long at a steady 30 fps, and both Tracks are within 0.2 s of it.</summary>
     private static void AssertInStepAt30Fps(string file, double atLeast)
     {
         var (pts, num, den) = SessionTestKit.VideoPtsTicks(file);
@@ -718,10 +698,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// Two Monitor Record toggles <paramref name="length"/> apart, <paramref name="during"/> run
-    /// meanwhile; returns the file once its writer has finished.
-    /// </summary>
+    /// <summary>Two Monitor Record toggles a given time apart; returns the file once its writer has finished.</summary>
     private static async Task<string> RecordMonitorAsync(Rig rig, TimeSpan length, Func<Task>? during = null)
     {
         Assert.True(rig.Orchestrator.Post(new HotkeyPressed(HotkeyAction.MonitorRecordToggle, Stopwatch.GetTimestamp())));
@@ -744,19 +721,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         return started.Path;
     }
 
-    /// <summary>
-    /// An orchestrator with Recordings and the Target's game session in Replay mode; the Global
-    /// video is 640x360 at 30 fps and the Global Track Layout two Tracks a <see cref="ToneHub"/>
-    /// plays. The profile, 640x480, has <c>recordingsEnabled</c> as given.
-    /// </summary>
-    /// <param name="clips">Whether the orchestrator has Replay Clips, whose saves land in the events.</param>
-    /// <param name="resetGap">Receives each <c>reset-gap</c> message.</param>
-    /// <param name="wgcFault">Thrown before any WGC capture is created, when it returns non-null.</param>
-    /// <param name="fallback">Receives each <c>monitor-capture-fallback</c> message.</param>
-    /// <param name="displays">The display port the orchestrator watches; none when null.</param>
-    /// <param name="warn">Receives each Recordings warning's code.</param>
-    /// <param name="duplicationScreens">Composited screens captured through Desktop Duplication (story 11.3).</param>
-    /// <param name="recovery">Whether the orchestrator recovers a lost GPU device (8.3), its restarts landing in the events.</param>
+    /// <summary>An orchestrator with Recordings and a game session in Replay mode; the optional arguments add ports and seams.</summary>
     private Rig NewRig(
         bool recordingsEnabled = false,
         bool clips = false,

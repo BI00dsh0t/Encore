@@ -208,7 +208,7 @@ public sealed class LibrarySettingsPageTests
     [Fact]
     public void AClipsFolderContainingTheCacheFolderIsRefused()
     {
-        // QA 10.9: the cache folder can't be inside the Clips folder, from this side too.
+        // The cache folder can't be inside the Clips folder, from this side too.
         var global = SettingsDocument.Empty.Global.Add(Keys.RingPath.Name, Keys.RingPath.ToJson(@"D:\Encore Cache"));
         _engine.State = _engine.State! with { Settings = SettingsDocument.Empty with { Revision = 1, Global = global } };
         var page = Create();
@@ -229,7 +229,7 @@ public sealed class LibrarySettingsPageTests
     [Fact]
     public void BothFolderPickersWordTheEnginesNestingRefusal()
     {
-        // Story 10.9: another client set the cache folder, so only the engine knows; each picker says it plainly.
+        // Another client set the cache folder, so only the engine knows; each picker says it plainly.
         _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.RingPathInvalid, "The cache folder and the Clips folder can't be inside each other.");
         var model = new MainViewModel(_engine, action => action());
         var clips = model.LibrarySettings.ClipsFolder;

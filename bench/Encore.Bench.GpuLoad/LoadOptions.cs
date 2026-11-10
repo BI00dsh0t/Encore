@@ -5,12 +5,7 @@ namespace Encore.Bench.GpuLoad;
 /// <summary>A command line the load can't run: printed on stderr, exit code 2.</summary>
 internal sealed class LoadUsageException(string message) : Exception(message);
 
-/// <summary>
-/// How the load presents (story 5.2): a borderless popup (<c>borderless</c>), DXGI fullscreen on the
-/// flip-model swap chain, which Windows runs with fullscreen optimizations as most games' "exclusive
-/// fullscreen" is today (<c>fullscreen</c>), or legacy exclusive fullscreen on a blt-model swap chain,
-/// which Bench starts with fullscreen optimizations off (<c>exclusive</c>).
-/// </summary>
+/// <summary>How the load presents: a borderless popup, flip-model DXGI fullscreen, or legacy exclusive fullscreen.</summary>
 internal enum LoadMode
 {
     Borderless,
@@ -18,11 +13,7 @@ internal enum LoadMode
     Exclusive,
 }
 
-/// <summary>
-/// The load's command line: <c>--target-fps</c> (default 80, spike 1.2's ≈ 78 fps in Cyberpunk at
-/// 2560×1440), <c>--parent &lt;pid&gt;</c> (exit when it does), <c>--size WxH</c> (default: the primary
-/// monitor), <c>--warmup</c> seconds of calibration and <c>--mode</c> (<see cref="LoadMode"/>, default borderless).
-/// </summary>
+/// <summary>The load's command line: target fps (default 80), parent pid, size, warm-up seconds and mode.</summary>
 internal sealed record LoadOptions(double TargetFps, int? ParentPid, int? Width, int? Height, double WarmupSeconds, LoadMode Mode = LoadMode.Borderless)
 {
     public const string Usage =

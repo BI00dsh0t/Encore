@@ -5,12 +5,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.Bench.Overlay;
 
-/// <summary>
-/// Story 5.2's Overlay host for <c>bench overlay</c>: <c>--pid &lt;game&gt;</c> picks the monitor. It prints
-/// <c>ready 0x&lt;hwnd&gt; excluded=&lt;bool&gt; exstyle=0x&lt;hex&gt;</c> with the dot hidden, then reads
-/// <c>show</c> and <c>hide</c> lines on stdin and answers each with <c>shown</c> or <c>hidden</c>. It exits at
-/// <c>quit</c> or when stdin closes.
-/// </summary>
+/// <summary>The Overlay host for <c>bench overlay</c>: prints a ready line, then shows and hides the dot on stdin commands.</summary>
 internal static class Program
 {
     [STAThread]

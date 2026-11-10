@@ -4,10 +4,7 @@ using Encore.Core.Feedback;
 
 namespace Encore.Engine.Ipc;
 
-/// <summary>
-/// The engine's active warnings (AD-3): raised as <c>warning.raised</c>, removed by
-/// <c>warning.dismiss</c> or, for the feedback notices it raises, withdrawn by the engine itself.
-/// </summary>
+/// <summary>The engine's active warnings: raised as <c>warning.raised</c>, removed by a dismiss or withdrawn by the engine.</summary>
 internal sealed class Warnings(EventHub hub, TimeProvider time) : IFeedbackNotices
 {
     private readonly Lock _lock = new();
@@ -27,10 +24,7 @@ internal sealed class Warnings(EventHub hub, TimeProvider time) : IFeedbackNotic
     string IFeedbackNotices.Raise(FeedbackNotice notice) =>
         Raise(notice.Code, notice.Severity, notice.Source, notice.Message, overlay: true, notice.Sound).Id;
 
-    /// <summary>
-    /// The engine's own dismissal: publishes <c>warning.dismissed</c> if <paramref name="id"/> is
-    /// active, dismissable or not; nothing happens if the user already dismissed it.
-    /// </summary>
+    /// <summary>The engine's own dismissal: publishes <c>warning.dismissed</c> when the id is active, dismissable or not.</summary>
     public void Withdraw(string id)
     {
         lock (_lock)
@@ -42,7 +36,7 @@ internal sealed class Warnings(EventHub hub, TimeProvider time) : IFeedbackNotic
         }
     }
 
-    /// <exception cref="ErrorCodeException"><see cref="ErrorCodes.WarningNotFound"/> or <see cref="ErrorCodes.WarningNotDismissable"/>.</exception>
+    /// <summary>Dismisses a warning; throws when it isn't active or can't be dismissed.</summary>
     public Empty Dismiss(WarningDismiss dismiss)
     {
         lock (_lock)

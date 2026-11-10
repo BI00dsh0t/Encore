@@ -7,11 +7,7 @@ using System.Text.Json;
 
 namespace Encore.Bench;
 
-/// <summary>
-/// What a scripted player check saw. <see cref="Plays"/> is true when playback advanced at least half as
-/// fast as the wall clock, false when the player refused the file, and null when the check itself could not
-/// run (the player missing, a script failure, a timeout): then the player is <c>not-checked</c>.
-/// </summary>
+/// <summary>What a scripted player check saw; Plays is null when the check itself could not run.</summary>
 internal sealed record ScriptedPlayback(
     string Player,
     bool? Plays,
@@ -26,12 +22,7 @@ internal sealed record ScriptedPlayback(
     long? FramesDropped,
     string? Error);
 
-/// <summary>
-/// <c>bench playback --auto</c>'s scripted players: Chrome, headless with a profile of its own, and Windows
-/// Media Player through its <c>WMPlayer.OCX</c> engine. Each plays the clip for a few seconds and reports, as one
-/// JSON object, whether playback advanced, the picture size and the audio tracks it lists. A/V sync in a player
-/// stays a person's check: these scripts don't measure it.
-/// </summary>
+/// <summary>The scripted players: headless Chrome and Windows Media Player; they don't measure A/V sync.</summary>
 internal static class PlayerScripts
 {
     public const string Chrome = "Chrome";
@@ -44,12 +35,7 @@ internal static class PlayerScripts
     public static bool IsScripted(string player) =>
         player.Equals(Chrome, StringComparison.OrdinalIgnoreCase) || player.Equals(WindowsMediaPlayer, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Reads a script's JSON result. Fields (all optional): <c>playedSeconds</c>, <c>wallSeconds</c>, <c>width</c>,
-    /// <c>height</c>, <c>durationSeconds</c>, <c>audioTracks</c>, <c>trackLabels</c>, <c>framesDecoded</c>,
-    /// <c>framesDropped</c>, <c>error</c> and <c>errorKind</c> (<c>media</c>: the player refused the file;
-    /// anything else: the check failed).
-    /// </summary>
+    /// <summary>Reads a script's JSON result; every field is optional, and errorKind <c>media</c> means the file was refused.</summary>
     internal static ScriptedPlayback Parse(string player, string json)
     {
         try
@@ -148,10 +134,7 @@ internal static class PlayerScripts
             .FirstOrDefault(File.Exists);
     }
 
-    /// <summary>
-    /// Plays <paramref name="clip"/> in headless Chrome (a fresh profile in <paramref name="work"/>) from a
-    /// loopback HTTP server that serves the page and the clip with byte ranges, and takes the page's report.
-    /// </summary>
+    /// <summary>Plays the clip in headless Chrome from a loopback HTTP server, and takes the page's report.</summary>
     public static ScriptedPlayback RunChrome(string chrome, string clip, string work, int playSeconds, TimeSpan timeout)
     {
         var profile = Path.Combine(work, "playback-chrome-profile");
@@ -220,10 +203,7 @@ internal static class PlayerScripts
         }
     }
 
-    /// <summary>
-    /// Plays <paramref name="clip"/> through Windows Media Player's <c>WMPlayer.OCX</c>, from Windows PowerShell on
-    /// an STA thread, and reads the JSON line the script prints.
-    /// </summary>
+    /// <summary>Plays the clip through Windows Media Player's engine, from Windows PowerShell on an STA thread.</summary>
     public static ScriptedPlayback RunWindowsMediaPlayer(string clip, string work, int playSeconds, TimeSpan timeout)
     {
         var script = Path.Combine(work, "playback-wmp.ps1");
@@ -299,13 +279,7 @@ internal static class PlayerScripts
             .FirstOrDefault(File.Exists);
     }
 
-    /// <summary>
-    /// Opens <paramref name="clip"/> in VLC with only its HTTP interface (on 127.0.0.1, a free port and a random
-    /// password; dummy audio and video outputs, so no sound and no window), polls <c>status.json</c> until it lists
-    /// <paramref name="audioStreams"/> audio streams or <paramref name="timeout"/> passes, and returns each audio
-    /// stream's <c>Description</c> (its title, as VLC's Audio Track menu names it) in stream order. VLC is stopped
-    /// and killed afterwards, whatever happens.
-    /// </summary>
+    /// <summary>Opens the clip in VLC with only its HTTP interface and returns each audio stream's title; VLC is always stopped.</summary>
     public static VlcListing RunVlc(string vlc, string clip, int audioStreams, TimeSpan timeout)
     {
         var port = FreePort();
@@ -396,10 +370,7 @@ internal static class PlayerScripts
         }
     }
 
-    /// <summary>
-    /// The <c>Description</c> of each <c>Stream N</c> whose <c>Type</c> is <c>Audio</c> in a VLC <c>status.json</c>,
-    /// ordered by N; an untitled stream reads as an empty string.
-    /// </summary>
+    /// <summary>The description of each audio stream in VLC's status JSON, in stream order; an untitled one is an empty string.</summary>
     internal static List<string> AudioLabels(string statusJson)
     {
         using var document = JsonDocument.Parse(statusJson);

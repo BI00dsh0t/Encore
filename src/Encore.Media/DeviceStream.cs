@@ -2,21 +2,7 @@ using Encore.Core.Audio;
 
 namespace Encore.Media;
 
-/// <summary>
-/// One device's stream (AD-13, AD-20): turns its QPC-stamped packets into contiguous, QPC-locked
-/// 48 kHz stereo blocks for a sink. Output frame k is at <c>origin + k / 48 000 s</c>, where the
-/// origin is the first packet's stamp (or the first <see cref="FillTo"/>).
-/// <list type="bullet">
-/// <item>Stamps that are zero, flagged bad or not after the previous one are extrapolated from the last packet.</item>
-/// <item>The first packet, a packet after a discontinuity, and the first packet after silence fill are placed exactly.</item>
-/// <item>Otherwise one <see cref="AdaptiveResampler"/> is steered by a PI loop on the error between where the
-/// packet's first frame comes out and its stamp, the ratio clamped to ±<see cref="MaxRatioDeviation"/>.
-/// An error past <see cref="ToleranceFrames"/> (an unflagged gap, a stall, an overlap) is a step
-/// correction: silence inserted, or the packet trimmed.</item>
-/// </list>
-/// Allocation-free after construction. Not thread-safe: one device thread drives it; counters may be
-/// read from elsewhere, as diagnostics.
-/// </summary>
+/// <summary>One device's stream: turns QPC-stamped packets into contiguous 48 kHz blocks. Rules: docs/code-notes.md.</summary>
 public sealed class DeviceStream
 {
     /// <summary>5 ms: an error past this is corrected by a step, not by steering.</summary>
@@ -76,7 +62,7 @@ public sealed class DeviceStream
     /// <summary>Frames sent to the sink.</summary>
     public long OutputFrames => _resampler.OutputFrames;
 
-    /// <summary>Packets after which silence of more than the tolerance was inserted (flagged gaps, unflagged gaps, resume after fill).</summary>
+    /// <summary>Packets after which more silence than the tolerance was inserted: a gap, or a resume after fill.</summary>
     public long GapFills { get; private set; }
 
     public long GapFillFrames { get; private set; }
@@ -92,19 +78,19 @@ public sealed class DeviceStream
     /// <summary>Packets whose stamp was missing, flagged bad or not after the last one, and so extrapolated.</summary>
     public long ResolvedStamps { get; private set; }
 
-    /// <summary>Packets that were neither exact placements nor within the tolerance: an unflagged gap or overlap, corrected by a step.</summary>
+    /// <summary>Packets corrected by a step: an unflagged gap or overlap past the tolerance.</summary>
     public long StepCorrections { get; private set; }
 
     /// <summary>Packets dropped because nothing could place them: a bad stamp before the stream started.</summary>
     public long UnplacedPackets { get; private set; }
 
-    /// <summary>The current ratio, (step − 1) × 10⁶: negative consumes input slower than 48 kHz, for a device whose clock runs slow.</summary>
+    /// <summary>The current ratio in parts per million; negative consumes input slower than 48 kHz, for a slow device clock.</summary>
     public double RatioPpm => (_resampler.Step - 1) * 1e6;
 
     /// <summary>The mean ratio over steered packets after the settle time; 0 before.</summary>
     public double MeanRatioPpm => _ratioCount == 0 ? 0 : _ratioSum / _ratioCount * 1e6;
 
-    /// <summary>The error at the latest packet once it was placed, in samples: positive when its content comes out after its stamp.</summary>
+    /// <summary>The latest packet's error in samples; positive when its content comes out after its stamp.</summary>
     public double LastErrorSamples { get; private set; }
 
     /// <summary>The largest |error| of a steered packet after the settle time, in samples.</summary>
@@ -113,16 +99,13 @@ public sealed class DeviceStream
     /// <summary>|error| of every steered packet after the settle time, in QPC ticks.</summary>
     public LatencyHistogram SteeringError { get; }
 
-    /// <summary>The output index (fractional) at which stream input frame <paramref name="inputFrame"/> comes out.</summary>
+    /// <summary>The fractional output index at which a stream input frame comes out.</summary>
     public double OutputIndexOf(double inputFrame) => _resampler.OutputIndexOf(inputFrame);
 
     /// <summary>Converts a QPC instant to a fractional output index.</summary>
     public double OutputIndexAt(long qpc) => (double)(qpc - _originQpc) * AudioFormat.SampleRate / _qpcFrequency;
 
-    /// <summary>
-    /// Adds one packet as the device delivered it. <paramref name="interleaved"/> holds
-    /// <paramref name="frames"/> × 2 samples, or is ignored when the packet is <see cref="AudioPacketFlags.Silent"/>.
-    /// </summary>
+    /// <summary>Adds one packet as the device delivered it; the samples are ignored when the packet is flagged silent.</summary>
     public void Push(long qpc, int frames, ReadOnlySpan<float> interleaved, AudioPacketFlags flags)
     {
         if (frames <= 0)
@@ -156,7 +139,7 @@ public sealed class DeviceStream
 
         var error = Error(stamp);
 
-        // A correction that dropped a whole packet goes on into this one: it is placed the same way, and not counted again.
+        // A correction that dropped a whole packet carries into this one: same placement, not counted again.
         var continuing = _continuingCorrection;
         _continuingCorrection = false;
         var stepped = !exact && !continuing && Math.Abs(error) > ToleranceFrames;
@@ -231,7 +214,7 @@ public sealed class DeviceStream
         }
     }
 
-    /// <summary>Fills the stream with silence up to <paramref name="qpc"/>, if it is behind it; the next packet is placed exactly.</summary>
+    /// <summary>Fills the stream with silence up to a QPC time when it is behind; the next packet is then placed exactly.</summary>
     public void FillTo(long qpc)
     {
         if (!_started)

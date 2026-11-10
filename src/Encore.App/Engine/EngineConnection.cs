@@ -15,15 +15,12 @@ internal enum EngineStatus
     Connecting,
     Connected,
 
-    /// <summary>The engine crashed or hung, and the App is starting it again (AD-16).</summary>
+    /// <summary>The engine crashed or hung, and the App is starting it again.</summary>
     Restarting,
     NotRunning,
     Disconnected,
 
-    /// <summary>
-    /// The engine crashed or hung again after <see cref="Supervision.CrashLoopRestarts"/> restarts within
-    /// <see cref="Supervision.CrashLoopWindow"/>: the App stopped relaunching it until the user restarts it.
-    /// </summary>
+    /// <summary>The engine crashed or hung too often: the App stopped relaunching it until the user restarts it.</summary>
     CrashLoop,
 }
 
@@ -35,13 +32,13 @@ internal interface IEngineSession
     /// <summary>Why the last attempt to reach the engine failed, if it did.</summary>
     string? Problem { get; }
 
-    /// <summary>The engine's state (AD-3), or <c>null</c> before the first connection.</summary>
+    /// <summary>The engine's state, or <c>null</c> before the first connection.</summary>
     StateSnapshot? State { get; }
 
     /// <summary>Raised, on a background thread, when <see cref="Status"/> or <see cref="State"/> changes.</summary>
     event Action? Changed;
 
-    /// <exception cref="ErrorCodeException">The engine refused the command, or there is no connection (<see cref="ErrorCodes.EngineDisconnected"/>).</exception>
+    /// <summary>Sends a command; throws ErrorCodeException when the engine refuses it or there is no connection.</summary>
     Task<TResult> SendAsync<TArgs, TResult>(CommandType<TArgs, TResult> command, TArgs args, CancellationToken cancellationToken = default);
 }
 
@@ -51,14 +48,14 @@ internal static class EngineSessions
     /// <summary>The session's state while it is <see cref="EngineStatus.Connected"/>, else <c>null</c>.</summary>
     public static StateSnapshot? ConnectedState(this IEngineSession engine) => ConnectedState(engine.Status, engine.State);
 
-    /// <summary><paramref name="state"/> when <paramref name="status"/> is <see cref="EngineStatus.Connected"/>, else <c>null</c>.</summary>
+    /// <summary>The state when the status is <see cref="EngineStatus.Connected"/>, else <c>null</c>.</summary>
     public static StateSnapshot? ConnectedState(EngineStatus status, StateSnapshot? state) =>
         status == EngineStatus.Connected ? state : null;
 }
 
 internal sealed record EngineConnectionOptions
 {
-    /// <summary>The engine's file name; the App trusts only this image, in its own folder (AD-3).</summary>
+    /// <summary>The engine's file name; the App trusts only this image, in its own folder.</summary>
     public const string EngineFileName = "Encore.Engine.exe";
 
     public required string InstanceName { get; init; }
@@ -68,10 +65,7 @@ internal sealed record EngineConnectionOptions
 
     public IReadOnlyList<string> EngineArguments { get; init; } = ["serve"];
 
-    /// <summary>
-    /// The only engine image the App connects to, and so the only one it ever kills (AD-3, AD-16):
-    /// <c>Encore.Engine.exe</c> in the App's own folder.
-    /// </summary>
+    /// <summary>The only engine image the App connects to, and so the only one it ever kills: the one in its own folder.</summary>
     public string TrustedEnginePath { get; init; } = Path.Combine(AppContext.BaseDirectory, EngineFileName);
 
     /// <summary>How long to keep trying to connect after launching the engine.</summary>
@@ -89,16 +83,7 @@ internal sealed record EngineConnectionOptions
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
 
-/// <summary>
-/// The App's connection to its engine, and its half of supervision (AD-16). <see cref="ConnectAsync"/>
-/// connects, launching the engine when none answers. <see cref="StartSupervising"/> keeps it that
-/// way: it attaches with <c>app.attach</c>, kills an engine that is hung, relaunches one that
-/// crashed, with backoff and <c>serve --restarted crashed|hung</c>, and raises <see cref="EngineEnded"/>
-/// when the engine ends cleanly on its own. A crash or hang after <see cref="Supervision.CrashLoopRestarts"/>
-/// restarts within <see cref="Supervision.CrashLoopWindow"/> is a crash loop: no relaunch, status
-/// <see cref="EngineStatus.CrashLoop"/>, until <see cref="RestartAfterCrashLoop"/>.
-/// <see cref="ShutdownAsync"/> stops supervising, then shuts the engine down for Quit.
-/// </summary>
+/// <summary>The App's connection to its engine, and its half of supervision. Details: docs/code-notes.md.</summary>
 internal sealed class EngineConnection(EngineConnectionOptions options) : IEngineSession, IAsyncDisposable
 {
     /// <summary>How long a closed connection waits for the engine's process to exit before treating it as alive.</summary>
@@ -112,7 +97,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
     private RestartBackoff _backoff = new(options.Time);
     private TaskCompletionSource? _restartRequested;
 
-    /// <summary>Why the engine the last <see cref="ConnectOrLaunchAsync"/> launched failed: it exited non-zero, or never answered.</summary>
+    /// <summary>Why the engine the last connect launched failed: it exited non-zero, or never answered.</summary>
     private EngineRestartReason? _launchFailure;
     private Link? _link;
     private Process? _launched;
@@ -139,10 +124,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
 
     public event Action? Changed;
 
-    /// <summary>
-    /// Raised, on a background thread, when the supervised engine exits with code 0 not from this App's
-    /// Quit (an <c>engine.shutdown</c> from elsewhere, or Ctrl+C): the App quits too.
-    /// </summary>
+    /// <summary>Raised on a background thread when the engine exits cleanly without this App's Quit: the App quits too.</summary>
     public event Action? EngineEnded;
 
     public EngineStatus Status => _status;
@@ -151,24 +133,17 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
 
     public string? Problem => _problem;
 
-    /// <summary>
-    /// Connects, launching the engine once when no engine answers. Ends <see cref="EngineStatus.Connected"/>,
-    /// or <see cref="EngineStatus.NotRunning"/> with a <see cref="Problem"/>. Doesn't supervise.
-    /// </summary>
+    /// <summary>Connects, launching the engine once when none answers; ends Connected, or NotRunning with a Problem.</summary>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         SetStatus(EngineStatus.Connecting);
         await ConnectOrLaunchAsync(live: null, restart: null, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// The tray's Restart, in <see cref="EngineStatus.CrashLoop"/>: clears the crash-loop guard and the
-    /// backoff and starts the engine again, with no restart reason, as the user asked for it.
-    /// Does nothing in any other status.
-    /// </summary>
+    /// <summary>The tray's Restart after a crash loop: clears the guard and the backoff and starts the engine again.</summary>
     public void RestartAfterCrashLoop() => Volatile.Read(ref _restartRequested)?.TrySetResult();
 
-    /// <summary>Starts the supervise loop (AD-16): connect, attach, watch, and kill or relaunch as needed.</summary>
+    /// <summary>Starts the supervise loop: connect, attach, watch, and kill or relaunch as needed.</summary>
     public void StartSupervising()
     {
         if (_supervise is not null)
@@ -199,10 +174,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         }
     }
 
-    /// <summary>
-    /// Quit (AD-16): stops supervising, sends <c>engine.shutdown</c> and waits up to <paramref name="timeout"/>
-    /// for the engine process to exit. False when it didn't in time; the App exits anyway.
-    /// </summary>
+    /// <summary>Quit: stops supervising, sends <c>engine.shutdown</c> and waits for the engine to exit; false when too slow.</summary>
     public async Task<bool> ShutdownAsync(TimeSpan timeout)
     {
         await StopSupervisingAsync().ConfigureAwait(false);
@@ -393,12 +365,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         }
     }
 
-    /// <summary>
-    /// Every relaunch after a crash or hang: asks the crash-loop guard, then waits out the backoff and
-    /// returns <paramref name="reason"/> for <c>serve --restarted</c>. A crash loop waits instead for
-    /// <see cref="RestartAfterCrashLoop"/>, and returns no reason. <paramref name="status"/> false keeps
-    /// the status already set.
-    /// </summary>
+    /// <summary>Every relaunch after a crash or hang: asks the crash-loop guard, then waits out the backoff.</summary>
     private async Task<EngineRestartReason?> RestartAsync(EngineRestartReason reason, CancellationToken cancellationToken, bool status = true)
     {
         if (_guard.TryRestart())
@@ -492,7 +459,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         }
     }
 
-    /// <summary>Kills the engine through the handle opened, and verified, at connect (AD-16).</summary>
+    /// <summary>Kills the engine through the handle opened, and verified, at connect.</summary>
     private async Task KillAsync(Process engine)
     {
         try
@@ -506,10 +473,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         }
     }
 
-    /// <summary>
-    /// Connects, launching the engine when none answers (with <paramref name="restart"/>), unless <paramref name="live"/> is an engine still
-    /// running: then it only reconnects, and gives up after <see cref="Supervision.ReplyLimit"/>.
-    /// </summary>
+    /// <summary>Connects, launching the engine when none answers; with a live engine it only reconnects, for a limited time.</summary>
     private async Task<Outcome> ConnectOrLaunchAsync(Process? live, EngineRestartReason? restart, CancellationToken cancellationToken)
     {
         _launched?.Dispose();
@@ -581,7 +545,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         return Outcome.Failed;
     }
 
-    /// <summary>One connection attempt, with the server check (AD-3).</summary>
+    /// <summary>One connection attempt, with the server check.</summary>
     private async Task<Attempt> AttemptAsync(CancellationToken cancellationToken)
     {
         var watchdog = new EngineWatchdog(options.Time);
@@ -641,10 +605,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         }
     }
 
-    /// <summary>
-    /// The server check (AD-3): the process serving the pipe is <see cref="EngineConnectionOptions.TrustedEnginePath"/>.
-    /// Returns that process with its handle open, the one handle the App may kill it through, or <c>null</c>.
-    /// </summary>
+    /// <summary>The server check: the pipe's server must be the trusted engine image; returns its process, or null.</summary>
     private Process? VerifyServer(NamedPipeClientStream pipe)
     {
         Process? process = null;
@@ -669,7 +630,7 @@ internal sealed class EngineConnection(EngineConnectionOptions options) : IEngin
         return null;
     }
 
-    /// <summary>Starts the engine; after a crash or hang with <c>--restarted crashed|hung</c>, so it raises <c>engine-restarted</c> itself.</summary>
+    /// <summary>Starts the engine; after a crash or hang it passes the reason, so the engine raises <c>engine-restarted</c>.</summary>
     private bool TryLaunch(EngineRestartReason? restart)
     {
         var start = new ProcessStartInfo(options.EnginePath)

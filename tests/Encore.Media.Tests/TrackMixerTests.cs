@@ -39,11 +39,7 @@ public sealed class TrackMixerTests
 {
     private readonly SampleSink _output = new();
 
-    /// <summary>
-    /// A device's stream: frame k is (v, -v) with v = seed / 20 + (k mod 4096) / 16384, so frames
-    /// within 4096 of each other are distinct, and any two devices' sum (seeds up to 7) stays within
-    /// full scale, which the limiter leaves bit-identical.
-    /// </summary>
+    /// <summary>A device's stream of distinct frame values, small enough that any two devices' sum stays within full scale.</summary>
     private static float Value(float seed, long frame) => (seed / 20) + ((frame % 4096) / 16384f);
 
     private static float[] Chunk(float seed, long start, int frames)

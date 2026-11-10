@@ -9,11 +9,7 @@ namespace Encore.Bench;
 /// <summary>A key and its modifiers, parsed from text such as <c>ctrl+alt+f9</c>.</summary>
 internal sealed record KeyCombo(int Vk, int Modifiers, string Text)
 {
-    /// <summary>
-    /// Modifiers <c>ctrl</c>/<c>control</c>, <c>alt</c>, <c>shift</c> and <c>win</c>, then one key: <c>f1</c>–<c>f24</c>,
-    /// a letter, a digit, or <c>0x</c> and a virtual-key code in hex.
-    /// </summary>
-    /// <exception cref="BenchUsageException">Not a key combination.</exception>
+    /// <summary>Parses modifiers then one key (f1 to f24, a letter, a digit, or a hex virtual-key code); throws otherwise.</summary>
     public static KeyCombo Parse(string text)
     {
         var parts = text.Split('+', StringSplitOptions.TrimEntries);
@@ -69,11 +65,7 @@ internal sealed record KeyCombo(int Vk, int Modifiers, string Text)
     }
 }
 
-/// <summary>
-/// A <c>WH_KEYBOARD_LL</c> hook on a thread of its own that stamps QPC on each key-down of one virtual key.
-/// A low-level hook runs before the system's Hotkey handling, so a stamp comes before the engine's
-/// <c>WM_HOTKEY</c> for the same press.
-/// </summary>
+/// <summary>A low-level keyboard hook on its own thread that stamps QPC on a key-down, before the system's Hotkey handling.</summary>
 internal sealed class KeyboardHook : IDisposable
 {
     private const int WhKeyboardLl = 13;

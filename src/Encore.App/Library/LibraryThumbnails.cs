@@ -5,11 +5,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Library;
 
-/// <summary>
-/// The Library rows' thumbnails (story 7.3): asked of a source off the UI thread, set on the row on
-/// it, and cached in memory by absolute path and size (never on disk). A file with no thumbnail isn't
-/// cached, so it is asked again only when its row asks again. <see cref="Request"/> runs on the UI thread.
-/// </summary>
+/// <summary>The Library rows' thumbnails: fetched off the UI thread, set on it, and cached in memory by path and size.</summary>
 internal sealed class LibraryThumbnails
 {
     /// <summary>The thumbnails' side in pixels: 96×54 rows at up to 200 % scale.</summary>
@@ -22,9 +18,7 @@ internal sealed class LibraryThumbnails
     // UI thread only.
     private readonly Dictionary<(string Path, long Size), ImageSource> _cache = [];
 
-    /// <param name="source">The thumbnail of an absolute path, or null when there is none; run by <paramref name="background"/>.</param>
-    /// <param name="background">Runs an action off the UI thread.</param>
-    /// <param name="post">Runs an action on the UI thread.</param>
+    /// <summary>The source runs on the background runner; post runs an action on the UI thread.</summary>
     public LibraryThumbnails(Func<string, ImageSource?> source, Action<Action> background, Action<Action> post)
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
@@ -32,10 +26,7 @@ internal sealed class LibraryThumbnails
         _post = post ?? throw new ArgumentNullException(nameof(post));
     }
 
-    /// <summary>
-    /// The shell's thumbnails (AD-1: the App passes only the path), asked on one dedicated STA thread
-    /// in order, as frozen bitmaps.
-    /// </summary>
+    /// <summary>The shell's thumbnails, asked on one dedicated STA thread in order, as frozen bitmaps.</summary>
     public static LibraryThumbnails Shell(Action<Action> post)
     {
         var queue = new BlockingCollection<Action>();
@@ -64,10 +55,7 @@ internal sealed class LibraryThumbnails
         return new LibraryThumbnails(FromShell, queue.Add, post);
     }
 
-    /// <summary>
-    /// Sets <paramref name="row"/>'s thumbnail of the file at <paramref name="absolutePath"/>: at once
-    /// when cached, else once the source has it. A row that asked for another file since keeps its own.
-    /// </summary>
+    /// <summary>Sets a row's thumbnail: at once when cached, else when the source has it; a row that moved on keeps its own.</summary>
     public void Request(LibraryRow row, string absolutePath, long size)
     {
         ArgumentNullException.ThrowIfNull(row);

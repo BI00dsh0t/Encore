@@ -19,15 +19,7 @@ using Encore.Engine.Supervision;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Story 6.13's closing check of epic 6, the parts that need no capture (the builder has paused GPU tests):
-/// the whole engine (<c>EngineHost</c>) in-process on a throwaway test instance with Rewind off,
-/// the App's own <see cref="EngineConnection"/> and the real <c>MainViewModel</c>'s pages. It walks the
-/// Recordings settings through a game's page and the Hotkeys page (with its screen picker) and across an engine restart,
-/// <c>monitors.list</c> on this PC, the Hotkeys rows each Record mode shows, Recording and Monitor Recording
-/// names and folders from Core's allocator as the Library sees them, and an interrupted fragmented MP4
-/// (made by <c>ffmpeg.exe</c> on the CPU) trimmed at the next start with <c>recording-interrupted</c>.
-/// </summary>
+/// <summary>The Recordings settings end to end with no capture: pages, names and folders, and an interrupted file trimmed.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class RecordingsEndToEndTests : IDisposable
 {
@@ -58,8 +50,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
         var output = Directory.CreateDirectory(Path.Combine(_folder, "out")).FullName;
         var fragmented = Fragmented("rec.mp4", 4);
 
-        // A Guid name: a dotted temp-folder name isn't a test instance name, and the engine would then start
-        // Rewind on the foreground window. Rewind is also off explicitly.
+        // A Guid name: a dotted temp-folder name isn't a test instance name, and the engine would start Rewind for real.
         var instance = new Instance(Instance.TestPrefix + "recordings-" + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
         Assert.True(instance.IsTest);
         var logs = new ListLoggers();
@@ -83,7 +74,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             ])));
             Until(() => main.GameProfiles.Profiles.Any(p => p.ProfileId == ProfileId), "the profile on the Game Profiles page");
 
-            // R9: Recordings are off by default; the Game Profiles page switches them on.
+            // Recordings are off by default; the Game Profiles page switches them on.
             var profile = main.GameProfiles.Page(ProfileId);
             Assert.False(profile.RecordingsEnabled);
             profile.RecordingsEnabled = true;
@@ -138,7 +129,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             Assert.Equal((recordStart, recordStop, monitorToggle), (effective.Hotkeys.RecordStart, effective.Hotkeys.RecordStop, effective.Hotkeys.MonitorRecordToggle));
             Assert.Equal(RecordHotkeyMode.Separate, effective.RecordHotkeyMode);
 
-            // Recording names and folders (R26, AD-21): the allocator the Recordings use, on the engine's document.
+            // Recording names and folders: the allocator the Recordings use, on the engine's document.
             var document = engine.State!.Settings;
             Assert.Equal("Alpha", document.Profiles[ProfileId].Folder);
             var qpc = Stopwatch.GetTimestamp();
@@ -163,7 +154,7 @@ public sealed class RecordingsEndToEndTests : IDisposable
             Assert.Contains(engine.State!.Library, i => i.Path == Path.GetRelativePath(output, game));
         }
 
-        // R11: the Recordings a dead engine left open. One torn mid-fragment, one with no whole fragment.
+        // The Recordings a dead engine left open. One torn mid-fragment, one with no whole fragment.
         var boxes = TopLevelBoxes(fragmented);
         var moofs = boxes.Where(b => b.Type == "moof").Select(b => b.Offset).ToList();
         Log?.WriteLine("boxes: " + string.Join(" ", boxes.Select(b => $"{b.Type}@{b.Offset}")));

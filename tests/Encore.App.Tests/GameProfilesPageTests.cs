@@ -13,7 +13,7 @@ using ImmutableValues = System.Collections.Immutable.ImmutableSortedDictionary<s
 
 namespace Encore.App.Tests;
 
-/// <summary>Games (story 10.10; story 3.6's Game Profiles before it): the list, the drill-in, and a game's page.</summary>
+/// <summary>Games: the list, the drill-in, and a game's page.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class GameProfilesPageTests
 {
@@ -133,7 +133,7 @@ public sealed class GameProfilesPageTests
     [Fact]
     public void AGameTakingItsOwnVideoQualityKeepsSource()
     {
-        // Story 12.3: the main Video quality is Source; the game's summary says so and its own copy carries matchSource.
+        // The main Video quality is Source; the game's summary says so and its own copy carries matchSource.
         SetProfiles(revision: 3, global: [("video", Keys.Video.ToJson(GlobalVideo with { MatchSource = true }))]);
         var updates = Capture();
         var page = Create().GameProfiles;

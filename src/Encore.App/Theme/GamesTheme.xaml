@@ -1,8 +1,4 @@
-<!--
-    Games' look (story 10.10; epic 10's DESIGN.md addendum: Breadcrumb header, Game row, Inheritance section),
-    one dictionary for both themes: every colour, corner and type comes from a token key both themes define,
-    through DynamicResource. ThemeService places it.
--->
+<!-- Games' look, one dictionary for both themes: every colour, corner and type comes from a token key. -->
 <ResourceDictionary x:Class="Encore.App.Theme.GamesTheme"
                     x:ClassModifier="internal"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

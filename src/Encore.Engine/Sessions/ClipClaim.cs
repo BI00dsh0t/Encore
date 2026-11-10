@@ -1,13 +1,6 @@
 namespace Encore.Engine.Sessions;
 
-/// <summary>
-/// How far a session's Clips have claimed its Rewind, in µs since the anchor (R6): the
-/// highest end of a write that succeeded or is still in flight. It is ring time, not a Reset (a Reset
-/// moves only once the orchestrator takes a write's result), so a write that starts while an earlier
-/// one is still writing cuts from that earlier write's end rather than back over it. A failed write
-/// only drops its own claim, so failures in any order leave the start at the last succeeded end, or
-/// at a write still in flight. Any thread may call it.
-/// </summary>
+/// <summary>How far a session's Clips have claimed its ring, in µs since the anchor. Any thread; see docs/code-notes.md.</summary>
 internal sealed class ClipClaim
 {
     private readonly Lock _gate = new();
@@ -37,11 +30,7 @@ internal sealed class ClipClaim
         }
     }
 
-    /// <summary>
-    /// The write that claimed <paramref name="claimedUs"/> was written, ending at
-    /// <paramref name="endUs"/> (earlier when its cut ended at a ring generation's boundary): that
-    /// end stays claimed.
-    /// </summary>
+    /// <summary>The write that claimed this span succeeded and ended at endUs, which stays claimed.</summary>
     public void Succeeded(long claimedUs, long endUs)
     {
         lock (_gate)

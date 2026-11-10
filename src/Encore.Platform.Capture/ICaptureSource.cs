@@ -1,10 +1,6 @@
 namespace Encore.Platform.Capture;
 
-/// <summary>
-/// A frame source a capture session draws from: WGC's <see cref="WindowCapture"/>, or, for a
-/// Monitor Recording whose WGC item fails, <see cref="DesktopDuplicationCapture"/> (AD-12). Frames
-/// reach the <see cref="CapturedFrameHandler"/> given at construction, one at a time.
-/// </summary>
+/// <summary>A frame source a capture session draws from; frames reach the handler given at construction, one at a time.</summary>
 public interface ICaptureSource : IDisposable
 {
     /// <summary>The captured window or monitor is gone; no more frames will arrive.</summary>

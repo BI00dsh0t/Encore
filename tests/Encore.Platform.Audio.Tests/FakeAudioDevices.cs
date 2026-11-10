@@ -7,10 +7,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Platform.Audio.Tests;
 
-/// <summary>
-/// A test double of the PC's endpoints: a list the test edits. Each change raises
-/// <see cref="EndpointsChanged"/> synchronously, as the watcher would after its coalesce window.
-/// </summary>
+/// <summary>A fake list of the PC's endpoints that the test edits; each change raises the changed event at once.</summary>
 internal sealed class FakeEndpointList : IAudioEndpointSource
 {
     private readonly Lock _lock = new();
@@ -68,12 +65,7 @@ internal sealed class FakeEndpointList : IAudioEndpointSource
     public void Raise() => EndpointsChanged?.Invoke();
 }
 
-/// <summary>
-/// The fake clients' factory: each defined endpoint plays one sine, identical on both channels, in
-/// real time, as 10 ms packets stamped contiguously from the client's start QPC. The test decides
-/// whether an endpoint opens, mutes a client (it keeps time but delivers nothing, like a vanished
-/// device) or invalidates it.
-/// </summary>
+/// <summary>The fake clients' factory: each endpoint plays one sine in real time; the test can refuse, mute or invalidate one.</summary>
 internal sealed class FakeDeviceBank
 {
     private readonly Lock _lock = new();
@@ -83,7 +75,7 @@ internal sealed class FakeDeviceBank
     private readonly Dictionary<string, List<ToneClient>> _opened = [];
     private readonly HashSet<string> _invalidateOnStart = [];
 
-    /// <summary>The next client opened on <paramref name="id"/> reports itself invalidated just after it starts, as a device still restarting would.</summary>
+    /// <summary>The next client opened on this id reports itself invalidated just after it starts, as a restarting device would.</summary>
     public void InvalidateNextOnStart(string id)
     {
         lock (_lock)

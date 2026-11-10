@@ -13,18 +13,7 @@ using MarshalInterface = WinRT.MarshalInterface<Windows.Graphics.DirectX.Direct3
 
 namespace Encore.Platform.Desktop;
 
-/// <summary>
-/// The in-app player's picture (AD-27, story 14.2): one BGRA texture with two views. Windows' media player
-/// copies each frame into it through <see cref="Direct3DSurface"/>, and a WPF <c>D3DImage</c> shows it through
-/// <see cref="BackBuffer"/>, so the page's controls can draw over the video.
-/// <para>
-/// It owns a D3D11 device and a D3D9Ex device on the App's window, made once. <see cref="Resize"/> remakes
-/// only the texture and its views. Every step checks its HRESULT and throws on failure (CsWin32's methods
-/// call <c>ThrowOnFailure</c>), so a caller sees a GPU failure rather than a blank picture.
-/// <see cref="Dispose"/> releases every COM reference it or the WinRT wrapper took, at once, with no GC.
-/// Create, use and dispose it on the UI thread.
-/// </para>
-/// </summary>
+/// <summary>The in-app player's picture: a texture the media player writes and WPF shows. UI thread only (docs/code-notes.md).</summary>
 public sealed unsafe class VideoSurface : IDisposable
 {
     private const uint PresentIntervalImmediate = 0x80000000;
@@ -40,8 +29,7 @@ public sealed unsafe class VideoSurface : IDisposable
     private IInspectable* _winrtSurface;
     private IDirect3DSurface? _direct3DSurface;
 
-    /// <summary>Creates both devices, with no texture yet; throws when the GPU refuses.</summary>
-    /// <param name="window">The window the D3D9Ex device belongs to: the App window that shows the picture.</param>
+    /// <summary>Creates both devices, with no texture yet, on the App window that shows it; throws when the GPU refuses.</summary>
     public VideoSurface(nint window)
     {
         _window = new HWND(window);
@@ -66,7 +54,7 @@ public sealed unsafe class VideoSurface : IDisposable
     /// <summary>The texture's height in pixels; 0 before the first <see cref="Resize"/>.</summary>
     public int Height { get; private set; }
 
-    /// <summary>The texture's D3D9 surface (an <c>IDirect3DSurface9*</c>), for <c>D3DImage.SetBackBuffer</c>; zero with no texture.</summary>
+    /// <summary>The texture's D3D9 surface pointer, for <c>D3DImage.SetBackBuffer</c>; zero with no texture.</summary>
     public nint BackBuffer => (nint)_surface9;
 
     /// <summary>The texture as the WinRT surface that <c>MediaPlayer.CopyFrameToVideoSurface</c> writes into.</summary>
@@ -79,11 +67,7 @@ public sealed unsafe class VideoSurface : IDisposable
         }
     }
 
-    /// <summary>
-    /// Remakes the texture and its views at <paramref name="width"/> × <paramref name="height"/>, on the same
-    /// devices; a no-op at the current size. The old views are released first, so a caller must take the new
-    /// <see cref="BackBuffer"/> and <see cref="Direct3DSurface"/>.
-    /// </summary>
+    /// <summary>Remakes the texture at a new size; the caller must then take the new back buffer and Direct3D surface.</summary>
     public void Resize(int width, int height)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
@@ -128,7 +112,7 @@ public sealed unsafe class VideoSurface : IDisposable
         Release(ref _device);
     }
 
-    /// <summary>Tests only: adds a reference to every COM object it holds, in the order <see cref="ReleaseForTest"/> should release them.</summary>
+    /// <summary>Tests only: adds a reference to every COM object it holds, in the order to release them.</summary>
     internal nint[] AddRefsForTest()
     {
         // The D3D9 surface level shares its count with its texture, so the texture stands for both.
@@ -235,7 +219,7 @@ public sealed unsafe class VideoSurface : IDisposable
         _surface9 = surface9;
     }
 
-    // The WinRT IDirect3DSurface over the texture's DXGI surface (Windows.Graphics.DirectX.Direct3D11 interop).
+    // The WinRT IDirect3DSurface over the texture's DXGI surface.
     private void CreateWinRTView()
     {
         IDXGISurface* dxgiSurface;
@@ -253,9 +237,7 @@ public sealed unsafe class VideoSurface : IDisposable
         }
     }
 
-    // The texture and its three views. The WinRT wrapper holds its own references (its native reference and
-    // one per interface it was used through) until a GC, even after Close: each is disposed here, so the
-    // texture and both devices go at once (QA 14.2 round 1).
+    // Releases the texture and its views; the WinRT wrapper is disposed here because it holds references until a GC.
     private void ReleaseTexture()
     {
         if (_direct3DSurface is { } wrapper)

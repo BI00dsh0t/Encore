@@ -5,11 +5,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Bench.Tests;
 
-/// <summary>
-/// The matrix's Hotkey failure rows, against the built engine's <c>serve</c>. Each test has its own
-/// Ctrl+Alt+Shift combination, which no other test in the solution uses (the engine's own Hotkey
-/// tests take F18–F21, F23 and F24).
-/// </summary>
+/// <summary>The Hotkey failure cases against the built engine; each test has its own combination, used by no other test.</summary>
 [Collection(nameof(BenchProcessCollection))]
 public sealed class HotkeyCommandTests : IDisposable
 {

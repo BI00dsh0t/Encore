@@ -5,12 +5,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Contracts.Messages;
 
-/// <summary>
-/// The Target Game: the one game the engine captures for. <see cref="ProfileId"/> is the game's
-/// executable as <c>Canonicalize</c> made it (AD-18): its lowercase final path.
-/// </summary>
-/// <param name="Name">The game's display name; the executable's file name until Game Profiles name it.</param>
-/// <param name="ProcessId">The game's process.</param>
+/// <summary>The Target Game: the one game the engine captures for; ProfileId is its executable's lowercase final path.</summary>
 public sealed record TargetGame(string ProfileId, string Name, int ProcessId);
 
 /// <summary>Why the Target Game changed.</summary>
@@ -26,7 +21,7 @@ public enum TargetChangeReason
     /// <summary>The Target was set to be ignored.</summary>
     Ignored,
 
-    /// <summary>A game was detected while there was no Target, or (the tracer rule) any newly detected game.</summary>
+    /// <summary>A game was detected while there was no Target.</summary>
     Detected,
 
     /// <summary>A game already running when the engine started.</summary>
@@ -37,29 +32,19 @@ public enum TargetChangeReason
 /// <summary><c>target.changed</c>: the Target Game went from <see cref="From"/> to <see cref="To"/> (either may be none).</summary>
 public sealed record TargetChanged(TargetGame? From, TargetGame? To, TargetChangeReason Reason);
 
-/// <summary>
-/// A running game Game Detection found (any source), known until its process exits. Informational:
-/// it isn't the Target Game, which only <c>target.changed</c> sets (AD-19).
-/// </summary>
-/// <param name="ProfileId">The executable as <c>Canonicalize</c> made it (AD-18).</param>
-/// <param name="Name">The game's display name; the executable's file name until Game Profiles name it.</param>
-/// <param name="ProcessId">The game's process.</param>
+/// <summary>A running game that Game Detection found, known until its process exits; it is not the Target Game.</summary>
 public sealed record DetectedGame(string ProfileId, string Name, int ProcessId);
 
-/// <summary><c>game.add</c>: hand-adds an executable to <c>manualGames</c> (R1). The engine canonicalizes <see cref="Path"/> (AD-18).</summary>
-/// <param name="Path">The executable's path as typed or browsed.</param>
+/// <c>game.add</c>: hand-adds an executable to <c>manualGames</c>; the engine makes the path canonical.
 public sealed record GameAdd(string Path);
 
 /// <summary>The reply to <c>game.add</c>: the canonical path now in <c>manualGames</c>.</summary>
 public sealed record GameAdded(string Path);
 
-/// <summary>
-/// Game messages (epic-game-detection-profiles): Game Detection, the Target Game and Game Profiles.
-/// The area's payloads, its own JSON context and its entries in these lists are added here only (AD-22).
-/// </summary>
+/// <summary>Game messages: Game Detection, the Target Game and Game Profiles; this area's payloads are added here only.</summary>
 public static class GameMessages
 {
-    /// <summary>The Target Game changed; the SessionOrchestrator is its only producer (AD-19).</summary>
+    /// <summary>The Target Game changed; the SessionOrchestrator is its only producer.</summary>
     public static EventType<TargetChanged> TargetChanged { get; } = new(
         "target.changed",
         GameJsonContext.Default.TargetChanged,
@@ -80,10 +65,7 @@ public static class GameMessages
         "detectedGames",
         (snapshot, game) => snapshot with { DetectedGames = [.. Without(snapshot.DetectedGames, game.ProcessId)] });
 
-    /// <summary>
-    /// Adds an executable to <c>manualGames</c> once, canonical; a path that isn't an existing executable
-    /// is refused with <c>invalid-arguments</c>.
-    /// </summary>
+    /// <summary>Adds an executable to <c>manualGames</c> once; a path that isn't an existing executable is refused.</summary>
     public static CommandType<GameAdd, GameAdded> Add { get; } =
         new("game.add", GameJsonContext.Default.GameAdd, GameJsonContext.Default.GameAdded);
 

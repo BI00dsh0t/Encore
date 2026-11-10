@@ -15,20 +15,11 @@ using Encore.Platform.Windows;
 
 namespace Encore.Engine.Tests;
 
-/// <summary>
-/// Runs <see cref="OutputSettingsTests"/> alone: the frame rate it measures at 3440×1440 and 120 fps
-/// would suffer from the encode tests running beside it.
-/// </summary>
+/// <summary>Runs the output settings tests alone: the frame rate they measure would suffer from other encode tests.</summary>
 [CollectionDefinition(nameof(OutputSettingsCollection), DisableParallelization = true)]
 public sealed class OutputSettingsCollection;
 
-/// <summary>
-/// Story 1.10's verify: <c>serve</c> publishes the probe's <c>videoOptions</c>, which equal what
-/// <c>ffmpeg.exe</c> accepts on this PC; the <c>video</c> key refuses 144 fps; and a session encodes
-/// the snapshot's codec at its resolution and fps. Every file must play in VLC (headless), when it
-/// is installed. The capture windows are borderless and exactly the size asked for; the files are
-/// deleted afterwards.
-/// </summary>
+/// <summary>The probe's video options match what ffmpeg accepts here, and a session encodes the snapshot's codec and size.</summary>
 [Collection(nameof(OutputSettingsCollection))]
 public sealed class OutputSettingsTests : IDisposable
 {
@@ -223,7 +214,7 @@ public sealed class OutputSettingsTests : IDisposable
         _ => "av1",
     };
 
-    /// <summary>The offers the probe must make: per codec, the first candidate the oracle accepts, and libx264 for H.264 failing that.</summary>
+    /// <summary>The offers the probe must make: per codec, the first candidate the oracle accepts, else libx264 for H.264.</summary>
     private static List<CodecOffer> ExpectedOffers()
     {
         var accepted = EncoderOracle.Accepted(EngineBinaries.Folder);

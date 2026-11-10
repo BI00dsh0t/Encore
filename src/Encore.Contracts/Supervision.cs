@@ -1,9 +1,6 @@
 namespace Encore.Contracts;
 
-/// <summary>
-/// The timings of two-way supervision (AD-16), kept once for both processes: the engine's
-/// heartbeat, when the App counts the engine as hung, and the restart backoff both sides use.
-/// </summary>
+/// <summary>The timings of two-way supervision, kept once for both processes: heartbeat, hang limits and restart backoff.</summary>
 public static class Supervision
 {
     /// <summary>How often the engine publishes <c>engine.heartbeat</c>.</summary>
@@ -35,11 +32,7 @@ public static class Supervision
     public static TimeSpan CrashLoopWindow { get; } = TimeSpan.FromMinutes(10);
 }
 
-/// <summary>
-/// The crash-loop rule of both supervisors (AD-16): a restart is allowed while fewer than
-/// <see cref="Supervision.CrashLoopRestarts"/> restarts fall within the last
-/// <see cref="Supervision.CrashLoopWindow"/>; the next one is a crash loop. Not thread-safe.
-/// </summary>
+/// <summary>The crash-loop rule of both supervisors: only so many restarts inside a sliding window. Not thread-safe.</summary>
 public sealed class CrashLoopGuard(TimeProvider time)
 {
     private readonly Queue<DateTimeOffset> _restarts = new();
@@ -66,10 +59,7 @@ public sealed class CrashLoopGuard(TimeProvider time)
     public void Reset() => _restarts.Clear();
 }
 
-/// <summary>
-/// The delays between restarts in a row (AD-16): 0, 1, 2, 4, 8, 16, then 30 s, back to the start
-/// once <see cref="Supervision.BackoffReset"/> passes with no restart. Not thread-safe.
-/// </summary>
+/// <summary>The delays between restarts in a row: 0, 1, 2, 4, 8, 16, then 30 s, starting over after a quiet spell.</summary>
 public sealed class RestartBackoff(TimeProvider time)
 {
     private int _restarts;
@@ -92,10 +82,7 @@ public sealed class RestartBackoff(TimeProvider time)
     }
 }
 
-/// <summary>
-/// One copy of a process per instance (AD-16): a named mutex, <c>Local\Encore.{process}.v1.{instance}</c>,
-/// held for the process's whole life. A mutex left abandoned by a process that died counts as acquired.
-/// </summary>
+/// <summary>One copy of a process per instance, by a named mutex held for its whole life; an abandoned mutex counts as taken.</summary>
 public sealed class SingleInstance : IDisposable
 {
     public const string Engine = "Engine";
@@ -110,12 +97,11 @@ public sealed class SingleInstance : IDisposable
         Name = name;
     }
 
-    /// <summary>The mutex's name.</summary>
     public string Name { get; }
 
     public static string MutexName(string process, string instance) => $@"Local\Encore.{process}.v1.{instance}";
 
-    /// <summary>Takes the mutex for <paramref name="process"/> in <paramref name="instance"/>, or returns <c>null</c> when another copy holds it.</summary>
+    /// <summary>Takes the mutex for a process in an instance, or returns <c>null</c> when another copy holds it.</summary>
     public static SingleInstance? TryAcquire(string process, string instance)
     {
         ArgumentException.ThrowIfNullOrEmpty(process);

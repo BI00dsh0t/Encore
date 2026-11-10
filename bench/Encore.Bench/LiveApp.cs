@@ -9,13 +9,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Bench;
 
-/// <summary>
-/// Story 8.7: the real App (<c>--tray --instance … --rewind</c>), which starts the engine beside it, on a
-/// throwaway test instance, with everything on: Rewind on the Target Game, its Overlay, the Library,
-/// Cleanup, and a Recording on the Record Hotkey. Bench drives it as a person would, by injected Hotkeys, and
-/// reads the engine's snapshot and events over IPC. Never the installed App or a real instance: the App comes
-/// from <c>--app-exe</c>, the local publish (<c>publish/Encore</c>) or the Release build.
-/// </summary>
+/// <summary>The real App and its engine on a throwaway test instance, driven by injected Hotkeys; never the installed App.</summary>
 internal sealed class LiveApp : IDisposable
 {
     public const string PublishedFolder = "publish/Encore";
@@ -53,10 +47,7 @@ internal sealed class LiveApp : IDisposable
 
     public int EnginePid => _enginePid;
 
-    /// <summary>
-    /// <c>--app-exe</c>; else the local publish (<c>publish/Encore/Encore.App.exe</c>, which
-    /// <c>tools/publish.ps1</c> composes) when it has the engine beside it; else the newest Release build.
-    /// </summary>
+    /// <summary>The App's path: the option, else the local publish when the engine is beside it, else the newest Release build.</summary>
     public static string Resolve(BenchContext context)
     {
         if (context.Options.Text("app-exe") is not null)
@@ -70,13 +61,7 @@ internal sealed class LiveApp : IDisposable
             : AppOverlayHost.Resolve(context);
     }
 
-    /// <summary>
-    /// Starts the App on a new test instance, waits for its engine, and applies <paramref name="ops"/> plus the
-    /// Hotkeys (Save and Record Toggle on <paramref name="save"/> and <paramref name="record"/>), with the Feedback
-    /// Sounds off: they play on the default communications endpoint, which may be a Track's device, and a sound
-    /// there would read as a burst.
-    /// </summary>
-    /// <exception cref="BenchFailure">The App or its engine never answered, or a Hotkey didn't register: everything is stopped.</exception>
+    /// <summary>Starts the App on a new test instance and applies the settings and Hotkeys, with Feedback Sounds off.</summary>
     public static LiveApp Start(string appExe, string name, KeyCombo save, KeyCombo record, IReadOnlyList<SettingsOp> ops)
     {
         var instance = Instance.ForTest(Instance.TestPrefix + name + "-" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(4)).ToLowerInvariant());
@@ -130,7 +115,7 @@ internal sealed class LiveApp : IDisposable
         }
     }
 
-    /// <summary>Lists <paramref name="exe"/> as a game (<c>game.add</c>), named, with Recordings on and <paramref name="ignored"/> set; returns its profile id.</summary>
+    /// <summary>Lists a program as a game, named, with Recordings on and its Ignored flag set as given; returns its profile id.</summary>
     public string AddGame(string exe, string name, bool ignored)
     {
         Wait(_client.SendAsync(GameMessages.Add, new GameAdd(exe)));
@@ -153,8 +138,7 @@ internal sealed class LiveApp : IDisposable
     /// <summary>Presses Record and waits for the Recording to run; returns the QPC just before the press and the file.</summary>
     public (long PressQpc, string Path) StartRecording(TimeSpan timeout)
     {
-        // A session that has just started can't record until its first frames are in ("can't record yet"):
-        // the press is repeated every 2 s until the Recording runs.
+        // A session that has just started can't record yet, so the press is repeated every 2 s until the Recording runs.
         var before = _client.State.LastRecordingStarted;
         var clock = Stopwatch.StartNew();
         while (true)
@@ -184,7 +168,7 @@ internal sealed class LiveApp : IDisposable
         return _client.State.LastRecordingStopped!;
     }
 
-    /// <summary>Presses Save and waits for <c>clip.saved</c> or <c>clip.failed</c>; returns the Clip's path, or why there is none.</summary>
+    /// <summary>Presses Save and waits for the saved or failed event; returns the Clip's path, or why there is none.</summary>
     public (string? Path, string? Failure) Save(TimeSpan timeout)
     {
         while (_clips.Reader.TryRead(out _))
@@ -210,7 +194,7 @@ internal sealed class LiveApp : IDisposable
     /// <summary>One Overlay message (a saved notice through <c>dev.simulate</c>), as <c>bench fps --overlay</c> sends.</summary>
     public void Message() => Send(() => Wait(_client.SendAsync(DevMessages.Simulate, new DevSimulate(SimulatedEvent.ClipSaved))));
 
-    /// <summary>Applies <paramref name="ops"/>; a conflict (the App changed a setting meanwhile, as it does as it starts) is retried on the newer revision.</summary>
+    /// <summary>Applies the ops; a conflict, as when the App changes a setting while starting, is retried on the newer revision.</summary>
     public void Update(params SettingsOp[] ops) => Send(() =>
     {
         for (var attempt = 1; ; attempt++)
@@ -350,12 +334,7 @@ internal sealed class LiveApp : IDisposable
     private static T Wait<T>(Task<T> task) => task.WaitAsync(ReplyTimeout).GetAwaiter().GetResult();
 }
 
-/// <summary>
-/// <c>bench fps --overlay --recording</c> (story 8.7): the real App with the load listed as its game. Off (the
-/// baseline runs) has the load's profile Ignored, so nothing captures; on (the <c>app</c> runs, while they settle)
-/// clears the flag, waits for Rewind to buffer it, and presses Record; off presses Record again and sets
-/// it Ignored. The Overlay's dot follows the real state, and <see cref="Message"/> adds a notice every 10 s.
-/// </summary>
+/// <c>bench fps --overlay --recording</c>: the real App with the load as its game, recording during the capture runs.
 internal sealed class LiveCapture : IDisposable
 {
     private static readonly TimeSpan StateTimeout = TimeSpan.FromSeconds(15);

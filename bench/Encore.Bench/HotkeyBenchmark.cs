@@ -12,8 +12,7 @@ namespace Encore.Bench;
 /// <summary>One press: the engine's stamp minus the hook's, ms.</summary>
 internal sealed record HotkeyPressTiming(int Press, double Ms, bool Injected);
 
-/// <summary><c>hotkey.json</c>.</summary>
-/// <param name="Injected">True when Bench pressed the key with <c>SendInput</c> (<c>--inject</c>); null in a file written before it was recorded.</param>
+/// <summary>The <c>hotkey.json</c> report; Injected is true when Bench pressed the key itself.</summary>
 internal sealed record HotkeyReport(
     DateTimeOffset Created,
     string Key,
@@ -31,12 +30,7 @@ internal sealed record HotkeyReport(
     string? Error,
     bool? Injected = null);
 
-/// <summary>
-/// <c>bench hotkey</c>: real presses of a Save Hotkey bound on a throwaway <c>serve</c> instance. A
-/// <c>WH_KEYBOARD_LL</c> hook in Bench stamps each key-down; the engine stamps its <c>WM_HOTKEY</c> and
-/// publishes <c>hotkey.pressed</c>. Press-to-stamp is the difference of the two QPCs. With <c>--inject</c>,
-/// Bench presses the combination itself with <c>SendInput</c> about once a second, for unattended runs.
-/// </summary>
+/// <c>bench hotkey</c>: times real presses of a Save Hotkey, from Bench's keyboard hook to the engine's stamp.
 internal static class HotkeyBenchmark
 {
     public const string FileName = "hotkey.json";
@@ -162,10 +156,7 @@ internal static class HotkeyBenchmark
         }
     }
 
-    /// <summary>
-    /// <paramref name="fault"/>, or, for an injected run that was not cancelled and timed no press, a named
-    /// failure: UIPI can drop injected input without SendInput saying so.
-    /// </summary>
+    /// <summary>The fault, or a named failure for an injected run that timed no press: Windows can drop injected input silently.</summary>
     internal static string? InjectFault(bool inject, string? fault, int timed, bool cancelled, TimeSpan timeout) =>
         inject && fault is null && timed == 0 && !cancelled
             ? $"no injected press reached the engine within {timeout.TotalSeconds:0} s: SendInput may be blocked by UIPI or a secure desktop"
@@ -216,8 +207,7 @@ internal static class HotkeyBenchmark
 
         Console.WriteLine($"Stops after {presses} presses, or {timeout.TotalSeconds:0} s without one, or Ctrl+C.");
 
-        // The hook is in place before the first injected press; a press the engine misses is pressed again,
-        // up to twice the count asked for.
+        // The hook is in place before the first injected press; a press the engine misses is pressed again.
         using var injector = inject ? KeyInjector.Start(combo, TimeSpan.FromSeconds(1), presses * 2) : null;
         while (timings.Count < presses && !cancellation.IsCancellationRequested)
         {
@@ -276,10 +266,7 @@ internal static class HotkeyBenchmark
         File.WriteAllText(Path.Combine(folder, "settings.json"), JsonSerializer.Serialize(document, SettingsJsonContext.Default.SettingsDocument));
     }
 
-    /// <summary>
-    /// Starts <c>serve</c> on the test instance, with <paramref name="extra"/> arguments, and waits for its
-    /// <c>listening</c> line; its output goes to log files.
-    /// </summary>
+    /// <summary>Starts <c>serve</c> on the test instance and waits for its listening line; its output goes to log files.</summary>
     internal static Process StartServe(string engine, string instance, string logPrefix, CancellationToken cancellation, params string[] extra)
     {
         var start = new ProcessStartInfo(engine)

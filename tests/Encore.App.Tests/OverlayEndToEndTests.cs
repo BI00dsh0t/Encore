@@ -16,15 +16,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.App.Tests;
 
-/// <summary>
-/// Story 5.14's closing check of epic 5, unattended: the whole engine (<c>EngineHost</c>) in-process on a throwaway
-/// test instance with Rewind on, the real foreground Game Detection, the real pipe and Hotkeys, and the
-/// App's own <see cref="EngineConnection"/>, <see cref="OverlayViewModel"/>, <see cref="OverlayWindow"/> and
-/// <see cref="MainViewModel"/> status line on it, wired as <c>ShellApp</c> wires them (the real plane query,
-/// capturable app windows). Bench's borderless GPU load is the Target Game. Injected Save and Mic Mute presses and
-/// <c>dev.simulate</c> drive it. The Feedback Sounds go to a recording output: requested, never played aloud.
-/// Needs the GPU, an unlocked console and the Release build of the GPU load.
-/// </summary>
+/// <summary>The Overlay end to end: the whole engine with Rewind on and the App's Overlay. Needs the GPU and a console.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class OverlayEndToEndTests : IDisposable
 {
@@ -90,8 +82,7 @@ public sealed class OverlayEndToEndTests : IDisposable
             Until(() => engine.State!.Hotkeys.Bindings.Count(b => b.Registered) == 2, "the Save and Mic Mute Hotkeys registered");
             Assert.False(overlay.IsVisible);
 
-            // R1: the load becomes the Target Game; the hollow dot within 1 s of buffering. A test instance has no
-            // runtime.json, so the mic starts muted and the mic-muted icon shows beside the dot.
+            // The load becomes the Target Game: the hollow dot shows, and the mic starts muted, so its icon shows too.
             load = StartLoad(loadExe!);
             var buffering = Until(() => engine.State!.Capture.Replay == ReplayState.Buffering, "Rewind buffering on the load");
             var dotIn = Until(() => model.Dot == OverlayDot.Hollow && overlay.IsVisible, "the hollow dot");
@@ -101,7 +92,7 @@ public sealed class OverlayEndToEndTests : IDisposable
             Assert.Equal(load.MainWindow, OverlayWindowStyle.ForegroundWindow());
             Assert.Equal($"Buffering on {engine.State!.TargetGame!.Name} · Mic muted", main.StatusLine.State);
 
-            // The adaptive dot (5.15): with no overlay planes, auto shows it for 3 s after each change only.
+            // The adaptive dot: with no overlay planes, auto shows it for 3 s after each change only.
             if (!model.DotAlways)
             {
                 var hidden = Until(() => model.Dot == OverlayDot.None, "the dot hiding after its 3 s");
@@ -110,13 +101,13 @@ public sealed class OverlayEndToEndTests : IDisposable
                 Assert.False(model.MicMuted);
             }
 
-            // R3: the Mic Mute press turns the icon off; with onChange the change shows the dot again.
+            // The Mic Mute press turns the icon off; with onChange the change shows the dot again.
             Press(VkF21);
             Until(() => !engine.State!.Capture.MicMuted, "mic unmuted");
             Until(() => !model.MicMuted && model.Dot == OverlayDot.Hollow, "the dot without the mic-muted icon");
             Assert.Equal($"Buffering on {engine.State!.TargetGame!.Name}", main.StatusLine.State);
 
-            // R2: a Save press shows the saving icon within 250 ms and keeps it through the cooldown and the write.
+            // A Save press shows the saving icon within 250 ms and keeps it through the cooldown and the write.
             Pump(TimeSpan.FromSeconds(BufferWindow + 1));
             var before = engine.State!.LastClip;
             var press = Stopwatch.StartNew();
@@ -135,8 +126,7 @@ public sealed class OverlayEndToEndTests : IDisposable
             Assert.InRange(press.Elapsed.TotalSeconds, 4.5, 7);
             Assert.Single(Directory.GetFiles(clips, "*.mp4", SearchOption.AllDirectories));
 
-            // R3: messages queue, oldest first, never overwrite. The saved Clip's message showed first; a failed save
-            // and a disk full arrive together and show one after the other.
+            // Messages queue, oldest first, and never overwrite: a failed save and a disk full show one after the other.
             Simulate(engine, SimulatedEvent.SaveFailed);
             Simulate(engine, SimulatedEvent.DiskFull);
             var codes = new List<string>();
@@ -154,8 +144,7 @@ public sealed class OverlayEndToEndTests : IDisposable
             Log?.WriteLine("messages: " + string.Join(", ", codes));
             Assert.Equal([ErrorCodes.ClipFailed, ErrorCodes.DiskFull], codes.Where(c => c != ErrorCodes.ClipSaved).Take(2));
 
-            // R3: the red X shows while disk-full is active; the status line lists it newest first, and its Dismiss
-            // (warning.dismiss) clears the red X.
+            // The red X shows while disk-full is active; the status line's Dismiss clears it.
             Assert.True(model.DiskFull);
             var diskFull = Assert.Single(main.StatusLine.Warnings, w => w.Message == "The disk is full");
             Assert.Same(diskFull, main.StatusLine.Warnings[0]);
@@ -163,7 +152,7 @@ public sealed class OverlayEndToEndTests : IDisposable
             diskFull.DismissCommand.Execute(null);
             Until(() => !model.DiskFull, "the red X gone after Dismiss");
 
-            // R1: the stub Recording shows the solid dot within 1 s, and its stop brings back the hollow one.
+            // The stub Recording shows the solid dot within 1 s, and its stop brings back the hollow one.
             var start = Stopwatch.StartNew();
             Simulate(engine, SimulatedEvent.RecordingStarted);
             Until(() => model.Dot == OverlayDot.Solid, "the solid dot");
@@ -174,14 +163,14 @@ public sealed class OverlayEndToEndTests : IDisposable
             Until(() => model.Dot == OverlayDot.Hollow, "the hollow dot after the Recording");
             Assert.InRange(stop.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(1));
 
-            // AD-15 amendment: app windows allow capture, including the Overlay; the game kept focus.
+            // App windows allow capture, including the Overlay; the game kept focus.
             Assert.True(overlay.IsVisible);
             var windows = CaptureExclusion.VisibleWindows();
             Assert.Contains(overlay.Handle, windows);
             Assert.All(windows, w => Assert.False(CaptureExclusion.IsApplied(w), $"Window {w:X} is excluded."));
             Assert.Equal(load.MainWindow, OverlayWindowStyle.ForegroundWindow());
 
-            // R4: each notice requested its sound on the default communications endpoint, and nothing played aloud.
+            // Each notice requested its sound on the default communications endpoint, and nothing played aloud.
             Until(() => sounds.Played.Count >= 5, "five Feedback Sounds");
             Log?.WriteLine("sounds: " + string.Join(", ", sounds.Played));
             Assert.Equal(

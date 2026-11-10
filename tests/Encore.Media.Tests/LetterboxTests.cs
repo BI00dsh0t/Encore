@@ -1,6 +1,6 @@
 namespace Encore.Media.Tests;
 
-/// <summary>The fit rectangle of story 1.11's matrix: equal, narrower and wider content, and the resize phases.</summary>
+/// <summary>The fit rectangle: equal, narrower and wider content, and the resize phases.</summary>
 public sealed class LetterboxTests
 {
     [Theory]

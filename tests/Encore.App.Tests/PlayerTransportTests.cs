@@ -4,7 +4,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Tests;
 
-/// <summary>Story 14.5: the player page's transport, over a fake player with a 30 s file.</summary>
+/// <summary>The player page's transport, over a fake player with a 30 s file.</summary>
 [Collection(nameof(WpfCollection))]
 public sealed class PlayerTransportTests : IDisposable
 {
@@ -87,7 +87,7 @@ public sealed class PlayerTransportTests : IDisposable
         page.MuteCommand.Execute(null);
         Assert.Equal((0.4, true), (first.Volume, first.IsMuted));
 
-        // Written when the page closes (14.7), not once a slider step.
+        // Written when the page closes, not once a slider step.
         library.DrillIn.Close();
 
         var second = new FakePlayer();
@@ -119,7 +119,7 @@ public sealed class PlayerTransportTests : IDisposable
         Assert.Equal("1:02:03", PlayerPage.Format(TimeSpan.FromSeconds(3723), TimeSpan.FromHours(2)));
     }
 
-    // QA 14.5: a view file from before 14.5 has no player keys and loads full and unmuted.
+    // A view file from before the player existed has no player keys and loads full and unmuted.
     [Fact]
     public void AViewFileFromBeforeThePlayerLoadsFullAndUnmuted()
     {
@@ -132,14 +132,14 @@ public sealed class PlayerTransportTests : IDisposable
         Assert.Equal((1.0, false), (state.PlayerVolume, state.PlayerMuted));
     }
 
-    // QA 14.5: the volume steps by whole hundredths with no drift, and any change unmutes, the slider's included.
+    // The volume steps by whole hundredths with no drift, and any change unmutes, the slider's included.
     [Fact]
     public void TheVolumeStepsWithoutDriftAndAnyChangeUnmutes()
     {
         var player = new FakePlayer();
         var page = Open(player);
 
-        // A slider at 0.333 is told the 0.33 kept, so its thumb snaps (QA 14.7).
+        // A slider at 0.333 is told the 0.33 kept, so its thumb snaps.
         var raised = 0;
         page.PropertyChanged += (_, e) => raised += e.PropertyName == nameof(PlayerPage.Volume) ? 1 : 0;
         page.Volume = 0.333333;
@@ -156,7 +156,7 @@ public sealed class PlayerTransportTests : IDisposable
 
         Assert.Equal(1.0, page.Volume);
 
-        // Up at 1.0 while muted still unmutes, though the volume can't rise (QA 14.7).
+        // Up at 1.0 while muted still unmutes, though the volume can't rise.
         page.MuteCommand.Execute(null);
         page.ChangeVolume(PlayerPage.VolumeStep);
         Assert.Equal((1.0, false, false), (page.Volume, page.IsMuted, player.IsMuted));

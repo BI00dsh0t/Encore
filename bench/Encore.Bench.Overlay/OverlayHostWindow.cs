@@ -7,12 +7,7 @@ using Encore.Platform.Desktop;
 
 namespace Encore.Bench.Overlay;
 
-/// <summary>
-/// Story 5.1's <c>OverlayWindow</c> showing the hollow dot, built the same way: the same WPF window
-/// properties and the same <see cref="CaptureExclusion"/> and <see cref="OverlayWindowStyle"/> calls from
-/// <c>Encore.Platform.Desktop</c>, without the engine session behind it. Bench never compiles against
-/// the App (AD-2); story 5.12 measures the App itself.
-/// </summary>
+/// <summary>A stand-in for the App's Overlay window showing the hollow dot, built the same way; Bench never references the App.</summary>
 internal sealed class OverlayHostWindow : Window
 {
     private const double DotSizeDip = 16;

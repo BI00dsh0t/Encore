@@ -2,14 +2,10 @@ using System.Text.Json;
 
 namespace Encore.Bench;
 
-/// <summary>One player's answers; <see cref="Status"/> is <c>checked</c> or <c>not-checked</c> (skipped).</summary>
-/// <param name="Method">Who checked it: <c>scripted</c> (<c>--auto</c>), <c>person</c>; null for a person's answers in a file written before it was recorded.</param>
+/// <summary>One player's answers; Status is <c>checked</c> or <c>not-checked</c>, and Method says who checked it.</summary>
 internal sealed record PlayerCheck(string Player, string Status, bool? Plays, bool? AvInSync, string? AudioTracks, string? Notes, string? Method = null);
 
-/// <summary><c>playback.json</c>.</summary>
-/// <param name="CaptureBorder">Whether WGC's capture border showed around the marker window (§7.4 <c>IsBorderRequired</c>): yes, no or not-checked.</param>
-/// <param name="Auto">True for an unattended <c>--auto</c> run; null in a file written before it was recorded.</param>
-/// <param name="BorderProbe">The screen grabs behind <see cref="CaptureBorder"/> in an <c>--auto</c> run.</param>
+/// <summary>The <c>playback.json</c> report; CaptureBorder is yes, no or not-checked.</summary>
 internal sealed record PlaybackReport(
     DateTimeOffset Created,
     string Clip,
@@ -23,27 +19,17 @@ internal sealed record PlaybackReport(
     BorderProbeResult? BorderProbe = null,
     IReadOnlyList<CodecPlayback>? Extras = null);
 
-/// <summary>
-/// Story 8.7: one more file the players were given, an HEVC or AV1 clip (<c>--codecs</c>) or an existing Recording
-/// (<c>--recording-file</c>). <paramref name="Encoded"/> is false, with <paramref name="Error"/>, when the GPU
-/// couldn't encode the codec: it has no file and no players.
-/// </summary>
+/// <summary>One more file the players were given; Encoded is false, with an error, when the GPU couldn't encode the codec.</summary>
 internal sealed record CodecPlayback(string Name, string Codec, string? File, bool Encoded, string? Error, int AudioTracks, IReadOnlyList<string> TrackTitles, IReadOnlyList<PlayerCheck> Players);
 
-/// <summary>
-/// <c>bench playback</c>: a short marked capture (both tracks, the default H.264 output), then a checklist
-/// the builder answers per NFR-4 player. HEVC and AV1 are not checked: they are labelled as possibly not
-/// playing everywhere. With <c>--auto</c> nobody answers: Chrome and Windows Media Player are scripted
-/// (<see cref="PlayerScripts"/>), screen grabs answer the capture-border question (<see cref="BorderProbe"/>),
-/// and every other player is <c>not-checked</c>, needing a person.
-/// </summary>
+/// <c>bench playback</c>: a short marked capture, then a checklist per player; <c>--auto</c> scripts what it can.
 internal static class PlaybackCheck
 {
     public const string FileName = "playback.json";
 
     public static readonly IReadOnlyList<string> DefaultPlayers = ["Discord", "Chrome", "VLC", "Windows Media Player", "DaVinci Resolve"];
 
-    /// <summary>The codecs <c>--codecs</c> makes clips of by default (story 8.7): H.264, then HEVC and AV1 where the GPU encodes them.</summary>
+    /// <summary>The codecs <c>--codecs</c> makes clips of by default: H.264, then HEVC and AV1 where the GPU encodes them.</summary>
     public static readonly IReadOnlyList<string> DefaultCodecs = ["h264", "hevc", "av1"];
 
     public static int Run(BenchContext context)
@@ -154,7 +140,7 @@ internal static class PlaybackCheck
         return 0;
     }
 
-    /// <summary>One extra file: its Tracks from ffprobe, then the scripted players (<c>--auto</c>) or every player needing a person.</summary>
+    /// <summary>One extra file: its Tracks from ffprobe, then the scripted players, or every player needing a person.</summary>
     private static CodecPlayback Extra(
         string name, string codec, string file, FfmpegTools tools, double toneDbfs, bool auto, IReadOnlyList<string> players, string work, string? chrome, int playSeconds, TimeSpan timeout,
         List<string> warnings)
@@ -206,10 +192,7 @@ internal static class PlaybackCheck
         return checks;
     }
 
-    /// <summary>
-    /// The checklist: the capture border, then per player whether it plays, A/V sync, its audio tracks and notes.
-    /// A skipped (or empty, or ended) answer records the border or the player as <c>not-checked</c>.
-    /// </summary>
+    /// <summary>The checklist: the capture border, then each player; a skipped answer records <c>not-checked</c>.</summary>
     internal static (string Border, List<PlayerCheck> Players) Questionnaire(IReadOnlyList<string> players, TextReader input, TextWriter output)
     {
         var border = Ask("Did a capture border show around the marker window while it recorded? (y/n/skip)", input, output) switch

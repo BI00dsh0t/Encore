@@ -8,23 +8,17 @@ namespace Encore.App.Settings;
 /// <summary>The outcome of a <see cref="SettingsSender.UpdateAsync"/>.</summary>
 internal abstract record SettingsSendResult
 {
-    /// <summary>The engine committed the ops; <c>settings.changed</c> for <paramref name="Revision"/> has arrived or is on its way.</summary>
+    /// <summary>The engine committed the ops; <c>settings.changed</c> for that revision has arrived or is on its way.</summary>
     public sealed record Committed(long Revision) : SettingsSendResult;
 
-    /// <summary>
-    /// <c>settings-conflict</c>: the document moved on since the caller rendered it. <paramref name="Current"/>
-    /// is the document to reload; nothing was changed or retried.
-    /// </summary>
+    /// <c>settings-conflict</c>: the document moved on since the caller rendered it; Current is the one to reload.
     public sealed record Conflict(SettingsDocument Current) : SettingsSendResult;
 
     /// <summary>The engine refused the ops, or couldn't be reached.</summary>
     public sealed record Failed(string Code, string Message) : SettingsSendResult;
 }
 
-/// <summary>
-/// The App's one way to change settings (AD-4): <c>settings.update</c> against the revision of the
-/// document the caller rendered. It never retries (AD-3); a conflict comes back as a reload.
-/// </summary>
+/// <summary>The App's one way to change settings: an update against the revision the caller rendered. It never retries.</summary>
 internal sealed class SettingsSender(IEngineSession engine)
 {
     public async Task<SettingsSendResult> UpdateAsync(SettingsDocument basis, IReadOnlyList<SettingsOp> ops, CancellationToken cancellationToken = default)
@@ -47,13 +41,10 @@ internal sealed class SettingsSender(IEngineSession engine)
     }
 }
 
-/// <summary>
-/// Typed reads and ops over a settings document's values, Global or one Game Profile's. A profile's value
-/// is its valid override of the key, else the Global value, as the engine resolves it (story 4.9).
-/// </summary>
+/// <summary>Typed reads and ops over a settings document's values; a profile's value is its override, else the Global one.</summary>
 internal static class SettingsValues
 {
-    /// <summary>The Global value of <paramref name="key"/>: the document's, or the key's default when it is missing or doesn't fit.</summary>
+    /// <summary>The Global value of a key: the document's, or the key's default when it is missing or doesn't fit.</summary>
     public static T Global<T>(SettingsDocument document, SettingKey<T> key) =>
         document.Global.TryGetValue(key.Name, out var raw) && key.TryRead(raw, out var value) ? value : key.Default;
 
@@ -61,7 +52,7 @@ internal static class SettingsValues
     public static bool HasOverride<T>(SettingsDocument document, SettingKey<T> key, string profileId) =>
         TryOverride(document, key, profileId, out _);
 
-    /// <summary>The value of <paramref name="key"/> for profile <paramref name="profileId"/>, or the Global value when it is null or has no valid override.</summary>
+    /// <summary>The value of a key for a profile, or the Global value when the profile is null or has no valid override.</summary>
     public static T Resolve<T>(SettingsDocument document, SettingKey<T> key, string? profileId) =>
         profileId is not null && TryOverride(document, key, profileId, out var value) ? value : Global(document, key);
 
