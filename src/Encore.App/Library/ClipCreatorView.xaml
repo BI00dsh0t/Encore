@@ -8,10 +8,14 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="Visible" />
         <theme:EmptyToCollapsedConverter x:Key="NotEmpty" />
-        <!-- The icons drawn more than once. -->
+        <!-- The icons drawn more than once, and the export menu's. -->
         <Geometry x:Key="BackArrowIcon">M 15,8 L 1,8 M 7,2 L 1,8 L 7,14</Geometry>
         <Geometry x:Key="PlusIcon">M 2,8 L 14,8 M 8,2 L 8,14</Geometry>
         <Geometry x:Key="MinusIcon">M 2,8 L 14,8</Geometry>
+        <Geometry x:Key="VideoIcon">M 1,1 L 15,1 L 15,15 L 1,15 Z M 5,1 L 5,15 M 11,1 L 11,15 M 1,5 L 5,5 M 1,11 L 5,11
+                                    M 11,5 L 15,5 M 11,11 L 15,11</Geometry>
+        <Geometry x:Key="AudioIcon">M 6,12 L 6,3 L 14,1 L 14,10 M 6,3 L 14,1 M 6,12 C 6,16 0,16 0,13 C 0,10 6,10 6,12
+                                    M 14,10 C 14,14 8,14 8,11 C 8,8 14,8 14,10</Geometry>
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <local:ClipCreatorPanel Margin="0,0,8,0"
@@ -32,7 +36,7 @@
                         VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="ExportButton"
-                                Click="Export"
+                                Click="OnExportClick"
                                 IsEnabled="{Binding CanOpenOptions}"
                                 Style="{DynamicResource EncoreClipJoinedButtonStyle}"
                                 AutomationProperties.Name="{Binding ExportLabel}">
@@ -49,7 +53,7 @@
                             <Button x:Name="ExportArrow"
                                     Padding="9"
                                     Style="{DynamicResource EncoreClipJoinedArrowButtonStyle}"
-                                    Click="ChooseType"
+                                    Click="OnExportTypeClick"
                                     IsEnabled="{Binding CanOpenOptions}"
                                     AutomationProperties.Name="Choose export type"
                                     ToolTip="Choose export type">
@@ -253,16 +257,16 @@
                                         <TextBox x:Name="StartBox"
                                                  Style="{DynamicResource EncoreClipTimeInputStyle}"
                                                  Text="{Binding StartText, UpdateSourceTrigger=LostFocus}"
-                                                 KeyDown="CommitTime"
+                                                 KeyDown="OnTimeBoxKeyDown"
                                                  AutomationProperties.Name="Selection start HH:MM:SS.mmm" />
                                         <Button Style="{DynamicResource EncoreClipToolButtonStyle}"
-                                                Click="StartMinus"
+                                                Click="OnStartMinusClick"
                                                 ToolTip="Start minus one millisecond"
                                                 AutomationProperties.Name="Start minus one millisecond">
                                             <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource MinusIcon}" />
                                         </Button>
                                         <Button Style="{DynamicResource EncoreClipToolButtonStyle}"
-                                                Click="StartPlus"
+                                                Click="OnStartPlusClick"
                                                 ToolTip="Start plus one millisecond"
                                                 AutomationProperties.Name="Start plus one millisecond">
                                             <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource PlusIcon}" />
@@ -282,16 +286,16 @@
                                         <TextBox x:Name="EndBox"
                                                  Style="{DynamicResource EncoreClipTimeInputStyle}"
                                                  Text="{Binding EndText, UpdateSourceTrigger=LostFocus}"
-                                                 KeyDown="CommitTime"
+                                                 KeyDown="OnTimeBoxKeyDown"
                                                  AutomationProperties.Name="Selection end HH:MM:SS.mmm" />
                                         <Button Style="{DynamicResource EncoreClipToolButtonStyle}"
-                                                Click="EndMinus"
+                                                Click="OnEndMinusClick"
                                                 ToolTip="End minus one millisecond"
                                                 AutomationProperties.Name="End minus one millisecond">
                                             <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource MinusIcon}" />
                                         </Button>
                                         <Button Style="{DynamicResource EncoreClipToolButtonStyle}"
-                                                Click="EndPlus"
+                                                Click="OnEndPlusClick"
                                                 ToolTip="End plus one millisecond"
                                                 AutomationProperties.Name="End plus one millisecond">
                                             <Path Style="{DynamicResource EncoreClipIconStyle}" Data="{StaticResource PlusIcon}" />
@@ -320,7 +324,7 @@
             <DockPanel Margin="0,6,0,0">
                 <Button Content="Keyboard shortcuts"
                         DockPanel.Dock="Right"
-                        Click="KeyboardHelp"
+                        Click="OnKeyboardHelpClick"
                         Style="{DynamicResource EncoreClipButtonStyle}"
                         FontSize="11"
                         Padding="0" />
