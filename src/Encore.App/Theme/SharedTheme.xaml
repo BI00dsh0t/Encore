@@ -13,7 +13,6 @@
     <sys:Double x:Key="EncoreSpacingLG">16</sys:Double>
     <sys:Double x:Key="EncoreSpacingXL">24</sys:Double>
     <sys:Double x:Key="EncoreSpacingXXL">32</sys:Double>
-    <sys:Double x:Key="EncoreNavWidth">200</sys:Double>
     <Thickness x:Key="EncorePagePadding">24</Thickness>
     <Thickness x:Key="EncoreCardPadding">16</Thickness>
     <Thickness x:Key="EncoreDialogContentPadding">24,32,24,24</Thickness>
