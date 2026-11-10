@@ -67,7 +67,8 @@ public sealed class MainWindowTests
             OpenSectionMenu();
             var current = (ComboBoxItem)sections.ItemContainerGenerator.ContainerFromItem(model.SelectedNavItem);
             // The left-button event is direct, so the click is raised as the tunnelling mouse-up the section list hears.
-            current.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseUpEvent });
+            var click = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseUpEvent };
+            current.RaiseEvent(click);
             Assert.False(drillIn.IsOpen);
             sections.IsDropDownOpen = false;
 

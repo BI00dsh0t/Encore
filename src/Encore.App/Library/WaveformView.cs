@@ -172,7 +172,10 @@ internal sealed partial class WaveformView : FrameworkElement
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
     private static DependencyProperty RegisterBrush(string name, Brush fallback) => DependencyProperty.Register(
-        name, typeof(Brush), typeof(WaveformView), new FrameworkPropertyMetadata(fallback, FrameworkPropertyMetadataOptions.AffectsRender));
+        name,
+        typeof(Brush),
+        typeof(WaveformView),
+        new FrameworkPropertyMetadata(fallback, FrameworkPropertyMetadataOptions.AffectsRender));
 
     private static object CoerceLaneOffset(DependencyObject view, object value) =>
         Math.Clamp(Math.Round((double)value), 0, ((WaveformView)view).ScrollMaximum);

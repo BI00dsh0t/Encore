@@ -105,7 +105,9 @@ internal partial class LibraryView
     // A click on a row selects or, double, opens; a header does nothing, and empty space clears the selection.
     private void OnListPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (ListPage is not { } page || e.OriginalSource is not DependencyObject source || VisualTreeSearch.IsInside<ScrollBar>(source, List))
+        if (ListPage is not { } page
+            || e.OriginalSource is not DependencyObject source
+            || VisualTreeSearch.IsInside<ScrollBar>(source, List))
         {
             return;
         }

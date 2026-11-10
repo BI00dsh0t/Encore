@@ -201,7 +201,8 @@ internal partial class PlayerView
     {
         var dpi = VisualTreeHelper.GetDpi(this);
         var area = PictureArea;
-        var (width, height) = PictureFit.Size(media.Width, media.Height, area.ActualWidth * dpi.DpiScaleX, area.ActualHeight * dpi.DpiScaleY);
+        var (width, height) = PictureFit.Size(
+            media.Width, media.Height, area.ActualWidth * dpi.DpiScaleX, area.ActualHeight * dpi.DpiScaleY);
         if (_surface is { Width: > 0 } current && (_settle.IsEnabled || (current.Width == width && current.Height == height)))
         {
             return current;
@@ -300,7 +301,8 @@ internal partial class PlayerView
         if (page.SupportsExternalActions)
         {
             menu.Items.Add(new Separator());
-            menu.Items.Add(new MenuItem { Header = "Open in default player", Style = itemStyle, Command = page.OpenInDefaultPlayerCommand });
+            var open = new MenuItem { Header = "Open in default player", Style = itemStyle, Command = page.OpenInDefaultPlayerCommand };
+            menu.Items.Add(open);
         }
 
         return menu;

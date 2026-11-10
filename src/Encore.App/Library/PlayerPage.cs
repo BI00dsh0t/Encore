@@ -510,7 +510,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         {
             surface = ensureSurface();
         }
-#pragma warning disable CA1031 // Every GPU failure here is the page's failure: narrowing missed OutOfMemoryException and ArgumentException.
+#pragma warning disable CA1031 // Any GPU failure here fails the page; a narrower catch missed OutOfMemoryException.
         catch (Exception)
 #pragma warning restore CA1031
         {
@@ -528,7 +528,7 @@ internal sealed class PlayerPage : Observable, IDisposable
         {
             Player.CopyFrame(surface);
         }
-#pragma warning disable CA1031 // A frame the player can't copy now (closing, its device lost, any mapped HRESULT) is skipped, never a crash.
+#pragma warning disable CA1031 // A frame the player can't copy now (closing, device lost) is skipped, never a crash.
         catch (Exception)
 #pragma warning restore CA1031
         {

@@ -97,7 +97,8 @@ public sealed class ShellTests
                 var library = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromItem(model.LibraryNav);
                 var fill = (Border)library.Template.FindName("Fill", library);
                 NavPress.SetIsPressed(library, true);
-                Assert.Equal(((SolidColorBrush)window.FindResource("SubtleFillColorTertiaryBrush")).Color, ((SolidColorBrush)fill.Background).Color);
+                var pressed = (SolidColorBrush)window.FindResource("SubtleFillColorTertiaryBrush");
+                Assert.Equal(pressed.Color, ((SolidColorBrush)fill.Background).Color);
                 NavPress.SetIsPressed(library, false);
                 Assert.Equal("Library", ((TextBlock)library.Template.FindName("Label", library)).Text);
 
