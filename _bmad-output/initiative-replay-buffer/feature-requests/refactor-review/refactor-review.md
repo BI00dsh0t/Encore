@@ -178,6 +178,17 @@ Scope: `CaptureSession.cs` (3,349 lines), `EncoderChain`, `ReplayRings`.
 - **Tests run after every phase of medium risk or above** (phases 2 to 7): the default suite of each project the phase touched, one project at a time, by day. Phases 6 and 7 touch the capture, encode and audio path, so they also get a Heavy run at night before they merge. A failure that the baseline didn't have blocks the merge.
 - Low-risk phases (0, 1 and 8) build with 0 warnings and run no tests.
 - Rough size: phases 0, 1 and 8 are a session each; phases 2, 4 and 6 are one or two; phases 3, 5 and 7 are two or three.
+- **Model per phase** (builder, 2026-11-10: "use appropriate model for each session"):
+
+  | Phase | Model | Why |
+  |---|---|---|
+  | 1 | Fable 5.2 (as run) | Sonnet 5.5 would have done for this mechanical pass |
+  | 2, 3 | Fable 5.2 (as run) | large splits of the App's view code |
+  | 4 | Opus 5.5 | medium risk, start-up order and argument parsing |
+  | 5 | Fable 5.2 | high risk: the session and Library actors' concurrency |
+  | 6 | Opus 5.5 | medium risk, native interop that stays as it is |
+  | 7 | Fable 5.2 | highest risk: the capture hot path |
+  | 8 | Sonnet 5.5 | the read-through stands in for a junior reader; fixes are small |
 
 ## Decisions (builder, 2026-11-10)
 
