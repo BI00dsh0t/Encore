@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace Encore.App.Tests;
@@ -23,11 +24,23 @@ internal static class Sta
             {
                 failure = ExceptionDispatchInfo.Capture(e);
             }
+            finally
+            {
+                ShutDownDispatcher();
+            }
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         thread.Join();
         failure?.Throw();
+    }
+
+    // A dispatcher left running keeps its windows until the process exits, and 200 of them made the test host exit too slowly.
+    private static void ShutDownDispatcher()
+    {
+        // A popup that still holds the mouse would ask WPF's pen thread during shutdown, after that thread has gone.
+        Mouse.Capture(null);
+        Dispatcher.CurrentDispatcher.InvokeShutdown();
     }
 
     /// <summary>Runs the current thread's dispatcher for <paramref name="duration"/>, so windows show, render and settle.</summary>
