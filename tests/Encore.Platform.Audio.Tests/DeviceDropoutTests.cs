@@ -92,10 +92,7 @@ internal static class Wait
     }
 }
 
-/// <summary>
-/// The hub's dropout and rebind (R5) over fake clients and a fake endpoint list: nothing here touches
-/// a Windows device. Device A plays 440 Hz, B 1 kHz.
-/// </summary>
+/// <summary>The hub's dropout and rebind over fake clients and a fake endpoint list; nothing touches a Windows device.</summary>
 public sealed class DeviceDropoutTests : IDisposable
 {
     private const string A = "{0.0.0.00000000}.{aaaaaaaa-0000-0000-0000-000000000001}";
@@ -189,7 +186,7 @@ public sealed class DeviceDropoutTests : IDisposable
         Assert.Equal(new AudioDeviceDropout(ANew, SettingsFlow.Output, "Game", "BEACN"), Assert.Single(_resumed).Dropout);
         Assert.Equal(ANew, subscription.Diagnostics.Endpoint.Id);
 
-        // A subscriber to the new id shares the rebound client (AD-20).
+        // A subscriber to the new id shares the rebound client.
         using (_hub.SubscribeDevice(ANew, SettingsFlow.Output, new EnergySubscriber()))
         {
             Assert.Equal(1, _hub.OpenDeviceCount);
@@ -200,7 +197,7 @@ public sealed class DeviceDropoutTests : IDisposable
     [Fact]
     public void ASessionDeviceWhoseSavedIdIsGoneOpensTheEndpointWithItsNamesUnlessTwoShareThem()
     {
-        // Story 8.6: the mixer restarted with new ids while nothing had A open.
+        // The mixer restarted with new ids while nothing had A open.
         _source.Remove(A, raise: false);
         _source.Add(ANew, "Game", "BEACN", SettingsFlow.Output, raise: false);
         var saved = new Core.Sessions.SessionAudioDevice(A, SettingsFlow.Output, "Game", ParentName: "BEACN");

@@ -7,10 +7,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Platform.Audio.Tests;
 
-/// <summary>
-/// The hub's endpoint watcher on this PC. Nothing here changes a real device: the notifications
-/// are made by calling the registered client through its <c>IMMNotificationClient</c> vtable.
-/// </summary>
+/// <summary>The endpoint watcher on this PC; notifications are faked through the client's vtable, so no device changes.</summary>
 public sealed unsafe class EndpointWatcherTests : IDisposable
 {
     private const string FakeId = "{0.0.0.00000000}.{00000000-0000-0000-0000-0000000000aa}";
@@ -100,7 +97,7 @@ public sealed unsafe class EndpointWatcherTests : IDisposable
     [Fact]
     public void AConsoleDefaultChangeRaisesChanged()
     {
-        // Story 10.4: the list marks each flow's console default.
+        // The list marks each flow's console default.
         Client->OnDefaultDeviceChanged(EDataFlow.eCapture, ERole.eConsole, FakeId);
 
         Assert.True(WaitFor(1, Within), "no change after a default change");
