@@ -188,7 +188,8 @@ internal sealed class MonitorPicker : Observable
         }
 
         // Attached screens in the list's order, then the ones that aren't attached.
-        var ordered = _monitors.Select(Id).Where(ids.Contains).Concat(ids.Where(id => !_monitors.Any(m => Same(Id(m), id)))).ToList();
+        var attached = _monitors.Select(Id).Where(ids.Contains);
+        var ordered = attached.Concat(ids.Where(id => !_monitors.Any(monitor => Same(Id(monitor), id)))).ToList();
         _lastChosen = ordered;
         Choose(MonitorRecordingScreens.Selected(ordered));
     }
@@ -196,10 +197,11 @@ internal sealed class MonitorPicker : Observable
     /// <summary>The id a selection stores for a screen: its DisplayConfig path, else (an older engine) its device name.</summary>
     private static string Id(DisplayMonitor monitor) => monitor.MonitorId ?? monitor.DeviceName;
 
-    private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    private static bool Same(string first, string second) => string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
 
     // Core's resolver rule: a saved id names a screen by its MonitorId, else by its device name.
-    private static bool Matches(DisplayMonitor monitor, string id) => (monitor.MonitorId is { } monitorId && Same(monitorId, id)) || Same(monitor.DeviceName, id);
+    private static bool Matches(DisplayMonitor monitor, string id) =>
+        (monitor.MonitorId is { } monitorId && Same(monitorId, id)) || Same(monitor.DeviceName, id);
 
     private static bool Matches(ScreenRow row, string id) => row.Monitor is { } monitor ? Matches(monitor, id) : Same(row.Id, id);
 
@@ -219,6 +221,9 @@ internal sealed class MonitorPicker : Observable
         _ => "H.264",
     };
 
+    // An attached screen's id as it is now, so a value from the old key or an older engine catches up.
+    private string CurrentId(string id) => _monitors.FirstOrDefault(monitor => Matches(monitor, id)) is { } attached ? Id(attached) : id;
+
     private void Choose(MonitorRecordingScreens screens)
     {
         _screens = screens;
@@ -231,14 +236,13 @@ internal sealed class MonitorPicker : Observable
     {
         if (_screens is { Mode: MonitorScreensMode.Selected, Monitors: { } ids })
         {
-            // An attached screen's id as it is now, so a value from the old key or an older engine catches up.
-            return [.. ids.Select(id => _monitors.FirstOrDefault(m => Matches(m, id)) is { } m ? Id(m) : id).Distinct(StringComparer.OrdinalIgnoreCase)];
+            return [.. ids.Select(CurrentId).Distinct(StringComparer.OrdinalIgnoreCase)];
         }
 
         if (_screens is null)
         {
-            var legacy = (_legacy is null ? null : _monitors.FirstOrDefault(m => Same(m.DeviceName, _legacy)))
-                ?? _monitors.FirstOrDefault(m => m.Primary)
+            var legacy = (_legacy is null ? null : _monitors.FirstOrDefault(monitor => Same(monitor.DeviceName, _legacy)))
+                ?? _monitors.FirstOrDefault(monitor => monitor.Primary)
                 ?? _monitors.FirstOrDefault();
             return legacy is null ? [] : [Id(legacy)];
         }
@@ -276,50 +280,63 @@ internal sealed class MonitorPicker : Observable
     {
         var all = IsAllScreens;
         var chosen = all ? [] : ChosenIds();
-        var lastOne = chosen.Count == 1;
-
-        // Attached screens, then chosen ones that aren't attached (by the name they were last seen with).
-        List<(string Id, DisplayMonitor? Monitor, string Label, bool Chosen)> wanted = [];
-        for (var i = 0; i < _monitors.Count; i++)
-        {
-            var m = _monitors[i];
-            var label = $"{Number(m.DeviceName, i + 1)}  {m.FriendlyName} · {m.Width} × {m.Height}"
-                + (m.RefreshHz is { } hz ? $" · {hz} Hz" : "")
-                + (m.Primary ? " · primary" : "")
-                + (m.Hdr ? " · HDR, recorded in SDR" : "");
-            wanted.Add((Id(m), m, label, all || chosen.Any(id => Matches(m, id))));
-        }
-
-        // Before the first list, no chosen screen is called not connected.
-        foreach (var id in _listed ? chosen.Where(id => !_monitors.Any(m => Matches(m, id))) : [])
-        {
-            var name = _known.Values.FirstOrDefault(k => Matches(k, id)) is { } seen
-                ? $"{Number(seen.DeviceName, wanted.Count + 1)}  {seen.FriendlyName}"
-                : "Unknown screen";
-            wanted.Add((id, null, $"{name} · Not connected — skipped", true));
-        }
+        var wanted = WantedRows(all, chosen);
 
         // Rows keep their identity while the list is the same, so a focused check box or tile keeps focus.
-        var rows = wanted.Select(w => w.Id).SequenceEqual(_rows.Select(r => r.Id), StringComparer.OrdinalIgnoreCase)
+        var rows = wanted.Select(want => want.Id).SequenceEqual(_rows.Select(row => row.Id), StringComparer.OrdinalIgnoreCase)
             ? _rows
-            : [.. wanted.Select(w => new ScreenRow(this, w.Id))];
+            : [.. wanted.Select(want => new ScreenRow(this, want.Id))];
+        var lastOne = chosen.Count == 1;
         for (var i = 0; i < rows.Count; i++)
         {
             var (_, monitor, label, isChosen) = wanted[i];
-            rows[i].Show(monitor, label, isChosen, enabled: !all, lastOne && isChosen && !all ? "At least one screen stays chosen. Tick another screen first." : null);
+            var toolTip = lastOne && isChosen && !all ? "At least one screen stays chosen. Tick another screen first." : null;
+            rows[i].Show(monitor, label, isChosen, enabled: !all, toolTip);
         }
 
         Rows = rows;
         ShowPreview();
-        OutputText = Output(all ? _monitors : [.. _monitors.Where(m => chosen.Any(id => Matches(m, id)))], chosen.Count);
+        OutputText = Output(all ? _monitors : [.. _monitors.Where(monitor => chosen.Any(id => Matches(monitor, id)))], chosen.Count);
         OnPropertyChanged(nameof(IsAllScreens));
         OnPropertyChanged(nameof(IsChosenScreens));
     }
 
+    // Attached screens, then chosen ones that aren't attached (by the name they were last seen with).
+    private List<(string Id, DisplayMonitor? Monitor, string Label, bool Chosen)> WantedRows(bool all, IReadOnlyList<string> chosen)
+    {
+        List<(string Id, DisplayMonitor? Monitor, string Label, bool Chosen)> wanted = [];
+        for (var i = 0; i < _monitors.Count; i++)
+        {
+            var monitor = _monitors[i];
+            wanted.Add((Id(monitor), monitor, AttachedLabel(monitor, i + 1), all || chosen.Any(id => Matches(monitor, id))));
+        }
+
+        // Before the first list, no chosen screen is called not connected.
+        foreach (var id in _listed ? chosen.Where(id => !_monitors.Any(monitor => Matches(monitor, id))) : [])
+        {
+            wanted.Add((id, null, $"{MissingName(id, wanted.Count + 1)} · Not connected — skipped", true));
+        }
+
+        return wanted;
+    }
+
+    // "1  Dell U2723QE · 2560 × 1440 · 144 Hz · primary"
+    private static string AttachedLabel(DisplayMonitor monitor, int position) =>
+        $"{Number(monitor.DeviceName, position)}  {monitor.FriendlyName} · {monitor.Width} × {monitor.Height}"
+        + (monitor.RefreshHz is { } hertz ? $" · {hertz} Hz" : "")
+        + (monitor.Primary ? " · primary" : "")
+        + (monitor.Hdr ? " · HDR, recorded in SDR" : "");
+
+    // The name a chosen screen had when it was last attached.
+    private string MissingName(string id, int position) =>
+        _known.Values.FirstOrDefault(known => Matches(known, id)) is { } seen
+            ? $"{Number(seen.DeviceName, position)}  {seen.FriendlyName}"
+            : "Unknown screen";
+
     /// <summary>The attached screens at their virtual-desktop positions, scaled to fit the preview.</summary>
     private void ShowPreview()
     {
-        if (_monitors.Count == 0 || _monitors.Any(m => m.X is null || m.Y is null))
+        if (_monitors.Count == 0 || _monitors.Any(monitor => monitor.X is null || monitor.Y is null))
         {
             if (_tiles.Count > 0)
             {
@@ -330,23 +347,23 @@ internal sealed class MonitorPicker : Observable
             return;
         }
 
-        var left = _monitors.Min(m => m.X!.Value);
-        var top = _monitors.Min(m => m.Y!.Value);
-        var width = _monitors.Max(m => m.X!.Value + m.Width) - left;
-        var height = _monitors.Max(m => m.Y!.Value + m.Height) - top;
+        var left = _monitors.Min(monitor => monitor.X!.Value);
+        var top = _monitors.Min(monitor => monitor.Y!.Value);
+        var width = _monitors.Max(monitor => monitor.X!.Value + monitor.Width) - left;
+        var height = _monitors.Max(monitor => monitor.Y!.Value + monitor.Height) - top;
         var scale = Math.Min(PreviewMaxWidth / width, PreviewMaxHeight / height);
         List<ScreenTile> tiles = [];
         for (var i = 0; i < _monitors.Count; i++)
         {
-            var m = _monitors[i];
+            var monitor = _monitors[i];
             tiles.Add(new ScreenTile(
                 _rows[i],
-                Number(m.DeviceName, i + 1),
-                m.Primary,
-                ((m.X!.Value - left) * scale) + TileGap,
-                ((m.Y!.Value - top) * scale) + TileGap,
-                Math.Max(1, (m.Width * scale) - (2 * TileGap)),
-                Math.Max(1, (m.Height * scale) - (2 * TileGap))));
+                Number(monitor.DeviceName, i + 1),
+                monitor.Primary,
+                ((monitor.X!.Value - left) * scale) + TileGap,
+                ((monitor.Y!.Value - top) * scale) + TileGap,
+                Math.Max(1, (monitor.Width * scale) - (2 * TileGap)),
+                Math.Max(1, (monitor.Height * scale) - (2 * TileGap))));
         }
 
         if (!tiles.SequenceEqual(_tiles))
@@ -375,7 +392,7 @@ internal sealed class MonitorPicker : Observable
         }
 
         // Before the probe, HEVC and AV1 are taken as available, as they are on most graphics cards.
-        bool CanEncode(VideoCodec codec) => !_options.Probed || _options.Codecs.Any(c => c.Codec == codec);
+        bool CanEncode(VideoCodec codec) => !_options.Probed || _options.Codecs.Any(option => option.Codec == codec);
         var plan = MonitorCanvasRule.Plan(screens, _codec, CanEncode);
         var text = $"Recorded as one {plan.Width} × {plan.Height} video{(plan.Scaled ? " (scaled down)" : "")}.";
         if (plan.Codec != _codec)
@@ -392,77 +409,3 @@ internal sealed class MonitorPicker : Observable
         return text;
     }
 }
-
-/// <summary>One screen's row in the <see cref="MonitorPicker"/>: a check box with its number, name, mode, primary and HDR.</summary>
-internal sealed class ScreenRow(MonitorPicker picker, string id) : Observable
-{
-    private string _label = "";
-    private bool _isChosen;
-    private bool _isEnabled = true;
-    private string? _toolTip;
-    private DisplayMonitor? _monitor;
-
-    /// <summary>The id the selection stores for this screen.</summary>
-    public string Id { get; } = id;
-
-    /// <summary>The attached screen; null for a chosen screen that isn't attached.</summary>
-    public DisplayMonitor? Monitor => _monitor;
-
-    /// <summary>"1  Dell U2723QE · 2560 × 1440 · 144 Hz · primary", or "… · Not connected — skipped".</summary>
-    public string Label
-    {
-        get => _label;
-        private set => Set(ref _label, value);
-    }
-
-    /// <summary>The screen is attached; a chosen one that isn't shows greyed.</summary>
-    public bool IsConnected => _monitor is not null;
-
-    /// <summary>Ticked: recorded. Setting it ticks or unticks the screen through the picker.</summary>
-    public bool IsChosen
-    {
-        get => _isChosen;
-        set
-        {
-            if (value != _isChosen)
-            {
-                picker.Toggle(this, value);
-            }
-        }
-    }
-
-    /// <summary>Chosen screens: the builder can tick it. All screens shows every screen ticked and disabled.</summary>
-    public bool IsEnabled
-    {
-        get => _isEnabled;
-        private set => Set(ref _isEnabled, value);
-    }
-
-    /// <summary>Why the last chosen screen can't be unticked; null otherwise.</summary>
-    public string? ToolTip
-    {
-        get => _toolTip;
-        private set => Set(ref _toolTip, value);
-    }
-
-    /// <summary>Shows <see cref="IsChosen"/> again, after a refused change.</summary>
-    internal void Refresh() => OnPropertyChanged(nameof(IsChosen));
-
-    internal void Show(DisplayMonitor? monitor, string label, bool isChosen, bool enabled, string? toolTip)
-    {
-        if (!Equals(_monitor, monitor))
-        {
-            _monitor = monitor;
-            OnPropertyChanged(nameof(Monitor));
-            OnPropertyChanged(nameof(IsConnected));
-        }
-
-        Label = label;
-        Set(ref _isChosen, isChosen, nameof(IsChosen));
-        IsEnabled = enabled;
-        ToolTip = toolTip;
-    }
-}
-
-/// <summary>One attached screen in the layout preview, in preview pixels; a record, so an unchanged layout keeps its tiles.</summary>
-internal sealed record ScreenTile(ScreenRow Row, string Number, bool Primary, double Left, double Top, double Width, double Height);
