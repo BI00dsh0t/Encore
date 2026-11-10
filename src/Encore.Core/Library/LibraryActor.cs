@@ -9,22 +9,15 @@ namespace Encore.Core.Library;
 /// <summary>The single-threaded Library index: every change, disk check and save runs on its own thread. docs/code-notes.md.</summary>
 public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 {
-    private const int WatcherBufferSize = 64 * 1024;
     private const int SharingRetries = 10;
     private const int ErrorSharingViolation = unchecked((int)0x80070020);
     private const int ErrorLockViolation = unchecked((int)0x80070021);
-
-    // How long watcher events gather before their paths are reconciled, and the retry of a busy file.
-    private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(250);
 
     /// <summary>How soon a failed save of the index is tried again.</summary>
     internal static readonly TimeSpan SaveRetryDelay = TimeSpan.FromSeconds(1);
 
     // An incomplete file written this recently may still be growing, so it is checked again.
     private static readonly TimeSpan RecentWrite = TimeSpan.FromSeconds(2);
-
-    // How long the watcher's echo of the actor's own file operation is ignored.
-    private static readonly TimeSpan RegistrationTime = TimeSpan.FromSeconds(5);
 
     // A rename or recycle that meets a sharing violation (e.g. the length worker's read) is tried again.
     private static readonly TimeSpan SharingRetryDelay = TimeSpan.FromMilliseconds(50);
@@ -46,7 +39,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private readonly TimeProvider _time;
     private readonly Action<Exception> _failed;
     private readonly bool _createMissingFolder;
-    private readonly Func<string, double?>? _readLength;
     private readonly Action<LibraryFolderChanged>? _folderChanged;
     private readonly Func<string, bool>? _recycle;
     private readonly Func<string, string>? _finalPath;
@@ -58,31 +50,21 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     // Actor thread only: the items, and what is known of their writes and lengths.
     private readonly LibraryIndex _index;
 
-    // The length worker's jobs; written by the actor thread only.
-    private readonly Channel<LengthJob> _lengthJobs = Channel.CreateUnbounded<LengthJob>(
-        new UnboundedChannelOptions { SingleReader = true, SingleWriter = true, AllowSynchronousContinuations = false });
+    // Reads lengths on a thread of its own; null without the port.
+    private readonly LibraryLengthWorker? _lengths;
 
-    private readonly Thread? _lengthThread;
+    // Its callbacks run on the watcher's threads and only post.
+    private readonly LibraryWatcher _watcher;
 
-    // Actor thread only: the paths of the actor's own file operations, by absolute path, to their expiry.
-    private readonly Dictionary<string, Registration> _registered = new(StringComparer.OrdinalIgnoreCase);
-
-    // Actor thread only: the absolute paths watcher events named, reconciled once they settle.
-    private readonly HashSet<string> _pending = new(StringComparer.OrdinalIgnoreCase);
-
-    // Actor thread only: the keys the running Cleanup pass couldn't delete; cleared when a pass starts.
-    private readonly HashSet<string> _cleanupSkip = new(StringComparer.OrdinalIgnoreCase);
-
-    // Actor thread only: whether the running pass found each key's file inside the Output Folder; the delete checks again.
-    private readonly Dictionary<string, bool> _cleanupInside = new(StringComparer.OrdinalIgnoreCase);
+    // Actor thread only, each of these.
+    private readonly OwnFileOperations _ownOperations;
+    private readonly PendingChecks _pending = new();
+    private readonly CleanupPass _pass = new();
+    private readonly CleanupLimitWarning _limitWarning = new();
 
     private string _folder = "";
-    private FileSystemWatcher? _watcher;
-    private ITimer? _settle;
     private ITimer? _saveRetry;
     private bool _saveFailing;
-    private bool _settleArmed;
-    private bool _rescanPending;
     private bool _cleanupBlocked;
     private bool _dirty;
     private bool _started;
@@ -90,13 +72,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private CleanupSettings _lastCleanup = CleanupOff;
     private ITimer? _cleanupFirst;
     private ITimer? _cleanupPeriodic;
-    private bool _passRunning;
-    private int _passDeleted;
-    private long _passBytes;
-    private int _passSkipped;
-    private bool _unreachableRaised;
-    private long _registrations;
-    private volatile bool _watching = true;
     private int _disposed;
 
     /// <summary>The publish callbacks run on the actor thread; each optional port is explained in docs/code-notes.md.</summary>
@@ -135,7 +110,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _failed = failed ?? throw new ArgumentNullException(nameof(failed));
         _createMissingFolder = createMissingFolder;
-        _readLength = readLength;
         _folderChanged = folderChanged;
         _recycle = recycle;
         _cleanup = cleanup;
@@ -144,13 +118,17 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         _finalPath = finalPath;
         _cleanupBlocked = cleanupBlocked;
         _index = new LibraryIndex(items, added, changed, removed, () => _dirty = true);
+        _ownOperations = new OwnFileOperations(time, (path, id) => _channel.Writer.TryWrite(new Expired(path, id)));
+        _watcher = new LibraryWatcher(
+            (kind, path, oldPath) => _channel.Writer.TryWrite(new Watched(kind, path, oldPath)),
+            OnWatcherError,
+            failed);
 
         _channel.Writer.TryWrite(new Start());
         _thread = new Thread(Run) { Name = "LibraryActor", IsBackground = true };
         if (readLength is not null)
         {
-            _lengthThread = new Thread(RunLengths) { Name = "LibraryLength", IsBackground = true, Priority = ThreadPriority.Lowest };
-            _lengthThread.Start();
+            _lengths = new LibraryLengthWorker(readLength, failed, () => Volatile.Read(ref _disposed) != 0, PostLengthRead);
         }
 
         _thread.Start();
@@ -159,12 +137,12 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>A test seam: whether the watcher raises events; setting it waits until the actor has applied it.</summary>
     internal bool Watching
     {
-        get => _watching;
+        get => _watcher.IsRaising;
         set
         {
             if (Environment.CurrentManagedThreadId == _thread.ManagedThreadId)
             {
-                SetWatching(value);
+                _watcher.SetRaising(value);
                 return;
             }
 
@@ -251,11 +229,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             _thread.Join();
         }
 
-        _lengthJobs.Writer.TryComplete();
-        if (_lengthThread is not null && Environment.CurrentManagedThreadId != _lengthThread.ManagedThreadId)
-        {
-            _lengthThread.Join();
-        }
+        _lengths?.Stop();
     }
 
     // A command's request, answered by the actor; faulted at once once the actor is disposed.
@@ -309,46 +283,17 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             }
         }
 
-        StopWatcher();
-        _settle?.Dispose();
+        _watcher.Stop();
+        _pending.Stop();
         _saveRetry?.Dispose();
         _cleanupFirst?.Dispose();
         _cleanupPeriodic?.Dispose();
-        DisposeRegistrations();
+        _ownOperations.Clear();
     }
 
-    // The length worker: it only reads a file and posts the result to the actor.
-    private void RunLengths()
-    {
-        var reader = _lengthJobs.Reader;
-        while (reader.WaitToReadAsync().AsTask().GetAwaiter().GetResult())
-        {
-            while (reader.TryRead(out var job))
-            {
-                // Once disposed, the actor would drop the result.
-                if (Volatile.Read(ref _disposed) != 0)
-                {
-                    continue;
-                }
-
-                double? length = null;
-                var modified = default(DateTime);
-                try
-                {
-                    modified = File.GetLastWriteTimeUtc(job.Path);
-                    length = _readLength!(job.Path);
-                }
-#pragma warning disable CA1031 // A reader that throws only costs the item its length.
-                catch (Exception e)
-#pragma warning restore CA1031
-                {
-                    _failed(e);
-                }
-
-                _channel.Writer.TryWrite(new LengthRead(job.Folder, job.Key, job.Size, modified, length));
-            }
-        }
-    }
+    // Runs on the length worker's thread: it only posts.
+    private void PostLengthRead(LengthJob job, DateTime modified, double? length) =>
+        _channel.Writer.TryWrite(new LengthRead(job.Folder, job.Key, job.Size, modified, length));
 
     private void Handle(Message message)
     {
@@ -447,7 +392,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
     private void OnWatch(Watch watch)
     {
-        SetWatching(watch.On);
+        _watcher.SetRaising(watch.On);
         watch.Done.TrySetResult();
     }
 
@@ -460,7 +405,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             // A step that fails ends its pass, so the next trigger starts another.
-            _passRunning = false;
+            _pass.IsRunning = false;
             _failed(e);
         }
     }
@@ -481,7 +426,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     // The gap between Load and the watcher is covered by one rescan; a corrupt load is saved at once.
     private void OnStart()
     {
-        _settle = _time.CreateTimer(_ => _channel.Writer.TryWrite(new Settle()), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _pending.Start(_time, () => _channel.Writer.TryWrite(new Settle()));
         _folder = LibraryPaths.FullFolder(_outputFolder());
 
         // A length loaded from library.json belongs to the file's current modified time (Load checked it).
@@ -498,7 +443,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         }
 
         CreateMissingFolder();
-        StartWatcher();
+        _watcher.Start(_folder);
         Rescan();
         foreach (var item in _index.Items.Where(i => !i.BeingWritten && i.LengthSeconds is null).ToList())
         {
@@ -576,11 +521,11 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         if ((watched.Kind == WatcherChangeTypes.Created && Directory.Exists(path))
             || (watched.Kind == WatcherChangeTypes.Deleted && !LibraryPaths.IsMp4(path) && _index.HasKeysUnder(key)))
         {
-            PendRescan();
+            _pending.AddRescan();
             return;
         }
 
-        Pend(path);
+        _pending.Add(path);
     }
 
     private void OnRenamed(string oldPath, string newPath)
@@ -600,7 +545,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
                 MoveKeysUnder(oldKey, newKey);
             }
 
-            PendRescan();
+            _pending.AddRescan();
             return;
         }
 
@@ -612,32 +557,30 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             }
             else if (!LibraryPaths.IsMp4(oldPath) && _index.HasKeysUnder(oldKey))
             {
-                PendRescan();
+                _pending.AddRescan();
             }
             else
             {
-                Pend(oldPath);
+                _pending.Add(oldPath);
             }
         }
 
         if (newIn)
         {
-            Pend(newPath);
+            _pending.Add(newPath);
         }
     }
 
     private void OnSettle()
     {
-        _settleArmed = false;
-        if (_rescanPending)
+        _pending.Settled();
+        if (_pending.RescanPending)
         {
             RescanNow();
             return;
         }
 
-        var paths = _pending.ToList();
-        _pending.Clear();
-        foreach (var path in paths)
+        foreach (var path in _pending.TakePaths())
         {
             Reconcile(path);
         }
@@ -647,14 +590,13 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     {
         _failed(error.Error);
         CreateMissingFolder();
-        StartWatcher();
+        _watcher.Start(_folder);
         RescanNow();
     }
 
     // A pending rescan, or a watcher restart, rescans the whole folder; its end may start a Cleanup pass.
     private void RescanNow()
     {
-        _rescanPending = false;
         _pending.Clear();
         Rescan();
         StartCleanup();
@@ -662,10 +604,8 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
 
     private void OnExpired(Expired expired)
     {
-        if (_registered.TryGetValue(expired.Path, out var registration) && registration.Id == expired.Id)
+        if (_ownOperations.Expire(expired.Path, expired.Id))
         {
-            _registered.Remove(expired.Path);
-            registration.Timer.Dispose();
             Reconcile(expired.Path);
         }
     }
@@ -681,14 +621,12 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         _folder = folder;
         _index.Clear();
         _pending.Clear();
-        _cleanupSkip.Clear();
-        _rescanPending = false;
-        DisposeRegistrations();
-        _registered.Clear();
+        _pass.Skipped.Clear();
+        _ownOperations.Clear();
         CreateMissingFolder();
 
         // Watched before the scan, so a file created meanwhile is reconciled once it settles.
-        StartWatcher();
+        _watcher.Start(_folder);
         foreach (var path in LibraryFiles.Files(folder, LibraryPaths.Extension, _failed))
         {
             if (LibraryPaths.TryKey(folder, path, out var key) && Check(path) is { } file)
@@ -716,22 +654,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         }
 
         StartCleanup();
-    }
-
-    private void SetWatching(bool on)
-    {
-        _watching = on;
-        if (_watcher is not null)
-        {
-            try
-            {
-                _watcher.EnableRaisingEvents = on;
-            }
-            catch (Exception e) when (e is IOException or ArgumentException)
-            {
-                _failed(e);
-            }
-        }
     }
 
     /// <summary>Checks one path against disk: removes, keeps or lists it; a busy or incomplete file is checked again later.</summary>
@@ -820,7 +742,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         var file = new FileInfo(full);
         if (!file.Exists)
         {
-            Pend(full);
+            _pending.Add(full);
             Refuse(done, path);
             return false;
         }
@@ -917,8 +839,8 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             return;
         }
 
-        Register(from);
-        Register(to);
+        _ownOperations.Register(from);
+        _ownOperations.Register(to);
         if (!Retried(() => File.Move(from, to), request.Done, "The file couldn't be renamed."))
         {
             return;
@@ -948,7 +870,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         var recycled = false;
         if (_recycle is { } recycle)
         {
-            Register(path);
+            _ownOperations.Register(path);
             if (!Retried(() => recycled = recycle(path), request.Done, "The file couldn't be deleted."))
             {
                 return;
@@ -1004,7 +926,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private bool CleanupOpen(CleanupSettings limits) =>
         (limits.MaxBytes is not null || limits.MaxAgeSeconds is not null)
         && _started
-        && !_rescanPending
+        && !_pending.RescanPending
         && !_cleanupBlocked
         && _time.GetUtcNow() - _startedAt >= CleanupStartDelay;
 
@@ -1045,7 +967,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>Starts a Cleanup pass unless one runs or Cleanup may not run: logs its plan, then posts its first step.</summary>
     private void StartCleanup()
     {
-        if (_passRunning)
+        if (_pass.IsRunning)
         {
             return;
         }
@@ -1053,23 +975,19 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         var limits = CleanupLimits();
         if (!CleanupOpen(limits))
         {
-            RearmWhenOff(limits);
+            _limitWarning.RearmWhenOff(limits);
             return;
         }
 
-        _cleanupSkip.Clear();
-        _cleanupInside.Clear();
-        _passDeleted = 0;
-        _passBytes = 0;
-        _passSkipped = 0;
-        var plan = PlanCleanup(limits, _cleanupSkip, _cleanupInside);
+        _pass.Reset();
+        var plan = PlanCleanup(limits, _pass.Skipped, _pass.InsideOutputFolder);
         if (plan.Items.Count == 0)
         {
             EndCleanup(plan);
             return;
         }
 
-        _passRunning = true;
+        _pass.IsRunning = true;
 
         // Logged before the first step is posted, so what is posted meanwhile is handled before it.
         Log($"Cleanup plan: {plan.Items.Count} files, {plan.Bytes} bytes: {string.Join(", ", plan.Items.Select(i => $"{i.Path} ({i.Size} bytes)"))}.");
@@ -1079,7 +997,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>One step of a pass: plans again, then deletes the plan's first item once it is re-checked, or ends the pass.</summary>
     private void OnCleanupStep()
     {
-        if (!_passRunning)
+        if (!_pass.IsRunning)
         {
             return;
         }
@@ -1087,16 +1005,16 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         var limits = CleanupLimits();
         if (!CleanupOpen(limits))
         {
-            _passRunning = false;
-            RearmWhenOff(limits);
-            Log($"Cleanup stopped after deleting {_passDeleted} files ({_passBytes} bytes): it may not run now.");
+            _pass.IsRunning = false;
+            _limitWarning.RearmWhenOff(limits);
+            Log($"Cleanup stopped after deleting {_pass.Deleted} files ({_pass.DeletedBytes} bytes): it may not run now.");
             return;
         }
 
-        var plan = PlanCleanup(limits, _cleanupSkip, _cleanupInside);
+        var plan = PlanCleanup(limits, _pass.Skipped, _pass.InsideOutputFolder);
         if (plan.Items.Count == 0)
         {
-            _passRunning = false;
+            _pass.IsRunning = false;
             EndCleanup(plan);
             return;
         }
@@ -1104,44 +1022,31 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         var item = plan.Items[0];
         if (CleanupDelete(item.Path))
         {
-            _passDeleted++;
-            _passBytes += item.Size;
+            _pass.CountDeleted(item.Size);
         }
         else
         {
             // Not tried again in this pass.
-            _cleanupSkip.Add(item.Path);
-            _passSkipped++;
+            _pass.Skip(item.Path);
         }
 
         _channel.Writer.TryWrite(new CleanupStep());
     }
 
-    /// <summary>A pass ended with nothing left to delete: raises <c>cleanup-limit-unreachable</c> once, or re-arms it.</summary>
+    /// <summary>A pass ended with nothing left to delete: raises <c>cleanup-limit-unreachable</c> when it is due.</summary>
     private void EndCleanup(CleanupPlan plan)
     {
-        // Re-armed only once the folder is back within the size limit, not by a pass that merely skipped a file.
-        if (CleanupLimits().MaxBytes is not { } maxBytes || plan.Remaining <= maxBytes)
+        var maxBytes = CleanupLimits().MaxBytes;
+        if (_limitWarning.IsDue(maxBytes, plan) && maxBytes is { } limit)
         {
-            _unreachableRaised = false;
-        }
-        else if (plan.Unreachable && !_unreachableRaised)
-        {
-            _unreachableRaised = true;
             _limitUnreachable?.Invoke(
-                $"Cleanup can't keep the Clips folder within its size limit of {maxBytes / 1e9:0.#} GB: the {plan.Remaining / 1e9:0.#} GB left are Favourites or files being saved.");
+                $"Cleanup can't keep the Clips folder within its size limit of {limit / 1e9:0.#} GB: "
+                + $"the {plan.Remaining / 1e9:0.#} GB left are Favourites or files being saved.");
         }
 
-        Log($"Cleanup finished: {_passDeleted} files deleted ({_passBytes} bytes), {_passSkipped} skipped; the Library holds {plan.Remaining} bytes.");
-    }
-
-    // Turning Cleanup off re-arms cleanup-limit-unreachable.
-    private void RearmWhenOff(CleanupSettings limits)
-    {
-        if (limits.MaxBytes is null && limits.MaxAgeSeconds is null)
-        {
-            _unreachableRaised = false;
-        }
+        Log(
+            $"Cleanup finished: {_pass.Deleted} files deleted ({_pass.DeletedBytes} bytes), {_pass.SkippedCount} skipped; "
+            + $"the Library holds {plan.Remaining} bytes.");
     }
 
     /// <summary>Deletes an item's file for good once it is re-checked against the index and the disk; false when it wasn't.</summary>
@@ -1163,7 +1068,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         var file = new FileInfo(full);
         if (!file.Exists || file.Length != item.Size)
         {
-            Pend(full);
+            _pending.Add(full);
             LogChangedOnDisk(key);
             return false;
         }
@@ -1183,7 +1088,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             return false;
         }
 
-        Register(full);
+        _ownOperations.Register(full);
         try
         {
             File.Delete(full);
@@ -1244,12 +1149,12 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>Queues a read of the item's length at its current size, unless one is already queued at that size.</summary>
     private void QueueLength(string key)
     {
-        if (_readLength is null || !_index.NeedsLength(key, out var item))
+        if (_lengths is null || !_index.NeedsLength(key, out var item))
         {
             return;
         }
 
-        if (_lengthJobs.Writer.TryWrite(new LengthJob(_folder, key, Path.Combine(_folder, key), item.Size)))
+        if (_lengths.TryQueue(new LengthJob(_folder, key, Path.Combine(_folder, key), item.Size)))
         {
             _index.LengthQueued(key, item.Size);
         }
@@ -1285,13 +1190,13 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             // The file system's clock, not the injected one: LastWriteTimeUtc comes from it.
             if (DateTime.UtcNow - file.LastWriteTimeUtc < RecentWrite)
             {
-                Pend(path);
+                _pending.Add(path);
             }
         }
         catch (IOException)
         {
             // Locked, e.g. a copy still running.
-            Pend(path);
+            _pending.Add(path);
         }
         catch (UnauthorizedAccessException)
         {
@@ -1320,7 +1225,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     private bool Ignored(string path) =>
         _index.IsBeingWritten(path)
         || (path.EndsWith(LibraryPaths.PartExtension, StringComparison.OrdinalIgnoreCase) && _index.IsBeingWritten(path[..^LibraryPaths.PartExtension.Length]))
-        || _registered.ContainsKey(path);
+        || _ownOperations.Covers(path);
 
     // A folder renamed: each item under it moves, keeping its profile and date.
     private void MoveKeysUnder(string oldPrefix, string newPrefix)
@@ -1340,49 +1245,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    private void Pend(string path)
-    {
-        _pending.Add(path);
-        ArmSettle();
-    }
-
-    private void PendRescan()
-    {
-        _rescanPending = true;
-        ArmSettle();
-    }
-
-    // Not re-armed by later events, so a path that keeps changing is still checked every 250 ms.
-    private void ArmSettle()
-    {
-        if (!_settleArmed && _settle is not null)
-        {
-            _settleArmed = true;
-            _settle.Change(SettleDelay, Timeout.InfiniteTimeSpan);
-        }
-    }
-
-    private void Register(string path)
-    {
-        if (_registered.Remove(path, out var previous))
-        {
-            previous.Timer.Dispose();
-        }
-
-        var id = ++_registrations;
-        var timer = _time.CreateTimer(_ => _channel.Writer.TryWrite(new Expired(path, id)), null, RegistrationTime, Timeout.InfiniteTimeSpan);
-        _registered[path] = new Registration(id, timer);
-    }
-
-    // Disposes each registration's expiry timer; the caller clears the map when it is still used.
-    private void DisposeRegistrations()
-    {
-        foreach (var registration in _registered.Values)
-        {
-            registration.Timer.Dispose();
-        }
-    }
-
     private void CreateMissingFolder()
     {
         if (_createMissingFolder && !Directory.Exists(_folder))
@@ -1397,59 +1259,6 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             }
         }
     }
-
-    // Callbacks only post.
-    private void StartWatcher()
-    {
-        StopWatcher();
-        if (!Directory.Exists(_folder))
-        {
-            return;
-        }
-
-        FileSystemWatcher? watcher = null;
-        try
-        {
-            watcher = new FileSystemWatcher(_folder, "*")
-            {
-                IncludeSubdirectories = true,
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size | NotifyFilters.LastWrite,
-                InternalBufferSize = WatcherBufferSize,
-            };
-            watcher.Created += OnFileEvent;
-            watcher.Changed += OnFileEvent;
-            watcher.Deleted += OnFileEvent;
-            watcher.Renamed += OnFileRenamed;
-            watcher.Error += OnError;
-            watcher.EnableRaisingEvents = _watching;
-            _watcher = watcher;
-        }
-        catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException)
-        {
-            watcher?.Dispose();
-            _failed(e);
-        }
-    }
-
-    private void StopWatcher()
-    {
-        if (_watcher is { } watcher)
-        {
-            _watcher = null;
-            watcher.Created -= OnFileEvent;
-            watcher.Changed -= OnFileEvent;
-            watcher.Deleted -= OnFileEvent;
-            watcher.Renamed -= OnFileRenamed;
-            watcher.Error -= OnError;
-            watcher.Dispose();
-        }
-    }
-
-    private void OnFileEvent(object sender, FileSystemEventArgs e) => _channel.Writer.TryWrite(new Watched(e.ChangeType, e.FullPath, null));
-
-    private void OnFileRenamed(object sender, RenamedEventArgs e) => _channel.Writer.TryWrite(new Watched(e.ChangeType, e.FullPath, e.OldFullPath));
-
-    private void OnError(object sender, ErrorEventArgs e) => OnWatcherError(e.GetException());
 
     // A failed save is retried until it lands, with one warning for each run of failures.
     private void Save()
@@ -1476,8 +1285,4 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
             _saveRetry.Change(SaveRetryDelay, Timeout.InfiniteTimeSpan);
         }
     }
-
-    private sealed record Registration(long Id, ITimer Timer);
-
-    private sealed record LengthJob(string Folder, string Key, string Path, long Size);
 }
