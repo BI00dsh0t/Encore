@@ -408,7 +408,7 @@ internal sealed class EngineStartup
     {
         if (_options.Restarted is { } restarted)
         {
-            AppSupervisor.RaiseEngineRestarted(_hub, _warnings, restarted);
+            EngineRestartedWarning.Raise(_hub, _warnings, restarted);
         }
 
         if (_settings.LoadCode == ErrorCodes.SettingsUnreadable)

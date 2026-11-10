@@ -13,9 +13,6 @@ internal sealed class AppSupervisor(
     TimeProvider time,
     ILogger log) : IDisposable
 {
-    /// <summary>Makes the check and the raise of <see cref="RaiseEngineRestarted"/> one step.</summary>
-    private static readonly Lock RestartedLock = new();
-
     private readonly Lock _lock = new();
     private readonly CancellationTokenSource _stop = new();
     private readonly RestartBackoff _backoff = new(time);
@@ -45,29 +42,6 @@ internal sealed class AppSupervisor(
     /// <summary>The watch loop of the current App, for tests.</summary>
     internal Task Watching { get; private set; } = Task.CompletedTask;
 
-    /// <summary>Raises <c>engine-restarted</c> for a reason, unless one is already active.</summary>
-    public static void RaiseEngineRestarted(EventHub hub, Warnings warnings, EngineRestartReason reason)
-    {
-        ArgumentNullException.ThrowIfNull(hub);
-        ArgumentNullException.ThrowIfNull(warnings);
-        lock (RestartedLock)
-        {
-            if (hub.State.Warnings.Any(warning => warning.Code == ErrorCodes.EngineRestarted))
-            {
-                return;
-            }
-
-            warnings.Raise(
-                ErrorCodes.EngineRestarted,
-                WarningSeverity.Warning,
-                "supervision",
-                reason == EngineRestartReason.Hung
-                    ? "Encore's background service stopped answering and was restarted."
-                    : "Encore's background service stopped unexpectedly and was restarted.",
-                overlay: false);
-        }
-    }
-
     /// <summary>Handles <c>app.attach</c>.</summary>
     public Empty Attach(AppAttach attach)
     {
@@ -83,7 +57,7 @@ internal sealed class AppSupervisor(
         hub.Publish(EngineMessages.Attached, new AppAttached(attach.Pid));
         if (attach.EngineRestart is { } reason)
         {
-            RaiseEngineRestarted(hub, warnings, reason);
+            EngineRestartedWarning.Raise(hub, warnings, reason);
         }
 
         string? withdraw;
@@ -318,11 +292,8 @@ internal sealed class AppSupervisor(
     private async Task<IWatchedProcess?> TryStartAfterBackoffAsync(IWatchedProcess app, int code)
     {
         var delay = _backoff.Next();
-        log.LogWarning(
-            "App {Pid} exited with code {Code} and no engine.shutdown; relaunching in {Delay} s",
-            app.Id,
-            code,
-            delay.TotalSeconds);
+        var seconds = delay.TotalSeconds;
+        log.LogWarning("App {Pid} exited with code {Code} and no engine.shutdown; relaunching in {Delay} s", app.Id, code, seconds);
         await Task.Delay(delay, time, _stop.Token).ConfigureAwait(false);
         try
         {
