@@ -2,8 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 
 namespace Encore.App.Library;
@@ -14,26 +12,28 @@ internal partial class LibraryView
     public LibraryView()
     {
         InitializeComponent();
-        DataContextChanged += (_, e) =>
-        {
-            if (e.OldValue is LibraryPage old)
-            {
-                old.DrillIn.Opened -= OnPlayerOpened;
-                old.DrillIn.Closed -= OnPlayerClosed;
-            }
-
-            if (e.NewValue is LibraryPage page)
-            {
-                page.DrillIn.Opened += OnPlayerOpened;
-                page.DrillIn.Closed += OnPlayerClosed;
-            }
-        };
+        DataContextChanged += OnDataContextChanged;
     }
 
     private LibraryPage? Page => DataContext as LibraryPage;
 
     // The list is hidden while the player page shows, so Delete can't reach the file being played.
     private LibraryPage? ListPage => Page is { DrillIn.IsOpen: false } page ? page : null;
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.OldValue is LibraryPage old)
+        {
+            old.DrillIn.Opened -= OnPlayerOpened;
+            old.DrillIn.Closed -= OnPlayerClosed;
+        }
+
+        if (e.NewValue is LibraryPage page)
+        {
+            page.DrillIn.Opened += OnPlayerOpened;
+            page.DrillIn.Closed += OnPlayerClosed;
+        }
+    }
 
     // Ctrl+F focuses the search box; an open rename box keeps every key, so the focus move doesn't commit it.
     private void OnViewPreviewKeyDown(object sender, KeyEventArgs e)
@@ -105,7 +105,7 @@ internal partial class LibraryView
     // A click on a row selects or, double, opens; a header does nothing, and empty space clears the selection.
     private void OnListPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (ListPage is not { } page || e.OriginalSource is not DependencyObject source || Within<ScrollBar>(source, List))
+        if (ListPage is not { } page || e.OriginalSource is not DependencyObject source || VisualTreeSearch.IsInside<ScrollBar>(source, List))
         {
             return;
         }
@@ -122,19 +122,14 @@ internal partial class LibraryView
             return;
         }
 
-        if (Within<ButtonBase>(source, container) || Within<TextBox>(source, container))
+        if (VisualTreeSearch.IsInside<ButtonBase>(source, container) || VisualTreeSearch.IsInside<TextBox>(source, container))
         {
             e.Handled = false;
             return;
         }
 
         var (ctrl, shift) = Modifiers();
-        page.Click(row, ctrl, shift);
-        if (e.ClickCount == 2 && !ctrl && !shift)
-        {
-            page.OpenFocused();
-        }
-
+        page.ClickRow(row, e.ClickCount, ctrl, shift);
         container.Focus();
     }
 
@@ -144,7 +139,7 @@ internal partial class LibraryView
         if (ListPage is { } page
             && e.OriginalSource is DependencyObject source
             && ContainerOf(source) is { DataContext: LibraryRow row } container
-            && !Within<TextBox>(source, container))
+            && !VisualTreeSearch.IsInside<TextBox>(source, container))
         {
             page.PrepareContextMenu(row);
             container.Focus();
@@ -165,18 +160,10 @@ internal partial class LibraryView
             return;
         }
 
+        // A pointer reports where it opened the menu; the keyboard reports -1, -1.
         var fromKeyboard = e.CursorLeft < 0 && e.CursorTop < 0;
-        if (fromKeyboard)
-        {
-            page.PrepareContextMenu(page.FocusedRow);
-        }
-        else if (e.OriginalSource is not DependencyObject source || ContainerOf(source) is not { DataContext: LibraryRow })
-        {
-            e.Handled = true;
-            return;
-        }
-
-        if (!page.HasShownSelection)
+        var onRow = e.OriginalSource is DependencyObject source && ContainerOf(source) is { DataContext: LibraryRow };
+        if (!page.TryPrepareContextMenu(fromKeyboard, onRow))
         {
             e.Handled = true;
         }
@@ -193,73 +180,40 @@ internal partial class LibraryView
         }
 
         var (ctrl, shift) = Modifiers();
-        switch (e.Key)
+        if (MoveFor(e.Key) is { } move)
         {
-            case Key.Up:
-                Move(page, LibraryMove.Up, ctrl, shift);
-                break;
-            case Key.Down:
-                Move(page, LibraryMove.Down, ctrl, shift);
-                break;
-            case Key.PageUp:
-                Move(page, LibraryMove.PageUp, ctrl, shift);
-                break;
-            case Key.PageDown:
-                Move(page, LibraryMove.PageDown, ctrl, shift);
-                break;
-            case Key.Home:
-                Move(page, LibraryMove.Home, ctrl, shift);
-                break;
-            case Key.End:
-                Move(page, LibraryMove.End, ctrl, shift);
-                break;
-            case Key.A when ctrl:
-                page.SelectAll();
-                break;
-            case Key.Space when ctrl:
-                page.ToggleFocusedSelection();
-                break;
-            case Key.Space:
-                page.ToggleFocusedFavourite();
-                break;
-            case Key.Enter:
-                page.OpenFocused();
-                break;
-            case Key.Delete:
-                page.DeleteSelection();
-                break;
-            case Key.F2:
-                page.RenameCommand.Execute(null);
-                break;
-            case Key.C when ctrl:
-                page.CopyCommand.Execute(null);
-                break;
-            case Key.Escape:
-                page.ClearSelection();
-                break;
-            default:
-                return;
+            Move(page, move, ctrl, shift);
+            e.Handled = true;
         }
-
-        e.Handled = true;
+        else if (page.HandleKey(e.Key, ctrl))
+        {
+            e.Handled = true;
+        }
     }
+
+    // The keys that move the focused row; the view handles them, as a page's length is the viewport's.
+    private static LibraryMove? MoveFor(Key key) => key switch
+    {
+        Key.Up => LibraryMove.Up,
+        Key.Down => LibraryMove.Down,
+        Key.PageUp => LibraryMove.PageUp,
+        Key.PageDown => LibraryMove.PageDown,
+        Key.Home => LibraryMove.Home,
+        Key.End => LibraryMove.End,
+        _ => null,
+    };
 
     // Focus tabbing into the list lands on the focused row, else the first; focus inside a row is left alone.
     private void OnListGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         if (Page is not { } page
-            || (e.OldFocus is DependencyObject old && IsInList(old))
+            || (e.OldFocus is DependencyObject old && VisualTreeSearch.IsInside(old, List))
             || !(ReferenceEquals(e.NewFocus, List) || e.NewFocus is ListBoxItem))
         {
             return;
         }
 
-        if (page.FocusedRow is null)
-        {
-            page.MoveFocus(LibraryMove.Home, 0, ctrl: true, shift: false);
-        }
-
-        if (page.FocusedRow is { } row && !ReferenceEquals((e.NewFocus as FrameworkElement)?.DataContext, row))
+        if (page.FocusForEntry() is { } row && !ReferenceEquals((e.NewFocus as FrameworkElement)?.DataContext, row))
         {
             Dispatcher.BeginInvoke(DispatcherPriority.Input, () => FocusRow(row));
         }
@@ -269,8 +223,14 @@ internal partial class LibraryView
     private void OnPlayerOpened(string path) =>
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
-            if (Page?.Creator is not null) { CreatorContent.FocusFirstControl(); }
-            else { PlayerContent.FocusFirstControl(); }
+            if (Page?.Creator is not null)
+            {
+                CreatorContent.FocusFirstControl();
+            }
+            else
+            {
+                PlayerContent.FocusFirstControl();
+            }
         });
 
     // Back on the list: focus returns to the row that was played, as Games does.
@@ -284,15 +244,7 @@ internal partial class LibraryView
         });
 
     // The More ⋯ button opens its menu under itself.
-    private void OnMoreClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { ContextMenu: { } menu } button)
-        {
-            menu.PlacementTarget = button;
-            menu.Placement = PlacementMode.Bottom;
-            menu.IsOpen = true;
-        }
-    }
+    private void OnMoreClick(object sender, RoutedEventArgs e) => ButtonMenu.OpenBelow(sender);
 
     private void Move(LibraryPage page, LibraryMove move, bool ctrl, bool shift)
     {
@@ -313,7 +265,7 @@ internal partial class LibraryView
     // How many rows a page holds: the viewport's height over a realized row's.
     private int RowsPerPage()
     {
-        var viewer = Descendant<ScrollViewer>(List);
+        var viewer = VisualTreeSearch.Descendant<ScrollViewer>(List);
         var row = Page?.FocusedRow is { } focused ? List.ItemContainerGenerator.ContainerFromItem(focused) as FrameworkElement : null;
         return viewer is null || row is not { ActualHeight: > 0 } ? 1 : Math.Max(1, (int)(viewer.ViewportHeight / row.ActualHeight));
     }
@@ -323,50 +275,4 @@ internal partial class LibraryView
 
     private ListBoxItem? ContainerOf(DependencyObject source) =>
         ItemsControl.ContainerFromElement(List, source) as ListBoxItem;
-
-    private bool IsInList(DependencyObject element)
-    {
-        for (var d = element; d is not null; d = ParentOf(d))
-        {
-            if (ReferenceEquals(d, List))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    // Whether source is, or is inside, a T below top.
-    private static bool Within<T>(DependencyObject source, DependencyObject top)
-        where T : DependencyObject
-    {
-        for (var d = source; d is not null && !ReferenceEquals(d, top); d = ParentOf(d))
-        {
-            if (d is T)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static DependencyObject? ParentOf(DependencyObject d) =>
-        d is Visual or Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
-
-    private static T? Descendant<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if ((child as T ?? Descendant<T>(child)) is { } found)
-            {
-                return found;
-            }
-        }
-
-        return null;
-    }
 }

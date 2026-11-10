@@ -1,3 +1,4 @@
+using System.Windows.Input;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -56,6 +57,32 @@ public sealed class LibraryPlayerTests : IDisposable
         // "Open in default player" still hands the path to the shell.
         page.OpenCommand.Execute(null);
         Assert.Equal([("open", Path.Combine(_folder, Clip))], _shell.Calls);
+    }
+
+    [Fact]
+    public void ADoubleClickOpensARowAndTheListsKeysAndMenuFollowTheSelection()
+    {
+        var page = new LibraryPage(_engine, shell: _shell, player: () => _player);
+        page.Render(State());
+
+        // The menu stays shut off a row and with nothing selected; from the keyboard it takes the focused row.
+        Assert.False(page.TryPrepareContextMenu(fromKeyboard: false, onRow: false));
+        Assert.False(page.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
+        var entry = page.FocusForEntry();
+        Assert.NotNull(entry);
+        Assert.Same(entry, page.FocusedRow);
+        Assert.True(page.TryPrepareContextMenu(fromKeyboard: true, onRow: false));
+
+        // Escape is the list's key and clears the selection; a key the list doesn't know is left alone.
+        Assert.True(page.HandleKey(Key.Escape, ctrl: false));
+        Assert.False(page.HasShownSelection);
+        Assert.False(page.HandleKey(Key.B, ctrl: false));
+
+        // A double click with Ctrl only selects; a plain one opens the player page.
+        page.ClickRow(Row(page, Clip), clickCount: 2, ctrl: true, shift: false);
+        Assert.False(page.DrillIn.IsOpen);
+        page.ClickRow(Row(page, Clip), clickCount: 2, ctrl: false, shift: false);
+        Assert.True(page.DrillIn.IsOpen);
     }
 
     [Fact]
