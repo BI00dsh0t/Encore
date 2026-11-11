@@ -118,7 +118,7 @@ public sealed class TrackMixCaptureTests : IDisposable
     /// <summary>Runs a 2 s session of the test window with the given audio from the hub; returns the file.</summary>
     private async Task<string> CaptureAsync(SessionAudio audio, ToneHub hub)
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var window = SessionTestKit.OpenWindow(_directory, _processes, WindowScript);
         var output = Path.Combine(_directory, "mix.mp4");
         var anchored = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);

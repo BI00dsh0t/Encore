@@ -6,6 +6,8 @@ using Encore.Contracts;
 using Encore.Contracts.Settings;
 using Encore.Engine.Settings;
 using Encore.Platform.Audio;
+using Encore.Platform.Audio.Tests;
+using Encore.Platform.FFmpeg.Tests;
 using PlatformFlow = Encore.Platform.Audio.AudioFlow;
 using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
@@ -79,6 +81,8 @@ public sealed class TrackLayoutCaptureTests : IDisposable
     public void EachTrackIsOneTitledAacStreamInLayoutOrder()
     {
         RequireFFmpeg();
+        Gpu.Require();
+        AudioDevices.Require();
         var output = AudioEndpoints.Default(PlatformFlow.Output);
         var input = AudioEndpoints.Default(PlatformFlow.Input);
         var outDevice = Device(output.Id, output.FriendlyName, SettingsFlow.Output);
@@ -107,6 +111,7 @@ public sealed class TrackLayoutCaptureTests : IDisposable
     public void TheDefaultLayoutCapturesOneSilentTrack()
     {
         RequireFFmpeg();
+        Gpu.Require();
         var title = OpenWindow();
         var file = Path.Combine(_directory, "default.mp4");
 
@@ -130,6 +135,7 @@ public sealed class TrackLayoutCaptureTests : IDisposable
     public void AnAbsentDeviceIsRefusedWithThePresentEndpointsAsCandidates()
     {
         RequireFFmpeg();
+        AudioDevices.Require();
         var missing = Device("{0.0.0.00000000}.{00000000-0000-0000-0000-000000000000}", "Gone Speakers", SettingsFlow.Output);
         StoreLayout(new TrackLayout([missing], [Track("Game", missing)]));
 

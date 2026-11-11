@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.IO.Pipes;
 using System.Security.AccessControl;
+using System.Security.Principal;
 using Microsoft.Extensions.Logging;
 using Encore.Contracts;
 
@@ -207,8 +208,11 @@ internal sealed class IpcServer : IAsyncDisposable
     private static PipeSecurity CurrentUserOnly()
     {
         var user = Contracts.Ipc.PipeName.CurrentUserSid;
+        using var identity = WindowsIdentity.GetCurrent();
         var security = new PipeSecurity();
-        security.SetOwner(user);
+
+        // The client's CurrentUserOnly check wants its token's default owner, which is Administrators when elevated.
+        security.SetOwner(identity.Owner ?? user);
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         security.AddAccessRule(new PipeAccessRule(user, PipeAccessRights.FullControl, AccessControlType.Allow));
         return security;

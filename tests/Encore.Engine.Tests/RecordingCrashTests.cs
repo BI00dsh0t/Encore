@@ -199,7 +199,7 @@ public sealed class RecordingCrashTests : IDisposable
     /// <summary>Records for a length and kills at each given time; with onFragment each kill waits for the next fragment.</summary>
     private async Task RecordAndKillAsync(IReadOnlyList<TimeSpan> kills, TimeSpan length, bool onFragment = false)
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         Directory.CreateDirectory(Output);
         Directory.CreateDirectory(Kills);
         using var hub = new ToneHub(new Dictionary<string, (double, double)>

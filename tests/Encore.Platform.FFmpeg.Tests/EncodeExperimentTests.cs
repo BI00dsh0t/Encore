@@ -33,6 +33,7 @@ public sealed class EncodeExperimentTests : IDisposable
     [Fact]
     public void X2ConvertsToNv12TaggedBt709AndKeepsTheFlashWhite()
     {
+        Gpu.Require();
         RequireFFmpeg();
         var log = NullLogger.Instance;
         var path = Path.Combine(_directory, "x2.mp4");

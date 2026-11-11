@@ -46,7 +46,7 @@ public sealed class ClipsEndToEndTests : IDisposable
     [InlineData(ReplayStorage.Disk)]
     public async Task SavePressesWriteClipsThatFollowTheSettingsFromTheNextReset(ReplayStorage storage)
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var loadExe = GpuLoadExe();
         Assert.SkipUnless(loadExe is not null, "the GPU load is not built (dotnet build Encore.slnx -c Release)");
         var clips = Directory.CreateDirectory(Path.Combine(_folder, "clips")).FullName;
@@ -112,7 +112,7 @@ public sealed class ClipsEndToEndTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task TheRewindStartsOnTheGameByItselfAfterEachColdStart()
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var loadExe = GpuLoadExe();
         Assert.SkipUnless(loadExe is not null, "the GPU load is not built (dotnet build Encore.slnx -c Release)");
         var clips = Directory.CreateDirectory(Path.Combine(_folder, "clips")).FullName;

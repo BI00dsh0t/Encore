@@ -141,7 +141,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     public async Task AWindowExcludedFromCaptureNeverShowsInTheMonitorRecording()
     {
         using var bench = BenchLock.Take();
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         SessionTestKit.OpenWindow(_directory, _processes, ExcludedWindowScript);
         await Task.Delay(TimeSpan.FromSeconds(1), Token);
         using var rig = NewRig();
@@ -288,7 +288,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
     public async Task AWindowExcludedFromCaptureNeverShowsInADesktopDuplicationRecording()
     {
         using var bench = BenchLock.Take();
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         SessionTestKit.OpenWindow(_directory, _processes, ExcludedWindowScript);
         await Task.Delay(TimeSpan.FromSeconds(1), Token);
         using var rig = NewRig(wgcFault: WgcOff);
@@ -734,7 +734,7 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         bool recovery = false,
         TimeSpan moveArmDelay = default)
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var hub = new ToneHub(new Dictionary<string, (double, double)> { ["game"] = (0.1, 440), ["mic"] = (0.2, 1000) });
         var game = new LayoutDevice(Guid.NewGuid(), "game", "Game device", "", SettingsFlow.Output, IsMic: false);
         var mic = new LayoutDevice(Guid.NewGuid(), "mic", "Mic device", "", SettingsFlow.Input, IsMic: true);

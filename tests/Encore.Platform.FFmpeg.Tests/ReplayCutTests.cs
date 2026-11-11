@@ -38,6 +38,7 @@ public sealed class ReplayCutTests : IDisposable
     [Fact]
     public void ClipsCutAtTheKeyframesForcedAfterTwoPressesMeetWithNoFrameMissingOrRepeated()
     {
+        Gpu.Require();
         Assert.SkipUnless(
             FFmpegLibrary.MissingLibraries(AppContext.BaseDirectory).Count == 0,
             "native/ffmpeg is not fetched; run pwsh tools/fetch-ffmpeg.ps1");

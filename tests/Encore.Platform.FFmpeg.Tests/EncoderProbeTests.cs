@@ -25,6 +25,7 @@ public sealed class EncoderProbeTests : IDisposable
     [Fact]
     public void TheEncodersThatWorkAreTheOnesFFmpegAccepts()
     {
+        Gpu.Require();
         RequireFFmpeg();
         var log = NullLogger.Instance;
         FFmpegLibrary.Initialize(log);
@@ -39,6 +40,7 @@ public sealed class EncoderProbeTests : IDisposable
     [Fact]
     public void EachCodecIsOfferedWithItsFirstWorkingEncoderAndOnlyH264FallsBackToLibx264()
     {
+        Gpu.Require();
         RequireFFmpeg();
         var log = NullLogger.Instance;
         FFmpegLibrary.Initialize(log);
@@ -83,6 +85,7 @@ public sealed class EncoderProbeTests : IDisposable
     [Fact]
     public void AnEncoderThatIsNotInTheBuildDoesNotWork()
     {
+        Gpu.Require();
         RequireFFmpeg();
         var log = NullLogger.Instance;
         FFmpegLibrary.Initialize(log);
@@ -96,6 +99,7 @@ public sealed class EncoderProbeTests : IDisposable
     [Fact]
     public void Libx264EncodesTheD3D11FramesThroughSystemMemory()
     {
+        Gpu.Require();
         RequireFFmpeg();
         var path = Path.Combine(_directory, "x264.mp4");
         Encode(path, new VideoEncoderOptions(Encoder: EncoderProbe.SoftwareH264, Fps: 30, BitrateKbps: 4_000), frames: 45, fps: 30, white: true);
@@ -113,6 +117,7 @@ public sealed class EncoderProbeTests : IDisposable
     [Fact]
     public void HevcIsTaggedHvc1()
     {
+        Gpu.Require();
         RequireFFmpeg();
         FFmpegLibrary.Initialize(NullLogger.Instance);
         string? encoder;

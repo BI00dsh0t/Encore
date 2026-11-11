@@ -9,5 +9,8 @@
     <Compile Include="..\Encore.Platform.Audio.Tests\FakeAudioDevices.cs" Link="FakeAudioDevices.cs" />
     <!-- The retry rule for the real-time timing tests, shared with the FFmpeg tests. -->
     <Compile Include="..\Encore.Platform.FFmpeg.Tests\RealTimeAttempts.cs" Link="RealTimeAttempts.cs" />
+    <!-- The checks that skip a test where this PC has no GPU or no audio devices, as on a hosted runner. -->
+    <Compile Include="..\Encore.Platform.FFmpeg.Tests\Gpu.cs" Link="Gpu.cs" />
+    <Compile Include="..\Encore.Platform.Audio.Tests\AudioDevices.cs" Link="AudioDevices.cs" />
   </ItemGroup>
 </Project>

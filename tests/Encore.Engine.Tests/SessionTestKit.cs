@@ -6,6 +6,8 @@ using Encore.Contracts.Settings;
 using Encore.Core.Sessions;
 using Encore.Engine.Sessions;
 using Encore.Platform.Audio;
+using Encore.Platform.Audio.Tests;
+using Encore.Platform.FFmpeg.Tests;
 using Encore.Platform.Windows;
 using PlatformFlow = Encore.Platform.Audio.AudioFlow;
 using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
@@ -24,6 +26,13 @@ internal static class SessionTestKit
     public static void RequireFFmpeg() => Assert.SkipUnless(
         File.Exists(Path.Combine(EngineBinaries.Folder, "ffprobe.exe")) && File.Exists(Path.Combine(EngineBinaries.Folder, "ffmpeg.exe")),
         "native/ffmpeg is not fetched");
+
+    /// <summary>Skips a real capture where it can't run: FFmpeg not fetched, or no GPU for the capture device.</summary>
+    public static void RequireCapture()
+    {
+        RequireFFmpeg();
+        Gpu.Require();
+    }
 
     /// <summary>Runs a pwsh script with a unique <c>-Title</c> and the given arguments, and waits for its window.</summary>
     public static WindowInfo OpenWindow(string directory, List<Process> processes, string script, params string[] args)
@@ -82,6 +91,7 @@ internal static class SessionTestKit
 
     public static SessionAudio DefaultAudio()
     {
+        AudioDevices.Require();
         var output = AudioEndpoints.Default(PlatformFlow.Output);
         var input = AudioEndpoints.Default(PlatformFlow.Input);
         return SessionAudio.OnePerDevice(

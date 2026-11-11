@@ -79,6 +79,7 @@ public sealed class AudioDeviceHubTests : IDisposable
     [Fact]
     public void TwoSubscribersShareOneClientAndGetIdenticalBlocks()
     {
+        AudioDevices.Require();
         var first = new RecordingSubscriber();
         var second = new RecordingSubscriber();
         using (var a = _hub.Subscribe(DefaultInput, SettingsFlow.Input, first))
@@ -110,6 +111,7 @@ public sealed class AudioDeviceHubTests : IDisposable
     [Fact]
     public void TheLastUnsubscribeClosesTheDeviceAndTheNextReopensIt()
     {
+        AudioDevices.Require();
         var first = new RecordingSubscriber();
         var subscription = _hub.Subscribe(DefaultOutput, SettingsFlow.Output, first);
         Assert.True(first.WaitFor(5, Timeout), "no blocks from the default output's loopback");
@@ -134,6 +136,7 @@ public sealed class AudioDeviceHubTests : IDisposable
     [Fact]
     public void AThrowingSubscriberIsCutOffAndTheOtherContinues()
     {
+        AudioDevices.Require();
         var thrower = new RecordingSubscriber(throwOnFirst: true);
         var steady = new RecordingSubscriber();
         using var a = _hub.Subscribe(DefaultInput, SettingsFlow.Input, thrower);
@@ -158,6 +161,7 @@ public sealed class AudioDeviceHubTests : IDisposable
     [Fact]
     public void TheDiagnosticsShowTheStreamTrackingQpc()
     {
+        AudioDevices.Require();
         var recorder = new RecordingSubscriber();
         using var subscription = _hub.SubscribeDevice(DefaultInput, SettingsFlow.Input, recorder);
         Assert.True(recorder.WaitFor(100, Timeout));

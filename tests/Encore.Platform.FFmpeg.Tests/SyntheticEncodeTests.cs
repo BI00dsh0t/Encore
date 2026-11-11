@@ -40,6 +40,7 @@ public sealed class SyntheticEncodeTests : IDisposable
     [Fact]
     public void SyntheticCaptureEncodesToAlignedFragmentedMp4()
     {
+        Gpu.Require();
         Assert.SkipUnless(
             FFmpegLibrary.MissingLibraries(AppContext.BaseDirectory).Count == 0,
             "native/ffmpeg is not fetched; run pwsh tools/fetch-ffmpeg.ps1");

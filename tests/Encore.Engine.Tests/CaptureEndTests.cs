@@ -98,7 +98,7 @@ public sealed class CaptureEndTests : IDisposable
     [Fact]
     public void ClosingTheWindowEndsCaptureAndFinalizesTheFile()
     {
-        RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         // The window closes once the engine is writing the file, not on a timer: a cold start sometimes took too long.
         var closeFlag = Path.Combine(_directory, "close-now");
         var title = OpenWindow(closeAfterMs: 0, closeFlag);
@@ -124,7 +124,7 @@ public sealed class CaptureEndTests : IDisposable
     [Trait("Category", "Heavy")]
     public void CtrlCEndsCaptureAndFinalizesTheFile()
     {
-        RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var title = OpenWindow(closeAfterMs: 0);
         var output = Path.Combine(_directory, "ctrlc.mp4");
 
@@ -145,7 +145,7 @@ public sealed class CaptureEndTests : IDisposable
     [Trait("Category", "Heavy")]
     public void AStatsRunWritesAReportThatMatchesTheFile()
     {
-        RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var title = OpenWindow(closeAfterMs: 0);
         RealTimeAttempts.Run(attempt => StatsReportAttempt(title, attempt));
     }
@@ -229,7 +229,7 @@ public sealed class CaptureEndTests : IDisposable
     [Trait("Category", "Heavy")]
     public void TheEncodeExperimentsRecordTheirOptionsAndWriteAPlayableFile()
     {
-        RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var title = OpenWindow(closeAfterMs: 0);
         var output = Path.Combine(_directory, "experiment.mp4");
         var statsPath = Path.Combine(_directory, "experiment.json");

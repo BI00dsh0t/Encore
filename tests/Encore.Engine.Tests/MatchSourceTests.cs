@@ -85,7 +85,7 @@ public sealed class MatchSourceTests : IAsyncLifetime
     public async Task ARealCaptureOfA2560By1440WindowWithMatchSourceRecordsAt2560By1440()
     {
         using var bench = BenchLock.Take("Engine 12.1 match-source capture test");
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var processes = new List<Process>();
         try
         {

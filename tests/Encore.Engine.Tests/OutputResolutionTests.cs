@@ -134,7 +134,7 @@ public sealed class OutputResolutionTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task AWindowResizedAndChangingModeGivesOneFixedSizeFileWithNoPtsBreak()
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var go = Path.Combine(_directory, "go");
         var window = SessionTestKit.OpenWindow(_directory, _processes, ResizingWindowScript, "-GoFile", go, "-PhaseMs", Text(PhaseMs));
         var output = Path.Combine(_directory, "resize.mp4");
@@ -175,7 +175,7 @@ public sealed class OutputResolutionTests : IDisposable
     [InlineData(60)]
     public async Task AStaticWindowStillGetsTheConfiguredFrameRate(int fps)
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var window = SessionTestKit.OpenWindow(_directory, _processes, StaticWindowScript, "-Width", "640", "-Height", "480");
         var output = Path.Combine(_directory, $"static-{fps}.mp4");
         var video = new VideoSettings(VideoCodec.H264, 640, 480, fps, 8_000, RateControl.Cbr);
@@ -192,7 +192,7 @@ public sealed class OutputResolutionTests : IDisposable
     [Trait("Category", "Heavy")]
     public void AStatsRunOnAFastWindowMeetsTheLatencyGcAndAllocationBounds()
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var window = SessionTestKit.OpenWindow(_directory, _processes, FastWindowScript, "-Width", "1920", "-Height", "1080");
         RealTimeAttempts.Run(attempt => FastWindowStatsAttempt(window, attempt));
     }

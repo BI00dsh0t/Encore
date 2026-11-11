@@ -585,7 +585,7 @@ public sealed class RecordingCaptureTests : IDisposable
         Func<bool>? starveFrames = null,
         VideoCodec codec = VideoCodec.H264)
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var hub = new ToneHub(new Dictionary<string, (double, double)>
         {
             ["game"] = (0.1, 440),
