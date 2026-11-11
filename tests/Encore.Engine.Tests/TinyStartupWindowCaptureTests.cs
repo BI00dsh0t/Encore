@@ -98,7 +98,7 @@ public sealed class TinyStartupWindowCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task AWindowThatStartsTinyIsCapturedOnceItGrowsAndASaveWorks()
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         using var hub = new ToneHub(new Dictionary<string, (double, double)> { ["game"] = (0.1, 440) });
         var game = new LayoutDevice(Guid.NewGuid(), "game", "Game device", "", SettingsFlow.Output, IsMic: false);
         var layout = new TrackLayout([game], [new Track(Guid.NewGuid(), "Game", [game.Key], MuteAffected: false)]);

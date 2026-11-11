@@ -30,6 +30,7 @@ public sealed class FrameScalerTests : IDisposable
     [MemberData(nameof(Paths))]
     public void NarrowerContentGetsBlackBarsLeftAndRight(bool nv12, bool copyIn)
     {
+        Gpu.Require();
         // 4:3 into 16:9: 480×360 at x = 80.
         var file = Encode("narrow.mp4", new VideoSize(480, 360), new VideoSize(480, 360), nv12, copyIn);
 
@@ -42,6 +43,7 @@ public sealed class FrameScalerTests : IDisposable
     [MemberData(nameof(Paths))]
     public void WiderContentGetsBlackBarsTopAndBottom(bool nv12, bool copyIn)
     {
+        Gpu.Require();
         // 2.37:1 into 16:9: 640×270 at y = 44.
         var file = Encode("wide.mp4", new VideoSize(640, 270), new VideoSize(640, 270), nv12, copyIn);
 
@@ -54,6 +56,7 @@ public sealed class FrameScalerTests : IDisposable
     [MemberData(nameof(Paths))]
     public void ContentEqualToTheOutputFillsItWithNoBars(bool nv12, bool copyIn)
     {
+        Gpu.Require();
         var file = Encode("equal.mp4", new VideoSize(Width, Height), new VideoSize(Width, Height), nv12, copyIn);
 
         Assert.InRange(MeanLuma(file, "crop=640:20:0:0"), 225, 255);
@@ -63,6 +66,7 @@ public sealed class FrameScalerTests : IDisposable
     [Fact]
     public void OnlyTheContentOfALargerTextureIsScaled()
     {
+        Gpu.Require();
         // WGC's pool texture outlives a shrink until it's recreated: 480×360 of content in a 640×360 texture.
         var file = Encode("larger.mp4", new VideoSize(640, 360), new VideoSize(480, 360), nv12: false, copyIn: false);
 

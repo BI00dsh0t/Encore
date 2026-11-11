@@ -40,6 +40,7 @@ public sealed class CommandFailureTests : IDisposable
     public void AMissingGameIsTheScriptsMessageAndExitOne()
     {
         Assert.SkipUnless(Pwsh() is not null, "pwsh.exe is not on the PATH");
+        Assert.SkipWhen(BenchContext.IsElevated(), "measure-path-a.ps1 refuses an elevated terminal");
         var errors = new StringWriter();
 
         var code = FpsBenchmark.Run(

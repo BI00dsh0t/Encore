@@ -89,7 +89,7 @@ public sealed class MicMuteCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task AMuteSilencesTheMicInItsAffectedTracksOnlyFromThePressUntilTheUnmute()
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var audio = new SessionAudio(
             [new SessionAudioDevice("game", SettingsFlow.Output, "Game device"), new SessionAudioDevice("mic", SettingsFlow.Input, "Mic device", IsMic: true)],
             [

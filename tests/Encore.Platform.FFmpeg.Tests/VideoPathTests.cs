@@ -28,6 +28,7 @@ public sealed class VideoPathTests : IDisposable
     [Fact]
     public void AFrameWhosePtsIsNotAboveTheLastIsDropped()
     {
+        Gpu.Require();
         RequireFFmpeg();
         var log = NullLogger.Instance;
         FFmpegLibrary.Initialize(log);
@@ -63,6 +64,7 @@ public sealed class VideoPathTests : IDisposable
     [Fact]
     public void KeyframesComeAtLeastEverySecondEvenAtALowFrameRate()
     {
+        Gpu.Require();
         RequireFFmpeg();
         var log = NullLogger.Instance;
         FFmpegLibrary.Initialize(log);
@@ -100,6 +102,7 @@ public sealed class VideoPathTests : IDisposable
     [Fact]
     public void AResizedFrameIsClippedAndTheRestOfTheTargetIsBlack()
     {
+        Gpu.Require();
         RequireFFmpeg();
         var log = NullLogger.Instance;
         FFmpegLibrary.Initialize(log);

@@ -84,7 +84,7 @@ public sealed partial class ChainSwitchCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task AProfilesNewLayoutAndVideoApplyFromTheClipAfterTheNextSaveWithNoGap()
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         using var hub = new ToneHub(new Dictionary<string, (double, double)>
         {
             ["game"] = (0.1, 440),

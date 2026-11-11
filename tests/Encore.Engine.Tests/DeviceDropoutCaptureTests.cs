@@ -87,7 +87,7 @@ public sealed class DeviceDropoutCaptureTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task ADeviceOutForTenSecondsIsSilentInItsTracksOnlyAndResumesWithoutARestart()
     {
-        SessionTestKit.RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var source = new FakeEndpointList();
         var bank = new FakeDeviceBank();
         bank.Define(IdA, "Game", "BEACN", Platform.Audio.AudioFlow.Output, AmplitudeA, 440);

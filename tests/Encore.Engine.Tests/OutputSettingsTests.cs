@@ -140,7 +140,7 @@ public sealed class OutputSettingsTests : IDisposable
     [MemberData(nameof(Codecs))]
     public async Task EachOfferedCodecCapturesA3440x1440WindowAt120Fps(VideoCodec codec)
     {
-        RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var encoders = new VideoEncoderCatalog(NullLoggerFactory.Instance);
         Assert.SkipWhen(encoders.EncoderFor(codec) is null, $"{codec} is not offered on this PC");
 
@@ -170,7 +170,7 @@ public sealed class OutputSettingsTests : IDisposable
     [Trait("Category", "Heavy")]
     public async Task AForcedLibx264SessionWritesAPlayableH264File()
     {
-        RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var window = OpenWindow(1280, 720);
         var output = Path.Combine(_directory, "x264.mp4");
         var video = new VideoSettings(VideoCodec.Hevc, 1280, 720, 60, 8_000, RateControl.Cbr);
@@ -190,7 +190,7 @@ public sealed class OutputSettingsTests : IDisposable
     [Fact]
     public async Task ACodecThisPCCantEncodeFallsBackToH264WithAWarning()
     {
-        RequireFFmpeg();
+        SessionTestKit.RequireCapture();
         var window = OpenWindow(640, 480);
         var output = Path.Combine(_directory, "fallback.mp4");
         var video = new VideoSettings(VideoCodec.Av1, 640, 480, 60, 8_000, RateControl.Vbr);
