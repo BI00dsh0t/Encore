@@ -1030,10 +1030,13 @@ public sealed class ClipCreatorTests : IDisposable
                     Assert.Equal(156, ((WaveformView)view.FindName("Timeline")).ActualHeight);
                     Capture(client, $"clip-controls-{look}-{(expanded ? "expanded" : "rail")}.png");
                     var originalHeight = video.ActualHeight;
-                    window.Height += 300; window.UpdateLayout();
-                    Assert.True(video.ActualHeight >= originalHeight + 299);
+
+                    // Extra height goes to the picture; a window grows only as tall as this screen allows.
+                    var grow = Math.Min(300, SystemParameters.MaximumWindowTrackHeight - window.Height);
+                    window.Height += grow; window.UpdateLayout();
+                    Assert.True(video.ActualHeight >= originalHeight + grow - 1, $"Picture {video.ActualHeight} after growing {grow} from {originalHeight}");
                     Assert.Equal(0, scroll.ScrollableHeight);
-                    window.Height -= 300; window.UpdateLayout();
+                    window.Height -= grow; window.UpdateLayout();
                 }
             }
         }

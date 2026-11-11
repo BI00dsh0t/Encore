@@ -101,7 +101,8 @@ public sealed class OutputSettingsTests : IDisposable
     [Fact]
     public async Task ServeOffersWhatFFmpegAcceptsAndTheVideoKeyRefuses144Fps()
     {
-        RequireFFmpeg();
+        // With no GPU the engine can't capture, so it offers no encoder at all.
+        SessionTestKit.RequireCapture();
         var expected = ExpectedOffers();
 
         await StartServeAsync();
@@ -235,8 +236,6 @@ public sealed class OutputSettingsTests : IDisposable
         SessionTestKit.OpenWindow(_directory, _processes, WindowScript, "-Width", Text(width), "-Height", Text(height));
 
     private void AssertPlaysInVlc(string file) => SessionTestKit.AssertPlaysInVlc(file, _directory, _processes);
-
-    private static void RequireFFmpeg() => SessionTestKit.RequireFFmpeg();
 
     private static Task<SessionOutcome> CaptureAsync(
         WindowInfo window, VideoSettings video, string output, CaptureSessionOptions options, IVideoEncoderCatalog encoders, ILoggerFactory loggers) =>
