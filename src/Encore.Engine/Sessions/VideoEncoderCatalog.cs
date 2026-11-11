@@ -6,13 +6,6 @@ using Encore.Platform.FFmpeg;
 
 namespace Encore.Engine.Sessions;
 
-/// <summary>Which encoder a session uses for each codec.</summary>
-internal interface IVideoEncoderCatalog
-{
-    /// <summary>The FFmpeg encoder the probe chose for a codec, or null when none works; a probe that throws is retried.</summary>
-    string? EncoderFor(VideoCodec codec);
-}
-
 /// <summary>The encoder probe, run once per codec and cached for the engine's life; each probes on adapter 0.</summary>
 internal sealed class VideoEncoderCatalog : IVideoEncoderCatalog
 {
