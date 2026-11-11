@@ -9,6 +9,13 @@ namespace Encore.Engine.Tests;
 public sealed class ReplayRingsTests
 {
     [Fact]
+    public void ARingPreallocatesItsWindowAndSlackOfVideoAndAudioPackets()
+    {
+        // 60 video and 2 x 47 AAC packets a second, plus one, over the 30 s window and 3 s of slack.
+        Assert.Equal(33 * (60 + 94 + 1), ReplayRings.Capacity(fps: 60, tracks: 2, seconds: 30));
+    }
+
+    [Fact]
     public void ARingFolderThatCantBeMadeGivesAMemoryRing()
     {
         // A file where the folder should be: the ring file can't be created under it.
