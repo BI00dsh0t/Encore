@@ -62,3 +62,7 @@ Encore sends nothing about you or your PC anywhere. It contacts GitHub only to c
 ## License
 
 Encore is licensed under the [GNU General Public License v3.0](LICENSE). It ships FFmpeg, built with GPL components; [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) lists every third-party component, its license and where its source is.
+
+### Name and logo
+
+The Encore name and logo identify the official builds from this repository. The source code is GPL-3.0, but the name and logo, including the files in `branding/` and `src/Encore.App/Icons/`, are not licensed for reuse; as section 7(e) of the GPL allows, no rights to them are granted. If you distribute a modified version, give it a different name and icon, so that nobody mistakes it for an official Encore build.

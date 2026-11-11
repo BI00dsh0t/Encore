@@ -2,6 +2,8 @@
 
 Encore is a Windows instant replay and recording app. Its identity is a single counterclockwise replay arrow: a moment worth returning to.
 
+The Encore name and logo are not covered by the repository's GPL-3.0 license; see "Name and logo" in the main README.
+
 ## Mark
 
 The approved direction is the counterclockwise replay arrow alone, with a compact arrowhead and a narrow gap. Keep the center empty. The ring is an exact 300-degree circular arc with center `(128,128)`, radius `82`, and constant thickness `28` on a `256 × 256` canvas. The open tail has a round cap with radius `14`; the arrowhead join remains flat and perpendicular to the shaft. Before rotation, it joins a vertical arrowhead base at `(128,46)`, pointing horizontally left with equal height above and below the shaft. The entire mark is rotated 45 degrees counterclockwise about `(128,128)`. It extends beyond the ring intentionally; judge circularity by the ring, not the arrowhead's bounding box.
