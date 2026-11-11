@@ -62,6 +62,20 @@ public sealed class AppUpdatesTests : IDisposable
         Assert.False(updates.IsReady);
     }
 
+    [Fact]
+    public async Task APackageThatDoesNotMatchItsChecksumIsDeletedBeforeItCanApply()
+    {
+        var package = Path.Combine(_folder, "EncoreApp-0.9.0-full.nupkg");
+        await File.WriteAllBytesAsync(package, [1, 2, 3], TestContext.Current.CancellationToken);
+        var sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(new byte[] { 1, 2, 3 }));
+
+        await PackageCheck.VerifyAsync(package, 3, sha256, TestContext.Current.CancellationToken);
+        Assert.True(File.Exists(package));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => PackageCheck.VerifyAsync(package, 3, new string('0', 64), TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(package));
+    }
+
     private sealed class FakeUpdater : IUpdater
     {
         public string? Newer { get; init; }

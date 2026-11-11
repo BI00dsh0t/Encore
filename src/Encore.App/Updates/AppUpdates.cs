@@ -1,3 +1,4 @@
+using System.IO;
 using Encore.Contracts;
 
 namespace Encore.App.Updates;
@@ -118,6 +119,11 @@ internal sealed class AppUpdates : Observable
         catch (OperationCanceledException)
         {
             Status = "";
+        }
+        catch (Exception e) when (e is InvalidDataException or Velopack.Exceptions.ChecksumFailedException)
+        {
+            Status = "An update didn't match its checksum, so it was deleted unused. Encore tries again tomorrow.";
+            _log($"Update rejected: {e.Message}");
         }
         catch (Exception e)
         {

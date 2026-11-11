@@ -1,4 +1,6 @@
+using System.IO;
 using Velopack;
+using Velopack.Locators;
 using Velopack.Sources;
 
 namespace Encore.App.Updates;
@@ -27,7 +29,11 @@ internal sealed class VelopackUpdater(string repositoryUrl) : IUpdater
             return null;
         }
 
+        // Velopack checks what it downloads, but not a package it rebuilds from deltas, so every package is checked here too.
         await manager.DownloadUpdatesAsync(update, cancelToken: cancel).ConfigureAwait(false);
+        var target = update.TargetFullRelease;
+        var package = Path.Combine(VelopackLocator.Current.PackagesDir ?? "", target.FileName);
+        await PackageCheck.VerifyAsync(package, target.Size, target.SHA256, cancel).ConfigureAwait(false);
         _manager = manager;
         _ready = update;
         return update.TargetFullRelease.Version.ToString();
