@@ -50,8 +50,14 @@ How a game is detected:
 - A detected game stays known, with its limited handle held, until its process exits. Minimizing it or closing its window
   does not end it.
 - Excluded processes (the engine's and the attached App's) and anything under the install folder are never detected.
-- The fullscreen rule alone is weak evidence: a browser or media player showing a video passes it. So the apps in
-  `KnownNonGames` are only ever detected by a listing.
+- The fullscreen rule alone is weak evidence: a browser or media player showing a video passes it. So the programs in
+  `NeverGames` (anything under the Windows folder, and a list of apps by file name) are only ever detected by a listing.
+- A program in a store's game folder (Steam's `steamapps\common`, the Xbox app's `.GamingRoot` folders, Epic's
+  manifests, GOG and Ubisoft Connect) is as sure a game as a listed one: it is found by the fullscreen rule, never
+  windowed, since those folders also hold launchers and tools. A never-game there stays a never-game.
+- Each detection carries its source: a store, Windows' list (or `manual`, set by the engine), or `fullscreen`.
+- A Store app's folder names its version. `profileOf` maps a new version to the Game Profile of an older one
+  (`StorePackages.Key`), so a choice and a game's settings survive an update.
 - A game whose Game Profile is Ignored is never detected. One that becomes Ignored while detected is forgotten as if it
   had exited, and clearing the flag lets it be detected again.
 
@@ -1112,11 +1118,21 @@ Sleep (`Suspend`):
 
 - `EnsureProfile` writes one `name`, taken from the executable's version resource, else the file name without its
   extension.
-- With `captureNewGames` off, the same update sets `ignored`, unless the game is in `manualGames`. The caller is told
-  the game's name once the write commits.
+- The same update records the game's `source`, and sets `ignored` when it isn't captured: a game in `manualGames` is
+  always captured; otherwise `captureNewGames` must be on, and an app found only in fullscreen (`source:
+  "fullscreen"`) also needs `captureFullscreenApps`. The caller is told the game's name once the write commits, and the
+  notice says "found in fullscreen" for such an app.
 - Everything else is the store's default: Recordings off, no overrides, a folder assigned.
 - An existing profile is never touched. A conflict with another write is retried while the profile is still missing.
   Any other failure is logged.
+
+### NonGameProfiles
+
+- Runs once at start, remembered as `nonGamesChecked` in `runtime.json`: a captured profile whose program is a
+  never-game (under the Windows folder, or on `NeverGames.Names`) becomes Not captured, with one Info notice naming
+  them. Captured apps found only in fullscreen are left alone: the user may have chosen them.
+- A failed settings write leaves the check for the next start; a failed `runtime.json` write runs it again, which
+  changes nothing the second time unless the user turned one back on.
 
 ### RuntimeStateStore
 

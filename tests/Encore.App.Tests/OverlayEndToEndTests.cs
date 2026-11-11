@@ -74,7 +74,9 @@ public sealed class OverlayEndToEndTests : IDisposable
             overlay = new OverlayWindow(model);
             var main = new MainViewModel(engine, action => dispatcher.BeginInvoke(action));
 
+            // The load is found only by its fullscreen window, so such apps are captured here.
             Update(engine,
+                SettingsOp.SetGlobal(Keys.CaptureFullscreenApps.Name, Keys.CaptureFullscreenApps.ToJson(true)),
                 SettingsOp.SetGlobal(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(clips)),
                 SettingsOp.SetGlobal(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(BufferWindow)),
                 SettingsOp.SetGlobal(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(5)),

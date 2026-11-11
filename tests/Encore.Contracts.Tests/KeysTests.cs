@@ -14,7 +14,7 @@ public sealed partial class KeysTests
                 "video", "trackLayout", "bufferWindow", "replayStorage", "ringPath", "saveCooldown", "outputFolder",
                 "hotkeys", "recordHotkeyMode", "monitorRecordingMonitor", "feedbackSounds", "feedbackSoundDevice",
                 "cleanup", "manualGames", "startWithWindows", "overlayDot", "appTheme",
-                "monitorRecordingScreens", "captureNewGames",
+                "monitorRecordingScreens", "captureNewGames", "captureFullscreenApps",
             ],
             Keys.All.Select(k => k.Name));
     }
@@ -25,6 +25,14 @@ public sealed partial class KeysTests
         // Today's behaviour unless the builder turns it off.
         Assert.True(Keys.CaptureNewGames.Default);
         Assert.False(Keys.CaptureNewGames.Overridable);
+    }
+
+    [Fact]
+    public void CaptureFullscreenAppsIsGlobalOnlyAndOffByDefault()
+    {
+        // An app found only by its fullscreen window waits for the user to turn it on.
+        Assert.False(Keys.CaptureFullscreenApps.Default);
+        Assert.False(Keys.CaptureFullscreenApps.Overridable);
     }
 
     [Fact]

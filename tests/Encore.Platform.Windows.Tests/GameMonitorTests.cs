@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Encore.Contracts.Messages;
+using Encore.Contracts.Settings;
 using Encore.Core.Sessions;
+using Encore.Platform.Windows.Stores;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.WindowsAndMessaging;
@@ -16,6 +18,8 @@ public sealed class GameMonitorTests : IDisposable
     private readonly FakeProbe _probe = new();
     private readonly List<(TargetCandidate? To, TargetChangeReason Reason)> _proposals = [];
     private readonly List<int> _detected = [];
+    private readonly List<string?> _sources = [];
+    private readonly List<StoreFolder> _stores = [];
     private readonly List<int> _exited = [];
     private readonly HashSet<string> _listed = new(StringComparer.Ordinal);
     private readonly ManualTime _time = new();
@@ -52,10 +56,15 @@ public sealed class GameMonitorTests : IDisposable
         NullLogger.Instance,
         () => _listed,
         GamePaths.Canonicalize(Path.Combine(_folder, "Install")),
-        game => _detected.Add(game.ProcessId),
+        game =>
+        {
+            _detected.Add(game.ProcessId);
+            _sources.Add(game.Source);
+        },
         game => _exited.Add(game.ProcessId),
         target,
-        _time);
+        _time,
+        stores: () => _stores);
 
     private void PollAfter(GameMonitor monitor, int seconds)
     {
@@ -177,6 +186,53 @@ public sealed class GameMonitorTests : IDisposable
         var vlc = Path.Combine(_folder, "vlc.exe");
         File.WriteAllBytes(vlc, []);
         _probe.Add(GamePid, vlc);
+        _probe.Foreground = new GameWindow(1, GamePid);
+
+        _monitor.Poll();
+        PollAfter(_monitor, 1);
+
+        Assert.Empty(_detected);
+        Assert.Empty(_proposals);
+    }
+
+    [Fact]
+    public void ANeverGameInsideASteamFolderStaysANeverGameAndAGameThereIsASteamGame()
+    {
+        _stores.Add(new StoreFolder(StoreLibraries.Normalize(_folder), GameStore.Steam));
+        var vlc = Path.Combine(_folder, "vlc.exe");
+        File.WriteAllBytes(vlc, []);
+        _probe.Add(GamePid, vlc);
+        _probe.Foreground = new GameWindow(1, GamePid);
+        _monitor.Poll();
+        Assert.Empty(_detected);
+
+        _probe.Add(GamePid + 1, GamePath);
+        _probe.Foreground = new GameWindow(2, GamePid + 1);
+        _monitor.Poll();
+
+        Assert.Equal([GamePid + 1], _detected);
+        Assert.Equal([GameSources.Steam], _sources);
+    }
+
+    [Fact]
+    public void AFullscreenGameInNoListOrStoreIsFoundByItsWindowAndAListedOneByTheList()
+    {
+        _probe.Add(GamePid, GamePath);
+        _probe.Foreground = new GameWindow(1, GamePid);
+        _monitor.Poll();
+
+        _listed.Add(GamePaths.Canonicalize(Path.Combine(_folder, "Other.exe")));
+        _probe.Add(GamePid + 1, Path.Combine(_folder, "Other.exe"));
+        _probe.Windows.Add(new GameWindow(2, GamePid + 1));
+        _monitor.Poll();
+
+        Assert.Equal([GameSources.Fullscreen, GameSources.WindowsList], _sources);
+    }
+
+    [Fact]
+    public void AFullscreenProgramUnderTheWindowsFolderIsNotDetected()
+    {
+        _probe.Add(GamePid, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe"));
         _probe.Foreground = new GameWindow(1, GamePid);
 
         _monitor.Poll();

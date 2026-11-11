@@ -13,6 +13,7 @@ internal sealed class GeneralSettingsViewModel(SettingsSender sender, AppUpdates
     private OverlayDotMode _overlayDot = Keys.OverlayDot.Default;
     private AppTheme _appTheme = Keys.AppTheme.Default;
     private bool _captureNewGames = Keys.CaptureNewGames.Default;
+    private bool _captureFullscreenApps = Keys.CaptureFullscreenApps.Default;
 
     public override string Title => "General";
 
@@ -65,6 +66,13 @@ internal sealed class GeneralSettingsViewModel(SettingsSender sender, AppUpdates
         set => SetAndSend(ref _captureNewGames, value, Keys.CaptureNewGames);
     }
 
+    /// <summary><c>captureFullscreenApps</c>: whether a new app found only in fullscreen is captured at once.</summary>
+    public bool CaptureFullscreenApps
+    {
+        get => _captureFullscreenApps;
+        set => SetAndSend(ref _captureFullscreenApps, value, Keys.CaptureFullscreenApps);
+    }
+
     protected override FrameworkElement CreateView() => new GeneralSettingsView { DataContext = this };
 
     protected override void OnRender(SettingsDocument document)
@@ -73,5 +81,6 @@ internal sealed class GeneralSettingsViewModel(SettingsSender sender, AppUpdates
         ShowGlobal(ref _overlayDot, Keys.OverlayDot, nameof(OverlayDot));
         ShowGlobal(ref _appTheme, Keys.AppTheme, nameof(AppTheme));
         ShowGlobal(ref _captureNewGames, Keys.CaptureNewGames, nameof(CaptureNewGames));
+        ShowGlobal(ref _captureFullscreenApps, Keys.CaptureFullscreenApps, nameof(CaptureFullscreenApps));
     }
 }

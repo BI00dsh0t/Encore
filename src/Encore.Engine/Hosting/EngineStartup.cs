@@ -429,6 +429,7 @@ internal sealed class EngineStartup
 
         // Only once they are reported: a start that fails before here reports them next time.
         _runtime.ClearInterrupted();
+        NonGameProfiles.CheckOnce(Store, _runtime, _warnings, _gameLog);
         if (!_libraryLoad.Corrupt)
         {
             return null;

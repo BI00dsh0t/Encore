@@ -33,7 +33,8 @@ public enum TargetChangeReason
 public sealed record TargetChanged(TargetGame? From, TargetGame? To, TargetChangeReason Reason);
 
 /// <summary>A running game that Game Detection found, known until its process exits; it is not the Target Game.</summary>
-public sealed record DetectedGame(string ProfileId, string Name, int ProcessId);
+/// <param name="Source">How it was found, one of <see cref="GameSources"/>; null from an older engine.</param>
+public sealed record DetectedGame(string ProfileId, string Name, int ProcessId, string? Source = null);
 
 /// <summary><c>game.add</c>: hand-adds an executable to <c>manualGames</c>; the engine makes the path canonical.</summary>
 public sealed record GameAdd(string Path);

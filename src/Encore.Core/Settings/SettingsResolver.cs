@@ -50,6 +50,7 @@ public static class SettingsResolver
             OverlayDot = Get(Keys.OverlayDot),
             AppTheme = Get(Keys.AppTheme),
             CaptureNewGames = Get(Keys.CaptureNewGames),
+            CaptureFullscreenApps = Get(Keys.CaptureFullscreenApps),
         };
     }
 
