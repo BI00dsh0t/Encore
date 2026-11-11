@@ -121,7 +121,7 @@ Yes. Clips are ordinary MP4 files. Discord, browsers and most players play the f
 
 ## Portable version
 
-Each release also has a zip, if you'd rather not install anything. Unzip it anywhere and run `Encore.App.exe`.
+Each release also has a zip, if you'd rather not install anything. Unzip it anywhere and run `Encore.exe`.
 
 It keeps its own settings, separate from an installed copy, and it doesn't update itself. It also starts with no hotkeys set, so set them first in Settings › Hotkeys. For most people the installer is the better choice.
 
