@@ -14,34 +14,64 @@ internal sealed partial class CaptureSession
     /// <summary>Opens the device, subscribes to the audio devices and starts capture; the output opens on the first frame.</summary>
     public void Open()
     {
-        // Several screens, or one screen matching its source: the plan sets codec and size before the encoder resolves.
-        if (IsMonitor && _options.CompositeMonitors is null)
-        {
-            if (_spec.Screens is { Count: > 1 } screens)
-            {
-                PlanCanvas(screens);
-            }
-            else if (_spec.Snapshot.Video.MatchSource)
-            {
-                var one = _spec.Screens is [var resolved]
-                    ? resolved
-                    : MonitorFinder.Find(_spec.Snapshot.MonitorRecordingMonitor, _log) is var found
-                        ? new DisplayMonitor(found.DeviceName, found.DeviceName, 0, 0, found.IsPrimary)
-                        : null;
-                if (one is not null)
-                {
-                    var placements = MonitorCanvas.Place([one]);
-                    if (placements.Count == 1)
-                    {
-                        (_spec, _) = CanvasPlanner.Plan(_spec, [one], placements, _encoderResolver.CanEncode, _options.Warn, _log);
-                    }
-                }
-            }
-        }
+        PlanMonitorCanvas();
 
         // Before anything is opened: the first codec use may run the probe.
         var (encoder, codec) = _encoderResolver.Resolve(_spec);
         var target = _spec.Target;
+        PickSource(target);
+        AllocatePath();
+        _device = (_monitor ?? _composite?[0].Monitor) is { } monitor
+            ? D3D11Device.CreateForMonitor(monitor.Handle, _loggers.CreateLogger<D3D11Device>())
+            : D3D11Device.Create(target.Window, _loggers.CreateLogger<D3D11Device>());
+        if (_options.GpuPriority is { } priority)
+        {
+            SetGpuPriority(priority);
+        }
+
+        var first = InstallFirstChain(encoder, codec, _device);
+        StartCapture(target, _device, first);
+    }
+
+    /// <summary>Several screens, or one screen matching its source: the plan sets codec and size before the encoder resolves.</summary>
+    private void PlanMonitorCanvas()
+    {
+        if (!IsMonitor || _options.CompositeMonitors is not null)
+        {
+            return;
+        }
+
+        if (_spec.Screens is { Count: > 1 } screens)
+        {
+            PlanCanvas(screens);
+            return;
+        }
+
+        if (!_spec.Snapshot.Video.MatchSource)
+        {
+            return;
+        }
+
+        var one = _spec.Screens is [var resolved]
+            ? resolved
+            : MonitorFinder.Find(_spec.Snapshot.MonitorRecordingMonitor, _log) is var found
+                ? new DisplayMonitor(found.DeviceName, found.DeviceName, 0, 0, found.IsPrimary)
+                : null;
+        if (one is null)
+        {
+            return;
+        }
+
+        var placements = MonitorCanvas.Place([one]);
+        if (placements.Count == 1)
+        {
+            (_spec, _) = CanvasPlanner.Plan(_spec, [one], placements, _encoderResolver.CanEncode, _options.Warn, _log);
+        }
+    }
+
+    /// <summary>Picks what to capture: the composited screens, one monitor, the dev-only composite, or the Target's window.</summary>
+    private void PickSource(CaptureTarget target)
+    {
         if (_composite is not null)
         {
             _monitor = _composite[0].Monitor;
@@ -66,25 +96,26 @@ internal sealed partial class CaptureSession
         {
             _window = WindowFinder.FromHandle(target.Window);
         }
+    }
 
-        if (!_options.Replay && !IsMonitor)
+    /// <summary>A session with no Rewind writes a file: the path given, else one allocated in the Output Folder.</summary>
+    private void AllocatePath()
+    {
+        if (_options.Replay || IsMonitor)
         {
-            _path = _options.OutputPath is { } explicitPath
-                ? Path.GetFullPath(explicitPath)
-                : OutputNaming.Allocate(_spec.Snapshot.OutputFolder ?? _options.OutputFolder, _window?.Title ?? "Capture", DateTime.Now, File.Exists);
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            return;
         }
 
-        _device = (_monitor ?? _composite?[0].Monitor) is { } monitor
-            ? D3D11Device.CreateForMonitor(monitor.Handle, _loggers.CreateLogger<D3D11Device>())
-            : D3D11Device.Create(target.Window, _loggers.CreateLogger<D3D11Device>());
-        if (_options.GpuPriority is { } priority)
-        {
-            SetGpuPriority(priority);
-        }
+        _path = _options.OutputPath is { } explicitPath
+            ? Path.GetFullPath(explicitPath)
+            : OutputNaming.Allocate(_spec.Snapshot.OutputFolder ?? _options.OutputFolder, _window?.Title ?? "Capture", DateTime.Now, File.Exists);
+        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+    }
 
-        // The first chain: its taps hold the last second of blocks until the anchor starts its audio.
-        var first = NewChain(_spec, encoder, codec, _path, _device);
+    /// <summary>Makes the first chain current; its taps hold the last second of blocks until the anchor starts its audio.</summary>
+    private EncoderChain InstallFirstChain(string encoder, VideoCodec codec, D3D11Device device)
+    {
+        var first = NewChain(_spec, encoder, codec, _path, device);
         lock (_gate)
         {
             lock (_chainLock)
@@ -96,18 +127,23 @@ internal sealed partial class CaptureSession
         first.Subscribe();
         _log.LogInformation("Mic {State} at start; mic mute covers {Inputs} Mic Device input(s) in muteAffected Tracks",
             _spec.MicMuted ? "muted" : "unmuted", _spec.Audio.GatedMicInputs().Count());
+        return first;
+    }
 
+    /// <summary>Starts the capture and the first-frame timer; a Monitor capture is installed as it is chosen.</summary>
+    private void StartCapture(CaptureTarget target, D3D11Device device, EncoderChain first)
+    {
         if (IsMonitor)
         {
             // Started as it is chosen: a WGC item that fails to start falls back to Desktop Duplication.
             _firstFrameTimer.Change(FirstFrameTimeout, Timeout.InfiniteTimeSpan);
-            _sources.StartForMonitor(_composite, _monitor, _device, first.Fps, StartInstalled);
+            _sources.StartForMonitor(_composite, _monitor, device, first.Fps, StartInstalled);
             return;
         }
 
         ICaptureSource capture = _composite is not null
-            ? _sources.Composite(_composite, _device, first.Fps)
-            : _sources.ForWindow(target.Window, _device, first.Fps);
+            ? _sources.Composite(_composite, device, first.Fps)
+            : _sources.ForWindow(target.Window, device, first.Fps);
         lock (_gate)
         {
             _capture = capture;
