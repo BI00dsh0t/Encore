@@ -83,118 +83,135 @@ internal sealed partial class CaptureSession
 
         private Exception? Run(string path)
         {
-            var log = session._log;
             var chain = _chain;
             var ring = chain.Ring!;
-            var leased = true;
-            var registered = true;
-            long? claimed = null;
-            long? end = null;
-
-            // The chain may retire once its last save has cut; the switching save first records where its Clip ends.
-            void EndRegistration()
-            {
-                registered = false;
-                session.EndWriter(chain, SwitchesTo is null ? null : end ?? session.MicrosAt(qpc));
-            }
-
+            var progress = new WriteProgress();
             try
             {
-                var pressUs = session.MicrosAt(qpc);
-                var toUs = WaitForKey(ring, pressUs);
-                end = toUs;
-
-                // Claimed as soon as the end is known: a later write starts here, not back over this one.
-                var previous = session._claim.Claim(toUs);
-                claimed = toUs;
-
-                // Every packet whose centre is before the key has been appended once each stream is an AAC frame past it.
-                var deadline = Deadline();
-                while (!ring.AllStreamsPast(toUs + AacFrameUs) && !session._outputFinished && Stopwatch.GetTimestamp() < deadline)
-                {
-                    Thread.Sleep(10);
-                }
-
-                var windowUs = _windowSeconds * 1_000_000L;
-                // The window back from the Clip's end, the key after the press, so the Clip never exceeds it.
-                var ownFromUs = Math.Max(toUs - windowUs, Volatile.Read(ref session._resetUs));
-                var fromUs = Math.Max(ownFromUs, previous);
-
-                // An empty cut, whatever set its start, makes no Clip.
-                if (toUs <= fromUs)
-                {
-                    throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The cut is empty: its start is at or after its end.");
-                }
-
-                // An earlier write still in flight has claimed all but under 1 s of the span.
-                if (previous > ownFromUs && toUs - fromUs < 1_000_000)
-                {
-                    throw new ErrorCodeException(ErrorCodes.ClipTooShort, "An earlier Clip still being written leaves less than 1 s to save.");
-                }
-
-                using var source = ring.Cut(chain.SnapStart(fromUs), toUs);
-                ring.Release();
-                leased = false;
-
-                // The cut holds its own pins and parameters: the chain's encoders are no longer needed.
-                EndRegistration();
-                if (source is null)
-                {
-                    throw new ErrorCodeException(
-                        ErrorCodes.ClipTooShort,
-                        "There's nothing to save yet: Encore has kept less than 1 s of gameplay since the game started or the last save.");
-                }
-
-                if (session._faults.ClipWrite(path) is { } fault)
-                {
-                    throw fault;
-                }
-
-                ClipWriter.Write(source, path, log);
-
-                // The cut's end: the press's keyframe, or a ring generation's boundary when the cut came from the one before it.
-                var endUs = source.Cut.EndUs;
-                session._claim.Succeeded(toUs, endUs);
-                claimed = null;
-                Volatile.Write(ref _endUs, endUs);
-                log.LogInformation(
-                    "Clip of {Seconds:0.000} s, {Start:0.000} s to {End:0.000} s after the anchor ({Packets} packets), written to {Path}",
-                    (source.Cut.EndUs - source.Cut.StartUs) / 1e6, source.Cut.StartUs / 1e6, source.Cut.EndUs / 1e6, source.Cut.Packets.Count, path);
+                CutAndWrite(chain, ring, path, progress);
                 return null;
             }
             catch (Exception e)
             {
                 // Give the span back: a later write starts at the last end still claimed.
-                if (claimed is { } toUs)
+                if (progress.Claimed is { } toUs)
                 {
                     session._claim.Failed(toUs);
                 }
 
-                // No file is left behind: neither the part nor the reserved one.
-                foreach (var file in new[] { path + ClipWriter.PartExtension, path })
-                {
-                    try
-                    {
-                        File.Delete(file);
-                    }
-                    catch (Exception deleteFailure) when (deleteFailure is IOException or UnauthorizedAccessException)
-                    {
-                        log.LogWarning("Could not delete {Path}: {Message}", file, deleteFailure.Message);
-                    }
-                }
-
+                DeleteFailed(path);
                 return e;
             }
             finally
             {
-                if (leased)
+                if (progress.Leased)
                 {
                     ring.Release();
                 }
 
-                if (registered)
+                if (progress.Registered)
                 {
-                    EndRegistration();
+                    EndRegistration(chain, progress);
+                }
+            }
+        }
+
+        /// <summary>Waits for the Clip's end and for every stream to pass it, then cuts the span and writes the file.</summary>
+        private void CutAndWrite(EncoderChain chain, ReplayRingSink ring, string path, WriteProgress progress)
+        {
+            var log = session._log;
+            var pressUs = session.MicrosAt(qpc);
+            var toUs = WaitForKey(ring, pressUs);
+            progress.End = toUs;
+
+            // Claimed as soon as the end is known: a later write starts here, not back over this one.
+            var previous = session._claim.Claim(toUs);
+            progress.Claimed = toUs;
+            WaitForStreams(ring, toUs);
+            var fromUs = StartOf(toUs, previous);
+            using var source = ring.Cut(chain.SnapStart(fromUs), toUs);
+            ring.Release();
+            progress.Leased = false;
+
+            // The cut holds its own pins and parameters: the chain's encoders are no longer needed.
+            EndRegistration(chain, progress);
+            if (source is null)
+            {
+                throw new ErrorCodeException(
+                    ErrorCodes.ClipTooShort,
+                    "There's nothing to save yet: Encore has kept less than 1 s of gameplay since the game started or the last save.");
+            }
+
+            if (session._faults.ClipWrite(path) is { } fault)
+            {
+                throw fault;
+            }
+
+            ClipWriter.Write(source, path, log);
+
+            // The cut's end: the press's keyframe, or a ring generation's boundary when the cut came from the one before it.
+            var endUs = source.Cut.EndUs;
+            session._claim.Succeeded(toUs, endUs);
+            progress.Claimed = null;
+            Volatile.Write(ref _endUs, endUs);
+            log.LogInformation(
+                "Clip of {Seconds:0.000} s, {Start:0.000} s to {End:0.000} s after the anchor ({Packets} packets), written to {Path}",
+                (source.Cut.EndUs - source.Cut.StartUs) / 1e6, source.Cut.StartUs / 1e6, source.Cut.EndUs / 1e6, source.Cut.Packets.Count, path);
+        }
+
+        /// <summary>Waits until each stream is an AAC frame past the key: every packet centred before it is then in the ring.</summary>
+        private void WaitForStreams(ReplayRingSink ring, long toUs)
+        {
+            var deadline = Deadline();
+            while (!ring.AllStreamsPast(toUs + AacFrameUs) && !session._outputFinished && Stopwatch.GetTimestamp() < deadline)
+            {
+                Thread.Sleep(10);
+            }
+        }
+
+        /// <summary>Where the cut starts: the window back from its end, no earlier than the last Reset or an earlier write's claim.</summary>
+        private long StartOf(long toUs, long previous)
+        {
+            var windowUs = _windowSeconds * 1_000_000L;
+
+            // The window back from the Clip's end, the key after the press, so the Clip never exceeds it.
+            var ownFromUs = Math.Max(toUs - windowUs, Volatile.Read(ref session._resetUs));
+            var fromUs = Math.Max(ownFromUs, previous);
+
+            // An empty cut, whatever set its start, makes no Clip.
+            if (toUs <= fromUs)
+            {
+                throw new ErrorCodeException(ErrorCodes.ClipTooShort, "The cut is empty: its start is at or after its end.");
+            }
+
+            // An earlier write still in flight has claimed all but under 1 s of the span.
+            if (previous > ownFromUs && toUs - fromUs < 1_000_000)
+            {
+                throw new ErrorCodeException(ErrorCodes.ClipTooShort, "An earlier Clip still being written leaves less than 1 s to save.");
+            }
+
+            return fromUs;
+        }
+
+        /// <summary>The chain may retire once its last save has cut; the switching save first records where its Clip ends.</summary>
+        private void EndRegistration(EncoderChain chain, WriteProgress progress)
+        {
+            progress.Registered = false;
+            session.EndWriter(chain, SwitchesTo is null ? null : progress.End ?? session.MicrosAt(qpc));
+        }
+
+        /// <summary>A failed write leaves no file behind: neither the part nor the reserved one.</summary>
+        private void DeleteFailed(string path)
+        {
+            foreach (var file in new[] { path + ClipWriter.PartExtension, path })
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch (Exception deleteFailure) when (deleteFailure is IOException or UnauthorizedAccessException)
+                {
+                    session._log.LogWarning("Could not delete {Path}: {Message}", file, deleteFailure.Message);
                 }
             }
         }
@@ -227,5 +244,21 @@ internal sealed partial class CaptureSession
         }
 
         private long Deadline() => Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * session._qpcFrequency);
+
+        /// <summary>How far one write has got, so its end gives back only what it still holds.</summary>
+        private sealed class WriteProgress
+        {
+            /// <summary>Whether the write still holds its lease on the ring.</summary>
+            public bool Leased { get; set; } = true;
+
+            /// <summary>Whether the write is still registered on its chain.</summary>
+            public bool Registered { get; set; } = true;
+
+            /// <summary>The end the write has claimed and not yet settled; null for none.</summary>
+            public long? Claimed { get; set; }
+
+            /// <summary>Where the Clip ends, once that is known.</summary>
+            public long? End { get; set; }
+        }
     }
 }
