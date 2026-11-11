@@ -25,17 +25,7 @@ public sealed class GamingTextBoxPaddingTests
             ShowActivated = false,
             ShowInTaskbar = false,
         };
-        var settings = new SettingsWindow
-        {
-            DataContext = model.Settings,
-            WindowStartupLocation = WindowStartupLocation.Manual,
-            Left = -30000,
-            Top = -30000,
-            ShowActivated = false,
-            ShowInTaskbar = false,
-        };
         ThemeService.ForWindow(window).Apply(AppTheme.GamingDark);
-        ThemeService.ForWindow(settings).Apply(AppTheme.GamingDark);
         try
         {
             window.Show();
@@ -44,11 +34,10 @@ public sealed class GamingTextBoxPaddingTests
             var offsets = Insets(window);
             Save(window, "gaming-textbox-library.png");
 
-            model.Settings.Select(model.Rewind);
-            settings.Show();
-            Sta.Pump(TimeSpan.FromMilliseconds(150));
-            offsets.AddRange(Insets(settings));
-            Save(settings, "gaming-textbox-clips.png");
+            model.OpenSettings(model.Rewind);
+            Sta.Pump(TimeSpan.FromMilliseconds(300));
+            offsets.AddRange(Insets(window.SettingsOverlay));
+            Save(window, "gaming-textbox-clips.png");
 
             // The Library's search box and the Clips page's cache-folder path box, at least.
             Assert.True(offsets.Count >= 2, $"Found {offsets.Count} text boxes");
@@ -56,14 +45,15 @@ public sealed class GamingTextBoxPaddingTests
         }
         finally
         {
-            settings.CloseForQuit();
             window.CloseForQuit();
         }
     });
 
     // Each shown TextBox's padding and where its content presenter actually starts, from the box's left edge.
-    private static List<(double Padding, double Inset)> Insets(Window window) =>
-        [.. Descendants<TextBox>(window).Where(b => b.IsVisible).Select(b => (b.Padding.Left, Descendants<ScrollContentPresenter>(b).Single().TranslatePoint(default, b).X))];
+    private static List<(double Padding, double Inset)> Insets(DependencyObject root) =>
+        [.. Descendants<TextBox>(root)
+            .Where(b => b.IsVisible)
+            .Select(b => (b.Padding.Left, Descendants<ScrollContentPresenter>(b).Single().TranslatePoint(default, b).X))];
 
     private static List<T> Descendants<T>(DependencyObject root)
         where T : DependencyObject

@@ -26,12 +26,6 @@ internal partial class MainWindow
     /// <summary>Restores and saves the window's size and place; null in tests, which place the window themselves.</summary>
     internal WindowPlacementKeeper? Placement { get; init; }
 
-    /// <summary>The Settings window's own size and place, handed to it when it is first opened.</summary>
-    internal WindowPlacementKeeper? SettingsPlacement { get; init; }
-
-    /// <summary>The Settings window, made the first time it opens and kept, hidden, until Quit.</summary>
-    internal SettingsWindow? Settings { get; private set; }
-
     /// <summary>Whether the window is in the player's full screen: for tests.</summary>
     internal bool IsFullScreen => _beforeFullScreen is not null;
 
@@ -49,10 +43,9 @@ internal partial class MainWindow
         Activate();
     }
 
-    /// <summary>Closes the window for good, on Quit, and the Settings window with it.</summary>
+    /// <summary>Closes the window for good, on Quit.</summary>
     public void CloseForQuit()
     {
-        Settings?.CloseForQuit();
         _quitting = true;
         Close();
     }
@@ -82,19 +75,17 @@ internal partial class MainWindow
         if (e.OldValue is MainViewModel old)
         {
             old.PropertyChanged -= OnModelPropertyChanged;
-            old.Settings.OpenRequested -= ShowSettings;
         }
 
         if (e.NewValue is MainViewModel model)
         {
             model.PropertyChanged += OnModelPropertyChanged;
-            model.Settings.OpenRequested += ShowSettings;
             ApplyFullScreen(model.IsPlayerFullScreen);
             ApplyNavigationWidth();
         }
     }
 
-    // A hidden window leaves full screen and takes the Settings window with it; the view model pauses what only a shown window needs.
+    // A hidden window leaves full screen, and the view model pauses what only a shown window needs.
     private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (Model is not { } model)
@@ -105,7 +96,6 @@ internal partial class MainWindow
         if (!IsVisible)
         {
             model.LeavePlayerFullScreen();
-            Settings?.Hide();
         }
 
         model.IsWindowShown = IsVisible;
@@ -168,7 +158,16 @@ internal partial class MainWindow
         }
     }
 
-    // The click has already flipped the toggle, so it is set back to checked while the Settings window is open.
+    // Settings over the shell is modal: nothing behind it takes focus, by keyboard or code, until it closes.
+    private void OnShellPreviewGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (Model?.Settings.IsOpen == true)
+        {
+            e.Handled = true;
+        }
+    }
+
+    // The click has already flipped the toggle, so it is set back to checked while Settings is open.
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         if (Model is { } model)
@@ -176,13 +175,6 @@ internal partial class MainWindow
             model.OpenSettings();
             SettingsButton.SetCurrentValue(ToggleButton.IsCheckedProperty, true);
         }
-    }
-
-    // The Settings window is owned by this one, made once and brought to the front on every request.
-    private void ShowSettings()
-    {
-        Settings ??= new SettingsWindow { DataContext = Model!.Settings, Owner = this, Placement = SettingsPlacement };
-        Settings.Open();
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e) => ApplyNavigationWidth();

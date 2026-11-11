@@ -17,9 +17,9 @@ public sealed class SourceResolutionViewTests
     public void TheClipsPageShowsSourceAndItsHelpInBothThemes() => Sta.Run(() =>
     {
         var model = new MainViewModel(SourceEngine(), action => action());
-        var window = new SettingsWindow
+        var window = new MainWindow
         {
-            DataContext = model.Settings,
+            DataContext = model,
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -30000,
             Top = -30000,
@@ -29,7 +29,7 @@ public sealed class SourceResolutionViewTests
         try
         {
             window.Show();
-            model.Settings.Select(model.Rewind);
+            model.OpenSettings(model.Rewind);
             foreach (var (theme, file) in new[] { (AppTheme.Fluent, "clips-source-fluent.png"), (AppTheme.GamingDark, "clips-source-gaming.png") })
             {
                 ThemeService.ForWindow(window).Apply(theme);

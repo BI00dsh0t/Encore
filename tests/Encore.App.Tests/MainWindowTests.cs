@@ -10,43 +10,61 @@ namespace Encore.App.Tests;
 public sealed class MainWindowTests
 {
     [Fact]
-    public void TheSettingsButtonOpensOneSettingsWindowAndEscOrHidingTheAppHidesIt() => Sta.Run(() =>
+    public void TheSettingsButtonOpensOneOverlayThatEscTheCrossAndTheScrimCloseAndTheLibraryCannotTakeFocus() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
         var window = new MainWindow { DataContext = model, Width = 960, Height = 900, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
             window.Show(); window.UpdateLayout();
-            var navigation = (ListBox)window.FindName("Nav");
+            var overlay = window.SettingsOverlay;
             var button = (System.Windows.Controls.Primitives.ToggleButton)window.FindName("SettingsButton");
-            void ClickSettings() => button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-            Assert.Single(navigation.Items);
-            model.IsNavigationExpanded = false;
-            window.UpdateLayout();
-            Assert.Equal(58, ((ColumnDefinition)window.FindName("NavColumn")).Width.Value);
+            var search = (TextBox)model.Library.View.FindName("SearchBox");
+            void ClickSettings()
+            {
+                button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Sta.Pump(TimeSpan.FromMilliseconds(250));
+            }
 
-            // The window opens beside the Library; pressed again, the button brings back the same window.
-            ClickSettings();
-            var settings = Assert.IsType<SettingsWindow>(window.Settings);
-            Assert.True(settings.IsVisible);
-            Assert.Same(window, settings.Owner);
-            Assert.True(model.Settings.IsShown);
-            Assert.True(button.IsChecked);
-            Assert.Same(model.Library.View, model.CurrentView);
-            ClickSettings();
-            Assert.Same(settings, window.Settings);
-            Assert.Single(window.OwnedWindows);
-            Assert.True(button.IsChecked);
+            void AssertClosed()
+            {
+                Sta.Pump(TimeSpan.FromMilliseconds(250));
+                Assert.False(model.Settings.IsOpen);
+                Assert.False(overlay.IsVisible);
+                Assert.False(button.IsChecked);
+                Assert.True(search.Focus(), "The Library takes focus again once Settings closes");
+            }
 
-            // Esc hides it, and so does the Main App hiding to the tray.
-            settings.RaiseEvent(Escape(settings));
-            Assert.False(settings.IsVisible);
-            Assert.False(model.Settings.IsShown);
-            Assert.False(button.IsChecked);
+            Assert.Single(((ListBox)window.FindName("Nav")).Items);
+            Assert.True(search.Focus());
+
+            // Settings opens over the Library, which then takes no focus; pressed again, the button opens no second overlay.
             ClickSettings();
-            Assert.True(settings.IsVisible);
-            window.Close();
-            Assert.False(settings.IsVisible);
+            Assert.True(model.Settings.IsOpen);
+            Assert.True(overlay.IsVisible);
+            Assert.True(button.IsChecked);
+            Assert.True(overlay.IsKeyboardFocusWithin);
+            Assert.False(search.Focus());
+            Assert.True(overlay.IsKeyboardFocusWithin);
+            ClickSettings();
+            Assert.True(model.Settings.IsOpen);
+            Assert.True(overlay.IsVisible);
+            Assert.Equal(1.0, overlay.Opacity, 2);
+
+            // Esc closes it, then the cross, then a click on the scrim.
+            overlay.RaiseEvent(Escape(window));
+            AssertClosed();
+            ClickSettings();
+            ((Button)overlay.FindName("CloseButton")).Command.Execute(null);
+            AssertClosed();
+            ClickSettings();
+            var scrim = (Border)overlay.FindName("Scrim");
+            var press = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent,
+            };
+            scrim.RaiseEvent(press);
+            AssertClosed();
         }
         finally { window.CloseForQuit(); }
     });
@@ -60,36 +78,39 @@ public sealed class MainWindowTests
         {
             window.Show(); window.UpdateLayout();
 
-            // The first-use tips' Change hotkeys link opens the window at Hotkeys.
+            // The first-use tips' Change hotkeys link opens Settings at Hotkeys.
             model.Library.Tips.ChangeHotkeysCommand.Execute(null);
-            var settings = Assert.IsType<SettingsWindow>(window.Settings);
-            settings.UpdateLayout();
-            var sections = (ListBox)settings.FindName("Sections");
-            var page = (ContentControl)settings.FindName("Page");
-            Assert.True(settings.IsVisible);
+            Sta.Pump(TimeSpan.FromMilliseconds(250));
+            var overlay = window.SettingsOverlay;
+            var sections = (ListBox)overlay.FindName("Sections");
+            var page = (ContentControl)overlay.FindName("Page");
+            Assert.True(overlay.IsVisible);
             Assert.Same(model.Hotkeys.View, page.Content);
             Assert.Same(model.Settings.Sections.Single(s => s.ViewModel == model.Hotkeys), sections.SelectedItem);
 
-            // Choosing a section in the list shows its page and title.
+            // Choosing a section in the list shows its page and title; a link while it is open switches the section.
             var soundsSection = model.Settings.Sections.Single(s => s.ViewModel == model.FeedbackSounds);
             var sounds = (ListBoxItem)sections.ItemContainerGenerator.ContainerFromItem(soundsSection);
             sounds.IsSelected = true;
             Assert.Same(model.FeedbackSounds.View, page.Content);
-            Assert.Equal("Sounds", ((ContentControl)settings.FindName("PageTitle")).Content);
+            Assert.Equal("Sounds", ((ContentControl)overlay.FindName("PageTitle")).Content);
+            model.Library.Tips.ChangeHotkeysCommand.Execute(null);
+            Assert.Same(model.Hotkeys.View, page.Content);
 
-            // A game's page: choosing Games again, then Esc, each go back to the list before Esc closes the window.
+            // A game's page: choosing Games again, then Esc, each go back to the list before Esc closes Settings.
             model.Settings.Select(model.GameProfiles);
             var drillIn = model.GameProfiles.DrillIn;
             drillIn.Open("test-game", "Test game");
+            sections.UpdateLayout();
             var games = (ListBoxItem)sections.ItemContainerGenerator.ContainerFromItem(model.Settings.SelectedSection);
             // The left-button event is direct, so the click is raised as the tunnelling mouse-up the section list hears.
             var click = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseUpEvent };
             games.RaiseEvent(click);
             Assert.False(drillIn.IsOpen);
             drillIn.Open("test-game", "Test game");
-            settings.RaiseEvent(Escape(settings));
+            overlay.RaiseEvent(Escape(window));
             Assert.False(drillIn.IsOpen);
-            Assert.True(settings.IsVisible);
+            Assert.True(model.Settings.IsOpen);
         }
         finally { window.CloseForQuit(); }
     });

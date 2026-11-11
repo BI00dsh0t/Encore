@@ -9,7 +9,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App;
 
-/// <summary>The Main App window's state: the status line, the Library and the Settings window, all from the engine's state.</summary>
+/// <summary>The Main App window's state: the status line, the Library and the Settings overlay, all from the engine's state.</summary>
 internal sealed class MainViewModel : Observable
 {
     public const string LibraryTitle = "Library";
@@ -43,7 +43,7 @@ internal sealed class MainViewModel : Observable
         GameProfiles = SettingsViewModels.OfType<GameProfilesViewModel>().Single();
         FeedbackSounds = SettingsViewModels.OfType<FeedbackSoundsViewModel>().Single();
         LibrarySettings = SettingsViewModels.OfType<LibrarySettingsViewModel>().Single();
-        Settings = new SettingsWindowViewModel(SettingsViewModels);
+        Settings = new SettingsOverlayViewModel(SettingsViewModels);
         Library = new LibraryViewModel(
             engine,
             LibraryThumbnails.Shell(post),
@@ -64,7 +64,7 @@ internal sealed class MainViewModel : Observable
         };
         Library.Playback.PropertyChanged += OnPlaybackPropertyChanged;
 
-        // The tips' Change hotkeys link opens the Settings window at Hotkeys.
+        // The tips' Change hotkeys link opens Settings at Hotkeys.
         Library.Tips.ChangeHotkeys = () => OpenSettings(Hotkeys);
 
         // Edit the main setting, from a game's page: the page that holds the key.
@@ -101,10 +101,10 @@ internal sealed class MainViewModel : Observable
 
     public LibraryViewModel Library { get; }
 
-    /// <summary>The Settings window: its sections, the selected page and whether it is shown.</summary>
-    public SettingsWindowViewModel Settings { get; }
+    /// <summary>The Settings overlay: its sections, the selected page and whether it is open.</summary>
+    public SettingsOverlayViewModel Settings { get; }
 
-    /// <summary>The main window's navigation: the Library; Settings opens in its own window.</summary>
+    /// <summary>The main window's navigation: the Library; Settings opens over it.</summary>
     public IReadOnlyList<NavItem> NavItems { get; }
 
     /// <summary>Whether the nav pane shows its labels, or only its icons.</summary>
@@ -138,9 +138,15 @@ internal sealed class MainViewModel : Observable
     /// <summary>The Library chosen again in the nav pane: an open item page goes back to the list.</summary>
     public void ReselectLibrary() => Library.DrillIn.Close();
 
-    /// <summary>Esc: leaves the player's full screen, else closes an open item page. False when it did neither.</summary>
+    /// <summary>Esc: Settings while it is open, else the player's full screen, else an open item page. False when it did none.</summary>
     public bool HandleEscape()
     {
+        if (Settings.IsOpen)
+        {
+            Settings.Escape();
+            return true;
+        }
+
         if (IsPlayerFullScreen)
         {
             LeavePlayerFullScreen();
@@ -150,9 +156,14 @@ internal sealed class MainViewModel : Observable
         return GoBack();
     }
 
-    /// <summary>Alt+Left and the mouse's Back: closes an open item page. False on the Library's list.</summary>
+    /// <summary>Alt+Left and the mouse's Back: closes the open item page, in Settings while it is open. False on a list.</summary>
     public bool GoBack()
     {
+        if (Settings.IsOpen)
+        {
+            return Settings.GoBack();
+        }
+
         if (!Library.DrillIn.IsOpen)
         {
             return false;
@@ -162,7 +173,7 @@ internal sealed class MainViewModel : Observable
         return true;
     }
 
-    /// <summary>The Settings button and every link to a settings page: shows the Settings window, at the page when one is given.</summary>
+    /// <summary>The Settings button and every link to a settings page: opens Settings, at the page when one is given.</summary>
     public void OpenSettings(SettingsViewModel? page = null) => Settings.Open(page);
 
     /// <summary>Whether the player page fills the screen: the window drops its frame, nav and headers.</summary>
@@ -188,6 +199,7 @@ internal sealed class MainViewModel : Observable
         {
             if (Set(ref _isWindowShown, value))
             {
+                Settings.IsWindowShown = value;
                 if (!value)
                 {
                     Library.Playback.Pause();

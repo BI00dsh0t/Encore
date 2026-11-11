@@ -26,7 +26,7 @@ public sealed partial class SettingsLayoutTests
     public void TheFirstFourPagesShowTheirSectionsAsCardsInBothThemes() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
-        var window = Offscreen(new SettingsWindow { DataContext = model.Settings });
+        var window = Offscreen(new MainWindow { DataContext = model });
         var theme = ThemeService.ForWindow(window);
         var expected = new (SettingsViewModel ViewModel, string Slug, string[] Sections)[]
         {
@@ -44,7 +44,7 @@ public sealed partial class SettingsLayoutTests
                 var card = (Style)window.FindResource("EncoreCardStyle");
                 foreach (var (viewModel, slug, sections) in expected)
                 {
-                    model.Settings.Select(viewModel);
+                    model.OpenSettings(viewModel);
                     Sta.Pump(TimeSpan.FromMilliseconds(100));
 
                     Assert.True(viewModel.View.IsLoaded, $"{viewModel.Title} didn't load under {which}");
@@ -88,7 +88,7 @@ public sealed partial class SettingsLayoutTests
             },
         };
         var model = new MainViewModel(engine, action => action());
-        var window = Offscreen(new SettingsWindow { DataContext = model.Settings });
+        var window = Offscreen(new MainWindow { DataContext = model });
         var theme = ThemeService.ForWindow(window);
         var expected = new (SettingsViewModel ViewModel, string Slug, string[] Sections)[]
         {
@@ -107,7 +107,7 @@ public sealed partial class SettingsLayoutTests
                 var accent = window.FindResource("AccentButtonStyle");
                 foreach (var (viewModel, slug, sections) in expected)
                 {
-                    model.Settings.Select(viewModel);
+                    model.OpenSettings(viewModel);
                     Sta.Pump(TimeSpan.FromMilliseconds(100));
                     if (viewModel == model.TrackLayout)
                     {
@@ -165,8 +165,8 @@ public sealed partial class SettingsLayoutTests
                         Sta.Pump(TimeSpan.FromMilliseconds(150));
                         var game = model.GameProfiles.OpenGame!.View;
                         Assert.True(game.IsLoaded, $"A game's page didn't load under {which}");
-                        Assert.True(((FrameworkElement)window.FindName("Breadcrumb")).IsVisible);
-                        Assert.False(((FrameworkElement)window.FindName("PageTitle")).IsVisible);
+                        Assert.True(((FrameworkElement)window.SettingsOverlay.FindName("Breadcrumb")).IsVisible);
+                        Assert.False(((FrameworkElement)window.SettingsOverlay.FindName("PageTitle")).IsVisible);
                         var gameSections = Descendants<HeaderedContentControl>(game).Where(s => s.Visibility == Visibility.Visible).ToList();
                         Assert.Equal(["Capture", "Recordings", "Files"], gameSections.Select(s => s.Header as string));
                         Assert.All(gameSections, s => Assert.Contains(Descendants<Border>(s), b => b.Style == card));
@@ -188,13 +188,13 @@ public sealed partial class SettingsLayoutTests
     {
         var engine = new FakeEngineSession();
         var model = new MainViewModel(engine, action => action());
-        var window = Offscreen(new SettingsWindow { DataContext = model.Settings });
+        var window = Offscreen(new MainWindow { DataContext = model });
         ThemeService.ForWindow(window).Apply(AppTheme.Fluent);
-        var message = (ContentControl)window.FindName("PageMessage");
+        var message = (ContentControl)window.SettingsOverlay.FindName("PageMessage");
         try
         {
             window.Show();
-            model.Settings.Select(model.General);
+            model.OpenSettings(model.General);
             Sta.Pump(TimeSpan.FromMilliseconds(100));
             Assert.False(message.IsVisible);
 
@@ -258,7 +258,7 @@ public sealed partial class SettingsLayoutTests
         encoder.Save(file);
     }
 
-    private static SettingsWindow Offscreen(SettingsWindow window)
+    private static MainWindow Offscreen(MainWindow window)
     {
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         window.Left = -30000;

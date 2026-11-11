@@ -1,15 +1,18 @@
 using System.Windows;
+using System.Windows.Input;
 
 namespace Encore.App.Settings;
 
-/// <summary>The Settings window's state: a section per settings page down the left, and the selected page with its drill-in.</summary>
-internal sealed class SettingsWindowViewModel : Observable
+/// <summary>The Settings overlay's state: whether it is open, a section per page, and the selected page with its drill-in.</summary>
+internal sealed class SettingsOverlayViewModel : Observable
 {
     private NavItem _selectedSection;
-    private bool _isShown;
+    private bool _isOpen;
+    private bool _isWindowShown;
 
-    public SettingsWindowViewModel(IReadOnlyList<SettingsViewModel> pages)
+    public SettingsOverlayViewModel(IReadOnlyList<SettingsViewModel> pages)
     {
+        CloseCommand = new RelayCommand(Close);
         Sections = pages.Select(page => new NavItem(page.Title, page)).ToList();
         _selectedSection = Sections[0];
         foreach (var drillIn in pages.Select(page => page.DrillIn).OfType<DrillIn>())
@@ -23,9 +26,6 @@ internal sealed class SettingsWindowViewModel : Observable
             };
         }
     }
-
-    /// <summary>Asks the shell to show the window and bring it to the front: the Settings button, or a link to a page.</summary>
-    public event Action? OpenRequested;
 
     /// <summary>One section per settings page, in the pages' order.</summary>
     public IReadOnlyList<NavItem> Sections { get; }
@@ -72,20 +72,36 @@ internal sealed class SettingsWindowViewModel : Observable
     /// <summary>Whether an item page is open, so the page header is a breadcrumb.</summary>
     public bool IsDrilledIn => CurrentDrillIn?.IsOpen == true;
 
-    /// <summary>Whether the window is shown; a page watches live data only while it is on screen.</summary>
-    public bool IsShown
+    /// <summary>Whether the overlay is open over the Main App window, which then takes no input behind it.</summary>
+    public bool IsOpen
     {
-        get => _isShown;
-        set
+        get => _isOpen;
+        private set
         {
-            if (Set(ref _isShown, value))
+            if (Set(ref _isOpen, value))
             {
                 UpdateOpenPage();
             }
         }
     }
 
-    /// <summary>Shows the window, at <paramref name="page"/> when one is given, else at the section last shown.</summary>
+    /// <summary>Whether the Main App window is shown; hidden in the tray, the overlay stays open but its page stops watching.</summary>
+    public bool IsWindowShown
+    {
+        get => _isWindowShown;
+        set
+        {
+            if (Set(ref _isWindowShown, value))
+            {
+                UpdateOpenPage();
+            }
+        }
+    }
+
+    /// <summary>The panel's close button.</summary>
+    public ICommand CloseCommand { get; }
+
+    /// <summary>Opens the overlay at <paramref name="page"/>, or at the section last shown; already open, it switches section.</summary>
     public void Open(SettingsViewModel? page = null)
     {
         if (page is not null)
@@ -93,7 +109,19 @@ internal sealed class SettingsWindowViewModel : Observable
             Select(page);
         }
 
-        OpenRequested?.Invoke();
+        IsOpen = true;
+    }
+
+    /// <summary>The close button, a click on the scrim, or Esc with no item page open.</summary>
+    public void Close() => IsOpen = false;
+
+    /// <summary>Esc: goes back from an item page, else closes the overlay.</summary>
+    public void Escape()
+    {
+        if (!GoBack())
+        {
+            Close();
+        }
     }
 
     public void Select(SettingsViewModel page) => SelectedSection = Sections.First(section => section.ViewModel == page);
@@ -134,8 +162,8 @@ internal sealed class SettingsWindowViewModel : Observable
             page.IsOpen = false;
         }
 
-        SelectedPage.IsOpen = IsShown;
+        SelectedPage.IsOpen = IsOnScreen(SelectedPage);
     }
 
-    private bool IsOnScreen(SettingsViewModel page) => IsShown && ReferenceEquals(page, SelectedPage);
+    private bool IsOnScreen(SettingsViewModel page) => IsOpen && IsWindowShown && ReferenceEquals(page, SelectedPage);
 }

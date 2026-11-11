@@ -104,7 +104,7 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                 }
 
                 // The switch with the delete confirmation open restyles it in place; No keeps the file.
-                first.Window.Settings!.Close();
+                first.Main.Settings.Close();
                 Pump(TimeSpan.FromMilliseconds(50));
                 var before = expected;
                 var after = before == AppTheme.Fluent ? AppTheme.GamingDark : AppTheme.Fluent;
