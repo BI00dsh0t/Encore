@@ -215,6 +215,8 @@ jobs:
   sign-feed:
     name: Sign the update feed
     needs: pack
+    # A skipped `sign` would otherwise skip every job after it, so each one states its own condition.
+    if: ${{ !cancelled() && needs.pack.result == 'success' }}
     runs-on: windows-2025
     environment: release
     timeout-minutes: 15
@@ -266,6 +268,7 @@ jobs:
   attest:
     name: Checksums and provenance
     needs: sign-feed
+    if: ${{ !cancelled() && needs.sign-feed.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -305,6 +308,7 @@ jobs:
   publish:
     name: Upload the draft release
     needs: [build, attest]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.attest.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
