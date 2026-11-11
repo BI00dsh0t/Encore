@@ -152,32 +152,39 @@ internal sealed partial class CaptureSession
 
         lock (_chainLock)
         {
-            _building = false;
-            // One built on a device lost meanwhile is torn down; the recovery builds it again.
-            if (chain is not null && !_chainsClosed && !_outputFinished && !Volatile.Read(ref _stopped) && !_deviceLost
-                && _wanted is { } wanted && ChainKey.SameChain(wanted, spec))
-            {
-                _prepared = chain;
-
-                // A move's chain arms at once, without a save.
-                TryStartArmLocked();
-            }
-            else if (chain is not null)
-            {
-                // Superseded meanwhile: torn down before the newer spec's build starts.
-                TearDownLocked(chain);
-            }
-            else if (ReferenceEquals(_wanted, spec))
-            {
-                _wanted = null;
-
-                // A move whose chain couldn't be built is forgotten: the size must hold again.
-                DropMoveLocked();
-            }
-
-            // A newer spec asked for while this one built.
-            StartBuildLocked();
+            HandOverLocked(chain, spec);
         }
+    }
+
+    /// <summary>Ends a build: its chain becomes the prepared one when still wanted, else it is torn down. Under the chain lock.</summary>
+    private void HandOverLocked(EncoderChain? chain, SessionSpec spec)
+    {
+        _building = false;
+
+        // One built on a device lost meanwhile is torn down; the recovery builds it again.
+        if (chain is not null && !_chainsClosed && !_outputFinished && !Volatile.Read(ref _stopped) && !_deviceLost
+            && _wanted is { } wanted && ChainKey.SameChain(wanted, spec))
+        {
+            _prepared = chain;
+
+            // A move's chain arms at once, without a save.
+            TryStartArmLocked();
+        }
+        else if (chain is not null)
+        {
+            // Superseded meanwhile: torn down before the newer spec's build starts.
+            TearDownLocked(chain);
+        }
+        else if (ReferenceEquals(_wanted, spec))
+        {
+            _wanted = null;
+
+            // A move whose chain couldn't be built is forgotten: the size must hold again.
+            DropMoveLocked();
+        }
+
+        // A newer spec asked for while this one built.
+        StartBuildLocked();
     }
 
     /// <summary>Tears a chain down on a background thread; no build starts until it is gone. Under the chain lock.</summary>
