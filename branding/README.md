@@ -36,7 +36,7 @@ The palette continues the app's existing Gaming dark theme. Brand mint is separa
 
 ## Voice
 
-Calm, direct, and specific. Suggested brand line: **Keep the moment.** Product description: **Instant replay and recording for Windows.** Use concrete interface copy such as “Clip saved”, “Recording”, and “Ready to save clips”.
+Calm, direct, and specific. Suggested brand line: **Keep the moment.** Product description: **Instant replay and recording for Windows.** Use concrete interface copy such as “Clip saved”, “Recording”, and “Ready to save Clips”.
 
 ## Reproduce
 
