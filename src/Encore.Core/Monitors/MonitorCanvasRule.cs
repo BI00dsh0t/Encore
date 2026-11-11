@@ -43,7 +43,14 @@ public static class MonitorCanvasRule
         var codec = outputCodec;
         if (codec == VideoCodec.H264 && Math.Max(nativeWidth, nativeHeight) > H264MaxSide)
         {
-            codec = canEncode(VideoCodec.Hevc) ? VideoCodec.Hevc : canEncode(VideoCodec.Av1) ? VideoCodec.Av1 : VideoCodec.H264;
+            if (canEncode(VideoCodec.Hevc))
+            {
+                codec = VideoCodec.Hevc;
+            }
+            else if (canEncode(VideoCodec.Av1))
+            {
+                codec = VideoCodec.Av1;
+            }
         }
 
         var (width, height) = Fit(nativeWidth, nativeHeight, MaxSide(codec));

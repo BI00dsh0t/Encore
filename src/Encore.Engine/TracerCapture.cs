@@ -151,9 +151,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     /// <summary>The session's <c>video</c> value from the command line, sized to the window (made even) when no size is given.</summary>
     private VideoSettings VideoFor(WindowInfo? window)
     {
-        var (width, height) = command.Size is { } size
-            ? (size.Width, size.Height)
-            : window is null ? MonitorCanvasSize() : WindowSize(window);
+        var (width, height) = SizeFor(window);
 
         // --match-source: the chain takes the window's own size at its first frame; width and height are the fallback.
         var video = new VideoSettings(command.Codec, width, height, command.Fps, command.BitrateKbps, RateControl.Cbr, command.MatchSource);
@@ -169,6 +167,16 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
     }
 
     /// <summary>The canvas rule, fitted to the codec's largest side only (no pixel budget).</summary>
+    private (int Width, int Height) SizeFor(WindowInfo? window)
+    {
+        if (command.Size is { } size)
+        {
+            return (size.Width, size.Height);
+        }
+
+        return window is null ? MonitorCanvasSize() : WindowSize(window);
+    }
+
     private (int Width, int Height) MonitorCanvasSize()
     {
         var placements = MonitorCanvas.Place(command.Monitors!);

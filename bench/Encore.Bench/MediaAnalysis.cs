@@ -99,9 +99,18 @@ internal static class MediaAnalysis
             string? title = null;
             if (stream.TryGetProperty("tags", out var tags))
             {
-                title = tags.TryGetProperty("title", out var tt) ? tt.GetString()
-                    : tags.TryGetProperty("handler_name", out var handler) ? handler.GetString()
-                    : null;
+                if (tags.TryGetProperty("title", out var tt))
+                {
+                    title = tt.GetString();
+                }
+                else if (tags.TryGetProperty("handler_name", out var handler))
+                {
+                    title = handler.GetString();
+                }
+                else
+                {
+                    title = null;
+                }
             }
 
             if (type == "video" && fps == 0 && stream.TryGetProperty("r_frame_rate", out var rate))
@@ -123,11 +132,14 @@ internal static class MediaAnalysis
         }
 
         var parts = text.Split('/');
-        return parts.Length == 2
+        if (parts.Length == 2
             && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var n)
-            && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var d) && d > 0
-            ? n / d
-            : double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var plain) ? plain : 0;
+            && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var d) && d > 0)
+        {
+            return n / d;
+        }
+
+        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var plain) ? plain : 0;
     }
 
     /// <summary>Every packet's pts and duration, s, per stream index, without decoding.</summary>

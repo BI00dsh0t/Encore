@@ -225,11 +225,21 @@ public sealed class SurfacesThemeTests
     });
 
     private static List<Color> GlyphColours(IEnumerable<FrameworkElement> glyphs) =>
-        glyphs.SelectMany(g => g is Panel p ? p.Children.OfType<Shape>() : g is Shape s ? [s] : [])
+        glyphs.SelectMany(ShapesIn)
             .SelectMany(s => new[] { s.Fill, s.Stroke })
             .OfType<SolidColorBrush>()
             .Select(b => b.Color)
             .ToList();
+
+    private static IEnumerable<Shape> ShapesIn(FrameworkElement glyph)
+    {
+        if (glyph is Panel panel)
+        {
+            return panel.Children.OfType<Shape>();
+        }
+
+        return glyph is Shape shape ? [shape] : [];
+    }
 
     private static string Name(AppTheme theme) => theme == AppTheme.Fluent ? "fluent" : "gaming-dark";
 

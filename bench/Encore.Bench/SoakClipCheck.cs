@@ -136,9 +136,13 @@ internal static class SoakClipCheck
         var stderr = process.StandardError.ReadToEnd().Trim();
         process.WaitForExit();
         _ = stdout.GetAwaiter().GetResult();
-        return process.ExitCode == 0 && stderr.Length == 0
-            ? null
-            : $"ffmpeg exit {process.ExitCode.ToString(CultureInfo.InvariantCulture)}{(stderr.Length > 0 ? ": " + Truncate(stderr) : "")}";
+        if (process.ExitCode == 0 && stderr.Length == 0)
+        {
+            return null;
+        }
+
+        var detail = stderr.Length > 0 ? ": " + Truncate(stderr) : "";
+        return $"ffmpeg exit {process.ExitCode.ToString(CultureInfo.InvariantCulture)}{detail}";
     }
 
     private static string Truncate(string text) => text.Length <= 300 ? text : text[..300] + "…";

@@ -133,7 +133,16 @@ internal static class FpsBenchmark
         var presentMon = context.ResolvePresentMon();
         var engine = context.ResolveEngine();
         var loadExe = realGame is null ? GpuLoadProcess.Resolve(context) : null;
-        var appExe = withRecording ? LiveApp.Resolve(context) : withOverlay ? AppOverlayHost.Resolve(context) : null;
+        string? appExe = null;
+        if (withRecording)
+        {
+            appExe = LiveApp.Resolve(context);
+        }
+        else if (withOverlay)
+        {
+            appExe = AppOverlayHost.Resolve(context);
+        }
+
         var folder = Path.Combine(context.RunFolder, "fps");
         var script = Path.Combine(context.RepoRoot, "tools", "measure-path-a.ps1");
 
@@ -339,10 +348,16 @@ internal static class FpsBenchmark
     }
 
     /// <summary>Why <paramref name="report"/> is not a measurement: the script aborted, or no capture run has a frame rate.</summary>
-    internal static string? Unmeasured(FpsReport report) =>
-        report.Aborted is { } aborted ? $"measure-path-a.ps1 aborted: {aborted}"
-        : !report.Runs.Any(r => r.Condition != "baseline" && r.AvgFps is not null) ? "No capture run has a frame rate; nothing was measured."
-        : null;
+    internal static string? Unmeasured(FpsReport report)
+    {
+        if (report.Aborted is { } aborted)
+        {
+            return $"measure-path-a.ps1 aborted: {aborted}";
+        }
+
+        bool anyCaptureRate = report.Runs.Any(r => r.Condition != "baseline" && r.AvgFps is not null);
+        return anyCaptureRate ? null : "No capture run has a frame rate; nothing was measured.";
+    }
 
     /// <summary>The Overlay's state from one line of the script's output: on, off, or null for no change.</summary>
     internal static bool? OverlayFor(string line) =>
@@ -426,7 +441,12 @@ internal static class FpsBenchmark
         }
 
         var loss = means?.FpsLossPercent;
-        var verdict = loss is null ? DriftMath.Inconclusive : loss < TargetLossPercent ? DriftMath.Pass : DriftMath.Miss;
+        var verdict = DriftMath.Inconclusive;
+        if (loss is not null)
+        {
+            verdict = loss < TargetLossPercent ? DriftMath.Pass : DriftMath.Miss;
+        }
+
         var aborted = root.TryGetProperty("aborted", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString() : null;
         return new FpsReport(
             DateTimeOffset.Now, game, settings, seconds, passes, summaryPath, aborted, baselineFps, baselineLow, means, runs, TargetLossPercent, verdict, load, overlay);

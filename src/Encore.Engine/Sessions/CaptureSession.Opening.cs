@@ -52,11 +52,17 @@ internal sealed partial class CaptureSession
             return;
         }
 
-        var one = _spec.Screens is [var resolved]
-            ? resolved
-            : MonitorFinder.Find(_spec.Snapshot.MonitorRecordingMonitor, _log) is var found
-                ? new DisplayMonitor(found.DeviceName, found.DeviceName, 0, 0, found.IsPrimary)
-                : null;
+        DisplayMonitor? one;
+        if (_spec.Screens is [var resolved])
+        {
+            one = resolved;
+        }
+        else
+        {
+            var found = MonitorFinder.Find(_spec.Snapshot.MonitorRecordingMonitor, _log);
+            one = new DisplayMonitor(found.DeviceName, found.DeviceName, 0, 0, found.IsPrimary);
+        }
+
         if (one is null)
         {
             return;

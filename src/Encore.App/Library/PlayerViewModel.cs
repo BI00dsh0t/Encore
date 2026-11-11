@@ -606,8 +606,20 @@ internal sealed class PlayerViewModel : Observable, IDisposable
     private static FileStream OpenShared(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
-    private TimeSpan Clamp(TimeSpan time) =>
-        time < TimeSpan.Zero ? TimeSpan.Zero : Media?.Duration is { } duration && time > duration ? duration : time;
+    private TimeSpan Clamp(TimeSpan time)
+    {
+        if (time < TimeSpan.Zero)
+        {
+            return TimeSpan.Zero;
+        }
+
+        if (Media?.Duration is { } duration && time > duration)
+        {
+            return duration;
+        }
+
+        return time;
+    }
 
     private void PlayPause()
     {

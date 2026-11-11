@@ -187,7 +187,14 @@ public static class Mp4File
     // mvhd: version and flags, then creation and modification times (32 or 64 bits), then the timescale. Null when it has none.
     private static uint? Timescale(ReadOnlySpan<byte> header, (int Start, int End) mvhd)
     {
-        var at = mvhd.End - mvhd.Start > 8 ? mvhd.Start + (header[mvhd.Start + 8] == 1 ? 28 : 20) : mvhd.End;
+        var at = mvhd.End;
+        bool hasVersion = mvhd.End - mvhd.Start > 8;
+        if (hasVersion)
+        {
+            bool hasLongTimes = header[mvhd.Start + 8] == 1;
+            at = mvhd.Start + (hasLongTimes ? 28 : 20);
+        }
+
         if (at + 4 > mvhd.End)
         {
             return null;

@@ -59,9 +59,17 @@ internal static class PlaybackCheck
             throw new BenchUsageException("--codecs must include h264: its clip is the one every player is checked with.");
         }
 
-        var recordingFile = options.Text("recording-file") is { } given
-            ? File.Exists(given) ? Path.GetFullPath(given) : throw new BenchFailure($"--recording-file '{given}' does not exist.")
-            : null;
+        string? recordingFile = null;
+        if (options.Text("recording-file") is { } given)
+        {
+            if (!File.Exists(given))
+            {
+                throw new BenchFailure($"--recording-file '{given}' does not exist.");
+            }
+
+            recordingFile = Path.GetFullPath(given);
+        }
+
         var engine = context.ResolveEngine();
         var tools = context.ResolveFfmpeg();
         var clip = Path.Combine(context.RunFolder, "playback.mp4");
@@ -173,10 +181,15 @@ internal static class PlaybackCheck
             if (player.Equals(PlayerScripts.Chrome, StringComparison.OrdinalIgnoreCase))
             {
                 Console.WriteLine($"{player}: playing the clip headless for {playSeconds} s ...");
-                result = PlayerScripts.FindChrome(chromeOption) is { } chrome
-                    ? PlayerScripts.RunChrome(chrome, clip, work, playSeconds, timeout)
-                    : new ScriptedPlayback(PlayerScripts.Chrome, null, null, null, null, null, null, null, null, null, null,
-                        chromeOption is null ? "Chrome is not installed (pass --chrome <exe>)" : $"Chrome is not at '{chromeOption}'");
+                if (PlayerScripts.FindChrome(chromeOption) is { } chrome)
+                {
+                    result = PlayerScripts.RunChrome(chrome, clip, work, playSeconds, timeout);
+                }
+                else
+                {
+                    var why = chromeOption is null ? "Chrome is not installed (pass --chrome <exe>)" : $"Chrome is not at '{chromeOption}'";
+                    result = new ScriptedPlayback(PlayerScripts.Chrome, null, null, null, null, null, null, null, null, null, null, why);
+                }
             }
             else if (player.Equals(PlayerScripts.WindowsMediaPlayer, StringComparison.OrdinalIgnoreCase))
             {
@@ -185,7 +198,13 @@ internal static class PlaybackCheck
             }
 
             var check = result is null ? PlayerScripts.NeedsPerson(player) : PlayerScripts.ToCheck(result with { Player = player });
-            Console.WriteLine($"  {player}: {check.Status}{(check.Plays is { } plays ? plays ? ", plays" : ", does not play" : "")}; {check.Notes}");
+            var playsText = "";
+            if (check.Plays is { } plays)
+            {
+                playsText = plays ? ", plays" : ", does not play";
+            }
+
+            Console.WriteLine($"  {player}: {check.Status}{playsText}; {check.Notes}");
             checks.Add(check);
         }
 

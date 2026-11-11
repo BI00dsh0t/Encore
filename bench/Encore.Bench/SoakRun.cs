@@ -403,9 +403,12 @@ internal static class SoakRun
                     engineProcess = engine = server;
                     var restarted = next.State.Warnings.FirstOrDefault(w => w.Code == ErrorCodes.EngineRestarted);
                     var pass = Back(next.State);
-                    Recovered(kind, at, clock, pass, pass
+                    var restartWarning = restarted is null ? "missing" : "active";
+                    var detail = pass
                         ? $"engine {old.Id} → {nextPid}, buffering on the load; {ErrorCodes.EngineRestarted}: {restarted?.Message}"
-                        : $"engine {old.Id} → {nextPid}, but within {limit.TotalSeconds:0} s: replay {next.State.Capture.Replay}, target {next.State.TargetGame?.ProfileId ?? "none"}, {ErrorCodes.EngineRestarted} {(restarted is null ? "missing" : "active")}");
+                        : $"engine {old.Id} → {nextPid}, but within {limit.TotalSeconds:0} s: replay {next.State.Capture.Replay}, "
+                            + $"target {next.State.TargetGame?.ProfileId ?? "none"}, {ErrorCodes.EngineRestarted} {restartWarning}";
+                    Recovered(kind, at, clock, pass, detail);
 
                     // The new engine starts empty.
                     bufferFull = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(bufferSeconds + 2);
@@ -513,12 +516,25 @@ internal static class SoakRun
                 }
             }
 
-            string? Stop() =>
-                engineProcess.HasExited ? $"the engine exited (code {ExitCode(engineProcess)})"
-                : appProcess.HasExited ? $"the App exited (code {ExitCode(appProcess)})"
-                : loadProcess.HasExited ? "the GPU load exited: " + loadProcess.ExitDescription()
-                : injectFault is not null ? "the Save Hotkey could not be injected"
-                : null;
+            string? Stop()
+            {
+                if (engineProcess.HasExited)
+                {
+                    return $"the engine exited (code {ExitCode(engineProcess)})";
+                }
+
+                if (appProcess.HasExited)
+                {
+                    return $"the App exited (code {ExitCode(appProcess)})";
+                }
+
+                if (loadProcess.HasExited)
+                {
+                    return "the GPU load exited: " + loadProcess.ExitDescription();
+                }
+
+                return injectFault is not null ? "the Save Hotkey could not be injected" : null;
+            }
 
             stopped = schedule.Run(Sample, () => Press(), Stop, cancel.Token);
             checks.GetAwaiter().GetResult();
@@ -610,10 +626,22 @@ internal static class SoakRun
     }
 
     /// <summary>A soak option given in minutes into the loop, from 0 up to (not at) the run's length; null when not given.</summary>
-    private static double? At(BenchOptions options, string name, double minutes) =>
-        options.Text(name) is null ? null
-        : options.Double(name, 0, 0, minutes) is var at && at < minutes ? at
-        : throw new BenchUsageException($"--{name} must be less than --minutes ({minutes:0.##}): an event at the end never fires.");
+    private static double? At(BenchOptions options, string name, double minutes)
+    {
+        if (options.Text(name) is null)
+        {
+            return null;
+        }
+
+        var at = options.Double(name, 0, 0, minutes);
+        bool isBeforeTheEnd = at < minutes;
+        if (!isBeforeTheEnd)
+        {
+            throw new BenchUsageException($"--{name} must be less than --minutes ({minutes:0.##}): an event at the end never fires.");
+        }
+
+        return at;
+    }
 
     private static TimeSpan Remaining(Stopwatch clock, TimeSpan limit) => limit - clock.Elapsed is var left && left > TimeSpan.Zero ? left : TimeSpan.Zero;
 
@@ -839,7 +867,13 @@ internal static class SoakRun
         md.AppendLine("|---|---|---|---|---|");
         foreach (var bound in report.Bounds)
         {
-            Line($"| {bound.Process} | {bound.Counter} | {bound.Detail} | {bound.Limit:0.##} | {(!bound.Judged ? "info" : bound.Pass ? "pass" : "**fail**")} |");
+            var verdict = "info";
+            if (bound.Judged)
+            {
+                verdict = bound.Pass ? "pass" : "**fail**";
+            }
+
+            Line($"| {bound.Process} | {bound.Counter} | {bound.Detail} | {bound.Limit:0.##} | {verdict} |");
         }
 
         md.AppendLine();

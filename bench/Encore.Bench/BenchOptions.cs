@@ -383,10 +383,21 @@ internal sealed class BenchContext
     public FfmpegTools ResolveFfmpeg() => FfmpegTools.Resolve(Options.Text("ffmpeg"), RepoRoot);
 
     /// <summary><c>--pwsh</c>, or <c>pwsh.exe</c> on the PATH.</summary>
-    public string ResolvePwsh() =>
-        Options.Text("pwsh") is { } given
-            ? File.Exists(given) ? Path.GetFullPath(given) : throw new BenchFailure($"pwsh is not at '{given}'.")
-            : FindOnPath("pwsh.exe") ?? throw new BenchFailure("pwsh.exe (PowerShell 7) is not on the PATH; install it or pass --pwsh <path>.");
+    public string ResolvePwsh()
+    {
+        if (Options.Text("pwsh") is not { } given)
+        {
+            return FindOnPath("pwsh.exe")
+                ?? throw new BenchFailure("pwsh.exe (PowerShell 7) is not on the PATH; install it or pass --pwsh <path>.");
+        }
+
+        if (!File.Exists(given))
+        {
+            throw new BenchFailure($"pwsh is not at '{given}'.");
+        }
+
+        return Path.GetFullPath(given);
+    }
 
     /// <summary><c>--presentmon</c>, or the newest <c>native/presentmon/PresentMon-*.exe</c>, as the FPS script picks it.</summary>
     public string ResolvePresentMon()
@@ -452,9 +463,17 @@ internal sealed record FfmpegTools(string Ffmpeg, string Ffprobe)
 {
     public static FfmpegTools? Find(string? given, string? repoRoot)
     {
-        var folders = given is not null
-            ? [Path.GetFullPath(given)]
-            : new[] { AppContext.BaseDirectory, repoRoot is null ? null : Path.Combine(repoRoot, "native", "ffmpeg") };
+        string?[] folders;
+        if (given is not null)
+        {
+            folders = [Path.GetFullPath(given)];
+        }
+        else
+        {
+            var repoFfmpeg = repoRoot is null ? null : Path.Combine(repoRoot, "native", "ffmpeg");
+            folders = [AppContext.BaseDirectory, repoFfmpeg];
+        }
+
         foreach (var folder in folders.OfType<string>())
         {
             var ffmpeg = Path.Combine(folder, "ffmpeg.exe");

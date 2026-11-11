@@ -75,6 +75,17 @@ internal static class DriftMath
     public const string Miss = "miss";
     public const string Inconclusive = "inconclusive";
 
+    /// <summary>The worst of the marks: a miss beats an inconclusive, which beats a pass.</summary>
+    public static string Worst(IReadOnlyCollection<string> marks)
+    {
+        if (marks.Contains(Miss))
+        {
+            return Miss;
+        }
+
+        return marks.Contains(Inconclusive) ? Inconclusive : Pass;
+    }
+
     /// <summary>A detected marker counts as a logged one within this of where the mapping puts it.</summary>
     private const double IdentityToleranceSeconds = 0.25;
 

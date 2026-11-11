@@ -144,9 +144,12 @@ public sealed partial class SessionOrchestrator
         }
 
         var target = active.Spec.Target;
-        return _target is { } candidate && candidate.ProcessId == target.ProcessId
-            ? candidate.Name
-            : target.ProfileId is { } profileId ? Path.GetFileName(profileId) : "Game";
+        if (_target is { } candidate && candidate.ProcessId == target.ProcessId)
+        {
+            return candidate.Name;
+        }
+
+        return target.ProfileId is { } profileId ? Path.GetFileName(profileId) : "Game";
     }
 
     /// <summary>A writer's result: a written Clip Resets Rewind at its end; a failed write Resets nothing.</summary>
@@ -164,7 +167,14 @@ public sealed partial class SessionOrchestrator
         }
 
         // The session still running, or the drained one: either still holds its Rewind.
-        var active = _active?.Id == written.SessionId ? _active : _drain?.Id == written.SessionId ? _drain : null;
+        bool isRunningSession = _active?.Id == written.SessionId;
+        bool isDrainedSession = _drain?.Id == written.SessionId;
+        var active = isDrainedSession ? _drain : null;
+        if (isRunningSession)
+        {
+            active = _active;
+        }
+
         if (active is not null)
         {
             // The running session takes the Effective Buffer Window at each Reset; a drained one keeps its ring as is.

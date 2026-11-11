@@ -405,10 +405,7 @@ internal static class ConformanceDrift
         var avDrift = Max(series.Select(s => s.Av.DriftMs));
         var t2t = Max(pairs.Select(p => p.DriftMs));
         var marks = series.Select(s => s.Av.Verdict).Concat(pairs.Select(p => p.Verdict)).Concat(lengths.Select(t => t.Mark)).ToList();
-        var verdict = series.Count == 0 ? DriftMath.Inconclusive
-            : marks.Contains(DriftMath.Miss) ? DriftMath.Miss
-            : marks.Contains(DriftMath.Inconclusive) ? DriftMath.Inconclusive
-            : DriftMath.Pass;
+        var verdict = series.Count == 0 ? DriftMath.Inconclusive : DriftMath.Worst(marks);
         return new ConformanceDriftReport(
             DateTimeOffset.Now, log.Minutes, log.App, log.Instance, log.Capture, log.Recording, log.StopReason, log.DeviceA, log.DeviceB,
             [.. layout.Tracks.Select(t => t.Name)], log.KeyAfterPressSeconds, scan.VideoFrames, series, pairs, avDrift, t2t, lengths,

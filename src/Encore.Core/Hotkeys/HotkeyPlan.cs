@@ -15,9 +15,16 @@ public static class HotkeyPlan
     {
         ArgumentNullException.ThrowIfNull(document);
 
-        HotkeySettings? hotkeys = document.Global.TryGetValue(Keys.Hotkeys.Name, out var raw) && Keys.Hotkeys.TryRead(raw, out var read)
-            ? read
-            : useCatalogDefault ? Keys.Hotkeys.Default : null;
+        HotkeySettings? hotkeys = null;
+        if (document.Global.TryGetValue(Keys.Hotkeys.Name, out var raw) && Keys.Hotkeys.TryRead(raw, out var read))
+        {
+            hotkeys = read;
+        }
+        else if (useCatalogDefault)
+        {
+            hotkeys = Keys.Hotkeys.Default;
+        }
+
         return For(hotkeys, SettingsResolver.Resolve(document, null).RecordHotkeyMode);
     }
 

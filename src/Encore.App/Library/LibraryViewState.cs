@@ -25,9 +25,13 @@ internal sealed record LibraryViewState(
         try
         {
             var state = JsonSerializer.Deserialize(File.ReadAllText(path), LibraryViewStateJson.Default.LibraryViewState);
-            return state is not null && Enum.IsDefined(state.GroupBy) && Enum.IsDefined(state.Date) && Enum.IsDefined(state.Sort)
-                ? state with { PlayerVolume = double.IsFinite(state.PlayerVolume) ? Math.Clamp(state.PlayerVolume, 0, 1) : 1.0 }
-                : Default;
+            if (state is null || !Enum.IsDefined(state.GroupBy) || !Enum.IsDefined(state.Date) || !Enum.IsDefined(state.Sort))
+            {
+                return Default;
+            }
+
+            var volume = double.IsFinite(state.PlayerVolume) ? Math.Clamp(state.PlayerVolume, 0, 1) : 1.0;
+            return state with { PlayerVolume = volume };
         }
         catch (Exception)
         {

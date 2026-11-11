@@ -94,11 +94,23 @@ internal sealed class VideoQualityViewModel : Observable
     }
 
     /// <summary>What "Source" records at, shown only while it's chosen; the H.264 line is there for its 4096 px limit.</summary>
-    public string? SourceHelp => _video.MatchSource
-        ? "Clips and Recordings are recorded at the game window's own size, and Monitor Recordings at the screen's size."
-            + " Frame rate and bitrate still apply."
-            + (_video.Codec == VideoCodec.H264 ? " With H.264, anything wider or taller than 4096 px is scaled down to fit." : "")
-        : null;
+    public string? SourceHelp
+    {
+        get
+        {
+            if (!_video.MatchSource)
+            {
+                return null;
+            }
+
+            var h264Note = _video.Codec == VideoCodec.H264
+                ? " With H.264, anything wider or taller than 4096 px is scaled down to fit."
+                : "";
+            return "Clips and Recordings are recorded at the game window's own size, and Monitor Recordings at the screen's size."
+                + " Frame rate and bitrate still apply."
+                + h264Note;
+        }
+    }
 
     /// <summary>The fps ceiling the engine offers.</summary>
     public int MaxFps => _options.MaxFps;

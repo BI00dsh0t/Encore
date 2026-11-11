@@ -381,6 +381,16 @@ public sealed unsafe class VideoEncoder : IDisposable
     private void LogOpened(VideoEncoderOptions settings, EncoderFamily family, bool software)
     {
         var nvenc = family == EncoderFamily.Nvenc;
+        var preset = "default";
+        if (nvenc)
+        {
+            preset = settings.Preset;
+        }
+        else if (software)
+        {
+            preset = SoftwarePreset;
+        }
+
         _logger.LogInformation(
             "{Encoder} {Width}x{Height} {Format}{Path}, {Fps} fps, {RateControl} {Kbps} kbps, GOP {Gop}, preset {Preset}, tune {Tune}",
             settings.Encoder,
@@ -392,7 +402,7 @@ public sealed unsafe class VideoEncoder : IDisposable
             settings.RateControl.ToString().ToUpperInvariant(),
             settings.BitrateKbps,
             settings.Fps,
-            nvenc ? settings.Preset : software ? SoftwarePreset : "default",
+            preset,
             nvenc ? settings.Tune ?? "default" : "default");
     }
 

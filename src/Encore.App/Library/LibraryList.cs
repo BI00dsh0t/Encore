@@ -418,10 +418,16 @@ internal sealed class LibraryList : Observable
 
     private string GameName(string key) => _gameOptions.TryGetValue(key, out var option) ? option.Name : key;
 
-    private static string DayName(DateTime day, DateTime today) =>
-        day == today ? "Today"
-        : day == today.AddDays(-1) ? "Yesterday"
-        : day.ToString(DayFormat, CultureInfo.InvariantCulture);
+    private static string DayName(DateTime day, DateTime today)
+    {
+        if (day == today)
+        {
+            return "Today";
+        }
+
+        bool isYesterday = day == today.AddDays(-1);
+        return isYesterday ? "Yesterday" : day.ToString(DayFormat, CultureInfo.InvariantCulture);
+    }
 
     private LibraryGroupHeader Header(string key, string name)
     {

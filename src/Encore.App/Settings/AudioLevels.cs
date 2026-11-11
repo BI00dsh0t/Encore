@@ -9,5 +9,13 @@ internal static class AudioLevels
     public static double Bar(float peak) => peak <= 0 ? 0 : Math.Clamp(((20 * Math.Log10(peak)) + 60) / 60, 0, 1);
 
     /// <summary>The kind caption (EXPERIENCE.md's glossary).</summary>
-    public static string Kind(AudioFlow flow, bool isMic) => flow == AudioFlow.Output ? "playback" : isMic ? "microphone" : "input";
+    public static string Kind(AudioFlow flow, bool isMic)
+    {
+        if (flow == AudioFlow.Output)
+        {
+            return "playback";
+        }
+
+        return isMic ? "microphone" : "input";
+    }
 }

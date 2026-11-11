@@ -579,7 +579,12 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
             }
 
             var start = rendered ? 0 : Start;
-            var end = rendered ? _effective is { } range ? range.End - range.Start : 0 : End;
+            var end = End;
+            if (rendered)
+            {
+                end = _effective is { } range ? range.End - range.Start : 0;
+            }
+
             return end > start ? (TimeSpan.FromSeconds(start), TimeSpan.FromSeconds(end)) : null;
         };
     }

@@ -114,11 +114,22 @@ internal sealed class OverlayViewModel : Observable
     }
 
     /// <summary>The dot the capture state calls for: solid while a Recording runs, hollow while Rewind buffers or drains.</summary>
-    public static OverlayDot DotFor(CaptureState? capture) =>
-        capture is null ? OverlayDot.None
-        : capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running ? OverlayDot.Solid
-        : capture.Replay is ReplayState.Buffering or ReplayState.Draining ? OverlayDot.Hollow
-        : OverlayDot.None;
+    public static OverlayDot DotFor(CaptureState? capture)
+    {
+        if (capture is null)
+        {
+            return OverlayDot.None;
+        }
+
+        bool isRecording = capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running;
+        if (isRecording)
+        {
+            return OverlayDot.Solid;
+        }
+
+        bool isRewindRunning = capture.Replay is ReplayState.Buffering or ReplayState.Draining;
+        return isRewindRunning ? OverlayDot.Hollow : OverlayDot.None;
+    }
 
     /// <summary>Reads the session again. Runs on the UI thread.</summary>
     public void Refresh()

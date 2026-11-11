@@ -182,9 +182,11 @@ internal sealed class GpuLoadProcess : IDisposable
                 if (line is null)
                 {
                     process.WaitForExit(5000);
-                    failure = process.HasExited && process.ExitCode == NoHardwareGpuExit
+                    bool foundNoGpu = process.HasExited && process.ExitCode == NoHardwareGpuExit;
+                    var exitCode = process.HasExited ? process.ExitCode.ToString(CultureInfo.InvariantCulture) : "?";
+                    failure = foundNoGpu
                         ? "The GPU load found no hardware GPU"
-                        : $"The GPU load exited before it was ready (exit {(process.HasExited ? process.ExitCode.ToString(CultureInfo.InvariantCulture) : "?")})";
+                        : $"The GPU load exited before it was ready (exit {exitCode})";
                     break;
                 }
 
