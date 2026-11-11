@@ -75,7 +75,8 @@ internal sealed partial class CaptureSession
         if (_composite is not null)
         {
             _monitor = _composite[0].Monitor;
-            _log.LogInformation("Monitor capture of {Count} screens composited: {Screens}", _composite.Count, string.Join("; ", _composite));
+            _log.LogInformation(
+                "Monitor capture of {Count} screens composited: {Screens}", _composite.Count, string.Join("; ", _composite));
         }
         else if (IsMonitor)
         {
@@ -108,7 +109,8 @@ internal sealed partial class CaptureSession
 
         _path = _options.OutputPath is { } explicitPath
             ? Path.GetFullPath(explicitPath)
-            : OutputNaming.Allocate(_spec.Snapshot.OutputFolder ?? _options.OutputFolder, _window?.Title ?? "Capture", DateTime.Now, File.Exists);
+            : OutputNaming.Allocate(
+                _spec.Snapshot.OutputFolder ?? _options.OutputFolder, _window?.Title ?? "Capture", DateTime.Now, File.Exists);
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
     }
 

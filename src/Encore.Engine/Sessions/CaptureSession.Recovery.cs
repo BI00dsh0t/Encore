@@ -110,7 +110,9 @@ internal sealed partial class CaptureSession
             SetGpuPriority(priority);
         }
 
-        _log.LogInformation("Recovered from the GPU device loss in {Ms:0} ms: a new device on {Adapter}, the encoder chain rebuilt; the frames captured meanwhile were dropped",
+        _log.LogInformation(
+            "Recovered from the GPU device loss in {Ms:0} ms: a new device on {Adapter}, the encoder chain rebuilt; "
+            + "the frames captured meanwhile were dropped",
             (now - began) * 1000.0 / _qpcFrequency, adapter);
         _events.ChainRestarted(now);
 
@@ -185,7 +187,8 @@ internal sealed partial class CaptureSession
             {
                 if (!ReferenceEquals(_window, window))
                 {
-                    throw new InvalidOperationException("The Target's window changed during the recovery; the next attempt captures the new one.");
+                    throw new InvalidOperationException(
+                        "The Target's window changed during the recovery; the next attempt captures the new one.");
                 }
 
                 InstallRecoveredLocked(attempt);

@@ -220,8 +220,10 @@ internal sealed class EncoderChain : IDisposable
         if (_paced?.Pacer is { } pacer)
         {
             _log.LogInformation(
-                "Video slots: {Fresh} new, {Repeated} repeated, {Skipped} skipped; {Replaced} held frames replaced, {Stale} stale, {QueueDrops} not drawn",
-                pacer.FreshSlots, pacer.RepeatedSlots, pacer.SkippedSlots, pacer.HeldReplaced, pacer.StaleFrames, _paced.QueueDrops + _video.PoolMisses);
+                "Video slots: {Fresh} new, {Repeated} repeated, {Skipped} skipped; "
+                + "{Replaced} held frames replaced, {Stale} stale, {QueueDrops} not drawn",
+                pacer.FreshSlots, pacer.RepeatedSlots, pacer.SkippedSlots, pacer.HeldReplaced, pacer.StaleFrames,
+                _paced.QueueDrops + _video.PoolMisses);
         }
 
         _audio.LogWritten();
@@ -340,10 +342,12 @@ internal sealed class EncoderChain : IDisposable
         _scaler = new FrameScaler(_device, OutputSize, nv12, 2 * VideoEncoder.PoolSize, _loggers.CreateLogger<FrameScaler>());
 
         _video = new VideoEncoder(_frames, packets, _qpcFrequency, sessionAnchorQpc, _loggers.CreateLogger<VideoEncoder>(), latency,
-            new VideoEncoderOptions(_options.NvencPreset, _options.NvencTune, EncoderName, Codec, video.Fps, video.BitrateKbps, video.RateControl));
+            new VideoEncoderOptions(
+                _options.NvencPreset, _options.NvencTune, EncoderName, Codec, video.Fps, video.BitrateKbps, video.RateControl));
         if (_options.Stages == CaptureStages.Full)
         {
-            var pacer = new FramePacer(_qpcFrequency, video.Fps, sessionAnchorQpc, VideoEncoder.TimeBase, firstFrameTakesNearestSlot: !first);
+            var pacer = new FramePacer(
+                _qpcFrequency, video.Fps, sessionAnchorQpc, VideoEncoder.TimeBase, firstFrameTakesNearestSlot: !first);
             _paced = new PacedVideoEncoder(_video, pacer, _loggers.CreateLogger<PacedVideoEncoder>());
             _paced.Failed += e => _fail(new ErrorCodeException(ErrorCodes.EncodeFailed, "Video encode failed: " + e.Message, e));
         }

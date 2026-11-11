@@ -60,7 +60,9 @@ internal sealed partial class CaptureSession
                 if (!HasRing || !Volatile.Read(ref _anchored) || IsEndingLocked || _deviceLost || IsSwitchingLocked || _restarting
                     || _current is not { IsBuilt: true, IsDisposed: false } old)
                 {
-                    _log.LogInformation("The encoder restart ({Reason}) was refused: the session isn't live, or a chain switch or restart is running", reason);
+                    _log.LogInformation(
+                        "The encoder restart ({Reason}) was refused: the session isn't live, or a chain switch or restart is running",
+                        reason);
                     return false;
                 }
 

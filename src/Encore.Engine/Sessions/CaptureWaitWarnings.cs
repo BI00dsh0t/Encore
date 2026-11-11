@@ -48,7 +48,8 @@ internal sealed class CaptureWaitWarnings(Warnings warnings, ILogger log)
         }
         else
         {
-            log.LogInformation("Stopped waiting to capture {Name} (process {Pid}): it is no longer the Target Game", target.Name, target.ProcessId);
+            log.LogInformation(
+                "Stopped waiting to capture {Name} (process {Pid}): it is no longer the Target Game", target.Name, target.ProcessId);
         }
 
         Withdraw();

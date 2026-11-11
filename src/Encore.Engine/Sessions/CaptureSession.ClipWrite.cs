@@ -9,7 +9,8 @@ namespace Encore.Engine.Sessions;
 internal sealed partial class CaptureSession
 {
     /// <summary>One save's write, bound to one encoder chain so it never mixes two chains' PTS. See docs/code-notes.md.</summary>
-    private sealed class ClipWrite(CaptureSession session, EncoderChain chain, VideoEncoder? video, long qpc, int windowSeconds) : IClipWrite
+    private sealed class ClipWrite(CaptureSession session, EncoderChain chain, VideoEncoder? video, long qpc, int windowSeconds)
+        : IClipWrite
     {
         private EncoderChain _chain = chain;
         private VideoEncoder? _video = video;
@@ -156,7 +157,8 @@ internal sealed partial class CaptureSession
             Volatile.Write(ref _endUs, endUs);
             log.LogInformation(
                 "Clip of {Seconds:0.000} s, {Start:0.000} s to {End:0.000} s after the anchor ({Packets} packets), written to {Path}",
-                (source.Cut.EndUs - source.Cut.StartUs) / 1e6, source.Cut.StartUs / 1e6, source.Cut.EndUs / 1e6, source.Cut.Packets.Count, path);
+                (source.Cut.EndUs - source.Cut.StartUs) / 1e6, source.Cut.StartUs / 1e6, source.Cut.EndUs / 1e6,
+                source.Cut.Packets.Count, path);
         }
 
         /// <summary>Waits until each stream is an AAC frame past the key: every packet centred before it is then in the ring.</summary>
@@ -169,7 +171,7 @@ internal sealed partial class CaptureSession
             }
         }
 
-        /// <summary>Where the cut starts: the window back from its end, no earlier than the last Reset or an earlier write's claim.</summary>
+        /// <summary>The cut's start, the latest of: the window back from its end, the last Reset, an earlier write's claim.</summary>
         private long StartOf(long toUs, long previous)
         {
             var windowUs = _windowSeconds * 1_000_000L;
@@ -235,7 +237,9 @@ internal sealed partial class CaptureSession
 
                 if (session._outputFinished || Stopwatch.GetTimestamp() >= deadline)
                 {
-                    session._log.LogInformation("No keyframe was encoded after the press within {Seconds:0.0} s; the Clip ends at the press", SaveWait.TotalSeconds);
+                    session._log.LogInformation(
+                        "No keyframe was encoded after the press within {Seconds:0.0} s; the Clip ends at the press",
+                        SaveWait.TotalSeconds);
                     return pressUs;
                 }
 

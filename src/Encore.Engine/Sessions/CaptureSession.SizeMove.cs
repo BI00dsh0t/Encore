@@ -30,7 +30,9 @@ internal sealed partial class CaptureSession
             return;
         }
 
-        if (_sizeWatch.Observe(qpc, content.Width, content.Height, current.OutputSize.Width, current.OutputSize.Height, current.Codec, reserved || current.Tap is { HasWriter: true }) is { } target)
+        if (_sizeWatch.Observe(
+                qpc, content.Width, content.Height, current.OutputSize.Width, current.OutputSize.Height, current.Codec,
+                reserved || current.Tap is { HasWriter: true }) is { } target)
         {
             StartMove(new VideoSize(target.Width, target.Height));
         }
@@ -45,7 +47,9 @@ internal sealed partial class CaptureSession
                 || IsSwitchingLocked || _prepared is not null || RecordReservedLocked()
                 || _current is not { IsBuilt: true, IsDisposed: false, Tap.HasWriter: false } old)
             {
-                _log.LogInformation("The game's size changed to {Size} and held; the move waits, since another chain change or a Recording is running", target);
+                _log.LogInformation(
+                    "The game's size changed to {Size} and held; the move waits, since another chain change or a Recording is running",
+                    target);
                 return;
             }
 
@@ -59,10 +63,16 @@ internal sealed partial class CaptureSession
             }
             else
             {
-                _log.LogInformation("The game's size changed to {Size} and held 3 s: Rewind moves to it, torn down first while a Monitor Recording runs", target);
+                _log.LogInformation(
+                    "The game's size changed to {Size} and held 3 s: Rewind moves to it, torn down first while a Monitor Recording runs",
+                    target);
                 _wanted = null;
                 _restarting = true;
-                _restartThread = new Thread(() => Restart(old, "the game's size changed while a Monitor Recording runs", old.Spec)) { Name = "Encoder chain move", IsBackground = true };
+                _restartThread = new Thread(() => Restart(old, "the game's size changed while a Monitor Recording runs", old.Spec))
+                {
+                    Name = "Encoder chain move",
+                    IsBackground = true,
+                };
                 _restartThread.Start();
             }
         }
@@ -117,7 +127,8 @@ internal sealed partial class CaptureSession
         }
 
         armed.StartAudio(armQpc);
-        _log.LogInformation("The size move switches Rewind to its new encoder chain {At:0.000} s after the anchor", MicrosAt(armQpc) / 1e6);
+        _log.LogInformation(
+            "The size move switches Rewind to its new encoder chain {At:0.000} s after the anchor", MicrosAt(armQpc) / 1e6);
     }
 
     /// <summary>A move ends once a chain at its size is current: that size is the source's from here. Under the chain lock.</summary>
@@ -140,7 +151,8 @@ internal sealed partial class CaptureSession
             return;
         }
 
-        _log.LogInformation("A Recording starts: the size move to {Size} is cancelled, and found again after it if the size still holds", _movingTo);
+        _log.LogInformation(
+            "A Recording starts: the size move to {Size} is cancelled, and found again after it if the size still holds", _movingTo);
         MovesCancelled++;
         DropMoveLocked();
         _wanted = null;

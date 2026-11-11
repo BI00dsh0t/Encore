@@ -204,7 +204,8 @@ internal sealed partial class CaptureSession
             {
                 // No capture runs on a lost device: the recovery captures the new window.
                 _window = window;
-                _log.LogInformation("Retargeted to window 0x{Handle:X} while the GPU device is lost; the recovery captures it", target.Window);
+                _log.LogInformation(
+                    "Retargeted to window 0x{Handle:X} while the GPU device is lost; the recovery captures it", target.Window);
                 return false;
             }
 
@@ -215,7 +216,7 @@ internal sealed partial class CaptureSession
         return true;
     }
 
-    /// <summary>Installs the new window's capture, under the gate; null when the session stopped or the device was lost meanwhile.</summary>
+    /// <summary>Installs the new window's capture, under the gate; null when the session stopped or the device was lost.</summary>
     private WindowCapture? InstallCapture(CaptureTarget target, WindowInfo window)
     {
         lock (_gate)

@@ -11,8 +11,8 @@ public sealed class EncoderResolverTests
     public void ACodecWithNoWorkingEncoderFallsBackToH264()
     {
         var video = new VideoSettings(VideoCodec.Hevc, 1920, 1080, 60, 20_000, RateControl.Cbr);
-        var document = SettingsDocument.Empty with { Global = SettingsDocument.Empty.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(video)) };
-        var snapshot = Core.Settings.SettingsResolver.Resolve(document, null);
+        var global = SettingsDocument.Empty.Global.SetItem(Keys.Video.Name, Keys.Video.ToJson(video));
+        var snapshot = Core.Settings.SettingsResolver.Resolve(SettingsDocument.Empty with { Global = global }, null);
         var spec = new SessionSpec(SessionKind.Game, new CaptureTarget(0, 0, null), snapshot, SessionAudio.None);
         var resolver = new EncoderResolver(null, new OnlyH264(), NullLogger.Instance);
 

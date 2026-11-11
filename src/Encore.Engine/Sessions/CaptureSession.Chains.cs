@@ -76,7 +76,7 @@ internal sealed partial class CaptureSession
         }
     }
 
-    /// <summary>Records the spec asked for and hands back the prepared chain it replaces; false when nothing changes. Under the chain lock.</summary>
+    /// <summary>Records the spec asked for and hands back the prepared chain it replaces; false when nothing changes.</summary>
     private bool WantLocked(SessionSpec? next, out EncoderChain? drop)
     {
         drop = null;
@@ -102,7 +102,8 @@ internal sealed partial class CaptureSession
             return false;
         }
 
-        _log.LogInformation("The profile's settings need another encoder chain ({Size} at {Fps} fps, {Tracks} Tracks); it is built for the next save",
+        _log.LogInformation(
+            "The profile's settings need another encoder chain ({Size} at {Fps} fps, {Tracks} Tracks); it is built for the next save",
             $"{next.Snapshot.Video.Width}x{next.Snapshot.Video.Height}", next.Snapshot.Video.Fps, next.Audio.Tracks.Count);
         _wanted = next;
         drop = _prepared;
@@ -141,7 +142,10 @@ internal sealed partial class CaptureSession
         }
         catch (Exception e)
         {
-            _log.LogWarning("The encoder chain for the profile's new settings couldn't be built; the session keeps its own until the next Reset or settings change: {Message}", e.Message);
+            _log.LogWarning(
+                "The encoder chain for the profile's new settings couldn't be built; "
+                + "the session keeps its own until the next Reset or settings change: {Message}",
+                e.Message);
             chain?.Dispose();
             chain = null;
         }
@@ -364,7 +368,8 @@ internal sealed partial class CaptureSession
         }
 
         var message = first == long.MaxValue
-            ? $"After your last saved Clip, the video didn't restart for {(MicrosAt(Stopwatch.GetTimestamp()) - end) / 1000} ms; the next Clip starts when it does."
+            ? $"After your last saved Clip, the video didn't restart for {(MicrosAt(Stopwatch.GetTimestamp()) - end) / 1000} ms; "
+                + "the next Clip starts when it does."
             : $"After your last saved Clip, the video restarted {(first - end) / 1000} ms late; the next Clip starts that much later.";
         _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
         _options.ResetGap?.Invoke(message);
@@ -380,7 +385,8 @@ internal sealed partial class CaptureSession
 
         var deadline = Stopwatch.GetTimestamp() + (long)(SaveWait.TotalSeconds * _qpcFrequency);
         // End stops the session, then joins this thread: it must not wait out the deadline.
-        while (ring.FirstKeyUs == long.MaxValue && !_chainsClosed && !_outputFinished && !Volatile.Read(ref _stopped) && Stopwatch.GetTimestamp() < deadline)
+        while (ring.FirstKeyUs == long.MaxValue && !_chainsClosed && !_outputFinished
+            && !Volatile.Read(ref _stopped) && Stopwatch.GetTimestamp() < deadline)
         {
             Thread.Sleep(10);
         }
@@ -393,8 +399,10 @@ internal sealed partial class CaptureSession
         var reset = Volatile.Read(ref _resetUs);
         var first = ring.FirstKeyUs;
         var message = first == long.MaxValue
-            ? "Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; the video didn't restart within 1 s, so the next Clip starts when it does."
-            : $"Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; the next Clip starts {(reset == long.MinValue ? 0 : Math.Max(0, first - reset)) / 1000} ms after the last one ended.";
+            ? "Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; "
+                + "the video didn't restart within 1 s, so the next Clip starts when it does."
+            : "Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; "
+                + $"the next Clip starts {(reset == long.MinValue ? 0 : Math.Max(0, first - reset)) / 1000} ms after the last one ended.";
         _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
         _options.ResetGap?.Invoke(message);
     }

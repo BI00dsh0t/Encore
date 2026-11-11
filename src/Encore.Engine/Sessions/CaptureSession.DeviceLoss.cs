@@ -60,7 +60,9 @@ internal sealed partial class CaptureSession
             }
         }
 
-        _log.LogWarning("{Code}: the GPU device was lost ({Message}); nothing is encoded until the session recovers", ErrorCodes.GpuReset, e.Message);
+        _log.LogWarning(
+            "{Code}: the GPU device was lost ({Message}); nothing is encoded until the session recovers",
+            ErrorCodes.GpuReset, e.Message);
         _events.DeviceLost(e);
         return true;
     }
@@ -118,7 +120,8 @@ internal sealed partial class CaptureSession
                 _suspended = true;
                 MarkDeviceLostLocked();
 
-                _log.LogInformation("The PC is going to sleep: tearing capture, the encoder chains and the device down; Rewind's ring is kept");
+                _log.LogInformation(
+                    "The PC is going to sleep: tearing capture, the encoder chains and the device down; Rewind's ring is kept");
                 var previous = _recoveryThread;
                 _recoveryThread = new Thread(() => SuspendTearDown(previous)) { Name = "Suspend teardown", IsBackground = true };
                 _recoveryThread.Start();

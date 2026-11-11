@@ -38,7 +38,7 @@ internal sealed record CaptureSessionOptions
 
     public ColorPath Color { get; init; } = ColorPath.X1;
 
-    /// <summary>An FFmpeg encoder that every session uses whatever the codec, bypassing the probe; for <c>--encoder</c> and tests.</summary>
+    /// <summary>An FFmpeg encoder every session uses whatever the codec, bypassing the probe; for <c>--encoder</c> and tests.</summary>
     public string? Encoder { get; init; }
 
     /// <summary>Called once, on the capture thread, with the anchor QPC once the first frame has opened the output.</summary>

@@ -73,7 +73,8 @@ internal sealed class VideoEncoderCatalog : IVideoEncoderCatalog
             }
         }
 
-        _log.LogInformation("Video options: {Codecs}", offers.Count == 0 ? "no codec" : string.Join(", ", offers.Select(o => $"{o.Codec} via {o.Encoder}")));
+        var codecs = offers.Count == 0 ? "no codec" : string.Join(", ", offers.Select(o => $"{o.Codec} via {o.Encoder}"));
+        _log.LogInformation("Video options: {Codecs}", codecs);
         return VideoOptions.FromProbe(offers);
     }
 

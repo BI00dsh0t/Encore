@@ -89,7 +89,7 @@ internal sealed class EstimatePublisher : IDisposable
         {
             return new DriveInfo(Path.GetPathRoot(Path.GetFullPath(folder))!).AvailableFreeSpace;
         }
-        catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException or NotSupportedException or System.Security.SecurityException)
+        catch (Exception e) when (IsUnreadable(e))
         {
             return null;
         }
@@ -101,14 +101,25 @@ internal sealed class EstimatePublisher : IDisposable
         try
         {
             return new DirectoryInfo(folder).EnumerateFiles(RingFile.Prefix + "*.bin")
-                .Where(f => f.Extension == ".bin" && Path.GetFileNameWithoutExtension(f.Name)[RingFile.Prefix.Length..] is { Length: > 0 } n && n.All(char.IsAsciiDigit))
+                .Where(IsRingFile)
                 .Sum(f => f.Length);
         }
-        catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException or NotSupportedException or System.Security.SecurityException)
+        catch (Exception e) when (IsUnreadable(e))
         {
             return 0;
         }
     }
+
+    // A ring file is named by the prefix and a number.
+    private static bool IsRingFile(FileInfo file) =>
+        file.Extension == ".bin"
+        && Path.GetFileNameWithoutExtension(file.Name)[RingFile.Prefix.Length..] is { Length: > 0 } number
+        && number.All(char.IsAsciiDigit);
+
+    // A folder or drive that can't be read, for any of the reasons the file system gives.
+    private static bool IsUnreadable(Exception e) =>
+        e is IOException or ArgumentException or UnauthorizedAccessException or NotSupportedException
+            or System.Security.SecurityException;
 
     private static bool Differs(StorageEstimate last, StorageEstimate next) =>
         last.Storage != next.Storage

@@ -21,7 +21,9 @@ internal sealed partial class CaptureSession
                     || _prepared is not null || _building || _tearingDown > 0
                     || _current is not { IsBuilt: true, IsDisposed: false, Tap.HasWriter: false } old)
                 {
-                    _log.LogInformation("The encoder chain switch at the Reset was refused: the session isn't live, or a chain is being built, switched or recorded from; it is retried at the next Reset");
+                    _log.LogInformation(
+                        "The encoder chain switch at the Reset was refused: the session isn't live, or a chain is being built, "
+                        + "switched or recorded from; it is retried at the next Reset");
                     return false;
                 }
 
@@ -32,7 +34,11 @@ internal sealed partial class CaptureSession
 
                 _wanted = null;
                 _restarting = true;
-                _restartThread = new Thread(() => Restart(old, "settings changed while a Monitor Recording runs", next)) { Name = "Encoder chain switch", IsBackground = true };
+                _restartThread = new Thread(() => Restart(old, "settings changed while a Monitor Recording runs", next))
+                {
+                    Name = "Encoder chain switch",
+                    IsBackground = true,
+                };
                 _restartThread.Start();
             }
         }
@@ -49,7 +55,9 @@ internal sealed partial class CaptureSession
             return;
         }
 
-        _log.LogInformation("Encoder restart ({Reason}) at {At:0.000} s after the anchor: the chain is torn down and rebuilt", reason, MicrosAt(began) / 1e6);
+        _log.LogInformation(
+            "Encoder restart ({Reason}) at {At:0.000} s after the anchor: the chain is torn down and rebuilt",
+            reason, MicrosAt(began) / 1e6);
 
         // Kept out of the teardown: closing it ends the Recording, which must post back after the orchestrator hears of the restart.
         var swap = new ChainSwap { Tap = old.TakeTap() };
@@ -124,13 +132,16 @@ internal sealed partial class CaptureSession
         InstallReplacement(swap, next, old);
         if (switchTo is not null)
         {
-            _log.LogInformation("The encoder chain switched at the Reset in {Ms:0} ms, torn down first: {Size}, {Tracks} Tracks from here on",
+            _log.LogInformation(
+                "The encoder chain switched at the Reset in {Ms:0} ms, torn down first: {Size}, {Tracks} Tracks from here on",
                 (now - began) * 1000.0 / _qpcFrequency, next.OutputSize, switchTo.Audio.Tracks.Count);
             ReportSwitchGap(next);
             return;
         }
 
-        _log.LogInformation("The encoder chain restarted in {Ms:0} ms; the frames captured meanwhile were dropped", (now - began) * 1000.0 / _qpcFrequency);
+        _log.LogInformation(
+            "The encoder chain restarted in {Ms:0} ms; the frames captured meanwhile were dropped",
+            (now - began) * 1000.0 / _qpcFrequency);
         _events.ChainRestarted(now);
     }
 
@@ -181,7 +192,9 @@ internal sealed partial class CaptureSession
             swap.Next?.Dispose(keepRing: switchTo is null);
         }
 
-        _log.LogWarning("The encoder restart ({Reason}) stopped: the GPU device was lost ({Message}); the session recovers instead", reason, e.Message);
+        _log.LogWarning(
+            "The encoder restart ({Reason}) stopped: the GPU device was lost ({Message}); the session recovers instead",
+            reason, e.Message);
         lock (_gate)
         {
             lock (_chainLock)

@@ -88,7 +88,9 @@ internal sealed partial class CaptureSession
         // Bounded: an attempt hung on the driver must not freeze the orchestrator.
         if (recovery is not null && !recovery.Join(RecoveryJoinWait))
         {
-            _log.LogWarning("The GPU device recovery hadn't finished within {Seconds:0} s of the stop; the session ends without it", RecoveryJoinWait.TotalSeconds);
+            _log.LogWarning(
+                "The GPU device recovery hadn't finished within {Seconds:0} s of the stop; the session ends without it",
+                RecoveryJoinWait.TotalSeconds);
         }
     }
 
@@ -96,7 +98,8 @@ internal sealed partial class CaptureSession
     private SessionOutcome NeverAnchored()
     {
         var message = _failure?.Message ?? $"Capture stopped ({_stopReason}) before the first frame.";
-        return new SessionOutcome(null, _stopReason, new EngineFailure(_failure is null ? ErrorCodes.CaptureFailed : EngineFailure.CodeOf(_failure), message));
+        var code = _failure is null ? ErrorCodes.CaptureFailed : EngineFailure.CodeOf(_failure);
+        return new SessionOutcome(null, _stopReason, new EngineFailure(code, message));
     }
 
     /// <summary>Flushes a live chain once capture has stopped, then writes the stats file.</summary>

@@ -7,7 +7,8 @@ namespace Encore.Engine.Sessions;
 internal sealed partial class CaptureSession
 {
     /// <summary>One Recording: Start attaches a writer to the tap and asks for a keyframe; the writer's thread does the rest.</summary>
-    private sealed class RecordingWrite(CaptureSession session, EncoderChain chain, RecordingTap tap, VideoEncoder video, long qpc) : IRecordingWrite
+    private sealed class RecordingWrite(CaptureSession session, EncoderChain chain, RecordingTap tap, VideoEncoder video, long qpc)
+        : IRecordingWrite
     {
         private RecordingWriter? _writer;
 
@@ -68,7 +69,8 @@ internal sealed partial class CaptureSession
                 session._recordReservedUntil = 0;
                 if (!ReferenceEquals(session._current, chain) || chain.Retiring || chain.IsDisposed)
                 {
-                    throw new InvalidOperationException("The game's video changed size just as the Recording started; press Record again.");
+                    throw new InvalidOperationException(
+                        "The game's video changed size just as the Recording started; press Record again.");
                 }
 
                 // Attached before the keyframe is asked for, so the forced key can't pass the tap unseen.

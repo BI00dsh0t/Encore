@@ -15,7 +15,8 @@ internal sealed class EncoderResolver(string? forced, IVideoEncoderCatalog encod
         if (forced is not null)
         {
             var forcedCodec = EncoderProbe.CodecOf(forced)
-                ?? throw new EngineFailure(ErrorCodes.EncodeFailed, $"'{forced}' is not an H.264, HEVC or AV1 encoder in this FFmpeg build.");
+                ?? throw new EngineFailure(
+                    ErrorCodes.EncodeFailed, $"'{forced}' is not an H.264, HEVC or AV1 encoder in this FFmpeg build.");
             log.LogInformation("Encoder forced to {Encoder} ({Codec})", forced, forcedCodec);
             return (forced, forcedCodec);
         }
