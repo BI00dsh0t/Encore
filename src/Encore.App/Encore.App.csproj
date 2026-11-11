@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="H.NotifyIcon.Wpf" />
+    <PackageReference Include="Velopack" />
   </ItemGroup>
   <!-- WPF caches this switch when the first window shows, so it is set at process start to keep Mica off every window. -->
   <ItemGroup>
