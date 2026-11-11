@@ -162,7 +162,6 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
         }
     }
 
-
     private bool Loaded(bool muted)
     {
         lock (_lock)
