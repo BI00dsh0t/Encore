@@ -373,6 +373,9 @@ public sealed partial class SessionOrchestratorTests : IDisposable
             orchestrator.Post(new HotkeyPressed(HotkeyAction.RecordToggle, qpc + 2));
             Assert.Equal(new RecordingStopped(started.Path, RecordingStopReasons.Stopped), await NextAsync(events));
             Assert.Equal(new TargetChanged(a.ToTargetGame(), b.ToTargetGame(), TargetChangeReason.Focus), await NextAsync(changes));
+
+            // The switch is announced before the old session ends, so wait for that end.
+            await factory.Sessions[0].Ended.Task.WaitAsync(Timeout, Token);
             Assert.Equal("target changed", factory.Sessions[0].EndReason);
         }
         finally
