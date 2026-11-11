@@ -1,6 +1,6 @@
 namespace Encore.App.Theme;
 
-/// <summary>See <c>ShellShared.xaml</c>.</summary>
+/// <summary>The shell styles both themes share; the dictionary is <c>ShellShared.xaml</c>.</summary>
 internal partial class ShellShared
 {
     public ShellShared() => InitializeComponent();

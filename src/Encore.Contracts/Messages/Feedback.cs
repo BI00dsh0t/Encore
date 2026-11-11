@@ -5,6 +5,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Contracts.Messages;
 
+/// <summary>How serious a warning is, which decides how the App shows it.</summary>
 [JsonConverter(typeof(CamelCaseEnumConverter<WarningSeverity>))]
 public enum WarningSeverity
 {

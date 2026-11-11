@@ -3,7 +3,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.Engine;
 
-/// <summary>Parses the engine's debug command line.</summary>
+/// <summary>Parses the engine's command line: <c>serve</c>, the debug commands and the media worker.</summary>
 public static class CommandLine
 {
     public const string Usage =

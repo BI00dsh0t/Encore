@@ -2,6 +2,7 @@ using System.IO;
 
 namespace Encore.App.Engine;
 
+/// <summary>What the App needs to find, launch and watch its engine; tests change the timings.</summary>
 internal sealed record EngineConnectionOptions
 {
     /// <summary>The engine's file name; the App trusts only this image, in its own folder.</summary>

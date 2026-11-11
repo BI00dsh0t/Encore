@@ -1,6 +1,6 @@
 namespace Encore.App.Theme;
 
-/// <summary>See <c>SettingsLayout.xaml</c>.</summary>
+/// <summary>The settings pages' shared layout styles; the dictionary is <c>SettingsLayout.xaml</c>.</summary>
 internal partial class SettingsLayout
 {
     public SettingsLayout() => InitializeComponent();

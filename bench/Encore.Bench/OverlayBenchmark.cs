@@ -447,6 +447,7 @@ internal static class OverlayBenchmark
 internal sealed record PresentMonSummary(
     int Frames, double? AvgFps, double? OnePercentLowFps, string? DominantMode, IReadOnlyDictionary<string, double> ModePercent, string? Error);
 
+/// <summary>Reads a PresentMon capture file into the figures the overlay report shows.</summary>
 internal static class PresentMonCsv
 {
     /// <summary>Reads a PresentMon CSV: the frame time column of either version, and every present's mode.</summary>

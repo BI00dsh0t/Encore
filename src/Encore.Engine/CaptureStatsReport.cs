@@ -68,6 +68,7 @@ public sealed record ResourceReport(
     SteadyReport? Steady,
     RunReport? Run);
 
+/// <summary>CPU, memory and garbage collections over the steady part of a run, after warm-up.</summary>
 public sealed record SteadyReport(
     double Seconds,
     double CpuSeconds,
@@ -77,8 +78,10 @@ public sealed record SteadyReport(
     double AllocatedBytesPerSecond,
     GcReport Gc);
 
+/// <summary>CPU, memory and garbage collections over the whole run.</summary>
 public sealed record RunReport(double CpuSeconds, long AllocatedBytes, GcReport Gc);
 
+/// <summary>Garbage collections by generation.</summary>
 public sealed record GcReport(int Gen0, int Gen1, int Gen2);
 
 /// <summary>Role is "output" (loopback) or "input"; SamplesEncoded counts the frames the AAC encoder got, fill included.</summary>
