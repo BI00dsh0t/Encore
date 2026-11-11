@@ -6,7 +6,8 @@ namespace Encore.Platform.Capture;
 public static unsafe class FrameCopies
 {
     /// <summary>Copies a captured frame into one slice of the target; a size mismatch clears to black and clips, never scales.</summary>
-    public static void CopyFrame(this D3D11Device device, nint source, VideoSize contentSize, nint target, uint targetSubresource, VideoSize targetSize)
+    public static void CopyFrame(
+        this D3D11Device device, nint source, VideoSize contentSize, nint target, uint targetSubresource, VideoSize targetSize)
     {
         var copy = ClippedCopy(source, contentSize, targetSize);
         if (copy != targetSize)

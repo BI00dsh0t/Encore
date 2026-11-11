@@ -7,7 +7,7 @@ namespace Encore.Platform.Capture;
 /// <summary>Measures what one frame copy costs the GPU, with timestamp queries.</summary>
 public static unsafe class CopyTiming
 {
-    /// <summary>The average GPU time of one <see cref="FrameCopies.CopyFrameTo"/>, in microseconds; null when it can't be measured. Blocks.</summary>
+    /// <summary>The average GPU time of one <see cref="FrameCopies.CopyFrameTo"/> in µs, or null if unmeasurable. Blocks.</summary>
     public static double? TimeCopies(this D3D11Device device, nint source, nint target, int x, int y, int count)
     {
         ((ID3D11Texture2D*)source)->GetDesc(out var description);
