@@ -71,7 +71,7 @@ internal sealed partial class CaptureSession : ICaptureSession
 
     // The encoder chains. _chainLock guards them and is only ever taken after _gate. See docs/code-notes.md.
     private readonly Lock _chainLock = new();
-    private readonly List<Thread> _workers = [];
+    private readonly ChainWorkers _workers;
     private EncoderChain? _current;
     private EncoderChain? _armed;
     private long _armedQpc;
@@ -120,6 +120,7 @@ internal sealed partial class CaptureSession : ICaptureSession
         _loggers = loggers;
         _log = loggers.CreateLogger<CaptureSession>();
         _encoderResolver = new EncoderResolver(options.Encoder, encoders, _log);
+        _workers = new ChainWorkers(_log);
         _sources = new CaptureSources(options, loggers, _log, OnFrame, OnClosed, Fail);
         _stats = options.Stats;
         _micMute = new MicMuteSchedule(spec.MicMuted);

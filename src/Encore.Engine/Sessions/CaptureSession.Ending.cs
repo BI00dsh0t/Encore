@@ -165,8 +165,7 @@ internal sealed partial class CaptureSession
         lock (_chainLock)
         {
             _chainsClosed = true;
-            workers = [.. _workers];
-            _workers.Clear();
+            workers = _workers.TakeAll();
             prepared = _prepared;
             _prepared = null;
             _wanted = null;

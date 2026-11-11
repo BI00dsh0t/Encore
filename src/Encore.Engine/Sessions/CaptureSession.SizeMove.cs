@@ -78,7 +78,7 @@ internal sealed partial class CaptureSession
         }
 
         _armPending = true;
-        StartWorkerLocked("Encoder chain move", ArmMove);
+        _workers.Start("Encoder chain move", ArmMove);
     }
 
     /// <summary>Arms a size move's prepared chain with no save, on a background thread; never while a Recording is attached.</summary>

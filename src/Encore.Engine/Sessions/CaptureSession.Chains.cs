@@ -113,7 +113,7 @@ internal sealed partial class CaptureSession
         }
 
         _building = true;
-        StartWorkerLocked("Encoder chain build", () => Build(spec));
+        _workers.Start("Encoder chain build", () => Build(spec));
     }
 
     /// <summary>On a background thread: builds a spec's chain and hands it over as prepared when it is still wanted.</summary>
@@ -170,7 +170,7 @@ internal sealed partial class CaptureSession
     private void TearDownLocked(EncoderChain chain)
     {
         _tearingDown++;
-        StartWorkerLocked("Encoder chain teardown", () =>
+        _workers.Start("Encoder chain teardown", () =>
         {
             try
             {
@@ -185,29 +185,6 @@ internal sealed partial class CaptureSession
                 }
             }
         });
-    }
-
-    /// <summary>Starts a background thread the session's End waits for. Under the chain lock.</summary>
-    private void StartWorkerLocked(string name, Action work)
-    {
-        _workers.RemoveAll(t => !t.IsAlive);
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                work();
-            }
-            catch (Exception e)
-            {
-                _log.LogError(e, "{Name} failed", name);
-            }
-        })
-        {
-            Name = name,
-            IsBackground = true,
-        };
-        _workers.Add(thread);
-        thread.Start();
     }
 
     /// <summary>Arms the prepared chain at a save press, when one is ready and nothing else is changing. Orchestrator thread.</summary>
@@ -275,7 +252,7 @@ internal sealed partial class CaptureSession
         }
 
         chain.RetireStarted = true;
-        StartWorkerLocked("Encoder chain retirement", () => Retire(chain));
+        _workers.Start("Encoder chain retirement", () => Retire(chain));
     }
 
     /// <summary>On a background thread: tears down the replaced chain, checks for a gap, then starts any build asked for.</summary>

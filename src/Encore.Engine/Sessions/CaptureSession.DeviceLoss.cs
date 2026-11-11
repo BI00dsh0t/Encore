@@ -221,8 +221,7 @@ internal sealed partial class CaptureSession
             List<Thread> workers;
             lock (_chainLock)
             {
-                workers = [.. _workers];
-                _workers.Clear();
+                workers = _workers.TakeAll();
             }
 
             if (workers.Count == 0)
