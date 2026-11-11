@@ -106,7 +106,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         var statsPath = Path.GetFullPath(command.Stats);
         try
         {
-            CaptureStatsCollector.EnsureWritable(statsPath);
+            CaptureStatsFile.EnsureWritable(statsPath);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
         {

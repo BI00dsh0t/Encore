@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 using Encore.Media;
 
 namespace Encore.Engine;
@@ -76,82 +75,5 @@ public sealed class CaptureStatsCollector
         }
 
         return new ResourceReport(processors, WarmUp.TotalSeconds, StartupToAnchorMs, steady, run);
-    }
-
-    public static LatencyReport Report(LatencyHistogram histogram, long? flushed = null) => new(
-        histogram.Count,
-        histogram.Percentile(50),
-        histogram.Percentile(99),
-        histogram.MaxMilliseconds,
-        histogram.MeanMilliseconds,
-        histogram.BucketMilliseconds,
-        histogram.Overflow,
-        histogram.Negative,
-        flushed);
-
-    /// <summary>One device's report: the hub's counters run from when the device opened, writtenFrames from the anchor.</summary>
-    public static AudioReport Report(
-        string role,
-        string device,
-        AudioStampStats stamps,
-        DeviceStream stream,
-        AudioTimeline timeline,
-        long samplesEncoded) => new(
-        role,
-        device,
-        stamps.Packets,
-        stamps.Frames,
-        stamps.SilentPackets,
-        new StampReport(
-            stamps.TimestampErrors,
-            stamps.ZeroStamps,
-            stamps.BackwardStamps,
-            stamps.Discontinuities,
-            Report(stamps.Jitter),
-            Report(stamps.StampAge),
-            new DriftReport(stamps.DriftPpm, stamps.DriftSegmentSeconds, stamps.Segments)),
-        new TimelineReport(
-            timeline.WrittenFrames,
-            stream.GapFills,
-            stream.GapFillFrames,
-            stream.Trims,
-            stream.TrimmedFrames,
-            stream.IdleFillFrames,
-            stream.ResolvedStamps),
-        samplesEncoded,
-        new ResamplerReport(
-            stream.RatioPpm,
-            stream.MeanRatioPpm,
-            stream.StepCorrections,
-            stream.SteeringError.Count,
-            stream.SteeringError.Percentile(99) * AudioTimeline.SampleRate / 1000,
-            stream.MaxSettledErrorSamples,
-            stream.OutputFrames));
-
-    /// <summary>Checks before a run that the path can be written; a file the check created is removed again.</summary>
-    public static void EnsureWritable(string path)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var existed = File.Exists(path);
-        using (new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None))
-        {
-        }
-
-        if (!existed)
-        {
-            File.Delete(path);
-        }
-    }
-
-    /// <summary>Writes the report as JSON to a temp file, then moves it into place, so a failed write leaves no cut-off file.</summary>
-    public static void Write(string path, CaptureStatsReport report)
-    {
-        var temporary = path + ".tmp";
-        using (var stream = File.Create(temporary))
-        {
-            JsonSerializer.Serialize(stream, report, CaptureStatsJson.Default.CaptureStatsReport);
-        }
-
-        File.Move(temporary, path, overwrite: true);
     }
 }

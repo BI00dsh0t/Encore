@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Encore.Contracts;
 using Encore.Core.Sessions;
-using Encore.Platform.Audio;
 using Encore.Platform.Capture;
 using Encore.Platform.FFmpeg;
-using SessionFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Sessions;
 
@@ -249,79 +247,26 @@ internal sealed partial class CaptureSession
     /// <summary>Writes the stats file once the trailer is written.</summary>
     private void WriteStats(EncoderChain chain)
     {
-        var encoder = chain.Video;
-        if (_stats is null || _options.StatsPath is not { } path || encoder is null
-            || chain.AudioEncoders.Count != chain.Spec.Audio.Tracks.Count || chain.AudioTimelines.Count != chain.AudioTracks.Count)
+        if (_stats is null || _options.StatsPath is not { } path)
         {
             return;
         }
 
-        var cadence = _stats.Cadence;
-        var arrived = cadence.Frames;
-        var stepped = arrived - cadence.NonIncreasing; // frames that advanced the capture clock
-        var span = cadence.SpanSeconds;
-        var slots = stepped + cadence.MissedSlots;
-        var paced = chain.Paced;
-        var pacer = paced?.Pacer;
-        var emitted = pacer?.EmittedSlots ?? 0;
-        var repeated = pacer?.RepeatedSlots ?? 0;
-        var video = new VideoReport(
-            chain.OutputSize.Width,
-            chain.OutputSize.Height,
-            arrived,
-            encoder.EncodedFrames,
-            repeated,
-            (paced?.QueueDrops ?? 0) + encoder.PoolMisses,
-            cadence.NonIncreasing,
-            cadence.MissedSlots,
-            cadence.Gaps,
-            cadence.MaxStepMilliseconds,
-            span > 0 ? (stepped - 1) / span : 0,
-            emitted > 0 ? repeated * 100.0 / emitted : 0,
-            slots > 0 ? cadence.MissedSlots * 100.0 / slots : 0,
-            pacer?.FreshSlots ?? 0,
-            pacer?.SkippedSlots ?? 0,
-            pacer?.HeldReplaced ?? 0);
-
-        // Every device, with the hub's readouts and the samples encoded by the first Track that holds it.
-        var audio = new List<AudioReport>();
-        for (var i = 0; i < chain.AudioTracks.Count; i++)
-        {
-            var track = chain.AudioTracks[i];
-            if (track.Subscription is AudioDeviceSubscription { Diagnostics: var diagnostics })
-            {
-                var role = track.Device.Flow == SessionFlow.Output ? "output" : "input";
-                var first = chain.Spec.Audio.FirstTrackOf(i);
-                var samples = first >= 0 ? chain.AudioEncoders[first].SamplesWritten : 0;
-                audio.Add(CaptureStatsCollector.Report(role, track.Device.FriendlyName, diagnostics.Stamps, diagnostics.Stream, chain.AudioTimelines[i], samples));
-            }
-        }
-
-        var report = new CaptureStatsReport(
-            CaptureStatsReport.CurrentSchema,
-            DateTimeOffset.Now,
+        var run = new SessionRun(
             _path ?? "",
             _window?.Title ?? "",
             _window?.ProcessName,
             _device?.AdapterName ?? "",
-            _options.RequestedSeconds,
             _stopReason,
-            (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency,
-            _stats.GpuPriority,
-            new EncoderReport(
-                _options.Stages.ToString().ToLowerInvariant(),
-                _options.NvencPreset,
-                _options.NvencTune,
-                _options.Color == ColorPath.X2 ? "x2" : "x1",
-                paced is not null),
-            video,
-            CaptureStatsCollector.Report(_stats.Latency, encoder.FlushedPackets),
-            _stats.Resources(),
-            audio);
+            (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency);
+        if (SessionStatsReport.For(_stats, chain, _options, run) is not { } report)
+        {
+            return;
+        }
 
         try
         {
-            CaptureStatsCollector.Write(path, report);
+            CaptureStatsFile.Write(path, report);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
         {
@@ -330,6 +275,6 @@ internal sealed partial class CaptureSession
         }
 
         _log.LogInformation("Stats written to {Path}: {Encoded} frames encoded ({Fresh} new), latency p99 {P99:0.0} ms",
-            path, video.FramesEncoded, video.FreshSlots, report.Latency.P99Ms);
+            path, report.Video.FramesEncoded, report.Video.FreshSlots, report.Latency.P99Ms);
     }
 }
