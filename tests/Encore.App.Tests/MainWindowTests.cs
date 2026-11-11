@@ -42,6 +42,52 @@ public sealed class MainWindowTests
         finally { window.CloseForQuit(); }
     });
 
+    [Fact]
+    public void TheLibraryNavItemAndBackBothLeaveSettingsForTheLibrary() => Sta.Run(() =>
+    {
+        var model = new MainViewModel(new FakeEngineSession(), action => action());
+        var window = new MainWindow { DataContext = model, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
+        var theme = Theme.ThemeService.ForWindow(window);
+        try
+        {
+            // Fluent at the default size with the pane expanded, then Gaming dark in a small window with the pane a rail.
+            var looks = new[]
+            {
+                (Contracts.Settings.AppTheme.Fluent, 1320.0, true),
+                (Contracts.Settings.AppTheme.GamingDark, 600.0, false),
+            };
+            foreach (var (which, width, expanded) in looks)
+            {
+                theme.Apply(which);
+                window.Width = width;
+                model.IsNavigationExpanded = expanded;
+                window.Show(); window.UpdateLayout();
+                var nav = (ListBox)window.FindName("Nav");
+                var settings = (System.Windows.Controls.Primitives.ToggleButton)window.FindName("SettingsButton");
+                var library = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromItem(model.LibraryNav);
+                void OpenSettings() => settings.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+
+                // Settings leaves the Library item unselected, so choosing it is a change the list acts on.
+                OpenSettings();
+                Assert.True(model.IsSettingsTabSelected);
+                Assert.False(library.IsSelected);
+                library.IsSelected = true;
+                Assert.False(model.IsSettingsTabSelected);
+                Assert.Same(model.Library.View, model.CurrentView);
+
+                // Back, and Esc, from a settings page's list return to the Library too.
+                OpenSettings();
+                Assert.True(model.GoBack());
+                Assert.False(model.IsSettingsTabSelected);
+                Assert.True(library.IsSelected);
+                OpenSettings();
+                Assert.True(model.HandleEscape());
+                Assert.False(model.IsSettingsTabSelected);
+            }
+        }
+        finally { window.CloseForQuit(); }
+    });
+
     // Regression written for review; shell/Settings execution remains deferred.
     [Fact]
     public void CurrentSettingsSectionReselectionClosesDrillInWhileEscapeOnlyDismissesTheMenu() => Sta.Run(() =>

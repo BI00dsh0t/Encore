@@ -154,6 +154,20 @@ internal sealed class MainViewModel : Observable
         }
     }
 
+    /// <summary>The nav list's selection: the Library, or none in Settings, so choosing the Library always leaves Settings.</summary>
+    public NavItem? SelectedPrimaryNavItem
+    {
+        get => IsSettingsTabSelected ? null : LibraryNav;
+        set
+        {
+            // The list clears its selection when Settings opens; only a chosen item navigates.
+            if (value is not null)
+            {
+                SelectedNavItem = value;
+            }
+        }
+    }
+
     /// <summary>The Clips folder the engine uses, or null before it says: the tray's Open the Clips folder.</summary>
     public string? ClipsFolder => _engine.State?.LibraryFolder;
 
@@ -174,7 +188,7 @@ internal sealed class MainViewModel : Observable
         }
     }
 
-    /// <summary>Esc: leaves the player's full screen, else closes an open item page. False when it did neither.</summary>
+    /// <summary>Esc: leaves the player's full screen, else goes back as <see cref="GoBack"/> does. False when it did neither.</summary>
     public bool HandleEscape()
     {
         if (IsPlayerFullScreen)
@@ -186,15 +200,21 @@ internal sealed class MainViewModel : Observable
         return GoBack();
     }
 
-    /// <summary>Alt+Left and the mouse's Back button: closes an open item page. False on a list page.</summary>
+    /// <summary>Alt+Left and the mouse's Back: closes an open item page, else leaves Settings. False on the Library's list.</summary>
     public bool GoBack()
     {
-        if (CurrentDrillIn is not { IsOpen: true } drillIn)
+        if (CurrentDrillIn is { IsOpen: true } drillIn)
+        {
+            drillIn.Close();
+            return true;
+        }
+
+        if (!IsSettingsTabSelected)
         {
             return false;
         }
 
-        drillIn.Close();
+        SelectedNavItem = LibraryNav;
         return true;
     }
 
@@ -386,6 +406,7 @@ internal sealed class MainViewModel : Observable
         OnPropertyChanged(nameof(CurrentDrillIn));
         OnPropertyChanged(nameof(IsDrilledIn));
         OnPropertyChanged(nameof(SelectedNavItem));
+        OnPropertyChanged(nameof(SelectedPrimaryNavItem));
         OnPropertyChanged(nameof(CurrentTitle));
         OnPropertyChanged(nameof(CurrentView));
     }
