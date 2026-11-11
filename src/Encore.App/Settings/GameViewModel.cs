@@ -21,6 +21,7 @@ internal sealed class GameViewModel : SettingsViewModel
     private bool _ignored;
     private bool _recordingsEnabled;
     private bool _isManual;
+    private string? _source;
     private string? _folder;
     private string? _clipsFolder;
     private string _recordKey = "the Record key";
@@ -173,7 +174,8 @@ internal sealed class GameViewModel : SettingsViewModel
     /// <summary>Whether the program is in <c>manualGames</c>.</summary>
     public bool IsManual => _isManual;
 
-    public string Source => _isManual ? "Added by hand" : "Detected automatically";
+    /// <summary>How Encore knows the game: "Steam game", "Added by you", "Found in fullscreen" and the like.</summary>
+    public string Source => GameSourceText.Describe(_source, _isManual);
 
     /// <summary>The game's folder, assigned once by the engine, or null before its first save.</summary>
     public string? FolderPath => _folder is null || _clipsFolder is null ? null : Path.Combine(_clipsFolder, _folder);
@@ -271,7 +273,9 @@ internal sealed class GameViewModel : SettingsViewModel
 
         var manual = SettingsValues.Global(document, Keys.ManualGames)
             .Any(path => string.Equals(path, ProfileId, StringComparison.OrdinalIgnoreCase));
-        if (Set(ref _isManual, manual, nameof(IsManual)))
+        var sourceChanged = Set(ref _isManual, manual, nameof(IsManual));
+        sourceChanged |= Set(ref _source, profile.Source, nameof(Source));
+        if (sourceChanged)
         {
             OnPropertyChanged(nameof(Source));
         }

@@ -1126,6 +1126,14 @@ Sleep (`Suspend`):
 - An existing profile is never touched. A conflict with another write is retried while the profile is still missing.
   Any other failure is logged.
 
+### NonGameProfiles
+
+- Runs once at start, remembered as `nonGamesChecked` in `runtime.json`: a captured profile whose program is a
+  never-game (under the Windows folder, or on `NeverGames.Names`) becomes Not captured, with one Info notice naming
+  them. Captured apps found only in fullscreen are left alone: the user may have chosen them.
+- A failed settings write leaves the check for the next start; a failed `runtime.json` write runs it again, which
+  changes nothing the second time unless the user turned one back on.
+
 ### RuntimeStateStore
 
 - The file is `{ "micMuted": bool }`, plus `openRecordings` while a Recording is being written, so the next start can
