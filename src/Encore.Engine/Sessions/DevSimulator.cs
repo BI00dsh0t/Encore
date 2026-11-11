@@ -4,7 +4,16 @@ using Encore.Contracts.Messages;
 namespace Encore.Engine.Sessions;
 
 /// <summary>Serves <c>dev.simulate</c>: fakes engine outcomes so feedback, supervision and recovery can be exercised.</summary>
-internal sealed class DevSimulator(Instance instance, Action<bool> recording, Action<RecordingStarted> started, Action<RecordingStopped> stopped, Action diskFull, Action<ClipFailed> saveFailed, Action saved, Action hang, Action gpuReset)
+internal sealed class DevSimulator(
+    Instance instance,
+    Action<bool> recording,
+    Action<RecordingStarted> started,
+    Action<RecordingStopped> stopped,
+    Action diskFull,
+    Action<ClipFailed> saveFailed,
+    Action saved,
+    Action hang,
+    Action gpuReset)
 {
     private const string SimulatedPath = "dev.simulate";
 

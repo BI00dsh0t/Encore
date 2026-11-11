@@ -177,7 +177,10 @@ Constructor arguments worth knowing:
   a new device works again.
 - `RemovedReason` reads as S_OK for a disposed device.
 - `SimulateLoss` and `SimulateReset` are fault seams for tests and the developer command; they never cause a real reset.
-- `TimeCopies` averages over several copies between two timestamp queries and blocks until the GPU has run them.
+- The class holds only the device. What is drawn on it lives beside it, as extension methods: `FrameCopies` (copies
+  and clears), `Textures`, `GpuThreadPriority` and `CopyTiming`.
+- `CopyTiming.TimeCopies` averages over several copies between two timestamp queries and blocks until the GPU has run
+  them.
 
 ### DesktopDuplicationCapture
 
@@ -854,13 +857,29 @@ Other notes:
   allocated, and the session's outcome has none.
 - `FollowWindow`: with no capture, the pacer repeats the last frame. The orchestrator retargets the session to the
   process's next window, keeping its Rewind, or ends it. When the option is not set, the session stops.
-- `StarveFrames` imitates the secure desktop (lock screen, UAC, Ctrl+Alt+Del), where the pacer repeats the last frame.
-- `WgcFault`: a Monitor session then falls back to Desktop Duplication; a game session fails.
 - `CompositeMonitors` takes GDI device names; an empty list means every attached monitor. It is kept for cost
   measurements. A real Monitor session composites its resolved screens instead.
 - `Warn` is used for `monitor-recording-scaled`.
 
+### ICaptureFaults
+
+- The one seam for the faults tests inject. The session asks it at each point where a fault could happen, and the
+  engine runs with `NoCaptureFaults`, where none ever does.
+- `DropsFrame` imitates the secure desktop (lock screen, UAC, Ctrl+Alt+Del), where the pacer repeats the last frame.
+- `Wgc`: a Monitor session then falls back to Desktop Duplication; a game session fails.
+
 ### CaptureSession
+
+The files, one per job:
+
+- `CaptureSession.cs` holds the state: every field, with the lock that guards it.
+- `Opening`, `Frames`, `SizeMove`, `Chains`, `Restart`, `DeviceLoss`, `Recovery`, `Clips`, `Recording` and `Ending`
+  each hold one job's methods. `ClipWrite` and `RecordingWrite` are the nested classes a save and a Recording run in.
+- `TestAccess` holds the members only tests call.
+- Beside it, with no lock of their own: `CanvasPlanner`, `EncoderResolver`, `CaptureSources`, `ChainWorkers` and
+  `SessionStatsReport`.
+- A long method is a list of named steps. Each step runs on its caller's thread, under the lock its caller holds; a
+  name ending in `Locked` says which.
 
 The pipeline:
 
@@ -982,7 +1001,7 @@ Monitor sessions:
 - Its anchor is posted (`Anchored`) so the orchestrator can start it.
 - When WGC can't create or start the monitor item, the same monitor is captured through Desktop Duplication, into the
   same chain, and `CaptureFallback` is raised once. A game session never falls back.
-- `PlanCanvas`, for several screens: the canvas of the screens replaces the snapshot's video size. Over H.264's
+- `CanvasPlanner.Plan`, for several screens: the canvas of the screens replaces the snapshot's video size. Over H.264's
   4096 px it uses HEVC, else AV1, at full size. A canvas over 4096 px that has to stay H.264 is fitted to 4096 with
   `monitor-recording-scaled`. With fewer than two screens still attached, the one left is captured directly. With
   none, the start fails with `monitor-recording-no-screens`.
@@ -1032,6 +1051,8 @@ Sleep (`Suspend`):
 
 ### EncoderChain
 
+- The audio side is `ChainAudio`: the taps, the mixers and the AAC encoders. The chain keeps the output, the video and
+  the order they are built, flushed and freed in.
 - A chain holds: the device taps, each cut by one `AudioTimeline` and fanned out to every Track that holds the device;
   each Track's `TrackMixer` and `AacEncoder`; the frame pool, scaler and paced video encoder at the spec's output size;
   and the output.
@@ -1041,7 +1062,7 @@ Sleep (`Suspend`):
 - The session's first chain starts at the anchor, video and audio alike. Its pacer gives its first frame slot 0.
 - A later chain is built in advance and stays idle. Its audio starts at the save press that switches the session to
   it, and its frames at the first one captured after that press, in the slot nearest it.
-- A Track with no devices is silence, advanced from QPC every `SilenceInterval` by a timer, off the capture thread.
+- A Track with no devices is silence, advanced from QPC by `SilenceClock`'s timer, off the capture thread.
 - A chain rebuilt by a forced restart takes over its predecessor's ring in a new generation.
 - `StartAudio`: each device's held blocks are replayed first. Each Track's first sample has its frames since the
   session anchor as its PTS.

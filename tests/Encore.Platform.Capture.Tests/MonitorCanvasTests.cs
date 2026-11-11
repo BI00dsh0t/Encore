@@ -44,9 +44,9 @@ public sealed class MonitorCanvasTests
         }
         finally
         {
-            D3D11Device.ReleaseTexture(uhd);
-            D3D11Device.ReleaseTexture(qhd);
-            D3D11Device.ReleaseTexture(canvas);
+            Textures.Release(uhd);
+            Textures.Release(qhd);
+            Textures.Release(canvas);
         }
     }
 }

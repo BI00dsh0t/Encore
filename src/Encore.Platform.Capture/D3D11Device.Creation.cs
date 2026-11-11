@@ -1,0 +1,157 @@
+using Microsoft.Extensions.Logging;
+using Windows.Graphics.DirectX.Direct3D11;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Direct3D;
+using Windows.Win32.Graphics.Direct3D10;
+using Windows.Win32.Graphics.Direct3D11;
+using Windows.Win32.Graphics.Dxgi;
+using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.System.Com;
+using IInspectable = Windows.Win32.System.WinRT.IInspectable;
+using WinRT;
+
+namespace Encore.Platform.Capture;
+
+// Creating the device: on the adapter that shows the window or drives the monitor.
+public sealed unsafe partial class D3D11Device
+{
+    /// <summary>Creates the device on the adapter showing the window, or on adapter 0 when none does or the window is zero.</summary>
+    public static D3D11Device Create(nint window, ILogger logger)
+    {
+        var monitor = window == 0
+            ? default
+            : PInvoke.MonitorFromWindow(new HWND((void*)window), MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
+        return Create(monitor, logger);
+    }
+
+    private static D3D11Device Create(HMONITOR monitor, ILogger logger)
+    {
+        IDXGIFactory1* factory = null;
+        IDXGIAdapter1* adapter = null;
+        ID3D11Device* device = null;
+        ID3D11DeviceContext* context = null;
+        try
+        {
+            var factoryIid = IDXGIFactory1.IID_Guid;
+            PInvoke.CreateDXGIFactory1(&factoryIid, (void**)&factory).ThrowOnFailure();
+            adapter = PickAdapter(factory, monitor);
+            var adapterDescription = adapter->GetDesc();
+            var adapterName = adapterDescription.Description.AsReadOnlySpan().SliceAtNull().ToString();
+            var featureLevel = CreateDevice(adapter, &device, &context);
+            ProtectMultithreaded(device);
+            var winRtDevice = CreateWinRTDevice(device);
+            logger.LogInformation("D3D11 device on {Adapter}, feature level {FeatureLevel}", adapterName, featureLevel);
+
+            var created = new D3D11Device(device, context, winRtDevice, adapterName);
+            device = null;
+            context = null;
+            return created;
+        }
+        finally
+        {
+            if (context is not null) context->Release();
+            if (device is not null) device->Release();
+            if (adapter is not null) adapter->Release();
+            if (factory is not null) factory->Release();
+        }
+    }
+
+    /// <summary>Creates the device on the adapter that drives the monitor, or on adapter 0 when none does or it is zero.</summary>
+    public static D3D11Device CreateForMonitor(nint monitor, ILogger logger) => Create(new HMONITOR((void*)monitor), logger);
+
+    /// <summary>Creates the device and its context on the adapter, into the caller's locals; returns the feature level.</summary>
+    private static D3D_FEATURE_LEVEL CreateDevice(IDXGIAdapter1* adapter, ID3D11Device** device, ID3D11DeviceContext** context)
+    {
+        ReadOnlySpan<D3D_FEATURE_LEVEL> levels = [D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0];
+        PInvoke.D3D11CreateDevice(
+            (IDXGIAdapter*)adapter,
+            D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN,
+            default,
+            D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+            levels,
+            PInvoke.D3D11_SDK_VERSION,
+            device,
+            out var featureLevel,
+            context).ThrowOnFailure();
+        return featureLevel;
+    }
+
+    /// <summary>Makes the context safe to share across threads: WGC, the engine and the encoder all use it.</summary>
+    private static void ProtectMultithreaded(ID3D11Device* device)
+    {
+        ID3D10Multithread* multithread = null;
+        var multithreadIid = ID3D10Multithread.IID_Guid;
+        ((IUnknown*)device)->QueryInterface(&multithreadIid, (void**)&multithread).ThrowOnFailure();
+        multithread->SetMultithreadProtected(true);
+        multithread->Release();
+    }
+
+    private static IDXGIAdapter1* PickAdapter(IDXGIFactory1* factory, HMONITOR monitor)
+    {
+        IDXGIAdapter1* first = null;
+        for (uint i = 0; ; i++)
+        {
+            IDXGIAdapter1* adapter = null;
+            var result = factory->EnumAdapters1(i, &adapter);
+            if (result == HRESULT.DXGI_ERROR_NOT_FOUND)
+            {
+                break;
+            }
+
+            result.ThrowOnFailure();
+            if (monitor != default && OwnsMonitor(adapter, monitor))
+            {
+                if (first is not null) first->Release();
+                return adapter;
+            }
+
+            if (first is null)
+            {
+                first = adapter;
+            }
+            else
+            {
+                adapter->Release();
+            }
+        }
+
+        return first is not null ? first : throw new InvalidOperationException("No DXGI adapter is present.");
+    }
+
+    private static bool OwnsMonitor(IDXGIAdapter1* adapter, HMONITOR monitor)
+    {
+        for (uint index = 0; ; index++)
+        {
+            IDXGIOutput* output = null;
+            if (adapter->EnumOutputs(index, &output).Failed)
+            {
+                return false;
+            }
+
+            var owns = output->GetDesc().Monitor == monitor;
+            output->Release();
+            if (owns)
+            {
+                return true;
+            }
+        }
+    }
+
+    private static IDirect3DDevice CreateWinRTDevice(ID3D11Device* device)
+    {
+        IDXGIDevice* dxgiDevice = null;
+        IInspectable* inspectable = null;
+        try
+        {
+            QueryDxgiDevice(device, &dxgiDevice).ThrowOnFailure();
+            PInvoke.CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice, &inspectable).ThrowOnFailure();
+            return MarshalInterface<IDirect3DDevice>.FromAbi((nint)inspectable);
+        }
+        finally
+        {
+            if (inspectable is not null) ((IUnknown*)inspectable)->Release();
+            if (dxgiDevice is not null) dxgiDevice->Release();
+        }
+    }
+}

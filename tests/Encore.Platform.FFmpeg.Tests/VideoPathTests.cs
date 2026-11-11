@@ -131,7 +131,7 @@ public sealed class VideoPathTests : IDisposable
             }
             finally
             {
-                D3D11Device.ReleaseTexture(source);
+                Textures.Release(source);
             }
 
             video.Flush();

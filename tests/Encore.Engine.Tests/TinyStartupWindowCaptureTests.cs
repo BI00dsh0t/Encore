@@ -130,7 +130,7 @@ public sealed class TinyStartupWindowCaptureTests : IDisposable
                 : CaptureWindow.None(why ?? "no window"),
             (_, why) => waiting.Writer.TryWrite(why),
             (_, captured) => ended.Writer.TryWrite(captured),
-            e => CaptureSession.CodeOf(e) == ErrorCodes.CaptureFailed)
+            e => EngineFailure.CodeOf(e) == ErrorCodes.CaptureFailed)
         {
             Poll = TimeSpan.FromMilliseconds(200),
         };

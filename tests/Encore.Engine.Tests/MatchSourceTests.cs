@@ -48,10 +48,10 @@ public sealed class MatchSourceTests : IAsyncLifetime
         var monitor = Chain(video, SessionKind.Monitor);
         var source = new VideoSize(2560, 1440);
 
-        Assert.Equal((new VideoSize(2560, 1440), 60), (CaptureSession.SizedToSource(on, isMonitor: false, source).OutputSize, on.Fps));
-        Assert.Equal(new VideoSize(1920, 1080), CaptureSession.SizedToSource(off, isMonitor: false, source).OutputSize);
-        Assert.Equal(new VideoSize(1920, 1080), CaptureSession.SizedToSource(monitor, isMonitor: true, source).OutputSize);
-        Assert.Equal(new VideoSize(1920, 1080), CaptureSession.SizedToSource(Chain(video), isMonitor: false, new VideoSize(600, 300)).OutputSize);
+        Assert.Equal((new VideoSize(2560, 1440), 60), (on.SizedToSource(isMonitor: false, source).OutputSize, on.Fps));
+        Assert.Equal(new VideoSize(1920, 1080), off.SizedToSource(isMonitor: false, source).OutputSize);
+        Assert.Equal(new VideoSize(1920, 1080), monitor.SizedToSource(isMonitor: true, source).OutputSize);
+        Assert.Equal(new VideoSize(1920, 1080), Chain(video).SizedToSource(isMonitor: false, new VideoSize(600, 300)).OutputSize);
     }
 
     [Fact]
