@@ -81,6 +81,7 @@ Times: `qpc` is the Windows performance-counter clock (`QueryPerformanceCounter`
 - Names are whole words. The exceptions are `qpc`, `pts`, `fps` and Windows API names.
 - Product terms are capitalised and spelled as in the UI: Clip, Recording, Rewind, Buffer Window, Target Game, Game Profile, Track, Track Layout, Output Folder, Hotkey.
   `GlossaryTests` in [Encore.App.Tests](../tests/Encore.App.Tests) checks the words the App shows.
+- **Rewind** is the feature's name in the UI, but the code and the wire say **Replay** (`ReplayState`, `replayStorage`, the Core `Replay` folder, `ReplayRingSink`). They are the same thing.
 - Comments are one line and say why; longer rules go in [code-notes.md](code-notes.md), under the class.
 
 ## Where to start reading
