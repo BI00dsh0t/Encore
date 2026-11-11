@@ -136,7 +136,7 @@ public sealed class SettingsStore
         {
             var document = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.SettingsDocument);
             if (document is null || document.SchemaVersion != SettingsDocument.CurrentSchemaVersion || document.Revision < 0
-                || document.Profiles.Values.Any(profile => profile is null))
+                || document.Profiles?.Values.Any(profile => profile is null) == true)
             {
                 return null;
             }

@@ -51,14 +51,20 @@ public static class SettingsMaps
     public static ImmutableSortedDictionary<string, GameProfile> EmptyProfiles { get; } =
         ImmutableSortedDictionary.Create<string, GameProfile>(StringComparer.Ordinal);
 
-    /// <summary>The document with every map keyed ordinally, as a freshly deserialized one may not be.</summary>
+    /// <summary>The document with every map keyed ordinally, as a freshly read one may not be; a map left out or null is empty.</summary>
     public static SettingsDocument WithOrdinalKeys(SettingsDocument document) => document with
     {
-        Global = document.Global.WithComparers(StringComparer.Ordinal),
-        Profiles = document.Profiles
-            .Select(p => KeyValuePair.Create(p.Key, p.Value with { Overrides = p.Value.Overrides.WithComparers(StringComparer.Ordinal) }))
+        Global = OrEmpty(document.Global).WithComparers(StringComparer.Ordinal),
+        Profiles = (document.Profiles ?? EmptyProfiles)
+            .Select(p => KeyValuePair.Create(
+                p.Key,
+                p.Value with { Overrides = OrEmpty(p.Value.Overrides).WithComparers(StringComparer.Ordinal) }))
             .ToImmutableSortedDictionary(StringComparer.Ordinal),
     };
+
+    // A hand-edited file can leave a map out, which deserializes as null despite the type.
+    private static ImmutableSortedDictionary<string, JsonElement> OrEmpty(ImmutableSortedDictionary<string, JsonElement>? values) =>
+        values ?? EmptyValues;
 }
 
 /// <summary>Which layer a settings op changes.</summary>
