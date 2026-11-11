@@ -69,6 +69,11 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: dotnet build Encore.slnx -c Release -p:Version=${{ env.VERSION }}
 
+      # The runner's screen starts at 1024x768, smaller than the App's 960x900 layout tests need.
+      - name: Set the screen to 1920x1080
+        shell: pwsh
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+
       # Every project's default suite, as in CI. A test that needs hardware the runner lacks skips itself.
       - name: Test
         shell: pwsh
