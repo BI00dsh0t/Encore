@@ -11,6 +11,8 @@
     <Version>0.0.0-dev</Version>
     <!-- The app is English only, so the runtime's translated messages stay out of the package. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Lets GitHub's dependency graph restore these Windows-only projects on its Linux runners; builds still need Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <!-- The unused-using check (IDE0005) only runs on build with this on; undocumented members and parameters stay allowed. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
