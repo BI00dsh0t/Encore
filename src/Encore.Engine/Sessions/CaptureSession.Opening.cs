@@ -100,7 +100,7 @@ internal sealed partial class CaptureSession
         if (IsMonitor)
         {
             // Started as it is chosen: a WGC item that fails to start falls back to Desktop Duplication.
-            _firstFrameTimer.Change(_options.FirstFrameTimeout, Timeout.InfiniteTimeSpan);
+            _firstFrameTimer.Change(FirstFrameTimeout, Timeout.InfiniteTimeSpan);
             _sources.StartForMonitor(_composite, _monitor, _device, first.Fps, StartInstalled);
             return;
         }
@@ -113,7 +113,7 @@ internal sealed partial class CaptureSession
             _capture = capture;
         }
 
-        _firstFrameTimer.Change(_options.FirstFrameTimeout, Timeout.InfiniteTimeSpan);
+        _firstFrameTimer.Change(FirstFrameTimeout, Timeout.InfiniteTimeSpan);
         capture.Start();
     }
 
@@ -198,7 +198,7 @@ internal sealed partial class CaptureSession
         }
 
         Fail(new EngineFailure(ErrorCodes.CaptureFailed,
-            $"No frame arrived from the window within {_options.FirstFrameTimeout.TotalSeconds:0} s."));
+            $"No frame arrived from the window within {FirstFrameTimeout.TotalSeconds:0} s."));
     }
 
     /// <summary>Frees what <see cref="Open"/> managed to open, when it threw.</summary>

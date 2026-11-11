@@ -90,7 +90,7 @@ internal sealed partial class CaptureSession
 
             // A switch's new chain takes a fresh ring: the old one goes with its chain.
             old.Dispose(keepRing: switchTo is null);
-            if (_options.RestartFault?.Invoke() is { } fault)
+            if (_faults.Restart() is { } fault)
             {
                 throw fault;
             }

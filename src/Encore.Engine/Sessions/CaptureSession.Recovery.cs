@@ -83,7 +83,7 @@ internal sealed partial class CaptureSession
                 return;
             }
 
-            if (_options.RecoveryFault?.Invoke() is { } fault)
+            if (_faults.Recovery() is { } fault)
             {
                 throw fault;
             }

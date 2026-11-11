@@ -30,7 +30,7 @@ internal sealed partial class CaptureSession
             }
 
             // For tests: a secure desktop delivers no frames; the pacer repeats the last one.
-            if (_options.StarveFrames?.Invoke() == true)
+            if (_faults.DropsFrame())
             {
                 return;
             }
@@ -87,7 +87,7 @@ internal sealed partial class CaptureSession
         // Only a session that can recover watches its device.
         if (HasRing || IsMonitor)
         {
-            _deviceWatch = new Timer(_ => WatchDevice(), null, _options.DeviceWatchInterval, _options.DeviceWatchInterval);
+            _deviceWatch = new Timer(_ => WatchDevice(), null, DeviceWatchInterval, DeviceWatchInterval);
         }
 
         // A chain asked for before the anchor is built from here.

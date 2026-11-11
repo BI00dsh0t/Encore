@@ -759,9 +759,10 @@ public sealed class MonitorRecordingCaptureTests : IDisposable
         var events = System.Threading.Channels.Channel.CreateUnbounded<object>();
         var published = new ConcurrentQueue<CaptureState>();
         var factory = new KeepingFactory(new CaptureSessionFactory(
-            new CaptureSessionOptions { OutputFolder = _directory, Replay = true, ResetGap = resetGap, WgcFault = wgcFault, CaptureFallback = fallback, DuplicationScreens = duplicationScreens, MoveArmDelay = moveArmDelay },
+            new CaptureSessionOptions { OutputFolder = _directory, Replay = true, ResetGap = resetGap, CaptureFallback = fallback },
             NullLoggerFactory.Instance,
-            hub));
+            hub,
+            faults: new TestCaptureFaults { WgcFault = wgcFault, DuplicationScreens = duplicationScreens, MoveArmDelay = moveArmDelay }));
         var orchestrator = new SessionOrchestrator(
             factory,
             () => Volatile.Read(ref _document),

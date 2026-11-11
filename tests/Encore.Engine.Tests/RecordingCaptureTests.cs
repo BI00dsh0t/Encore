@@ -627,13 +627,16 @@ public sealed class RecordingCaptureTests : IDisposable
                 OutputFolder = _directory,
                 Replay = true,
                 Anchored = qpc => anchored.TrySetResult(qpc),
+            };
+            var faults = new TestCaptureFaults
+            {
                 RestartFault = restartFault,
                 RecoveryFault = recoveryFault,
                 StarveFrames = starveFrames,
             };
             var published = new ConcurrentQueue<CaptureState>();
             var library = new LibraryCalls();
-            var factory = new CapturingFactory(new CaptureSessionFactory(options, loggers ?? NullLoggerFactory.Instance, hub));
+            var factory = new CapturingFactory(new CaptureSessionFactory(options, loggers ?? NullLoggerFactory.Instance, hub, faults: faults));
             orchestrator = new SessionOrchestrator(
                 factory,
                 () => Volatile.Read(ref document),

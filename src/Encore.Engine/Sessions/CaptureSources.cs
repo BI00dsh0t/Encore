@@ -6,6 +6,7 @@ namespace Encore.Engine.Sessions;
 /// <summary>Makes a session's capture sources, each wired to the session's frame, close and failure handlers.</summary>
 internal sealed class CaptureSources(
     CaptureSessionOptions options,
+    ICaptureFaults faults,
     ILoggerFactory loggers,
     ILogger log,
     CapturedFrameHandler onFrame,
@@ -34,10 +35,9 @@ internal sealed class CaptureSources(
     /// <summary>The composited capture of the placements on <paramref name="device"/>, not started.</summary>
     public CompositeCapture Composite(IReadOnlyList<MonitorPlacement> placements, D3D11Device device, int fps)
     {
-        var forced = options.DuplicationScreens;
         var composite = Wire(new CompositeCapture(
             device, placements, fps,
-            p => options.CompositeDuplication || forced?.Contains(p.Monitor.DeviceName, StringComparer.OrdinalIgnoreCase) == true,
+            p => options.CompositeDuplication || faults.ForcesDuplication(p.Monitor.DeviceName),
             onFrame, loggers.CreateLogger<CompositeCapture>()));
         Api = options.CompositeDuplication ? "composite-desktop-duplication" : "composite";
         return composite;
@@ -118,7 +118,7 @@ internal sealed class CaptureSources(
 
     private void ThrowWgcFault()
     {
-        if (options.WgcFault?.Invoke() is { } fault)
+        if (faults.Wgc() is { } fault)
         {
             throw fault;
         }

@@ -19,12 +19,19 @@ internal sealed partial class CaptureSession : ICaptureSession
     /// <summary>How long a save waits for every stream to pass the press before it cuts.</summary>
     private static readonly TimeSpan SaveWait = TimeSpan.FromSeconds(1);
 
+    /// <summary>With no first frame by then, the session fails with <c>capture-failed</c>.</summary>
+    private static readonly TimeSpan FirstFrameTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>How often a session that can recover checks whether its GPU device was removed or reset.</summary>
+    private static readonly TimeSpan DeviceWatchInterval = TimeSpan.FromMilliseconds(500);
+
     /// <summary>How long <see cref="End"/> waits for a running GPU device recovery attempt.</summary>
     private static readonly TimeSpan RecoveryJoinWait = TimeSpan.FromSeconds(10);
 
     private SessionSpec _spec;
     private readonly ISessionEvents _events;
     private readonly CaptureSessionOptions _options;
+    private readonly ICaptureFaults _faults;
     private readonly ILoggerFactory _loggers;
     private readonly ILogger _log;
     private readonly long _qpcFrequency = Stopwatch.Frequency;
@@ -111,17 +118,25 @@ internal sealed partial class CaptureSession : ICaptureSession
     private string _stopReason = "";
     private Exception? _failure;
 
-    public CaptureSession(SessionSpec spec, ISessionEvents events, CaptureSessionOptions options, IAudioDeviceHub audio, IVideoEncoderCatalog encoders, ILoggerFactory loggers)
+    public CaptureSession(
+        SessionSpec spec,
+        ISessionEvents events,
+        CaptureSessionOptions options,
+        IAudioDeviceHub audio,
+        IVideoEncoderCatalog encoders,
+        ILoggerFactory loggers,
+        ICaptureFaults? faults = null)
     {
         _spec = spec;
         _audio = audio;
         _events = events;
         _options = options;
+        _faults = faults ?? NoCaptureFaults.Instance;
         _loggers = loggers;
         _log = loggers.CreateLogger<CaptureSession>();
         _encoderResolver = new EncoderResolver(options.Encoder, encoders, _log);
         _workers = new ChainWorkers(_log);
-        _sources = new CaptureSources(options, loggers, _log, OnFrame, OnClosed, Fail);
+        _sources = new CaptureSources(options, _faults, loggers, _log, OnFrame, OnClosed, Fail);
         _stats = options.Stats;
         _micMute = new MicMuteSchedule(spec.MicMuted);
         _firstFrameTimer = new Timer(_ => OnFirstFrameTimeout(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);

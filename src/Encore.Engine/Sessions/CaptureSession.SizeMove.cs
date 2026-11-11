@@ -84,9 +84,9 @@ internal sealed partial class CaptureSession
     /// <summary>Arms a size move's prepared chain with no save, on a background thread; never while a Recording is attached.</summary>
     private void ArmMove()
     {
-        if (_options.MoveArmDelay > TimeSpan.Zero)
+        if (_faults.MoveArmDelay > TimeSpan.Zero)
         {
-            Thread.Sleep(_options.MoveArmDelay);
+            Thread.Sleep(_faults.MoveArmDelay);
         }
 
         EncoderChain? armed = null;

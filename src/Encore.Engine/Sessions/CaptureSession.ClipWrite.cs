@@ -145,7 +145,7 @@ internal sealed partial class CaptureSession
                         "There's nothing to save yet: Encore has kept less than 1 s of gameplay since the game started or the last save.");
                 }
 
-                if (session._options.ClipWriteFault?.Invoke(path) is { } fault)
+                if (session._faults.ClipWrite(path) is { } fault)
                 {
                     throw fault;
                 }

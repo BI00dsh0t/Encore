@@ -123,6 +123,9 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
             OutputFolder = _directory,
             Replay = true,
             Anchored = qpc => anchored.TrySetResult(qpc),
+        };
+        var faults = new TestCaptureFaults
+        {
             ClipWriteFault = path =>
             {
                 if (!fault.TakeArmed())
@@ -140,7 +143,7 @@ public sealed partial class ReplayClipCaptureTests : IDisposable
         long anchor, press, nextPress;
         ClipSaved clip, next, same;
         using (var orchestrator = new SessionOrchestrator(
-            new CaptureSessionFactory(options, NullLoggerFactory.Instance, hub),
+            new CaptureSessionFactory(options, NullLoggerFactory.Instance, hub, faults: faults),
             () => document,
             published.Enqueue,
             targetCapture: new TargetCapture(s => SessionAudio.FromLayout(s.TrackLayout), (_, e) => saved.Writer.TryComplete(e)),
