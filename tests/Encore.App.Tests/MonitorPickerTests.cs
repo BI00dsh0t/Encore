@@ -139,9 +139,9 @@ public sealed class MonitorPickerTests
     {
         SetState(revision: 1, MonitorRecordingScreens.Selected("path-dell", "path-lg", "path-gone"));
         var model = Create();
-        var window = new SettingsWindow
+        var window = new MainWindow
         {
-            DataContext = model.Settings,
+            DataContext = model,
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -30000,
             Top = -30000,
@@ -161,7 +161,7 @@ public sealed class MonitorPickerTests
             {
                 theme.Apply(which);
                 window.Show();
-                model.Settings.Select(model.Hotkeys);
+                model.OpenSettings(model.Hotkeys);
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
                 var picker = (FrameworkElement)model.Hotkeys.View.FindName("ScreenPicker");
                 picker.BringIntoView();

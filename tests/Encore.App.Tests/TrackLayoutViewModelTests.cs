@@ -563,14 +563,14 @@ public sealed class TrackLayoutViewModelTests
 
         model.Settings.Select(model.TrackLayout);
         Assert.IsType<MetersWatch>(_engine.Sent[^1]);
-        model.Settings.IsShown = false;
+        model.IsWindowShown = false;
         Assert.Same(Empty.Value, _engine.Sent[^1]);
         Assert.Equal(2, _engine.Sent.Count(a => a is Empty));
 
         // An unwatch lost to a dropped link goes out again once the same engine run is back.
-        model.Settings.IsShown = true;
+        model.IsWindowShown = true;
         _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.EngineDisconnected, "Gone.");
-        model.Settings.IsShown = false;
+        model.IsWindowShown = false;
         _engine.Reply = (_, _) => Empty.Value;
         _engine.RaiseChanged();
         Assert.Same(Empty.Value, _engine.Sent[^1]);
@@ -643,7 +643,7 @@ public sealed class TrackLayoutViewModelTests
 
     private static void Open(MainViewModel model)
     {
-        model.Settings.IsShown = true;
-        model.Settings.Select(model.TrackLayout);
+        model.IsWindowShown = true;
+        model.OpenSettings(model.TrackLayout);
     }
 }

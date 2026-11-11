@@ -35,7 +35,7 @@ public sealed class ShellTests
     });
 
     [Fact]
-    public void TheShellAndTheSettingsWindowLoadInBothThemesWithAGamesPageOpen() => Sta.Run(() =>
+    public void TheShellAndTheSettingsOverlayLoadInBothThemesWithAGamesPageOpen() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession();
         engine.State = engine.State! with
@@ -83,10 +83,9 @@ public sealed class ShellTests
                 Assert.Equal("Library", ((TextBlock)library.Template.FindName("Label", library)).Text);
                 Save(window, $"shell-{name}.png");
 
-                // The Settings window, each section through its list, then a game's page with its breadcrumb.
+                // Settings over the window, each section through its list, then a game's page with its breadcrumb.
                 model.OpenSettings(model.General);
-                var settings = window.Settings!;
-                ThemeService.ForWindow(settings).Apply(which);
+                var settings = window.SettingsOverlay;
                 var sections = (ListBox)settings.FindName("Sections");
                 var pageHost = (ContentControl)settings.FindName("Page");
                 foreach (var section in model.Settings.Sections)
@@ -99,14 +98,15 @@ public sealed class ShellTests
 
                 model.Settings.Select(model.General);
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
-                Save(settings, $"settings-window-{name}.png");
+                Save(window, $"settings-overlay-{name}.png");
                 model.Settings.Select(model.GameProfiles);
                 model.GameProfiles.Open(model.GameProfiles.Profiles[0]);
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
                 Assert.True(((FrameworkElement)settings.FindName("Breadcrumb")).IsVisible);
-                Save(settings, $"settings-window-games-{name}.png");
+                Save(window, $"settings-overlay-games-{name}.png");
                 model.GameProfiles.DrillIn.Close();
-                settings.Close();
+                model.Settings.Close();
+                Sta.Pump(TimeSpan.FromMilliseconds(250));
             }
         }
         finally

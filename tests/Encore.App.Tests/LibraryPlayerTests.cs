@@ -209,7 +209,10 @@ public sealed class LibraryPlayerTests : IDisposable
         Assert.Same(model.Library.DrillIn, model.CurrentDrillIn);
         Assert.True(model.IsDrilledIn);
 
+        // Settings opens over the player page and leaves it open; with Settings closed, Back closes it.
         model.OpenSettings(model.General);
+        Assert.False(model.GoBack());
+        model.Settings.Close();
         Assert.True(model.IsDrilledIn);
         Assert.True(model.GoBack());
 

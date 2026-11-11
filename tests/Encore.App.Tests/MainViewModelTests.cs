@@ -25,23 +25,28 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
-    public void EscapeAndBackCloseAnOpenItemPageAndTheSettingsButtonAsksForTheWindow()
+    public void EscapeAndBackCloseAnOpenItemPageAndTheSettingsButtonOpensSettings()
     {
         var model = Create();
-        var asked = 0;
-        model.Settings.OpenRequested += () => asked++;
         Assert.False(model.HandleEscape());
         Assert.False(model.GoBack());
 
         model.OpenSettings();
-        Assert.Equal(1, asked);
+        Assert.True(model.Settings.IsOpen);
         Assert.Same(model.General, model.Settings.SelectedPage);
         model.Settings.Select(model.GameProfiles);
         var drillIn = model.Settings.CurrentDrillIn!;
         drillIn.Open("game", "Game");
-        Assert.True(model.Settings.GoBack());
+        Assert.True(model.GoBack());
         Assert.False(drillIn.IsOpen);
-        Assert.False(model.Settings.GoBack());
+        Assert.False(model.GoBack());
+
+        // Esc goes back from an item page first, then closes Settings.
+        drillIn.Open("game", "Game");
+        Assert.True(model.HandleEscape());
+        Assert.Equal((false, true), (drillIn.IsOpen, model.Settings.IsOpen));
+        Assert.True(model.HandleEscape());
+        Assert.False(model.Settings.IsOpen);
 
         // Choosing another section closes the item page of the one left; Ctrl+Tab steps round.
         drillIn.Open("game", "Game");

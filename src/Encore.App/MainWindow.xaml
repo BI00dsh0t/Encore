@@ -1,4 +1,4 @@
-<!-- The Main App's shell: the nav pane, then the status header, the page header and the page. Every colour is a token. -->
+<!-- The Main App's shell: the nav pane, the status header, the page header and the page; Settings opens over it all. -->
 <app:ShellWindow x:Class="Encore.App.MainWindow"
                  x:ClassModifier="internal"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -16,122 +16,126 @@
                  WindowStartupLocation="CenterScreen"
                  MouseUp="OnMouseUp">
     <Grid>
-        <Grid.Resources>
-            <BooleanToVisibilityConverter x:Key="EncoreShellVisible" />
-            <theme:TrueToCollapsedConverter x:Key="EncoreShellHidden" />
-        </Grid.Resources>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="NavColumn" Width="200" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
+        <!-- While Settings is open over it, the scrim takes the shell's clicks and the shell refuses focus. -->
+        <Grid x:Name="ShellContent" PreviewGotKeyboardFocus="OnShellPreviewGotKeyboardFocus">
+            <Grid.Resources>
+                <BooleanToVisibilityConverter x:Key="EncoreShellVisible" />
+                <theme:TrueToCollapsedConverter x:Key="EncoreShellHidden" />
+            </Grid.Resources>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="NavColumn" Width="200" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-        <Border x:Name="NavLayer" Style="{DynamicResource EncoreShellNavLayerStyle}" />
-        <DockPanel x:Name="NavPane" Margin="{DynamicResource EncoreNavPanePadding}">
-            <ToggleButton x:Name="NavigationToggle"
-                          DockPanel.Dock="Top"
-                          Height="36"
-                          Margin="4,8,4,0"
-                          IsChecked="{Binding IsNavigationExpanded, Mode=TwoWay}"
-                          Style="{DynamicResource EncoreSettingsNavStyle}"
-                          HorizontalAlignment="Left"
-                          Width="40"
-                          ToolTip="{Binding NavigationToggleLabel}"
-                          AutomationProperties.Name="{Binding NavigationToggleLabel}">
-                <Path Width="16"
-                      Height="16"
-                      Stroke="{DynamicResource TextFillColorPrimaryBrush}"
-                      StrokeThickness="1.5"
-                      Data="M 1,1 L 15,1 L 15,15 L 1,15 Z M 6,1 L 6,15" />
-            </ToggleButton>
-            <ToggleButton x:Name="SettingsButton"
-                          DockPanel.Dock="Bottom"
-                          Style="{DynamicResource EncoreSettingsNavStyle}"
-                          IsChecked="{Binding Settings.IsShown, Mode=OneWay}"
-                          Click="OnSettingsClick"
-                          ToolTip="Settings"
-                          AutomationProperties.Name="Settings">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE713;"
-                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                               FontSize="16"
-                               VerticalAlignment="Center" />
-                    <TextBlock Text="Settings" Margin="12,0,0,0">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+            <Border x:Name="NavLayer" Style="{DynamicResource EncoreShellNavLayerStyle}" />
+            <DockPanel x:Name="NavPane" Margin="{DynamicResource EncoreNavPanePadding}">
+                <ToggleButton x:Name="NavigationToggle"
+                              DockPanel.Dock="Top"
+                              Height="36"
+                              Margin="4,8,4,0"
+                              IsChecked="{Binding IsNavigationExpanded, Mode=TwoWay}"
+                              Style="{DynamicResource EncoreSettingsNavStyle}"
+                              HorizontalAlignment="Left"
+                              Width="40"
+                              ToolTip="{Binding NavigationToggleLabel}"
+                              AutomationProperties.Name="{Binding NavigationToggleLabel}">
+                    <Path Width="16"
+                          Height="16"
+                          Stroke="{DynamicResource TextFillColorPrimaryBrush}"
+                          StrokeThickness="1.5"
+                          Data="M 1,1 L 15,1 L 15,15 L 1,15 Z M 6,1 L 6,15" />
+                </ToggleButton>
+                <ToggleButton x:Name="SettingsButton"
+                              DockPanel.Dock="Bottom"
+                              Style="{DynamicResource EncoreSettingsNavStyle}"
+                              IsChecked="{Binding Settings.IsOpen, Mode=OneWay}"
+                              Click="OnSettingsClick"
+                              ToolTip="Settings"
+                              AutomationProperties.Name="Settings">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE713;"
+                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                   FontSize="16"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="Settings" Margin="12,0,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsNavigationExpanded}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </ToggleButton>
+                <!-- The mark and the name; the rail keeps only the mark. -->
+                <StackPanel x:Name="Brand"
+                            Margin="{DynamicResource EncoreNavBrandMargin}"
+                            DockPanel.Dock="Top"
+                            Orientation="Horizontal">
+                    <Control x:Name="BrandMark"
+                             Width="20"
+                             Height="20"
+                             Style="{DynamicResource EncoreMarkStyle}" />
+                    <ContentControl x:Name="BrandName"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Content="Encore"
+                                    Style="{DynamicResource EncoreBrandStyle}"
+                                    Visibility="{Binding IsNavigationExpanded, Converter={StaticResource EncoreShellVisible}}" />
+                </StackPanel>
+                <ListBox x:Name="Nav"
+                                Padding="0"
+                                AutomationProperties.Name="Navigation"
+                                Background="{DynamicResource SubtleFillColorTransparentBrush}"
+                                BorderThickness="0"
+                                FocusVisualStyle="{x:Null}"
+                                ItemContainerStyle="{DynamicResource EncoreNavItemStyle}"
+                                ItemsSource="{Binding NavItems, Mode=OneTime}"
+                                KeyDown="OnNavKeyDown"
+                                PreviewMouseLeftButtonUp="OnNavClick"
+                                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                SelectedItem="{Binding LibraryNav, Mode=OneWay}"
+                                SelectionMode="Single"
+                                TextSearch.TextPath="Title" />
+            </DockPanel>
+
+            <Border x:Name="ContentLayer" Grid.Column="1" Style="{DynamicResource EncoreShellContentLayerStyle}">
+                <DockPanel x:Name="ContentPanel" Margin="{DynamicResource EncorePagePadding}">
+                    <ContentControl x:Name="StatusHeader"
+                                    Content="{Binding StatusLine.View}"
+                                    Visibility="{Binding StatusLine.HasErrors, Converter={StaticResource EncoreShellVisible}}"
+                                    DockPanel.Dock="Top"
+                                    Focusable="False" />
+                    <Grid x:Name="PageHeader" Margin="0,16,0,0" DockPanel.Dock="Top">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsNavigationExpanded}" Value="False">
+                                    <DataTrigger Binding="{Binding IsCreatingClip}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </StackPanel>
-            </ToggleButton>
-            <!-- The mark and the name; the rail keeps only the mark. -->
-            <StackPanel x:Name="Brand"
-                        Margin="{DynamicResource EncoreNavBrandMargin}"
-                        DockPanel.Dock="Top"
-                        Orientation="Horizontal">
-                <Control x:Name="BrandMark"
-                         Width="20"
-                         Height="20"
-                         Style="{DynamicResource EncoreMarkStyle}" />
-                <ContentControl x:Name="BrandName"
-                                Margin="8,0,0,0"
-                                VerticalAlignment="Center"
-                                Content="Encore"
-                                Style="{DynamicResource EncoreBrandStyle}"
-                                Visibility="{Binding IsNavigationExpanded, Converter={StaticResource EncoreShellVisible}}" />
-            </StackPanel>
-            <ListBox x:Name="Nav"
-                            Padding="0"
-                            AutomationProperties.Name="Navigation"
-                            Background="{DynamicResource SubtleFillColorTransparentBrush}"
-                            BorderThickness="0"
-                            FocusVisualStyle="{x:Null}"
-                            ItemContainerStyle="{DynamicResource EncoreNavItemStyle}"
-                            ItemsSource="{Binding NavItems, Mode=OneTime}"
-                            KeyDown="OnNavKeyDown"
-                            PreviewMouseLeftButtonUp="OnNavClick"
-                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                            SelectedItem="{Binding LibraryNav, Mode=OneWay}"
-                            SelectionMode="Single"
-                            TextSearch.TextPath="Title" />
-        </DockPanel>
-
-        <Border x:Name="ContentLayer" Grid.Column="1" Style="{DynamicResource EncoreShellContentLayerStyle}">
-            <DockPanel x:Name="ContentPanel" Margin="{DynamicResource EncorePagePadding}">
-                <ContentControl x:Name="StatusHeader"
-                                Content="{Binding StatusLine.View}"
-                                Visibility="{Binding StatusLine.HasErrors, Converter={StaticResource EncoreShellVisible}}"
-                                DockPanel.Dock="Top"
-                                Focusable="False" />
-                <Grid x:Name="PageHeader" Margin="0,16,0,0" DockPanel.Dock="Top">
-                    <Grid.Style>
-                        <Style TargetType="Grid">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsCreatingClip}" Value="True">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Grid.Style>
-                    <ContentControl x:Name="PageTitle"
-                                    Content="Library"
-                                    Style="{DynamicResource EncorePageTitleStyle}"
-                                    Visibility="{Binding IsDrilledIn, Converter={StaticResource EncoreShellHidden}}" />
-                    <app:DrillInHeader x:Name="Breadcrumb"
-                                       DataContext="{Binding CurrentDrillIn}"
-                                       Visibility="{Binding DataContext.IsDrilledIn,
-                                                            ElementName=Shell,
-                                                            Converter={StaticResource EncoreShellVisible}}" />
-                </Grid>
-                <ContentControl x:Name="Page"
-                                Margin="0,12,0,0"
-                                Content="{Binding CurrentView}"
-                                Focusable="False" />
-            </DockPanel>
-        </Border>
+                        </Grid.Style>
+                        <ContentControl x:Name="PageTitle"
+                                        Content="Library"
+                                        Style="{DynamicResource EncorePageTitleStyle}"
+                                        Visibility="{Binding IsDrilledIn, Converter={StaticResource EncoreShellHidden}}" />
+                        <app:DrillInHeader x:Name="Breadcrumb"
+                                           DataContext="{Binding CurrentDrillIn}"
+                                           Visibility="{Binding DataContext.IsDrilledIn,
+                                                                ElementName=Shell,
+                                                                Converter={StaticResource EncoreShellVisible}}" />
+                    </Grid>
+                    <ContentControl x:Name="Page"
+                                    Margin="0,12,0,0"
+                                    Content="{Binding CurrentView}"
+                                    Focusable="False" />
+                </DockPanel>
+            </Border>
+        </Grid>
+        <app:SettingsOverlay x:Name="SettingsOverlay" DataContext="{Binding Settings}" />
     </Grid>
 </app:ShellWindow>
