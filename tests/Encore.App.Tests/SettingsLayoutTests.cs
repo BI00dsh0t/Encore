@@ -26,7 +26,7 @@ public sealed partial class SettingsLayoutTests
     public void TheFirstFourPagesShowTheirSectionsAsCardsInBothThemes() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
-        var window = Offscreen(new MainWindow { DataContext = model });
+        var window = Offscreen(new SettingsWindow { DataContext = model.Settings });
         var theme = ThemeService.ForWindow(window);
         var expected = new (SettingsViewModel ViewModel, string Slug, string[] Sections)[]
         {
@@ -44,7 +44,7 @@ public sealed partial class SettingsLayoutTests
                 var card = (Style)window.FindResource("EncoreCardStyle");
                 foreach (var (viewModel, slug, sections) in expected)
                 {
-                    model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == viewModel);
+                    model.Settings.Select(viewModel);
                     Sta.Pump(TimeSpan.FromMilliseconds(100));
 
                     Assert.True(viewModel.View.IsLoaded, $"{viewModel.Title} didn't load under {which}");
@@ -88,7 +88,7 @@ public sealed partial class SettingsLayoutTests
             },
         };
         var model = new MainViewModel(engine, action => action());
-        var window = Offscreen(new MainWindow { DataContext = model });
+        var window = Offscreen(new SettingsWindow { DataContext = model.Settings });
         var theme = ThemeService.ForWindow(window);
         var expected = new (SettingsViewModel ViewModel, string Slug, string[] Sections)[]
         {
@@ -107,7 +107,7 @@ public sealed partial class SettingsLayoutTests
                 var accent = window.FindResource("AccentButtonStyle");
                 foreach (var (viewModel, slug, sections) in expected)
                 {
-                    model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == viewModel);
+                    model.Settings.Select(viewModel);
                     Sta.Pump(TimeSpan.FromMilliseconds(100));
                     if (viewModel == model.TrackLayout)
                     {
@@ -188,13 +188,13 @@ public sealed partial class SettingsLayoutTests
     {
         var engine = new FakeEngineSession();
         var model = new MainViewModel(engine, action => action());
-        var window = Offscreen(new MainWindow { DataContext = model });
+        var window = Offscreen(new SettingsWindow { DataContext = model.Settings });
         ThemeService.ForWindow(window).Apply(AppTheme.Fluent);
         var message = (ContentControl)window.FindName("PageMessage");
         try
         {
             window.Show();
-            model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == model.General);
+            model.Settings.Select(model.General);
             Sta.Pump(TimeSpan.FromMilliseconds(100));
             Assert.False(message.IsVisible);
 
@@ -258,7 +258,7 @@ public sealed partial class SettingsLayoutTests
         encoder.Save(file);
     }
 
-    private static MainWindow Offscreen(MainWindow window)
+    private static SettingsWindow Offscreen(SettingsWindow window)
     {
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         window.Left = -30000;

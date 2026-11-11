@@ -88,7 +88,7 @@ internal sealed class GameProfilesViewModel : SettingsViewModel
     public override bool HasUnsavedChanges => _games.Values.Any(game => game.HasUnsavedChanges);
 
     /// <summary>Whether the page is on screen; the open game's audio tracks meter only then.</summary>
-    public bool IsOpen
+    public override bool IsOpen
     {
         get => _isOpen;
         set

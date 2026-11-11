@@ -12,42 +12,45 @@ public sealed class MainViewModelTests
     private readonly List<Action> _posted = [];
 
     [Fact]
-    public void TheNavListsTheEightPagesInOrderWithNoRecordingsPage()
+    public void TheMainNavHoldsTheLibraryAndSettingsListsTheSevenPagesInOrder()
     {
         // The builder's approved order; Games has its own title.
         var model = Create();
 
+        Assert.Equal(["Library"], model.NavItems.Select(i => i.Title));
         Assert.Equal(
-            ["Library", "Settings", "General", "Clips", "Hotkeys", "Audio Tracks", "Games", "Sounds", "Storage and Cleanup"],
-            model.NavItems.Select(i => i.Title));
-        Assert.Equal(8, model.NavItems.Count(i => !i.IsSection));
-        Assert.DoesNotContain(model.NavItems, i => i.Title == "Recordings");
+            ["General", "Clips", "Hotkeys", "Audio Tracks", "Games", "Sounds", "Storage and Cleanup"],
+            model.Settings.Sections.Select(i => i.Title));
+        Assert.DoesNotContain(model.Settings.Sections, i => i.Title == "Recordings");
     }
 
     [Fact]
-    public void EscapeAndBackCloseAnOpenItemPageAndTheSettingsButtonOpensSettings()
+    public void EscapeAndBackCloseAnOpenItemPageAndTheSettingsButtonAsksForTheWindow()
     {
         var model = Create();
+        var asked = 0;
+        model.Settings.OpenRequested += () => asked++;
         Assert.False(model.HandleEscape());
         Assert.False(model.GoBack());
 
         model.OpenSettings();
-        Assert.True(model.IsSettingsTabSelected);
-        model.SelectedSettingsViewModel = model.GameProfiles;
-        var drillIn = model.CurrentDrillIn!;
+        Assert.Equal(1, asked);
+        Assert.Same(model.General, model.Settings.SelectedPage);
+        model.Settings.Select(model.GameProfiles);
+        var drillIn = model.Settings.CurrentDrillIn!;
         drillIn.Open("game", "Game");
-        Assert.True(model.HandleEscape());
+        Assert.True(model.Settings.GoBack());
         Assert.False(drillIn.IsOpen);
+        Assert.False(model.Settings.GoBack());
 
+        // Choosing another section closes the item page of the one left; Ctrl+Tab steps round.
         drillIn.Open("game", "Game");
-        Assert.True(model.GoBack());
+        model.Settings.StepBy(1);
         Assert.False(drillIn.IsOpen);
-
-        // Pressed again on the settings pages, the Settings button goes back to the page's list.
-        drillIn.Open("game", "Game");
-        model.OpenSettings();
-        Assert.False(drillIn.IsOpen);
-        Assert.Same(model.GameProfiles, model.SelectedSettingsViewModel);
+        Assert.Same(model.FeedbackSounds, model.Settings.SelectedPage);
+        model.Settings.Select(model.General);
+        model.Settings.StepBy(-1);
+        Assert.Same(model.LibrarySettings, model.Settings.SelectedPage);
     }
 
     [Fact]
@@ -79,7 +82,7 @@ public sealed class MainViewModelTests
         Assert.Equal("Ready to save Clips in Game.exe", model.StatusLine.State);
         Assert.Equal("Defaults in use.", Assert.Single(model.StatusLine.Warnings).Message);
         Assert.True(model.General.StartWithWindows);
-        Assert.Same(model.General, model.SelectedSettingsViewModel);
+        Assert.Same(model.General, model.Settings.SelectedPage);
     }
 
     [Fact]

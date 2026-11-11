@@ -82,13 +82,13 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                 var brush = Assert.Single(Descendants(first.Main.Library.View).OfType<Border>().Select(b => b.Background).OfType<ImageBrush>());
                 Assert.Equal(BindingStatus.Active, BindingOperations.GetBindingExpression(brush, ImageBrush.ImageSourceProperty)!.Status);
 
-                // The switch with each page open restyles every surface in place.
+                // The switch with each settings page open in the Settings window restyles every surface in place.
                 var expected = AppTheme.Fluent;
-                foreach (var item in first.Main.NavItems.Where(i => !i.IsSection))
+                foreach (var item in first.Main.Settings.Sections)
                 {
-                    first.Main.SelectedNavItem = item;
+                    first.Main.OpenSettings(item.ViewModel);
                     Pump(TimeSpan.FromMilliseconds(50));
-                    var view = first.Main.CurrentView;
+                    var view = first.Main.Settings.CurrentView;
                     first.OpenTrayMenu();
                     Pump(TimeSpan.FromMilliseconds(200));
                     Assert.True(first.TrayMenu.IsOpen, $"the tray menu closed before the switch on {item.Title}");
@@ -97,14 +97,14 @@ public sealed partial class ModernUiEndToEndTests : IDisposable
                     Until(() => first.Themes.All(t => t.Theme == expected), $"{expected} with {item.Title} open");
                     Pump(TimeSpan.FromMilliseconds(50));
                     AssertTheme(first, expected, keys);
-                    Assert.Same(item, first.Main.SelectedNavItem);
-                    Assert.Same(view, first.Main.CurrentView);
+                    Assert.Same(item, first.Main.Settings.SelectedSection);
+                    Assert.Same(view, first.Main.Settings.CurrentView);
                     Assert.True(view.IsLoaded, $"{item.Title} didn't stay loaded after the switch to {expected}");
                     Log?.WriteLine($"{item.Title}: {expected}");
                 }
 
                 // The switch with the delete confirmation open restyles it in place; No keeps the file.
-                first.Main.SelectedNavItem = first.Main.LibraryNav;
+                first.Window.Settings!.Close();
                 Pump(TimeSpan.FromMilliseconds(50));
                 var before = expected;
                 var after = before == AppTheme.Fluent ? AppTheme.GamingDark : AppTheme.Fluent;

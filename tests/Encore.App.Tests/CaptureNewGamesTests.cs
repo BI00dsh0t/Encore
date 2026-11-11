@@ -30,9 +30,9 @@ public sealed class CaptureNewGamesTests
     public void TheGeneralPageShowsTheSwitchInBothThemes() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
-        var window = new MainWindow
+        var window = new SettingsWindow
         {
-            DataContext = model,
+            DataContext = model.Settings,
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -30000,
             Top = -30000,
@@ -42,8 +42,7 @@ public sealed class CaptureNewGamesTests
         try
         {
             window.Show();
-            model.IsSettingsTabSelected = true;
-            model.SelectedSettingsViewModel = model.General;
+            model.Settings.Select(model.General);
             foreach (var (theme, file) in new[] { (AppTheme.Fluent, "general-games-fluent.png"), (AppTheme.GamingDark, "general-games-gaming.png") })
             {
                 ThemeService.ForWindow(window).Apply(theme);

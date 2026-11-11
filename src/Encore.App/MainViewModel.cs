@@ -9,17 +9,14 @@ using Encore.Contracts.Settings;
 
 namespace Encore.App;
 
-/// <summary>The Main App window's state: the status line, the Library and the Settings pages, all from the engine's state.</summary>
+/// <summary>The Main App window's state: the status line, the Library and the Settings window, all from the engine's state.</summary>
 internal sealed class MainViewModel : Observable
 {
     public const string LibraryTitle = "Library";
-    public const string SettingsLabel = "Settings";
 
     private readonly IEngineSession _engine;
-    private SettingsViewModel _selectedSettingsViewModel;
     private bool _isWindowShown;
     private bool _isNavigationExpanded = true;
-    private bool _isSettingsTabSelected;
     private PlayerViewModel? _watchedPlayer;
 
     /// <summary>Post runs an action on the UI thread, as session changes arrive on background threads.</summary>
@@ -46,7 +43,7 @@ internal sealed class MainViewModel : Observable
         GameProfiles = SettingsViewModels.OfType<GameProfilesViewModel>().Single();
         FeedbackSounds = SettingsViewModels.OfType<FeedbackSoundsViewModel>().Single();
         LibrarySettings = SettingsViewModels.OfType<LibrarySettingsViewModel>().Single();
-        _selectedSettingsViewModel = SettingsViewModels[0];
+        Settings = new SettingsWindowViewModel(SettingsViewModels);
         Library = new LibraryViewModel(
             engine,
             LibraryThumbnails.Shell(post),
@@ -56,21 +53,22 @@ internal sealed class MainViewModel : Observable
             clipMedia: clipMedia,
             clipThumbnailCacheFolder: clipThumbnailCacheFolder,
             firstUseFile: firstUseFile);
-        LibraryNav = new NavItem(LibraryTitle, null, isSection: false);
-        NavItems =
-        [
-            LibraryNav,
-            new NavItem(SettingsLabel, null, isSection: true),
-            .. SettingsViewModels.Select(viewModel => new NavItem(viewModel.Title, viewModel, isSection: false)),
-        ];
-        FollowDrillIns();
+        LibraryNav = new NavItem(LibraryTitle, null);
+        NavItems = [LibraryNav];
+        Library.DrillIn.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(DrillIn.IsOpen))
+            {
+                OnPropertyChanged(nameof(IsDrilledIn));
+            }
+        };
         Library.Playback.PropertyChanged += OnPlaybackPropertyChanged;
 
-        // The tips' Change hotkeys link.
-        Library.Tips.ChangeHotkeys = () => Select(Hotkeys);
+        // The tips' Change hotkeys link opens the Settings window at Hotkeys.
+        Library.Tips.ChangeHotkeys = () => OpenSettings(Hotkeys);
 
         // Edit the main setting, from a game's page: the page that holds the key.
-        GameProfiles.EditMain = key => Select(key == Keys.TrackLayout ? TrackLayout : Rewind);
+        GameProfiles.EditMain = key => Settings.Select(key == Keys.TrackLayout ? TrackLayout : Rewind);
         engine.Changed += () => post(Refresh);
         Refresh();
     }
@@ -103,14 +101,11 @@ internal sealed class MainViewModel : Observable
 
     public LibraryViewModel Library { get; }
 
-    /// <summary>The shell's navigation: Library, the Settings label, then every settings page; only the label isn't selectable.</summary>
+    /// <summary>The Settings window: its sections, the selected page and whether it is shown.</summary>
+    public SettingsWindowViewModel Settings { get; }
+
+    /// <summary>The main window's navigation: the Library; Settings opens in its own window.</summary>
     public IReadOnlyList<NavItem> NavItems { get; }
-
-    /// <summary>The items of the nav list: today, the Library.</summary>
-    public IEnumerable<NavItem> PrimaryNavItems => NavItems.Where(item => !item.IsSection && item.ViewModel is null);
-
-    /// <summary>The items of the settings section list: one per settings page.</summary>
-    public IEnumerable<NavItem> SettingsNavItems => NavItems.Where(item => item.ViewModel is not null);
 
     /// <summary>Whether the nav pane shows its labels, or only its icons.</summary>
     public bool IsNavigationExpanded
@@ -129,66 +124,21 @@ internal sealed class MainViewModel : Observable
 
     public NavItem LibraryNav { get; }
 
-    /// <summary>The selected navigation item; setting it sets the Library or Settings choice and the selected page.</summary>
-    public NavItem SelectedNavItem
-    {
-        get => IsSettingsTabSelected ? NavItems.First(item => item.ViewModel == SelectedSettingsViewModel) : LibraryNav;
-        set
-        {
-            if (value is null || value.IsSection)
-            {
-                // Never empty, and the section label can't be chosen: keep the item shown.
-                OnPropertyChanged();
-                return;
-            }
-
-            if (value.ViewModel is { } viewModel)
-            {
-                SelectedSettingsViewModel = viewModel;
-                IsSettingsTabSelected = true;
-            }
-            else
-            {
-                IsSettingsTabSelected = false;
-            }
-        }
-    }
-
-    /// <summary>The nav list's selection: the Library, or none in Settings, so choosing the Library always leaves Settings.</summary>
-    public NavItem? SelectedPrimaryNavItem
-    {
-        get => IsSettingsTabSelected ? null : LibraryNav;
-        set
-        {
-            // The list clears its selection when Settings opens; only a chosen item navigates.
-            if (value is not null)
-            {
-                SelectedNavItem = value;
-            }
-        }
-    }
-
     /// <summary>The Clips folder the engine uses, or null before it says: the tray's Open the Clips folder.</summary>
     public string? ClipsFolder => _engine.State?.LibraryFolder;
 
-    /// <summary>The shown page's drill-in, or null; the shell's breadcrumb binds to it.</summary>
-    public DrillIn? CurrentDrillIn => IsSettingsTabSelected ? SelectedSettingsViewModel.DrillIn : Library.DrillIn;
+    /// <summary>The Library's drill-in; the shell's breadcrumb binds to it.</summary>
+    public DrillIn CurrentDrillIn => Library.DrillIn;
 
     /// <summary>Whether an item page is open, so the page header is a breadcrumb.</summary>
-    public bool IsCreatingClip => !IsSettingsTabSelected && Library.Playback.Creator is not null;
+    public bool IsCreatingClip => Library.Playback.Creator is not null;
 
-    public bool IsDrilledIn => CurrentDrillIn?.IsOpen == true;
+    public bool IsDrilledIn => CurrentDrillIn.IsOpen;
 
-    /// <summary>The nav item chosen again on the page already shown: an open drill-in goes back to its list.</summary>
-    public void ReselectNavItem(NavItem item)
-    {
-        if (ReferenceEquals(item, SelectedNavItem))
-        {
-            CurrentDrillIn?.Close();
-        }
-    }
+    /// <summary>The Library chosen again in the nav pane: an open item page goes back to the list.</summary>
+    public void ReselectLibrary() => Library.DrillIn.Close();
 
-    /// <summary>Esc: leaves the player's full screen, else goes back as <see cref="GoBack"/> does. False when it did neither.</summary>
+    /// <summary>Esc: leaves the player's full screen, else closes an open item page. False when it did neither.</summary>
     public bool HandleEscape()
     {
         if (IsPlayerFullScreen)
@@ -200,34 +150,20 @@ internal sealed class MainViewModel : Observable
         return GoBack();
     }
 
-    /// <summary>Alt+Left and the mouse's Back: closes an open item page, else leaves Settings. False on the Library's list.</summary>
+    /// <summary>Alt+Left and the mouse's Back: closes an open item page. False on the Library's list.</summary>
     public bool GoBack()
     {
-        if (CurrentDrillIn is { IsOpen: true } drillIn)
-        {
-            drillIn.Close();
-            return true;
-        }
-
-        if (!IsSettingsTabSelected)
+        if (!Library.DrillIn.IsOpen)
         {
             return false;
         }
 
-        SelectedNavItem = LibraryNav;
+        Library.DrillIn.Close();
         return true;
     }
 
-    /// <summary>The Settings button: shows the settings pages; pressed again on them, an open item page goes back to its list.</summary>
-    public void OpenSettings()
-    {
-        if (IsSettingsTabSelected)
-        {
-            ReselectNavItem(SelectedNavItem);
-        }
-
-        IsSettingsTabSelected = true;
-    }
+    /// <summary>The Settings button and every link to a settings page: shows the Settings window, at the page when one is given.</summary>
+    public void OpenSettings(SettingsViewModel? page = null) => Settings.Open(page);
 
     /// <summary>Whether the player page fills the screen: the window drops its frame, nav and headers.</summary>
     public bool IsPlayerFullScreen => Library.Playback.Player?.IsFullScreen == true;
@@ -241,24 +177,8 @@ internal sealed class MainViewModel : Observable
         }
     }
 
-    /// <summary>The page header's title: "Library" or the settings page's.</summary>
-    public string CurrentTitle => SelectedNavItem.Title;
-
-    /// <summary>The page on screen: the Library's view or the settings page's.</summary>
-    public FrameworkElement CurrentView => IsSettingsTabSelected ? SelectedSettingsViewModel.View : Library.View;
-
-    public SettingsViewModel SelectedSettingsViewModel
-    {
-        get => _selectedSettingsViewModel;
-        set
-        {
-            if (Set(ref _selectedSettingsViewModel, value))
-            {
-                NavigationChanged();
-                UpdateOpenPage();
-            }
-        }
-    }
+    /// <summary>The page on screen: the Library's view.</summary>
+    public FrameworkElement CurrentView => Library.View;
 
     /// <summary>Whether the Main App window is shown; closing it only hides it.</summary>
     public bool IsWindowShown
@@ -276,32 +196,8 @@ internal sealed class MainViewModel : Observable
                 {
                     Library.Playback.ResumeCreator();
                 }
-
-                UpdateOpenPage();
             }
         }
-    }
-
-    /// <summary>Whether a settings page is selected, rather than the Library; the tray's open-Settings path sets it.</summary>
-    public bool IsSettingsTabSelected
-    {
-        get => _isSettingsTabSelected;
-        set
-        {
-            if (Set(ref _isSettingsTabSelected, value))
-            {
-                NavigationChanged();
-                UpdateOpenPage();
-            }
-        }
-    }
-
-    /// <summary>Selects the next or previous selectable navigation item, wrapping round: Ctrl+Tab and Ctrl+Shift+Tab.</summary>
-    public void NavigateBy(int step)
-    {
-        var items = NavItems.Where(item => !item.IsSection).ToList();
-        var at = items.IndexOf(SelectedNavItem);
-        SelectedNavItem = items[(((at + step) % items.Count) + items.Count) % items.Count];
     }
 
     /// <summary>Reads the session again. Runs on the UI thread.</summary>
@@ -328,23 +224,6 @@ internal sealed class MainViewModel : Observable
         foreach (var viewModel in SettingsViewModels)
         {
             viewModel.Render(state.Settings);
-        }
-    }
-
-    private void Select(SettingsViewModel viewModel) => SelectedNavItem = NavItems.First(item => item.ViewModel == viewModel);
-
-    // The page header is a breadcrumb while any page's item page is open.
-    private void FollowDrillIns()
-    {
-        foreach (var drillIn in SettingsViewModels.Select(viewModel => viewModel.DrillIn).OfType<DrillIn>().Append(Library.DrillIn))
-        {
-            drillIn.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(DrillIn.IsOpen))
-                {
-                    OnPropertyChanged(nameof(IsDrilledIn));
-                }
-            };
         }
     }
 
@@ -384,50 +263,5 @@ internal sealed class MainViewModel : Observable
         {
             OnPropertyChanged(nameof(IsPlayerFullScreen));
         }
-    }
-
-    private void NavigationChanged()
-    {
-        // Leaving a page closes its drill-in; leaving the Library closes its player page and releases the file.
-        if (IsSettingsTabSelected)
-        {
-            Library.DrillIn.Close();
-        }
-
-        foreach (var viewModel in SettingsViewModels)
-        {
-            if (!IsSettingsTabSelected || !ReferenceEquals(viewModel, SelectedSettingsViewModel))
-            {
-                viewModel.DrillIn?.Close();
-            }
-        }
-
-        OnPropertyChanged(nameof(IsCreatingClip));
-        OnPropertyChanged(nameof(CurrentDrillIn));
-        OnPropertyChanged(nameof(IsDrilledIn));
-        OnPropertyChanged(nameof(SelectedNavItem));
-        OnPropertyChanged(nameof(SelectedPrimaryNavItem));
-        OnPropertyChanged(nameof(CurrentTitle));
-        OnPropertyChanged(nameof(CurrentView));
-    }
-
-    // Pages meter only while on screen; the closing page goes first, so its unwatch doesn't stop the new watch.
-    private void UpdateOpenPage()
-    {
-        var settingsShown = IsWindowShown && IsSettingsTabSelected;
-        var trackLayout = settingsShown && SelectedSettingsViewModel == TrackLayout;
-        var gameProfiles = settingsShown && SelectedSettingsViewModel == GameProfiles;
-        if (!trackLayout)
-        {
-            TrackLayout.IsOpen = false;
-        }
-
-        if (!gameProfiles)
-        {
-            GameProfiles.IsOpen = false;
-        }
-
-        TrackLayout.IsOpen = trackLayout;
-        GameProfiles.IsOpen = gameProfiles;
     }
 }

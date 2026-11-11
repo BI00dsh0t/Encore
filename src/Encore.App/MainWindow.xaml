@@ -46,7 +46,7 @@
             <ToggleButton x:Name="SettingsButton"
                           DockPanel.Dock="Bottom"
                           Style="{DynamicResource EncoreSettingsNavStyle}"
-                          IsChecked="{Binding IsSettingsTabSelected, Mode=OneWay}"
+                          IsChecked="{Binding Settings.IsShown, Mode=OneWay}"
                           Click="OnSettingsClick"
                           ToolTip="Settings"
                           AutomationProperties.Name="Settings">
@@ -84,18 +84,18 @@
                                 Style="{DynamicResource EncoreBrandStyle}"
                                 Visibility="{Binding IsNavigationExpanded, Converter={StaticResource EncoreShellVisible}}" />
             </StackPanel>
-            <app:NavListBox x:Name="Nav"
+            <ListBox x:Name="Nav"
                             Padding="0"
                             AutomationProperties.Name="Navigation"
                             Background="{DynamicResource SubtleFillColorTransparentBrush}"
                             BorderThickness="0"
                             FocusVisualStyle="{x:Null}"
                             ItemContainerStyle="{DynamicResource EncoreNavItemStyle}"
-                            ItemsSource="{Binding PrimaryNavItems, Mode=OneTime}"
+                            ItemsSource="{Binding NavItems, Mode=OneTime}"
                             KeyDown="OnNavKeyDown"
                             PreviewMouseLeftButtonUp="OnNavClick"
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                            SelectedItem="{Binding SelectedPrimaryNavItem, Mode=TwoWay}"
+                            SelectedItem="{Binding LibraryNav, Mode=OneWay}"
                             SelectionMode="Single"
                             TextSearch.TextPath="Title" />
         </DockPanel>
@@ -107,28 +107,6 @@
                                 Visibility="{Binding StatusLine.HasErrors, Converter={StaticResource EncoreShellVisible}}"
                                 DockPanel.Dock="Top"
                                 Focusable="False" />
-                <ComboBox x:Name="SettingsSections"
-                          DockPanel.Dock="Top"
-                          Margin="0,12,0,0"
-                          ItemsSource="{Binding SettingsNavItems, Mode=OneTime}"
-                          PreviewMouseLeftButtonUp="OnSettingsSectionClick"
-                          PreviewKeyDown="OnSettingsSectionKeyDown"
-                          SelectedItem="{Binding SelectedNavItem, Mode=TwoWay}"
-                          AutomationProperties.Name="Settings section"
-                          Visibility="{Binding IsSettingsTabSelected, Converter={StaticResource EncoreShellVisible}}">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Title}" />
-                                <Border Width="6"
-                                        Height="6"
-                                        Margin="8,0,0,0"
-                                        Background="{DynamicResource AccentFillColorDefaultBrush}"
-                                        Visibility="{Binding HasUnsavedChanges, Converter={StaticResource EncoreShellVisible}}" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
                 <Grid x:Name="PageHeader" Margin="0,16,0,0" DockPanel.Dock="Top">
                     <Grid.Style>
                         <Style TargetType="Grid">
@@ -140,7 +118,7 @@
                         </Style>
                     </Grid.Style>
                     <ContentControl x:Name="PageTitle"
-                                    Content="{Binding CurrentTitle}"
+                                    Content="Library"
                                     Style="{DynamicResource EncorePageTitleStyle}"
                                     Visibility="{Binding IsDrilledIn, Converter={StaticResource EncoreShellHidden}}" />
                     <app:DrillInHeader x:Name="Breadcrumb"
@@ -149,22 +127,6 @@
                                                             ElementName=Shell,
                                                             Converter={StaticResource EncoreShellVisible}}" />
                 </Grid>
-                <!-- The wrapper hides the bar off the settings pages; the bar's own style hides it while empty. -->
-                <Border DockPanel.Dock="Bottom">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsSettingsTabSelected}" Value="False">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <ContentControl x:Name="PageMessage"
-                                    Margin="0,12,0,0"
-                                    Content="{Binding SelectedSettingsViewModel.Message}"
-                                    Style="{DynamicResource EncoreSettingsPageMessageStyle}" />
-                </Border>
                 <ContentControl x:Name="Page"
                                 Margin="0,12,0,0"
                                 Content="{Binding CurrentView}"

@@ -31,6 +31,9 @@ internal abstract class SettingsViewModel(SettingsSender sender) : Observable
     /// <summary>The page's drill-in, when it opens item pages; null for a plain page.</summary>
     public virtual DrillIn? DrillIn => null;
 
+    /// <summary>Whether the page is on screen; a page that watches live data starts and stops with it.</summary>
+    public virtual bool IsOpen { get; set; }
+
     /// <summary>Whether the page holds an unsaved draft: the nav item shows a dot. Raised as a property change.</summary>
     public virtual bool HasUnsavedChanges => false;
 

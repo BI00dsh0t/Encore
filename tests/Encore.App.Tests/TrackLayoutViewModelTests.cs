@@ -193,7 +193,7 @@ public sealed class TrackLayoutViewModelTests
         SetState(revision: 3, layout: rendered, Speakers);
         var model = Create();
         var viewModel = model.TrackLayout;
-        var nav = model.NavItems.Single(i => i.ViewModel == viewModel);
+        var nav = model.Settings.Sections.Single(i => i.ViewModel == viewModel);
         Assert.False(viewModel.IsDirty);
         Assert.False(nav.HasUnsavedChanges);
 
@@ -555,22 +555,22 @@ public sealed class TrackLayoutViewModelTests
         _engine.RaiseChanged();
         Assert.True(model.TrackLayout.Tracks[1].Level > 0);
 
-        model.SelectedSettingsViewModel = model.General;
+        model.Settings.Select(model.General);
 
         Assert.Same(Empty.Value, _engine.Sent[^1]);
         Assert.Single(_engine.Sent, a => a is Empty);
         Assert.All(model.TrackLayout.Tracks, t => Assert.Equal(0, t.Level));
 
-        model.SelectedSettingsViewModel = model.TrackLayout;
+        model.Settings.Select(model.TrackLayout);
         Assert.IsType<MetersWatch>(_engine.Sent[^1]);
-        model.IsWindowShown = false;
+        model.Settings.IsShown = false;
         Assert.Same(Empty.Value, _engine.Sent[^1]);
         Assert.Equal(2, _engine.Sent.Count(a => a is Empty));
 
         // An unwatch lost to a dropped link goes out again once the same engine run is back.
-        model.IsWindowShown = true;
+        model.Settings.IsShown = true;
         _engine.Reply = (_, _) => throw new ErrorCodeException(ErrorCodes.EngineDisconnected, "Gone.");
-        model.IsWindowShown = false;
+        model.Settings.IsShown = false;
         _engine.Reply = (_, _) => Empty.Value;
         _engine.RaiseChanged();
         Assert.Same(Empty.Value, _engine.Sent[^1]);
@@ -583,7 +583,7 @@ public sealed class TrackLayoutViewModelTests
         SetState(revision: 1, layout: null, Speakers, Headset with { Available = false }, Mic, new AudioDevice("{out-3}", "Line Out", "Realtek", AudioFlow.Output, true));
         var model = new MainViewModel(_engine, action => action());
         Assert.Equal(["General", "Clips", "Hotkeys", "Audio Tracks", "Games", "Sounds", "Storage and Cleanup"], model.SettingsViewModels.Select(p => p.Title));
-        model.SelectedSettingsViewModel = model.TrackLayout;
+        model.Settings.Select(model.TrackLayout);
         var viewModel = model.TrackLayout;
         viewModel.AddSound(viewModel.Tracks[0], Speakers);
         viewModel.AddSound(viewModel.Tracks[0], Headset with { Available = false });
@@ -599,7 +599,7 @@ public sealed class TrackLayoutViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedSettingsViewModel.View;
+            var view = model.Settings.SelectedPage.View;
             view.Measure(new Size(600, 800));
             view.Arrange(new Rect(0, 0, 600, 800));
             view.UpdateLayout();
@@ -643,8 +643,7 @@ public sealed class TrackLayoutViewModelTests
 
     private static void Open(MainViewModel model)
     {
-        model.IsWindowShown = true;
-        model.IsSettingsTabSelected = true;
-        model.SelectedSettingsViewModel = model.TrackLayout;
+        model.Settings.IsShown = true;
+        model.Settings.Select(model.TrackLayout);
     }
 }

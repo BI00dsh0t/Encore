@@ -64,15 +64,14 @@ public sealed class GameProfilesViewModelTests
         Assert.Null(viewModel.OpenGame);
         Assert.Equal(ChadId, viewModel.LastOpenedId);
 
-        // Choosing Games in the nav again (click, Enter or Space) goes back too; another item doesn't.
+        // Choosing Games in the Settings window's sections again (click, Enter or Space) goes back too; another section doesn't.
         var model = Create();
-        model.SelectedSettingsViewModel = model.GameProfiles;
-        model.IsSettingsTabSelected = true;
+        model.Settings.Select(model.GameProfiles);
         model.GameProfiles.Open(model.GameProfiles.Profiles[0]);
-        model.ReselectNavItem(model.NavItems.Single(i => i.ViewModel == model.General));
-        Assert.True(model.IsDrilledIn);
-        model.ReselectNavItem(model.SelectedNavItem);
-        Assert.False(model.IsDrilledIn);
+        model.Settings.ReselectSection(model.Settings.Sections.Single(i => i.ViewModel == model.General));
+        Assert.True(model.Settings.IsDrilledIn);
+        model.Settings.ReselectSection(model.Settings.SelectedSection);
+        Assert.False(model.Settings.IsDrilledIn);
     }
 
     [Fact]
@@ -202,7 +201,7 @@ public sealed class GameProfilesViewModelTests
         Assert.Same(game, viewModel.OpenGame);
         Assert.Equal(3, game.Tracks.Tracks.Count);
         Assert.True(viewModel.Profiles[0].HasUnsavedChanges);
-        Assert.True(model.NavItems.Single(i => i.ViewModel == viewModel).HasUnsavedChanges);
+        Assert.True(model.Settings.Sections.Single(i => i.ViewModel == viewModel).HasUnsavedChanges);
     }
 
     [Fact]
@@ -244,7 +243,7 @@ public sealed class GameProfilesViewModelTests
         SetProfilesWithAlpha(revision: 3, ("trackLayout", Keys.TrackLayout.ToJson(GlobalLayout)));
         _engine.Reply = (_, _) => Empty.Value;
         var model = Create();
-        model.SelectedSettingsViewModel = model.GameProfiles;
+        model.Settings.Select(model.GameProfiles);
         var viewModel = model.GameProfiles;
 
         var errors = new BindingErrors();

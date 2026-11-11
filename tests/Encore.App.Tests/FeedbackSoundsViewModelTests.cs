@@ -99,7 +99,7 @@ public sealed class FeedbackSoundsViewModelTests
         };
         var model = Create();
         Assert.Contains(model.SettingsViewModels, p => p.Title == "Sounds");
-        model.SelectedSettingsViewModel = model.FeedbackSounds;
+        model.Settings.Select(model.FeedbackSounds);
         Assert.Equal("Another app has the sound device to itself.", model.FeedbackSounds.CapturedWarning);
 
         var errors = new BindingErrors();
@@ -109,7 +109,7 @@ public sealed class FeedbackSoundsViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedSettingsViewModel.View;
+            var view = model.Settings.SelectedPage.View;
             view.Measure(new Size(600, 400));
             view.Arrange(new Rect(0, 0, 600, 400));
             view.UpdateLayout();
