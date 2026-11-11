@@ -95,7 +95,7 @@
                             KeyDown="OnNavKeyDown"
                             PreviewMouseLeftButtonUp="OnNavClick"
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                            SelectedItem="{Binding SelectedNavItem, Mode=TwoWay}"
+                            SelectedItem="{Binding SelectedPrimaryNavItem, Mode=TwoWay}"
                             SelectionMode="Single"
                             TextSearch.TextPath="Title" />
         </DockPanel>
