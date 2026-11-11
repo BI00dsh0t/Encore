@@ -114,7 +114,10 @@ public static class ProfileAttributes
     public const string Ignored = "ignored";
     public const string RecordingsEnabled = "recordingsEnabled";
 
-    public static IReadOnlyList<string> All { get; } = [Name, Ignored, RecordingsEnabled];
+    /// <summary>One of <see cref="GameSources"/>, set when the profile is created.</summary>
+    public const string Source = "source";
+
+    public static IReadOnlyList<string> All { get; } = [Name, Ignored, RecordingsEnabled, Source];
 }
 
 /// <summary>The closed settings key catalog. A key missing from the document takes its default.</summary>
@@ -213,6 +216,10 @@ public static class Keys
     public static SettingKey<bool> CaptureNewGames { get; } = new(
         "captureNewGames", Json.Boolean, true, overridable: false, AppliesAt.Immediate);
 
+    /// <summary>Whether a new app found only by its fullscreen window is captured; false creates its profile Ignored.</summary>
+    public static SettingKey<bool> CaptureFullscreenApps { get; } = new(
+        "captureFullscreenApps", Json.Boolean, false, overridable: false, AppliesAt.Immediate);
+
     /// <summary>Every key, in catalog order.</summary>
     public static IReadOnlyList<SettingKey> All { get; } =
     [
@@ -235,6 +242,7 @@ public static class Keys
         AppTheme,
         MonitorRecordingScreens,
         CaptureNewGames,
+        CaptureFullscreenApps,
     ];
 
     private static readonly Dictionary<string, SettingKey> ByName = All.ToDictionary(k => k.Name, StringComparer.Ordinal);

@@ -9,6 +9,7 @@ internal sealed class GameProfileItem(string profileId) : Observable
     private string _name = "";
     private bool _ignored;
     private bool _isManual;
+    private string? _source;
     private int _changed;
     private bool _isCapturing;
     private bool _unsaved;
@@ -29,9 +30,9 @@ internal sealed class GameProfileItem(string profileId) : Observable
 
     public bool IsManual => _isManual;
 
-    /// <summary>"Detected automatically" or "Added by hand", then "· {n} settings changed".</summary>
+    /// <summary>How Encore knows the game ("Steam game", "Added by you"…), then "· {n} settings changed".</summary>
     public string Caption =>
-        (_isManual ? "Added by hand" : "Detected automatically")
+        GameSourceText.Describe(_source, _isManual)
         + (_changed switch { 0 => "", 1 => " · 1 setting changed", var n => $" · {n} settings changed" });
 
     /// <summary>How many of the game's three overridable settings it changes.</summary>
@@ -80,6 +81,7 @@ internal sealed class GameProfileItem(string profileId) : Observable
         }
 
         var captionChanged = Set(ref _isManual, isManual, nameof(IsManual));
+        captionChanged |= Set(ref _source, profile.Source, nameof(Caption));
         captionChanged |= Set(ref _changed, changed, nameof(ChangedCount));
         if (captionChanged)
         {

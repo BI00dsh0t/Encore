@@ -4,7 +4,7 @@ using Encore.Core.Sessions;
 
 namespace Encore.Engine.Settings;
 
-/// <summary>The engine's runtime state in <c>runtime.json</c>: mic mute and open Recordings. Never a setting.</summary>
+/// <summary>The engine's runtime state in <c>runtime.json</c>: mic mute, open Recordings and one-time checks. Never a setting.</summary>
 internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
 {
     public const string FileName = "runtime.json";
@@ -15,6 +15,7 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
     private readonly List<string> _open = [];
     private bool? _muted;
     private bool _interrupted;
+    private bool _nonGamesChecked;
 
     public RuntimeStateStore(string folder, ILogger log)
     {
@@ -150,6 +151,41 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
         }
     }
 
+    /// <summary>Whether the one-time check for non-game profiles has run, read from the file without changing it.</summary>
+    public bool NonGamesChecked()
+    {
+        lock (_lock)
+        {
+            RuntimeState? state;
+            try
+            {
+                state = Parse(File.ReadAllBytes(_path));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                state = null;
+            }
+
+            // Kept for the next write, which writes every value: a file with no mic mute starts muted anyway.
+            _muted ??= state?.MicMuted ?? true;
+            _nonGamesChecked |= state?.NonGamesChecked == true;
+            return _nonGamesChecked;
+        }
+    }
+
+    /// <summary>Records that the one-time check for non-game profiles has run; a failed write runs it again next start.</summary>
+    public void MarkNonGamesChecked()
+    {
+        lock (_lock)
+        {
+            _nonGamesChecked = true;
+            if (Write() is { } error)
+            {
+                _log.LogWarning("The non-game check couldn't be recorded in {Path}: {Message}; it runs again next start", _path, error);
+            }
+        }
+    }
+
     private static RuntimeState? Parse(byte[] json)
     {
         try
@@ -185,5 +221,5 @@ internal sealed class RuntimeStateStore : IMicMuteStore, IOpenRecordings
         }
     }
 
-    private RuntimeState Snapshot() => new(_muted, _open.Count > 0 ? [.. _open] : null);
+    private RuntimeState Snapshot() => new(_muted, _open.Count > 0 ? [.. _open] : null, _nonGamesChecked ? true : null);
 }

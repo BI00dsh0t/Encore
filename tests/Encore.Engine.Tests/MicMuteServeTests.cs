@@ -43,11 +43,11 @@ public sealed class MicMuteServeTests : IAsyncLifetime
     [Fact]
     public async Task AnUnmuteIsPublishedSavedAndKeptAcrossARestartUntilTheFileIsDeleted()
     {
-        // A cold start: no runtime.json, so the first snapshot is muted.
+        // A cold start: no runtime.json, so the first snapshot is muted; the start's one-time check writes the file.
         var host = await StartHostAsync();
         var (client, events) = await ConnectAsync(host);
         Assert.True(client.State.Capture.MicMuted);
-        Assert.False(File.Exists(RuntimeFile));
+        Assert.Equal("""{"micMuted":true,"nonGamesChecked":true}""", File.ReadAllText(RuntimeFile));
 
         Assert.True(host.Sessions.Post(new HotkeyPressed(HotkeyAction.MicMute, Stopwatch.GetTimestamp())));
 
@@ -58,7 +58,7 @@ public sealed class MicMuteServeTests : IAsyncLifetime
         Assert.False(CaptureMessages.StateChanged.Read(changed.Payload).MicMuted);
         Assert.False(client.State.Capture.MicMuted);
         Assert.Equal(HotkeyAction.MicMute, client.State.LastHotkeyPress?.Action);
-        Assert.Equal("""{"micMuted":false}""", File.ReadAllText(RuntimeFile));
+        Assert.Equal("""{"micMuted":false,"nonGamesChecked":true}""", File.ReadAllText(RuntimeFile));
 
         // A restart starts unmuted, in its first snapshot.
         await StopAsync(host, client);

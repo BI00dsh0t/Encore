@@ -9,6 +9,7 @@ using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 using Encore.Engine.Supervision;
 using Encore.Platform.Windows;
+using Encore.Platform.Windows.Stores;
 
 namespace Encore.Engine.Tests;
 
@@ -21,6 +22,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
 
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "rb-games-" + Guid.NewGuid().ToString("N"));
     private readonly FakeProbe _probe = new();
+    private readonly List<StoreFolder> _stores = [];
     private EngineHost _host = null!;
     private EngineClient _client = null!;
     private Channel<IpcEvent> _events = null!;
@@ -29,10 +31,18 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
 
     private string GamePath => Path.Combine(_folder, "Game.EXE");
 
+    // A folder in no store: a program here is found only by its fullscreen window.
+    private string UnlistedFolder => Path.Combine(_folder, "..", Path.GetFileName(_folder) + "-apps");
+
     public async ValueTask InitializeAsync()
     {
         Directory.CreateDirectory(_folder);
+        Directory.CreateDirectory(UnlistedFolder);
         await File.WriteAllBytesAsync(GamePath, [], Token);
+        await File.WriteAllBytesAsync(Path.Combine(UnlistedFolder, "App.exe"), [], Token);
+
+        // The tests' games are Steam games, as most real ones are; an app found only in fullscreen starts Not captured.
+        _stores.Add(new StoreFolder(StoreLibraries.Normalize(_folder), GameStore.Steam));
         var instance = new Instance(Instance.TestPrefix + Guid.NewGuid().ToString("N"), Path.Combine(_folder, "roaming"), Path.Combine(_folder, "local"));
         _host = EngineHost.Start(
             instance,
@@ -43,6 +53,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
                 ProbeEncoders = false,
                 AppLauncher = new StayingLauncher(),
                 GameWindows = _probe,
+                GameStores = () => _stores,
                 GameScanInterval = TimeSpan.FromMilliseconds(50),
             });
         _events = Channel.CreateUnbounded<IpcEvent>();
@@ -57,6 +68,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         await _client.DisposeAsync();
         await _host.DisposeAsync();
         Directory.Delete(_folder, recursive: true);
+        Directory.Delete(UnlistedFolder, recursive: true);
     }
 
     [Fact]
@@ -96,7 +108,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         Assert.Equal(2, _client.State!.Settings.Revision);
         var detected = GameMessages.Detected.Read((await NextAsync("game.detected")).Payload);
         var changed = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload);
-        var expected = new DetectedGame(GamePaths.Canonicalize(GamePath), "Game.EXE", GamePid);
+        var expected = new DetectedGame(GamePaths.Canonicalize(GamePath), "Game.EXE", GamePid, GameSources.Manual);
         Assert.Equal(expected, detected);
         Assert.Equal(new TargetChanged(null, new TargetGame(expected.ProfileId, expected.Name, GamePid), TargetChangeReason.Detected), changed);
         Assert.Equal([expected], _client.State!.DetectedGames!);
@@ -308,6 +320,49 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         var target = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload);
         Assert.Equal(GamePid + 1, target.To!.ProcessId);
         Assert.False(_client.State!.Settings.Profiles[GamePaths.Canonicalize(GamePath)].Ignored);
+    }
+
+    [Fact]
+    public async Task AnAppFoundOnlyInFullscreenStartsNotCapturedWithItsNoticeAndAStoreGameIsCaptured()
+    {
+        var app = Path.Combine(UnlistedFolder, "App.exe");
+        _probe.Add(GamePid, app);
+        _probe.Foreground = new GameWindow(0x10, GamePid);
+
+        var found = await NextOfAsync("settings.changed", "warning.raised", "game.detected", "game.exited");
+        var notice = FeedbackMessages.Raised.Read(found["warning.raised"].Payload);
+        Assert.Equal((ErrorCodes.NewGameNotCaptured, true), (notice.Code, notice.Overlay));
+        Assert.Equal("Encore found App in fullscreen. If it's a game, turn it on in Games.", notice.Message);
+        var profile = _client.State!.Settings.Profiles[GamePaths.Canonicalize(app)];
+        Assert.Equal((true, GameSources.Fullscreen), (profile.Ignored, profile.Source));
+        Assert.Null(_client.State!.TargetGame);
+
+        _probe.Add(GamePid + 1, GamePath);
+        _probe.Foreground = new GameWindow(0x11, GamePid + 1);
+        await NextAsync("settings.changed");
+        var detected = GameMessages.Detected.Read((await NextAsync("game.detected")).Payload);
+        await NextAsync("target.changed");
+        Assert.Equal(GameSources.Steam, detected.Source);
+        Assert.Equal((false, GameSources.Steam), (_client.State!.Settings.Profiles[detected.ProfileId].Ignored, detected.Source));
+    }
+
+    [Fact]
+    public async Task WithCaptureFullscreenAppsOnAnAppFoundOnlyInFullscreenIsCaptured()
+    {
+        var value = JsonSerializer.SerializeToElement(true, SettingsJsonContext.Default.Boolean);
+        var update = new SettingsUpdate(0, [SettingsOp.SetGlobal(Keys.CaptureFullscreenApps.Name, value)]);
+        await _client.SendAsync(SettingsMessages.Update, update, Token);
+        await NextAsync("settings.changed");
+
+        var app = Path.Combine(UnlistedFolder, "App.exe");
+        _probe.Add(GamePid, app);
+        _probe.Foreground = new GameWindow(0x10, GamePid);
+
+        await NextAsync("settings.changed");
+        await NextAsync("game.detected");
+        await NextAsync("target.changed");
+        var profile = _client.State!.Settings.Profiles[GamePaths.Canonicalize(app)];
+        Assert.Equal((false, GameSources.Fullscreen), (profile.Ignored, profile.Source));
     }
 
     private async Task SetCaptureNewGamesAsync(bool on)

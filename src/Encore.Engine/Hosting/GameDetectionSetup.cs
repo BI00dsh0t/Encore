@@ -7,6 +7,7 @@ using Encore.Core.Settings;
 using Encore.Engine.Ipc;
 using Encore.Engine.Settings;
 using Encore.Platform.Windows;
+using Encore.Platform.Windows.Stores;
 
 namespace Encore.Engine.Hosting;
 
@@ -22,6 +23,7 @@ internal static class GameDetectionSetup
         ILogger log)
     {
         var listed = ListedGames(new GameConfigStore(log), () => store.Current);
+        var stores = options.GameStores ?? new StoreLibraries(log).Folders;
         return new GameMonitor(
             options.GameWindows ?? new ForegroundGameWindowProbe(),
             pid => pid == Environment.ProcessId || pid == hub.State.AppPid,
@@ -30,11 +32,13 @@ internal static class GameDetectionSetup
             log,
             listed,
             InstallFolder(),
-            game => Detected(game, store, hub, warnings, log),
+            game => Detected(WithManualSource(game, store.Current), store, hub, warnings, log),
             game => hub.Publish(GameMessages.Exited, game),
             () => hub.State.TargetGame?.ProcessId,
             options.Time,
-            id => store.Current.Profiles.TryGetValue(id, out var profile) && profile.Ignored);
+            id => store.Current.Profiles.TryGetValue(id, out var profile) && profile.Ignored,
+            path => ProfileMatch.Resolve(store.Current, path),
+            stores);
     }
 
     private static void Detected(DetectedGame game, SettingsStore store, EventHub hub, Warnings warnings, ILogger log)
@@ -44,15 +48,25 @@ internal static class GameDetectionSetup
             store,
             game.ProfileId,
             game.Name,
+            game.Source,
             log,
             name => warnings.Raise(
                 ErrorCodes.NewGameNotCaptured,
                 WarningSeverity.Info,
                 "games",
-                $"{name} was found but isn't captured. Turn it on in Games.",
+                NotCapturedText(name, game.Source),
                 overlay: true));
         hub.Publish(GameMessages.Detected, game);
     }
+
+    /// <summary>The one-time notice for a new game that isn't captured; an app found in fullscreen is told apart.</summary>
+    internal static string NotCapturedText(string name, string? source) => source == GameSources.Fullscreen
+        ? $"Encore found {name} in fullscreen. If it's a game, turn it on in Games."
+        : $"{name} was found but isn't captured. Turn it on in Games.";
+
+    /// <summary>A game added by hand is reported as such, whatever else listed it.</summary>
+    private static DetectedGame WithManualSource(DetectedGame game, SettingsDocument document) =>
+        GameProfiles.IsManual(document, game.ProfileId) ? game with { Source = GameSources.Manual } : game;
 
     /// <summary>The listed games for Game Detection, rebuilt only when a source changes. Called on the monitor's thread.</summary>
     private static Func<IReadOnlySet<string>> ListedGames(GameConfigStore windowsList, Func<SettingsDocument> settings)

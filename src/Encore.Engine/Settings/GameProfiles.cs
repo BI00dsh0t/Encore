@@ -9,11 +9,14 @@ namespace Encore.Engine.Settings;
 /// <summary>Creates a Game Profile for a game that has none yet, named from its executable.</summary>
 internal static class GameProfiles
 {
+    private static readonly SettingsJsonContext Json = SettingsJsonContext.Default;
+
     /// <summary>Creates a Game Profile when the document lacks one, named from the executable. Rules: docs/code-notes.md.</summary>
     public static void EnsureProfile(
         SettingsStore store,
         string profileId,
         string fileName,
+        string? source,
         ILogger log,
         Action<string>? notCaptured = null)
     {
@@ -27,7 +30,7 @@ internal static class GameProfiles
         var ignored = false;
         try
         {
-            if (!SettingsRetry.Update(store, current => CreationUpdate(current, profileId, value, out ignored)))
+            if (!SettingsRetry.Update(store, current => CreationUpdate(current, profileId, value, source, out ignored)))
             {
                 return;
             }
@@ -48,8 +51,9 @@ internal static class GameProfiles
         }
     }
 
-    /// <summary>The ops that create the profile, ignored when new games aren't captured; null when another write made it.</summary>
-    private static SettingsUpdate? CreationUpdate(SettingsDocument current, string profileId, JsonElement name, out bool ignored)
+    /// <summary>The ops that create the profile with its source, ignored when not captured; null when another write made it.</summary>
+    private static SettingsUpdate? CreationUpdate(
+        SettingsDocument current, string profileId, JsonElement name, string? source, out bool ignored)
     {
         ignored = false;
         if (current.Profiles.ContainsKey(profileId))
@@ -57,22 +61,43 @@ internal static class GameProfiles
             return null;
         }
 
-        ignored = !CapturedWhenNew(current, profileId);
-        var named = SettingsOp.SetProfile(profileId, ProfileAttributes.Name, name);
-        if (!ignored)
+        ignored = !CapturedWhenNew(current, profileId, source);
+        List<SettingsOp> ops = [SettingsOp.SetProfile(profileId, ProfileAttributes.Name, name)];
+        if (source is not null && GameSources.All.Contains(source))
         {
-            return new SettingsUpdate(current.Revision, [named]);
+            ops.Add(SettingsOp.SetProfile(profileId, ProfileAttributes.Source, JsonSerializer.SerializeToElement(source, Json.String)));
         }
 
-        var ignoredValue = JsonSerializer.SerializeToElement(true, SettingsJsonContext.Default.Boolean);
-        return new SettingsUpdate(current.Revision, [named, SettingsOp.SetProfile(profileId, ProfileAttributes.Ignored, ignoredValue)]);
+        if (ignored)
+        {
+            ops.Add(SettingsOp.SetProfile(profileId, ProfileAttributes.Ignored, JsonSerializer.SerializeToElement(true, Json.Boolean)));
+        }
+
+        return new SettingsUpdate(current.Revision, ops);
     }
 
-    // A new game is captured when captureNewGames is on, or when it was added by hand (manualGames).
-    private static bool CapturedWhenNew(SettingsDocument document, string profileId)
+    /// <summary>Whether the program was added by hand (<c>manualGames</c>), at this path or as another version of its Store app.</summary>
+    public static bool IsManual(SettingsDocument document, string profileId) =>
+        SettingsResolver.Resolve(document, null).ManualGames
+            .Select(GamePaths.CanonicalOrLowercase)
+            .Any(path => IsProgram(path, profileId));
+
+    /// <summary>
+    /// Whether a new game is captured: always when added by hand; otherwise when captureNewGames is on, and, for an app
+    /// found only by its fullscreen window, when captureFullscreenApps is on too.
+    /// </summary>
+    public static bool CapturedWhenNew(SettingsDocument document, string profileId, string? source)
     {
+        if (IsManual(document, profileId))
+        {
+            return true;
+        }
+
         var global = SettingsResolver.Resolve(document, null);
-        return global.CaptureNewGames
-            || global.ManualGames.Any(path => string.Equals(GamePaths.CanonicalOrLowercase(path), profileId, StringComparison.Ordinal));
+        return global.CaptureNewGames && (source != GameSources.Fullscreen || global.CaptureFullscreenApps);
     }
+
+    // The same program: the same path, or another version of the same Store app.
+    private static bool IsProgram(string path, string profileId) =>
+        string.Equals(path, profileId, StringComparison.Ordinal) || StorePackages.SameProgram(path, profileId);
 }

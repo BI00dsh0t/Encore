@@ -27,6 +27,19 @@ public sealed class CaptureNewGamesTests
     }
 
     [Fact]
+    public void TheFullscreenAppsSwitchStartsOffAndTurningItOnSendsTheGlobalKey()
+    {
+        var engine = new FakeEngineSession { Reply = (_, _) => new SettingsUpdateResult(1) };
+        var model = new MainViewModel(engine, action => action());
+        Assert.False(model.General.CaptureFullscreenApps);
+
+        model.General.CaptureFullscreenApps = true;
+
+        var op = Assert.Single(Assert.IsType<SettingsUpdate>(Assert.Single(engine.Sent)).Ops);
+        Assert.Equal((SettingsScope.Global, "captureFullscreenApps", true), (op.Scope, op.Key, op.Value.GetBoolean()));
+    }
+
+    [Fact]
     public void TheGeneralPageShowsTheSwitchInBothThemes() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
@@ -50,6 +63,8 @@ public sealed class CaptureNewGamesTests
                 var box = Descendants<CheckBox>(window).Single(b => Equals(b.Content, "Capture new games"));
                 Assert.True(box.IsVisible);
                 Assert.True(box.IsChecked);
+                var apps = Descendants<CheckBox>(window).Single(b => Equals(b.Content, "Also capture apps found only in fullscreen"));
+                Assert.True(apps is { IsVisible: true, IsChecked: false, IsEnabled: true });
                 Descendants<ScrollViewer>(window).First(v => v.IsVisible && v.ScrollableHeight > 0).ScrollToEnd();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
                 Save(window, file);

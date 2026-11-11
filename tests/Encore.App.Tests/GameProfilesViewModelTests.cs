@@ -40,7 +40,9 @@ public sealed class GameProfilesViewModelTests
 
         Assert.Equal("Games", viewModel.Title);
         Assert.Equal([("Beta", ""), ("Chad", ""), ("Alpha", "Ignored games")], viewModel.Profiles.Select(p => (p.Name, p.Group)));
-        Assert.Equal(["Detected automatically", "Added by hand", "Detected automatically · 2 settings changed"], viewModel.Profiles.Select(p => p.Caption));
+        Assert.Equal(
+            ["Steam game", "Added by you", "Detected automatically · 2 settings changed"],
+            viewModel.Profiles.Select(p => p.Caption));
         Assert.Equal([true, false, false], viewModel.Profiles.Select(p => p.IsCapturing));
         Assert.All(viewModel.Profiles, p => Assert.DoesNotContain(@":\", p.Name + p.Caption, StringComparison.Ordinal));
     }
@@ -57,7 +59,7 @@ public sealed class GameProfilesViewModelTests
         Assert.True(viewModel.DrillIn.IsOpen);
         Assert.Equal(("Games", "Chad"), (viewModel.DrillIn.ParentTitle, viewModel.DrillIn.ItemTitle));
         Assert.Equal(ChadId, viewModel.OpenGame!.ProgramPath);
-        Assert.Equal("Added by hand", viewModel.OpenGame.Source);
+        Assert.Equal("Added by you", viewModel.OpenGame.Source);
 
         viewModel.DrillIn.BackCommand.Execute(null);
 
@@ -326,7 +328,7 @@ public sealed class GameProfilesViewModelTests
                     .SetItem(Keys.ManualGames.Name, Keys.ManualGames.ToJson([ChadId]))
                     .SetItems(global.Select(o => KeyValuePair.Create(o.Key, o.Value))),
                 Profiles = SettingsMaps.EmptyProfiles
-                    .Add(BetaId, new GameProfile { Name = "Beta", Overrides = Values(beta) })
+                    .Add(BetaId, new GameProfile { Name = "Beta", Source = GameSources.Steam, Overrides = Values(beta) })
                     .Add(ChadId, new GameProfile { Name = "Chad" })
                     .Add(AlphaId, new GameProfile { Name = "Alpha", Ignored = true, Overrides = Values(alpha) }),
             },
