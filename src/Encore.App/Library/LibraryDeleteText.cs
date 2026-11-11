@@ -31,9 +31,13 @@ internal static class LibraryDeleteText
             kept.Add(saving == 1 ? "1 file being saved" : string.Create(CultureInfo.InvariantCulture, $"{saving} files being saved"));
         }
 
-        return kept.Count == 0
-            ? question
-            : $"{question}\n{string.Join(" and ", kept)} {(favourites + saving == 1 ? "is" : "are")} kept.";
+        if (kept.Count == 0)
+        {
+            return question;
+        }
+
+        var verb = favourites + saving == 1 ? "is" : "are";
+        return $"{question}\n{string.Join(" and ", kept)} {verb} kept.";
     }
 
     /// <summary>Why none of the rows can be deleted.</summary>

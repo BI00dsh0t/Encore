@@ -39,10 +39,16 @@ internal static class StatusText
     }
 
     /// <summary>The dot for a capture state: recording wins over buffering.</summary>
-    public static StatusDot Dot(CaptureState capture) =>
-        capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running ? StatusDot.Recording
-        : capture.Replay == ReplayState.Buffering ? StatusDot.Buffering
-        : StatusDot.Idle;
+    public static StatusDot Dot(CaptureState capture)
+    {
+        bool isRecording = capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running;
+        if (isRecording)
+        {
+            return StatusDot.Recording;
+        }
+
+        return capture.Replay == ReplayState.Buffering ? StatusDot.Buffering : StatusDot.Idle;
+    }
 
     /// <summary>The capture state in words: "Ready to save Clips in Valorant · Recording · Mic muted".</summary>
     public static string Capture(StateSnapshot state)

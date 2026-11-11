@@ -35,12 +35,25 @@ public static unsafe class EncoderProbe
     };
 
     /// <summary>The family an encoder name belongs to, from its suffix.</summary>
-    public static EncoderFamily FamilyOf(string encoder) =>
-        encoder.EndsWith("_nvenc", StringComparison.Ordinal) ? EncoderFamily.Nvenc
-        : encoder.EndsWith("_amf", StringComparison.Ordinal) ? EncoderFamily.Amf
-        : encoder.EndsWith("_qsv", StringComparison.Ordinal) ? EncoderFamily.Qsv
-        : encoder == SoftwareH264 ? EncoderFamily.X264
-        : EncoderFamily.Other;
+    public static EncoderFamily FamilyOf(string encoder)
+    {
+        if (encoder.EndsWith("_nvenc", StringComparison.Ordinal))
+        {
+            return EncoderFamily.Nvenc;
+        }
+
+        if (encoder.EndsWith("_amf", StringComparison.Ordinal))
+        {
+            return EncoderFamily.Amf;
+        }
+
+        if (encoder.EndsWith("_qsv", StringComparison.Ordinal))
+        {
+            return EncoderFamily.Qsv;
+        }
+
+        return encoder == SoftwareH264 ? EncoderFamily.X264 : EncoderFamily.Other;
+    }
 
     /// <summary>The codec of a named FFmpeg encoder, or null when this build lacks it. FFmpeg must be initialized.</summary>
     public static VideoCodec? CodecOf(string encoder)

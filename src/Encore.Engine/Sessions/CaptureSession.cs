@@ -159,9 +159,17 @@ internal sealed partial class CaptureSession : ICaptureSession
                 capture = _capture;
             }
 
-            return capture is CompositeCapture composite ? composite.LiveDevices
-                : _composite is not null ? [.. _composite.Select(p => p.Monitor.DeviceName)]
-                : MonitorDevice is { } device ? [device] : [];
+            if (capture is CompositeCapture composite)
+            {
+                return composite.LiveDevices;
+            }
+
+            if (_composite is not null)
+            {
+                return [.. _composite.Select(p => p.Monitor.DeviceName)];
+            }
+
+            return MonitorDevice is { } device ? [device] : [];
         }
     }
 

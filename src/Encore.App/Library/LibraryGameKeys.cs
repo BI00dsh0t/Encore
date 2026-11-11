@@ -40,7 +40,15 @@ internal static class LibraryGameKeys
     }
 
     /// <summary>The order of the groups: games by name first, then Monitor Recordings, then Other.</summary>
-    public static int Rank(string key) => key == OtherKey ? 2 : key == MonitorRecordingsKey ? 1 : 0;
+    public static int Rank(string key)
+    {
+        if (key == OtherKey)
+        {
+            return 2;
+        }
+
+        return key == MonitorRecordingsKey ? 1 : 0;
+    }
 
     private static string ProfileKey(string id) => "profile:" + id;
 

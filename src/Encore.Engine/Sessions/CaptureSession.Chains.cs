@@ -405,11 +405,20 @@ internal sealed partial class CaptureSession
 
         var reset = Volatile.Read(ref _resetUs);
         var first = ring.FirstKeyUs;
-        var message = first == long.MaxValue
-            ? "Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; "
-                + "the video didn't restart within 1 s, so the next Clip starts when it does."
-            : "Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; "
-                + $"the next Clip starts {(reset == long.MinValue ? 0 : Math.Max(0, first - reset)) / 1000} ms after the last one ended.";
+        bool hasRestarted = first != long.MaxValue;
+        string message;
+        if (!hasRestarted)
+        {
+            message = "Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; "
+                + "the video didn't restart within 1 s, so the next Clip starts when it does.";
+        }
+        else
+        {
+            var gapUs = reset == long.MinValue ? 0 : Math.Max(0, first - reset);
+            message = "Your new video settings took effect after your last saved Clip, while a Monitor Recording runs; "
+                + $"the next Clip starts {gapUs / 1000} ms after the last one ended.";
+        }
+
         _log.LogWarning("{Code}: {Message}", ErrorCodes.ResetGap, message);
         _options.ResetGap?.Invoke(message);
     }

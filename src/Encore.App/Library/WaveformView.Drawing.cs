@@ -78,7 +78,18 @@ internal sealed partial class WaveformView
                 continue;
             }
 
-            var labelX = i == 0 ? x : i == labels ? x - text.Width : x - text.Width / 2;
+            bool isFirst = i == 0;
+            bool isLast = i == labels;
+            var labelX = x - text.Width / 2;
+            if (isFirst)
+            {
+                labelX = x;
+            }
+            else if (isLast)
+            {
+                labelX = x - text.Width;
+            }
+
             context.DrawText(text, new Point(Math.Max(PlotLeft, labelX), 2));
         }
     }

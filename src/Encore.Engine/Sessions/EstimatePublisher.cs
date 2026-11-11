@@ -44,9 +44,17 @@ internal sealed class EstimatePublisher : IDisposable
     {
         var global = SettingsResolver.Resolve(document, null);
         var folder = global.RingPath ?? _defaultRingFolder;
-        long? free = global.ReplayStorage == ReplayStorage.Memory
-            ? _memory.Read() is { TotalBytes: > 0 } status ? status.AvailableBytes + Environment.WorkingSet : null
-            : _freeDisk(folder) + RingFileBytes(folder);
+        bool isMemory = global.ReplayStorage == ReplayStorage.Memory;
+        long? free;
+        if (isMemory)
+        {
+            free = _memory.Read() is { TotalBytes: > 0 } status ? status.AvailableBytes + Environment.WorkingSet : null;
+        }
+        else
+        {
+            free = _freeDisk(folder) + RingFileBytes(folder);
+        }
+
         return ReplayStorageEstimate.For(global, free);
     }
 

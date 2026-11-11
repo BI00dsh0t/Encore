@@ -218,11 +218,15 @@ internal sealed class LibrarySettingsViewModel : SettingsViewModel
 
     private static string PlanText(LibraryCleanupPlan plan)
     {
-        var now = plan.Count == 0
-            ? "Nothing would be deleted now."
-            : string.Create(
+        var now = "Nothing would be deleted now.";
+        if (plan.Count != 0)
+        {
+            var files = plan.Count == 1 ? "file" : "files";
+            now = string.Create(
                 CultureInfo.InvariantCulture,
-                $"Cleanup would delete {plan.Count} {(plan.Count == 1 ? "file" : "files")} ({SettingsText.Bytes(plan.Bytes)}) now.");
+                $"Cleanup would delete {plan.Count} {files} ({SettingsText.Bytes(plan.Bytes)}) now.");
+        }
+
         return now
             + "\n\nCleanup deletes permanently: files don't go to the Recycle Bin."
             + " Favourites and files being written are never deleted."
