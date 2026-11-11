@@ -51,7 +51,7 @@ internal static class GameProfiles
         }
     }
 
-    /// <summary>The ops that create the profile, ignored when new games aren't captured; null when another write made it.</summary>
+    /// <summary>The ops that create the profile with its source, ignored when not captured; null when another write made it.</summary>
     private static SettingsUpdate? CreationUpdate(
         SettingsDocument current, string profileId, JsonElement name, string? source, out bool ignored)
     {
@@ -61,7 +61,7 @@ internal static class GameProfiles
             return null;
         }
 
-        ignored = !CapturedWhenNew(current, profileId);
+        ignored = !CapturedWhenNew(current, profileId, source);
         List<SettingsOp> ops = [SettingsOp.SetProfile(profileId, ProfileAttributes.Name, name)];
         if (source is not null && GameSources.All.Contains(source))
         {
@@ -82,9 +82,20 @@ internal static class GameProfiles
             .Select(GamePaths.CanonicalOrLowercase)
             .Any(path => IsProgram(path, profileId));
 
-    // A new game is captured when captureNewGames is on, or when it was added by hand (manualGames).
-    private static bool CapturedWhenNew(SettingsDocument document, string profileId) =>
-        SettingsResolver.Resolve(document, null).CaptureNewGames || IsManual(document, profileId);
+    /// <summary>
+    /// Whether a new game is captured: always when added by hand; otherwise when captureNewGames is on, and, for an app
+    /// found only by its fullscreen window, when captureFullscreenApps is on too.
+    /// </summary>
+    public static bool CapturedWhenNew(SettingsDocument document, string profileId, string? source)
+    {
+        if (IsManual(document, profileId))
+        {
+            return true;
+        }
+
+        var global = SettingsResolver.Resolve(document, null);
+        return global.CaptureNewGames && (source != GameSources.Fullscreen || global.CaptureFullscreenApps);
+    }
 
     // The same program: the same path, or another version of the same Store app.
     private static bool IsProgram(string path, string profileId) =>

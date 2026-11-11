@@ -46,6 +46,13 @@
                               IsChecked="{Binding CaptureNewGames}" />
                     <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
                                Text="When off, a game Encore finds for the first time is added to Games as Not captured. Games you add by hand are always captured." />
+                    <CheckBox Margin="0,12,0,0"
+                              FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              Content="Also capture apps found only in fullscreen"
+                              IsChecked="{Binding CaptureFullscreenApps}"
+                              IsEnabled="{Binding CaptureNewGames}" />
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                               Text="Games from Steam, the Xbox app, Epic, GOG, Ubisoft Connect and Windows' game list are always captured. Any other app that fills your screen is added to Games as Not captured, so a browser or a video call isn't recorded by surprise." />
                 </StackPanel>
             </HeaderedContentControl>
             <HeaderedContentControl Header="About and updates" Style="{DynamicResource EncoreSettingsSectionStyle}">

@@ -11,6 +11,7 @@ using Encore.Engine.Settings;
 using Encore.Platform.Audio;
 using Encore.Platform.Audio.Tests;
 using Encore.Platform.Windows;
+using Encore.Platform.Windows.Stores;
 using PlatformFlow = Encore.Platform.Audio.AudioFlow;
 using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
@@ -42,6 +43,9 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
 
     private string GamePath => Path.Combine(_folder, "Game.EXE");
 
+    // The test game is a Steam game, so it is captured at once.
+    private IReadOnlyList<StoreFolder> SteamFolder() => [new StoreFolder(StoreLibraries.Normalize(_folder), GameStore.Steam)];
+
     private string SettingsFile => Path.Combine(_instance.RoamingDataFolder, SettingsStore.FileName);
 
     private string RuntimeFile => Path.Combine(_instance.LocalDataFolder, RuntimeStateStore.FileName);
@@ -72,7 +76,7 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
         var endpoints = new FakeEndpointSource(
             new AudioDevice(Game, "Game", "BEACN", SettingsFlow.Output, Available: true),
             new AudioDevice(Mic, "Mic", "BEACN", SettingsFlow.Input, Available: true));
-        var (host, client) = await StartAsync(new EngineHostOptions { GameWindows = probe, AudioEndpoints = endpoints });
+        var (host, client) = await StartAsync(Options(probe, endpoints));
         await probe.PolledAsync(2);
 
         // The game is detected, its Game Profile auto-created and given an override and an attribute.
@@ -111,7 +115,7 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
 
         // A reboot: a cold start on the same folders, with the game launched again afterwards.
         probe = new GameDetectionServeTests.FakeProbe();
-        (_, client) = await StartAsync(new EngineHostOptions { GameWindows = probe, AudioEndpoints = endpoints });
+        (_, client) = await StartAsync(Options(probe, endpoints));
         Assert.Equal(Json(settings), Json(client.State.Settings));
         Assert.False(client.State.Capture.MicMuted);
         Assert.True(Assert.Single(client.State.Library).Favourite);
@@ -230,6 +234,9 @@ public sealed class NothingToReselectServeTests : IAsyncLifetime
             }
         }
     }
+
+    private EngineHostOptions Options(GameDetectionServeTests.FakeProbe probe, FakeEndpointSource endpoints) =>
+        new() { GameWindows = probe, GameStores = SteamFolder, AudioEndpoints = endpoints };
 
     private async Task<(EngineHost Host, EngineClient Client)> StartAsync(EngineHostOptions options)
     {

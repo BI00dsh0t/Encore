@@ -216,6 +216,10 @@ public static class Keys
     public static SettingKey<bool> CaptureNewGames { get; } = new(
         "captureNewGames", Json.Boolean, true, overridable: false, AppliesAt.Immediate);
 
+    /// <summary>Whether a new app found only by its fullscreen window is captured; false creates its profile Ignored.</summary>
+    public static SettingKey<bool> CaptureFullscreenApps { get; } = new(
+        "captureFullscreenApps", Json.Boolean, false, overridable: false, AppliesAt.Immediate);
+
     /// <summary>Every key, in catalog order.</summary>
     public static IReadOnlyList<SettingKey> All { get; } =
     [
@@ -238,6 +242,7 @@ public static class Keys
         AppTheme,
         MonitorRecordingScreens,
         CaptureNewGames,
+        CaptureFullscreenApps,
     ];
 
     private static readonly Dictionary<string, SettingKey> ByName = All.ToDictionary(k => k.Name, StringComparer.Ordinal);

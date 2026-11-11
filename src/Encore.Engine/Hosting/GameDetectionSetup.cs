@@ -54,10 +54,15 @@ internal static class GameDetectionSetup
                 ErrorCodes.NewGameNotCaptured,
                 WarningSeverity.Info,
                 "games",
-                $"{name} was found but isn't captured. Turn it on in Games.",
+                NotCapturedText(name, game.Source),
                 overlay: true));
         hub.Publish(GameMessages.Detected, game);
     }
+
+    /// <summary>The one-time notice for a new game that isn't captured; an app found in fullscreen is told apart.</summary>
+    internal static string NotCapturedText(string name, string? source) => source == GameSources.Fullscreen
+        ? $"Encore found {name} in fullscreen. If it's a game, turn it on in Games."
+        : $"{name} was found but isn't captured. Turn it on in Games.";
 
     /// <summary>A game added by hand is reported as such, whatever else listed it.</summary>
     private static DetectedGame WithManualSource(DetectedGame game, SettingsDocument document) =>

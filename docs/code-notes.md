@@ -1118,8 +1118,10 @@ Sleep (`Suspend`):
 
 - `EnsureProfile` writes one `name`, taken from the executable's version resource, else the file name without its
   extension.
-- With `captureNewGames` off, the same update sets `ignored`, unless the game is in `manualGames`. The caller is told
-  the game's name once the write commits.
+- The same update records the game's `source`, and sets `ignored` when it isn't captured: a game in `manualGames` is
+  always captured; otherwise `captureNewGames` must be on, and an app found only in fullscreen (`source:
+  "fullscreen"`) also needs `captureFullscreenApps`. The caller is told the game's name once the write commits, and the
+  notice says "found in fullscreen" for such an app.
 - Everything else is the store's default: Recordings off, no overrides, a folder assigned.
 - An existing profile is never touched. A conflict with another write is retried while the profile is still missing.
   Any other failure is logged.
