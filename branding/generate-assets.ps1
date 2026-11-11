@@ -6,6 +6,8 @@ $culture = [Globalization.CultureInfo]::InvariantCulture
 $mint = '#2DD4BF'
 $ink = '#0A0B0E'
 $paper = '#E6E8EB'
+$record = '#FF4655'
+$caution = '#F5B83D'
 # The 300-degree ring follows an exact circle centered at 128,128, with radius 82.
 $arc = 'M 56.985917,87 A 82,82 0 1 0 128,46'
 # A vertical base centers the left-pointing arrow on the horizontal shaft at y=46.
@@ -65,6 +67,144 @@ function Save-Png($Visual, [int]$Width, [int]$Height, [string]$Name) {
     try { $encoder.Save($stream) } finally { $stream.Dispose() }
 }
 
+function Draw-Tile($Context, [double]$Size) {
+    $Context.DrawRoundedRectangle((Brush $ink), $null,
+        [Windows.Rect]::new($Size / 64, $Size / 64, $Size * 62 / 64, $Size * 62 / 64), $Size * 54 / 256, $Size * 54 / 256)
+    Draw-Mark $Context 0 0 $Size $mint
+}
+
+function Render-Frame([int]$Size, [scriptblock]$Draw) {
+    $visual = [Windows.Media.DrawingVisual]::new()
+    $context = $visual.RenderOpen()
+    & $Draw $context $Size
+    $context.Close()
+    $bitmap = [Windows.Media.Imaging.RenderTargetBitmap]::new($Size, $Size, 96, 96, [Windows.Media.PixelFormats]::Pbgra32)
+    $bitmap.Render($visual)
+    return $bitmap
+}
+
+function Png-Bytes($Bitmap) {
+    $encoder = [Windows.Media.Imaging.PngBitmapEncoder]::new()
+    $encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($Bitmap))
+    $stream = [IO.MemoryStream]::new()
+    $encoder.Save($stream)
+    return ,$stream.ToArray()
+}
+
+# A DIB frame is a BITMAPINFOHEADER, straight-alpha BGRA rows bottom-up, then the transparency mask.
+function Dib-Bytes($Bitmap, [int]$Size) {
+    $pixels = [byte[]]::new($Size * $Size * 4)
+    $Bitmap.CopyPixels($pixels, $Size * 4, 0)
+    $maskStride = [Math]::Floor(($Size + 31) / 32) * 4
+    $stream = [IO.MemoryStream]::new()
+    $writer = [IO.BinaryWriter]::new($stream)
+    $writer.Write([uint32]40); $writer.Write([int32]$Size); $writer.Write([int32]($Size * 2))
+    $writer.Write([uint16]1); $writer.Write([uint16]32); $writer.Write([uint32]0)
+    $writer.Write([uint32]($Size * $Size * 4 + $maskStride * $Size))
+    $writer.Write([int32]0); $writer.Write([int32]0); $writer.Write([uint32]0); $writer.Write([uint32]0)
+    $mask = [byte[]]::new($maskStride * $Size)
+    for ($row = $Size - 1; $row -ge 0; $row--) {
+        for ($column = 0; $column -lt $Size; $column++) {
+            Write-DibPixel $writer $pixels (($row * $Size + $column) * 4)
+            if ($pixels[($row * $Size + $column) * 4 + 3] -eq 0) {
+                $maskIndex = ($Size - 1 - $row) * $maskStride + [Math]::Floor($column / 8)
+                $mask[$maskIndex] = $mask[$maskIndex] -bor (0x80 -shr ($column % 8))
+            }
+        }
+    }
+    $writer.Write($mask)
+    $writer.Flush()
+    return ,$stream.ToArray()
+}
+
+# WPF renders premultiplied alpha; an icon's DIB wants it straight.
+function Write-DibPixel($Writer, [byte[]]$Pixels, [int]$Index) {
+    $alpha = $Pixels[$Index + 3]
+    for ($channel = 0; $channel -lt 3; $channel++) {
+        $value = 0
+        if ($alpha -gt 0) { $value = [Math]::Min(255, [Math]::Round($Pixels[$Index + $channel] * 255.0 / $alpha)) }
+        $Writer.Write([byte]$value)
+    }
+    $Writer.Write([byte]$alpha)
+}
+
+function Write-Icon([string]$Path, [int[]]$Sizes, [scriptblock]$Draw) {
+    $frames = [Collections.Generic.List[byte[]]]::new()
+    foreach ($size in $Sizes) {
+        $bitmap = Render-Frame $size $Draw
+        if ($size -ge 256) { $frames.Add((Png-Bytes $bitmap)) } else { $frames.Add((Dib-Bytes $bitmap $size)) }
+    }
+    $writer = [IO.BinaryWriter]::new([IO.File]::Create($Path))
+    try {
+        $writer.Write([uint16]0); $writer.Write([uint16]1); $writer.Write([uint16]$frames.Count)
+        $offset = 6 + 16 * $frames.Count
+        for ($index = 0; $index -lt $frames.Count; $index++) {
+            $dimension = $Sizes[$index] % 256
+            $writer.Write([byte]$dimension); $writer.Write([byte]$dimension)
+            $writer.Write([byte]0); $writer.Write([byte]0)
+            $writer.Write([uint16]1); $writer.Write([uint16]32)
+            $writer.Write([uint32]$frames[$index].Length); $writer.Write([uint32]$offset)
+            $offset += $frames[$index].Length
+        }
+        foreach ($frame in $frames) { $writer.Write($frame) }
+    } finally { $writer.Dispose() }
+}
+
+# A corner badge sits on whole pixels in the bottom-right, with a transparent gap cut around it.
+function Draw-Badged($Context, [int]$Size, [double]$Share, [scriptblock]$Base, [scriptblock]$Badge) {
+    $radius = [Math]::Round($Size * $Share)
+    $center = [Windows.Point]::new($Size - $radius, $Size - $radius)
+    $gap = [Math]::Max(1, $Size / 16)
+    $cut = [Windows.Media.EllipseGeometry]::new($center, $radius + $gap, $radius + $gap)
+    $whole = [Windows.Media.RectangleGeometry]::new([Windows.Rect]::new(0, 0, $Size, $Size))
+    $Context.PushClip([Windows.Media.CombinedGeometry]::new([Windows.Media.GeometryCombineMode]::Exclude, $whole, $cut))
+    & $Base $Context $Size
+    $Context.Pop()
+    & $Badge $Context $center $radius
+}
+
+function Draw-Caution($Context, [Windows.Point]$Center, [double]$Radius) {
+    $Context.DrawEllipse((Brush $caution), $null, $Center, $Radius, $Radius)
+    $width = [Math]::Max(1.2, $Radius * 0.34)
+    $bar = [Windows.Rect]::new($Center.X - $width / 2, $Center.Y - $Radius * 0.62, $width, $Radius * 0.8)
+    $Context.DrawRoundedRectangle((Brush $ink), $null, $bar, $width / 2, $width / 2)
+    $dot = [Windows.Point]::new($Center.X, $Center.Y + $Radius * 0.5)
+    $Context.DrawEllipse((Brush $ink), $null, $dot, $width * 0.6, $width * 0.6)
+}
+
+function Draw-RecordDot($Context, [Windows.Point]$Center, [double]$Radius) {
+    $Context.DrawEllipse((Brush $record), $null, $Center, $Radius, $Radius)
+}
+
+# Idle and error use a one-colour mark per taskbar theme; capturing shows the app tile, which reads on either.
+function Write-TrayIcons([string]$Directory) {
+    $traySizes = @(16, 20, 24, 32, 40, 48)
+    foreach ($variant in @(@('dark', $paper), @('light', $ink))) {
+        $color = $variant[1]
+        $mark = { param($Context, $Size) Draw-Mark $Context 0 0 $Size $color }.GetNewClosure()
+        Write-Icon (Join-Path $Directory "tray-idle-$($variant[0]).ico") $traySizes $mark
+        $badged = { param($Context, $Size) Draw-Badged $Context $Size 0.25 $mark ${function:Draw-Caution} }.GetNewClosure()
+        Write-Icon (Join-Path $Directory "tray-error-$($variant[0]).ico") $traySizes $badged
+    }
+    $tile = { param($Context, $Size) Draw-Tile $Context $Size }
+    Write-Icon (Join-Path $Directory 'tray-ready.ico') $traySizes $tile
+    $recording = { param($Context, $Size) Draw-Badged $Context $Size 0.22 $tile ${function:Draw-RecordDot} }.GetNewClosure()
+    Write-Icon (Join-Path $Directory 'tray-recording.ico') $traySizes $recording
+}
+
+# GitHub's social preview is 1280 by 640; it is uploaded by hand, so it stays with the other exports.
+function Write-SocialPreview {
+    $visual = [Windows.Media.DrawingVisual]::new()
+    $context = $visual.RenderOpen()
+    $context.DrawRectangle((Brush $ink), $null, [Windows.Rect]::new(0, 0, 1280, 640))
+    Draw-Mark $context 130 170 300 $mint
+    Draw-Text $context 'Encore' 470 180 140 $paper 'SemiBold'
+    Draw-Text $context 'Keep the moment.' 478 372 40 $mint
+    Draw-Text $context 'Instant replay and recording for Windows.' 478 432 30 '#8B949E'
+    $context.Close()
+    Save-Png $visual 1280 640 'encore-social-preview.png'
+}
+
 Write-Svg 'encore-mark.svg' '0 0 256 256' "<g color=`"$mint`">$geometry</g>"
 Write-Svg 'encore-mark-white.svg' '0 0 256 256' "<g color=`"$paper`">$geometry</g>"
 Write-Svg 'encore-mark-ink.svg' '0 0 256 256' "<g color=`"$ink`">$geometry</g>"
@@ -87,30 +227,18 @@ foreach ($size in $sizes) {
     Save-Png $visual $size $size "encore-mark-$size.png"
     $visual = [Windows.Media.DrawingVisual]::new()
     $context = $visual.RenderOpen()
-    $context.DrawRoundedRectangle((Brush $ink), $null,
-        [Windows.Rect]::new($size / 64, $size / 64, $size * 62 / 64, $size * 62 / 64), $size * 54 / 256, $size * 54 / 256)
-    Draw-Mark $context 0 0 $size $mint
+    Draw-Tile $context $size
     $context.Close()
     Save-Png $visual $size $size "encore-app-$size.png"
 }
 
-# ICO frames use lossless PNG data and include the Windows tray and taskbar sizes.
+# The Windows tray and taskbar sizes; 256 px stays PNG, smaller frames are DIBs.
 $iconSizes = @(16, 20, 24, 32, 40, 48, 64, 128, 256)
-$frames = @($iconSizes | ForEach-Object { ,([IO.File]::ReadAllBytes((Join-Path $OutputDirectory "encore-app-$_.png"))) })
-$writer = [IO.BinaryWriter]::new([IO.File]::Create((Join-Path $OutputDirectory 'encore.ico')))
-try {
-    $writer.Write([uint16]0); $writer.Write([uint16]1); $writer.Write([uint16]$frames.Count)
-    $offset = 6 + 16 * $frames.Count
-    for ($index = 0; $index -lt $frames.Count; $index++) {
-        $dimension = $iconSizes[$index] % 256
-        $writer.Write([byte]$dimension); $writer.Write([byte]$dimension)
-        $writer.Write([byte]0); $writer.Write([byte]0)
-        $writer.Write([uint16]1); $writer.Write([uint16]32)
-        $writer.Write([uint32]$frames[$index].Length); $writer.Write([uint32]$offset)
-        $offset += $frames[$index].Length
-    }
-    foreach ($frame in $frames) { $writer.Write([byte[]]$frame) }
-} finally { $writer.Dispose() }
+Write-Icon (Join-Path $OutputDirectory 'encore.ico') $iconSizes { param($Context, $Size) Draw-Tile $Context $Size }
+
+$iconDirectory = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\src\Encore.App\Icons'))
+Copy-Item (Join-Path $OutputDirectory 'encore.ico') (Join-Path $iconDirectory 'encore.ico')
+Write-TrayIcons $iconDirectory
 
 $visual = [Windows.Media.DrawingVisual]::new()
 $context = $visual.RenderOpen()
@@ -143,4 +271,5 @@ Draw-Text $context 'WINDOWS REPLAY & RECORDING' 60 706 12 '#8B949E' 'SemiBold'
 Draw-Text $context 'Exact circular geometry / Segoe UI Semibold' 820 706 12 '#8B949E'
 $context.Close()
 Save-Png $visual 1200 760 'encore-brand-preview.png'
-Write-Output "Encore assets generated in $OutputDirectory"
+Write-SocialPreview
+Write-Output "Encore assets generated in $OutputDirectory and $iconDirectory"
