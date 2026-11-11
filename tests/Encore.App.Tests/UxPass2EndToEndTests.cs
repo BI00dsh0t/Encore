@@ -91,7 +91,7 @@ public sealed class UxPass2EndToEndTests : IDisposable
         var library = new LibraryViewModel(engine, shell: shell, confirmDelete: _ => true);
         engine.Changed += () => post(() => library.Render(engine.State!));
         library.Render(engine.State!);
-        Assert.False(library.ShowsWelcome);
+        Assert.False(library.ShowsEmptyMessage);
 
         // Sort and search.
         (library.List.GroupBy, library.List.Sort) = (LibraryGrouping.None, LibrarySort.NewestFirst);

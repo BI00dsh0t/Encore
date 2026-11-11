@@ -125,7 +125,8 @@ internal sealed class ShellApp(Instance instance) : Application
             player: unsupported is null ? null : () => new WindowsMediaPlayer(unsupported),
             log: _log.Write,
             clipThumbnailCacheFolder: Path.Combine(instance.LocalDataFolder, "cache", "clip-thumbnails", "v1"),
-            updates: CreateUpdates());
+            updates: CreateUpdates(),
+            firstUseFile: Path.Combine(instance.RoamingDataFolder, "first-use.json"));
     }
 
     private MainWindow CreateWindow(MainViewModel model)

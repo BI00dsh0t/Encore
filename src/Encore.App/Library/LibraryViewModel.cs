@@ -30,10 +30,12 @@ internal sealed class LibraryViewModel : Observable
         Func<string, Stream>? openRead = null,
         Action<string>? log = null,
         IClipMediaService? clipMedia = null,
-        string? clipThumbnailCacheFolder = null)
+        string? clipThumbnailCacheFolder = null,
+        string? firstUseFile = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         _viewStateFile = viewStateFile;
+        Tips = new LibraryTips(firstUseFile);
         var view = LibraryViewState.Load(viewStateFile);
         List = new LibraryList(view, time ?? TimeProvider.System, thumbnails, NewRow);
         Selection = new LibrarySelection(List);
@@ -88,17 +90,17 @@ internal sealed class LibraryViewModel : Observable
     /// <summary>The rebuilt-index banner.</summary>
     public LibraryBanner Banner { get; }
 
-    /// <summary>The empty Library's welcome card.</summary>
-    public LibraryWelcome Welcome { get; } = new();
+    /// <summary>The first-use tips at the top of the Library.</summary>
+    public LibraryTips Tips { get; }
 
     /// <summary>The item pages' drill-in: the breadcrumb, Back and close of the player and the clip creator.</summary>
     public DrillIn DrillIn { get; }
 
-    /// <summary>Whether the welcome card shows: a snapshot has come, and the Library holds nothing, with no filter or search.</summary>
-    public bool ShowsWelcome => _hasRendered && _itemCount == 0 && !List.IsFiltered;
+    /// <summary>Whether the empty line shows: a snapshot has come, and the Library holds nothing, with no filter or search.</summary>
+    public bool ShowsEmptyMessage => _hasRendered && _itemCount == 0 && !List.IsFiltered;
 
-    /// <summary>Whether the command bar shows: a snapshot has come, and the welcome card isn't standing in for the list.</summary>
-    public bool ShowsCommandBar => _hasRendered && !ShowsWelcome;
+    /// <summary>Whether the command bar shows: a snapshot has come, and the Library isn't simply empty.</summary>
+    public bool ShowsCommandBar => _hasRendered && !ShowsEmptyMessage;
 
     /// <summary>"Open in default player": hands the one selected item to the shell's default player, even while being written.</summary>
     public ICommand OpenCommand { get; }
@@ -137,12 +139,12 @@ internal sealed class LibraryViewModel : Observable
     public void Render(StateSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);
-        Welcome.Show(state);
+        Tips.Show(state);
         if (!_hasRendered || _itemCount != state.Library.Count)
         {
             _hasRendered = true;
             _itemCount = state.Library.Count;
-            OnWelcomeChanged();
+            OnEmptyChanged();
         }
 
         Banner.Show(state);
@@ -237,13 +239,13 @@ internal sealed class LibraryViewModel : Observable
         if (e.PropertyName is nameof(LibraryList.GameFilter) or nameof(LibraryList.DateFilter)
             or nameof(LibraryList.FavouritesOnly) or nameof(LibraryList.SearchText))
         {
-            OnWelcomeChanged();
+            OnEmptyChanged();
         }
     }
 
-    private void OnWelcomeChanged()
+    private void OnEmptyChanged()
     {
-        OnPropertyChanged(nameof(ShowsWelcome));
+        OnPropertyChanged(nameof(ShowsEmptyMessage));
         OnPropertyChanged(nameof(ShowsCommandBar));
     }
 

@@ -33,7 +33,8 @@ internal sealed class MainViewModel : Observable
         Action<string>? log = null,
         IClipMediaService? clipMedia = null,
         string? clipThumbnailCacheFolder = null,
-        AppUpdates? updates = null)
+        AppUpdates? updates = null,
+        string? firstUseFile = null)
     {
         _engine = engine;
         StatusLine = new StatusLine(engine);
@@ -53,7 +54,8 @@ internal sealed class MainViewModel : Observable
             player: player,
             log: log,
             clipMedia: clipMedia,
-            clipThumbnailCacheFolder: clipThumbnailCacheFolder);
+            clipThumbnailCacheFolder: clipThumbnailCacheFolder,
+            firstUseFile: firstUseFile);
         LibraryNav = new NavItem(LibraryTitle, null, isSection: false);
         NavItems =
         [
@@ -64,8 +66,8 @@ internal sealed class MainViewModel : Observable
         FollowDrillIns();
         Library.Playback.PropertyChanged += OnPlaybackPropertyChanged;
 
-        // The welcome card's links.
-        Library.Welcome.Navigate = link => Select(link == WelcomeLink.AudioTracks ? TrackLayout : LibrarySettings);
+        // The tips' Change hotkeys link.
+        Library.Tips.ChangeHotkeys = () => Select(Hotkeys);
 
         // Edit the main setting, from a game's page: the page that holds the key.
         GameProfiles.EditMain = key => Select(key == Keys.TrackLayout ? TrackLayout : Rewind);

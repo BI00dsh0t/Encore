@@ -154,9 +154,19 @@ internal sealed class LibraryList : Observable
     /// <summary>Whether a filter or the search may be hiding items.</summary>
     public bool IsFiltered => GameFilter is not null || DateFilter != LibraryDateFilter.All || FavouritesOnly || IsSearching;
 
-    /// <summary>The list area's message when a search matches nothing; null otherwise.</summary>
-    public string? NoResultsText =>
-        IsSearching && _hasSnapshot && _shownRows.Count == 0 ? $"No items match “{SearchText.Trim()}”." : null;
+    /// <summary>The list area's message when a search or a filter matches nothing; null otherwise.</summary>
+    public string? NoResultsText
+    {
+        get
+        {
+            if (!_hasSnapshot || _shownRows.Count > 0 || !IsFiltered)
+            {
+                return null;
+            }
+
+            return IsSearching ? $"No items match “{SearchText.Trim()}”." : "Nothing matches these filters.";
+        }
+    }
 
     /// <summary>Clears the search; the view clears its box directly, so Esc works within the binding delay.</summary>
     public ICommand ClearSearchCommand =>
