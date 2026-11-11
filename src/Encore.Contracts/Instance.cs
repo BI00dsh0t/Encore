@@ -9,6 +9,9 @@ public sealed record Instance(string Name, string RoamingDataFolder, string Loca
     public const string InstalledName = "Encore";
     public const string DevName = "Encore-Dev";
 
+    /// <summary>The installer's folder under %LOCALAPPDATA%; not <see cref="InstalledName"/>, which holds the user's data.</summary>
+    public const string InstallerFolderName = "EncoreApp";
+
     /// <summary>The only instance names <c>--instance</c> accepts, so tests never touch a real instance.</summary>
     public const string TestPrefix = "Encore-Test-";
 
@@ -24,11 +27,17 @@ public sealed record Instance(string Name, string RoamingDataFolder, string Loca
     /// <summary>Resolves the instance of a process image; only one under the user's Programs\Encore folder is installed.</summary>
     public static Instance Resolve(string processPath, string roamingAppData, string localAppData)
     {
-        var installFolder = Path.TrimEndingDirectorySeparator(
-            Path.GetFullPath(Path.Combine(localAppData, "Programs", InstalledName))) + Path.DirectorySeparatorChar;
         var image = Path.GetFullPath(processPath);
-        var name = image.StartsWith(installFolder, StringComparison.OrdinalIgnoreCase) ? InstalledName : DevName;
+        bool isInstalled = IsUnder(image, Path.Combine(localAppData, InstallerFolderName))
+            || IsUnder(image, Path.Combine(localAppData, "Programs", InstalledName));
+        var name = isInstalled ? InstalledName : DevName;
         return new Instance(name, Path.Combine(roamingAppData, name), Path.Combine(localAppData, name));
+    }
+
+    private static bool IsUnder(string image, string folder)
+    {
+        var prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar;
+        return image.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Whether <paramref name="name"/> is <see cref="TestPrefix"/> followed by letters, digits or dashes.</summary>

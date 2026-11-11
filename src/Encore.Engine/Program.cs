@@ -37,7 +37,7 @@ Directory.CreateDirectory(logFolder);
 using var logProvider = new TextLoggerProvider(logFolder, "engine");
 using var loggers = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddProvider(logProvider));
 var log = loggers.CreateLogger("Engine");
-log.LogInformation("Encore engine, instance {Instance}, pid {Pid}", instance.Name, Environment.ProcessId);
+log.LogInformation("Encore engine {Version}, instance {Instance}, pid {Pid}", AppVersion.Text, instance.Name, Environment.ProcessId);
 
 SetConsoleTitle(instance);
 if (parsed.Command is null)

@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'global.json') }}
+
+      - name: Cache FFmpeg
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: native/ffmpeg
+          key: ffmpeg-${{ hashFiles('tools/fetch-ffmpeg.ps1') }}
+
+      - name: Fetch FFmpeg
+        shell: pwsh
+        run: ./tools/fetch-ffmpeg.ps1
+
+      - name: Build
+        run: dotnet build Encore.slnx -c Release
+
+      # Hosted runners have no GPU, audio devices or interactive desktop, so only the projects that
+      # need none of them run here. The rest, and every Heavy test, run on a developer's PC.
+      - name: Test
+        shell: pwsh
+        run: |
+          foreach ($project in 'Contracts', 'Core', 'Media') {
+            dotnet test --project "tests/Encore.$project.Tests" -c Release --no-build
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      # NativeAOT turns trim and AOT warnings into errors only at publish time.
+      - name: Publish the engine
+        shell: pwsh
+        run: ./tools/publish-engine.ps1

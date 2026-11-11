@@ -7,6 +7,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
+    <!-- A local build's version; the release workflow passes the tag's. -->
+    <Version>0.0.0-dev</Version>
+    <!-- The app is English only, so the runtime's translated messages stay out of the package. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <!-- The unused-using check (IDE0005) only runs on build with this on; undocumented members and parameters stay allowed. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

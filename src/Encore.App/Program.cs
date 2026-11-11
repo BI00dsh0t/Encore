@@ -1,3 +1,4 @@
+using Encore.App.Updates;
 using Encore.Contracts;
 
 namespace Encore.App;
@@ -8,6 +9,9 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // The installer calls the App with its own arguments while it installs, updates or uninstalls; those calls end here.
+        InstallerHooks.Run();
+
         if (!AppArguments.TryParse(args, out var instance))
         {
             return 2;

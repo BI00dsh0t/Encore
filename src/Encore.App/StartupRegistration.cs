@@ -17,7 +17,10 @@ internal sealed class StartupRegistration(Instance instance, RunKey runKey, stri
     private long? _failedRevision;
 
     /// <summary>The Run value's data: the App's path, quoted, and <c>--tray</c>.</summary>
-    public string Command { get; } = $"\"{appPath}\" {AppArguments.TrayArgument}";
+    public string Command { get; } = CommandFor(appPath);
+
+    /// <summary>The Run value's data for an App at <paramref name="appPath"/>.</summary>
+    public static string CommandFor(string appPath) => $"\"{appPath}\" {AppArguments.TrayArgument}";
 
     /// <summary>Whether this instance owns the Run value.</summary>
     public bool Applies => instance.Name == Instance.InstalledName;

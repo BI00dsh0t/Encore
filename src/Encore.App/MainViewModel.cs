@@ -4,6 +4,7 @@ using Encore.App.Engine;
 using Encore.App.Library;
 using Encore.App.Settings;
 using Encore.App.Status;
+using Encore.App.Updates;
 using Encore.Contracts.Settings;
 
 namespace Encore.App;
@@ -31,11 +32,12 @@ internal sealed class MainViewModel : Observable
         Func<IPlayer>? player = null,
         Action<string>? log = null,
         IClipMediaService? clipMedia = null,
-        string? clipThumbnailCacheFolder = null)
+        string? clipThumbnailCacheFolder = null,
+        AppUpdates? updates = null)
     {
         _engine = engine;
         StatusLine = new StatusLine(engine);
-        SettingsViewModels = SettingsViewModelFactory.Create(new SettingsSender(engine), engine, defaultCacheFolder, gameShell);
+        SettingsViewModels = SettingsViewModelFactory.Create(new SettingsSender(engine), engine, defaultCacheFolder, gameShell, updates);
         General = SettingsViewModels.OfType<GeneralSettingsViewModel>().Single();
         Rewind = SettingsViewModels.OfType<RewindSettingsViewModel>().Single();
         Hotkeys = SettingsViewModels.OfType<HotkeysViewModel>().Single();

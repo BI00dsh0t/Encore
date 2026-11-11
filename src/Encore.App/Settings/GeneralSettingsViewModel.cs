@@ -1,11 +1,13 @@
+using System.IO;
 using System.Windows;
 using Encore.App.Overlay;
+using Encore.App.Updates;
 using Encore.Contracts.Settings;
 
 namespace Encore.App.Settings;
 
 /// <summary>Global settings with no page of their own. The tray's Start with Windows item binds here too.</summary>
-internal sealed class GeneralSettingsViewModel(SettingsSender sender) : SettingsViewModel(sender)
+internal sealed class GeneralSettingsViewModel(SettingsSender sender, AppUpdates? updates = null) : SettingsViewModel(sender)
 {
     private bool _startWithWindows;
     private OverlayDotMode _overlayDot = Keys.OverlayDot.Default;
@@ -13,6 +15,9 @@ internal sealed class GeneralSettingsViewModel(SettingsSender sender) : Settings
     private bool _captureNewGames = Keys.CaptureNewGames.Default;
 
     public override string Title => "General";
+
+    /// <summary>The Updates section: the version, the update switches and the restart button.</summary>
+    public AppUpdates Updates { get; } = updates ?? AppUpdates.Disabled(Path.Combine(Path.GetTempPath(), "encore-updates.json"));
 
     /// <summary><c>startWithWindows</c>: setting it sends the change; the Run value is written once the engine commits it.</summary>
     public bool StartWithWindows

@@ -57,6 +57,15 @@ public sealed class InstanceTests
     }
 
     [Fact]
+    public void AnImageTheInstallerPutInPlaceIsTheInstalledInstance()
+    {
+        var instance = Instance.Resolve(@"C:\Users\u\AppData\Local\EncoreApp\current\Encore.App.exe", Roaming, Local);
+
+        Assert.Equal(Instance.InstalledName, instance.Name);
+        Assert.Equal(@"C:\Users\u\AppData\Local\Encore", instance.LocalDataFolder);
+    }
+
+    [Fact]
     public void TheInstallFolderMatchIgnoresCase()
     {
         var instance = Instance.Resolve(@"c:\users\U\appdata\local\programs\encore\bin\x.exe", Roaming, Local);

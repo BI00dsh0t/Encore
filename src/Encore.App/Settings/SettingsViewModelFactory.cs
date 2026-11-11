@@ -1,4 +1,5 @@
 using Encore.App.Engine;
+using Encore.App.Updates;
 
 namespace Encore.App.Settings;
 
@@ -10,9 +11,10 @@ internal static class SettingsViewModelFactory
         SettingsSender sender,
         IEngineSession engine,
         string? defaultCacheFolder = null,
-        IGameShell? gameShell = null) =>
+        IGameShell? gameShell = null,
+        AppUpdates? updates = null) =>
     [
-        new GeneralSettingsViewModel(sender),
+        new GeneralSettingsViewModel(sender, updates),
         new RewindSettingsViewModel(sender, defaultCacheFolder: defaultCacheFolder),
         new HotkeysViewModel(sender, engine),
         new TrackLayoutViewModel(sender, engine),

@@ -4,7 +4,9 @@ using Encore.App.Engine;
 using Encore.App.Library;
 using Encore.App.Overlay;
 using Encore.App.Theme;
+using Encore.App.Updates;
 using Encore.Contracts;
+using Encore.Contracts.Messages;
 using Encore.Platform.Desktop;
 
 namespace Encore.App;
@@ -36,6 +38,7 @@ internal sealed class ShellApp(Instance instance) : Application
 
         // Before anything reads its data folders, an Encore instance's first start copies its old ReplayBuffer data once.
         LegacyData.CopyIfFirstStart(instance);
+        _log.Write($"Encore {AppVersion.Text}, instance {instance.Name}, pid {Environment.ProcessId}");
 
         var theme = ApplyLastTheme();
         _engine = CreateEngine(e.Args);
@@ -51,7 +54,33 @@ internal sealed class ShellApp(Instance instance) : Application
         }
 
         _engine.StartSupervising();
+        _ = model.General.Updates.RunAsync();
+        OldInstall.OfferRemoval(
+            model.General.Updates.CanUpdate,
+            question => Prompts.Ask(_window, question, "Encore"),
+            _log.Write);
     }
+
+    // The public repository the release workflow publishes to.
+    private const string RepositoryUrl = "https://github.com/BI00dsh0t/Encore";
+
+    private static string AppPath => Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Encore.App.exe");
+
+    private AppUpdates CreateUpdates()
+    {
+        var preferences = Path.Combine(instance.RoamingDataFolder, "updates.json");
+        if (instance.Name != Instance.InstalledName)
+        {
+            return AppUpdates.Disabled(preferences);
+        }
+
+        return new AppUpdates(new VelopackUpdater(RepositoryUrl), preferences, IsBusy, QuitAsync, _log.Write);
+    }
+
+    // A Recording running or a Clip being saved holds an update back.
+    private bool IsBusy() =>
+        _engine?.State?.Capture is { } capture
+        && (capture.Recording == RecordingState.Running || capture.MonitorRecording == RecordingState.Running || capture.ClipsWriting > 0);
 
     // The theme is in place before the first window shows, using the theme last applied until the settings arrive.
     private ThemeService ApplyLastTheme()
@@ -81,7 +110,7 @@ internal sealed class ShellApp(Instance instance) : Application
         _startup = new StartupRegistration(
             instance,
             RunKey.Startup,
-            Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Encore.App.exe"));
+            InstallLayout.LaunchPath(AppPath, File.Exists));
         engine.Changed += () => Post(SyncStartup);
     }
 
@@ -95,7 +124,8 @@ internal sealed class ShellApp(Instance instance) : Application
             Path.Combine(instance.LocalDataFolder, "ring"),
             player: unsupported is null ? null : () => new WindowsMediaPlayer(unsupported),
             log: _log.Write,
-            clipThumbnailCacheFolder: Path.Combine(instance.LocalDataFolder, "cache", "clip-thumbnails", "v1"));
+            clipThumbnailCacheFolder: Path.Combine(instance.LocalDataFolder, "cache", "clip-thumbnails", "v1"),
+            updates: CreateUpdates());
     }
 
     private MainWindow CreateWindow(MainViewModel model)
@@ -160,6 +190,7 @@ internal sealed class ShellApp(Instance instance) : Application
         }
 
         _quitting = true;
+        (_window?.DataContext as MainViewModel)?.General.Updates.Stop();
 
         // The Library's player page closes first, so the player stops and the file is released.
         (_window!.DataContext as MainViewModel)?.Library.DrillIn.Close();

@@ -48,6 +48,28 @@
                                Text="When off, a game Encore finds for the first time is added to Games as Not captured. Games you add by hand are always captured." />
                 </StackPanel>
             </HeaderedContentControl>
+            <HeaderedContentControl Header="Updates" Style="{DynamicResource EncoreSettingsSectionStyle}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="{Binding Updates.VersionText, Mode=OneTime}" />
+                    <CheckBox Margin="0,8,0,0"
+                              FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              Content="Check for updates automatically"
+                              IsEnabled="{Binding Updates.CanUpdate, Mode=OneTime}"
+                              IsChecked="{Binding Updates.CheckAutomatically}" />
+                    <CheckBox Margin="0,8,0,0"
+                              FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              Content="Get beta versions"
+                              IsEnabled="{Binding Updates.CanUpdate, Mode=OneTime}"
+                              IsChecked="{Binding Updates.Beta}" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <Button Content="Check now" Command="{Binding Updates.CheckNowCommand, Mode=OneTime}" />
+                        <Button Margin="8,0,0,0"
+                                Content="Restart to update"
+                                Command="{Binding Updates.RestartToUpdateCommand, Mode=OneTime}" />
+                    </StackPanel>
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding Updates.Status}" />
+                </StackPanel>
+            </HeaderedContentControl>
         </theme:SettingsContent>
     </ScrollViewer>
 </UserControl>
